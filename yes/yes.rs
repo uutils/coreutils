@@ -19,7 +19,7 @@ use extra::getopts::*;
 
 fn main() {
     let args = os::args();
-    let program = copy args[0];
+    let program = args[0].clone();
     let opts = ~[
         groups::optflag("h", "help", "display this help and exit"),
         groups::optflag("V", "version", "output version information and exit"),

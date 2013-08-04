@@ -19,7 +19,7 @@ use extra::getopts::*;
 
 fn main() {
     let args = os::args();
-    let program = copy args[0];
+    let program = args[0].clone();
     let opts = ~[
         groups::optflag("0", "null", "end each output line with 0 byte rather than newline"),
         groups::optflag("h", "help", "display this help and exit"),
@@ -58,14 +58,14 @@ fn main() {
 pub fn exec(args: ~[~str], separator: &str) {
     if args.is_empty() {
         let vars = os::env();
-        for vars.iter().advance |&(env_var, value)| {
+        for (env_var, value) in vars.consume_iter() {
             print(fmt!("%s=%s", env_var, value));
             print(separator);
         }
         return;
     }
 
-    for args.iter().advance |env_var| {
+    for env_var in args.iter() {
         match os::getenv(*env_var) {
             Some(var) => {
                 print(var);
