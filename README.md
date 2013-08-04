@@ -21,7 +21,6 @@ To do
 
 - base64
 - basename
-- cat
 - chcon
 - chgrp
 - chmod
