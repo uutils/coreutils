@@ -84,17 +84,15 @@ pub enum NumberingMode {
     NumberAll,
 }
 
-static TAB: u8 = '\t' as u8;
-static CR: u8 = '\r' as u8;
-static LF: u8 = '\n' as u8;
+static TAB: u8 = bytes!("\t");
+static CR: u8 = bytes!("\r");
+static LF: u8 = bytes!("\n");
 
-#[cfg(windows)]
 fn is_newline_char(byte: u8) -> bool {
-    byte == LF || byte == CR
-}
+    if cfg!("windows") {
+        return byte == LF || byte == CR
+    }
 
-#[cfg(unix)]
-fn is_newline_char(byte: u8) -> bool {
     byte == LF
 }
 
@@ -124,13 +122,13 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
                         at_line_start = true;
                     }
                     if show_tabs && *byte == TAB {
-                        writer.write(['^' as u8, 'I' as u8]);
+                        writer.write(bytes!("^I"));
                     } else if show_ends && *byte == LF {
-                        writer.write(['$' as u8, LF]);
+                        writer.write(bytes!("$\n"));
                     } else if show_nonprint && (*byte < 32 || *byte >= 127) && !is_newline_char(*byte) {
                         let mut byte = *byte;
                         if byte >= 128 {
-                            writer.write(['M' as u8, '-' as u8]);
+                            writer.write(bytes!("M-"));
                             byte = byte - 128;
                         }
                         if byte < 32 {
