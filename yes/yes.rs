@@ -15,7 +15,7 @@ extern mod extra;
 
 use std::os;
 use std::io::stderr;
-use extra::getopts::*;
+use extra::getopts::groups;
 
 fn main() {
     let args = os::args();
@@ -28,12 +28,12 @@ fn main() {
         Ok(m) => m,
         Err(f) => {
             stderr().write_line("Invalid options");
-            stderr().write_line(fail_str(f));
+            stderr().write_line(f.to_err_msg());
             os::set_exit_status(1);
             return
         }
     };
-    if opts_present(&matches, [~"h", ~"help"]) {
+    if matches.opts_present([~"h", ~"help"]) {
         println("yes 1.0.0");
         println("");
         println("Usage:");
@@ -42,7 +42,7 @@ fn main() {
         print(groups::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
         return;
     }
-    if opts_present(&matches, [~"V", ~"version"]) {
+    if matches.opts_present([~"V", ~"version"]) {
         println("yes 1.0.0");
         return;
     }

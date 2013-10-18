@@ -6,6 +6,7 @@ build:
 	sh -c 'rustc --out-dir build/ printenv/printenv.rs'
 	sh -c 'rustc --out-dir build/ true/true.rs'
 	sh -c 'rustc --out-dir build/ yes/yes.rs'
+	sh -c 'rustc --out-dir build/ cat/cat.rs'
 	sh -c 'rustc --out-dir build/ whoami/whoami.rs'
 
 .PHONY: build

@@ -15,7 +15,7 @@ extern mod extra;
 
 use std::os;
 use std::io::{stdin, stderr, stdout, Writer, Reader};
-use extra::getopts::*;
+use extra::getopts::groups;
 
 fn main() {
     let args = os::args();
@@ -37,12 +37,12 @@ fn main() {
         Ok(m) => m,
         Err(f) => {
             stderr().write_line("Invalid options");
-            stderr().write_line(fail_str(f));
+            stderr().write_line(f.to_err_msg());
             os::set_exit_status(1);
             return
         }
     };
-    if opts_present(&matches, [~"h", ~"help"]) {
+    if matches.opts_present([~"h", ~"help"]) {
         println("cat 1.0.0");
         println("");
         println("Usage:");
@@ -53,22 +53,22 @@ fn main() {
         println("With no FILE, or when FILE is -, read standard input.");
         return;
     }
-    if opts_present(&matches, [~"V", ~"version"]) {
+    if matches.opts_present([~"V", ~"version"]) {
         println("cat 1.0.0");
         return;
     }
 
     let mut number_mode = NumberNone;
-    if opts_present(&matches, [~"n", ~"number"]) {
+    if matches.opts_present([~"n", ~"number"]) {
         number_mode = NumberAll;
     }
-    if opts_present(&matches, [~"b", ~"number-nonblank"]) {
+    if matches.opts_present([~"b", ~"number-nonblank"]) {
         number_mode = NumberNonEmpty;
     }
-    let show_nonprint = opts_present(&matches, [~"v", ~"show-nonprinting", ~"A", ~"show-all", ~"t", ~"e"]);
-    let show_ends = opts_present(&matches, [~"E", ~"show-ends", ~"A", ~"show-all", ~"e"]);
-    let show_tabs = opts_present(&matches, [~"T", ~"show-tabs",  ~"A", ~"show-all", ~"t"]);
-    let squeeze_blank = opts_present(&matches, [~"s", ~"squeeze-blank"]);
+    let show_nonprint = matches.opts_present([~"v", ~"show-nonprinting", ~"A", ~"show-all", ~"t", ~"e"]);
+    let show_ends = matches.opts_present([~"E", ~"show-ends", ~"A", ~"show-all", ~"e"]);
+    let show_tabs = matches.opts_present([~"T", ~"show-tabs",  ~"A", ~"show-all", ~"t"]);
+    let squeeze_blank = matches.opts_present([~"s", ~"squeeze-blank"]);
     let mut files = matches.free;
     if files.is_empty() {
         files = ~[~"-"];
@@ -84,15 +84,17 @@ pub enum NumberingMode {
     NumberAll,
 }
 
-static TAB: u8 = bytes!("\t");
-static CR: u8 = bytes!("\r");
-static LF: u8 = bytes!("\n");
+static TAB: u8 = '\t' as u8;
+static CR: u8 = '\r' as u8;
+static LF: u8 = '\n' as u8;
 
+#[cfg(windows)]
 fn is_newline_char(byte: u8) -> bool {
-    if cfg!("windows") {
-        return byte == LF || byte == CR
-    }
+    byte == LF || byte == CR
+}
 
+#[cfg(unix)]
+fn is_newline_char(byte: u8) -> bool {
     byte == LF
 }
 
@@ -103,7 +105,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
         for path in files.iter() {
             let reader = match open(path.to_owned()) {
                 Some(f) => f,
-                None => { loop }
+                None => { continue }
             };
 
             let mut counter: uint = 1;
@@ -156,7 +158,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
     for path in files.iter() {
         let reader = match open(path.to_owned()) {
             Some(f) => f,
-            None => { loop }
+            None => { continue }
         };
 
         loop {
