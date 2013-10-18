@@ -175,7 +175,7 @@ fn open(path: ~str) -> Option<@Reader> {
         return Some(stdin());
     }
 
-    match std::io::file_reader(&std::path::Path(path)) {
+    match std::io::file_reader(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => return Some(fd),
         Err(e) => {
             stderr().write_line(fmt!("cat: %s: %s", path, e));
