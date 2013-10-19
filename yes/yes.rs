@@ -37,7 +37,7 @@ fn main() {
         println("yes 1.0.0");
         println("");
         println("Usage:");
-        println(fmt!("  %s [STRING]... [OPTION]...", program));
+        println(format!("  {0:s} [STRING]... [OPTION]...", program));
         println("");
         print(groups::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
         return;

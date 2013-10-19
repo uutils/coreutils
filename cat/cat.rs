@@ -46,7 +46,7 @@ fn main() {
         println("cat 1.0.0");
         println("");
         println("Usage:");
-        println(fmt!("  %s [OPTION]... [FILE]...", program));
+        println(format!("  {0:s} [OPTION]... [FILE]...", program));
         println("");
         print(groups::usage("Concatenate FILE(s), or standard input, to standard output.", opts));
         println("");
@@ -116,7 +116,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
                 let buf = reader.read_bytes(2);
                 for byte in buf.iter() {
                     if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(*byte))) {
-                        writer.write_str(fmt!("%6u  ", counter));
+                        writer.write_str(format!("{0:6u}  ", counter));
                         counter += 1;
                         at_line_start = false;
                     }
@@ -178,7 +178,7 @@ fn open(path: ~str) -> Option<@Reader> {
     match std::io::file_reader(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => return Some(fd),
         Err(e) => {
-            stderr().write_line(fmt!("cat: %s: %s", path, e));
+            stderr().write_line(format!("cat: {0:s}: {1:s}", path, e));
             os::set_exit_status(1);
         }
     }

@@ -38,7 +38,7 @@ fn main() {
         println("printenv 1.0.0");
         println("");
         println("Usage:");
-        println(fmt!("  %s [VARIABLE]... [OPTION]...", program));
+        println(format!("  {0:s} [VARIABLE]... [OPTION]...", program));
         println("");
         print(groups::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
         return;
@@ -59,7 +59,7 @@ pub fn exec(args: ~[~str], separator: &str) {
     if args.is_empty() {
         let vars = os::env();
         for (env_var, value) in vars.move_iter() {
-            print(fmt!("%s=%s", env_var, value));
+            print(format!("{0:s}={1:s}", env_var, value));
             print(separator);
         }
         return;
