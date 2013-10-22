@@ -130,7 +130,6 @@ To do
 - users
 - wc
 - who
-- whoami
 
 License
 -------
