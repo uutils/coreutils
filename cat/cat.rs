@@ -102,21 +102,21 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
     let writer = stdout();
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
+        let mut counter: uint = 1;
+        let is_numbering = number == NumberAll || number == NumberNonEmpty;
+
         for path in files.iter() {
             let reader = match open(path.to_owned()) {
                 Some(f) => f,
                 None => { continue }
             };
 
-            let mut counter: uint = 1;
             let mut at_line_start = true;
-            let is_numbering = number == NumberAll || number == NumberNonEmpty;
-
             loop {
                 let buf = reader.read_bytes(2);
                 for byte in buf.iter() {
                     if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(*byte))) {
-                        writer.write_str(format!("{0:6u}  ", counter));
+                        writer.write_str(format!("{0:6u}\t", counter));
                         counter += 1;
                         at_line_start = false;
                     }

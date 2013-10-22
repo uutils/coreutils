@@ -9,4 +9,11 @@ build:
 	sh -c 'rustc --out-dir build/ cat/cat.rs'
 	sh -c 'rustc --out-dir build/ whoami/whoami.rs'
 
+test:
+	rm -rf tmp
+	mkdir tmp
+	sh -c 'rustc -o tmp/cat_test cat/test.rs'
+	sh -c 'tmp/cat_test'
+	rm -rf tmp
+
 .PHONY: build
