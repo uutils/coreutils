@@ -33,7 +33,7 @@ fn main() {
             return
         }
     };
-    if matches.opts_present([~"h", ~"help"]) {
+    if matches.opt_present("help") {
         println("yes 1.0.0");
         println("");
         println("Usage:");
@@ -42,7 +42,7 @@ fn main() {
         print(groups::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
         return;
     }
-    if matches.opts_present([~"V", ~"version"]) {
+    if matches.opt_present("version") {
         println("yes 1.0.0");
         return;
     }

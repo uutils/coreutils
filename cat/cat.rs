@@ -42,7 +42,7 @@ fn main() {
             return
         }
     };
-    if matches.opts_present([~"h", ~"help"]) {
+    if matches.opt_present("help") {
         println("cat 1.0.0");
         println("");
         println("Usage:");
@@ -53,22 +53,22 @@ fn main() {
         println("With no FILE, or when FILE is -, read standard input.");
         return;
     }
-    if matches.opts_present([~"V", ~"version"]) {
+    if matches.opt_present("version") {
         println("cat 1.0.0");
         return;
     }
 
     let mut number_mode = NumberNone;
-    if matches.opts_present([~"n", ~"number"]) {
+    if matches.opt_present("number") {
         number_mode = NumberAll;
     }
-    if matches.opts_present([~"b", ~"number-nonblank"]) {
+    if matches.opt_present("number-nonblank") {
         number_mode = NumberNonEmpty;
     }
-    let show_nonprint = matches.opts_present([~"v", ~"show-nonprinting", ~"A", ~"show-all", ~"t", ~"e"]);
-    let show_ends = matches.opts_present([~"E", ~"show-ends", ~"A", ~"show-all", ~"e"]);
-    let show_tabs = matches.opts_present([~"T", ~"show-tabs",  ~"A", ~"show-all", ~"t"]);
-    let squeeze_blank = matches.opts_present([~"s", ~"squeeze-blank"]);
+    let show_nonprint = matches.opts_present([~"show-nonprinting", ~"show-all", ~"t", ~"e"]);
+    let show_ends = matches.opts_present([~"show-ends", ~"show-all", ~"e"]);
+    let show_tabs = matches.opts_present([~"show-tabs",  ~"show-all", ~"t"]);
+    let squeeze_blank = matches.opt_present("squeeze-blank");
     let mut files = matches.free;
     if files.is_empty() {
         files = ~[~"-"];

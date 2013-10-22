@@ -34,7 +34,7 @@ fn main() {
             return
         }
     };
-    if matches.opts_present([~"h", ~"help"]) {
+    if matches.opt_present("help") {
         println("printenv 1.0.0");
         println("");
         println("Usage:");
@@ -43,12 +43,12 @@ fn main() {
         print(groups::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
         return;
     }
-    if matches.opts_present([~"V", ~"version"]) {
+    if matches.opt_present("version") {
         println("printenv 1.0.0");
         return;
     }
     let mut separator = "\n";
-    if matches.opts_present([~"0", ~"null"]) {
+    if matches.opt_present("null") {
         separator = "\x00";
     };
 

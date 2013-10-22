@@ -50,7 +50,7 @@ fn main() {
         Ok(m) => m,
         Err(f) => fail2!(f.to_err_msg()),
     };
-    if matches.opt_present("h") || matches.opt_present("help") {
+    if matches.opt_present("help") {
         println("whoami 1.0.0");
         println("");
         println("Usage:");
@@ -59,7 +59,7 @@ fn main() {
         print(groups::usage("print effective userid", opts));
         return;
     }
-    if matches.opt_present("V") || matches.opt_present("version") {
+    if matches.opt_present("version") {
         println("whoami 1.0.0");
         return;
     }
