@@ -3,8 +3,9 @@ RUSTC				?=	rustc
 RUSTCFLAGS			:=
 
 EXES				:=	false printenv true yes cat whoami
-EXES_PATHS			:=	$(addprefix build/,$(EXES))
 TESTS				:=	cat
+
+EXES_PATHS			:=	$(addprefix build/,$(EXES))
 
 command				=	sh -c '$(1)'
 
