@@ -8,18 +8,32 @@ struct options {
 
 fn usage(prog: &str) {
     println!("Usage: {:s} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", prog);
-    println!("Sets each NAME as VALUE in the environment, then run COMMAND\n");
+    println!("Set each NAME to VALUE in the environment and run COMMAND\n");
     println!("Possible options are:");
-    println!("  -i, --ignore-environment  starts with an empty environment");
-    println!("  -0, --null end each line with a 0 byte instead of a \\\\n\n");
+    println!("  -i, --ignore-environment\t start with an empty environment");
+    println!("  -0, --null              \t end each output line with a 0 byte rather than newline");
+    println!("  -u, --unset NAME        \t remove variable from the environment");
+    println!("      --help              \t display this help and exit");
+    println!("      --version           \t output version information and exit\n");
+    println!("A mere - implies -i. If no COMMAND, print the resulting environment");
 }
 
 fn version() {
-    println!("env (Rust Coreutils) 1.0");
+    println!("env 1.0.0");
 }
 
+// print name=value env pairs on screen
+// if null is true, separate pairs with a \0, \n otherwise
 fn print_env(null: bool) {
-    println!("env!")
+    let env = std::os::env();
+
+    for &(ref n, ref v) in env.iter() {
+        print!("{:s}={:s}{:c}",
+            n.as_slice(),
+            v.as_slice(),
+            if null { '\0' } else { '\n' }
+        );
+    }
 }
 
 fn main() {
@@ -40,8 +54,14 @@ fn main() {
     let mut wait_cmd = false;
     let mut iter = args.iter();
     iter.next(); // skip program
+    let mut item = iter.next();
 
-    for opt in iter {
+    // the for loop doesn't work here,
+    // because we need sometines to read 2 items forward,
+    // and the iter can't be borrowed twice
+    while item != None {
+        let opt = item.unwrap();
+
         if wait_cmd {
             // we still accept NAME=VAL here but not other options
             let mut sp = opt.splitn_iter('=', 1);
@@ -49,7 +69,7 @@ fn main() {
             let value = sp.next();
 
             match (name, value) {
-                (Some(n), Some(v)) => { 
+                (Some(n), Some(v)) => {
                     opts.sets.push((n.into_owned(), v.into_owned())); 
                 }
                 _ => {
@@ -66,12 +86,15 @@ fn main() {
                     ~"--help" => { usage(prog); return }
                     ~"--version" => { version(); return }
 
-                    ~"--ignore-environment" => {
-                        opts.ignore_env = true; 
-                    }
+                    ~"--ignore-environment" => opts.ignore_env = true,
+                    ~"--null" => opts.null = true,
+                    ~"--unset" => {
+                        let var = iter.next();
 
-                    ~"--null" => {
-                        opts.null = true;
+                        match var {
+                            None => println!("{:s}: this option requires an argument: {:s}", prog, opt.as_slice()),
+                            Some(s) => opts.unsets.push(s.to_owned())
+                        }
                     }
                             
                     _ => {
@@ -82,39 +105,57 @@ fn main() {
                 }
             }
 
-            else {
-                match *opt {
-                    ~"-" => {
-                        // implies -i and stop parsing opts
-                        wait_cmd = true;
-                        opts.ignore_env = true;
-                    }
+            else if opt.starts_with("-") {
+                if opt.len() == 0 {
+                    // implies -i and stop parsing opts
+                    wait_cmd = true;
+                    opts.ignore_env = true;
+                    continue;
+                }
 
-                    _ => {
-                        // is it a NAME=VALUE like opt ?
-                        let mut sp = opt.splitn_iter('=', 1);
-                        let name = sp.next();
-                        let value = sp.next();
+                let mut chars = opt.iter();
+                chars.next();
 
-                        match (name, value) {
-                            (Some(n), Some(v)) => { 
-                                // yes
-                                opts.sets.push((n.into_owned(), v.into_owned())); 
-                                wait_cmd = true;
-                            }
-                            // no, its a program-like opt
-                            _ => {
-                                opts.program.push(opt.to_owned());
-                                break;
-                            }
+                for c in chars {
+                    // short versions of options
+                    match c {
+                        'i' => opts.ignore_env = true,
+                        '0' => opts.null = true,
+                        _ => {
+                            println!("{:s}: illegal option -- {:c}", prog, c);
+                            println!("Type \"{:s} --help\" for detailed informations", prog);
+                            return
                         }
                     }
                 }
             }
+
+            else {
+                // is it a NAME=VALUE like opt ?
+                let mut sp = opt.splitn_iter('=', 1);
+                let name = sp.next();
+                let value = sp.next();
+
+                match (name, value) {
+                    (Some(n), Some(v)) => {
+                        // yes
+                        opts.sets.push((n.into_owned(), v.into_owned()));
+                        wait_cmd = true;
+                    }
+                    // no, its a program-like opt
+                    _ => {
+                        opts.program.push(opt.to_owned());
+                        break;
+                    }
+                }
+            }
         }
+
+        item = iter.next();
     }
 
     // read program arguments now
+
     for opt in iter {
         opts.program.push(opt.to_owned());
     }
@@ -127,15 +168,23 @@ fn main() {
         }
     }
 
+    for ref name in opts.unsets.iter() {
+        std::os::unsetenv(name.as_slice())
+    }
+
     for &(ref name, ref val) in opts.sets.iter() {
         std::os::setenv(name.as_slice(), val.as_slice())
     }
 
     match opts.program {
         [ref prog, ..args] => { 
-            let status = std::run::process_status(prog.as_slice(), args);
+            let status = std::run::process_status(prog.as_slice(), args.as_slice());
             std::os::set_exit_status(status)
         }
-        [] => { print_env(opts.null); }
+
+        [] => {
+            // no program providen
+            print_env(opts.null);
+        }
     }
 }
