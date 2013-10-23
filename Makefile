@@ -1,19 +1,41 @@
+RUSTC				?=	rustc
+
+RUSTCFLAGS			:=
+
+EXES				:=	false printenv true yes cat whoami
+EXES_PATHS			:=	$(addprefix build/,$(EXES))
+TESTS				:=	cat
+
+command				=	sh -c '$(1)'
+
+define EXE_BUILD
+build/$(1):			$(1)/$(1).rs
+	$(call command,$(RUSTC) $(RUSTCFLAGS) -o build/$(1) $(1)/$(1).rs)
+endef
+
+define TEST_BUILD
+test_$(1):			tmp/$(1)_test
+	$(call command,tmp/$(1)_test)
+
+tmp/$(1)_test:	$(1)/test.rs
+	$(RUSTC) $(RUSTCFLAGS) -o tmp/$(1)_test $(1)/test.rs
+endef
+
+all:				build $(EXES_PATHS)
+
+test:				tmp $(addprefix test_,$(TESTS))
+	rm -rf tmp
+
+clean:
+	rm -rf build tmp
+
 build:
-	rm -rf build
 	mkdir build
-	# run through the shell since make acting up on windows
-	sh -c 'rustc --out-dir build/ false/false.rs'
-	sh -c 'rustc --out-dir build/ printenv/printenv.rs'
-	sh -c 'rustc --out-dir build/ true/true.rs'
-	sh -c 'rustc --out-dir build/ yes/yes.rs'
-	sh -c 'rustc --out-dir build/ cat/cat.rs'
-	sh -c 'rustc --out-dir build/ whoami/whoami.rs'
 
-test:
-	rm -rf tmp
+tmp:
 	mkdir tmp
-	sh -c 'rustc -o tmp/cat_test cat/test.rs'
-	sh -c 'tmp/cat_test'
-	rm -rf tmp
 
-.PHONY: build
+$(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
+$(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
+
+.PHONY:				all test clean
