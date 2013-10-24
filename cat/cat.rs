@@ -1,4 +1,5 @@
 #[link(name="cat", vers="1.0.0", author="Seldaek")];
+#[feature(managed_boxes)]
 
 /*
  * This file is part of the uutils coreutils package.
