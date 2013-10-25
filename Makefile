@@ -12,7 +12,7 @@ TESTS       := cat
 
 # Utils stuff
 EXES_PATHS  := $(addprefix build/,$(EXES))
-command     := sh -c '$(1)'
+command     = sh -c '$(1)'
 
 # Main exe build rule
 define EXE_BUILD
