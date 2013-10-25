@@ -41,7 +41,6 @@ To do
 - dirname
 - du
 - echo
-- env
 - expand
 - expr
 - extent-scan
