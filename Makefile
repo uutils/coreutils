@@ -7,7 +7,7 @@ RUSTCFLAGS  :=
 RMFLAGS     :=
 
 # Output names
-EXES        := false printenv true yes cat whoami
+EXES        := false printenv true yes cat whoami env
 TESTS       := cat
 
 # Utils stuff
