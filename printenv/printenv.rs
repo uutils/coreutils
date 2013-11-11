@@ -14,7 +14,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::stderr;
+use std::rt::io::stderr;
 use extra::getopts::groups;
 
 fn main() {
@@ -28,8 +28,8 @@ fn main() {
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            stderr().write_line("Invalid options");
-            stderr().write_line(f.to_err_msg());
+            writeln!(&mut stderr() as &mut Writer,
+                   "Invalid options\n{}", f.to_err_msg());
             os::set_exit_status(1);
             return
         }
@@ -38,7 +38,7 @@ fn main() {
         println("printenv 1.0.0");
         println("");
         println("Usage:");
-        println(format!("  {0:s} [VARIABLE]... [OPTION]...", program));
+        println!("  {0:s} [VARIABLE]... [OPTION]...", program);
         println("");
         print(groups::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
         return;
@@ -59,7 +59,7 @@ pub fn exec(args: ~[~str], separator: &str) {
     if args.is_empty() {
         let vars = os::env();
         for (env_var, value) in vars.move_iter() {
-            print(format!("{0:s}={1:s}", env_var, value));
+            print!("{0:s}={1:s}", env_var, value);
             print(separator);
         }
         return;

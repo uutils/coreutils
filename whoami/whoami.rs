@@ -48,7 +48,7 @@ fn main() {
     ];
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => fail2!(f.to_err_msg()),
+        Err(f) => fail!(f.to_err_msg()),
     };
     if matches.opt_present("help") {
         println("whoami 1.0.0");
