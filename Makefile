@@ -22,7 +22,7 @@ endef
 
 # Test exe built rules
 define TEST_BUILD
-test_$(1): tmp/$(1)_test
+test_$(1): tmp/$(1)_test build/$(1)
 	$(call command,tmp/$(1)_test)
 
 tmp/$(1)_test: $(1)/test.rs
@@ -49,4 +49,3 @@ $(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
 $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 
 .PHONY: all test clean
-
