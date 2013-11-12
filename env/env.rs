@@ -190,8 +190,11 @@ fn main() {
 
     match opts.program {
         [ref prog, ..args] => {
-            let status = std::run::process_status(prog.as_slice(), args.as_slice());
-            std::os::set_exit_status(status)
+            let exit = std::run::process_status(prog.as_slice(), args.as_slice());
+            match exit {
+                std::rt::io::process::ExitStatus(status) => std::os::set_exit_status(status),
+                _ => std::os::set_exit_status(1)
+            }
         }
 
         [] => {
