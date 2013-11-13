@@ -29,7 +29,6 @@ extern {
 }
 
 #[fixed_stack_segment]
-#[deny(cstack)]
 unsafe fn getusername() -> ~str {
     let passwd: *c_passwd = getpwuid(geteuid());
 

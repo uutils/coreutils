@@ -14,7 +14,7 @@
 extern mod extra;
 
 use std::os;
-use std::rt::io::stderr;
+use std::io::stderr;
 use extra::getopts::groups;
 
 fn main() {

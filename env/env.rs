@@ -192,7 +192,7 @@ fn main() {
         [ref prog, ..args] => {
             let exit = std::run::process_status(prog.as_slice(), args.as_slice());
             match exit {
-                std::rt::io::process::ExitStatus(status) => std::os::set_exit_status(status),
+                std::io::process::ExitStatus(status) => std::os::set_exit_status(status),
                 _ => std::os::set_exit_status(1)
             }
         }

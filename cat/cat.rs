@@ -15,7 +15,7 @@
 extern mod extra;
 
 use std::os;
-use std::rt::io::{stdin, stderr, stdout, File, result};
+use std::io::{stdin, stderr, stdout, File, result};
 use extra::getopts::groups;
 
 fn main() {
