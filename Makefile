@@ -3,11 +3,11 @@ RUSTC       ?= rustc
 RM          := rm
 
 # Flags
-RUSTCFLAGS  :=
+RUSTCFLAGS  := --opt-level=3
 RMFLAGS     :=
 
 # Output names
-EXES        := false printenv true yes cat whoami env
+EXES        := false printenv true yes cat whoami env wc
 TESTS       := cat
 
 # Utils stuff
