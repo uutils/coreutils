@@ -16,7 +16,7 @@ command     = sh -c '$(1)'
 
 # Main exe build rule
 define EXE_BUILD
-build/$(1): $(1)/$(1).rs
+build/$(1): build $(1)/$(1).rs
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -o build/$(1) $(1)/$(1).rs)
 endef
 
@@ -26,7 +26,7 @@ test_$(1): tmp/$(1)_test build/$(1)
 	$(call command,tmp/$(1)_test)
 
 tmp/$(1)_test: $(1)/test.rs
-	$(RUSTC) $(RUSTCFLAGS) -o tmp/$(1)_test $(1)/test.rs
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o tmp/$(1)_test $(1)/test.rs)
 endef
 
 # Main rules
