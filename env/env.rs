@@ -75,7 +75,7 @@ fn main() {
 
         if wait_cmd {
             // we still accept NAME=VAL here but not other options
-            let mut sp = opt.splitn_iter('=', 1);
+            let mut sp = opt.splitn('=', 1);
             let name = sp.next();
             let value = sp.next();
 
@@ -119,7 +119,7 @@ fn main() {
                 continue;
             }
 
-            let mut chars = opt.iter();
+            let mut chars = opt.chars();
             chars.next();
 
             for c in chars {
@@ -146,7 +146,7 @@ fn main() {
             }
         } else {
             // is it a NAME=VALUE like opt ?
-            let mut sp = opt.splitn_iter('=', 1);
+            let mut sp = opt.splitn('=', 1);
             let name = sp.next();
             let value = sp.next();
 

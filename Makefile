@@ -22,11 +22,11 @@ endef
 
 # Test exe built rules
 define TEST_BUILD
-test_$(1): tmp/$(1)_test build/$(1)
+test_$(1): tmp/$(1)_test build build/$(1)
 	$(call command,tmp/$(1)_test)
 
 tmp/$(1)_test: $(1)/test.rs
-	$(RUSTC) $(RUSTCFLAGS) -o tmp/$(1)_test $(1)/test.rs
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o tmp/$(1)_test $(1)/test.rs)
 endef
 
 # Main rules

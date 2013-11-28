@@ -28,7 +28,6 @@ extern {
     pub fn getpwuid(uid: libc::c_int) -> *c_passwd;
 }
 
-#[fixed_stack_segment]
 unsafe fn getusername() -> ~str {
     let passwd: *c_passwd = getpwuid(geteuid());
 
