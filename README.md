@@ -123,11 +123,11 @@ To do
 - uname-uname
 - uname
 - unexpand
-- uniq
+- uniq (in progress)
 - unlink
 - uptime
 - users
-- wc
+- wc (in progress)
 - who
 
 License
