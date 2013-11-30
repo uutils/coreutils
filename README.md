@@ -127,7 +127,6 @@ To do
 - unlink
 - uptime
 - users
-- wc (in progress)
 - who
 
 License
