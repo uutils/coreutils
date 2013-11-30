@@ -60,11 +60,9 @@ fn main() {
     }
 
     if (matches.opt_present("version")) {
-        println("cat 1.0.0");
+        println("wc 1.0.0");
         return;
     }
-
-
 
     let mut files = matches.free.clone();
     if files.is_empty() {
@@ -113,7 +111,11 @@ pub fn wc(files: ~[~str], matches: &Matches) {
             // hence the option wrapped in a result here
             match result(| | reader.read_until(LF)) {
                 Ok(Some(raw_line)) => {
-                    line_count += 1;
+                    // GNU 'wc' only counts lines that end in LF as lines
+                    if (raw_line.iter().last().unwrap() == &LF) {
+                        line_count += 1;
+                    }
+
                     byte_count += raw_line.iter().len();
 
                     // try and convert the bytes to UTF-8 first
