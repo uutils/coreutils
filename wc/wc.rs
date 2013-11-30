@@ -140,7 +140,9 @@ pub fn wc(files: ~[~str], matches: &Matches) {
                     }
 
                     if (current_char_count > longest_line_length) {
-                        longest_line_length = current_char_count;
+                        // we subtract one here because `line.iter().len()` includes the LF
+                        // matches GNU 'wc' behaviour
+                        longest_line_length = current_char_count - 1;
                     }
                 },
                 _ => break
