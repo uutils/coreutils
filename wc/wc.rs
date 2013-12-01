@@ -121,12 +121,12 @@ pub fn wc(files: ~[~str], matches: &Matches) {
                     // try and convert the bytes to UTF-8 first
                     match from_utf8_slice_opt(raw_line) {
                         Some(line) => {
-                            word_count += line.word_iter().len();
-                            current_char_count = line.iter().len();
+                            word_count += line.words().len();
+                            current_char_count = line.chars().len();
                             char_count += current_char_count;
                         },
                         None => {
-                            word_count += raw_line.split_iter(|&x| is_word_seperator(x)).len();
+                            word_count += raw_line.split(|&x| is_word_seperator(x)).len();
                             for byte in raw_line.iter() {
                                 match byte.is_ascii() {
                                     true => {
@@ -221,7 +221,7 @@ fn open(path: ~str) -> Option<BufferedReader<~Reader>> {
         return Some(BufferedReader::new(reader));
     }
 
-    match result(|| File::open(&std::path::Path::new(path.as_slice()))) {
+    match result(|| File::open(&std::path::Path::init(path.as_slice()))) {
         Ok(fd) => {
             let reader = ~fd as ~Reader;
             return Some(BufferedReader::new(reader));
