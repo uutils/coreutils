@@ -92,9 +92,7 @@ fn main() {
         return println("echo version: " + VERSION);
     }
 
-    if matches.free.is_empty() {
-        print("");
-    } else {
+    if !matches.free.is_empty() {
         let string = matches.free.connect(" ");
         if matches.opt_present("e") {
             let mut prev_was_slash = false;
