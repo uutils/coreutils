@@ -7,7 +7,7 @@ RUSTCFLAGS  := --opt-level=3
 RMFLAGS     :=
 
 # Output names
-EXES        := false printenv true yes cat whoami env wc
+EXES        := false printenv true yes cat whoami env wc echo
 TESTS       := cat
 
 # Utils stuff
