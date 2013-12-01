@@ -182,7 +182,7 @@ fn open(path: ~str) -> Option<~Reader> {
         return Some(~stdin() as ~Reader);
     }
 
-    match result(|| File::open(&std::path::Path::new(path.as_slice()))) {
+    match result(|| File::open(&std::path::Path::init(path.as_slice()))) {
         Ok(fd) => return Some(~fd as ~Reader),
         Err(e) => {
             writeln!(&mut stderr() as &mut Writer,
