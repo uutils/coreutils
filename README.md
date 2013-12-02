@@ -52,7 +52,6 @@ To do
 - dircolors
 - dirname
 - du
-- echo
 - expand
 - expr
 - extent-scan
