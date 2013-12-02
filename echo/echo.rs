@@ -41,6 +41,29 @@ fn isodigit(c: u8) -> bool {
     }
 }
 
+fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
+    let (max_digits, is_legal_digit) = match base {
+        8u => (3, isodigit),
+        16u => (2, isxdigit),
+        _ => fail!(),
+    };
+
+    let mut bytes: ~[u8] = ~[];
+    for offset in range(0, max_digits) {
+        let c = string[index + offset as uint];
+        if is_legal_digit(c) {
+            bytes.push(c as u8);
+        } else {
+            if bytes.len() > 0 {
+                return (to_char(bytes, base), offset);
+            } else {
+                return (' ', offset);
+            }
+        }
+    }
+    return (to_char(bytes, base), max_digits)
+}
+
 fn main() {
     let args = os::args();
     let program = args[0].clone();
@@ -120,90 +143,27 @@ fn main() {
                                 't' => print_char('\t'),
                                 'v' => print_char('\x0B'),
                                 'x' => {
-                                    if index == string.len() - 1 {
+                                    let (c, num_char_used) = convert_str(string, index + 1, 16u);
+                                    if num_char_used == 0 {
                                         print_char('\\');
                                         print_char('x');
-                                    } else if index == string.len() - 2 {
-                                        let next_char = string[index + 1];
-                                        if isxdigit(next_char) {
-                                            print_char(to_char([next_char as u8], 16u));
-                                            iter.next();
-                                        } else {
-                                            print_char('\\');
-                                            print_char('x');
-                                        }
                                     } else {
-                                        let next_char = string[index + 1];
-                                        let next_next_char = string[index + 2];
-                                        match (isxdigit(next_char), isxdigit(next_next_char)) {
-                                            (true, true) => {
-                                                print_char(to_char([next_char as u8, next_next_char as u8], 16u));
-                                                iter.next(); iter.next();
-                                            }
-                                            (true, false) => {
-                                                print_char(to_char([next_char as u8], 16u));
-                                                iter.next();
-                                            }
-                                            _ => {
-                                                print_char('\\');
-                                                print_char('x');
-                                            }
-                                        };
+                                        print_char(c);
+                                        for _ in range(0, num_char_used) {
+                                            iter.next(); // consume used characters
+                                        }
                                     }
                                 },
                                 '0' => {
-                                    if index == string.len() - 1 {
+                                    let (c, num_char_used) = convert_str(string, index + 1, 8u);
+                                    if num_char_used == 0 {
                                         print_char('\\');
                                         print_char('0');
-                                    } else if index == string.len() - 2 {
-                                        let next_char = string[index + 1];
-                                        if isodigit(next_char) {
-                                            print_char(to_char([next_char as u8], 8u));
-                                            iter.next();
-                                        } else {
-                                            print_char('\\');
-                                            print_char('0');
-                                        }
-                                    } else if index == string.len() - 3 {
-                                        let next_char = string[index + 1];
-                                        let next_next_char = string[index + 2];
-                                        match (isodigit(next_char), isodigit(next_next_char)) {
-                                            (true, true) => {
-                                                print_char(to_char([next_char as u8, next_next_char as u8], 8u));
-                                                iter.next(); iter.next();
-                                            }
-                                            (true, false) => {
-                                                print_char(to_char([next_char as u8], 8u));
-                                                iter.next();
-                                            }
-                                            _ => {
-                                                print_char('\\');
-                                                print_char('x');
-                                            }
-                                        };
                                     } else {
-                                        let next_char = string[index + 1];
-                                        let next_next_char = string[index + 2];
-                                        let next_next_next_char = string[index + 3];
-                                        match (isodigit(next_char), isodigit(next_next_char),
-                                            isodigit(next_next_next_char)) {
-                                            (true, true, true) => {
-                                                print_char(to_char([next_char as u8, next_next_char as u8, next_next_next_char as u8], 8u));
-                                                iter.next(); iter.next(); iter.next();
-                                            }
-                                            (true, true, false) => {
-                                                print_char(to_char([next_char as u8, next_next_char as u8], 8u));
-                                                iter.next(); iter.next();
-                                            }
-                                            (true, false, false) => {
-                                                print_char(to_char([next_char as u8], 8u));
-                                                iter.next();
-                                            }
-                                            _ => {
-                                                print_char('\\');
-                                                print_char('x');
-                                            }
-                                        };
+                                        print_char(c);
+                                        for _ in range(0, num_char_used) {
+                                            iter.next(); // consume used characters
+                                        }
                                     }
                                 }
                                 _ => {
