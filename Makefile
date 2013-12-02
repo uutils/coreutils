@@ -7,8 +7,21 @@ RUSTCFLAGS  := --opt-level=3
 RMFLAGS     :=
 
 # Output names
-EXES        := false printenv true yes cat whoami env wc echo
-TESTS       := cat
+EXES        := \
+  cat \
+  echo \
+  env \
+  false \
+  printenv \
+  true \
+  wc \
+  whoami \
+  yes \
+
+
+TESTS       := \
+  cat \
+
 
 # Utils stuff
 EXES_PATHS  := $(addprefix build/,$(EXES))
