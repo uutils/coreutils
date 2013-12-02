@@ -16,6 +16,18 @@ are either old, abandonned, hosted on CVS, written in platform-specific C, etc.
 Rust provides a good platform-agnostic way of writing systems utils that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
+Contribute
+----------
+
+Contributions are very welcome.  You may *claim* an item on the to-do list by following these steps:
+
+1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement ls"
+2. State that you are working on this utility.
+3. Develop the utility.
+4. Submit a pull request and close the issue.  Your pull request should include deleting the utility from the to-do list on this README.
+
+The steps above imply that, before starting to work on a utility, you should search the issues to make sure no one else is working on it.
+
 To do
 -----
 
