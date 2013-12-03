@@ -42,8 +42,8 @@ fn main() {
         println("Usage:");
         println!("  {0:s} [OPTION] NAME...", program);
         println("");
-        print(groups::usage("Output each NAME with its last non-slash component and trailing slashes\
-removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current\
+        print(groups::usage("Output each NAME with its last non-slash component and trailing slashes
+removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
 directory).", opts));
         return;
     }
