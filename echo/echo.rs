@@ -92,22 +92,21 @@ fn main() {
         println!("  {0:s} [SHORT-OPTION]... [STRING]...", program);
         println!("  {0:s} LONG-OPTION", program);
         println("");
-        print(groups::usage("Echo the STRING(s) to standard output.", opts));
-        print("\nIf -e is in effect, the following sequences are recognized:\n\
-\n\
-  \\\\      backslash\n\
-  \\a      alert (BEL)\n\
-  \\b      backspace\n\
-  \\c      produce no further output\n\
-  \\e      escape\n\
-  \\f      form feed\n\
-  \\n      new line\n\
-  \\r      carriage return\n\
-  \\t      horizontal tab\n\
-  \\v      vertical tab\n\
-  \\0NNN   byte with octal value NNN (1 to 3 digits)\n\
-  \\xHH    byte with hexadecimal value HH (1 to 2 digits)\n\
-");
+        println(groups::usage("Echo the STRING(s) to standard output.", opts));
+        println("If -e is in effect, the following sequences are recognized:
+
+\\\\      backslash
+\\a      alert (BEL)
+\\b      backspace
+\\c      produce no further output
+\\e      escape
+\\f      form feed
+\\n      new line
+\\r      carriage return
+\\t      horizontal tab
+\\v      vertical tab
+\\0NNN   byte with octal value NNN (1 to 3 digits)
+\\xHH    byte with hexadecimal value HH (1 to 2 digits)");
         return;
     }
 
