@@ -11,6 +11,7 @@ EXES        := \
   cat \
   echo \
   env \
+  du \
   false \
   printenv \
   true \
