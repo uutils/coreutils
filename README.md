@@ -51,7 +51,6 @@ To do
 - df
 - dircolors
 - dirname
-- du
 - expand
 - expr
 - extent-scan
