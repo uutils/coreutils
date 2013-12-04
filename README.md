@@ -32,7 +32,6 @@ To do
 -----
 
 - base64
-- basename
 - chcon
 - chgrp
 - chmod
