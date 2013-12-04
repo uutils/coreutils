@@ -9,6 +9,7 @@ RMFLAGS     :=
 # Output names
 EXES        := \
   cat \
+  dirname \
   echo \
   env \
   false \

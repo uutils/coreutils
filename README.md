@@ -50,7 +50,6 @@ To do
 - dd
 - df
 - dircolors
-- dirname
 - du
 - expand
 - expr
