@@ -17,6 +17,7 @@ EXES        := \
   wc \
   whoami \
   yes \
+  basename \
 
 
 TESTS       := \
