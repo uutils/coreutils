@@ -14,6 +14,7 @@ EXES        := \
   env \
   false \
   printenv \
+  pwd \
   true \
   wc \
   whoami \
