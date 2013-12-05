@@ -98,7 +98,6 @@ To do
 - printf
 - prog-fprintf
 - ptx
-- pwd
 - readlink
 - realpath
 - relpath
