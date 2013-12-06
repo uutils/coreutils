@@ -14,7 +14,7 @@ extern mod extra;
 use std::os;
 use std::io::{stdin, stderr, File, result};
 use std::io::buffered::BufferedReader;
-use std::str::from_utf8_slice_opt;
+use std::str::from_utf8_opt;
 use extra::getopts::{groups, Matches};
 
 struct Result {
@@ -119,7 +119,7 @@ pub fn wc(files: ~[~str], matches: &Matches) {
                     byte_count += raw_line.iter().len();
 
                     // try and convert the bytes to UTF-8 first
-                    match from_utf8_slice_opt(raw_line) {
+                    match from_utf8_opt(raw_line) {
                         Some(line) => {
                             word_count += line.words().len();
                             current_char_count = line.chars().len();
@@ -221,7 +221,7 @@ fn open(path: ~str) -> Option<BufferedReader<~Reader>> {
         return Some(BufferedReader::new(reader));
     }
 
-    match result(|| File::open(&std::path::Path::init(path.as_slice()))) {
+    match result(|| File::open(&std::path::Path::new(path.as_slice()))) {
         Ok(fd) => {
             let reader = ~fd as ~Reader;
             return Some(BufferedReader::new(reader));
