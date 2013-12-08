@@ -15,18 +15,24 @@ use std::os;
 use std::io::stderr;
 use std::io::fs;
 use std::io::FileStat;
+use std::option::Option;
 use std::path::Path;
 use extra::arc::Arc;
 use extra::future::Future;
-use extra::getopts::{groups, Matches};
+use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
 
+struct Options {
+    all: bool,
+    max_depth: Option<uint>,
+    total: bool
+}
 
-fn du(path: &Path, matches_arc: Arc<Matches>) -> ~[Arc<FileStat>] {
+fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
     let mut stats = ~[];
     let mut futures = ~[];
-    let matches = matches_arc.get();
+    let options = options_arc.get();
     let mut my_stat = path.stat();
 
     for f in fs::readdir(path).move_iter() {
@@ -34,13 +40,13 @@ fn du(path: &Path, matches_arc: Arc<Matches>) -> ~[Arc<FileStat>] {
             true => {
                 let stat = f.stat();
                 my_stat.size += stat.size;
-                if matches.opt_present("all") {
+                if options.all {
                     stats.push(Arc::new(stat))
                 }    
             }
             false => {
-                let ma_clone = matches_arc.clone();
-                futures.push(do Future::spawn { du(&f, ma_clone) })
+                let oa_clone = options_arc.clone();
+                futures.push(do Future::spawn { du(&f, oa_clone, depth + 1) })
             }
         }
     }
@@ -51,7 +57,9 @@ fn du(path: &Path, matches_arc: Arc<Matches>) -> ~[Arc<FileStat>] {
             if stat.path.dir_path() == my_stat.path {
                 my_stat.size += stat.size;
             }
-            stats.push(stat_arc.clone());
+            if options.max_depth == None || depth < options.max_depth.unwrap() {
+                stats.push(stat_arc.clone());
+            }
         }
     }
 
@@ -159,19 +167,58 @@ ers of 1000).");
         return
     }
 
+    let options = Options{
+        all: matches.opt_present("all"),
+        max_depth: match (matches.opt_present("summarize"), matches.opt_str("max-depth")) {
+            (true, Some(s)) => match from_str::<uint>(s) {
+                Some(_) => {
+                    println!("du: warning: summarizing conflicts with --max-depth={:s}", s);
+                    return
+                },
+                None => {
+                    println!("du: invalid maximum depth '{:s}'", s);
+                    return
+                }
+            },
+            (true, None) => Some(0),
+            (false, Some(s)) => match from_str::<uint>(s) {
+                Some(u) => Some(u),
+                None => {
+                    println!("du: invalid maximum depth '{:s}'", s);
+                    return
+                }
+            },
+            (false, None) => None
+        },
+        total: matches.opt_present("total")
+    };
+
     let strs = matches.free.clone();
     let strs = match strs.is_empty() {
         true => ~[~"./"],
         false => strs
     };
 
-    let matches_arc = Arc::new(matches);
+    let options_arc = Arc::new(options);
 
+    let mut grand_total = 0;
     for path_str in strs.iter() {
         let path = Path::init(path_str.clone());
-        for stat_arc in du(&path, matches_arc.clone()).move_iter() {
+        let iter = du(&path, options_arc.clone(), 0).move_iter();
+        let (_, len) = iter.size_hint();
+        let len = len.unwrap();
+        for (index, stat_arc) in iter.enumerate() {
             let stat = stat_arc.get();
             println!("{:<10} {}", stat.size, stat.path.display());
+            if options.total && index == (len - 1) {
+                // The last element will be the total size of the the path under
+                // path_str.  We add it to the grand total.
+                grand_total += stat.size;
+            }
         }
+    }
+
+    if options.total {
+        println!("{:<10} total", grand_total);
     }
 }
