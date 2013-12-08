@@ -63,7 +63,7 @@ To do
 - groups
 - head
 - hostid
-- hostname
+- hostname (in progress)
 - id
 - install
 - join
