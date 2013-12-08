@@ -104,7 +104,7 @@ fn main() {
         // // In task
         // groups::optflag("l", "count-links", "count sizes many times if hard linked"),
         // // In main
-        // groups::optflag("m", "", "like --block-size=1M"),
+        groups::optflag("m", "", "like --block-size=1M"),
         // // In task
         // groups::optflag("L", "dereference", "dereference all symbolic links"),
         // // In task
@@ -201,6 +201,26 @@ ers of 1000).");
 
     let options_arc = Arc::new(options);
 
+    let MB = 1024 * 1024;
+    let KB = 1024;
+    let convert_size = |size: u64| -> ~str {
+        if matches.opt_present("human-readable") {
+            if size > MB {
+                format!("{:.1f}MB", (size as f64) / (MB as f64))
+            } else if size > KB {
+                format!("{:.1f}KB", (size as f64) / (KB as f64))
+            } else {
+                format!("{}B", size)
+            }
+        } else if matches.opt_present("k") {
+            format!("{}", ((size as f64) / (KB as f64)).ceil())
+        } else if matches.opt_present("m") {
+            format!("{}", ((size as f64) / (MB as f64)).ceil())
+        } else {
+            format!("{}", ((size as f64) / (KB as f64)).ceil())
+        }
+    };
+
     let mut grand_total = 0;
     for path_str in strs.iter() {
         let path = Path::init(path_str.clone());
@@ -209,7 +229,7 @@ ers of 1000).");
         let len = len.unwrap();
         for (index, stat_arc) in iter.enumerate() {
             let stat = stat_arc.get();
-            println!("{:<10} {}", stat.size, stat.path.display());
+            println!("{:<10} {}", convert_size(stat.size), stat.path.display());
             if options.total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
@@ -219,6 +239,6 @@ ers of 1000).");
     }
 
     if options.total {
-        println!("{:<10} total", grand_total);
+        println!("{:<10} total", convert_size(grand_total));
     }
 }
