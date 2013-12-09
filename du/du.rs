@@ -26,7 +26,8 @@ static VERSION: &'static str = "1.0.0";
 struct Options {
     all: bool,
     max_depth: Option<uint>,
-    total: bool
+    total: bool,
+    separate_dirs: bool,
 }
 
 fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
@@ -40,6 +41,7 @@ fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
             true => {
                 let stat = f.stat();
                 my_stat.size += stat.size;
+                my_stat.unstable.blocks += stat.unstable.blocks;
                 if options.all {
                     stats.push(Arc::new(stat))
                 }    
@@ -54,8 +56,9 @@ fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
     for future in futures.mut_iter() {
         for stat_arc in future.get().move_rev_iter() {
             let stat = stat_arc.get();
-            if stat.path.dir_path() == my_stat.path {
+            if !options.separate_dirs && stat.path.dir_path() == my_stat.path {
                 my_stat.size += stat.size;
+                my_stat.unstable.blocks += stat.unstable.blocks;
             }
             if options.max_depth == None || depth < options.max_depth.unwrap() {
                 stats.push(stat_arc.clone());
@@ -74,11 +77,11 @@ fn main() {
     let opts = ~[
         // In task
         groups::optflag("a", "all", " write counts for all files, not just directories"),
-        // // In main
-        // groups::optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
-        //     although  the apparent  size is usually smaller, it may be larger due to holes
-        //     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"),
         // In main
+        groups::optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
+            although  the apparent  size is usually smaller, it may be larger due to holes
+            in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"),
+        // // In main
         // groups::optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
         //     E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
         //     "SIZE"),
@@ -190,7 +193,8 @@ ers of 1000).");
             },
             (false, None) => None
         },
-        total: matches.opt_present("total")
+        total: matches.opt_present("total"),
+        separate_dirs: matches.opt_present("S"),
     };
 
     let strs = matches.free.clone();
@@ -201,10 +205,17 @@ ers of 1000).");
 
     let options_arc = Arc::new(options);
 
-    let MB = 1024 * 1024;
-    let KB = 1024;
+    let MB = match matches.opt_present("si") {
+        true => 1000 * 1000,
+        false => 1024 * 1024,  
+    };
+    let KB = match matches.opt_present("si") {
+        true => 1000,
+        false => 1024,  
+    };
+
     let convert_size = |size: u64| -> ~str {
-        if matches.opt_present("human-readable") {
+        if matches.opt_present("human-readable") || matches.opt_present("si") {
             if size > MB {
                 format!("{:.1f}MB", (size as f64) / (MB as f64))
             } else if size > KB {
@@ -221,6 +232,11 @@ ers of 1000).");
         }
     };
 
+    let line_separator = match matches.opt_present("0") {
+        true => "\0",
+        false => "\n",
+    };
+
     let mut grand_total = 0;
     for path_str in strs.iter() {
         let path = Path::init(path_str.clone());
@@ -229,16 +245,24 @@ ers of 1000).");
         let len = len.unwrap();
         for (index, stat_arc) in iter.enumerate() {
             let stat = stat_arc.get();
-            println!("{:<10} {}", convert_size(stat.size), stat.path.display());
+            let size = match matches.opt_present("apparent-size") {
+                true => stat.size,
+                // C's stat is such that each block is assume to be 512 bytes
+                // See: http://linux.die.net/man/2/stat
+                false => stat.unstable.blocks * 512,
+            };
+            print!("{:<10} {}", convert_size(size), stat.path.display());
+            print(line_separator);
             if options.total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
-                grand_total += stat.size;
+                grand_total += size;
             }
         }
     }
 
     if options.total {
-        println!("{:<10} total", convert_size(grand_total));
+        print!("{:<10} total", convert_size(grand_total));
+        print(line_separator);
     }
 }
