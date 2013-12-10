@@ -61,7 +61,7 @@ To do
 - getlimits
 - group-list
 - groups
-- head
+- head ( in progress )
 - hostid
 - hostname
 - id
