@@ -130,10 +130,8 @@ fn main() {
             only if it is N or fewer levels below the command
             line argument;  --max-depth=0 is the same as --summarize", "N"),
         // In main
-        groups::optflag("", "time", "show time of the last modification of any file in the
-            directory, or any of its subdirectories"),
-        // In main
-        groups::optopt("", "time", "show time as WORD instead of modification time:
+        groups::optflagopt("", "time", "show time of the last modification of any file in the
+            directory, or any of its subdirectories.  If WORD is given, show time as WORD instead of modification time:
             atime, access, use, ctime or status", "WORD"),
         // In main
         groups::optopt("", "time-style", "show times using style STYLE:
@@ -275,7 +273,7 @@ ers of 1000).");
     let time_format_str = match matches.opt_str("time-style") {
         Some(s) => {
             match s.as_slice() {
-                "full-iso" => "%Y-%m-%d %H:%M:%S.%N %z",
+                "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
                 "long-iso" => "%Y-%m-%d %H:%M",
                 "iso" => "%Y-%m-%d",
                 _ => {
@@ -330,7 +328,7 @@ Try 'du --help' for more information.");
                             },
                             None => stat.modified
                         };
-                        ((time / 1000) as i64, (time % 1000 * 1000) as i32)
+                        ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
                     let time_spec = Timespec::new(secs, nsecs);
                     extra::time::at(time_spec).strftime(time_format_str)
