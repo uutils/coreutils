@@ -116,7 +116,7 @@ fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_f
                     }).inside(|| {
                         fs::rmdir(&file);
                     });
-                } else if dir {
+                } else if dir && (*filename != ~"/" || !preserve_root) {
                     io_error::cond.trap(|_| {
                         writeln!(&mut stderr() as &mut Writer,
                                  "Could not remove directory '{}'", *filename);
@@ -124,9 +124,15 @@ fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_f
                         fs::rmdir(&file);
                     });
                 } else {
-                    writeln!(&mut stderr() as &mut Writer,
-                             "Could not remove directory '{}' (did you mean to pass '-r'?)",
-                             *filename);
+                    if recursive {
+                        writeln!(&mut stderr() as &mut Writer,
+                                 "Could not remove directory '{}'",
+                                 *filename);
+                    } else {
+                        writeln!(&mut stderr() as &mut Writer,
+                                 "Could not remove directory '{}' (did you mean to pass '-r'?)",
+                                 *filename);
+                    }
                 }
             } else {
                 io_error::cond.trap(|_| {
