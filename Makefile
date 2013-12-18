@@ -15,6 +15,7 @@ EXES        := \
   false \
   printenv \
   pwd \
+  rmdir \
   true \
   wc \
   whoami \
