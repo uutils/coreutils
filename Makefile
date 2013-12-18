@@ -15,6 +15,7 @@ EXES        := \
   false \
   printenv \
   pwd \
+  sleep \
   true \
   wc \
   whoami \
