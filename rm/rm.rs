@@ -103,6 +103,7 @@ fn main() {
     }
 }
 
+// TODO: implement one-file-system and interactive
 fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
     for filename in files.iter() {
         let file = Path::new(filename.to_owned());
@@ -113,15 +114,19 @@ fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_f
                     io_error::cond.trap(|_| {
                         writeln!(&mut stderr() as &mut Writer,
                                  "Could not remove directory: '{}'", *filename);
+                        os::set_exit_status(1);
                     }).inside(|| {
                         fs::rmdir(&file);
+                        println!("Removed '{}'", *filename);
                     });
                 } else if dir && (*filename != ~"/" || !preserve_root) {
                     io_error::cond.trap(|_| {
                         writeln!(&mut stderr() as &mut Writer,
                                  "Could not remove directory '{}'", *filename);
+                        os::set_exit_status(1);
                     }).inside(|| {
                         fs::rmdir(&file);
+                        println!("Removed '{}'", *filename);
                     });
                 } else {
                     if recursive {
@@ -132,6 +137,7 @@ fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_f
                         writeln!(&mut stderr() as &mut Writer,
                                  "Could not remove directory '{}' (did you mean to pass '-r'?)",
                                  *filename);
+                        os::set_exit_status(1);
                     }
                 }
             } else {
@@ -141,11 +147,12 @@ fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_f
                     os::set_exit_status(1);
                 }).inside(|| {
                     fs::unlink(&file);
+                    println!("Removed '{}'", *filename);
                 });
             }
         } else if !force {
             writeln!(&mut stderr() as &mut Writer,
-                     "Invalid file: '{}'", *filename);
+                     "No such file or directory '{}'", *filename);
             os::set_exit_status(1);
         }
     }
