@@ -23,8 +23,8 @@ fn main() {
         groups::optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty"),
         groups::optflag("p", "parents", "remove DIRECTORY and its ancestors; e.g., 'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a"),
         groups::optflag("v", "verbose", "output a diagnostic for every directory processed"),
-        groups::optflag("", "help", "print this help and exit"),
-        groups::optflag("", "version", "output version information and exit")
+        groups::optflag("h", "help", "print this help and exit"),
+        groups::optflag("V", "version", "output version information and exit")
     ];
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
