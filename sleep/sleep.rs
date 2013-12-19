@@ -22,8 +22,8 @@ fn main() {
     let program = args[0].clone();
 
     let opts = ~[
-        groups::optflag("", "help", "display this help and exit"),
-        groups::optflag("", "version", "output version information and exit")
+        groups::optflag("h", "help", "display this help and exit"),
+        groups::optflag("V", "version", "output version information and exit")
     ];
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
