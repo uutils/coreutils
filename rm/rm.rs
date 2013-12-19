@@ -12,13 +12,28 @@
 extern mod extra;
 
 use std::os;
-use std::io::{stderr,fs,io_error};
+use std::io::{stdin,stderr,stdio,fs,buffered,io_error};
 use extra::getopts::groups;
 
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,
     InteractiveAlways
+}
+
+impl Eq for InteractiveMode {
+    fn eq(&self, other: &InteractiveMode) -> bool {
+        match (*self, *other) {
+            (InteractiveNone, InteractiveNone) |
+            (InteractiveOnce, InteractiveOnce) |
+            (InteractiveAlways, InteractiveAlways) => true,
+            _ => false
+        }
+    }
+
+    fn ne(&self, other: &InteractiveMode) -> bool {
+        !self.eq(other)
+    }
 }
 
 fn main() {
@@ -71,6 +86,11 @@ fn main() {
         println("assurance that the contents are truly unrecoverable, consider using shred.");
     } else if matches.opt_present("version") {
         println("rm 1.0.0");
+    } else if matches.free.is_empty() {
+        writeln!(&mut stderr() as &mut Writer, "Missing an argument");
+        writeln!(&mut stderr() as &mut Writer,
+                 "For help, try '{0:s} --help'", program);
+        os::set_exit_status(1);
     } else {
         let force = matches.opt_present("force");
         let interactive =
@@ -98,36 +118,33 @@ fn main() {
         let recursive = matches.opt_present("recursive");
         let dir = matches.opt_present("dir");
         let verbose = matches.opt_present("verbose");
-        remove_files(matches.free, force, interactive, one_fs, preserve_root,
-                     recursive, dir, verbose);
+        if interactive == InteractiveOnce && (recursive || matches.free.len() > 3) {
+            let msg =
+                if recursive {
+                    "Remove all arguments recursively? "
+                } else {
+                    "Remove all arguments? "
+                };
+            if !prompt(msg) {
+                return;
+            }
+        }
+        remove(matches.free, force, interactive, one_fs, preserve_root,
+               recursive, dir, verbose);
     }
 }
 
-// TODO: implement one-file-system and interactive
-fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
+// TODO: implement one-file-system
+fn remove(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
     for filename in files.iter() {
         let file = Path::new(filename.to_owned());
         if file.exists() {
             if file.is_dir() {
                 if recursive && (*filename != ~"/" || !preserve_root) {
-                    remove_files(fs::walk_dir(&file).map(|x| x.as_str().unwrap().to_owned()).to_owned_vec(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
-                    io_error::cond.trap(|_| {
-                        writeln!(&mut stderr() as &mut Writer,
-                                 "Could not remove directory: '{}'", *filename);
-                        os::set_exit_status(1);
-                    }).inside(|| {
-                        fs::rmdir(&file);
-                        println!("Removed '{}'", *filename);
-                    });
+                    remove(fs::walk_dir(&file).map(|x| x.as_str().unwrap().to_owned()).to_owned_vec(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
+                    remove_dir(&file, *filename, interactive, verbose);
                 } else if dir && (*filename != ~"/" || !preserve_root) {
-                    io_error::cond.trap(|_| {
-                        writeln!(&mut stderr() as &mut Writer,
-                                 "Could not remove directory '{}'", *filename);
-                        os::set_exit_status(1);
-                    }).inside(|| {
-                        fs::rmdir(&file);
-                        println!("Removed '{}'", *filename);
-                    });
+                    remove_dir(&file, *filename, interactive, verbose);
                 } else {
                     if recursive {
                         writeln!(&mut stderr() as &mut Writer,
@@ -137,24 +154,89 @@ fn remove_files(files: &[~str], force: bool, interactive: InteractiveMode, one_f
                         writeln!(&mut stderr() as &mut Writer,
                                  "Could not remove directory '{}' (did you mean to pass '-r'?)",
                                  *filename);
-                        os::set_exit_status(1);
                     }
+                    os::set_exit_status(1);
                 }
             } else {
-                io_error::cond.trap(|_| {
-                    writeln!(&mut stderr() as &mut Writer,
-                             "Could not remove file: '{}'", *filename);
-                    os::set_exit_status(1);
-                }).inside(|| {
-                    fs::unlink(&file);
-                    println!("Removed '{}'", *filename);
-                });
+                remove_file(&file, *filename, interactive, verbose);
             }
         } else if !force {
             writeln!(&mut stderr() as &mut Writer,
                      "No such file or directory '{}'", *filename);
             os::set_exit_status(1);
         }
+    }
+}
+
+fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) {
+    let response =
+        if interactive == InteractiveAlways {
+            prompt_file(path, name)
+        } else {
+            true
+        };
+    if response {
+        io_error::cond.trap(|_| {
+            writeln!(&mut stderr() as &mut Writer,
+                     "Could not remove directory '{}'", name);
+            os::set_exit_status(1);
+        }).inside(|| {
+            fs::rmdir(path);
+            if verbose {
+                println!("Removed '{}'", name);
+            }
+        });
+    }
+}
+
+fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) {
+    let response =
+        if interactive == InteractiveAlways {
+            prompt_file(path, name)
+        } else {
+            true
+        };
+    if response {
+        io_error::cond.trap(|_| {
+            writeln!(&mut stderr() as &mut Writer,
+                     "Could not remove file '{}'", name);
+            os::set_exit_status(1);
+        }).inside(|| {
+            fs::unlink(path);
+            if verbose {
+                println!("Removed '{}'", name);
+            }
+        });
+    }
+}
+
+fn prompt_file(path: &Path, name: &str) -> bool {
+    if path.is_dir() {
+        prompt(format!("Remove directory '{}'? ", name))
+    } else {
+        prompt(format!("Remove file '{}'? ", name))
+    }
+}
+
+fn prompt(msg: &str) -> bool {
+    print(msg);
+    read_prompt()
+}
+
+fn read_prompt() -> bool {
+    stdio::flush();
+    match buffered::BufferedReader::new(stdin()).read_line() {
+        Some(line) => {
+            match line.char_at(0) {
+                'y' | 'Y' => true,
+                'n' | 'N' => false,
+                _ => {
+                    print("Please enter either Y or N: ");
+                    read_prompt()
+                }
+            }
+        }
+        None => true
     }
 }
 
