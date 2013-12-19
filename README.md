@@ -105,7 +105,6 @@ To do
 - relpath
 - remove
 - rm
-- rmdir
 - runcon
 - seq
 - setuidgid
