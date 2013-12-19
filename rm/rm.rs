@@ -46,7 +46,7 @@ fn main() {
         groups::optflag("i", "", "prompt before every removal"),
         groups::optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"),
         groups::optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN"),
-        groups::optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument"),
+        groups::optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)"),
         groups::optflag("", "no-preserve-root", "do not treat '/' specially"),
         groups::optflag("", "preserve-root", "do not remove '/' (default)"),
         groups::optflag("r", "recursive", "remove directories and their contents recursively"),
