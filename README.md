@@ -104,7 +104,6 @@ To do
 - realpath
 - relpath
 - remove
-- rm
 - rmdir
 - runcon
 - seq
