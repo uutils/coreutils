@@ -52,8 +52,8 @@ fn main() {
         groups::optflag("r", "recursive", "remove directories and their contents recursively"),
         groups::optflag("d", "dir", "remove empty directories"),
         groups::optflag("v", "verbose", "explain what is being done"),
-        groups::optflag("", "help", "display this help and exit"),
-        groups::optflag("", "version", "output version information and exit")
+        groups::optflag("h", "help", "display this help and exit"),
+        groups::optflag("V", "version", "output version information and exit")
     ];
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
