@@ -53,7 +53,10 @@ fn decode(conf: &mut Conf) {
             out.write(bytes);
             out.flush();
         }
-        Err(s) => fail!(s)
+        Err(s) => {
+            error!("error: {:s}", s);
+            fail!()
+        }
     }
 }
 
@@ -130,9 +133,13 @@ impl Conf {
             optflag("h", "help", "display this help text and exit"),
             optflag("V", "version", "output version information and exit")
         ];
-        // TODO: The user should get a clean error message in the case that
-        // unwrap() fails.
-        let matches = getopts(args.tail(), opts).unwrap();
+        let matches = match getopts(args.tail(), opts) {
+            Ok(m) => m,
+            Err(e) => {
+                error!("error: {:s}", e.to_err_msg());
+                fail!()
+            }
+        };
 
         Conf {
             progname: args[0].clone(),
@@ -149,7 +156,15 @@ impl Conf {
             },
             ignore_garbage: matches.opt_present("ignore-garbage"),
             line_wrap: match matches.opt_str("wrap") {
-                Some(s) => from_str(s).unwrap(),
+                Some(s) => match from_str(s) {
+                    Some(s) => s,
+                    None => {
+                        error!("error: {:s}",
+                               "Argument to option 'wrap' improperly "
+                               + "formatted.");
+                        fail!()
+                    }
+                },
                 None => 76
             },
             input_file: if matches.free.is_empty()
