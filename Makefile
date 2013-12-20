@@ -8,6 +8,7 @@ RMFLAGS     :=
 
 # Output names
 EXES        := \
+  base64 \
   cat \
   dirname \
   echo \

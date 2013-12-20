@@ -33,7 +33,6 @@ The steps above imply that, before starting to work on a utility, you should sea
 To do
 -----
 
-- base64
 - basename
 - chcon
 - chgrp
