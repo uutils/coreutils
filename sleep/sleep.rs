@@ -101,10 +101,10 @@ fn sleep(args: &[~str]) {
 
 fn match_suffix(arg: &mut ~str) -> Result<int, ~str> {
     let result = match (*arg).pop_char() {
-        's' => Ok(1),
-        'm' => Ok(60),
-        'h' => Ok(60 * 60),
-        'd' => Ok(60 * 60 * 24),
+        's' | 'S' => Ok(1),
+        'm' | 'M' => Ok(60),
+        'h' | 'H' => Ok(60 * 60),
+        'd' | 'D' => Ok(60 * 60 * 24),
         val => {
             (*arg).push_char(val);
             if !val.is_alphabetic() {
