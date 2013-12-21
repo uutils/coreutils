@@ -38,8 +38,8 @@ fn decode(conf: &mut Conf) {
     if conf.ignore_garbage {
         let standard_chars =
             bytes!("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-                   "abcdefghijklmnopqrstuvwxyz",
-                   "0123456789+/").map(|b| char::from_u32(*b as u32).unwrap());
+            "abcdefghijklmnopqrstuvwxyz",
+            "0123456789+/").map(|b| char::from_u32(*b as u32).unwrap());
 
         to_decode = to_decode
             .trim_chars(&|c| !standard_chars.contains(&c))
@@ -87,12 +87,12 @@ fn help(conf: &Conf) {
     println("");
     println(conf.usage);
 
-    let msg = ~"With no FILE, or when FILE is -, read standard input.\n\n"
-        + "The data are encoded as described for the base64 alphabet in RFC "
-        + "3548. When\ndecoding, the input may contain newlines in addition "
-        + "to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage "
-        + "to attempt to recover from any other\nnon-alphabet bytes in the "
-        + "encoded stream.";
+    let msg = ~"With no FILE, or when FILE is -, read standard input.\n\n\
+        The data are encoded as described for the base64 alphabet in RFC \
+        3548. When\ndecoding, the input may contain newlines in addition \
+        to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
+        to attempt to recover from any other\nnon-alphabet bytes in the \
+        encoded stream.";
 
     println(msg);
 }
@@ -128,11 +128,11 @@ impl Conf {
             optflag("i", "ignore-garbage",
             "when decoding, ignore non-alphabetic characters"),
             optopt("w", "wrap",
-            "wrap encoded lines after COLS character (default 76, 0 to disable"
-            + " wrapping)", "COLS"),
+            "wrap encoded lines after COLS character (default 76, 0 to \
+            disable wrapping)", "COLS"),
             optflag("h", "help", "display this help text and exit"),
             optflag("V", "version", "output version information and exit")
-        ];
+                ];
         let matches = match getopts(args.tail(), opts) {
             Ok(m) => m,
             Err(e) => {
@@ -143,8 +143,8 @@ impl Conf {
 
         Conf {
             progname: args[0].clone(),
-            usage: usage("Base64 encode or decode FILE, or standard input, to "
-                         + "standard output.", opts),
+            usage: usage("Base64 encode or decode FILE, or standard input, to \
+                         standard output.", opts),
             mode: if matches.opt_present("help") {
                 Help
             } else if matches.opt_present("version") {
@@ -159,15 +159,14 @@ impl Conf {
                 Some(s) => match from_str(s) {
                     Some(s) => s,
                     None => {
-                        error!("error: {:s}",
-                               "Argument to option 'wrap' improperly "
-                               + "formatted.");
+                        error!("error: {:s}", "Argument to option 'wrap' \
+                               improperly formatted.");
                         fail!()
                     }
                 },
                 None => 76
             },
-            input_file: if matches.free.is_empty()
+            input_file: if matches.free.is_empty() 
                             || matches.free[0] == ~"-" {
                 ~stdin() as ~Reader
             } else {
