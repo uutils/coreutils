@@ -17,6 +17,8 @@ pub struct Conf {
     progname: ~str,
     usage: ~str,
     mode: Mode,
+    sources: ~[~Path],
+    dest: ~Path,
 }
 
 impl Conf {
@@ -44,6 +46,21 @@ impl Conf {
             } else {
                 Copy
             },
+            // For now we assume that the first free argument is SOURCE and the
+            // second free argument is DEST.
+            sources: if matches.free.len() < 1 {
+                error!("error: Missing SOURCE argument. Try --help.");
+                fail!()
+            } else {
+                ~[~Path::new(matches.free[0].clone())]
+            },
+            dest: if matches.free.len() < 2 {
+                error!("error: Missing DEST argument. Try --help.");
+                fail!()
+            } else {
+                ~Path::new(matches.free[1].clone())
+            },
+            // Any other free arguments are ignored for now.
         }
     }
 }
