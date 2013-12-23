@@ -12,6 +12,7 @@
 extern mod extra;
 
 use std::os;
+use std::io::fs;
 
 use conf::Conf;
 
@@ -38,4 +39,16 @@ fn help(conf: &Conf) {
 }
 
 fn copy(conf: &Conf) {
+    // We assume there is only one source for now.
+    let source = &conf.sources[0];
+    let dest = &conf.dest;
+
+    // In the case of only one source and one destination, it's a simple file
+    // copy operation, and the destination can't exist.
+    if dest.exists() {
+        error!("error: \"{:s}\" already exists", dest.display().to_str());
+        fail!()
+    }
+
+    fs::copy(*source, *dest);
 }
