@@ -12,12 +12,12 @@
 extern mod extra;
 
 use std::os;
-use std::io;
 use std::io::fs;
 
 use conf::Conf;
 
 mod conf;
+mod util;
 
 fn main() {
     let conf = Conf::new(os::args());
@@ -43,21 +43,8 @@ fn copy(conf: &Conf) {
     // We assume there is only one source for now.
     let source = &conf.sources[0];
     let dest = &conf.dest;
-    let mut raw_source = source.clone();
-    let mut raw_dest = dest.clone();
 
-    // We need to ensure they're not the same file, so we have to take symlinks
-    // and relative paths into account.
-    if fs::lstat(raw_source).kind == io::TypeSymlink {
-        raw_source = ~fs::readlink(raw_source).unwrap();
-    }
-    raw_source = ~os::make_absolute(raw_source);
-    if fs::lstat(raw_dest).kind == io::TypeSymlink {
-        raw_dest = ~fs::readlink(raw_dest).unwrap();
-    }
-    raw_dest = ~os::make_absolute(raw_dest);
-
-    if raw_source == raw_dest {
+    if util::paths_refer_to_same_file(*source, *dest) {
         error!("error: \"{:s}\" and \"{:s}\" are the same file",
                source.display().to_str(),
                dest.display().to_str());
