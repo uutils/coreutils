@@ -1,4 +1,4 @@
-#[link(name="env", vers="1.0.0", author="LeoTestard")];
+#[crate_id(name="env", vers="1.0.0", author="LeoTestard")];
 
 /*
  * This file is part of the uutils coreutils package.

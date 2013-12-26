@@ -1,4 +1,4 @@
-#[link(name="pwd", vers="1.0.0", author="Heather Cynede")];
+#[crate_id(name="pwd", vers="1.0.0", author="Heather Cynede")];
 
 /*
  * This file is part of the uutils coreutils package.

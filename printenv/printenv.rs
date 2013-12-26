@@ -1,4 +1,4 @@
-#[link(name="printenv", vers="1.0.0", author="Seldaek")];
+#[crate_id(name="printenv", vers="1.0.0", author="Seldaek")];
 
 /*
  * This file is part of the uutils coreutils package.
