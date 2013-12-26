@@ -1,4 +1,4 @@
-#[link(name="whoami", version="1.0.0", author="KokaKiwi")];
+#[crate_id(name="whoami", version="1.0.0", author="KokaKiwi")];
 
 /*
  * This file is part of the uutils coreutils package.

@@ -1,4 +1,4 @@
-#[link(name="rmdir", vers="1.0.0", author="Arcterus")];
+#[crate_id(name="rmdir", vers="1.0.0", author="Arcterus")];
 
 /*
  * This file is part of the uutils coreutils package.
