@@ -1,4 +1,4 @@
-#[link(name="base64", vers="1.0.0", author="Jordy Dickinson")]
+#[crate_id = "base64#1.0.0"];
 
 /*
  * This file is part of the uutils coreutils package.
