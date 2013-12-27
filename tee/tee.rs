@@ -1,4 +1,5 @@
-#[link(name="tee", vers="1.0.0", author="Aleksander Bielawski")];
+#[crate_id(name="tee", vers="1.0.0", author="Aleksander Bielawski")];
+#[license="MIT"];
 
 /*
  * This file is part of the uutils coreutils package.
