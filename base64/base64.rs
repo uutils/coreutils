@@ -16,26 +16,80 @@ use std::io::{File, stdin, stdout};
 use std::os;
 use std::str;
 
+use extra::getopts::groups::{
+    getopts,
+    optflag,
+    optopt,
+    usage
+};
 use extra::base64;
 use extra::base64::{FromBase64, ToBase64};
 
 fn main() {
-    let mut conf = Conf::new(os::args());
+    let args = ~os::args();
+    let opts = ~[
+        optflag("d", "decode", "decode data"),
+        optflag("i", "ignore-garbage",
+        "when decoding, ignore non-alphabetic characters"),
+        optopt("w", "wrap",
+        "wrap encoded lines after COLS character (default 76, 0 to \
+        disable wrapping)", "COLS"),
+        optflag("h", "help", "display this help text and exit"),
+        optflag("V", "version", "output version information and exit")
+    ];
+    let matches = match getopts(args.tail(), opts) {
+        Ok(m) => m,
+        Err(e) => {
+            error!("error: {:s}", e.to_err_msg());
+            fail!()
+        }
+    };
 
-    match conf.mode {
-        Decode  => decode(&mut conf),
-        Encode  => encode(&mut conf),
-        Help    => help(&conf),
+    let progname = args[0].clone();
+    let usage = usage("Base64 encode or decode FILE, or standard input, to \
+                       standard output.", opts);
+    let mode = if matches.opt_present("help") {
+        Help
+    } else if matches.opt_present("version") {
+        Version
+    } else if matches.opt_present("decode") {
+        Decode
+    } else {
+        Encode
+    };
+    let ignore_garbage = matches.opt_present("ignore-garbage");
+    let line_wrap = match matches.opt_str("wrap") {
+        Some(s) => match from_str(s) {
+            Some(s) => s,
+            None => {
+                error!("error: {:s}", "Argument to option 'wrap' \
+                        improperly formatted.");
+                fail!()
+            }
+        },
+        None => 76
+    };
+    let mut input = if matches.free.is_empty() || matches.free[0] == ~"-" {
+        ~stdin() as ~Reader
+    } else {
+        let path = Path::new(matches.free[0]);
+        ~File::open(&path) as ~Reader
+    };
+
+    match mode {
+        Decode  => decode(input, ignore_garbage),
+        Encode  => encode(input, line_wrap),
+        Help    => help(progname, usage),
         Version => version()
     }
 }
 
-fn decode(conf: &mut Conf) {
-    let mut to_decode = str::from_utf8_owned(conf.input_file.read_to_end());
+fn decode(input: &mut Reader, ignore_garbage: bool) {
+    let mut to_decode = str::from_utf8_owned(input.read_to_end());
 
     to_decode = to_decode.replace("\n", "");
 
-    if conf.ignore_garbage {
+    if ignore_garbage {
         let standard_chars =
             bytes!("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             "abcdefghijklmnopqrstuvwxyz",
@@ -60,16 +114,16 @@ fn decode(conf: &mut Conf) {
     }
 }
 
-fn encode(conf: &mut Conf) {
+fn encode(input: &mut Reader, line_wrap: uint) {
     let b64_conf = base64::Config {
         char_set: base64::Standard,
         pad: true,
-        line_length: match conf.line_wrap {
+        line_length: match line_wrap {
             0 => None,
-            _ => Some(conf.line_wrap)
+            _ => Some(line_wrap)
         }
     };
-    let to_encode = conf.input_file.read_to_end();
+    let to_encode = input.read_to_end();
     let mut encoded = to_encode.to_base64(b64_conf);
 
     // To my knowledge, RFC 3548 does not specify which line endings to use. It
@@ -82,10 +136,10 @@ fn encode(conf: &mut Conf) {
     println(encoded);
 }
 
-fn help(conf: &Conf) {
-    println!("Usage: {:s} [OPTION]... [FILE]", conf.progname);
+fn help(progname: &str, usage: &str) {
+    println!("Usage: {:s} [OPTION]... [FILE]", progname);
     println("");
-    println(conf.usage);
+    println(usage);
 
     let msg = ~"With no FILE, or when FILE is -, read standard input.\n\n\
         The data are encoded as described for the base64 alphabet in RFC \
@@ -99,82 +153,6 @@ fn help(conf: &Conf) {
 
 fn version() {
     println("base64 1.0.0");
-}
-
-struct Conf {
-    progname: ~str,
-    usage: ~str,
-    mode: Mode,
-    ignore_garbage: bool,
-    line_wrap: uint,
-    input_file: ~Reader
-}
-
-impl Conf {
-    fn new(args: &[~str]) -> Conf {
-        // The use statement is here rather than at the top of the file so that
-        // the reader is made directly aware that we're using getopts::groups,
-        // and not just getopts. Also some names are somewhat vague taken out
-        // of context (i.e., "usage").
-        use extra::getopts::groups::{
-            getopts,
-            optflag,
-            optopt,
-            usage
-        };
-
-        let opts = ~[
-            optflag("d", "decode", "decode data"),
-            optflag("i", "ignore-garbage",
-            "when decoding, ignore non-alphabetic characters"),
-            optopt("w", "wrap",
-            "wrap encoded lines after COLS character (default 76, 0 to \
-            disable wrapping)", "COLS"),
-            optflag("h", "help", "display this help text and exit"),
-            optflag("V", "version", "output version information and exit")
-                ];
-        let matches = match getopts(args.tail(), opts) {
-            Ok(m) => m,
-            Err(e) => {
-                error!("error: {:s}", e.to_err_msg());
-                fail!()
-            }
-        };
-
-        Conf {
-            progname: args[0].clone(),
-            usage: usage("Base64 encode or decode FILE, or standard input, to \
-                         standard output.", opts),
-            mode: if matches.opt_present("help") {
-                Help
-            } else if matches.opt_present("version") {
-                Version
-            } else if matches.opt_present("decode") {
-                Decode
-            } else {
-                Encode
-            },
-            ignore_garbage: matches.opt_present("ignore-garbage"),
-            line_wrap: match matches.opt_str("wrap") {
-                Some(s) => match from_str(s) {
-                    Some(s) => s,
-                    None => {
-                        error!("error: {:s}", "Argument to option 'wrap' \
-                               improperly formatted.");
-                        fail!()
-                    }
-                },
-                None => 76
-            },
-            input_file: if matches.free.is_empty() 
-                            || matches.free[0] == ~"-" {
-                ~stdin() as ~Reader
-            } else {
-                let path = Path::new(matches.free[0]);
-                ~File::open(&path) as ~Reader
-            }
-        }
-    }
 }
 
 enum Mode {
