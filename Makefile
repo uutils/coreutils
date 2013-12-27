@@ -6,8 +6,8 @@ RM          := rm
 RUSTCFLAGS  := --opt-level=3
 RMFLAGS     :=
 
-# Output names
-EXES        := \
+# Possible programs
+PROGS       := \
   cat \
   dirname \
   echo \
@@ -21,6 +21,11 @@ EXES        := \
   whoami \
   yes \
 
+BUILD       ?= $(PROGS)
+
+# Output names
+EXES        := \
+  $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS)))
 
 TESTS       := \
   cat \
