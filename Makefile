@@ -27,9 +27,14 @@ BUILD       ?= $(PROGS)
 EXES        := \
   $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS)))
 
-TESTS       := \
+# Programs with usable tests
+TEST_PROGS  := \
   cat \
 
+TEST        ?= $(TEST_PROGS)
+
+TESTS       := \
+  $(filter $(TEST),$(filter-out $(DONT_TEST),$(filter $(BUILD),$(filter-out $(DONT_BUILD),$(TEST_PROGS)))))
 
 # Utils stuff
 EXES_PATHS  := $(addprefix build/,$(EXES))
