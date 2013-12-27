@@ -13,9 +13,9 @@
 extern mod extra;
 
 use std::io::{stdin, stdout, Append, File, Truncate, Write};
-use std::io::{io_error, result, EndOfFile};
+use std::io::{io_error, EndOfFile};
 use std::io::signal::{Interrupt, Listener};
-use std::io::util::{copy, MultiWriter};
+use std::io::util::{copy, NullWriter, MultiWriter};
 use std::os::{args, set_exit_status};
 use extra::getopts::groups::{getopts, optflag, usage};
 
@@ -24,11 +24,8 @@ static VERSION: &'static str = "1.0.0";
 
 fn main() {
     match options(args()).and_then(exec) {
-        Err(message) => {
-            warn(message);
-            set_exit_status(1)
-        },
-        Ok(status) => set_exit_status(status)
+        Ok(_) => set_exit_status(0),
+        Err(_) => set_exit_status(1)
     }
 }
 
@@ -40,7 +37,7 @@ struct Options {
     files: ~[Path]
 }
 
-fn options(args: &[~str]) -> Result<Options, ~str> {
+fn options(args: &[~str]) -> Result<Options, ()> {
     let opts = ~[
         optflag("a", "append", "append to the given FILEs, do not overwrite"),
         optflag("i", "ignore-interrupts", "ignore interrupt signals"),
@@ -67,45 +64,90 @@ fn options(args: &[~str]) -> Result<Options, ~str> {
             print_and_exit: to_print,
             files: names.map(|name| Path::new(name.clone()))
         })
-    })
+    }).map_err(|message| warn(message))
 }
 
-fn exec(options: Options) -> Result<int, ~str> {
+fn exec(options: Options) -> Result<(), ()> {
     match options.print_and_exit {
-        Some(text) => {
-            println(text);
-            Ok(0)
-        },
+        Some(text) => Ok(println(text)),
         None => tee(options)
     }
 }
 
-fn tee(options: Options) -> Result<int, ~str> {
+fn tee(options: Options) -> Result<(), ()> {
     let mut handler = Listener::new();
     if options.ignore_interrupts {
         handler.register(Interrupt);
     }
-    result(|| io_error::cond.trap(|e| {
-        if e.kind != EndOfFile {
-            io_error::cond.raise(e);
-        }
-    }).inside(|| {
+    let mut ok = true;
+    io_error::cond.trap(|_| ok = false).inside(|| {
         let writers = options.files.map(|path| open(path, options.append));
         let output = &mut MultiWriter::new(writers);
-        let input = &mut stdin();
+        let input = &mut NamedReader { inner: ~stdin() as ~Reader };
         copy(input, output);
         output.flush();
-        0
-    })).map_err(|err| err.desc.to_owned())
+    });
+    if ok { Ok(()) } else { Err(()) }
 }
 
 fn open(path: &Path, append: bool) -> ~Writer {
-    if *path == Path::new("-") {
+    let inner = with_path(path, || if *path == Path::new("-") {
         ~stdout() as ~Writer
     } else {
         let mode = if append { Append } else { Truncate };
-        ~File::open_mode(path, mode, Write) as ~Writer
+        match File::open_mode(path, mode, Write) {
+            Some(file) => ~file as ~Writer,
+            None => ~NullWriter as ~Writer
+        }
+    });
+    ~NamedWriter { inner: inner, path: ~path.clone() } as ~Writer
+}
+
+struct NamedWriter {
+    priv inner: ~Writer,
+    priv path: ~Path
+}
+
+impl Writer for NamedWriter {
+    fn write(&mut self, buf: &[u8]) {
+        with_path(self.path, || io_error::cond.trap(|e| {
+            self.inner = ~NullWriter as ~Writer;
+            io_error::cond.raise(e);
+        }).inside(|| self.inner.write(buf)))
     }
+
+    fn flush(&mut self) {
+        with_path(self.path, || io_error::cond.trap(|e| {
+            self.inner = ~NullWriter as ~Writer;
+            io_error::cond.raise(e);
+        }).inside(|| self.inner.flush()))
+    }
+}
+
+struct NamedReader {
+    priv inner: ~Reader
+}
+
+impl Reader for NamedReader {
+    fn read(&mut self, buf: &mut [u8]) -> Option<uint> {
+        with_path(&Path::new("stdin"), || io_error::cond.trap(|e| {
+            if e.kind != EndOfFile {
+                io_error::cond.raise(e)
+            }
+        }).inside(|| self.inner.read(buf)))
+
+    }
+
+    fn eof(&mut self) -> bool {
+        self.inner.eof()
+    }
+}
+
+fn with_path<T>(path: &Path, cb: || -> T) -> T {
+    io_error::cond.trap(|e| {
+        warn(format!("{}: {}", path.display(), e.desc));
+        io_error::cond.raise(e);
+    }).inside(cb)
 }
 
 fn warn(message: &str) {
