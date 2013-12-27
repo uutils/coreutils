@@ -191,11 +191,11 @@ fn main() {
     match opts.program {
         [ref prog, ..args] => {
             match std::run::process_status(prog.as_slice(), args.as_slice()) {
-                Some(exit) => 
-                    match exit {
-                        std::io::process::ExitStatus(status) => std::os::set_exit_status(status),
-                        _ => std::os::set_exit_status(1)
-                    },
+                Some(exit) =>
+                    std::os::set_exit_status(match exit {
+                        std::io::process::ExitStatus(s) => s,
+                        _ => 1
+                    }),
                 None => std::os::set_exit_status(1)
             }
         }
