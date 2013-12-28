@@ -25,7 +25,7 @@ static VERSION: &'static str = "1.0.0";
 fn main() {
     match options(args()).and_then(exec) {
         Err(message) => {
-            error!("{}: {}", args()[0], message);
+            warn(message);
             set_exit_status(1)
         },
         Ok(status) => set_exit_status(status)
@@ -106,4 +106,8 @@ fn tee(options: Options) -> Result<int, ~str> {
         output.flush();
         0
     })).map_err(|err| err.desc.to_owned())
+}
+
+fn warn(message: &str) {
+    error!("{}: {}", args()[0], message);
 }
