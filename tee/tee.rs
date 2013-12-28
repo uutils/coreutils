@@ -70,15 +70,6 @@ fn options(args: &[~str]) -> Result<Options, ~str> {
     })
 }
 
-fn open(path: &Path, append: bool) -> ~Writer {
-    if *path == Path::new("-") {
-        ~stdout() as ~Writer
-    } else {
-        let mode = if append { Append } else { Truncate };
-        ~File::open_mode(path, mode, Write) as ~Writer
-    }
-}
-
 fn exec(options: Options) -> Result<int, ~str> {
     match options.print_and_exit {
         Some(text) => {
@@ -106,6 +97,15 @@ fn tee(options: Options) -> Result<int, ~str> {
         output.flush();
         0
     })).map_err(|err| err.desc.to_owned())
+}
+
+fn open(path: &Path, append: bool) -> ~Writer {
+    if *path == Path::new("-") {
+        ~stdout() as ~Writer
+    } else {
+        let mode = if append { Append } else { Truncate };
+        ~File::open_mode(path, mode, Write) as ~Writer
+    }
 }
 
 fn warn(message: &str) {
