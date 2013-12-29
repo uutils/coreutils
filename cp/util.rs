@@ -1,4 +1,8 @@
-fn paths_refer_to_the_same_file(p1: &Path, p2: &Path) -> bool {
+use std::io;
+use std::io::fs;
+use std::os;
+
+pub fn paths_refer_to_the_same_file(p1: &Path, p2: &Path) -> bool {
     let mut raw_p1 = p1.clone();
     let mut raw_p2 = p2.clone();
 
