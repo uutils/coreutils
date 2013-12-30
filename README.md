@@ -16,6 +16,42 @@ are either old, abandonned, hosted on CVS, written in platform-specific C, etc.
 Rust provides a good platform-agnostic way of writing systems utils that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
+Build Instructions
+------------------
+
+To simply build all available utilities:
+```
+make
+```
+
+To build all but a few of the available utilities:
+```
+make DONT_BUILD='UTILITY_1 UTILITY_2'
+```
+
+To build only a few of the available utilities:
+```
+make BUILD='UTILITY_1 UTILITY_2'
+```
+
+Test Instructions
+-----------------
+
+To simply test all available utilities:
+```
+make test
+```
+
+To test all but a few of the available utilities:
+```
+make DONT_TEST='UTILITY_1 UTILITY_2' test
+```
+
+To test only a few of the available utilities:
+```
+make TEST='UTILITY_1 UTILITY_2' test
+```
+
 Contribute
 ----------
 
