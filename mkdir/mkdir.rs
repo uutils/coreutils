@@ -14,25 +14,18 @@ extern mod extra;
 use std::os;
 use std::io::stderr;
 use extra::getopts::groups;
-use std::io::fs::mkdir;
-use std::path;
+use std::io::fs;
 
 static VERSION: &'static str = "1.0.0";
 
-fn print_help(opts: &[groups::OptGroup]) {
-    println!("mkdir v{} - make a new directory with the given path", VERSION);
-    println("");
-    println("Usage:");
-    print(groups::usage("Create the given DIRECTORY(ies)" +
-                        " if they do not exist", opts));
-}
-
 fn main() {
     let args: ~[~str] = os::args();
-    let program: ~str = args[0].clone();
     
     let opts: ~[groups::OptGroup] = ~[
-        //groups::optflag("m", "mode", "set file mode"),
+        // Linux-specific options
+        // groups::optflag("m", "mode", "set file mode"),
+        // groups::optflag("Z", "context", "set SELinux secutiry context" +
+        // " of each created directory to CTX"),
         groups::optflag("p", "parents", "make parent directories as needed"),
         groups::optflag("v", "verbose",
                         "print a message for each printed directory"),
@@ -59,11 +52,40 @@ fn main() {
         return;
     }
 
-    let parents: bool = matches.opt_present("parents");
-    mkdir(parents);
+    let mk_parents: bool = matches.opt_present("parents");
+    let dirs: ~[~str] = matches.free;
+    mkdir(dirs, mk_parents);
 }
 
-fn mkdir(mk_parents: bool) {
-    
+fn print_help(opts: &[groups::OptGroup]) {
+    println!("mkdir v{} - make a new directory with the given path", VERSION);
+    println("");
+    println("Usage:");
+    print(groups::usage("Create the given DIRECTORY(ies)" +
+                        " if they do not exist", opts));
 }
 
+/* std::libc currently does not provide bindings for any bits
+besides user bits, so might as well use octal for now.
+See 'std::io::FilePermission',
+'std::libc::consts::os::posix88' for future updates */
+fn mkdir(dirs: ~[~str], mk_parents: bool) {
+    let default: u32 = 0o755;
+
+    for dir in dirs.iter() {
+        let path = Path::new((*dir).clone());
+        // Recursively create parent dirs as needed
+        if mk_parents {
+            match path.dirname_str() {
+                Some(p) => if p != "." {
+                    mkdir(~[p.into_owned()], mk_parents)
+                },
+                None => ()
+            }
+        }
+        if !path.exists() {
+            println(*dir);
+            fs::mkdir(&path, default);
+        }
+    }
+}

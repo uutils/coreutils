@@ -13,6 +13,7 @@ PROGS       := \
   echo \
   env \
   false \
+  mkdir \
   printenv \
   pwd \
   rmdir \
