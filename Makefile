@@ -31,6 +31,7 @@ EXES        := \
 # Programs with usable tests
 TEST_PROGS  := \
   cat \
+  mkdir \
 
 TEST        ?= $(TEST_PROGS)
 

@@ -86,6 +86,7 @@ pub enum NumberingMode {
 }
 
 static TAB: u8 = '\t' as u8;
+#[allow(dead_code)]
 static CR: u8 = '\r' as u8;
 static LF: u8 = '\n' as u8;
 
