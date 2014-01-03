@@ -97,7 +97,6 @@ To do
 - getlimits
 - group-list
 - groups
-- head ( in progress )
 - hostid
 - install
 - join

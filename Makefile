@@ -29,6 +29,7 @@ PROGS       := \
   yes \
   tty \
   hostname \
+  head \
 
 UNIX_PROGS := \
   users \
