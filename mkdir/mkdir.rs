@@ -141,6 +141,7 @@ fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
             }
             writeln!(&mut stderr() as &mut Writer,
                      "{}", error_msg);
+            os::set_exit_status(1);
         }
     }
 }
@@ -159,13 +160,3 @@ fn mkdir(path: &Path, mode: u32) -> bool {
         }
     }
 }
-
-// #[test]
-// fn create_dir() {
-//     let test_dir = "mkdir_test_dir";
-//     let path: Path = Path::new(test_dir);
-//     let mode: u32 = 0x755;
-//     let result = mkdir(&path, mode);
-//     fs::rmdir(&path);
-//     assert_eq!(true, result);
-// }

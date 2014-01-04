@@ -30,8 +30,8 @@ EXES        := \
 
 # Programs with usable tests
 TEST_PROGS  := \
-  cat \
   mkdir \
+  cat \
 
 TEST        ?= $(TEST_PROGS)
 
@@ -54,7 +54,7 @@ test_$(1): tmp/$(1)_test build build/$(1)
 	$(call command,tmp/$(1)_test)
 
 tmp/$(1)_test: $(1)/test.rs
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o tmp/$(1)_test $(1)/test.rs)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) -o tmp/$(1)_test $(1)/test.rs)
 endef
 
 # Main rules
