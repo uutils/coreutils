@@ -117,7 +117,6 @@ To do
 - ls
 - make-prime-list
 - md5sum
-- mkdir
 - mkfifo
 - mknod
 - mktemp

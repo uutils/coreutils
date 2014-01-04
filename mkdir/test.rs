@@ -11,6 +11,7 @@ fn main() {
     test_mkdir_mode();
     test_mkdir_parent();
     test_mkdir_no_parent();
+    println("mkdir tests completed successfully!\n");
 }
 
 fn cleanup() {

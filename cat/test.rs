@@ -4,6 +4,7 @@ fn main() {
     test_output_multi_files_print_all_chars();
     test_stdin_squeeze();
     test_stdin_number_non_blank();
+    println("cat tests completed successfully!\n");
 }
 
 fn test_output_multi_files_print_all_chars() {
