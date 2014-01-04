@@ -34,7 +34,7 @@ fn version() {
 }
 
 fn help(conf: &Conf) {
-    println("Usage: cp SOURCE DEST");
+    println!("Usage: {:s} SOURCE DEST", conf.progname);
     println("");
     println(conf.usage);
 }

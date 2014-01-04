@@ -2,9 +2,9 @@ use std::io;
 use std::io::fs;
 use std::os;
 
-pub fn paths_refer_to_the_same_file(p1: &Path, p2: &Path) -> bool {
-    let mut raw_p1 = p1.clone();
-    let mut raw_p2 = p2.clone();
+pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> bool {
+    let mut raw_p1 = ~p1.clone();
+    let mut raw_p2 = ~p2.clone();
 
     // We have to take symlinks and relative paths into account.
     if fs::lstat(raw_p1).kind == io::TypeSymlink {
