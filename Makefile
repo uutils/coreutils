@@ -30,8 +30,8 @@ EXES        := \
 
 # Programs with usable tests
 TEST_PROGS  := \
-  mkdir \
   cat \
+  mkdir \
 
 TEST        ?= $(TEST_PROGS)
 

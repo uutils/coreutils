@@ -22,9 +22,9 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 fn main() {
-    let args: ~[~str] = os::args();
+    let args = os::args();
     
-    let opts: ~[groups::OptGroup] = ~[
+    let opts = ~[
         // Linux-specific options, not implemented
         // groups::optflag("Z", "context", "set SELinux secutiry context" +
         // " of each created directory to CTX"),
@@ -32,9 +32,9 @@ fn main() {
         groups::optflag("p", "parents", "make parent directories as needed"),
         groups::optflag("v", "verbose",
                         "print a message for each printed directory"),
-        groups::optflag("", "help", "display this help"),
+        groups::optflag("h", "help", "display this help"),
         groups::optflag("", "version", "display this version")
-            ];
+    ];
 
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
@@ -54,18 +54,14 @@ fn main() {
         println("mkdir v" + VERSION);
         return;
     }
-    let mut verbose_flag: bool = false;
-    if matches.opt_present("verbose") {
-        verbose_flag = true;
-    }
-
-    let mk_parents: bool = matches.opt_present("parents");
+    let verbose_flag = matches.opt_present("verbose");
+    let mk_parents = matches.opt_present("parents");
 
     // Translate a ~str in octal form to u32, default to 755
     // Not tested on Windows
     let mode_match = matches.opts_str(&[~"mode"]);
     let mode: u32 = if mode_match.is_some() {
-        let m: ~str = mode_match.unwrap();
+        let m = mode_match.unwrap();
         let res = strconv::from_str_common(m, 8, false, false, false,
                                            strconv::ExpNone,
                                            false, false);
@@ -81,7 +77,7 @@ fn main() {
         0o755
     };
 
-    let dirs: ~[~str] = matches.free;
+    let dirs = matches.free;
     exec(dirs, mk_parents, mode, verbose_flag);
 }
 
@@ -122,17 +118,17 @@ fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
         let path = Path::new((*dir).clone());
         // Determine if parent directory to the one to 
         // be created exists
-        let parent: &str = match path.dirname_str() {
+        let parent = match path.dirname_str() {
             Some(p) => p,
             None => ""
         };
-        let parent_exists:bool = Path::new(parent).exists();
+        let parent_exists = Path::new(parent).exists();
         if parent_exists && !path.exists() {
             // if mkdir failed return
             if !mkdir(&path, mode) {return;}
             if verbose {println(*dir);}
         } else {
-            let mut error_msg: ~str = ~"";
+            let mut error_msg = ~"";
             if !parent_exists {
                 error_msg.push_str("Error: parent directory '");
                 error_msg.push_str(parent);
