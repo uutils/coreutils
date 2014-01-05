@@ -98,13 +98,16 @@ fn print_help(opts: &[groups::OptGroup]) {
  */
 fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
     let mut parent_dirs: ~[~str] = ~[];
-    for dir in dirs.iter() {
-        let path = Path::new((*dir).clone());
-        // Build list of parent dirs which need to be created
-        if mk_parents {
-            match path.dirname_str() {
-                Some(p) => if p != "." {
-                    parent_dirs.push(p.into_owned())
+    if mk_parents {
+        for dir in dirs.iter() {
+            let path = Path::new((*dir).clone());
+            // Build list of parent dirs which need to be created
+            let parent = path.dirname_str();
+            match parent {
+                Some(p) => {
+                    if !Path::new(p).exists() {
+                        parent_dirs.push(p.into_owned())
+                    }
                 },
                 None => ()
             }
