@@ -157,7 +157,6 @@ To do
 - tac-pipe
 - tac
 - tail
-- tee
 - test
 - timeout
 - touch
