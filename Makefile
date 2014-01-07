@@ -19,6 +19,7 @@ PROGS       := \
   rm \
   rmdir \
   sleep \
+  tee \
   true \
   wc \
   whoami \
