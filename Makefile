@@ -9,6 +9,7 @@ RMFLAGS     :=
 # Possible programs
 PROGS       := \
   base64 \
+  basename \
   cat \
   dirname \
   echo \
@@ -24,7 +25,6 @@ PROGS       := \
   wc \
   whoami \
   yes \
-  basename \
 
 BUILD       ?= $(PROGS)
 

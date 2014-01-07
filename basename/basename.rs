@@ -1,4 +1,4 @@
-#[link(name="basename", vers="1.0.0", author="Jimmy Lu")];
+#[crate_id(name="basename", vers="1.0.0", author="Jimmy Lu")];
 
 /*
  * This file is part of the uutils coreutils package.
@@ -36,8 +36,8 @@ fn main() {
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            let stderr = stderr();
-            stderr.write_str(program + ": " + f.to_err_msg() + "\n");
+            writeln!(&mut stderr() as &mut Writer,
+                   "Invalid options\n{}", f.to_err_msg());
             os::set_exit_status(1);
             return;
         }
@@ -91,7 +91,7 @@ fn main() {
 fn strip_dir(fullname :&~str) -> ~str {
     let mut name = ~"";
 
-    for c in fullname.rev_iter() {
+    for c in fullname.chars_rev() {
         if c == '/' || c == '\\' {
             return name;
         }
