@@ -16,6 +16,7 @@ PROGS       := \
   false \
   printenv \
   pwd \
+  rm \
   rmdir \
   sleep \
   true \

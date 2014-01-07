@@ -139,7 +139,6 @@ To do
 - realpath
 - relpath
 - remove
-- rm
 - runcon
 - seq
 - setuidgid
