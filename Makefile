@@ -8,6 +8,7 @@ RMFLAGS     :=
 
 # Possible programs
 PROGS       := \
+  base64 \
   cat \
   dirname \
   echo \
