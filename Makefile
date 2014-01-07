@@ -16,6 +16,7 @@ PROGS       := \
   printenv \
   pwd \
   rmdir \
+  sleep \
   true \
   wc \
   whoami \

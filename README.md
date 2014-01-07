@@ -146,7 +146,6 @@ To do
 - setuidgid
 - shred
 - shuf
-- sleep
 - sort
 - split
 - stat
