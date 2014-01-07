@@ -29,11 +29,10 @@ fn main() {
     let args = ~os::args();
     let opts = ~[
         optflag("d", "decode", "decode data"),
-        optflag("i", "ignore-garbage",
-        "when decoding, ignore non-alphabetic characters"),
+        optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
         optopt("w", "wrap",
-        "wrap encoded lines after COLS character (default 76, 0 to \
-        disable wrapping)", "COLS"),
+            "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS"
+        ),
         optflag("h", "help", "display this help text and exit"),
         optflag("V", "version", "output version information and exit")
     ];
@@ -46,8 +45,7 @@ fn main() {
     };
 
     let progname = args[0].clone();
-    let usage = usage("Base64 encode or decode FILE, or standard input, to \
-                       standard output.", opts);
+    let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", opts);
     let mode = if matches.opt_present("help") {
         Help
     } else if matches.opt_present("version") {
@@ -62,8 +60,7 @@ fn main() {
         Some(s) => match from_str(s) {
             Some(s) => s,
             None => {
-                error!("error: {:s}", "Argument to option 'wrap' \
-                        improperly formatted.");
+                error!("error: {:s}", "Argument to option 'wrap' improperly formatted.");
                 fail!()
             }
         },

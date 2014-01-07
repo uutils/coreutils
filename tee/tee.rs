@@ -41,8 +41,10 @@ fn options(args: &[~str]) -> Result<Options, ()> {
     let opts = ~[
         optflag("a", "append", "append to the given FILEs, do not overwrite"),
         optflag("i", "ignore-interrupts", "ignore interrupt signals"),
-        optflag("", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit")];
+        optflag("h", "help", "display this help and exit"),
+        optflag("V", "version", "output version information and exit"),
+    ];
+
     getopts(args.tail(), opts).map_err(|e| e.to_err_msg()).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
         let program = args[0].clone();
