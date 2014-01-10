@@ -159,7 +159,6 @@ To do
 - tr
 - truncate
 - tsort
-- tty ( in progress )
 - uname-arch
 - uname-uname
 - uname
