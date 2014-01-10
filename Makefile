@@ -25,6 +25,7 @@ PROGS       := \
   wc \
   whoami \
   yes \
+  tty \
 
 BUILD       ?= $(PROGS)
 
