@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::stderr;
+use std::io::{print, println, stderr};
 use std::uint;
 use extra::getopts::groups;
 
@@ -86,12 +86,12 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        println("echo " + VERSION + " - display a line of text");
-        println("");
-        println("Usage:");
+        println!("echo {:s} - display a line of text", VERSION);
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [SHORT-OPTION]... [STRING]...", program);
         println!("  {0:s} LONG-OPTION", program);
-        println("");
+        println!("");
         println(groups::usage("Echo the STRING(s) to standard output.", opts));
         println("If -e is in effect, the following sequences are recognized:
 
@@ -111,7 +111,7 @@ fn main() {
     }
 
     if matches.opt_present("version") {
-        return println("echo version: " + VERSION);
+        return println!("echo version: {:s}", VERSION);
     }
 
     if !matches.free.is_empty() {
@@ -181,6 +181,6 @@ fn main() {
     }
 
     if !matches.opt_present("n") {
-        println("")
+        println!("")
     }
 }

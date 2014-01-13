@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{stdin,stderr,stdio,fs,buffered,io_error};
+use std::io::{print,stdin,stderr,stdio,fs,buffered,io_error};
 use extra::getopts::groups;
 
 enum InteractiveMode {
@@ -65,27 +65,27 @@ fn main() {
         }
     };
     if matches.opt_present("help") {
-        println("rm 1.0.0");
-        println("");
-        println("Usage:");
+        println!("rm 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
-        println("");
+        println!("");
         print(groups::usage("Remove (unlink) the FILE(s).", opts));
-        println("");
-        println("By default, rm does not remove directories.  Use the --recursive (-r)");
-        println("option to remove each listed directory, too, along with all of its contents");
-        println("");
-        println("To remove a file whose name starts with a '-', for example '-foo',");
-        println("use one of these commands:");
-        println("rm -- -foo");
-        println("");
-        println("rm ./-foo");
-        println("");
-        println("Note that if you use rm to remove a file, it might be possible to recover");
-        println("some of its contents, given sufficient expertise and/or time.  For greater");
-        println("assurance that the contents are truly unrecoverable, consider using shred.");
+        println!("");
+        println!("By default, rm does not remove directories.  Use the --recursive (-r)");
+        println!("option to remove each listed directory, too, along with all of its contents");
+        println!("");
+        println!("To remove a file whose name starts with a '-', for example '-foo',");
+        println!("use one of these commands:");
+        println!("rm -- -foo");
+        println!("");
+        println!("rm ./-foo");
+        println!("");
+        println!("Note that if you use rm to remove a file, it might be possible to recover");
+        println!("some of its contents, given sufficient expertise and/or time.  For greater");
+        println!("assurance that the contents are truly unrecoverable, consider using shred.");
     } else if matches.opt_present("version") {
-        println("rm 1.0.0");
+        println!("rm 1.0.0");
     } else if matches.free.is_empty() {
         writeln!(&mut stderr() as &mut Writer, "Missing an argument");
         writeln!(&mut stderr() as &mut Writer,
@@ -231,7 +231,7 @@ fn read_prompt() -> bool {
                 'y' | 'Y' => true,
                 'n' | 'N' => false,
                 _ => {
-                    print("Please enter either Y or N: ");
+                    print!("Please enter either Y or N: ");
                     read_prompt()
                 }
             }

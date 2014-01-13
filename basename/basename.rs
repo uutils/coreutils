@@ -11,7 +11,7 @@
 
 extern mod extra;
 
-use std::io::stderr;
+use std::io::{print, println, stderr};
 use std::os;
 use std::str;
 use std::str::StrSlice;
@@ -46,8 +46,8 @@ fn main() {
     if matches.opt_present("help") {
         println!("Usage: {0:s} NAME [SUFFIX]", program);
         println!("  or: {0:s} OPTION", program);
-        println("Print NAME with any leading directory components removed.");
-        println("If specified, also remove a trailing SUFFIX.");
+        println!("Print NAME with any leading directory components removed.");
+        println!("If specified, also remove a trailing SUFFIX.");
 
         print(groups::usage("", opts));
 

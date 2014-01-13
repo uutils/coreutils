@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::stderr;
+use std::io::{print, stderr};
 use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
@@ -37,11 +37,11 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        println("dirname " + VERSION + " - strip last component from file name");
-        println("");
-        println("Usage:");
+        println!("dirname {:s} - strip last component from file name", VERSION);
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [OPTION] NAME...", program);
-        println("");
+        println!("");
         print(groups::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
 directory).", opts));
@@ -49,7 +49,7 @@ directory).", opts));
     }
 
     if matches.opt_present("version") {
-        return println("dirname version: " + VERSION);
+        return println!("dirname version: {:s}", VERSION);
     }
 
     let separator = match matches.opt_present("zero") {

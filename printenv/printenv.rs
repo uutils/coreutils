@@ -14,7 +14,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::stderr;
+use std::io::{print, stderr};
 use extra::getopts::groups;
 
 fn main() {
@@ -35,16 +35,16 @@ fn main() {
         }
     };
     if matches.opt_present("help") {
-        println("printenv 1.0.0");
-        println("");
-        println("Usage:");
+        println!("printenv 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [VARIABLE]... [OPTION]...", program);
-        println("");
+        println!("");
         print(groups::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
         return;
     }
     if matches.opt_present("version") {
-        println("printenv 1.0.0");
+        println!("printenv 1.0.0");
         return;
     }
     let mut separator = "\n";
