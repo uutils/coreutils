@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::char;
-use std::io::{File, stdin, stdout};
+use std::io::{println, File, stdin, stdout};
 use std::os;
 use std::str;
 
@@ -135,7 +135,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
 
 fn help(progname: &str, usage: &str) {
     println!("Usage: {:s} [OPTION]... [FILE]", progname);
-    println("");
+    println!("");
     println(usage);
 
     let msg = ~"With no FILE, or when FILE is -, read standard input.\n\n\
@@ -149,7 +149,7 @@ fn help(progname: &str, usage: &str) {
 }
 
 fn version() {
-    println("base64 1.0.0");
+    println!("base64 1.0.0");
 }
 
 enum Mode {
