@@ -12,7 +12,7 @@
 
 extern mod extra;
 
-use std::io::{stdin, stdout, Append, File, Truncate, Write};
+use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::io::{io_error, EndOfFile};
 use std::io::signal::{Interrupt, Listener};
 use std::io::util::{copy, NullWriter, MultiWriter};

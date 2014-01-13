@@ -15,7 +15,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{stdin, stderr, stdout, File, result};
+use std::io::{print, stdin, stderr, stdout, File, result};
 use extra::getopts::groups;
 
 fn main() {
@@ -44,18 +44,18 @@ fn main() {
         }
     };
     if matches.opt_present("help") {
-        println("cat 1.0.0");
-        println("");
-        println("Usage:");
+        println!("cat 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
-        println("");
+        println!("");
         print(groups::usage("Concatenate FILE(s), or standard input, to standard output.", opts));
-        println("");
-        println("With no FILE, or when FILE is -, read standard input.");
+        println!("");
+        println!("With no FILE, or when FILE is -, read standard input.");
         return;
     }
     if matches.opt_present("version") {
-        println("cat 1.0.0");
+        println!("cat 1.0.0");
         return;
     }
 

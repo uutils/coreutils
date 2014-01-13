@@ -15,6 +15,7 @@
 extern mod extra;
 
 use std::{libc,str,os};
+use std::io::println;
 use std::io::stdio::stderr;
 use extra::getopts::{optflag,getopts};
 
@@ -47,7 +48,7 @@ fn main () {
         if !tty.is_whitespace() {
             println(tty);
         } else {
-            println("not a tty");
+            println!("not a tty");
         }
     }
 

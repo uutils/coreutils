@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{stdin, stderr, File, result};
+use std::io::{print, stdin, stderr, File, result};
 use std::io::buffered::BufferedReader;
 use std::str::from_utf8_opt;
 use extra::getopts::{groups, Matches};
@@ -50,17 +50,17 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        println("Usage:");
+        println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
-        println("");
+        println!("");
         print(groups::usage("Print newline, word and byte counts for each FILE", opts));
-        println("");
-        println("With no FILE, or when FILE is -, read standard input.");
+        println!("");
+        println!("With no FILE, or when FILE is -, read standard input.");
         return;
     }
 
     if (matches.opt_present("version")) {
-        println("wc 1.0.0");
+        println!("wc 1.0.0");
         return;
     }
 
@@ -211,7 +211,7 @@ fn print_stats(filename: &~str, line_count: uint, word_count: uint, char_count: 
         println!(" {}", *filename);
     }
     else {
-        println("");
+        println!("");
     }
 }
 

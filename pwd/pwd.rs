@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::stderr;
+use std::io::{print, stderr};
 use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
@@ -37,13 +37,13 @@ fn main() {
 
     if matches.opt_present("help") {
         println!("pwd {}", VERSION);
-        println("");
-        println("Usage:");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [OPTION] NAME...", program);
-        println("");
+        println!("");
         print(groups::usage("Print the full filename of the current working directory.", opts));
     } else if matches.opt_present("version") {
-        return println("pwd version: " + VERSION);
+        return println!("pwd version: {}", VERSION);
     } else {
         let cwd = std::os::getcwd();
         println!("{}", cwd.display());

@@ -13,6 +13,7 @@
 
 extern mod extra;
 
+use std::io::print;
 use std::os;
 use std::str;
 use std::libc;
@@ -49,16 +50,16 @@ fn main() {
         Err(f) => fail!(f.to_err_msg()),
     };
     if matches.opt_present("help") {
-        println("whoami 1.0.0");
-        println("");
-        println("Usage:");
+        println!("whoami 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {:s}", program);
-        println("");
+        println!("");
         print(groups::usage("print effective userid", opts));
         return;
     }
     if matches.opt_present("version") {
-        println("whoami 1.0.0");
+        println!("whoami 1.0.0");
         return;
     }
 

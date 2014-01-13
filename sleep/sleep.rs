@@ -14,7 +14,7 @@ extern mod extra;
 use std::num;
 use std::cast;
 use std::os;
-use std::io::{stderr, timer};
+use std::io::{print, stderr, timer};
 use extra::getopts::groups;
 
 fn main() {
@@ -35,20 +35,20 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        println("sleep 1.0.0");
-        println("");
-        println("Usage:");
+        println!("sleep 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} NUMBER[SUFFIX]", program);
-        println("or");
+        println!("or");
         println!("  {0:s} OPTION", program);
-        println("");
+        println!("");
         print(groups::usage("Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
 specified by the sum of their values.", opts));
     } else if matches.opt_present("version") {
-        println("sleep 1.0.0");
+        println!("sleep 1.0.0");
     } else if matches.free.is_empty() {
         writeln!(&mut stderr() as &mut Writer, "Missing an argument");
         writeln!(&mut stderr() as &mut Writer,

@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{stderr, io_error, fs};
+use std::io::{print, stderr, io_error, fs};
 use extra::getopts::groups;
 
 fn main() {
@@ -36,14 +36,14 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        println("rmdir 1.0.0");
-        println("");
-        println("Usage:");
+        println!("rmdir 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [OPTION]... DIRECTORY...", program);
-        println("");
+        println!("");
         print(groups::usage("Remove the DIRECTORY(ies), if they are empty.", opts));
     } else if matches.opt_present("version") {
-        println("rmdir 1.0.0");
+        println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {
         writeln!(&mut stderr() as &mut Writer, "Missing an argument");
         writeln!(&mut stderr() as &mut Writer,

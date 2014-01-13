@@ -14,7 +14,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::stderr;
+use std::io::{print, println, stderr};
 use extra::getopts::groups;
 
 fn main() {
@@ -34,16 +34,16 @@ fn main() {
         }
     };
     if matches.opt_present("help") {
-        println("yes 1.0.0");
-        println("");
-        println("Usage:");
+        println!("yes 1.0.0");
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [STRING]... [OPTION]...", program);
-        println("");
+        println!("");
         print(groups::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
         return;
     }
     if matches.opt_present("version") {
-        println("yes 1.0.0");
+        println!("yes 1.0.0");
         return;
     }
     let mut string = ~"y";
