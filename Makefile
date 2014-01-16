@@ -22,6 +22,7 @@ PROGS       := \
   sleep \
   tee \
   true \
+  users \
   wc \
   whoami \
   yes \

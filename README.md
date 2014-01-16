@@ -166,7 +166,6 @@ To do
 - uniq (in progress)
 - unlink
 - uptime
-- users
 - who
 
 License
