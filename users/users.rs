@@ -24,6 +24,8 @@ use std::ptr;
 use std::str;
 use extra::getopts::groups;
 
+static DEFAULT_FILE: &'static str = "/var/run/utmp";
+
 static UT_LINESIZE: uint = 32;
 static UT_NAMESIZE: uint = 32;
 static UT_HOSTSIZE: uint = 256;
@@ -101,7 +103,7 @@ fn main() {
         return;
     }
 
-    let mut filename = "/var/run/utmp";
+    let mut filename = DEFAULT_FILE;
     if matches.free.len() > 0 {
         filename = matches.free[0].as_slice();
     }
