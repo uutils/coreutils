@@ -139,10 +139,6 @@ impl Reader for NamedReader {
         }).inside(|| self.inner.read(buf)))
 
     }
-
-    fn eof(&mut self) -> bool {
-        self.inner.eof()
-    }
 }
 
 fn with_path<T>(path: &Path, cb: || -> T) -> T {
