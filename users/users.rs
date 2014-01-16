@@ -139,6 +139,8 @@ fn exec(filename: &str) {
         endutent();
     }
 
-    users.sort();
-    println!("{}", users.connect(" "));
+    if users.len() > 0 {
+        users.sort();
+        println!("{}", users.connect(" "));
+    }
 }
