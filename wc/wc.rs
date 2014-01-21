@@ -12,8 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print, stdin, stderr, File, result};
-use std::io::buffered::BufferedReader;
+use std::io::{print, stdin, stderr, File, result, BufferedReader};
 use std::str::from_utf8_opt;
 use extra::getopts::{groups, Matches};
 

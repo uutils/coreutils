@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print,stdin,stderr,stdio,fs,buffered,io_error};
+use std::io::{print,stdin,stderr,stdio,fs,BufferedReader,io_error};
 use extra::getopts::groups;
 
 enum InteractiveMode {
@@ -225,7 +225,7 @@ fn prompt(msg: &str) -> bool {
 
 fn read_prompt() -> bool {
     stdio::flush();
-    match buffered::BufferedReader::new(stdin()).read_line() {
+    match BufferedReader::new(stdin()).read_line() {
         Some(line) => {
             match line.char_at(0) {
                 'y' | 'Y' => true,
