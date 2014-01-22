@@ -60,7 +60,10 @@ directory).", opts));
     if !matches.free.is_empty() {
         for path in matches.free.iter() {
             let p = std::path::Path::new(path.clone());
-            print(std::str::from_utf8(p.dirname()));
+            let d = std::str::from_utf8(p.dirname());
+            if d.is_some() {
+                print(d.unwrap());
+            }
             print(separator);
         }
     } else {
