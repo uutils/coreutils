@@ -13,7 +13,7 @@ extern mod extra;
 
 use std::os;
 use std::io::{print, stdin, stderr, File, result, BufferedReader};
-use std::str::from_utf8_opt;
+use std::str::from_utf8;
 use extra::getopts::{groups, Matches};
 
 struct Result {
@@ -58,7 +58,7 @@ fn main() {
         return;
     }
 
-    if (matches.opt_present("version")) {
+    if matches.opt_present("version") {
         println!("wc 1.0.0");
         return;
     }
@@ -111,14 +111,14 @@ pub fn wc(files: ~[~str], matches: &Matches) {
             match result(| | reader.read_until(LF)) {
                 Ok(Some(raw_line)) => {
                     // GNU 'wc' only counts lines that end in LF as lines
-                    if (raw_line.iter().last().unwrap() == &LF) {
+                    if raw_line.iter().last().unwrap() == &LF {
                         line_count += 1;
                     }
 
                     byte_count += raw_line.iter().len();
 
                     // try and convert the bytes to UTF-8 first
-                    match from_utf8_opt(raw_line) {
+                    match from_utf8(raw_line) {
                         Some(line) => {
                             word_count += line.words().len();
                             current_char_count = line.chars().len();
@@ -138,7 +138,7 @@ pub fn wc(files: ~[~str], matches: &Matches) {
                         }
                     }
 
-                    if (current_char_count > longest_line_length) {
+                    if current_char_count > longest_line_length {
                         // we subtract one here because `line.iter().len()` includes the LF
                         // matches GNU 'wc' behaviour
                         longest_line_length = current_char_count - 1;
@@ -163,7 +163,7 @@ pub fn wc(files: ~[~str], matches: &Matches) {
         total_char_count += char_count;
         total_byte_count += byte_count;
 
-        if (longest_line_length > total_longest_line_length) {
+        if longest_line_length > total_longest_line_length {
             total_longest_line_length = longest_line_length;
         }
 
@@ -175,38 +175,41 @@ pub fn wc(files: ~[~str], matches: &Matches) {
         print_stats(&result.filename, result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
     }
 
-    if (files.len() > 1) {
+    if files.len() > 1 {
         print_stats(&~"total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
     }
 }
 
 fn print_stats(filename: &~str, line_count: uint, word_count: uint, char_count: uint,
     byte_count: uint, longest_line_length: uint, matches: &Matches, max_str_len: uint) {
-    if (matches.opt_present("lines")) {
+    if matches.opt_present("lines") {
         print!("{:1$}", line_count, max_str_len);
     }
-    if (matches.opt_present("words")) {
+    if matches.opt_present("words") {
         print!("{:1$}", word_count, max_str_len);
     }
-    if (matches.opt_present("bytes")) {
+    if matches.opt_present("bytes") {
         print!("{:1$}", byte_count, max_str_len + 1);
     }
-    if (matches.opt_present("chars")) {
+    if matches.opt_present("chars") {
         print!("{:1$}", char_count, max_str_len);
     }
-    if (matches.opt_present("max-line-length")) {
+    if matches.opt_present("max-line-length") {
         print!("{:1$}", longest_line_length, max_str_len);
     }
 
     // defaults
-    if (!matches.opt_present("bytes") && !matches.opt_present("chars") && !matches.opt_present("lines")
-        && !matches.opt_present("words") && !matches.opt_present("max-line-length")) {
+    if !matches.opt_present("bytes")
+        && !matches.opt_present("chars")
+        && !matches.opt_present("lines")
+        && !matches.opt_present("words")
+        && !matches.opt_present("max-line-length") {
         print!("{:1$}", line_count, max_str_len);
         print!("{:1$}", word_count, max_str_len + 1);
         print!("{:1$}", byte_count, max_str_len + 1);
     }
 
-    if (*filename != ~"-") {
+    if *filename != ~"-" {
         println!(" {}", *filename);
     }
     else {
