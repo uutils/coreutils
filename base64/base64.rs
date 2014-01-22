@@ -105,7 +105,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
             out.flush();
         }
         Err(s) => {
-            error!("error: {:s}", s);
+            error!("error: {}", s.to_str());
             fail!()
         }
     }
