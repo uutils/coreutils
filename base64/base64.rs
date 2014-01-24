@@ -82,9 +82,9 @@ fn main() {
 }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = str::from_utf8_owned(input.read_to_end());
+    let mut to_decode = str::from_utf8_owned(input.read_to_end()).unwrap();
 
-    to_decode = to_decode.replace("\n", "");
+    to_decode = str::replace(to_decode, "\n", "");
 
     if ignore_garbage {
         let standard_chars =
