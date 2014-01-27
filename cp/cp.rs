@@ -76,13 +76,13 @@ fn main() {
 }
 
 fn version() {
-    println("cp 1.0.0");
+    println!("cp 1.0.0");
 }
 
 fn help(progname: &str, usage: &str) {
     println!("Usage: {:s} SOURCE DEST", progname);
-    println("");
-    println(usage);
+    println!("");
+    println!("{:s}", usage);
 }
 
 fn copy(sources: &[~Path], dest: &Path) {
