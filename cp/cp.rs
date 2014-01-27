@@ -12,6 +12,7 @@
 extern mod extra;
 
 use std::os;
+use std::io;
 use std::io::fs;
 
 mod util;
@@ -58,15 +59,17 @@ fn main() {
         error!("error: Missing SOURCE argument. Try --help.");
         fail!()
     } else {
-        ~[~Path::new(matches.free[0].clone())]
+        // All but the last argument:
+        matches.free.slice(0, matches.free.len() - 2)
+            .map(|arg| ~Path::new(arg.clone()))
     };
     let dest = if matches.free.len() < 2 {
         error!("error: Missing DEST argument. Try --help.");
         fail!()
     } else {
-        ~Path::new(matches.free[1].clone())
+        // Only the last argument:
+        ~Path::new(matches.free[matches.free.len() - 1].clone())
     };
-    // Any other free arguments are ignored for now.
 
     match mode {
         Copy    => copy(sources, dest),
@@ -86,17 +89,38 @@ fn help(progname: &str, usage: &str) {
 }
 
 fn copy(sources: &[~Path], dest: &Path) {
-    // We assume there is only one source for now.
-    let source = sources[0].clone();
+    assert!(sources.len() >= 1);
 
-    if util::paths_refer_to_same_file(source, dest) {
-        error!("error: \"{:s}\" and \"{:s}\" are the same file",
-               source.display().to_str(),
-               dest.display().to_str());
-        fail!();
+    if sources.len() == 1 {
+        let source = sources[0].clone();
+
+        if util::paths_refer_to_same_file(source, dest) {
+            error!("error: \"{:s}\" and \"{:s}\" are the same file",
+                source.display().to_str(),
+                dest.display().to_str());
+            fail!();
+        }
+
+        fs::copy(source, dest);
+    } else {
+        if fs::stat(dest).kind != io::TypeDirectory {
+            error!("error: TARGET must be a directory");
+            fail!();
+        }
+
+        for source in sources.iter() {
+            if fs::stat(*source).kind != io::TypeFile {
+                error!("error: \"{:s}\" is not a file", source.display().to_str());
+                continue;
+            }
+
+            let mut full_dest = dest.clone();
+            
+            full_dest.push(source.filename_str().unwrap());
+
+            println!("{:s}", full_dest.display().to_str());
+
+            fs::copy(*source, &full_dest);
+        }
     }
-
-    // In the case of only one source and one destination, it's a simple file
-    // copy operation.
-    fs::copy(source, dest);
 }
