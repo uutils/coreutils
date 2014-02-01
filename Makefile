@@ -24,6 +24,7 @@ PROGS       := \
   seq \
   tee \
   true \
+  truncate \
   users \
   wc \
   whoami \
