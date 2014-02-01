@@ -115,38 +115,31 @@ fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Opt
     for filename in filenames.iter() {
         let filename: &str = *filename;
         let path = Path::new(filename);
-        if !path.exists() && !no_create {
-            io_error::cond.trap(|_| {
-                writeln!(&mut stderr() as &mut Writer,
-                         "Failed to create the file '{}'", filename);
-                os::set_exit_status(1);
-            }).inside(|| {
-                File::create(&path);
-            });
-        }
         io_error::cond.trap(|err| {
             writeln!(&mut stderr() as &mut Writer, "{}", err.to_str());
         }).inside(|| {
-            match File::open_mode(&path, Open, ReadWrite) {
-                Some(mut file) => {
-                    file.seek(0, SeekEnd);
-                    let fsize = file.tell();
-                    file.seek(0, SeekSet);
-                    let tsize = match mode {
-                        Reference => refsize,
-                        Extend => fsize + refsize,
-                        Reduce => fsize - refsize,
-                        AtMost => if fsize > refsize { refsize } else { fsize },
-                        AtLeast => if fsize < refsize { refsize } else { fsize },
-                        RoundDown => fsize - fsize % refsize,
-                        RoundUp => fsize + fsize % refsize
-                    };
-                    file.truncate(tsize as i64);
-                }
-                None => {
-                    writeln!(&mut stderr() as &mut Writer,
-                             "Failed to open the file '{}'", filename);
-                    os::set_exit_status(1);
+            if path.exists() || !no_create {
+                match File::open_mode(&path, Open, ReadWrite) {
+                    Some(mut file) => {
+                        file.seek(0, SeekEnd);
+                        let fsize = file.tell();
+                        file.seek(0, SeekSet);
+                            let tsize = match mode {
+                            Reference => refsize,
+                            Extend => fsize + refsize,
+                            Reduce => fsize - refsize,
+                            AtMost => if fsize > refsize { refsize } else { fsize },
+                            AtLeast => if fsize < refsize { refsize } else { fsize },
+                            RoundDown => fsize - fsize % refsize,
+                            RoundUp => fsize + fsize % refsize
+                        };
+                        file.truncate(tsize as i64);
+                    }
+                    None => {
+                        writeln!(&mut stderr() as &mut Writer,
+                                 "Failed to open the file '{}'", filename);
+                        os::set_exit_status(1);
+                    }
                 }
             }
         });
