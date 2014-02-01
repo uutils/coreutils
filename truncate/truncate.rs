@@ -55,23 +55,24 @@ fn main() {
         println!("  {0:s} [OPTION]... FILE...", program);
         println!("");
         print!("{}", groups::usage("Shrink or extend the size of each file to the specified size.", opts));
-        println!("");
-        println!("SIZE is an integer with an optional prefix and optional unit.");
-        println!("The available units (K, M, G, T, P, E, Z, and Y) use the following format:");
-        println!("\t'KB' =>           1000 (kilobytes)");
-        println!("\t'K'  =>           1024 (kibibytes)");
-        println!("\t'MB' =>      1000*1000 (megabytes)");
-        println!("\t'M'  =>      1024*1024 (mebibytes)");
-        println!("\t'GB' => 1000*1000*1000 (gigabytes)");
-        println!("\t'G'  => 1024*1024*1024 (gibibytes)");
-        println!("SIZE may also be prefixed by one of the following to adjust the size of each");
-        println!("file based on its current size:");
-        println!("\t'+'  => extend by");
-        println!("\t'-'  => reduce by");
-        println!("\t'<'  => at most");
-        println!("\t'>'  => at least");
-        println!("\t'/'  => round down to multiple of");
-        println!("\t'%'  => round up to multiple of");
+        print!("
+SIZE is an integer with an optional prefix and optional unit.
+The available units (K, M, G, T, P, E, Z, and Y) use the following format:
+	'KB' =>           1000 (kilobytes)
+	'K'  =>           1024 (kibibytes)
+	'MB' =>      1000*1000 (megabytes)
+	'M'  =>      1024*1024 (mebibytes)
+	'GB' => 1000*1000*1000 (gigabytes)
+	'G'  => 1024*1024*1024 (gibibytes)
+SIZE may also be prefixed by one of the following to adjust the size of each
+file based on its current size:
+	'+'  => extend by
+	'-'  => reduce by
+	'<'  => at most
+	'>'  => at least
+	'/'  => round down to multiple of
+	'%'  => round up to multiple of
+");
     } else if matches.opt_present("version") {
         println!("truncate 1.0.0");
     } else if matches.free.is_empty() {
