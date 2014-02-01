@@ -191,8 +191,8 @@ fn parse_size(size: ~str) -> Result<(u64, TruncateMode), ()> {
         }
     };
     if !err && size.char_at(size.len() - 1).is_alphabetic() {
-        number *= match size.char_at(size.len() - 1) {
-            'B' => match size.char_at(size.len() - 2) {
+        number *= match size.char_at(size.len() - 1).to_ascii().to_upper().to_char() {
+            'B' => match size.char_at(size.len() - 2).to_ascii().to_upper().to_char() {
                 'K' => 1000,
                 'M' => 1000 * 1000,
                 'G' => 1000 * 1000 * 1000,
