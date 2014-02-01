@@ -155,7 +155,6 @@ To do
 - timeout
 - touch
 - tr
-- truncate
 - tsort
 - uname-arch
 - uname-uname
