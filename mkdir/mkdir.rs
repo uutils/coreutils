@@ -51,7 +51,7 @@ fn main() {
         return;
     }
     if matches.opt_present("version") {
-        println("mkdir v" + VERSION);
+        println!("mkdir v{}", VERSION);
         return;
     }
     let verbose_flag = matches.opt_present("verbose");
@@ -83,10 +83,10 @@ fn main() {
 
 fn print_help(opts: &[groups::OptGroup]) {
     println!("mkdir v{} - make a new directory with the given path", VERSION);
-    println("");
-    println("Usage:");
-    print(groups::usage("Create the given DIRECTORY(ies)" +
-                        " if they do not exist", opts));
+    println!("");
+    println!("Usage:");
+    print!("{}", groups::usage("Create the given DIRECTORY(ies)" +
+                               " if they do not exist", opts));
 }
 
 /**
@@ -126,7 +126,7 @@ fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
         if parent_exists && !path.exists() {
             // if mkdir failed return
             if !mkdir(&path, mode) {return;}
-            if verbose {println(*dir);}
+            if verbose {println!("{}", *dir);}
         } else {
             let mut error_msg = ~"";
             if !parent_exists {
