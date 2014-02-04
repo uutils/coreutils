@@ -15,25 +15,11 @@ use std::os;
 use std::io::{print,stdin,stderr,stdio,fs,BufferedReader,io_error};
 use extra::getopts::groups;
 
+#[deriving(Eq)]
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,
     InteractiveAlways
-}
-
-impl Eq for InteractiveMode {
-    fn eq(&self, other: &InteractiveMode) -> bool {
-        match (*self, *other) {
-            (InteractiveNone, InteractiveNone) |
-            (InteractiveOnce, InteractiveOnce) |
-            (InteractiveAlways, InteractiveAlways) => true,
-            _ => false
-        }
-    }
-
-    fn ne(&self, other: &InteractiveMode) -> bool {
-        !self.eq(other)
-    }
 }
 
 fn main() {
