@@ -15,6 +15,7 @@ PROGS       := \
   echo \
   env \
   false \
+  mkdir \
   printenv \
   pwd \
   rm \
@@ -37,6 +38,7 @@ EXES        := \
 # Programs with usable tests
 TEST_PROGS  := \
   cat \
+  mkdir \
 
 TEST        ?= $(TEST_PROGS)
 
