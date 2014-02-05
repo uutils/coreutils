@@ -11,7 +11,7 @@
 
 extern mod extra;
 
-use std::io::{print, println, stderr};
+use std::io::{print, println};
 use std::os;
 use std::str;
 use std::str::StrSlice;
@@ -27,20 +27,14 @@ fn main() {
     //
     // Argument parsing
     //
-
     let opts = ~[
         groups::optflag("h", "help", "display this help and exit"),
         groups::optflag("V", "version", "output version information and exit"),
     ];
 
     let matches = match groups::getopts(args.tail(), opts) {
-        Ok(m) => m,
-        Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                   "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return;
-        }
+        Ok(m)  => m,
+        Err(f) => fail!("Invalid options\n{}", f.to_err_msg())
     };
 
     if matches.opt_present("help") {
@@ -95,7 +89,6 @@ fn strip_dir(fullname :&~str) -> ~str {
         if c == '/' || c == '\\' {
             return name;
         }
-
         name = str::from_char(c) + name;
     }
 

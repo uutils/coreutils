@@ -15,7 +15,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print, stdin, stderr, stdout, File, result};
+use std::io::{print, stdin, stdout, File};
 use extra::getopts::groups;
 
 fn main() {
@@ -36,12 +36,7 @@ fn main() {
     ];
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                   "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
-        }
+        Err(f) => fail!("Invalid options\n{}", f.to_err_msg())
     };
     if matches.opt_present("help") {
         println!("cat 1.0.0");
@@ -118,11 +113,13 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
             loop {
                 // reading from a TTY seems to raise a condition on
                 // EOF, rather than return Some(0) like a file.
-                match result(|| reader.read(buf)) {
-                    Ok(Some(n)) if n != 0 => {
+                match reader.read(buf) {
+                    Ok(n) if n != 0 => {
                         for byte in buf.slice_to(n).iter() {
                             if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(*byte))) {
-                                write!(&mut writer as &mut Writer, "{0:6u}\t", counter);
+                                match write!(&mut writer as &mut Writer, "{0:6u}\t", counter) {
+                                    Ok(_) => (), Err(err) => fail!("{}", err)
+                                };
                                 counter += 1;
                                 at_line_start = false;
                             }
@@ -130,32 +127,45 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
                                 at_line_start = true;
                             }
                             if show_tabs && *byte == TAB {
-                                writer.write(bytes!("^I"));
+                                match writer.write(bytes!("^I")) {
+                                    Ok(_) => (), Err(err) => fail!("{}", err)
+                                };
                             } else if show_ends && *byte == LF {
-                                writer.write(bytes!("$\n"));
+                                match writer.write(bytes!("$\n")) {
+                                    Ok(_) => (), Err(err) => fail!("{}", err)
+                                };
                             } else if show_nonprint && (*byte < 32 || *byte >= 127) && !is_newline_char(*byte) {
                                 let mut byte = *byte;
                                 if byte >= 128 {
-                                    writer.write(bytes!("M-"));
+                                    match writer.write(bytes!("M-")) {
+                                        Ok(_) => (), Err(err) => fail!("{}", err)
+                                    };
                                     byte = byte - 128;
                                 }
                                 if byte < 32 {
-                                    writer.write(['^' as u8, byte + 64]);
+                                    match writer.write(['^' as u8, byte + 64]) {
+                                        Ok(_) => (), Err(err) => fail!("{}", err)
+                                    };
                                 } else if byte == 127 {
-                                    writer.write(['^' as u8, byte - 64]);
+                                    match writer.write(['^' as u8, byte - 64]) {
+                                        Ok(_) => (), Err(err) => fail!("{}", err)
+                                    };
                                 } else {
-                                    writer.write([byte]);
+                                    match writer.write([byte]) {
+                                        Ok(_) => (), Err(err) => fail!("{}", err)
+                                    };
                                 }
                             } else {
-                                writer.write([*byte]);
+                                match writer.write([*byte]) {
+                                    Ok(_) => (), Err(err) => fail!("{}", err)
+                                };
                             }
                         }
-                    }
+                    },
                     _ => break
                 }
             }
         }
-
         return;
     }
 
@@ -170,9 +180,12 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
         loop {
             // reading from a TTY seems to raise a condition on EOF,
             // rather than return Some(0) like a file.
-            match result(|| reader.read(buf)) {
-                Ok(Some(n)) if n != 0 => writer.write(buf.slice_to(n)),
-                _ => break
+            match reader.read(buf) {
+                Ok(n) if n != 0 => {
+                    match writer.write(buf.slice_to(n)) {
+                        Ok(_) => (), Err(err) => fail!("{}", err)
+                    }
+                }, _ => break
             }
         }
     }
@@ -183,14 +196,8 @@ fn open(path: ~str) -> Option<~Reader> {
         return Some(~stdin() as ~Reader);
     }
 
-    match result(|| File::open(&std::path::Path::new(path.as_slice()))) {
+    match File::open(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => return Some(~fd as ~Reader),
-        Err(e) => {
-            writeln!(&mut stderr() as &mut Writer,
-                     "cat: {0:s}: {1:s}", path, e.to_str());
-            os::set_exit_status(1);
-        }
+        Err(e) => fail!("cat: {0:s}: {1:s}", path, e.to_str())
     }
-
-    None
 }

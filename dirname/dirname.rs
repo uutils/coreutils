@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print, stderr};
+use std::io::print;
 use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
@@ -28,12 +28,7 @@ fn main() {
 
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
-        }  
+        Err(f) => fail!("Invalid options\n{}", f.to_err_msg())
     };
 
     if matches.opt_present("help") {
@@ -60,7 +55,10 @@ directory).", opts));
     if !matches.free.is_empty() {
         for path in matches.free.iter() {
             let p = std::path::Path::new(path.clone());
-            print(std::str::from_utf8(p.dirname()));
+            let d = std::str::from_utf8(p.dirname());
+            if d.is_some() {
+                print(d.unwrap());
+            }
             print(separator);
         }
     } else {
