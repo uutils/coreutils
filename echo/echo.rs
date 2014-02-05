@@ -1,3 +1,4 @@
+#[feature(macro_rules)];
 #[crate_id(name="echo", vers="1.0.0", author="Derek Chiang")];
 
 /*
@@ -12,11 +13,21 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print, println, stderr};
+use std::io::{print, println};
 use std::uint;
 use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
+
+#[macro_export]
+macro_rules! crash(
+    ($exitcode:expr, $($args:expr),+) => (
+        {   ::std::os::set_exit_status($exitcode); 
+            let _unused = write!(&mut ::std::io::stderr(), $($args),+);
+            return;
+        }
+    )
+)
 
 fn print_char(c: char) {
     print!("{}", c);
@@ -77,12 +88,7 @@ fn main() {
 
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
-        }  
+        Err(f) => crash!(1, "Invalid options\n{}", f.to_err_msg())
     };
 
     if matches.opt_present("help") {
