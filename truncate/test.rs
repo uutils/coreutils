@@ -6,8 +6,8 @@ static TESTNAME: &'static str = "THISISARANDOMFILENAME";
 fn make_file() -> io::File {
     while Path::new(TESTNAME).exists() { io::timer::sleep(1000); }
     match io::File::create(&Path::new(TESTNAME)) {
-        Some(f) => f,
-        None => fail!()
+        Ok(f) => f,
+        Err(_) => fail!()
     }
 }
 
@@ -18,7 +18,7 @@ fn test_increase_file_size() {
         fail!();
     }
     file.seek(0, io::SeekEnd);
-    if file.tell() != 5 * 1024 {
+    if file.tell().unwrap() != 5 * 1024 {
         fail!();
     }
     io::fs::unlink(&Path::new(TESTNAME));
@@ -32,8 +32,8 @@ fn test_decrease_file_size() {
         fail!();
     }
     file.seek(0, io::SeekEnd);
-    if file.tell() != 6 {
-		 println!("{}", file.tell());
+    if file.tell().unwrap() != 6 {
+        println!("{}", file.tell());
         fail!();
     }
     io::fs::unlink(&Path::new(TESTNAME));

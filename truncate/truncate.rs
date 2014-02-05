@@ -9,12 +9,44 @@
  * file that was distributed with this source code.
  */
 
+#[feature(macro_rules)];
+
 extern mod extra;
 
-use std::io::{stderr, io_error, File, Open, ReadWrite, Writer, SeekEnd, SeekSet};
+use std::io::{stderr, File, Open, ReadWrite, Writer, SeekEnd, SeekSet};
 use std::os;
 use std::u64;
 use extra::getopts::groups;
+
+macro_rules! get_file_size(
+    ($file:ident, $action:expr) => ({
+        match $file.seek(0, SeekEnd) {
+            Ok(_) => {}
+            Err(f) => {
+                writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
+                os::set_exit_status(1);
+                $action
+            }
+        }
+        let size = match $file.tell() {
+            Ok(m) => m,
+            Err(f) => {
+                writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
+                os::set_exit_status(1);
+                $action
+            }
+        };
+        match $file.seek(0, SeekSet) {
+            Ok(_) => {}
+            Err(f) => {
+                writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
+                os::set_exit_status(1);
+                $action
+            }
+        }
+        size
+    })
+)
 
 #[deriving(Eq)]
 enum TruncateMode {
@@ -97,14 +129,15 @@ file based on its current size:
 fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Option<~str>, filenames: ~[~str]) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
-            io_error::cond.trap(|err| {
-                writeln!(&mut stderr() as &mut Writer, "{}", err.to_str());
-                os::set_exit_status(1);
-            }).inside(|| {
-                let mut rfile = File::open(&Path::new(rfilename.clone()));
-                rfile.seek(0, SeekEnd);
-                (rfile.tell(), Reference)
-            })
+            let mut rfile = match File::open(&Path::new(rfilename.clone())) {
+                Ok(m) => m,
+                Err(f) => {
+                    writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
+                    os::set_exit_status(1);
+                    return
+                }
+            };
+            (get_file_size!(rfile, return), Reference)
         }
         None => {
             match parse_size(size.unwrap()) {
@@ -116,34 +149,34 @@ fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Opt
     for filename in filenames.iter() {
         let filename: &str = *filename;
         let path = Path::new(filename);
-        io_error::cond.trap(|err| {
-            writeln!(&mut stderr() as &mut Writer, "{}", err.to_str());
-        }).inside(|| {
-            if path.exists() || !no_create {
-                match File::open_mode(&path, Open, ReadWrite) {
-                    Some(mut file) => {
-                        file.seek(0, SeekEnd);
-                        let fsize = file.tell();
-                        file.seek(0, SeekSet);
-                            let tsize = match mode {
-                            Reference => refsize,
-                            Extend => fsize + refsize,
-                            Reduce => fsize - refsize,
-                            AtMost => if fsize > refsize { refsize } else { fsize },
-                            AtLeast => if fsize < refsize { refsize } else { fsize },
-                            RoundDown => fsize - fsize % refsize,
-                            RoundUp => fsize + fsize % refsize
-                        };
-                        file.truncate(tsize as i64);
-                    }
-                    None => {
-                        writeln!(&mut stderr() as &mut Writer,
-                                 "Failed to open the file '{}'", filename);
-                        os::set_exit_status(1);
+        if path.exists() || !no_create {
+            match File::open_mode(&path, Open, ReadWrite) {
+                Ok(mut file) => {
+                    let fsize = get_file_size!(file, continue);
+                    let tsize = match mode {
+                        Reference => refsize,
+                        Extend => fsize + refsize,
+                        Reduce => fsize - refsize,
+                        AtMost => if fsize > refsize { refsize } else { fsize },
+                        AtLeast => if fsize < refsize { refsize } else { fsize },
+                        RoundDown => fsize - fsize % refsize,
+                        RoundUp => fsize + fsize % refsize
+                    };
+                    match file.truncate(tsize as i64) {
+                        Ok(_) => {}
+                        Err(f) => {
+                            writeln!(&mut stderr() as &mut Writer,
+                                     "{}", f.to_str());
+                            os::set_exit_status(1);
+                        }
                     }
                 }
+                Err(f) => {
+                    writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
+                    os::set_exit_status(1);
+                }
             }
-        });
+        }
     }
 }
 
