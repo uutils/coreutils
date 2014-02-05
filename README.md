@@ -138,7 +138,6 @@ To do
 - relpath
 - remove
 - runcon
-- seq
 - setuidgid
 - shred
 - shuf
