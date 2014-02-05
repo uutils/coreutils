@@ -1,3 +1,4 @@
+#[feature(macro_rules)];
 #[crate_id(name="basename", vers="1.0.0", author="Jimmy Lu")];
 
 /*
@@ -19,9 +20,18 @@ use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
 
+#[macro_export]
+macro_rules! crash(
+    ($exitcode:expr, $($args:expr),+) => (
+        {   ::std::os::set_exit_status($exitcode); 
+            let _unused = write!(&mut ::std::io::stderr(), $($args),+);
+            return;
+        }
+    )
+)
+
 fn main() {
     let args = os::args();
-
     let program = strip_dir(&args[ 0 ].clone());
 
     //
@@ -34,7 +44,7 @@ fn main() {
 
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m)  => m,
-        Err(f) => fail!("Invalid options\n{}", f.to_err_msg())
+        Err(f) => crash!(1, "Invalid options\n{}", f.to_err_msg())
     };
 
     if matches.opt_present("help") {
