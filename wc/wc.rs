@@ -12,8 +12,8 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print, stdin, stderr, File, result, BufferedReader};
 use std::str::from_utf8;
+use std::io::{print, stdin, stderr, File, BufferedReader};
 use extra::getopts::{groups, Matches};
 
 struct Result {
@@ -108,8 +108,8 @@ pub fn wc(files: ~[~str], matches: &Matches) {
         loop {
             // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
             // hence the option wrapped in a result here
-            match result(| | reader.read_until(LF)) {
-                Ok(Some(raw_line)) => {
+            match reader.read_until(LF) {
+                Ok(raw_line) => {
                     // GNU 'wc' only counts lines that end in LF as lines
                     if raw_line.iter().last().unwrap() == &LF {
                         line_count += 1;
@@ -223,7 +223,7 @@ fn open(path: ~str) -> Option<BufferedReader<~Reader>> {
         return Some(BufferedReader::new(reader));
     }
 
-    match result(|| File::open(&std::path::Path::new(path.as_slice()))) {
+    match File::open(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => {
             let reader = ~fd as ~Reader;
             return Some(BufferedReader::new(reader));
