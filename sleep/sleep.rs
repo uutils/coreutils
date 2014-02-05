@@ -28,7 +28,7 @@ fn main() {
     let matches = match groups::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer, "{}", f.to_err_msg())
+            writeln!(&mut stderr() as &mut Writer, "{}", f.to_err_msg());
             os::set_exit_status(1);
             return
         }

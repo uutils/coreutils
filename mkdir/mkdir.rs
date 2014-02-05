@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{fs, result, stderr};
+use std::io::{fs, stderr};
 use std::num::strconv;
 use extra::getopts::groups;
 
@@ -149,7 +149,7 @@ fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
  * Wrapper to catch errors, return false if failed
  */
 fn mkdir(path: &Path, mode: u32) -> bool {
-    match result(|| fs::mkdir(path, mode)) {
+    match fs::mkdir(path, mode) {
         Ok(_) => true,
         Err(e) => {
             writeln!(&mut stderr() as &mut Writer,

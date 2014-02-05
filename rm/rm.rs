@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print,stdin,stderr,stdio,fs,BufferedReader,io_error};
+use std::io::{print,stdin,stderr,stdio,fs,BufferedReader};
 use extra::getopts::groups;
 
 #[deriving(Eq)]
@@ -127,7 +127,16 @@ fn remove(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: boo
         if file.exists() {
             if file.is_dir() {
                 if recursive && (*filename != ~"/" || !preserve_root) {
-                    remove(fs::walk_dir(&file).map(|x| x.as_str().unwrap().to_owned()).to_owned_vec(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
+                    let walk_dir = match fs::walk_dir(&file) {
+                        Ok(m) => m,
+                        Err(f) => {
+                            writeln!(&mut stderr() as &mut Writer,
+                                     "{}", f.to_str());
+                            os::set_exit_status(1);
+                            return;
+                        }
+                    };
+                    remove(walk_dir.map(|x| x.as_str().unwrap().to_owned()).to_owned_vec(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
                     remove_dir(&file, *filename, interactive, verbose);
                 } else if dir && (*filename != ~"/" || !preserve_root) {
                     remove_dir(&file, *filename, interactive, verbose);
@@ -162,16 +171,14 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
             true
         };
     if response {
-        io_error::cond.trap(|_| {
-            writeln!(&mut stderr() as &mut Writer,
-                     "Could not remove directory '{}'", name);
-            os::set_exit_status(1);
-        }).inside(|| {
-            fs::rmdir(path);
-            if verbose {
-                println!("Removed '{}'", name);
+        match fs::rmdir(path) {
+            Ok(_) => if verbose { println!("Removed '{}'", name); },
+            Err(f) => {
+                writeln!(&mut stderr() as &mut Writer,
+                         "{}", f.to_str());
+                os::set_exit_status(1);
             }
-        });
+        }
     }
 }
 
@@ -183,16 +190,14 @@ fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: b
             true
         };
     if response {
-        io_error::cond.trap(|_| {
-            writeln!(&mut stderr() as &mut Writer,
-                     "Could not remove file '{}'", name);
-            os::set_exit_status(1);
-        }).inside(|| {
-            fs::unlink(path);
-            if verbose {
-                println!("Removed '{}'", name);
+        match fs::unlink(path) {
+            Ok(_) => if verbose { println!("Removed '{}'", name); },
+            Err(f) => {
+                writeln!(&mut stderr() as &mut Writer,
+                         "{}", f.to_str());
+                os::set_exit_status(1);
             }
-        });
+        }
     }
 }
 
@@ -212,7 +217,7 @@ fn prompt(msg: &str) -> bool {
 fn read_prompt() -> bool {
     stdio::flush();
     match BufferedReader::new(stdin()).read_line() {
-        Some(line) => {
+        Ok(line) => {
             match line.char_at(0) {
                 'y' | 'Y' => true,
                 'n' | 'N' => false,
@@ -222,7 +227,7 @@ fn read_prompt() -> bool {
                 }
             }
         }
-        None => true
+        Err(_) => true
     }
 }
 
