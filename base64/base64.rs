@@ -82,7 +82,10 @@ fn main() {
 }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = str::from_utf8_owned(input.read_to_end()).unwrap();
+    let mut to_decode = str::from_utf8_owned(match input.read_to_end() {
+        Ok(m) => m,
+        Err(f) => fail!(f.to_str())
+    }).unwrap();
 
     to_decode = str::replace(to_decode, "\n", "");
 
@@ -120,7 +123,10 @@ fn encode(input: &mut Reader, line_wrap: uint) {
             _ => Some(line_wrap)
         }
     };
-    let to_encode = input.read_to_end();
+    let to_encode = match input.read_to_end() {
+        Ok(m) => m,
+        Err(f) => fail!(f.to_str())
+    };
     let mut encoded = to_encode.to_base64(b64_conf);
 
     // To my knowledge, RFC 3548 does not specify which line endings to use. It

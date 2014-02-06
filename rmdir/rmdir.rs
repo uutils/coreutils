@@ -12,7 +12,7 @@
 extern mod extra;
 
 use std::os;
-use std::io::{print, stderr, io_error, fs};
+use std::io::{print, stderr, fs};
 use extra::getopts::groups;
 
 fn main() {
@@ -77,23 +77,34 @@ fn remove(dirs: &[~str], ignore: bool, parents: bool, verbose: bool) {
 }
 
 fn remove_dir(path: &Path, dir: &~str, ignore: bool, parents: bool, verbose: bool) {
-    if fs::walk_dir(path).next() == None {
-        io_error::cond.trap(|_| {
+    let mut walk_dir = match fs::walk_dir(path) {
+        Ok(m) => m,
+        Err(f) => {
             writeln!(&mut stderr() as &mut Writer,
-                     "Failed to remove directory '{}'", *dir);
+                     "{}", f.to_str());
             os::set_exit_status(1);
-        }).inside(|| {
-            fs::rmdir(path);
-            if verbose {
-                println!("Removed directory '{}'", *dir);
-            }
-            if parents {
-                let dirname = path.dirname_str().unwrap();
-                if dirname != "." {
-                    remove_dir(&Path::new(dirname), &dirname.to_owned(), ignore, parents, verbose);
+            return;
+        }
+    };
+    if walk_dir.next() == None {
+        match fs::rmdir(path) {
+            Ok(_) => {
+                if verbose {
+                    println!("Removed directory '{}'", *dir);
+                }
+                if parents {
+                    let dirname = path.dirname_str().unwrap();
+                    if dirname != "." {
+                        remove_dir(&Path::new(dirname), &dirname.to_owned(), ignore, parents, verbose);
+                    }
                 }
             }
-        });
+            Err(f) => {
+                writeln!(&mut stderr() as &mut Writer,
+                         "{}", f.to_str());
+                os::set_exit_status(1);
+            }
+        }
     } else if !ignore {
         writeln!(&mut stderr() as &mut Writer,
                  "Failed to remove directory '{}' (non-empty)", *dir);
