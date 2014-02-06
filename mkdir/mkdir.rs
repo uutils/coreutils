@@ -33,7 +33,7 @@ fn main() {
         groups::optflag("v", "verbose",
                         "print a message for each printed directory"),
         groups::optflag("h", "help", "display this help"),
-        groups::optflag("", "version", "display this version")
+        groups::optflag("V", "version", "display this version")
     ];
 
     let matches = match groups::getopts(args.tail(), opts) {
