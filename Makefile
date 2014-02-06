@@ -21,6 +21,7 @@ PROGS       := \
   rm \
   rmdir \
   sleep \
+  seq \
   tee \
   true \
   users \
@@ -39,6 +40,7 @@ EXES        := \
 TEST_PROGS  := \
   cat \
   mkdir \
+  seq \
 
 TEST        ?= $(TEST_PROGS)
 
