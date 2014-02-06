@@ -24,6 +24,7 @@ PROGS       := \
   seq \
   tee \
   true \
+  truncate \
   users \
   wc \
   whoami \
@@ -41,6 +42,7 @@ TEST_PROGS  := \
   cat \
   mkdir \
   seq \
+  truncate \
 
 TEST        ?= $(TEST_PROGS)
 
