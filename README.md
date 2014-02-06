@@ -11,7 +11,7 @@ Why?
 Many GNU, linux and other utils are pretty awesome, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to windows. However those projects
-are either old, abandonned, hosted on CVS, written in platform-specific C, etc.
+are either old, abandoned, hosted on CVS, written in platform-specific C, etc.
 
 Rust provides a good platform-agnostic way of writing systems utils that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
@@ -155,6 +155,7 @@ To do
 - timeout
 - touch
 - tr
+- truncate
 - tsort
 - uname-arch
 - uname-uname
