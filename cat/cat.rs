@@ -13,28 +13,28 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 extern mod extra;
+extern mod getopts;
 
 use std::os;
 use std::io::{print, stdin, stdout, File};
-use extra::getopts::groups;
 
 fn main() {
     let args = os::args();
     let program = args[0].clone();
     let opts = ~[
-        groups::optflag("A", "show-all", "equivalent to -vET"),
-        groups::optflag("b", "number-nonblank", "number nonempty output lines, overrides -n"),
-        groups::optflag("e", "", "equivalent to -vE"),
-        groups::optflag("E", "show-ends", "display $ at end of each line"),
-        groups::optflag("n", "number", "number all output lines"),
-        groups::optflag("s", "squeeze-blank", "suppress repeated empty output lines"),
-        groups::optflag("t", "", "equivalent to -vT"),
-        groups::optflag("T", "show-tabs", "display TAB characters as ^I"),
-        groups::optflag("v", "show-nonprinting", "use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("A", "show-all", "equivalent to -vET"),
+        getopts::optflag("b", "number-nonblank", "number nonempty output lines, overrides -n"),
+        getopts::optflag("e", "", "equivalent to -vE"),
+        getopts::optflag("E", "show-ends", "display $ at end of each line"),
+        getopts::optflag("n", "number", "number all output lines"),
+        getopts::optflag("s", "squeeze-blank", "suppress repeated empty output lines"),
+        getopts::optflag("t", "", "equivalent to -vT"),
+        getopts::optflag("T", "show-tabs", "display TAB characters as ^I"),
+        getopts::optflag("v", "show-nonprinting", "use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => fail!("Invalid options\n{}", f.to_err_msg())
     };
@@ -44,7 +44,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(groups::usage("Concatenate FILE(s), or standard input, to standard output.", opts));
+        print(getopts::usage("Concatenate FILE(s), or standard input, to standard output.", opts));
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return;

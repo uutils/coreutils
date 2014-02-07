@@ -3,7 +3,7 @@ RUSTC       ?= rustc
 RM          := rm
 
 # Flags
-RUSTCFLAGS  := --opt-level=3 -A unused_must_use
+RUSTCFLAGS  := --opt-level=3
 RMFLAGS     :=
 
 # Possible programs

@@ -11,27 +11,31 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::os;
-use std::io::{print, stderr};
-use extra::getopts::groups;
+use std::io::print;
+
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "printenv";
 
 fn main() {
     let args = os::args();
     let program = args[0].clone();
     let opts = ~[
-        groups::optflag("0", "null", "end each output line with 0 byte rather than newline"),
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                   "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
+            crash!(1, "Invalid options\n{}", f.to_err_msg())
         }
     };
     if matches.opt_present("help") {
@@ -40,7 +44,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [VARIABLE]... [OPTION]...", program);
         println!("");
-        print(groups::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
+        print(getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
         return;
     }
     if matches.opt_present("version") {

@@ -12,35 +12,35 @@
 #[feature(macro_rules)];
 
 extern mod extra;
+extern mod getopts;
 
-use std::io::{stderr, File, Open, ReadWrite, Writer, SeekEnd, SeekSet};
+use std::io::{File, Open, ReadWrite, SeekEnd, SeekSet};
 use std::os;
 use std::u64;
-use extra::getopts::groups;
+
+#[path = "../util.rs"]
+mod util;
 
 macro_rules! get_file_size(
     ($file:ident, $action:expr) => ({
         match $file.seek(0, SeekEnd) {
             Ok(_) => {}
             Err(f) => {
-                writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
-                os::set_exit_status(1);
+                show_error!(1, "{}", f.to_str());
                 $action
             }
         }
         let size = match $file.tell() {
             Ok(m) => m,
             Err(f) => {
-                writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
-                os::set_exit_status(1);
+                show_error!(1, "{}", f.to_str());
                 $action
             }
         };
         match $file.seek(0, SeekSet) {
             Ok(_) => {}
             Err(f) => {
-                writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
-                os::set_exit_status(1);
+                show_error!(1, "{}", f.to_str());
                 $action
             }
         }
@@ -59,24 +59,24 @@ enum TruncateMode {
     RoundUp
 }
 
+static NAME: &'static str = "truncate";
+
 fn main() {
     let args = os::args();
     let program = args[0].clone();
 
     let opts = ~[
-        groups::optflag("c", "no-create", "do not create files that do not exist"),
-        groups::optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)"),
-        groups::optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE"),
-        groups::optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE"),
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit")
+        getopts::optflag("c", "no-create", "do not create files that do not exist"),
+        getopts::optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)"),
+        getopts::optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE"),
+        getopts::optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer, "{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
+            crash!(1, "{}", f.to_err_msg())
         }
     };
 
@@ -86,7 +86,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... FILE...", program);
         println!("");
-        print!("{}", groups::usage("Shrink or extend the size of each file to the specified size.", opts));
+        print!("{}", getopts::usage("Shrink or extend the size of each file to the specified size.", opts));
         print!("
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -108,18 +108,15 @@ file based on its current size:
     } else if matches.opt_present("version") {
         println!("truncate 1.0.0");
     } else if matches.free.is_empty() {
-        writeln!(&mut stderr() as &mut Writer, "Missing an argument");
-        writeln!(&mut stderr() as &mut Writer,
-                 "For help, try '{0:s} --help'", program);
-        os::set_exit_status(1);
+        show_error!(1, "missing an argument");
+        crash!(1, "for help, try '{0:s} --help'", program);
     } else {
         let no_create = matches.opt_present("no-create");
         let io_blocks = matches.opt_present("io-blocks");
         let reference = matches.opt_str("reference");
         let size = matches.opt_str("size");
         if reference.is_none() && size.is_none() {
-            writeln!(&mut stderr() as &mut Writer, "You must specify either --reference or --size.");
-            os::set_exit_status(1);
+            crash!(1, "you must specify either --reference or --size");
         } else {
             truncate(no_create, io_blocks, reference, size, matches.free);
         }
@@ -132,19 +129,12 @@ fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Opt
             let mut rfile = match File::open(&Path::new(rfilename.clone())) {
                 Ok(m) => m,
                 Err(f) => {
-                    writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
-                    os::set_exit_status(1);
-                    return
+                    crash!(1, "{}", f.to_str())
                 }
             };
             (get_file_size!(rfile, return), Reference)
         }
-        None => {
-            match parse_size(size.unwrap()) {
-                Ok(szpair) => szpair,
-                Err(()) => return
-            }
-        }
+        None => parse_size(size.unwrap())
     };
     for filename in filenames.iter() {
         let filename: &str = *filename;
@@ -165,23 +155,19 @@ fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Opt
                     match file.truncate(tsize as i64) {
                         Ok(_) => {}
                         Err(f) => {
-                            writeln!(&mut stderr() as &mut Writer,
-                                     "{}", f.to_str());
-                            os::set_exit_status(1);
+                            show_error!(1, "{}", f.to_str());
                         }
                     }
                 }
                 Err(f) => {
-                    writeln!(&mut stderr() as &mut Writer, "{}", f.to_str());
-                    os::set_exit_status(1);
+                    show_error!(1, "{}", f.to_str());
                 }
             }
         }
     }
 }
 
-fn parse_size(size: ~str) -> Result<(u64, TruncateMode), ()> {
-    let mut err = false;
+fn parse_size(size: ~str) -> (u64, TruncateMode) {
     let mode = match size.char_at(0) {
         '+' => Extend,
         '-' => Reduce,
@@ -210,14 +196,10 @@ fn parse_size(size: ~str) -> Result<(u64, TruncateMode), ()> {
     let mut number = match u64::parse_bytes(bytes, 10) {
         Some(num) => num,
         None => {
-            writeln!(&mut stderr() as &mut Writer,
-                     "'{}' is not a valid number.", size);
-            os::set_exit_status(1);
-            err = true;
-            0
+            crash!(1, "'{}' is not a valid number.", size)
         }
     };
-    if !err && size.char_at(size.len() - 1).is_alphabetic() {
+    if size.char_at(size.len() - 1).is_alphabetic() {
         number *= match size.char_at(size.len() - 1).to_ascii().to_upper().to_char() {
             'B' => match size.char_at(size.len() - 2).to_ascii().to_upper().to_char() {
                 'K' => 1000,
@@ -229,11 +211,7 @@ fn parse_size(size: ~str) -> Result<(u64, TruncateMode), ()> {
                 'Z' => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 'Y' => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 letter => {
-                    writeln!(&mut stderr() as &mut Writer,
-                             "'{}B' is not a valid suffix.", letter);
-                    os::set_exit_status(1);
-                    err = true;
-                    1
+                    crash!(1, "'{}B' is not a valid suffix.", letter)
                 }
             },
             'K' => 1024,
@@ -245,18 +223,10 @@ fn parse_size(size: ~str) -> Result<(u64, TruncateMode), ()> {
             'Z' => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
             'Y' => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
             letter => {
-                writeln!(&mut stderr() as &mut Writer,
-                         "'{}' is not a valid suffix.", letter);
-                os::set_exit_status(1);
-                err = true;
-                1
+                crash!(1, "'{}' is not a valid suffix.", letter)
             }
         };
     }
-    if err {
-        Err(())
-    } else {
-        Ok((number, mode))
-    }
+    (number, mode)
 }
 

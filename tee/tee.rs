@@ -11,13 +11,13 @@
  */
 
 extern mod extra;
+extern mod getopts;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
-use std::io::{io_error, EndOfFile};
-use std::io::signal::{Interrupt, Listener};
+use std::io::{IoResult};
 use std::io::util::{copy, NullWriter, MultiWriter};
 use std::os::{args, set_exit_status};
-use extra::getopts::groups::{getopts, optflag, usage};
+use getopts::{getopts, optflag, usage};
 
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
@@ -77,75 +77,73 @@ fn exec(options: Options) -> Result<(), ()> {
 }
 
 fn tee(options: Options) -> Result<(), ()> {
-    let mut handler = Listener::new();
-    if options.ignore_interrupts {
-        handler.register(Interrupt);
+    let writers = options.files.map(|path| open(path, options.append));
+    let output = &mut MultiWriter::new(writers);
+    let input = &mut NamedReader { inner: ~stdin() as ~Reader };
+    if copy(input, output).is_err() || output.flush().is_err() {
+        Err(())
+    } else {
+        Ok(())
     }
-    let mut ok = true;
-    io_error::cond.trap(|_| ok = false).inside(|| {
-        let writers = options.files.map(|path| open(path, options.append));
-        let output = &mut MultiWriter::new(writers);
-        let input = &mut NamedReader { inner: ~stdin() as ~Reader };
-        copy(input, output);
-        output.flush();
-    });
-    if ok { Ok(()) } else { Err(()) }
 }
 
 fn open(path: &Path, append: bool) -> ~Writer {
-    let inner = with_path(path, || if *path == Path::new("-") {
+    let inner = if *path == Path::new("-") {
         ~stdout() as ~Writer
     } else {
         let mode = if append { Append } else { Truncate };
         match File::open_mode(path, mode, Write) {
-            Some(file) => ~file as ~Writer,
-            None => ~NullWriter as ~Writer
+            Ok(file) => ~file as ~Writer,
+            Err(_) => ~NullWriter as ~Writer
         }
-    });
+    };
     ~NamedWriter { inner: inner, path: ~path.clone() } as ~Writer
 }
 
 struct NamedWriter {
-    priv inner: ~Writer,
-    priv path: ~Path
+    inner: ~Writer,
+    path: ~Path
 }
 
 impl Writer for NamedWriter {
-    fn write(&mut self, buf: &[u8]) {
-        with_path(self.path, || io_error::cond.trap(|e| {
-            self.inner = ~NullWriter as ~Writer;
-            io_error::cond.raise(e);
-        }).inside(|| self.inner.write(buf)))
+    fn write(&mut self, buf: &[u8]) -> IoResult<()> {
+        with_path(self.path, || {
+            let val = self.inner.write(buf);
+            if val.is_err() {
+                self.inner = ~NullWriter as ~Writer;
+            }
+            val
+        })
     }
 
-    fn flush(&mut self) {
-        with_path(self.path, || io_error::cond.trap(|e| {
-            self.inner = ~NullWriter as ~Writer;
-            io_error::cond.raise(e);
-        }).inside(|| self.inner.flush()))
+    fn flush(&mut self) -> IoResult<()> {
+        with_path(self.path, || {
+            let val = self.inner.flush();
+            if val.is_err() {
+                self.inner = ~NullWriter as ~Writer;
+            }
+            val
+        })
     }
 }
 
 struct NamedReader {
-    priv inner: ~Reader
+    inner: ~Reader
 }
 
 impl Reader for NamedReader {
-    fn read(&mut self, buf: &mut [u8]) -> Option<uint> {
-        with_path(&Path::new("stdin"), || io_error::cond.trap(|e| {
-            if e.kind != EndOfFile {
-                io_error::cond.raise(e)
-            }
-        }).inside(|| self.inner.read(buf)))
-
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+        with_path(&Path::new("stdin"), || {
+            self.inner.read(buf)
+        })
     }
 }
 
-fn with_path<T>(path: &Path, cb: || -> T) -> T {
-    io_error::cond.trap(|e| {
-        warn(format!("{}: {}", path.display(), e.desc));
-        io_error::cond.raise(e);
-    }).inside(cb)
+fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
+    match cb() {
+        Err(f) => { warn(format!("{}: {}", path.display(), f.to_str())); Err(f) }
+        okay => okay
+    }
 }
 
 fn warn(message: &str) {

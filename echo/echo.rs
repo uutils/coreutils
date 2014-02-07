@@ -11,23 +11,17 @@
  */
 
 extern mod extra;
+extern mod getopts;
 
 use std::os;
 use std::io::{print, println};
 use std::uint;
-use extra::getopts::groups;
 
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "echo";
 static VERSION: &'static str = "1.0.0";
-
-#[macro_export]
-macro_rules! crash(
-    ($exitcode:expr, $($args:expr),+) => (
-        {   ::std::os::set_exit_status($exitcode); 
-            let _unused = write!(&mut ::std::io::stderr(), $($args),+);
-            return;
-        }
-    )
-)
 
 fn print_char(c: char) {
     print!("{}", c);
@@ -79,14 +73,14 @@ fn main() {
     let args = os::args();
     let program = args[0].clone();
     let opts = ~[
-        groups::optflag("n", "", "do not output the trailing newline"),
-        groups::optflag("e", "", "enable interpretation of backslash escapes"),
-        groups::optflag("E", "", "disable interpretation of backslash escapes (default)"),
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("n", "", "do not output the trailing newline"),
+        getopts::optflag("e", "", "enable interpretation of backslash escapes"),
+        getopts::optflag("E", "", "disable interpretation of backslash escapes (default)"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f.to_err_msg())
     };
@@ -98,7 +92,7 @@ fn main() {
         println!("  {0:s} [SHORT-OPTION]... [STRING]...", program);
         println!("  {0:s} LONG-OPTION", program);
         println!("");
-        println(groups::usage("Echo the STRING(s) to standard output.", opts));
+        println(getopts::usage("Echo the STRING(s) to standard output.", opts));
         println("If -e is in effect, the following sequences are recognized:
 
 \\\\      backslash

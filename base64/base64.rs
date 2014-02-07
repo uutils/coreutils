@@ -9,14 +9,17 @@
  * that was distributed with this source code.
  */
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::char;
 use std::io::{println, File, stdin, stdout};
 use std::os;
 use std::str;
 
-use extra::getopts::groups::{
+use getopts::{
     getopts,
     optflag,
     optopt,
@@ -24,6 +27,11 @@ use extra::getopts::groups::{
 };
 use extra::base64;
 use extra::base64::{FromBase64, ToBase64};
+
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "base64";
 
 fn main() {
     let args = ~os::args();
@@ -104,8 +112,14 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         Ok(bytes) => {
             let mut out = stdout();
 
-            out.write(bytes);
-            out.flush();
+            match out.write(bytes) {
+                Ok(_) => {}
+                Err(f) => { crash!(1, "{}", f.to_str()); }
+            }
+            match out.flush() {
+                Ok(_) => {}
+                Err(f) => { crash!(1, "{}", f.to_str()); }
+            }
         }
         Err(s) => {
             error!("error: {}", s.to_str());
