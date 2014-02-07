@@ -2,7 +2,7 @@
 /*
  * This file is part of the uutils coreutils package.
  *
- * (c) Jordi Boggiano <j.boggiano@seld.be>
+ * (c) Alan Andrade <alan.andradec@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,9 +13,10 @@
  */
 
 extern mod extra;
+extern mod getopts;
 
 use std::{os,libc,vec,str};
-use extra::getopts::{optflag, getopts};
+use getopts::{optflag, getopts, usage};
 
 extern {
     fn gethostname(name: *libc::c_char, namelen: libc::size_t) -> libc::c_int;
@@ -24,16 +25,25 @@ extern {
 
 fn main () {
     let args = os::args();
+    let program = args[0].to_owned();
 
     let options = [
-        optflag("f"),
-        optflag("s")
+        optflag("f", "full", "Default option to show full name"),
+        optflag("s", "slice subdomain", "Cuts the subdomain off if any"),
+        optflag("h", "help", "Show help"),
+        optflag("V", "version", "Show program's version")
     ];
 
     let matches = match getopts(args.tail(), options) {
         Ok(m) => { m }
-        _ => { usage(); return; }
+        _ => { println!("{:s}", usage(program, options)); return; }
     };
+
+    if matches.opt_present("h") {
+        println!("{:s}", usage(program, options));
+        return
+    }
+    if matches.opt_present("V") { version(); return }
 
     match matches.free.len() {
         0 => {
@@ -50,12 +60,12 @@ fn main () {
             println!("{:s}", hostname);
         }
         1 => { xsethostname( matches.free.last().unwrap() ) }
-        _ => { usage() }
+        _ => { println!("{:s}", usage(program, options)); }
     };
 }
 
-fn usage() {
-    println!("usage: hostname [-fs] [name-of-host]");
+fn version() {
+    println!("hostname version 1.0.0");
 }
 
 fn xgethostname() -> ~str {
