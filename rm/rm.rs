@@ -9,11 +9,16 @@
  * file that was distributed with this source code.
  */
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::os;
-use std::io::{print,stdin,stderr,stdio,fs,BufferedReader};
-use extra::getopts::groups;
+use std::io::{print, stdin, stdio, fs, BufferedReader};
+
+#[path = "../util.rs"]
+mod util;
 
 #[deriving(Eq)]
 enum InteractiveMode {
@@ -22,32 +27,31 @@ enum InteractiveMode {
     InteractiveAlways
 }
 
+static NAME: &'static str = "rm";
+
 fn main() {
     let args = os::args();
     let program = args[0].clone();
 
     // TODO: make getopts support -R in addition to -r
     let opts = ~[
-        groups::optflag("f", "force", "ignore nonexistent files and arguments, never prompt"),
-        groups::optflag("i", "", "prompt before every removal"),
-        groups::optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"),
-        groups::optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN"),
-        groups::optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)"),
-        groups::optflag("", "no-preserve-root", "do not treat '/' specially"),
-        groups::optflag("", "preserve-root", "do not remove '/' (default)"),
-        groups::optflag("r", "recursive", "remove directories and their contents recursively"),
-        groups::optflag("d", "dir", "remove empty directories"),
-        groups::optflag("v", "verbose", "explain what is being done"),
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit")
+        getopts::optflag("f", "force", "ignore nonexistent files and arguments, never prompt"),
+        getopts::optflag("i", "", "prompt before every removal"),
+        getopts::optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"),
+        getopts::optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN"),
+        getopts::optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)"),
+        getopts::optflag("", "no-preserve-root", "do not treat '/' specially"),
+        getopts::optflag("", "preserve-root", "do not remove '/' (default)"),
+        getopts::optflag("r", "recursive", "remove directories and their contents recursively"),
+        getopts::optflag("d", "dir", "remove empty directories"),
+        getopts::optflag("v", "verbose", "explain what is being done"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                     "{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
+            crash!(1, "{}", f.to_err_msg())
         }
     };
     if matches.opt_present("help") {
@@ -56,7 +60,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(groups::usage("Remove (unlink) the FILE(s).", opts));
+        print(getopts::usage("Remove (unlink) the FILE(s).", opts));
         println!("");
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
@@ -73,10 +77,8 @@ fn main() {
     } else if matches.opt_present("version") {
         println!("rm 1.0.0");
     } else if matches.free.is_empty() {
-        writeln!(&mut stderr() as &mut Writer, "Missing an argument");
-        writeln!(&mut stderr() as &mut Writer,
-                 "For help, try '{0:s} --help'", program);
-        os::set_exit_status(1);
+        show_error!(1, "missing an argument");
+        show_error!(1, "for help, try '{0:s} --help'", program)
     } else {
         let force = matches.opt_present("force");
         let interactive =
@@ -90,10 +92,7 @@ fn main() {
                     ~"once" => InteractiveOnce,
                     ~"always" => InteractiveAlways,
                     val => {
-                        writeln!(&mut stderr() as &mut Writer,
-                                 "Invalid argument to interactive ({})", val);
-                        os::set_exit_status(1);
-                        return
+                        crash!(1, "Invalid argument to interactive ({})", val)
                     }
                 }
             } else {
@@ -130,10 +129,7 @@ fn remove(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: boo
                     let walk_dir = match fs::walk_dir(&file) {
                         Ok(m) => m,
                         Err(f) => {
-                            writeln!(&mut stderr() as &mut Writer,
-                                     "{}", f.to_str());
-                            os::set_exit_status(1);
-                            return;
+                            crash!(1, "{}", f.to_str());
                         }
                     };
                     remove(walk_dir.map(|x| x.as_str().unwrap().to_owned()).to_owned_vec(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
@@ -142,23 +138,19 @@ fn remove(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: boo
                     remove_dir(&file, *filename, interactive, verbose);
                 } else {
                     if recursive {
-                        writeln!(&mut stderr() as &mut Writer,
-                                 "Could not remove directory '{}'",
-                                 *filename);
+                        show_error!(1, "could not remove directory '{}'",
+                                       *filename);
                     } else {
-                        writeln!(&mut stderr() as &mut Writer,
-                                 "Could not remove directory '{}' (did you mean to pass '-r'?)",
-                                 *filename);
+                        show_error!(1,
+                                    "could not remove directory '{}' (did you mean to pass '-r'?)",
+                                    *filename);
                     }
-                    os::set_exit_status(1);
                 }
             } else {
                 remove_file(&file, *filename, interactive, verbose);
             }
         } else if !force {
-            writeln!(&mut stderr() as &mut Writer,
-                     "No such file or directory '{}'", *filename);
-            os::set_exit_status(1);
+            show_error!(1, "no such file or directory '{}'", *filename);
         }
     }
 }
@@ -174,9 +166,7 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
         match fs::rmdir(path) {
             Ok(_) => if verbose { println!("Removed '{}'", name); },
             Err(f) => {
-                writeln!(&mut stderr() as &mut Writer,
-                         "{}", f.to_str());
-                os::set_exit_status(1);
+                show_error!(1, "{}", f.to_str());
             }
         }
     }
@@ -193,9 +183,7 @@ fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: b
         match fs::unlink(path) {
             Ok(_) => if verbose { println!("Removed '{}'", name); },
             Err(f) => {
-                writeln!(&mut stderr() as &mut Writer,
-                         "{}", f.to_str());
-                os::set_exit_status(1);
+                show_error!(1, "{}", f.to_str());
             }
         }
     }

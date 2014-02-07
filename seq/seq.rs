@@ -1,18 +1,25 @@
 #[crate_id(name="seq", vers="1.0.0", author="Daniel MacDougall")];
 
+#[feature(macro_rules)];
+
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 
 extern mod extra;
+extern mod getopts;
 
 use std::os;
 use std::cmp::max;
-use extra::getopts::groups;
 
-fn print_usage(opts: ~[groups::OptGroup]) {
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "seq";
+
+fn print_usage(opts: ~[getopts::OptGroup]) {
     println!("seq 1.0.0\n");
     println!("Usage:\n  seq [-w] [-s string] [-t string] [first [step]] last\n");
-    println!("{:s}", groups::usage("Print sequences of numbers", opts));
+    println!("{:s}", getopts::usage("Print sequences of numbers", opts));
 }
 
 fn parse_float(s: &str) -> Result<f32, ~str>{
@@ -30,16 +37,16 @@ fn escape_sequences(s: &str) -> ~str {
 fn main() {
     let args = os::args();
     let opts = ~[
-        groups::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
-        groups::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),
-        groups::optflag("w", "widths", "Equalize widths of all numbers by padding with zeros"),
-        groups::optflag("h", "help", "print this help text and exit"),
-        groups::optflag("V", "version", "print version and exit"),
+        getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
+        getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),
+        getopts::optflag("w", "widths", "Equalize widths of all numbers by padding with zeros"),
+        getopts::optflag("h", "help", "print this help text and exit"),
+        getopts::optflag("V", "version", "print version and exit"),
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m }
         Err(f) => {
-            println!("{:s}", f.to_err_msg());
+            show_error!(1, "{:s}", f.to_err_msg());
             print_usage(opts);
             return;
         }
@@ -53,13 +60,14 @@ fn main() {
         return;
     }
     if matches.free.len() < 1 || matches.free.len() > 3 {
+        os::set_exit_status(1);
         print_usage(opts);
         return;
     }
     let first = if matches.free.len() > 1 {
         match parse_float(matches.free[0]) {
             Ok(n) => n,
-            Err(s) => { println!("{:s}", s); return; }
+            Err(s) => { show_error!(1, "{:s}", s); return; }
         }
     } else {
         1.0
@@ -67,14 +75,14 @@ fn main() {
     let step = if matches.free.len() > 2 {
         match parse_float(matches.free[1]) {
             Ok(n) => n,
-            Err(s) => { println!("{:s}", s); return; }
+            Err(s) => { show_error!(1, "{:s}", s); return; }
         }
     } else {
         1.0
     };
     let last = match parse_float(matches.free[matches.free.len()-1]) {
         Ok(n) => n,
-        Err(s) => { println!("{:s}", s); return; }
+        Err(s) => { show_error!(1, "{:s}", s); return; }
     };
     let separator = escape_sequences(matches.opt_str("s").unwrap_or(~"\n"));
     let terminator = escape_sequences(matches.opt_str("t").unwrap_or(separator.clone()));

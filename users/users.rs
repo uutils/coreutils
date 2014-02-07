@@ -14,7 +14,10 @@
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #[allow(dead_code)];
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::io::print;
 use std::cast;
@@ -22,7 +25,9 @@ use std::libc;
 use std::os;
 use std::ptr;
 use std::str;
-use extra::getopts::groups;
+
+#[path = "../util.rs"]
+mod util;
 
 static DEFAULT_FILE: &'static str = "/var/run/utmp";
 
@@ -75,15 +80,17 @@ extern {
     fn utmpname(file: *libc::c_char) -> libc::c_int;
 }
 
+static NAME: &'static str = "users";
+
 fn main() {
     let args = os::args();
     let program = args[0].as_slice();
     let opts = ~[
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => fail!(f.to_err_msg()),
     };
@@ -94,7 +101,7 @@ fn main() {
         println!("Usage:");
         println!("  {:s} [OPTION]... [FILE]", program);
         println!("");
-        print(groups::usage("Output who is currently logged in according to FILE.", opts));
+        print(getopts::usage("Output who is currently logged in according to FILE.", opts));
         return;
     }
 

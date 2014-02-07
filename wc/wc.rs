@@ -9,12 +9,18 @@
  * file that was distributed with this source code.
  */
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::os;
 use std::str::from_utf8;
-use std::io::{print, stdin, stderr, File, BufferedReader};
-use extra::getopts::{groups, Matches};
+use std::io::{print, stdin, File, BufferedReader};
+use getopts::Matches;
+
+#[path = "../util.rs"]
+mod util;
 
 struct Result {
     filename: ~str,
@@ -25,26 +31,25 @@ struct Result {
     max_line_length: uint,
 }
 
+static NAME: &'static str = "wc";
+
 fn main() {
     let args = os::args();
     let program = args[0].clone();
     let opts = ~[
-        groups::optflag("c", "bytes", "print the byte counts"),
-        groups::optflag("m", "chars", "print the character counts"),
-        groups::optflag("l", "lines", "print the newline counts"),
-        groups::optflag("L", "max-line-length", "print the length of the longest line"),
-        groups::optflag("w", "words", "print the word counts"),
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("c", "bytes", "print the byte counts"),
+        getopts::optflag("m", "chars", "print the character counts"),
+        getopts::optflag("l", "lines", "print the newline counts"),
+        getopts::optflag("L", "max-line-length", "print the length of the longest line"),
+        getopts::optflag("w", "words", "print the word counts"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                   "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
+            crash!(1, "Invalid options\n{}", f.to_err_msg())
         }
     };
 
@@ -52,7 +57,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(groups::usage("Print newline, word and byte counts for each FILE", opts));
+        print(getopts::usage("Print newline, word and byte counts for each FILE", opts));
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return;
@@ -229,8 +234,7 @@ fn open(path: ~str) -> Option<BufferedReader<~Reader>> {
             return Some(BufferedReader::new(reader));
         },
         Err(e) => {
-            writeln!(&mut stderr() as &mut Writer, "wc: {0:s}: {1:s}", path, e.desc.to_str());
-            os::set_exit_status(1);
+            show_error!(1, "wc: {0:s}: {1:s}", path, e.desc.to_str());
         }
     }
 

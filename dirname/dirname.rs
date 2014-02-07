@@ -10,10 +10,10 @@
  */
 
 extern mod extra;
+extern mod getopts;
 
 use std::os;
 use std::io::print;
-use extra::getopts::groups;
 
 static VERSION: &'static str = "1.0.0";
 
@@ -21,12 +21,12 @@ fn main() {
     let args = os::args();
     let program = args[0].clone();
     let opts = ~[
-        groups::optflag("z", "zero", "separate output with NUL rather than newline"),
-        groups::optflag("", "help", "display this help and exit"),
-        groups::optflag("", "version", "output version information and exit"),
+        getopts::optflag("z", "zero", "separate output with NUL rather than newline"),
+        getopts::optflag("", "help", "display this help and exit"),
+        getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => fail!("Invalid options\n{}", f.to_err_msg())
     };
@@ -37,7 +37,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION] NAME...", program);
         println!("");
-        print(groups::usage("Output each NAME with its last non-slash component and trailing slashes
+        print(getopts::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
 directory).", opts));
         return;

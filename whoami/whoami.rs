@@ -11,13 +11,18 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::io::print;
 use std::os;
 use std::str;
 use std::libc;
-use extra::getopts::groups;
+
+#[path = "../util.rs"]
+mod util;
 
 struct c_passwd {
     pw_name: *libc::c_char,
@@ -38,16 +43,18 @@ unsafe fn getusername() -> ~str {
     name
 }
 
+static NAME: &'static str = "whoami";
+
 fn main() {
     let args = os::args();
     let program = args[0].as_slice();
     let opts = ~[
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => fail!(f.to_err_msg()),
+        Err(f) => crash!(1, "{}", f.to_err_msg()),
     };
     if matches.opt_present("help") {
         println!("whoami 1.0.0");
@@ -55,7 +62,7 @@ fn main() {
         println!("Usage:");
         println!("  {:s}", program);
         println!("");
-        print(groups::usage("print effective userid", opts));
+        print(getopts::usage("print effective userid", opts));
         return;
     }
     if matches.opt_present("version") {

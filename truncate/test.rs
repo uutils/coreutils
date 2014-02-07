@@ -1,11 +1,11 @@
 use std::{run, io};
 
 static PROG: &'static str = "build/truncate";
-static TESTNAME: &'static str = "THISISARANDOMFILENAME";
+static TFILE1: &'static str = "truncate_test_1";
+static TFILE2: &'static str = "truncate_test_2";
 
-fn make_file() -> io::File {
-    while Path::new(TESTNAME).exists() { io::timer::sleep(1000); }
-    match io::File::create(&Path::new(TESTNAME)) {
+fn make_file(name: &str) -> io::File {
+    match io::File::create(&Path::new(name)) {
         Ok(f) => f,
         Err(_) => fail!()
     }
@@ -13,22 +13,22 @@ fn make_file() -> io::File {
 
 #[test]
 fn test_increase_file_size() {
-    let mut file = make_file();
-    if !run::process_status(PROG, [~"-s", ~"+5K", TESTNAME.to_owned()]).unwrap().success() {
+    let mut file = make_file(TFILE1);
+    if !run::process_status(PROG, [~"-s", ~"+5K", TFILE1.to_owned()]).unwrap().success() {
         fail!();
     }
     file.seek(0, io::SeekEnd);
     if file.tell().unwrap() != 5 * 1024 {
         fail!();
     }
-    io::fs::unlink(&Path::new(TESTNAME));
+    io::fs::unlink(&Path::new(TFILE1));
 }
 
 #[test]
 fn test_decrease_file_size() {
-    let mut file = make_file();
+    let mut file = make_file(TFILE2);
     file.write(bytes!("1234567890"));
-    if !run::process_status(PROG, [~"--size=-4", TESTNAME.to_owned()]).unwrap().success() {
+    if !run::process_status(PROG, [~"--size=-4", TFILE2.to_owned()]).unwrap().success() {
         fail!();
     }
     file.seek(0, io::SeekEnd);
@@ -36,5 +36,5 @@ fn test_decrease_file_size() {
         println!("{}", file.tell());
         fail!();
     }
-    io::fs::unlink(&Path::new(TESTNAME));
+    io::fs::unlink(&Path::new(TFILE2));
 }

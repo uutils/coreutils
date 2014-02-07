@@ -11,26 +11,30 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::os;
-use std::io::{print, println, stderr};
-use extra::getopts::groups;
+use std::io::{print, println};
+
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "yes";
 
 fn main() {
     let args = os::args();
     let program = args[0].clone();
     let opts = ~[
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                   "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
-            return
+            crash!(1, "invalid options\n{}", f.to_err_msg())
         }
     };
     if matches.opt_present("help") {
@@ -39,7 +43,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [STRING]... [OPTION]...", program);
         println!("");
-        print(groups::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
+        print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
         return;
     }
     if matches.opt_present("version") {

@@ -12,23 +12,33 @@
  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
  */
 
+#[allow(dead_code)];
+
+#[feature(macro_rules)];
+
 extern mod extra;
+extern mod getopts;
 
 use std::{libc,str,os};
 use std::io::println;
 use std::io::stdio::stderr;
-use extra::getopts::{optflag,getopts};
+use getopts::{optflag,getopts};
+
+#[path = "../util.rs"]
+mod util;
 
 extern {
     fn ttyname(filedesc: libc::c_int) -> *libc::c_char;
     fn isatty(filedesc: libc::c_int) -> libc::c_int;
 }
 
+static NAME: &'static str = "tty";
+
 fn main () {
     let args = os::args();
 
     let options = [
-        optflag("s")
+        optflag("s", "silent", "print nothing, only return an exit status")
     ];
 
     let silent = match getopts(args.tail(), options) {
@@ -64,6 +74,6 @@ fn main () {
 }
 
 fn usage () {
-    writeln!(&mut stderr() as &mut Writer, "usage: tty [-s]");
+    safe_writeln!(&mut stderr() as &mut Writer, "usage: tty [-s]");
     os::set_exit_status(2);
 }

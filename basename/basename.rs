@@ -11,24 +11,18 @@
  */
 
 extern mod extra;
+extern mod getopts;
 
 use std::io::{print, println};
 use std::os;
 use std::str;
 use std::str::StrSlice;
-use extra::getopts::groups;
 
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
-
-#[macro_export]
-macro_rules! crash(
-    ($exitcode:expr, $($args:expr),+) => (
-        {   ::std::os::set_exit_status($exitcode); 
-            let _unused = write!(&mut ::std::io::stderr(), $($args),+);
-            return;
-        }
-    )
-)
 
 fn main() {
     let args = os::args();
@@ -38,11 +32,11 @@ fn main() {
     // Argument parsing
     //
     let opts = ~[
-        groups::optflag("h", "help", "display this help and exit"),
-        groups::optflag("V", "version", "output version information and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m)  => m,
         Err(f) => crash!(1, "Invalid options\n{}", f.to_err_msg())
     };
@@ -53,7 +47,7 @@ fn main() {
         println!("Print NAME with any leading directory components removed.");
         println!("If specified, also remove a trailing SUFFIX.");
 
-        print(groups::usage("", opts));
+        print(getopts::usage("", opts));
 
         return;
     }
