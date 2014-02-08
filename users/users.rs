@@ -14,7 +14,7 @@
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #[allow(dead_code)];
 
-#[feature(macro_rules)];
+#[feature(macro_rules, globs)];
 
 extern mod extra;
 extern mod getopts;
@@ -25,59 +25,105 @@ use std::libc;
 use std::os;
 use std::ptr;
 use std::str;
+use utmpx::*;
 
 #[path = "../util.rs"]
 mod util;
 
-static DEFAULT_FILE: &'static str = "/var/run/utmp";
+#[cfg(target_os = "linux")]
+mod utmpx {
+    use std::libc;
 
-static UT_LINESIZE: uint = 32;
-static UT_NAMESIZE: uint = 32;
-static UT_HOSTSIZE: uint = 256;
+    pub static DEFAULT_FILE: &'static str = "/var/run/utmp";
 
-static EMPTY: libc::c_short = 0;
-static RUN_LVL: libc::c_short = 1;
-static BOOT_TIME: libc::c_short = 2;
-static NEW_TIME: libc::c_short = 3;
-static OLD_TIME: libc::c_short = 4;
-static INIT_PROCESS: libc::c_short = 5;
-static LOGIN_PROCESS: libc::c_short = 6;
-static USER_PROCESS: libc::c_short = 7;
-static DEAD_PROCESS: libc::c_short = 8;
-static ACCOUNTING: libc::c_short = 9;
+    pub static UT_LINESIZE: uint = 32;
+    pub static UT_NAMESIZE: uint = 32;
+    pub static UT_IDSIZE: uint = 4;
+    pub static UT_HOSTSIZE: uint = 256;
 
-struct c_exit_status {
-    e_termination: libc::c_short,
-    e_exit: libc::c_short,
+    pub static EMPTY: libc::c_short = 0;
+    pub static RUN_LVL: libc::c_short = 1;
+    pub static BOOT_TIME: libc::c_short = 2;
+    pub static NEW_TIME: libc::c_short = 3;
+    pub static OLD_TIME: libc::c_short = 4;
+    pub static INIT_PROCESS: libc::c_short = 5;
+    pub static LOGIN_PROCESS: libc::c_short = 6;
+    pub static USER_PROCESS: libc::c_short = 7;
+    pub static DEAD_PROCESS: libc::c_short = 8;
+    pub static ACCOUNTING: libc::c_short = 9;
+
+    pub struct c_exit_status {
+        e_termination: libc::c_short,
+        e_exit: libc::c_short,
+    }
+
+    pub struct c_utmp {
+        ut_type: libc::c_short,
+        ut_pid: libc::pid_t,
+        ut_line: [libc::c_char, ..UT_LINESIZE],
+        ut_id: [libc::c_char, ..UT_IDSIZE],
+
+        ut_user: [libc::c_char, ..UT_NAMESIZE],
+        ut_host: [libc::c_char, ..UT_HOSTSIZE],
+        ut_exit: c_exit_status,
+        ut_session: libc::c_long,
+        ut_tv: libc::timeval,
+
+        ut_addr_v6: [libc::int32_t, ..4],
+        __unused: [libc::c_char, ..20],
+    }
 }
 
-struct c_utmp {
-    ut_type: libc::c_short,
-    ut_pid: libc::pid_t,
-    ut_line: [libc::c_char, ..UT_LINESIZE],
-    ut_id: [libc::c_char, ..4],
+#[cfg(target_os = "macos")]
+mod utmpx {
+    use std::libc;
 
-    ut_user: [libc::c_char, ..UT_NAMESIZE],
-    ut_host: [libc::c_char, ..UT_HOSTSIZE],
-    ut_exit: c_exit_status,
-    ut_session: libc::c_long,
-    ut_tv: libc::timeval,
+    pub static DEFAULT_FILE: &'static str = "/var/run/utmpx";
 
-    ut_addr_v6: [libc::int32_t, ..4],
-    __unused: [libc::c_char, ..20],
+    pub static UT_LINESIZE: uint = 32;
+    pub static UT_NAMESIZE: uint = 256;
+    pub static UT_IDSIZE: uint = 4;
+    pub static UT_HOSTSIZE: uint = 256;
+
+    pub static EMPTY: libc::c_short = 0;
+    pub static RUN_LVL: libc::c_short = 1;
+    pub static BOOT_TIME: libc::c_short = 2;
+    pub static OLD_TIME: libc::c_short = 3;
+    pub static NEW_TIME: libc::c_short = 4;
+    pub static INIT_PROCESS: libc::c_short = 5;
+    pub static LOGIN_PROCESS: libc::c_short = 6;
+    pub static USER_PROCESS: libc::c_short = 7;
+    pub static DEAD_PROCESS: libc::c_short = 8;
+    pub static ACCOUNTING: libc::c_short = 9;
+
+    pub struct c_exit_status {
+        e_termination: libc::c_short,
+        e_exit: libc::c_short,
+    }
+
+    pub struct c_utmp {
+        ut_user: [libc::c_char, ..UT_NAMESIZE],
+        ut_id: [libc::c_char, ..UT_IDSIZE],
+        ut_line: [libc::c_char, ..UT_LINESIZE],
+        ut_pid: libc::pid_t,
+        ut_type: libc::c_short,
+        ut_tv: libc::timeval,
+        ut_host: [libc::c_char, ..UT_HOSTSIZE],
+        __unused: [libc::c_char, ..16]
+    }
 }
 
 extern {
-    fn getutent() -> *c_utmp;
-    fn getutid(ut: *c_utmp) -> *c_utmp;
-    fn getutline(ut: *c_utmp) -> *c_utmp;
+    fn getutxent() -> *c_utmp;
+    fn getutxid(ut: *c_utmp) -> *c_utmp;
+    fn getutxline(ut: *c_utmp) -> *c_utmp;
 
-    fn pututline(ut: *c_utmp) -> *c_utmp;
+    fn pututxline(ut: *c_utmp) -> *c_utmp;
 
-    fn setutent();
-    fn endutent();
+    fn setutxent();
+    fn endutxent();
 
-    fn utmpname(file: *libc::c_char) -> libc::c_int;
+    fn utmpxname(file: *libc::c_char) -> libc::c_int;
 }
 
 static NAME: &'static str = "users";
@@ -121,17 +167,17 @@ fn main() {
 fn exec(filename: &str) {
     filename.with_c_str(|filename| {
         unsafe {
-            utmpname(filename);
+            utmpxname(filename);
         }
     });
 
     let mut users: ~[~str] = ~[];
 
     unsafe {
-        setutent();
+        setutxent();
 
         loop {
-            let line = getutent();
+            let line = getutxent();
 
             if line == ptr::null() {
                 break;
@@ -143,7 +189,7 @@ fn exec(filename: &str) {
             }
         }
 
-        endutent();
+        endutxent();
     }
 
     if users.len() > 0 {
