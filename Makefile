@@ -27,15 +27,21 @@ PROGS       := \
   truncate \
   users \
   wc \
-  whoami \
   yes \
   tty \
+
+UNIX_PROGS := \
+  whoami \
+
+ifneq ($(OS),Windows_NT)
+	PROGS    := $(PROGS) $(UNIX_PROGS)
+endif
 
 BUILD       ?= $(PROGS)
 
 # Output names
 EXES        := \
-  $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS)))
+  $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 # Programs with usable tests
 TEST_PROGS  := \
