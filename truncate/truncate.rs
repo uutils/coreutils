@@ -14,7 +14,7 @@
 extern mod extra;
 extern mod getopts;
 
-use std::io::{File, Open, ReadWrite, SeekEnd, SeekSet};
+use std::io::{File, Open, ReadWrite, fs};
 use std::os;
 use std::u64;
 
@@ -23,28 +23,13 @@ mod util;
 
 macro_rules! get_file_size(
     ($file:ident, $action:expr) => ({
-        match $file.seek(0, SeekEnd) {
-            Ok(_) => {}
+        match fs::stat($file.path()) {
+            Ok(stat) => stat.size,
             Err(f) => {
                 show_error!(1, "{}", f.to_str());
                 $action
             }
         }
-        let size = match $file.tell() {
-            Ok(m) => m,
-            Err(f) => {
-                show_error!(1, "{}", f.to_str());
-                $action
-            }
-        };
-        match $file.seek(0, SeekSet) {
-            Ok(_) => {}
-            Err(f) => {
-                show_error!(1, "{}", f.to_str());
-                $action
-            }
-        }
-        size
     })
 )
 
@@ -126,7 +111,7 @@ file based on its current size:
 fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Option<~str>, filenames: ~[~str]) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
-            let mut rfile = match File::open(&Path::new(rfilename.clone())) {
+            let rfile = match File::open(&Path::new(rfilename.clone())) {
                 Ok(m) => m,
                 Err(f) => {
                     crash!(1, "{}", f.to_str())
