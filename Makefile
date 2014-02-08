@@ -25,12 +25,12 @@ PROGS       := \
   tee \
   true \
   truncate \
-  users \
   wc \
   yes \
   tty \
 
 UNIX_PROGS := \
+  users \
   whoami \
 
 ifneq ($(OS),Windows_NT)
