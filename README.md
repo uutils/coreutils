@@ -99,7 +99,6 @@ To do
 - groups
 - head ( in progress )
 - hostid
-- hostname (in progress)
 - id (in progress)
 - install
 - join
@@ -155,7 +154,6 @@ To do
 - timeout
 - touch
 - tr
-- truncate
 - tsort
 - uname-arch
 - uname-uname
