@@ -36,11 +36,11 @@ fn main () {
 
     let matches = match getopts(args.tail(), options) {
         Ok(m) => { m }
-        _ => { println!("{:s}", usage(program, options)); return; }
+        _ => { help_menu(program, options); return; }
     };
 
     if matches.opt_present("h") {
-        println!("{:s}", usage(program, options));
+        help_menu(program, options);
         return
     }
     if matches.opt_present("V") { version(); return }
@@ -60,16 +60,25 @@ fn main () {
             println!("{:s}", hostname);
         }
         1 => { xsethostname( matches.free.last().unwrap() ) }
-        _ => { println!("{:s}", usage(program, options)); }
+        _ => { help_menu(program, options); }
     };
 }
 
 fn version() {
-    println!("hostname version 1.0.0");
+    println!("hostname 1.0.0");
+}
+
+fn help_menu(program: &str, options: &[getopts::OptGroup]) {
+    version();
+    println!("");
+    println!("Usage:");
+    println!("  {:s} [OPTION]... [HOSTNAME]", program);
+    println!("");
+    print!("{:s}", usage("Print or set the system's host name.", options));
 }
 
 fn xgethostname() -> ~str {
-    let namelen = 255u;
+    let namelen = 256u;
     let mut name = vec::from_elem(namelen, 0u8);
 
     let err = unsafe {
