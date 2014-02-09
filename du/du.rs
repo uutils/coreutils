@@ -170,6 +170,9 @@ SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
 ers of 1000).");
         return
+    } else if matches.opt_present("version") {
+        println!("du version: {}", VERSION);
+        return
     }
 
     let options = Options{
