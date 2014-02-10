@@ -141,8 +141,8 @@ fn main() {
         // In main
         getopts::optopt("", "time-style", "show times using style STYLE:
             full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE"),
-        getopts::optflag("", "help", "display this help and exit"),
-        getopts::optflag("", "version", "output version information and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
     let matches = match getopts::getopts(args.tail(), opts) {
