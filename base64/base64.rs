@@ -11,7 +11,7 @@
 
 #[feature(macro_rules)];
 
-extern mod extra;
+extern mod serialize;
 extern mod getopts;
 
 use std::char;
@@ -25,8 +25,8 @@ use getopts::{
     optopt,
     usage
 };
-use extra::base64;
-use extra::base64::{FromBase64, ToBase64};
+use serialize::base64;
+use serialize::base64::{FromBase64, ToBase64};
 
 #[path = "../util.rs"]
 mod util;

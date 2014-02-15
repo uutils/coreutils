@@ -107,7 +107,7 @@ struct NamedWriter {
 
 impl Writer for NamedWriter {
     fn write(&mut self, buf: &[u8]) -> IoResult<()> {
-        with_path(self.path, || {
+        with_path(self.path.clone(), || {
             let val = self.inner.write(buf);
             if val.is_err() {
                 self.inner = ~NullWriter as ~Writer;
@@ -117,7 +117,7 @@ impl Writer for NamedWriter {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        with_path(self.path, || {
+        with_path(self.path.clone(), || {
             let val = self.inner.flush();
             if val.is_err() {
                 self.inner = ~NullWriter as ~Writer;
