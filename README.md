@@ -99,7 +99,6 @@ To do
 - groups
 - head ( in progress )
 - hostid
-- id (in progress)
 - install
 - join
 - kill
@@ -167,4 +166,4 @@ To do
 License
 -------
 
-uutils are licensed under the MIT License - see the `LICENSE` file for details
+uutils is licensed under the MIT License - see the `LICENSE` file for details
