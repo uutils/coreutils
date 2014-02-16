@@ -16,8 +16,8 @@
 
 #[feature(macro_rules, globs)];
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::io::print;
 use std::cast;

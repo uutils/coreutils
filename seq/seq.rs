@@ -5,8 +5,8 @@
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::os;
 use std::cmp::max;

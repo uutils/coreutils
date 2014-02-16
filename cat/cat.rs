@@ -12,8 +12,8 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::os;
 use std::io::{print, stdin, stdout, File};

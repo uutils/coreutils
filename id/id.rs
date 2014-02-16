@@ -13,13 +13,12 @@
  *  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
  */
 
-extern mod getopts;
+extern crate getopts;
 
 use std::{libc, os, vec};
-use std::ptr::{read_ptr, is_null, is_not_null};
-use std::libc::{c_char, c_int, time_t, uid_t, pid_t, c_uint, dev_t, c_float, getgid, getegid, getuid, getlogin};
+use std::ptr::read;
+use std::libc::{c_char, c_int, time_t, uid_t, getgid, getegid, getuid, getlogin};
 use std::str::raw::from_c_str;
-use std::unstable::intrinsics::uninit;
 use getopts::{getopts, optflag, usage};
 
 // These could be extracted into their own file
@@ -40,36 +39,45 @@ struct c_group {
     gr_name: *c_char /* group name */
 }
 
-type au_id_t    = uid_t;
-type au_asid_t  = pid_t;
-type au_event_t = c_uint;
-type au_emod_t  = c_uint;
-type au_class_t = c_int;
+#[cfg(not(target_os = "linux"))]
+mod audit {
+    pub use std::unstable::intrinsic::uninit;
+    use std::libc::{pid_t, c_uint, uint64_t, dev_t};
 
-struct au_mask {
-    am_success: c_uint,
-    am_failure: c_uint
-}
-type au_mask_t = au_mask;
+    type au_id_t    = uid_t;
+    type au_asid_t  = pid_t;
+    type au_event_t = c_uint;
+    type au_emod_t  = c_uint;
+    type au_class_t = c_int;
 
-struct au_tid_addr {
-    port: dev_t,
-}
-type au_tid_addr_t = au_tid_addr;
+    struct au_mask {
+        am_success: c_uint,
+        am_failure: c_uint
+    }
+    type au_mask_t = au_mask;
 
-struct c_auditinfo_addr {
-    ai_auid: au_id_t,           /* Audit user ID */
-    ai_mask: au_mask_t,         /* Audit masks. */
-    ai_termid: au_tid_addr_t,   /* Terminal ID. */
-    ai_flags: c_float,          /* Audit session flags */
-    ai_asid: au_asid_t          /* Audit session ID. */
+    struct au_tid_addr {
+        port: dev_t,
+    }
+    type au_tid_addr_t = au_tid_addr;
+
+    struct c_auditinfo_addr {
+        ai_auid: au_id_t,           /* Audit user ID */
+        ai_mask: au_mask_t,         /* Audit masks. */
+        ai_termid: au_tid_addr_t,   /* Terminal ID. */
+        ai_asid: au_asid_t,         /* Audit session ID. */
+        ai_flags: uint64_t          /* Audit session flags */
+    }
+    pub type c_auditinfo_addr_t = c_auditinfo_addr;
+
+    extern {
+        pub fn getaudit(auditinfo_addr: *c_auditinfo_addr_t) -> c_int;
+    }
 }
-type c_auditinfo_addr_t = c_auditinfo_addr;
 
 extern {
     fn getpwuid(uid: uid_t) -> *c_passwd;
     fn getgrgid(gid: uid_t) -> *c_group;
-    fn getaudit(auditinfo_addr: *c_auditinfo_addr_t) -> c_int;
     fn getpwnam(login: *c_char) -> *c_passwd;
     fn getgrouplist(name:   *c_char,
                     basegid: c_int,
@@ -85,7 +93,7 @@ fn main () {
 
     let options = [
         optflag("h", "", "Show help"),
-        optflag("A", "", "Display the process audit"),
+        optflag("A", "", "Display the process audit (not available on Linux)"),
         optflag("G", "", "Display the different group IDs"),
         optflag("g", "", "Display the effective group ID as a number"),
         optflag("n", "", "Display the name of the user or group ID for the -G, -g and -u options"),
@@ -122,8 +130,8 @@ fn main () {
             let id = from_str::<u32>(username).unwrap();
             let pw_pointer = unsafe { getpwuid(id) };
 
-            if is_not_null(pw_pointer) {
-                Some(unsafe { read_ptr(pw_pointer) })
+            if pw_pointer.is_not_null() {
+                Some(unsafe { read(pw_pointer) })
             } else {
                 no_such_user(username);
                 return;
@@ -134,8 +142,8 @@ fn main () {
             let pw_pointer = unsafe {
                 getpwnam(username.as_slice().as_ptr() as *i8)
             };
-            if is_not_null(pw_pointer) {
-                Some(unsafe { read_ptr(pw_pointer) })
+            if pw_pointer.is_not_null() {
+                Some(unsafe { read(pw_pointer) })
             } else {
                 no_such_user(username);
                 return;
@@ -163,8 +171,8 @@ fn main () {
         } as u32;
         let gr = unsafe { getgrgid(id) };
 
-        if nflag && is_not_null(gr) {
-            let gr_name = unsafe { from_c_str(read_ptr(gr).gr_name) };
+        if nflag && gr.is_not_null() {
+            let gr_name = unsafe { from_c_str(read(gr).gr_name) };
             println!("{:s}", gr_name);
         } else {
             println!("{:u}", id);
@@ -182,13 +190,13 @@ fn main () {
         };
 
         let pw = unsafe { getpwuid(id as u32) };
-        if nflag && is_not_null(pw) {
+        if nflag && pw.is_not_null() {
             let pw_name = unsafe {
-                from_c_str(read_ptr(pw).pw_name)
+                from_c_str(read(pw).pw_name)
             };
             println!("{:s}", pw_name);
         } else {
-			println!("{:d}", id);
+            println!("{:d}", id);
         }
 
         return;
@@ -229,28 +237,28 @@ fn pretty(possible_pw: Option<c_passwd>) {
         let pw = unsafe { getpwuid(rid) };
 
         let is_same_user = unsafe {
-            from_c_str(read_ptr(pw).pw_name) == login
+            from_c_str(read(pw).pw_name) == login
         };
 
-        if is_null(pw) || is_same_user {
+        if pw.is_null() || is_same_user {
             println!("login\t{:s}", login);
         }
 
-        if is_not_null(pw) {
+        if pw.is_not_null() {
             println!(
                 "uid\t{:s}",
-                unsafe { from_c_str(read_ptr(pw).pw_name) })
+                unsafe { from_c_str(read(pw).pw_name) })
         } else {
-			println!("uid\t{:u}\n", rid);
+            println!("uid\t{:u}\n", rid);
         }
 
         let eid = unsafe { getegid() };
         if eid == rid {
             let pw = unsafe { getpwuid(eid) };
-            if is_not_null(pw) {
+            if pw.is_not_null() {
                 println!(
                     "euid\t{:s}",
-                    unsafe { from_c_str(read_ptr(pw).pw_name) });
+                    unsafe { from_c_str(read(pw).pw_name) });
             } else {
                 println!("euid\t{:u}", eid);
             }
@@ -260,10 +268,10 @@ fn pretty(possible_pw: Option<c_passwd>) {
 
         if rid != eid {
             let gr = unsafe { getgrgid(rid) };
-            if is_not_null(gr) {
+            if gr.is_not_null() {
                 println!(
                     "rgid\t{:s}",
-                    unsafe { from_c_str(read_ptr(gr).gr_name) });
+                    unsafe { from_c_str(read(gr).gr_name) });
             } else {
                 println!("rgid\t{:u}", rid);
             }
@@ -276,7 +284,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
 
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
-        unsafe { read_ptr(getpwuid(getuid())) }
+        unsafe { read(getpwuid(getuid())) }
     } else {
         possible_pw.unwrap()
     };
@@ -333,9 +341,9 @@ fn group(possible_pw: Option<c_passwd>, nflag: bool) {
     for &g in groups.iter() {
         if nflag {
             let group = unsafe { getgrgid(g as u32) };
-            if is_not_null(group) {
+            if group.is_not_null() {
                 let name = unsafe {
-                    from_c_str(read_ptr(group).gr_name)
+                    from_c_str(read(group).gr_name)
                 };
                 print!("{:s} ", name);
             }
@@ -347,10 +355,14 @@ fn group(possible_pw: Option<c_passwd>, nflag: bool) {
     println!("");
 }
 
-fn auditid () {
-    let auditinfo: c_auditinfo_addr_t = unsafe { uninit() };
-    let address = &auditinfo as *c_auditinfo_addr_t;
-    if  unsafe { getaudit(address) } < 0 {
+#[cfg(target_os = "linux")]
+fn auditid() { }
+
+#[cfg(not(target_os = "linux"))]
+fn auditid() {
+    let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninit() };
+    let address = &auditinfo as *audit::c_auditinfo_addr_t;
+    if  unsafe { audit::getaudit(address) } < 0 {
         println!("Couldlnt retrieve information");
         return;
     }
@@ -403,20 +415,20 @@ fn id_print(possible_pw: Option<c_passwd>,
 
     print!(" gid={:d}", gid);
     let gr = unsafe { getgrgid(gid as u32) };
-    if is_not_null(gr) {
+    if gr.is_not_null() {
         print!(
             "({:s})",
-            unsafe { from_c_str(read_ptr(gr).gr_name) });
+            unsafe { from_c_str(read(gr).gr_name) });
     }
 
     let euid = unsafe { libc::geteuid() };
     if p_euid && (euid != uid as u32) {
         print!(" euid={:u}", euid);
         let pw = unsafe { getpwuid(euid) };
-        if is_not_null(pw) {
+        if pw.is_not_null() {
             print!(
                 "({:s})",
-                unsafe { from_c_str(read_ptr(pw).pw_name) });
+                unsafe { from_c_str(read(pw).pw_name) });
         }
     }
 
@@ -425,8 +437,8 @@ fn id_print(possible_pw: Option<c_passwd>,
         print!(" egid={:u}", egid);
         unsafe {
             let grp = getgrgid(egid);
-            if is_not_null(grp) {
-                print!("({:s})", from_c_str(read_ptr(grp).gr_name));
+            if grp.is_not_null() {
+                print!("({:s})", from_c_str(read(grp).gr_name));
             }
         }
     }
@@ -441,9 +453,9 @@ fn id_print(possible_pw: Option<c_passwd>,
             if !first { print!(",") }
             print!("{:d}", gr);
             let group = unsafe { getgrgid(gr as u32) };
-            if is_not_null(group) {
+            if group.is_not_null() {
                 let name = unsafe {
-                    from_c_str(read_ptr(group).gr_name)
+                    from_c_str(read(group).gr_name)
                 };
                 print!("({:s})", name);
             }
