@@ -33,6 +33,7 @@ PROGS       := \
 UNIX_PROGS := \
   users \
   whoami \
+  id
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
