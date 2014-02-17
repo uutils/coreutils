@@ -12,8 +12,8 @@
  * https://www.opensource.apple.com/source/shell_cmds/shell_cmds-170/hostname/hostname.c?txt
  */
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::{os,libc,vec,str};
 use getopts::{optflag, getopts, usage};

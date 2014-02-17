@@ -11,8 +11,8 @@
 
 #[feature(macro_rules)];
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::io::{File, Open, ReadWrite, fs};
 use std::os;
@@ -108,7 +108,7 @@ file based on its current size:
     }
 }
 
-fn truncate(no_create: bool, io_blocks: bool, reference: Option<~str>, size: Option<~str>, filenames: ~[~str]) {
+fn truncate(no_create: bool, _: bool, reference: Option<~str>, size: Option<~str>, filenames: ~[~str]) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {

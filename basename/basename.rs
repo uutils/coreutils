@@ -10,8 +10,8 @@
  * file that was distributed with this source code.
  */
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::io::{print, println};
 use std::os;

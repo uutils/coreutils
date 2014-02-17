@@ -11,8 +11,8 @@
 
 #[feature(macro_rules)];
 
-extern mod serialize;
-extern mod getopts;
+extern crate serialize;
+extern crate getopts;
 
 use std::char;
 use std::io::{println, File, stdin, stdout};

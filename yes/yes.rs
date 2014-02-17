@@ -13,8 +13,8 @@
 
 #[feature(macro_rules)];
 
-extern mod extra;
-extern mod getopts;
+extern crate extra;
+extern crate getopts;
 
 use std::os;
 use std::io::{print, println};
