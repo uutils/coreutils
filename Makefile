@@ -28,9 +28,9 @@ PROGS       := \
   wc \
   yes \
   tty \
-  hostname \
 
 UNIX_PROGS := \
+  hostname \
   users \
   whoami \
   id
