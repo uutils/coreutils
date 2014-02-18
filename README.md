@@ -86,7 +86,6 @@ To do
 - dd
 - df
 - dircolors
-- du
 - expand
 - expr
 - extent-scan
