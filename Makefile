@@ -14,6 +14,7 @@ PROGS       := \
   dirname \
   echo \
   env \
+  du \
   false \
   mkdir \
   printenv \
