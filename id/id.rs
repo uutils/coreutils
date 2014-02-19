@@ -41,27 +41,27 @@ struct c_group {
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::unstable::intrinsic::uninit;
-    use std::libc::{pid_t, c_uint, uint64_t, dev_t};
+    pub use std::unstable::intrinsics::uninit;
+    use std::libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
 
-    type au_id_t    = uid_t;
-    type au_asid_t  = pid_t;
-    type au_event_t = c_uint;
-    type au_emod_t  = c_uint;
-    type au_class_t = c_int;
+    pub type au_id_t    = uid_t;
+    pub type au_asid_t  = pid_t;
+    pub type au_event_t = c_uint;
+    pub type au_emod_t  = c_uint;
+    pub type au_class_t = c_int;
 
-    struct au_mask {
+    pub struct au_mask {
         am_success: c_uint,
         am_failure: c_uint
     }
-    type au_mask_t = au_mask;
+    pub type au_mask_t = au_mask;
 
-    struct au_tid_addr {
+    pub struct au_tid_addr {
         port: dev_t,
     }
-    type au_tid_addr_t = au_tid_addr;
+    pub type au_tid_addr_t = au_tid_addr;
 
-    struct c_auditinfo_addr {
+    pub struct c_auditinfo_addr {
         ai_auid: au_id_t,           /* Audit user ID */
         ai_mask: au_mask_t,         /* Audit masks. */
         ai_termid: au_tid_addr_t,   /* Terminal ID. */

@@ -1,4 +1,4 @@
-#[link(name="du", vers="1.0.0", author="Derek Chiang")];
+#[crate_id(name="du", vers="1.0.0", author="Derek Chiang")];
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,19 +9,24 @@
  * file that was distributed with this source code.
  */
 
-extern mod extra;
+#[feature(macro_rules)];
+
+extern crate extra;
+extern crate getopts;
+extern crate sync;
 
 use std::os;
-use std::io::stderr;
 use std::io::fs;
 use std::io::FileStat;
 use std::option::Option;
 use std::path::Path;
-use extra::arc::Arc;
-use extra::future::Future;
-use extra::getopts::groups;
 use extra::time::Timespec;
+use sync::{Arc, Future};
 
+#[path = "../util.rs"]
+mod util;
+
+static NAME: &'static str = "du";
 static VERSION: &'static str = "1.0.0";
 
 struct Options {
@@ -35,21 +40,21 @@ fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
     let mut stats = ~[];
     let mut futures = ~[];
     let options = options_arc.get();
-    let mut my_stat = path.stat();
+    let mut my_stat = safe_unwrap!(path.stat());
 
-    for f in fs::readdir(path).move_iter() {
+    for f in safe_unwrap!(fs::readdir(path)).move_iter() {
         match f.is_file() {
             true => {
-                let stat = f.stat();
+                let stat = safe_unwrap!(f.stat());
                 my_stat.size += stat.size;
                 my_stat.unstable.blocks += stat.unstable.blocks;
                 if options.all {
                     stats.push(Arc::new(stat))
-                }    
+                }
             }
             false => {
                 let oa_clone = options_arc.clone();
-                futures.push(do Future::spawn { du(&f, oa_clone, depth + 1) })
+                futures.push(Future::spawn(proc() { du(&f, oa_clone, depth + 1) }))
             }
         }
     }
@@ -77,88 +82,86 @@ fn main() {
     let program = args[0].clone();
     let opts = ~[
         // In task
-        groups::optflag("a", "all", " write counts for all files, not just directories"),
+        getopts::optflag("a", "all", " write counts for all files, not just directories"),
         // In main
-        groups::optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
+        getopts::optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
             although  the apparent  size is usually smaller, it may be larger due to holes
             in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"),
         // In main
-        groups::optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
+        getopts::optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
             E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
             "SIZE"),
         // In main
-        groups::optflag("b", "bytes", "equivalent to '--apparent-size --block-size=1'"),
+        getopts::optflag("b", "bytes", "equivalent to '--apparent-size --block-size=1'"),
         // In main
-        groups::optflag("c", "total", "produce a grand total"),
+        getopts::optflag("c", "total", "produce a grand total"),
         // In task
-        // groups::optflag("D", "dereference-args", "dereference only symlinks that are listed
+        // getopts::optflag("D", "dereference-args", "dereference only symlinks that are listed
         //     on the command line"),
         // In main
-        // groups::optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
+        // getopts::optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
         //                   names specified in file F;
         //                   If F is - then read names from standard input", "F"),
         // // In task
-        // groups::optflag("H", "", "equivalent to --dereference-args (-D)"),
+        // getopts::optflag("H", "", "equivalent to --dereference-args (-D)"),
         // In main
-        groups::optflag("h", "human-readable", "print sizes in human readable format (e.g., 1K 234M 2G)"),
+        getopts::optflag("h", "human-readable", "print sizes in human readable format (e.g., 1K 234M 2G)"),
         // In main
-        groups::optflag("", "si", "like -h, but use powers of 1000 not 1024"),
+        getopts::optflag("", "si", "like -h, but use powers of 1000 not 1024"),
         // In main
-        groups::optflag("k", "", "like --block-size=1K"),
+        getopts::optflag("k", "", "like --block-size=1K"),
         // In task
-        groups::optflag("l", "count-links", "count sizes many times if hard linked"),
+        getopts::optflag("l", "count-links", "count sizes many times if hard linked"),
         // // In main
-        groups::optflag("m", "", "like --block-size=1M"),
+        getopts::optflag("m", "", "like --block-size=1M"),
         // // In task
-        // groups::optflag("L", "dereference", "dereference all symbolic links"),
+        // getopts::optflag("L", "dereference", "dereference all symbolic links"),
         // // In task
-        // groups::optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
+        // getopts::optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
         // // In main
-        groups::optflag("0", "null", "end each output line with 0 byte rather than newline"),
+        getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),
         // In main
-        groups::optflag("S", "separate-dirs", "do not include size of subdirectories"),
+        getopts::optflag("S", "separate-dirs", "do not include size of subdirectories"),
         // In main
-        groups::optflag("s", "summarize", "display only a total for each argument"),
+        getopts::optflag("s", "summarize", "display only a total for each argument"),
         // // In task
-        // groups::optflag("x", "one-file-system", "skip directories on different file systems"),
+        // getopts::optflag("x", "one-file-system", "skip directories on different file systems"),
         // // In task
-        // groups::optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
+        // getopts::optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
         // // In task
-        // groups::optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
+        // getopts::optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
         // In main
-        groups::optopt("d", "max-depth", "print the total for a directory (or file, with --all)
+        getopts::optopt("d", "max-depth", "print the total for a directory (or file, with --all)
             only if it is N or fewer levels below the command
             line argument;  --max-depth=0 is the same as --summarize", "N"),
         // In main
-        groups::optflagopt("", "time", "show time of the last modification of any file in the
+        getopts::optflagopt("", "time", "show time of the last modification of any file in the
             directory, or any of its subdirectories.  If WORD is given, show time as WORD instead of modification time:
             atime, access, use, ctime or status", "WORD"),
         // In main
-        groups::optopt("", "time-style", "show times using style STYLE:
+        getopts::optopt("", "time-style", "show times using style STYLE:
             full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE"),
-        groups::optflag("", "help", "display this help and exit"),
-        groups::optflag("", "version", "output version information and exit"),
+        getopts::optflag("", "help", "display this help and exit"),
+        getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match groups::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            writeln!(&mut stderr() as &mut Writer,
-                "Invalid options\n{}", f.to_err_msg());
-            os::set_exit_status(1);
+            show_error!(1, "Invalid options\n{}", f.to_err_msg());
             return
         }
     };
 
     if matches.opt_present("help") {
-        println("du " + VERSION + " - estimate file space usage");
-        println("");
-        println("Usage:");
+        println!("du {} - estimate file space usage", VERSION);
+        println!("");
+        println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("  {0:s} [OPTION]... --files0-from=F", program);
-        println("");
-        println(groups::usage("Summarize disk usage of each FILE, recursively for directories.", opts));
-        println("Display  values  are  in  units  of  the  first  available  SIZE from
+        println!("");
+        println!("{}", getopts::usage("Summarize disk usage of each FILE, recursively for directories.", opts));
+        println!("Display  values  are  in  units  of  the  first  available  SIZE from
 --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
 ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
 POSIXLY_CORRECT is set).
@@ -277,7 +280,7 @@ ers of 1000).");
                 "long-iso" => "%Y-%m-%d %H:%M",
                 "iso" => "%Y-%m-%d",
                 _ => {
-                    println("
+                    println!("
 du: invalid argument 'awdwa' for 'time style'
 Valid arguments are:
 - 'full-iso'
@@ -319,7 +322,7 @@ Try 'du --help' for more information.");
                                 "created" => stat.created,
                                 "modified" => stat.modified,
                                 _ => {
-                                    println("du: invalid argument 'modified' for '--time'
+                                    println!("du: invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
     Try 'du --help' for more information.");
@@ -337,7 +340,7 @@ Try 'du --help' for more information.");
             } else {
                 print!("{:<10} {}", convert_size(size), stat.path.display());
             }
-            print(line_separator);
+            print!("{}", line_separator);
             if options.total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
@@ -348,6 +351,6 @@ Try 'du --help' for more information.");
 
     if options.total {
         print!("{:<10} total", convert_size(grand_total));
-        print(line_separator);
+        print!("{}", line_separator);
     }
 }
