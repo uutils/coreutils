@@ -141,7 +141,7 @@ fn main() {
         // In main
         getopts::optopt("", "time-style", "show times using style STYLE:
             full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE"),
-        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
