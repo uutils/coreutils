@@ -141,8 +141,8 @@ fn main() {
         // In main
         getopts::optopt("", "time-style", "show times using style STYLE:
             full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE"),
-        getopts::optflag("", "help", "display this help and exit"),
-        getopts::optflag("", "version", "output version information and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
     let matches = match getopts::getopts(args.tail(), opts) {
@@ -169,6 +169,9 @@ POSIXLY_CORRECT is set).
 SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
 ers of 1000).");
+        return
+    } else if matches.opt_present("version") {
+        println!("du version: {}", VERSION);
         return
     }
 
