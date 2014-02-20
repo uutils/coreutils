@@ -28,13 +28,13 @@ PROGS       := \
   truncate \
   wc \
   yes \
-  tty \
   hostname \
   head \
 
 UNIX_PROGS := \
   users \
   whoami \
+  tty \
   id
 
 ifneq ($(OS),Windows_NT)
