@@ -13,6 +13,8 @@
  *  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
  */
 
+#[allow(non_camel_case_types)];
+
 extern crate getopts;
 
 use std::{libc, os, vec};
@@ -41,7 +43,7 @@ struct c_group {
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::unstable::intrinsics::uninit;
+    pub use std::mem::uninit;
     use std::libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
 
     pub type au_id_t    = uid_t;

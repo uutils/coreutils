@@ -11,16 +11,16 @@
 
 #[feature(macro_rules)];
 
-extern crate extra;
 extern crate getopts;
 extern crate sync;
+extern crate time;
 
 use std::os;
 use std::io::fs;
 use std::io::FileStat;
 use std::option::Option;
 use std::path::Path;
-use extra::time::Timespec;
+use time::Timespec;
 use sync::{Arc, Future};
 
 #[path = "../util.rs"]
@@ -337,7 +337,7 @@ Try 'du --help' for more information.");
                         ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
                     let time_spec = Timespec::new(secs, nsecs);
-                    extra::time::at(time_spec).strftime(time_format_str)
+                    time::at(time_spec).strftime(time_format_str)
                 };
                 print!("{:<10} {:<30} {}", convert_size(size), time_str, stat.path.display());
             } else {
