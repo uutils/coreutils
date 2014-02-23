@@ -22,6 +22,7 @@ use getopts::{
     usage,
 };
 
+#[deriving(Eq)]
 pub enum Mode {
     Copy,
     Help,
@@ -43,8 +44,7 @@ fn main() {
     };
 
     let progname = args[0].clone();
-    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to \
-                       DIRECTORY.", opts);
+    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
     let mode = if matches.opt_present("version") {
         Version
     } else if matches.opt_present("help") {
@@ -52,8 +52,28 @@ fn main() {
     } else {
         Copy
     };
-    // For now we assume that the first free argument is SOURCE and the
-    // second free argument is DEST.
+
+    match mode {
+        Copy    => copy(matches),
+        Help    => help(progname, usage),
+        Version => version(),
+    }
+}
+
+fn version() {
+    println!("cp 1.0.0");
+}
+
+fn help(progname: &str, usage: &str) {
+    let msg = format!("Usage: {0} SOURCE DEST\n  \
+                         or:  {0} SOURCE... DIRECTORY\n  \
+                         or:  {0} -t DIRECTORY SOURCE\n\
+                       \n\
+                       {1}", progname, usage);
+    println!("{}", msg);
+}
+
+fn copy(matches: getopts::Matches) {
     let sources = if matches.free.len() < 1 {
         error!("error: Missing SOURCE argument. Try --help.");
         fail!()
@@ -70,24 +90,6 @@ fn main() {
         ~Path::new(matches.free[matches.free.len() - 1].clone())
     };
 
-    match mode {
-        Copy    => copy(sources, dest),
-        Help    => help(progname, usage),
-        Version => version(),
-    }
-}
-
-fn version() {
-    println!("cp 1.0.0");
-}
-
-fn help(progname: &str, usage: &str) {
-    println!("Usage: {:s} SOURCE DEST", progname);
-    println!("");
-    println!("{:s}", usage);
-}
-
-fn copy(sources: &[~Path], dest: &Path) {
     assert!(sources.len() >= 1);
 
     if sources.len() == 1 {
