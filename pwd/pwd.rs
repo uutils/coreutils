@@ -17,7 +17,7 @@ extern crate getopts;
 use std::os;
 use std::io::print;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "pwd";

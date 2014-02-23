@@ -17,7 +17,7 @@ use std::os;
 use std::io::{print, println};
 use std::uint;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "echo";

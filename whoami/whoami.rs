@@ -23,7 +23,7 @@ use std::os;
 use std::str;
 use std::libc;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 struct c_passwd {

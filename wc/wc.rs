@@ -19,7 +19,7 @@ use std::str::from_utf8;
 use std::io::{print, stdin, File, BufferedReader};
 use getopts::Matches;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 struct Result {

@@ -23,7 +23,7 @@ use std::path::Path;
 use time::Timespec;
 use sync::{Arc, Future};
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "du";

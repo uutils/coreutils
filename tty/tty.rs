@@ -24,7 +24,7 @@ use std::io::println;
 use std::io::stdio::stderr;
 use getopts::{optflag,getopts};
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 extern {

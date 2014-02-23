@@ -19,7 +19,7 @@ extern crate getopts;
 use std::os;
 use std::io::{print, println};
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "yes";

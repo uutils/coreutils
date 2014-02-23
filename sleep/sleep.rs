@@ -19,7 +19,7 @@ use std::cast;
 use std::os;
 use std::io::{print, timer};
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "sleep";

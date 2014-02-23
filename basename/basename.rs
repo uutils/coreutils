@@ -18,7 +18,7 @@ use std::os;
 use std::str;
 use std::str::StrSlice;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "basename";
