@@ -55,8 +55,8 @@ make TEST='UTILITY_1 UTILITY_2' test
 Contribute
 ----------
 
-Contributions are very welcome, and should target rust's master branch until
-rust 1.0 is released. You may *claim* an item on the to-do list by following
+Contributions are very welcome, and should target Rust's master branch until
+Rust 1.0 is released. You may *claim* an item on the to-do list by following
 these steps:
 
 1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement ls"
