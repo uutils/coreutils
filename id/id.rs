@@ -14,32 +14,29 @@
  */
 
 #[allow(non_camel_case_types)];
-
+#[feature(macro_rules)];
 extern crate getopts;
 
 use std::{libc, os, vec};
 use std::ptr::read;
-use std::libc::{c_char, c_int, time_t, uid_t, getgid, getegid, getuid, getlogin};
+use std::libc::{
+    c_char,
+    c_int,
+    uid_t,
+    getgid,
+    getegid,
+    getuid,
+    getlogin
+};
 use std::str::raw::from_c_str;
 use getopts::{getopts, optflag, usage};
+use c_types::{
+    c_passwd,
+    c_group
+};
 
-// These could be extracted into their own file
-struct c_passwd {
-    pw_name:    *c_char,    /* user name */
-    pw_passwd:  *c_char,    /* user name */
-    pw_uid:     c_int,      /* user uid */
-    pw_gid:     c_int,      /* user gid */
-    pw_change:  time_t,
-    pw_class:   *c_char,
-    pw_gecos:   *c_char,
-    pw_dir:     *c_char,
-    pw_shell:   *c_char,
-    pw_expire:  time_t
-}
-
-struct c_group {
-    gr_name: *c_char /* group name */
-}
+#[path = "../common/util.rs"] mod util;
+#[path = "../common/c_types.rs"] mod c_types;
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
@@ -87,7 +84,38 @@ extern {
                     ngroups: *mut c_int) -> c_int;
 }
 
-static PROGRAM: &'static str = "id";
+static NAME: &'static str = "id";
+
+fn get_pw_from_args(matches: &getopts::Matches) -> Option<c_passwd> {
+    if matches.free.len() == 1 {
+        let username = matches.free[0].clone();
+
+        // Passed user as id
+        if username.chars().all(|c| c.is_digit()) {
+            let id = from_str::<u32>(username).unwrap();
+            let pw_pointer = unsafe { getpwuid(id) };
+
+            if pw_pointer.is_not_null() {
+                Some(unsafe { read(pw_pointer) })
+            } else {
+                crash!(1, "{:s}: no such user", username);
+            }
+
+        // Passed the username as a string
+        } else {
+            let pw_pointer = unsafe {
+                getpwnam(username.as_slice().as_ptr() as *i8)
+            };
+            if pw_pointer.is_not_null() {
+                Some(unsafe { read(pw_pointer) })
+            } else {
+                crash!(1, "{:s}: no such user", username);
+            }
+        }
+    } else {
+        None
+    }
+}
 
 fn main () {
     let args = os::args();
@@ -108,13 +136,13 @@ fn main () {
     let matches = match getopts(args_t, options) {
         Ok(m) => { m },
         Err(_) => {
-            println!("{:s}", usage(PROGRAM, options));
+            println!("{:s}", usage(NAME, options));
             return;
         }
     };
 
     if matches.opt_present("h") {
-        println!("{:s}", usage(PROGRAM, options));
+        println!("{:s}", usage(NAME, options));
         return;
     }
 
@@ -124,37 +152,7 @@ fn main () {
     }
 
 
-    let possible_pw = if matches.free.len() == 1 {
-        let username = matches.free[0].clone();
-
-        // Passed user by id
-        if username.chars().all(|c| c.is_digit()) {
-            let id = from_str::<u32>(username).unwrap();
-            let pw_pointer = unsafe { getpwuid(id) };
-
-            if pw_pointer.is_not_null() {
-                Some(unsafe { read(pw_pointer) })
-            } else {
-                no_such_user(username);
-                return;
-            }
-
-        // Passed the username as a string
-        } else {
-            let pw_pointer = unsafe {
-                getpwnam(username.as_slice().as_ptr() as *i8)
-            };
-            if pw_pointer.is_not_null() {
-                Some(unsafe { read(pw_pointer) })
-            } else {
-                no_such_user(username);
-                return;
-            }
-        }
-    } else {
-        None
-    };
-
+    let possible_pw = get_pw_from_args(&matches);
 
     let nflag = matches.opt_present("n");
     let uflag = matches.opt_present("u");
@@ -310,10 +308,6 @@ fn pline(possible_pw: Option<c_passwd>) {
         pw_gecos,
         pw_dir,
         pw_shell);
-}
-
-fn no_such_user(username: ~str) {
-    println!("{:s}: {:s}: no such user", PROGRAM, username.as_slice());
 }
 
 static NGROUPS: i32 = 20;

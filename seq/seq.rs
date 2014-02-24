@@ -11,7 +11,7 @@ extern crate getopts;
 use std::os;
 use std::cmp::max;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "seq";

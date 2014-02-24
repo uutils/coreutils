@@ -22,14 +22,10 @@ use std::io::print;
 use std::os;
 use std::str;
 use std::libc;
+use c_types::c_passwd;
 
-#[path = "../util.rs"]
-mod util;
-
-struct c_passwd {
-    pw_name: *libc::c_char,
-    // Maybe I should put here others struct members, but...Well, maybe.
-}
+#[path = "../common/util.rs"] mod util;
+#[path = "../common/c_types.rs"] mod c_types;
 
 extern {
     pub fn geteuid() -> libc::c_int;
