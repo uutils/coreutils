@@ -32,6 +32,7 @@ PROGS       := \
   head \
 
 UNIX_PROGS := \
+  logname \
   users \
   whoami \
   tty \
