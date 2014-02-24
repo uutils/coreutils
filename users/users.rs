@@ -12,7 +12,7 @@
 /* last synced with: whoami (GNU coreutils) 8.22 */
 
 // Allow dead code here in order to keep all fields, constants here, for consistency.
-#[allow(dead_code)];
+#[allow(dead_code, non_camel_case_types)];
 
 #[feature(macro_rules, globs)];
 

@@ -11,6 +11,8 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
+#[allow(non_camel_case_types)];
+
 #[feature(macro_rules)];
 
 extern crate extra;

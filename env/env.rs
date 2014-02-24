@@ -11,6 +11,8 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
+#[allow(non_camel_case_types)];
+
 struct options {
     ignore_env: bool,
     null: bool,
@@ -188,21 +190,17 @@ fn main() {
         std::os::setenv(name.as_slice(), val.as_slice())
     }
 
-    match opts.program {
-        [ref prog, ..args] => {
-            match std::run::process_status(prog.as_slice(), args.as_slice()) {
-                Ok(exit) =>
-                    std::os::set_exit_status(match exit {
-                        std::io::process::ExitStatus(s) => s,
-                        _ => 1
-                    }),
-                Err(_) => std::os::set_exit_status(1)
-            }
+    if opts.program.len() >= 1 {
+        match std::run::process_status(opts.program[0].as_slice(), opts.program.slice_from(1)) {
+            Ok(exit) =>
+                std::os::set_exit_status(match exit {
+                    std::io::process::ExitStatus(s) => s,
+                    _ => 1
+                }),
+            Err(_) => std::os::set_exit_status(1)
         }
-
-        [] => {
-            // no program provided
-            print_env(opts.null);
-        }
+    } else {
+        // no program provided
+        print_env(opts.null);
     }
 }
