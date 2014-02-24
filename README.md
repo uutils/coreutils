@@ -79,7 +79,7 @@ To do
 - comm
 - copy
 - cp-hash
-- cp
+- cp (some work done in ```dev``` branch)
 - csplit
 - cut
 - date
@@ -104,7 +104,6 @@ To do
 - libstdbuf
 - link
 - ln
-- logname
 - ls-dir
 - ls-ls
 - ls-vdir
