@@ -22,7 +22,6 @@ use std::ptr::read;
 use std::libc::{
     c_char,
     c_int,
-    time_t,
     uid_t,
     getgid,
     getegid,
@@ -31,27 +30,13 @@ use std::libc::{
 };
 use std::str::raw::from_c_str;
 use getopts::{getopts, optflag, usage};
+use c_types::{
+    c_passwd,
+    c_group
+};
 
-#[path = "../common/util.rs"]
-mod util;
-
-// These could be extracted into their own file
-struct c_passwd {
-    pw_name:    *c_char,    /* user name */
-    pw_passwd:  *c_char,    /* user name */
-    pw_uid:     c_int,      /* user uid */
-    pw_gid:     c_int,      /* user gid */
-    pw_change:  time_t,
-    pw_class:   *c_char,
-    pw_gecos:   *c_char,
-    pw_dir:     *c_char,
-    pw_shell:   *c_char,
-    pw_expire:  time_t
-}
-
-struct c_group {
-    gr_name: *c_char /* group name */
-}
+#[path = "../common/util.rs"] mod util;
+#[path = "../common/c_types.rs"] mod c_types;
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
