@@ -95,7 +95,7 @@ To do
 - fold
 - getlimits
 - group-list
-- groups (in progress)
+- groups
 - hostid
 - install
 - join
