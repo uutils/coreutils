@@ -9,11 +9,13 @@
 
 #[macro_escape];
 
+pub fn program_name () -> &'static str { ::NAME }
+
 #[macro_export]
 macro_rules! show_error(
     ($exitcode:expr, $($args:expr),+) => ({
         ::std::os::set_exit_status($exitcode);
-        safe_write!(&mut ::std::io::stderr(), "{}: error: ", NAME);
+        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::util::program_name());
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
 )
