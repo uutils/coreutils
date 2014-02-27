@@ -33,9 +33,11 @@ PROGS       := \
   head \
 
 UNIX_PROGS := \
+  logname \
   users \
   whoami \
   tty \
+  groups \
   id
 
 ifneq ($(OS),Windows_NT)

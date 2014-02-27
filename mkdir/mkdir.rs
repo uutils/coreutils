@@ -18,7 +18,7 @@ use std::os;
 use std::io::fs;
 use std::num::strconv;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "mkdir";

@@ -18,7 +18,7 @@ use std::io::{File, Open, ReadWrite, fs};
 use std::os;
 use std::u64;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 macro_rules! get_file_size(

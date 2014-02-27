@@ -28,7 +28,7 @@ use getopts::{
 use serialize::base64;
 use serialize::base64::{FromBase64, ToBase64};
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "base64";

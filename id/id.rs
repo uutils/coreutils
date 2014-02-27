@@ -14,32 +14,32 @@
  */
 
 #[allow(non_camel_case_types)];
-
+#[feature(macro_rules)];
 extern crate getopts;
 
 use std::{libc, os, vec};
 use std::ptr::read;
-use std::libc::{c_char, c_int, time_t, uid_t, getgid, getegid, getuid, getlogin};
+use std::libc::{
+    c_char,
+    c_int,
+    uid_t,
+    getgid,
+    getegid,
+    getuid,
+    getlogin
+};
 use std::str::raw::from_c_str;
 use getopts::{getopts, optflag, usage};
+use c_types::{
+    c_passwd,
+    c_group,
+    get_pw_from_args,
+    getpwuid,
+    group
+};
 
-// These could be extracted into their own file
-struct c_passwd {
-    pw_name:    *c_char,    /* user name */
-    pw_passwd:  *c_char,    /* user name */
-    pw_uid:     c_int,      /* user uid */
-    pw_gid:     c_int,      /* user gid */
-    pw_change:  time_t,
-    pw_class:   *c_char,
-    pw_gecos:   *c_char,
-    pw_dir:     *c_char,
-    pw_shell:   *c_char,
-    pw_expire:  time_t
-}
-
-struct c_group {
-    gr_name: *c_char /* group name */
-}
+#[path = "../common/util.rs"] mod util;
+#[path = "../common/c_types.rs"] mod c_types;
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
@@ -78,16 +78,14 @@ mod audit {
 }
 
 extern {
-    fn getpwuid(uid: uid_t) -> *c_passwd;
     fn getgrgid(gid: uid_t) -> *c_group;
-    fn getpwnam(login: *c_char) -> *c_passwd;
     fn getgrouplist(name:   *c_char,
                     basegid: c_int,
                     groups: *c_int,
                     ngroups: *mut c_int) -> c_int;
 }
 
-static PROGRAM: &'static str = "id";
+static NAME: &'static str = "id";
 
 fn main () {
     let args = os::args();
@@ -108,13 +106,13 @@ fn main () {
     let matches = match getopts(args_t, options) {
         Ok(m) => { m },
         Err(_) => {
-            println!("{:s}", usage(PROGRAM, options));
+            println!("{:s}", usage(NAME, options));
             return;
         }
     };
 
     if matches.opt_present("h") {
-        println!("{:s}", usage(PROGRAM, options));
+        println!("{:s}", usage(NAME, options));
         return;
     }
 
@@ -124,37 +122,7 @@ fn main () {
     }
 
 
-    let possible_pw = if matches.free.len() == 1 {
-        let username = matches.free[0].clone();
-
-        // Passed user by id
-        if username.chars().all(|c| c.is_digit()) {
-            let id = from_str::<u32>(username).unwrap();
-            let pw_pointer = unsafe { getpwuid(id) };
-
-            if pw_pointer.is_not_null() {
-                Some(unsafe { read(pw_pointer) })
-            } else {
-                no_such_user(username);
-                return;
-            }
-
-        // Passed the username as a string
-        } else {
-            let pw_pointer = unsafe {
-                getpwnam(username.as_slice().as_ptr() as *i8)
-            };
-            if pw_pointer.is_not_null() {
-                Some(unsafe { read(pw_pointer) })
-            } else {
-                no_such_user(username);
-                return;
-            }
-        }
-    } else {
-        None
-    };
-
+    let possible_pw = get_pw_from_args(&matches.free);
 
     let nflag = matches.opt_present("n");
     let uflag = matches.opt_present("u");
@@ -191,7 +159,7 @@ fn main () {
             unsafe { getegid() as i32 }
         };
 
-        let pw = unsafe { getpwuid(id as u32) };
+        let pw = unsafe { getpwuid(id) };
         if nflag && pw.is_not_null() {
             let pw_name = unsafe {
                 from_c_str(read(pw).pw_name)
@@ -236,7 +204,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
     } else {
         let login = unsafe { from_c_str(getlogin()) };
         let rid = unsafe { getuid() };
-        let pw = unsafe { getpwuid(rid) };
+        let pw = unsafe { getpwuid(rid as i32) };
 
         let is_same_user = unsafe {
             from_c_str(read(pw).pw_name) == login
@@ -256,7 +224,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
 
         let eid = unsafe { getegid() };
         if eid == rid {
-            let pw = unsafe { getpwuid(eid) };
+            let pw = unsafe { getpwuid(eid as i32) };
             if pw.is_not_null() {
                 println!(
                     "euid\t{:s}",
@@ -286,7 +254,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
 
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
-        unsafe { read(getpwuid(getuid())) }
+        unsafe { read(getpwuid(getuid() as i32)) }
     } else {
         possible_pw.unwrap()
     };
@@ -312,50 +280,7 @@ fn pline(possible_pw: Option<c_passwd>) {
         pw_shell);
 }
 
-fn no_such_user(username: ~str) {
-    println!("{:s}: {:s}: no such user", PROGRAM, username.as_slice());
-}
-
 static NGROUPS: i32 = 20;
-
-fn group(possible_pw: Option<c_passwd>, nflag: bool) {
-    let mut groups = vec::with_capacity(NGROUPS as uint);
-    let mut ngroups;
-
-    if possible_pw.is_some() {
-        ngroups = NGROUPS;
-        unsafe {
-            getgrouplist(
-                possible_pw.unwrap().pw_name,
-                possible_pw.unwrap().pw_gid,
-                groups.as_ptr(),
-                &mut ngroups);
-        }
-    } else {
-        ngroups = unsafe {
-            libc::getgroups(NGROUPS, groups.as_mut_ptr() as *mut u32)
-        };
-    }
-
-
-    unsafe { groups.set_len(ngroups as uint) };
-
-    for &g in groups.iter() {
-        if nflag {
-            let group = unsafe { getgrgid(g as u32) };
-            if group.is_not_null() {
-                let name = unsafe {
-                    from_c_str(read(group).gr_name)
-                };
-                print!("{:s} ", name);
-            }
-        } else {
-            print!("{:d} ", g);
-        }
-    }
-
-    println!("");
-}
 
 #[cfg(target_os = "linux")]
 fn auditid() { }
@@ -426,7 +351,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     let euid = unsafe { libc::geteuid() };
     if p_euid && (euid != uid as u32) {
         print!(" euid={:u}", euid);
-        let pw = unsafe { getpwuid(euid) };
+        let pw = unsafe { getpwuid(euid as i32) };
         if pw.is_not_null() {
             print!(
                 "({:s})",

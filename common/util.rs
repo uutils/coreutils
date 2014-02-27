@@ -13,7 +13,7 @@
 macro_rules! show_error(
     ($exitcode:expr, $($args:expr),+) => ({
         ::std::os::set_exit_status($exitcode);
-        safe_write!(&mut ::std::io::stderr(), "{}: error: ", NAME);
+        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
 )

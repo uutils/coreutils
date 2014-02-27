@@ -17,7 +17,7 @@ extern crate getopts;
 use std::os;
 use std::io::{print, stdin, stdio, fs, BufferedReader};
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 #[deriving(Eq)]

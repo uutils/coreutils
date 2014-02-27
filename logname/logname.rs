@@ -1,15 +1,15 @@
-#[crate_id(name="whoami", version="1.0.0", author="KokaKiwi")];
+#[crate_id(name="logname", version="1.0.0", author="Benoit Benedetti")];
 
 /*
  * This file is part of the uutils coreutils package.
  *
- * (c) Jordi Boggiano <j.boggiano@seld.be>
+ * (c) Benoit Benedetti <benoit.benedetti@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
-/* last synced with: whoami (GNU coreutils) 8.21 */
+/* last synced with: logname (GNU coreutils) 8.22 */
 
 #[allow(non_camel_case_types)];
 
@@ -18,61 +18,68 @@
 extern crate extra;
 extern crate getopts;
 
-use std::io::print;
+use std::io::{print, println};
 use std::os;
 use std::str;
 use std::libc;
-use c_types::{c_passwd, getpwuid};
 
 #[path = "../common/util.rs"] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
 
 extern {
-    pub fn geteuid() -> libc::c_int;
+    // POSIX requires using getlogin (or equivalent code)
+    pub fn getlogin() -> *libc::c_char;
 }
 
-unsafe fn getusername() -> ~str {
-    let passwd: *c_passwd = getpwuid(geteuid());
+unsafe fn get_userlogin() -> ~str {
+    let login: *libc::c_char = getlogin();
 
-    let pw_name: *libc::c_char = (*passwd).pw_name;
-    let name = str::raw::from_c_str(pw_name);
-
-    name
+    str::raw::from_c_str(login)
 }
 
-static NAME: &'static str = "whoami";
+static NAME: &'static str = "logname";
+static VERSION: &'static str = "1.0.0";
+
+fn version() {
+    println(NAME + " " + VERSION);
+}
 
 fn main() {
     let args = os::args();
-    let program = args[0].as_slice();
+    let program = args[0].clone();
+
+    //
+    // Argument parsing
+    //
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
+
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f.to_err_msg()),
+        Err(f) => crash!(1, "Invalid options\n{}", f.to_err_msg())
     };
+
     if matches.opt_present("help") {
-        println!("whoami 1.0.0");
+        version();
         println!("");
         println!("Usage:");
         println!("  {:s}", program);
         println!("");
-        print(getopts::usage("print effective userid", opts));
+        print(getopts::usage("print user's login name", opts));
         return;
     }
     if matches.opt_present("version") {
-        println!("whoami 1.0.0");
+        version();
         return;
     }
 
     exec();
 }
 
-pub fn exec() {
+fn exec() {
     unsafe {
-        let username = getusername();
-        println!("{:s}", username);
+        let userlogin = get_userlogin();
+        println!("{:s}", userlogin);
     }
 }

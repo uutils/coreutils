@@ -27,7 +27,7 @@ use std::ptr;
 use std::str;
 use utmpx::*;
 
-#[path = "../util.rs"]
+#[path = "../common/util.rs"]
 mod util;
 
 #[cfg(target_os = "linux")]
