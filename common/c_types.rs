@@ -1,4 +1,4 @@
-#[allow(dead_code)];
+#[allow(dead_code, non_camel_case_types)];
 
 extern crate getopts;
 
