@@ -23,6 +23,7 @@ PROGS       := \
   rmdir \
   sleep \
   seq \
+  tac \
   tee \
   true \
   truncate \
