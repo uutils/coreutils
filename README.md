@@ -95,7 +95,6 @@ To do
 - fold
 - getlimits
 - group-list
-- groups
 - hostid
 - install
 - join
@@ -144,7 +143,6 @@ To do
 - sum
 - sync
 - tac-pipe
-- tac
 - tail
 - test
 - timeout
