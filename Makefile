@@ -36,6 +36,7 @@ UNIX_PROGS := \
   users \
   whoami \
   tty \
+  groups \
   id
 
 ifneq ($(OS),Windows_NT)
