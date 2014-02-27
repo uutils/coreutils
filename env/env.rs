@@ -191,7 +191,7 @@ fn main() {
     }
 
     if opts.program.len() >= 1 {
-        match std::run::process_status(opts.program[0].as_slice(), opts.program.slice_from(1)) {
+        match std::io::process::Process::status(opts.program[0].as_slice(), opts.program.slice_from(1)) {
             Ok(exit) =>
                 std::os::set_exit_status(match exit {
                     std::io::process::ExitStatus(s) => s,
