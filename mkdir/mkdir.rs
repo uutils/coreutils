@@ -126,14 +126,14 @@ fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
         if parent_exists && !path.exists() {
             mkdir(&path, mode);
             if verbose {println!("{}", *dir);}
-        } else {
+        } else if !mk_parents {
             let mut error_msg = ~"";
             if !parent_exists {
-                error_msg.push_str("Error: parent directory '");
+                error_msg.push_str("parent directory '");
                 error_msg.push_str(parent);
                 error_msg.push_str("' does not exist");
             } else {
-                error_msg.push_str("Error: directory '");
+                error_msg.push_str("directory '");
                 error_msg.push_str(*dir);
                 error_msg.push_str("' already exists");
             }
