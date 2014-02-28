@@ -50,7 +50,13 @@ fn main() {
         let before = matches.opt_present("b");
         let regex = matches.opt_present("r");
         let separator = match matches.opt_str("s") {
-            Some(m) => m,
+            Some(m) => {
+                if m.len() == 0 {
+                    crash!(1, "separator cannot be empty")
+                } else {
+                    m
+                }
+            }
             None => ~"\n"
         };
         tac(matches.free, before, regex, separator);
@@ -61,9 +67,11 @@ fn tac(filenames: ~[~str], before: bool, _: bool, separator: ~str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
                            crash_if_err!(1, io::File::open(&Path::new(filename))));
-        let data = crash_if_err!(1, file.read_to_str());
-        let mut split_vec: ~[&str] = data.split_str(separator).collect();
-        split_vec.pop();  // removes blank line that is inserted otherwise
+        let mut data = crash_if_err!(1, file.read_to_str());
+        if data.ends_with("\n") {
+            data.pop_char();  // removes blank line that is inserted otherwise
+        }
+        let split_vec: ~[&str] = data.split_str(separator).collect();
         let rev: ~str = split_vec.rev_iter().fold(~"", |a, &b|
             a + if before {
                 separator + b
