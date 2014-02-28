@@ -59,13 +59,14 @@ fn paste(filenames: ~[~str], serial: bool, delimiters: ~str) {
     let mut files: ~[io::BufferedReader<io::File>] = filenames.move_iter().map(|name|
         io::BufferedReader::new(crash_if_err!(1, io::File::open(&Path::new(name))))
     ).collect();
+    let delimiters: ~[~str] = delimiters.chars().map(|x| x.to_str()).collect();
     let mut delim_count = 0;
     if serial {
         for file in files.mut_iter() {
             let mut output = ~"";
             loop {
                 output = output + match file.read_line() {
-                    Ok(line) => format!("{}{}", line.trim_right(), delimiters.char_at(delim_count % delimiters.len())),
+                    Ok(line) => line.trim_right() + delimiters[delim_count % delimiters.len()],
                     Err(f) => if f.kind == io::EndOfFile {
                         break
                     } else {
@@ -78,25 +79,33 @@ fn paste(filenames: ~[~str], serial: bool, delimiters: ~str) {
             println!("{}", output);
         }
     } else {
+        let mut eof = std::vec::from_elem(files.len(), false);
         loop {
             let mut output = ~"";
-            let mut eof = 0;
-            for file in files.mut_iter() {
-                output = output + match file.read_line() {
-                    Ok(line) => format!("{}{}", line.trim_right(), delimiters.char_at(delim_count % delimiters.len())),
-                    Err(f) => if f.kind == io::EndOfFile {
-                        eof += 1;
-                        delimiters.char_at(delim_count % delimiters.len()).to_str()
-                    } else {
-                        crash!(1, "{}", f.to_str())
+            let mut eof_count = 0;
+            for (i, file) in files.mut_iter().enumerate() {
+                if eof[i] {
+                    eof_count += 1;
+                } else {
+                    match file.read_line() {
+                        Ok(line) => output = output + line.slice_to(line.len() - 1),
+                        Err(f) => if f.kind == io::EndOfFile {
+                            eof[i] = true;
+                            eof_count += 1;
+                        } else {
+                            crash!(1, "{}", f.to_str());
+                        }
                     }
-                };
+                }
+                output = output + delimiters[delim_count % delimiters.len()];
+                delim_count += 1;
             }
-            if files.len() == eof {
+            if files.len() == eof_count {
                 break;
             }
             output.pop_char();
             println!("{}", output);
+            delim_count = 0;
         }
     }
 }
