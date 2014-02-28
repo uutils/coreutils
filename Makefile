@@ -17,6 +17,7 @@ PROGS       := \
   du \
   false \
   mkdir \
+  paste \
   printenv \
   pwd \
   rm \

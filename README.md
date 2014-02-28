@@ -120,7 +120,6 @@ To do
 - numfmt
 - od
 - operand2sig
-- paste
 - pathchk
 - pinky
 - pr
