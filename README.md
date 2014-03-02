@@ -138,7 +138,7 @@ To do
 - split
 - stat
 - stdbuf
-- stty
+- stty (in progress)
 - sum
 - sync
 - tac-pipe
