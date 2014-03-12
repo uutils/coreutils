@@ -18,12 +18,14 @@ PROGS       := \
   du \
   false \
   mkdir \
+  paste \
   printenv \
   pwd \
   rm \
   rmdir \
   sleep \
   seq \
+  tac \
   tee \
   true \
   truncate \

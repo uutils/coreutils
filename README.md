@@ -86,7 +86,7 @@ To do
 - dd
 - df
 - dircolors
-- expand
+- expand (in progress)
 - expr
 - extent-scan
 - factor
@@ -95,7 +95,6 @@ To do
 - fold
 - getlimits
 - group-list
-- groups
 - hostid
 - install
 - join
@@ -121,7 +120,6 @@ To do
 - numfmt
 - od
 - operand2sig
-- paste
 - pathchk
 - pinky
 - pr
@@ -140,11 +138,10 @@ To do
 - split
 - stat
 - stdbuf
-- stty
+- stty (in progress)
 - sum
 - sync
 - tac-pipe
-- tac
 - tail
 - test
 - timeout
