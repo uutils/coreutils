@@ -92,13 +92,13 @@ fn main() {
                 }
             }
         } else if opt.starts_with("--") {
-            match *opt {
-                ~"--help" => { usage(prog); return }
-                ~"--version" => { version(); return }
+            match opt.as_slice() {
+                "--help" => { usage(prog); return }
+                "--version" => { version(); return }
 
-                ~"--ignore-environment" => opts.ignore_env = true,
-                ~"--null" => opts.null = true,
-                ~"--unset" => {
+                "--ignore-environment" => opts.ignore_env = true,
+                "--null" => opts.null = true,
+                "--unset" => {
                     let var = iter.next();
 
                     match var {
