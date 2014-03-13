@@ -87,10 +87,10 @@ fn main() {
             } else if matches.opt_present("I") {
                 InteractiveOnce
             } else if matches.opt_present("interactive") {
-                match matches.opt_str("interactive").unwrap() {
-                    ~"none" => InteractiveNone,
-                    ~"once" => InteractiveOnce,
-                    ~"always" => InteractiveAlways,
+                match matches.opt_str("interactive").unwrap().as_slice() {
+                    "none" => InteractiveNone,
+                    "once" => InteractiveOnce,
+                    "always" => InteractiveAlways,
                     val => {
                         crash!(1, "Invalid argument to interactive ({})", val)
                     }
