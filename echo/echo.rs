@@ -1,4 +1,3 @@
-#[feature(macro_rules)];
 #[crate_id(name="echo", vers="1.0.0", author="Derek Chiang")];
 
 /*
@@ -10,7 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate extra;
+#[feature(macro_rules)];
+
 extern crate getopts;
 
 use std::os;

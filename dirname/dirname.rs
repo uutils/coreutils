@@ -9,7 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate extra;
+#[feature(macro_rules)];
+
 extern crate getopts;
 
 use std::os;
