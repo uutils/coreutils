@@ -10,7 +10,9 @@
  * file that was distributed with this source code.
  */
 
-extern crate extra;
+#[feature(phase)];
+#[phase(syntax, link)] extern crate log;
+
 extern crate getopts;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};

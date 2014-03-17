@@ -10,6 +10,8 @@
  */
 
 #[feature(macro_rules)];
+#[feature(phase)];
+#[phase(syntax, link)] extern crate log;
 
 extern crate serialize;
 extern crate getopts;
