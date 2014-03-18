@@ -10,7 +10,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate extra;
 extern crate getopts;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};

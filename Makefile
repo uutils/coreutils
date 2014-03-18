@@ -39,7 +39,8 @@ UNIX_PROGS := \
   whoami \
   tty \
   groups \
-  id
+  id \
+  uptime
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)

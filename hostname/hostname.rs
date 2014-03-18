@@ -12,7 +12,6 @@
  * https://www.opensource.apple.com/source/shell_cmds/shell_cmds-170/hostname/hostname.c?txt
  */
 
-extern crate extra;
 extern crate getopts;
 
 use std::{os,libc,vec,str};

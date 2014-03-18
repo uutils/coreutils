@@ -10,7 +10,6 @@
  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
  */
 
-extern crate extra;
 extern crate getopts;
 
 use std::os;
