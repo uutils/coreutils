@@ -12,7 +12,6 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-extern crate extra;
 extern crate getopts;
 
 use std::os;

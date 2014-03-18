@@ -5,11 +5,9 @@
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 
-extern crate extra;
 extern crate getopts;
 
 use std::os;
-use std::cmp::max;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -99,7 +97,7 @@ fn done_printing(next: f32, step: f32, last: f32) -> bool {
 
 fn print_seq(first: f32, step: f32, last: f32, separator: ~str, terminator: ~str, pad: bool) {
     let mut i = first;
-    let maxlen = max(first, last).to_str().len();
+    let maxlen = first.max(last).to_str().len();
     while !done_printing(i, step, last) {
         let ilen = i.to_str().len();
         if pad && ilen < maxlen {
