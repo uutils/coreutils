@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate extra;
 extern crate getopts;
 
 use std::os;
