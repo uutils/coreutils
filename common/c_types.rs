@@ -32,6 +32,18 @@ pub struct c_group {
     gr_name: *c_char /* group name */
 }
 
+pub struct c_tm {
+    tm_sec: c_int,         /* seconds */
+    tm_min: c_int,         /* minutes */
+    tm_hour: c_int,        /* hours */
+    tm_mday: c_int,        /* day of the month */
+    tm_mon: c_int,         /* month */
+    tm_year: c_int,        /* year */
+    tm_wday: c_int,        /* day of the week */
+    tm_yday: c_int,        /* day in the year */
+    tm_isdst: c_int       /* daylight saving time */
+}
+
 extern {
     pub fn getpwuid(uid: c_int) -> *c_passwd;
     pub fn getpwnam(login: *c_char) -> *c_passwd;
