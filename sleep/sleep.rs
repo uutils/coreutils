@@ -11,7 +11,6 @@
 
 #[feature(macro_rules)];
 
-extern crate extra;
 extern crate getopts;
 
 use std::num;
@@ -88,7 +87,7 @@ fn sleep(args: &[~str]) {
 }
 
 fn match_suffix(arg: &mut ~str) -> Result<int, ~str> {
-    let result = match (*arg).pop_char() {
+    let result = match (*arg).pop_char().unwrap() {
         's' | 'S' => Ok(1),
         'm' | 'M' => Ok(60),
         'h' | 'H' => Ok(60 * 60),

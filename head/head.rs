@@ -10,7 +10,6 @@
  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
  */
 
-extern crate extra;
 extern crate getopts;
 
 use std::os;
@@ -128,7 +127,7 @@ fn obsolete (options: &mut ~[~str]) -> Option<uint> {
 }
 
 fn head<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint) {
-    for line in reader.lines().take(line_count) { print!("{:s}", line); }
+    for line in reader.lines().take(line_count) { print!("{}", line); }
 }
 
 fn version () {
