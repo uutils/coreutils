@@ -80,7 +80,7 @@ fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args[0].as_slice();
     let opts = ~[
         // In task
         getopts::optflag("a", "all", " write counts for all files, not just directories"),
@@ -299,8 +299,8 @@ Try '{program} --help' for more information.", s, program = program);
     };
 
     let mut grand_total = 0;
-    for path_str in strs.iter() {
-        let path = Path::new(path_str.clone());
+    for path_str in strs.move_iter() {
+        let path = Path::new(path_str);
         let iter = du(&path, options_arc.clone(), 0).move_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
