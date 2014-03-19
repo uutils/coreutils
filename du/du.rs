@@ -176,38 +176,30 @@ ers of 1000).");
         return
     }
 
-    let options = Options{
+    let summarize = matches.opt_present("summarize");
+
+    let max_depth_str = matches.opt_str("max-depth");
+    let max_depth = max_depth_str.as_ref().and_then(|s| from_str::<uint>(*s));
+    match (max_depth_str, max_depth) {
+        (Some(ref s), _) if summarize => {
+            println!("{}: warning: summarizing conflicts with --max-depth={:s}", program, *s);
+            return
+        }
+        (Some(ref s), None) => {
+            println!("{}: invalid maximum depth '{:s}'", program, *s);
+            return
+        }
+        (Some(_), Some(_)) | (None, _) => { /* valid */ }
+    }
+
+    let options = Options {
         all: matches.opt_present("all"),
-        max_depth: match (matches.opt_present("summarize"), matches.opt_str("max-depth")) {
-            (true, Some(s)) => match from_str::<uint>(s) {
-                Some(_) => {
-                    println!("du: warning: summarizing conflicts with --max-depth={:s}", s);
-                    return
-                },
-                None => {
-                    println!("du: invalid maximum depth '{:s}'", s);
-                    return
-                }
-            },
-            (true, None) => Some(0),
-            (false, Some(s)) => match from_str::<uint>(s) {
-                Some(u) => Some(u),
-                None => {
-                    println!("du: invalid maximum depth '{:s}'", s);
-                    return
-                }
-            },
-            (false, None) => None
-        },
+        max_depth: max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = matches.free.clone();
-    let strs = match strs.is_empty() {
-        true => ~[~"./"],
-        false => strs
-    };
+    let strs = if matches.free.is_empty() {~[~"./"]} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 
