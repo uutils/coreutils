@@ -200,3 +200,4 @@ fn open(path: ~str) -> Option<~Reader> {
         Err(e) => fail!("cat: {0:s}: {1:s}", path, e.to_str())
     }
 }
+/* vim: set ai ts=4 sw=4 sts=4 et : */
