@@ -15,7 +15,8 @@
 extern crate getopts;
 
 use std::os;
-use std::io::{print, stdin, stdout, File};
+use std::io::{print, File};
+use std::io::stdio::{stdout_raw, stdin_raw};
 
 fn main() {
     let args = os::args();
@@ -95,7 +96,7 @@ fn is_newline_char(byte: u8) -> bool {
 }
 
 pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
-    let mut writer = stdout();
+    let mut writer = stdout_raw();
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
         let mut counter: uint = 1;
@@ -192,7 +193,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
 
 fn open(path: ~str) -> Option<~Reader> {
     if "-" == path {
-        return Some(~stdin() as ~Reader);
+        return Some(~stdin_raw() as ~Reader);
     }
 
     match File::open(&std::path::Path::new(path.as_slice())) {
