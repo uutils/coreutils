@@ -17,6 +17,7 @@ extern crate getopts;
 use std::os;
 use std::io::{print, File};
 use std::io::stdio::{stdout_raw, stdin_raw};
+use std::io::{BufferedReader, BufferedWriter};
 
 fn main() {
     let args = os::args();
@@ -96,7 +97,6 @@ fn is_newline_char(byte: u8) -> bool {
 }
 
 pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
-    let mut writer = stdout_raw();
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
         let mut counter: uint = 1;
@@ -108,6 +108,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
                 None => { continue }
             };
 
+            let mut writer = BufferedWriter::with_capacity(1024 * 8, stdout_raw());
             let mut at_line_start = true;
             let mut buf = [0, .. 2];
             loop {
@@ -170,6 +171,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
     }
 
     let mut buf = [0, .. 100000];
+    let mut writer = stdout_raw();
     // passthru mode
     for path in files.iter() {
         let mut reader = match open(path.to_owned()) {
