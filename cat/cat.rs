@@ -116,50 +116,34 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
                 // EOF, rather than return Some(0) like a file.
                 match reader.read(buf) {
                     Ok(n) if n != 0 => {
-                        for byte in buf.slice_to(n).iter() {
-                            if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(*byte))) {
-                                match write!(&mut writer as &mut Writer, "{0:6u}\t", counter) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
+                        for &byte in buf.slice_to(n).iter() {
+                            if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(byte))) {
+                                (write!(&mut writer as &mut Writer, "{0:6u}\t", counter)).unwrap();
                                 counter += 1;
                                 at_line_start = false;
                             }
-                            if is_numbering && *byte == LF {
+                            if is_numbering && byte == LF {
                                 at_line_start = true;
                             }
-                            if show_tabs && *byte == TAB {
-                                match writer.write(bytes!("^I")) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
-                            } else if show_ends && *byte == LF {
-                                match writer.write(bytes!("$\n")) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
-                            } else if show_nonprint && (*byte < 32 || *byte >= 127) && !is_newline_char(*byte) {
-                                let mut byte = *byte;
+                            if show_tabs && byte == TAB {
+                                writer.write(bytes!("^I")).unwrap();
+                            } else if show_ends && byte == LF {
+                                writer.write(bytes!("$\n")).unwrap();
+                            } else if show_nonprint && (byte < 32 || byte >= 127) && !is_newline_char(byte) {
+                                let mut byte = byte;
                                 if byte >= 128 {
-                                    match writer.write(bytes!("M-")) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write(bytes!("M-")).unwrap();
                                     byte = byte - 128;
                                 }
                                 if byte < 32 {
-                                    match writer.write(['^' as u8, byte + 64]) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write(['^' as u8, byte + 64]).unwrap();
                                 } else if byte == 127 {
-                                    match writer.write(['^' as u8, byte - 64]) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write(['^' as u8, byte - 64]).unwrap();
                                 } else {
-                                    match writer.write([byte]) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write_u8(byte).unwrap();
                                 }
                             } else {
-                                match writer.write([*byte]) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
+                                writer.write_u8(byte).unwrap();
                             }
                         }
                     },
@@ -184,9 +168,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
             // rather than return Some(0) like a file.
             match reader.read(buf) {
                 Ok(n) if n != 0 => {
-                    match writer.write(buf.slice_to(n)) {
-                        Ok(_) => (), Err(err) => fail!("{}", err)
-                    }
+                    writer.write(buf.slice_to(n)).unwrap();
                 }, _ => break
             }
         }
