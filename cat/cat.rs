@@ -15,7 +15,9 @@
 extern crate getopts;
 
 use std::os;
-use std::io::{print, stdin, stdout, File};
+use std::io::{print, File};
+use std::io::stdio::{stdout_raw, stdin_raw};
+use std::io::{BufferedReader, BufferedWriter};
 
 fn main() {
     let args = os::args();
@@ -95,7 +97,6 @@ fn is_newline_char(byte: u8) -> bool {
 }
 
 pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
-    let mut writer = stdout();
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
         let mut counter: uint = 1;
@@ -107,57 +108,42 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
                 None => { continue }
             };
 
+            let mut writer = BufferedWriter::with_capacity(1024 * 8, stdout_raw());
             let mut at_line_start = true;
-            let mut buf = [0, .. 2];
+            let mut buf = ~[0, .. 1024 * 4];
             loop {
                 // reading from a TTY seems to raise a condition on
                 // EOF, rather than return Some(0) like a file.
                 match reader.read(buf) {
                     Ok(n) if n != 0 => {
-                        for byte in buf.slice_to(n).iter() {
-                            if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(*byte))) {
-                                match write!(&mut writer as &mut Writer, "{0:6u}\t", counter) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
+                        for &byte in buf.slice_to(n).iter() {
+                            if at_line_start && (number == NumberAll || (number == NumberNonEmpty && !is_newline_char(byte))) {
+                                (write!(&mut writer as &mut Writer, "{0:6u}\t", counter)).unwrap();
                                 counter += 1;
                                 at_line_start = false;
                             }
-                            if is_numbering && *byte == LF {
+                            if is_numbering && byte == LF {
                                 at_line_start = true;
                             }
-                            if show_tabs && *byte == TAB {
-                                match writer.write(bytes!("^I")) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
-                            } else if show_ends && *byte == LF {
-                                match writer.write(bytes!("$\n")) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
-                            } else if show_nonprint && (*byte < 32 || *byte >= 127) && !is_newline_char(*byte) {
-                                let mut byte = *byte;
+                            if show_tabs && byte == TAB {
+                                writer.write(bytes!("^I")).unwrap();
+                            } else if show_ends && byte == LF {
+                                writer.write(bytes!("$\n")).unwrap();
+                            } else if show_nonprint && (byte < 32 || byte >= 127) && !is_newline_char(byte) {
+                                let mut byte = byte;
                                 if byte >= 128 {
-                                    match writer.write(bytes!("M-")) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write(bytes!("M-")).unwrap();
                                     byte = byte - 128;
                                 }
                                 if byte < 32 {
-                                    match writer.write(['^' as u8, byte + 64]) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write(['^' as u8, byte + 64]).unwrap();
                                 } else if byte == 127 {
-                                    match writer.write(['^' as u8, byte - 64]) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write(['^' as u8, byte - 64]).unwrap();
                                 } else {
-                                    match writer.write([byte]) {
-                                        Ok(_) => (), Err(err) => fail!("{}", err)
-                                    };
+                                    writer.write_u8(byte).unwrap();
                                 }
                             } else {
-                                match writer.write([*byte]) {
-                                    Ok(_) => (), Err(err) => fail!("{}", err)
-                                };
+                                writer.write_u8(byte).unwrap();
                             }
                         }
                     },
@@ -168,7 +154,8 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
         return;
     }
 
-    let mut buf = [0, .. 100000];
+    let mut writer = stdout_raw();
+    let mut buf = ~[0, .. 1024 * 64];
     // passthru mode
     for path in files.iter() {
         let mut reader = match open(path.to_owned()) {
@@ -181,9 +168,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
             // rather than return Some(0) like a file.
             match reader.read(buf) {
                 Ok(n) if n != 0 => {
-                    match writer.write(buf.slice_to(n)) {
-                        Ok(_) => (), Err(err) => fail!("{}", err)
-                    }
+                    writer.write(buf.slice_to(n)).unwrap();
                 }, _ => break
             }
         }
@@ -192,7 +177,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
 
 fn open(path: ~str) -> Option<~Reader> {
     if "-" == path {
-        return Some(~stdin() as ~Reader);
+        return Some(~stdin_raw() as ~Reader);
     }
 
     match File::open(&std::path::Path::new(path.as_slice())) {
@@ -200,3 +185,4 @@ fn open(path: ~str) -> Option<~Reader> {
         Err(e) => fail!("cat: {0:s}: {1:s}", path, e.to_str())
     }
 }
+/* vim: set ai ts=4 sw=4 sts=4 et : */

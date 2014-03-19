@@ -1,5 +1,7 @@
 #[crate_id(name="tee", vers="1.0.0", author="Aleksander Bielawski")];
 #[license="MIT"];
+#[feature(phase)];
+#[feature(macro_rules)];
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,6 +13,7 @@
  */
 
 extern crate getopts;
+#[phase(syntax, link)] extern crate log;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::io::{IoResult};
