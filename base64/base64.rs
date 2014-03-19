@@ -9,10 +9,12 @@
  * that was distributed with this source code.
  */
 
+#[feature(phase)];
 #[feature(macro_rules)];
 
 extern crate serialize;
 extern crate getopts;
+#[phase(syntax, link)] extern crate log;
 
 use std::char;
 use std::io::{println, File, stdin, stdout};

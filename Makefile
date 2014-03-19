@@ -11,6 +11,7 @@ PROGS       := \
   base64 \
   basename \
   cat \
+  cp \
   dirname \
   echo \
   env \
