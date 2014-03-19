@@ -1,5 +1,6 @@
 #[crate_id(name="cp", vers="1.0.0", author="Jordy Dickinson")];
 #[feature(macro_rules)];
+#[feature(phase)];
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,6 +12,7 @@
  */
 
 extern crate getopts;
+#[phase(syntax, link)] extern crate log;
 
 use std::os;
 use std::io;

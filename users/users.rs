@@ -16,7 +16,6 @@
 
 #[feature(macro_rules, globs)];
 
-extern crate extra;
 extern crate getopts;
 
 use std::io::print;

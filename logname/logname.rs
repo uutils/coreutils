@@ -15,7 +15,6 @@
 
 #[feature(macro_rules)];
 
-extern crate extra;
 extern crate getopts;
 
 use std::io::{print, println};
