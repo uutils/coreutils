@@ -110,7 +110,7 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
 
             let mut writer = BufferedWriter::with_capacity(1024 * 8, stdout_raw());
             let mut at_line_start = true;
-            let mut buf = [0, .. 2];
+            let mut buf = ~[0, .. 1024 * 4];
             loop {
                 // reading from a TTY seems to raise a condition on
                 // EOF, rather than return Some(0) like a file.
@@ -170,8 +170,8 @@ pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_end
         return;
     }
 
-    let mut buf = [0, .. 100000];
     let mut writer = stdout_raw();
+    let mut buf = ~[0, .. 1024 * 64];
     // passthru mode
     for path in files.iter() {
         let mut reader = match open(path.to_owned()) {
