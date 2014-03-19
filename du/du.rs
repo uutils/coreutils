@@ -17,8 +17,7 @@ extern crate sync;
 extern crate time;
 
 use std::os;
-use std::io::fs;
-use std::io::FileStat;
+use std::io::{stderr, fs, FileStat, TypeDirectory};
 use std::option::Option;
 use std::path::Path;
 use time::Timespec;
@@ -32,30 +31,40 @@ static VERSION: &'static str = "1.0.0";
 
 struct Options {
     all: bool,
+    program_name: ~str,
     max_depth: Option<uint>,
     total: bool,
     separate_dirs: bool,
 }
 
-fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
+// this takes `my_stat` to avoid having to stat files multiple times.
+fn du(path: &Path, mut my_stat: FileStat,
+      options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
     let mut stats = ~[];
     let mut futures = ~[];
     let options = options_arc.get();
-    let mut my_stat = safe_unwrap!(path.stat());
 
-    for f in safe_unwrap!(fs::readdir(path)).move_iter() {
-        match f.is_file() {
-            true => {
-                let stat = safe_unwrap!(f.stat());
-                my_stat.size += stat.size;
-                my_stat.unstable.blocks += stat.unstable.blocks;
-                if options.all {
-                    stats.push(Arc::new(stat))
-                }
+    if my_stat.kind == TypeDirectory {
+        let read = match fs::readdir(path) {
+            Ok(read) => read,
+            Err(e) => {
+                writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
+                         options.program_name, path.display(), e);
+                return ~[Arc::new(my_stat)]
             }
-            false => {
+        };
+
+        for f in read.move_iter() {
+            let this_stat = safe_unwrap!(fs::lstat(&f));
+            if this_stat.kind == TypeDirectory {
                 let oa_clone = options_arc.clone();
-                futures.push(Future::spawn(proc() { du(&f, oa_clone, depth + 1) }))
+                futures.push(Future::spawn(proc() { du(&f, this_stat, oa_clone, depth + 1) }))
+            } else {
+                my_stat.size += this_stat.size;
+                my_stat.unstable.blocks += this_stat.unstable.blocks;
+                if options.all {
+                    stats.push(Arc::new(this_stat))
+                }
             }
         }
     }
@@ -198,6 +207,7 @@ ers of 1000).",
 
     let options = Options {
         all: matches.opt_present("all"),
+        program_name: program.to_owned(),
         max_depth: max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
@@ -301,7 +311,8 @@ Try '{program} --help' for more information.", s, program = program);
     let mut grand_total = 0;
     for path_str in strs.move_iter() {
         let path = Path::new(path_str);
-        let iter = du(&path, options_arc.clone(), 0).move_iter();
+        let stat = safe_unwrap!(fs::lstat(&path));
+        let iter = du(&path, stat, options_arc.clone(), 0).move_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat_arc) in iter.enumerate() {
@@ -340,7 +351,7 @@ Try '{program} --help' for more information.", s, program = program);
                 print!("{:<10} {}", convert_size(size), stat.path.display());
             }
             print!("{}", line_separator);
-            if options.total && index == (len - 1) {
+            if options_arc.get().total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
                 grand_total += size;
@@ -348,7 +359,7 @@ Try '{program} --help' for more information.", s, program = program);
         }
     }
 
-    if options.total {
+    if options_arc.get().total {
         print!("{:<10} total", convert_size(grand_total));
         print!("{}", line_separator);
     }
