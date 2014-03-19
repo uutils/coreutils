@@ -17,8 +17,7 @@ extern crate sync;
 extern crate time;
 
 use std::os;
-use std::io::fs;
-use std::io::FileStat;
+use std::io::{stderr, fs, FileStat, TypeDirectory};
 use std::option::Option;
 use std::path::Path;
 use time::Timespec;
@@ -32,30 +31,40 @@ static VERSION: &'static str = "1.0.0";
 
 struct Options {
     all: bool,
+    program_name: ~str,
     max_depth: Option<uint>,
     total: bool,
     separate_dirs: bool,
 }
 
-fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
+// this takes `my_stat` to avoid having to stat files multiple times.
+fn du(path: &Path, mut my_stat: FileStat,
+      options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
     let mut stats = ~[];
     let mut futures = ~[];
     let options = options_arc.get();
-    let mut my_stat = safe_unwrap!(path.stat());
 
-    for f in safe_unwrap!(fs::readdir(path)).move_iter() {
-        match f.is_file() {
-            true => {
-                let stat = safe_unwrap!(f.stat());
-                my_stat.size += stat.size;
-                my_stat.unstable.blocks += stat.unstable.blocks;
-                if options.all {
-                    stats.push(Arc::new(stat))
-                }
+    if my_stat.kind == TypeDirectory {
+        let read = match fs::readdir(path) {
+            Ok(read) => read,
+            Err(e) => {
+                writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
+                         options.program_name, path.display(), e);
+                return ~[Arc::new(my_stat)]
             }
-            false => {
+        };
+
+        for f in read.move_iter() {
+            let this_stat = safe_unwrap!(fs::lstat(&f));
+            if this_stat.kind == TypeDirectory {
                 let oa_clone = options_arc.clone();
-                futures.push(Future::spawn(proc() { du(&f, oa_clone, depth + 1) }))
+                futures.push(Future::spawn(proc() { du(&f, this_stat, oa_clone, depth + 1) }))
+            } else {
+                my_stat.size += this_stat.size;
+                my_stat.unstable.blocks += this_stat.unstable.blocks;
+                if options.all {
+                    stats.push(Arc::new(this_stat))
+                }
             }
         }
     }
@@ -80,7 +89,7 @@ fn du(path: &Path, options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args[0].as_slice();
     let opts = ~[
         // In task
         getopts::optflag("a", "all", " write counts for all files, not just directories"),
@@ -155,69 +164,66 @@ fn main() {
     };
 
     if matches.opt_present("help") {
-        println!("du {} - estimate file space usage", VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
-        println!("  {0:s} [OPTION]... --files0-from=F", program);
-        println!("");
-        println!("{}", getopts::usage("Summarize disk usage of each FILE, recursively for directories.", opts));
-        println!("Display  values  are  in  units  of  the  first  available  SIZE from
+        println!("{program} {version} - estimate file space usage
+
+Usage
+  {program} [OPTION]... [FILE]...
+  {program} [OPTION]... --files0-from=F
+
+{usage}
+
+Display  values  are  in  units  of  the  first  available  SIZE from
 --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
 ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
 POSIXLY_CORRECT is set).
 
 SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
-ers of 1000).");
+ers of 1000).",
+                 program = program,
+                 version = VERSION,
+                 usage = getopts::usage("Summarize disk usage of each FILE, recursively for directories.", opts));
         return
     } else if matches.opt_present("version") {
-        println!("du version: {}", VERSION);
+        println!("{} version: {}", program, VERSION);
         return
     }
 
-    let options = Options{
+    let summarize = matches.opt_present("summarize");
+
+    let max_depth_str = matches.opt_str("max-depth");
+    let max_depth = max_depth_str.as_ref().and_then(|s| from_str::<uint>(*s));
+    match (max_depth_str, max_depth) {
+        (Some(ref s), _) if summarize => {
+            println!("{}: warning: summarizing conflicts with --max-depth={:s}", program, *s);
+            return
+        }
+        (Some(ref s), None) => {
+            println!("{}: invalid maximum depth '{:s}'", program, *s);
+            return
+        }
+        (Some(_), Some(_)) | (None, _) => { /* valid */ }
+    }
+
+    let options = Options {
         all: matches.opt_present("all"),
-        max_depth: match (matches.opt_present("summarize"), matches.opt_str("max-depth")) {
-            (true, Some(s)) => match from_str::<uint>(s) {
-                Some(_) => {
-                    println!("du: warning: summarizing conflicts with --max-depth={:s}", s);
-                    return
-                },
-                None => {
-                    println!("du: invalid maximum depth '{:s}'", s);
-                    return
-                }
-            },
-            (true, None) => Some(0),
-            (false, Some(s)) => match from_str::<uint>(s) {
-                Some(u) => Some(u),
-                None => {
-                    println!("du: invalid maximum depth '{:s}'", s);
-                    return
-                }
-            },
-            (false, None) => None
-        },
+        program_name: program.to_owned(),
+        max_depth: max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = matches.free.clone();
-    let strs = match strs.is_empty() {
-        true => ~[~"./"],
-        false => strs
-    };
+    let strs = if matches.free.is_empty() {~[~"./"]} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 
     let MB = match matches.opt_present("si") {
         true => 1000 * 1000,
-        false => 1024 * 1024,  
+        false => 1024 * 1024,
     };
     let KB = match matches.opt_present("si") {
         true => 1000,
-        false => 1024,  
+        false => 1024,
     };
 
     let block_size = match matches.opt_str("block-size") {
@@ -228,7 +234,7 @@ ers of 1000).");
             let mut letters = ~[];
             for c in s.chars() {
                 if found_letter && c.is_digit() || !found_number && !c.is_digit() {
-                    println!("du: invalid --block-size argument '{}'", s);
+                    println!("{}: invalid --block-size argument '{}'", program, s);
                     return
                 } else if c.is_digit() {
                     found_number = true;
@@ -251,7 +257,7 @@ ers of 1000).");
                 "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 _ => {
-                    println!("du: invalid --block-size argument '{}'", s); return
+                    println!("{}: invalid --block-size argument '{}'", program, s); return
                 }
             };
             number * multiple
@@ -284,13 +290,12 @@ ers of 1000).");
                 "long-iso" => "%Y-%m-%d %H:%M",
                 "iso" => "%Y-%m-%d",
                 _ => {
-                    println!("
-du: invalid argument 'awdwa' for 'time style'
+                    println!("{program}: invalid argument '{}' for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
-Try 'du --help' for more information.");
+Try '{program} --help' for more information.", s, program = program);
                     return
                 }
             }
@@ -304,9 +309,10 @@ Try 'du --help' for more information.");
     };
 
     let mut grand_total = 0;
-    for path_str in strs.iter() {
-        let path = Path::new(path_str.clone());
-        let iter = du(&path, options_arc.clone(), 0).move_iter();
+    for path_str in strs.move_iter() {
+        let path = Path::new(path_str);
+        let stat = safe_unwrap!(fs::lstat(&path));
+        let iter = du(&path, stat, options_arc.clone(), 0).move_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat_arc) in iter.enumerate() {
@@ -326,10 +332,10 @@ Try 'du --help' for more information.");
                                 "created" => stat.created,
                                 "modified" => stat.modified,
                                 _ => {
-                                    println!("du: invalid argument 'modified' for '--time'
+                                    println!("{program}: invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
-    Try 'du --help' for more information.");
+    Try '{program} --help' for more information.", program = program);
                                     return
                                 }
                             },
@@ -345,7 +351,7 @@ Try 'du --help' for more information.");
                 print!("{:<10} {}", convert_size(size), stat.path.display());
             }
             print!("{}", line_separator);
-            if options.total && index == (len - 1) {
+            if options_arc.get().total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
                 grand_total += size;
@@ -353,7 +359,7 @@ Try 'du --help' for more information.");
         }
     }
 
-    if options.total {
+    if options_arc.get().total {
         print!("{:<10} total", convert_size(grand_total));
         print!("{}", line_separator);
     }
