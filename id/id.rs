@@ -17,7 +17,7 @@
 #[feature(macro_rules)];
 extern crate getopts;
 
-use std::{libc, os, vec};
+use std::{libc, os};
 use std::ptr::read;
 use std::libc::{
     c_char,
@@ -318,7 +318,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     }
 
     let mut ngroups;
-    let mut groups = vec::with_capacity(NGROUPS as uint);
+    let mut groups = Vec::with_capacity(NGROUPS as uint);
 
     if use_ggl && possible_pw.is_some() {
         ngroups = NGROUPS;

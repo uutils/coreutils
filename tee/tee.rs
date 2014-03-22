@@ -36,7 +36,7 @@ struct Options {
     append: bool,
     ignore_interrupts: bool,
     print_and_exit: Option<~str>,
-    files: ~[Path]
+    files: ~Vec<Path>
 }
 
 fn options(args: &[~str]) -> Result<Options, ()> {
@@ -57,7 +57,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
                            comment);
-        let names = m.free + ~[~"-"];
+        let names = std::vec::append_one(m.free.clone(), ~"-");
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };
@@ -66,7 +66,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
-            files: names.map(|name| Path::new(name.clone()))
+            files: ~names.iter().map(|name| Path::new(name.clone())).collect()
         })
     }).map_err(|message| warn(message))
 }
@@ -79,7 +79,7 @@ fn exec(options: Options) -> Result<(), ()> {
 }
 
 fn tee(options: Options) -> Result<(), ()> {
-    let writers = options.files.map(|path| open(path, options.append));
+    let writers = options.files.iter().map(|path| open(path, options.append)).collect();
     let output = &mut MultiWriter::new(writers);
     let input = &mut NamedReader { inner: ~stdin() as ~Reader };
     if copy(input, output).is_err() || output.flush().is_err() {

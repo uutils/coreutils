@@ -60,7 +60,7 @@ fn main() {
     }
 }
 
-fn remove(dirs: &[~str], ignore: bool, parents: bool, verbose: bool) {
+fn remove(dirs: Vec<~str>, ignore: bool, parents: bool, verbose: bool) {
     for dir in dirs.iter() {
         let path = Path::new(dir.to_owned());
         if path.exists() {

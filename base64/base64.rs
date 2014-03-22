@@ -76,10 +76,10 @@ fn main() {
         },
         None => 76
     };
-    let mut input = if matches.free.is_empty() || matches.free[0] == ~"-" {
+    let mut input = if matches.free.is_empty() || matches.free.get(0).as_slice() == "-" {
         ~stdin() as ~Reader
     } else {
-        let path = Path::new(matches.free[0]);
+        let path = Path::new(matches.free.get(0).clone());
         ~File::open(&path) as ~Reader
     };
 

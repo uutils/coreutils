@@ -10,7 +10,7 @@ use std::libc::{
     getgroups
 };
 
-use std::vec;
+use std::vec::Vec;
 
 use std::ptr::read;
 use std::str::raw::from_c_str;
@@ -54,9 +54,9 @@ extern {
     pub fn getgrgid(gid: uid_t) -> *c_group;
 }
 
-pub fn get_pw_from_args(free: &~[~str]) -> Option<c_passwd> {
+pub fn get_pw_from_args(free: &Vec<~str>) -> Option<c_passwd> {
     if free.len() == 1 {
-        let username = free[0].clone();
+        let username = free.get(0).clone();
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit()) {
@@ -88,7 +88,7 @@ pub fn get_pw_from_args(free: &~[~str]) -> Option<c_passwd> {
 static NGROUPS: i32 = 20;
 
 pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
-    let mut groups = vec::with_capacity(NGROUPS as uint);
+    let mut groups = Vec::with_capacity(NGROUPS as uint);
     let mut ngroups;
 
     if possible_pw.is_some() {

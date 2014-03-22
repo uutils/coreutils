@@ -69,7 +69,7 @@ fn main() {
 
     let mut files = matches.free.clone();
     if files.is_empty() {
-        files = ~[~"-"];
+        files = vec!(~"-");
     }
 
     wc(files, &matches);
@@ -86,7 +86,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: ~[~str], matches: &Matches) {
+pub fn wc(files: Vec<~str>, matches: &Matches) {
     let mut total_line_count: uint = 0;
     let mut total_word_count: uint = 0;
     let mut total_char_count: uint = 0;

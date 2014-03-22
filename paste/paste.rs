@@ -55,7 +55,7 @@ fn main() {
     }
 }
 
-fn paste(filenames: ~[~str], serial: bool, delimiters: ~str) {
+fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
     let mut files: ~[io::BufferedReader<io::File>] = filenames.move_iter().map(|name|
         io::BufferedReader::new(crash_if_err!(1, io::File::open(&Path::new(name))))
     ).collect();
@@ -79,18 +79,18 @@ fn paste(filenames: ~[~str], serial: bool, delimiters: ~str) {
             println!("{}", output);
         }
     } else {
-        let mut eof = std::vec::from_elem(files.len(), false);
+        let mut eof = Vec::from_elem(files.len(), false);
         loop {
             let mut output = ~"";
             let mut eof_count = 0;
             for (i, file) in files.mut_iter().enumerate() {
-                if eof[i] {
+                if *eof.get(i) {
                     eof_count += 1;
                 } else {
                     match file.read_line() {
                         Ok(line) => output = output + line.slice_to(line.len() - 1),
                         Err(f) => if f.kind == io::EndOfFile {
-                            eof[i] = true;
+                            *eof.get_mut(i) = true;
                             eof_count += 1;
                         } else {
                             crash!(1, "{}", f.to_str());
