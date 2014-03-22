@@ -62,7 +62,7 @@ specified by the sum of their values.", opts));
     }
 }
 
-fn sleep(args: &[~str]) {
+fn sleep(args: Vec<~str>) {
     let sleep_time = args.iter().fold(0.0, |result, arg| {
         let suffix_time = match match_suffix(unsafe { cast::transmute(arg) }) {
             Ok(m) => m,

@@ -63,7 +63,7 @@ fn main() {
         return;
     }
     let first = if matches.free.len() > 1 {
-        match parse_float(matches.free[0]) {
+        match parse_float(matches.free.get(0).as_slice()) {
             Ok(n) => n,
             Err(s) => { show_error!(1, "{:s}", s); return; }
         }
@@ -71,14 +71,14 @@ fn main() {
         1.0
     };
     let step = if matches.free.len() > 2 {
-        match parse_float(matches.free[1]) {
+        match parse_float(matches.free.get(1).as_slice()) {
             Ok(n) => n,
             Err(s) => { show_error!(1, "{:s}", s); return; }
         }
     } else {
         1.0
     };
-    let last = match parse_float(matches.free[matches.free.len()-1]) {
+    let last = match parse_float(matches.free.get(matches.free.len()-1).as_slice()) {
         Ok(n) => n,
         Err(s) => { show_error!(1, "{:s}", s); return; }
     };

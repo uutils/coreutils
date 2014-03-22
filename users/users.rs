@@ -77,7 +77,7 @@ fn main() {
 
     let mut filename = DEFAULT_FILE;
     if matches.free.len() > 0 {
-        filename = matches.free[0].as_slice();
+        filename = matches.free.get(0).as_slice();
     }
 
     exec(filename);
