@@ -63,7 +63,7 @@ fn main() {
     }
 }
 
-fn tac(filenames: ~[~str], before: bool, _: bool, separator: ~str) {
+fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
                            crash_if_err!(1, io::File::open(&Path::new(filename))));
