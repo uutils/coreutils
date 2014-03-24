@@ -1,0 +1,3 @@
+[submodule "md5sum/rust-crypto"]
+	path = md5sum/rust-crypto
+	url = git://github.com/DaGenix/rust-crypto.git
