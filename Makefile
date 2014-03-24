@@ -1,10 +1,4 @@
-# Binaries
-RUSTC       ?= rustc
-RM          := rm
-
-# Flags
-RUSTCFLAGS  := --opt-level=3
-RMFLAGS     :=
+include common.mk
 
 # Possible programs
 PROGS       := \
@@ -16,6 +10,7 @@ PROGS       := \
   env \
   du \
   false \
+  md5sum \
   mkdir \
   paste \
   printenv \
@@ -70,8 +65,16 @@ command     = sh -c '$(1)'
 
 # Main exe build rule
 define EXE_BUILD
+ifeq ($(wildcard $(1)/Makefile),)
 build/$(1): $(1)/$(1).rs
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -o build/$(1) $(1)/$(1).rs)
+clean_$(1):
+else
+build/$(1): $(1)/$(1).rs
+	cd $(1) && make
+clean_$(1):
+	cd $(1) && make clean
+endif
 endef
 
 # Test exe built rules
@@ -89,7 +92,7 @@ all: build $(EXES_PATHS)
 test: tmp $(addprefix test_,$(TESTS))
 	$(RM) -rf tmp
 
-clean:
+clean: $(addprefix clean_,$(EXES))
 	$(RM) -rf build tmp
 
 build:
