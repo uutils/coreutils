@@ -19,6 +19,14 @@ macro_rules! show_error(
 )
 
 #[macro_export]
+macro_rules! show_warning(
+    ($($args:expr),+) => ({
+        safe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
+        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+    })
+)
+
+#[macro_export]
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
         show_error!($exitcode, $($args),+);
