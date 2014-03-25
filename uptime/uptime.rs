@@ -72,8 +72,10 @@ fn main() {
     }
 
     print_time();
-    print_uptime();
-    print_nusers();
+    let (boot_time, user_count) = process_utmpx();
+    let upsecs = get_uptime(boot_time) / 100;
+    print_uptime(upsecs);
+    print_nusers(user_count);
     print_loadavg();
 }
 
@@ -93,7 +95,7 @@ fn print_loadavg() {
     }
 }
 
-fn print_nusers() {
+fn process_utmpx() -> (Option<time_t>, uint) {
     DEFAULT_FILE.with_c_str(|filename| {
         unsafe {
             utmpxname(filename);
@@ -101,6 +103,7 @@ fn print_nusers() {
     });
 
     let mut nusers = 0;
+    let mut boot_time = None;
 
     unsafe {
         setutxent();
@@ -112,14 +115,25 @@ fn print_nusers() {
                 break;
             }
 
-            if (*line).ut_type == USER_PROCESS {
-                nusers += 1;
+            match (*line).ut_type {
+                USER_PROCESS => nusers += 1,
+                BOOT_TIME => {
+                    let t = (*line).ut_tv;
+                    if t.tv_sec > 0 {
+                        boot_time = Some(t.tv_sec);
+                    }
+                },
+                _ => continue
             }
         }
 
         endutxent();
     }
 
+    (boot_time, nusers)
+}
+
+fn print_nusers(nusers: uint) {
     if nusers == 1 {
         print!("1 user, ");
     } else if nusers > 1 {
@@ -137,13 +151,19 @@ fn print_time() {
     }
 }
 
-fn get_uptime() -> int {
+fn get_uptime(boot_time: Option<time_t>) -> i64 {
     let proc_uptime = File::open(&Path::new("/proc/uptime"))
                             .read_to_str();
 
     let uptime_text = match proc_uptime {
         Ok(s) => s,
-        _ => return -1
+        _ => return match boot_time {
+                Some(t) => {
+                    let now = unsafe { time(null()) };
+                    (now - t) * 100 // Return in ms
+                },
+                _ => -1
+             }
     };
 
     match uptime_text.words().next() {
@@ -155,11 +175,10 @@ fn get_uptime() -> int {
     }
 }
 
-fn print_uptime() {
-    let uptime = get_uptime() / 100;
-    let updays = uptime / 86400;
-    let uphours = (uptime - (updays * 86400)) / 3600;
-    let upmins = (uptime - (updays * 86400) - (uphours * 3600)) / 60;
+fn print_uptime(upsecs: i64) {
+    let updays = upsecs / 86400;
+    let uphours = (upsecs - (updays * 86400)) / 3600;
+    let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 { 
         print!("up {:1d} day, {:2d}:{:02d},  ", updays, uphours, upmins);
     }
