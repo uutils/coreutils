@@ -127,8 +127,7 @@ fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut File, binary: bool) -> ~str {
         if binary {
             safe_unwrap!(file.read_to_end())
         } else {
-            let val = safe_unwrap!(file.read_to_str()).into_bytes();  // XXX: i don't know why the variable is necessary
-            val
+            (safe_unwrap!(file.read_to_str())).into_bytes()
         };
     md5.reset();
     md5.input(data);
