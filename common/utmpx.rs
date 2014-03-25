@@ -1,4 +1,5 @@
 #[allow(non_camel_case_types)];
+#[allow(dead_code)];
 
 pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,c_utmp};
 #[cfg(target_os = "linux")]
