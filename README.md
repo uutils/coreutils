@@ -153,7 +153,6 @@ To do
 - unexpand
 - uniq (in progress)
 - unlink
-- uptime
 - who
 
 License
