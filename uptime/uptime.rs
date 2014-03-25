@@ -87,7 +87,7 @@ fn print_loadavg() {
     else {
         print!("load average: ")
         for n in range(0, loads) {
-            print!("{}{}", avg[n], if n == loads - 1 { "\n" }
+            print!("{:.2f}{}", avg[n], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
     }
