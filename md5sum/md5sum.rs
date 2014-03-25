@@ -1,5 +1,14 @@
 #[crate_id(name = "md5sum", vers = "1.0.0", author = "Arcterus")];
 
+/*
+ * This file is part of the uutils coreutils package.
+ *
+ * (c) Arcterus <arcterus@mail.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 #[feature(macro_rules)];
 
 extern crate crypto = "rust-crypto";
