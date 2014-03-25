@@ -19,7 +19,7 @@ extern crate getopts;
 use std::os;
 use std::cast::transmute;
 use std::io::{print,File};
-use std::libc::{time_t,c_double,c_int,size_t,c_char};
+use std::libc::{time_t,c_double,c_int,c_char};
 use std::ptr::null;
 use std::from_str::from_str;
 use c_types::c_tm;
