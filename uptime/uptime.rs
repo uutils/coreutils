@@ -127,7 +127,6 @@ fn print_nusers() {
     }
 }
 
-
 fn print_time() {
     let local_time = unsafe { *localtime(&time(null())) };
 
@@ -139,16 +138,21 @@ fn print_time() {
 }
 
 fn get_uptime() -> int {
-    let uptime_text = File::open(&Path::new("/proc/uptime"))
-                            .read_to_str().unwrap();
+    let proc_uptime = File::open(&Path::new("/proc/uptime"))
+                            .read_to_str();
 
-    return match uptime_text.words().next() {
+    let uptime_text = match proc_uptime {
+        Ok(s) => s,
+        _ => return -1
+    };
+
+    match uptime_text.words().next() {
         Some(s) => match from_str(s.replace(".","")) {
                     Some(n) => n,
                     None => -1
                    },
         None => -1
-    };
+    }
 }
 
 fn print_uptime() {
@@ -156,7 +160,7 @@ fn print_uptime() {
     let updays = uptime / 86400;
     let uphours = (uptime - (updays * 86400)) / 3600;
     let upmins = (uptime - (updays * 86400) - (uphours * 3600)) / 60;
-    if updays == 1 {
+    if updays == 1 { 
         print!("up {:1d} day, {:2d}:{:02d},  ", updays, uphours, upmins);
     }
     else if updays > 1 {
