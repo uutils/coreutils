@@ -92,7 +92,6 @@ To do
 - factor
 - find-mount-point
 - fmt
-- fold
 - getlimits
 - group-list
 - hostid
