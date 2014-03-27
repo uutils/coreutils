@@ -10,6 +10,7 @@ PROGS       := \
   env \
   du \
   false \
+  fold \
   md5sum \
   mkdir \
   paste \
