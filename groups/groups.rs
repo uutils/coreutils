@@ -1,4 +1,4 @@
-#[crate_id(name="groups", vers="1.0.0", author="Alan Andrade")];
+#![crate_id(name="groups", vers="1.0.0", author="Alan Andrade")]
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -8,7 +8,7 @@
  * file that was distributed with this source code.
  *
  */
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 

@@ -1,4 +1,4 @@
-#[crate_id(name="id", version="1.0.0", author="Alan Andrade")];
+#![crate_id(name="id", version="1.0.0", author="Alan Andrade")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,8 +13,8 @@
  *  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
  */
 
-#[allow(non_camel_case_types)];
-#[feature(macro_rules)];
+#![allow(non_camel_case_types)]
+#![feature(macro_rules)]
 extern crate getopts;
 
 use std::{libc, os};

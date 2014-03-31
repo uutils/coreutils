@@ -1,4 +1,4 @@
-#[crate_id(name="logname", version="1.0.0", author="Benoit Benedetti")];
+#![crate_id(name="logname", version="1.0.0", author="Benoit Benedetti")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,9 +11,9 @@
 
 /* last synced with: logname (GNU coreutils) 8.22 */
 
-#[allow(non_camel_case_types)];
+#![allow(non_camel_case_types)]
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
