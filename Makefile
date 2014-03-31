@@ -97,6 +97,7 @@ clean: $(addprefix clean_,$(EXES))
 	$(RM) -rf build tmp
 
 build:
+	git submodule update --init
 	mkdir build
 
 tmp:

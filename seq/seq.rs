@@ -1,6 +1,6 @@
-#[crate_id(name="seq", vers="1.0.0", author="Daniel MacDougall")];
+#![crate_id(name="seq", vers="1.0.0", author="Daniel MacDougall")]
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag

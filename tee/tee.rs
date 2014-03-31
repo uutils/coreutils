@@ -1,7 +1,7 @@
-#[crate_id(name="tee", vers="1.0.0", author="Aleksander Bielawski")];
-#[license="MIT"];
-#[feature(phase)];
-#[feature(macro_rules)];
+#![crate_id(name="tee", vers="1.0.0", author="Aleksander Bielawski")]
+#![license="MIT"]
+#![feature(phase)]
+#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.

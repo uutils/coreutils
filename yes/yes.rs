@@ -1,4 +1,4 @@
-#[crate_id(name="yes", vers="1.0.0", author="Seldaek")];
+#![crate_id(name="yes", vers="1.0.0", author="Seldaek")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,7 +11,7 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
