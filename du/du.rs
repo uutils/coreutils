@@ -1,4 +1,4 @@
-#[crate_id(name="du", vers="1.0.0", author="Derek Chiang")];
+#![crate_id(name="du", vers="1.0.0", author="Derek Chiang")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,8 +9,8 @@
  * file that was distributed with this source code.
  */
 
-#[allow(uppercase_variables)];
-#[feature(macro_rules)];
+#![allow(uppercase_variables)]
+#![feature(macro_rules)]
 
 extern crate getopts;
 extern crate sync;
@@ -47,8 +47,8 @@ fn du(path: &Path, mut my_stat: FileStat,
         let read = match fs::readdir(path) {
             Ok(read) => read,
             Err(e) => {
-                writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
-                         options.program_name, path.display(), e);
+                safe_writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
+                              options.program_name, path.display(), e);
                 return ~[Arc::new(my_stat)]
             }
         };

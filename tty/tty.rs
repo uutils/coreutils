@@ -1,4 +1,4 @@
-#[crate_id(name="tty", version="1.0.0", author="Alan Andrade")];
+#![crate_id(name="tty", version="1.0.0", author="Alan Andrade")]
 
 
 /*
@@ -12,9 +12,9 @@
  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
  */
 
-#[allow(dead_code)];
+#![allow(dead_code)]
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 

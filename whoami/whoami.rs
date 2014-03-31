@@ -1,4 +1,4 @@
-#[crate_id(name="whoami", version="1.0.0", author="KokaKiwi")];
+#![crate_id(name="whoami", version="1.0.0", author="KokaKiwi")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,9 +11,9 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-#[allow(non_camel_case_types)];
+#![allow(non_camel_case_types)]
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 

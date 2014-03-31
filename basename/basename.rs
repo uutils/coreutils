@@ -1,5 +1,5 @@
-#[feature(macro_rules)];
-#[crate_id(name="basename", vers="1.0.0", author="Jimmy Lu")];
+#![feature(macro_rules)]
+#![crate_id(name="basename", vers="1.0.0", author="Jimmy Lu")]
 
 /*
  * This file is part of the uutils coreutils package.

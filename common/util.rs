@@ -7,7 +7,7 @@
  * file that was distributed with this source code.
  */
 
-#[macro_escape];
+#![macro_escape]
 
 #[macro_export]
 macro_rules! show_error(

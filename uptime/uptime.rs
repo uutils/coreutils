@@ -1,4 +1,4 @@
-#[crate_id(name="uptime", vers="1.0.0", author="José Neder")];
+#![crate_id(name="uptime", vers="1.0.0", author="José Neder")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,8 +11,8 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-#[allow(non_camel_case_types)];
-#[feature(macro_rules, globs)];
+#![allow(non_camel_case_types)]
+#![feature(macro_rules, globs)]
 
 extern crate getopts;
 
