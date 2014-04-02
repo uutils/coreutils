@@ -148,7 +148,6 @@ To do
 - tsort
 - uname-arch
 - uname-uname
-- uname
 - unexpand
 - uniq (in progress)
 - unlink

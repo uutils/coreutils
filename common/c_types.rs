@@ -28,6 +28,25 @@ pub struct c_passwd {
     pw_expire:  time_t
 }
 
+#[cfg(target_os = "macos")]
+pub struct utsname {
+    pub sysname: [c_char, ..256],
+    pub nodename: [c_char, ..256],
+    pub release: [c_char, ..256],
+    pub version: [c_char, ..256],
+    pub machine: [c_char, ..256]
+}
+
+#[cfg(target_os = "linux")]
+pub struct utsname {
+    pub sysname: [c_char, ..65],
+    pub nodename: [c_char, ..65],
+    pub release: [c_char, ..65],
+    pub version: [c_char, ..65],
+    pub machine: [c_char, ..65],
+    pub domainame: [c_char, ..65]
+}
+
 pub struct c_group {
     gr_name: *c_char /* group name */
 }
