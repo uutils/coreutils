@@ -24,17 +24,12 @@
 extern crate getopts;
 extern crate collections;
 extern crate serialize;
+
 #[phase(syntax, link)] extern crate log;
 
 use std::os;
-use std::io;
-use std::cast;
-use std::hash::Hash;
-use std::io::fs;
-use std::fmt::format_unsafe;
-use collections::HashMap;
-use collections::enum_set::{EnumSet, CLike};
-
+use std::from_str::from_str;
+use std::io::process::Process;
 
 use getopts::{
     getopts,
@@ -43,6 +38,15 @@ use getopts::{
 	  optflagopt,
     usage,
 };
+
+
+static PROGNAME :&'static str = "kill";
+static VERSION  :&'static str = "0.0.1";
+
+static EXIT_OK  :i32 = 0;
+static EXIT_ERR :i32 = 1;
+
+
 
 #[deriving(Eq)]
 pub enum Mode {
@@ -53,7 +57,12 @@ pub enum Mode {
     Version,
 }
 
+static DEFAULT_SIGNAL:uint = 15;
+
+
 struct Signal<'a> { name:&'a str, value: uint}
+
+
 
 #[cfg(target_os = "linux")]
 static all_signals:[Signal<'static>, ..31] = [
@@ -91,8 +100,81 @@ static all_signals:[Signal<'static>, ..31] = [
 ];
 
 
+/*
 
-static PROGNAME :&'static str = "kill"; //args[0].clone();
+
+https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man3/signal.3.html
+
+
+No    Name         Default Action       Description
+1     SIGHUP       terminate process    terminal line hangup
+2     SIGINT       terminate process    interrupt program
+3     SIGQUIT      create core image    quit program
+4     SIGILL       create core image    illegal instruction
+5     SIGTRAP      create core image    trace trap
+6     SIGABRT      create core image    abort program (formerly SIGIOT)
+7     SIGEMT       create core image    emulate instruction executed
+8     SIGFPE       create core image    floating-point exception
+9     SIGKILL      terminate process    kill program
+10    SIGBUS       create core image    bus error
+11    SIGSEGV      create core image    segmentation violation
+12    SIGSYS       create core image    non-existent system call invoked
+13    SIGPIPE      terminate process    write on a pipe with no reader
+14    SIGALRM      terminate process    real-time timer expired
+15    SIGTERM      terminate process    software termination signal
+16    SIGURG       discard signal       urgent condition present on socket
+17    SIGSTOP      stop process         stop (cannot be caught or ignored)
+18    SIGTSTP      stop process         stop signal generated from keyboard
+19    SIGCONT      discard signal       continue after stop
+20    SIGCHLD      discard signal       child status has changed
+21    SIGTTIN      stop process         background read attempted from control terminal
+22    SIGTTOU      stop process         background write attempted to control terminal
+23    SIGIO        discard signal       I/O is possible on a descriptor (see fcntl(2))
+24    SIGXCPU      terminate process    cpu time limit exceeded (see setrlimit(2))
+25    SIGXFSZ      terminate process    file size limit exceeded (see setrlimit(2))
+26    SIGVTALRM    terminate process    virtual time alarm (see setitimer(2))
+27    SIGPROF      terminate process    profiling timer alarm (see setitimer(2))
+28    SIGWINCH     discard signal       Window size change
+29    SIGINFO      discard signal       status request from keyboard
+30    SIGUSR1      terminate process    User defined signal 1
+31    SIGUSR2      terminate process    User defined signal 2
+
+*/
+
+#[cfg(target_os = "macos")]
+static all_signals:[Signal<'static>, ..31] = [
+	  Signal{ name: "HUP",    value:1  },
+	  Signal{ name: "INT",    value:2  },
+	  Signal{ name: "QUIT",   value:3  },
+	  Signal{ name: "ILL",    value:4  },
+	  Signal{ name: "TRAP",   value:5  },
+	  Signal{ name: "ABRT",   value:6  },
+	  Signal{ name: "EMT",    value:7  },
+	  Signal{ name: "FPE",    value:8  },
+	  Signal{ name: "KILL",   value:9  },
+	  Signal{ name: "BUS",    value:10 },
+	  Signal{ name: "SEGV",   value:11 },
+	  Signal{ name: "SYS",    value:12 },
+	  Signal{ name: "PIPE",   value:13 },
+	  Signal{ name: "ALRM",   value:14 },
+	  Signal{ name: "TERM",   value:15 },
+	  Signal{ name: "URG",    value:16 },
+	  Signal{ name: "STOP",   value:17 },
+	  Signal{ name: "TSTP",   value:18 },
+	  Signal{ name: "CONT",   value:19 },
+	  Signal{ name: "CHLD",   value:20 },
+	  Signal{ name: "TTIN",   value:21 },
+	  Signal{ name: "TTOU",   value:22 },
+	  Signal{ name: "IO",    value:23 },
+	  Signal{ name: "XCPU",   value:24 },
+	  Signal{ name: "XFSZ",   value:25 },
+	  Signal{ name: "VTALRM", value:26 },
+	  Signal{ name: "PROF",   value:27 },
+	  Signal{ name: "WINCH",  value:28 },
+	  Signal{ name: "INFO",   value:29 },
+	  Signal{ name: "USR1",    value:30 },
+	  Signal{ name: "USR2",    value:31 },
+];
 
 //global exit with status
 fn sys_exit(status:std::libc::c_int){
@@ -117,17 +199,13 @@ fn main() {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            error!("kill: {:s}", e.to_err_msg());
+            error!("{}: {:s}", PROGNAME, e.to_err_msg());
 						help(PROGNAME, usage);
 						std::os::set_exit_status(1);
 						return;
         },
     };
 
-
-    for (s in matches.free.iter()) {
-			println!("{}". s);
-		}
 
     let mode = if matches.opt_present("version") {
         Version
@@ -142,7 +220,7 @@ fn main() {
     };
 
     match mode {
-        Kill    => kill(matches),
+        Kill    => kill(matches.opt_str("signal").unwrap_or(~"9"), matches.free),
         Table   => table(),
         List    => list(matches.opt_str("list")),
         Help    => help(PROGNAME, usage),
@@ -151,7 +229,7 @@ fn main() {
 }
 
 fn version() {
-    println!("kill 1.0.0");
+    println!("{} {}", PROGNAME, VERSION);
 }
 
 fn table() {
@@ -159,14 +237,14 @@ fn table() {
     /* Compute the maximum width of a signal number. */
     let mut signum = 1;
     let mut num_width = 1;
-    while (signum <= all_signals.len() / 10){
+    while signum <= all_signals.len() / 10 {
         num_width += 1;
         signum *= 10;
     }
     let mut name_width = 0;
     /* Compute the maximum width of a signal name. */
     for s in all_signals.iter() {
-        if (s.name.len() > name_width) {
+        if s.name.len() > name_width {
             name_width = s.name.len()
         }
     }
@@ -185,7 +263,7 @@ fn table() {
 				//}
 				//print!(f, idx+1, signame);
 				
-        if ((idx+1) % 7 == 0) {
+        if (idx+1) % 7 == 0 {
             println!("");
         }
 
@@ -195,20 +273,16 @@ fn table() {
 
 fn print_signal(signal_name_or_value: ~str) {
 	  for signal in all_signals.iter() {
-			  if(signal.name == signal_name_or_value) {
+			  if signal.name == signal_name_or_value  || ("SIG" + signal.name) == signal_name_or_value {
 					  println!("{}", signal.value)
-						sys_exit(0);
-				} else if (signal_name_or_value == signal.value.to_str()) {
+						sys_exit(EXIT_OK);
+				} else if signal_name_or_value == signal.value.to_str() {
 					  println!("{}", signal.name);
-						sys_exit(0);
+						sys_exit(EXIT_OK);
 				}
 		}
 		println!("{}: unknown signal name {}", PROGNAME, signal_name_or_value)
-		sys_exit(1);
-	  //let optnum:Option<int> = from_str(signal);
-		//if optnum.is_some() {
-		//	  let num = optnum.unwrap();
-		//}
+		sys_exit(EXIT_ERR);
 }
 
 fn print_signals() {
@@ -216,7 +290,7 @@ fn print_signals() {
     for (idx, signal) in all_signals.iter().enumerate() {
 			  pos += signal.name.len();
 			  print!("{}", signal.name);
-		    if (idx > 0 && pos > 73) {
+		    if idx > 0 && pos > 73 {
 							  println!("");
 							  pos = 0;
 				} else {
@@ -239,109 +313,40 @@ fn help(progname: &str, usage: &str) {
     println!("{}", msg);
 }
 
-
-fn kill(matches: getopts::Matches) {
+fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
+    for signal in all_signals.iter() {
+			  let long_name = "SIG" + signal.name;
+			  if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_str()) || (long_name == signal_name_or_value) {
+					  return Some(signal.value);
+				}
+		}
+		return None;
 }
 
+fn kill(signalname: ~str, pids: ~[~str]) {
+		let optional_signal_value = signal_by_name_or_value(signalname.clone());
+		let mut signal_value:uint = DEFAULT_SIGNAL;
+		match optional_signal_value {
+		    Some(x) => signal_value = x,
+			  None => {
+ 	          println!("{}: unknown signal name {}", PROGNAME, signalname);
+		    }
+		}
+    for pid in pids.iter() {
+			  match from_str::<i32>(*pid) {
+					  Some(x) => {
 
-fn copy(matches: getopts::Matches) {
-    let sources = if matches.free.len() < 1 {
-        error!("error: Missing SOURCE argument. Try --help.");
-        fail!()
-    } else {
-        // All but the last argument:
-        matches.free.slice(0, matches.free.len() - 2)
-            .map(|arg| ~Path::new(arg.clone()))
-    };
-    let dest = if matches.free.len() < 2 {
-        error!("error: Missing DEST argument. Try --help.");
-        fail!()
-    } else {
-        // Only the last argument:
-        ~Path::new(matches.free[matches.free.len() - 1].clone())
-    };
-
-    assert!(sources.len() >= 1);
-
-    if sources.len() == 1 {
-        let source = sources[0].clone();
-        let same_file = match paths_refer_to_same_file(source, dest) {
-            Ok(b)  => b,
-            Err(e) => if e.kind == io::FileNotFound {
-                false
-            } else {
-                error!("error: {:s}", e.to_str());
-                fail!()
-            }
-        };
-
-        if same_file {
-            error!("error: \"{:s}\" and \"{:s}\" are the same file",
-                source.display().to_str(),
-                dest.display().to_str());
-            fail!();
-        }
-
-        let io_result = fs::copy(source, dest);
-
-        if io_result.is_err() {
-            let err = io_result.unwrap_err();
-            error!("error: {:s}", err.to_str());
-            fail!();
-        }
-    } else {
-        if fs::stat(dest).unwrap().kind != io::TypeDirectory {
-            error!("error: TARGET must be a directory");
-            fail!();
-        }
-
-        for source in sources.iter() {
-            if fs::stat(*source).unwrap().kind != io::TypeFile {
-                error!("error: \"{:s}\" is not a file", source.display().to_str());
-                continue;
-            }
-
-            let mut full_dest = dest.clone();
-
-            full_dest.push(source.filename_str().unwrap());
-
-            println!("{:s}", full_dest.display().to_str());
-
-            let io_result = fs::copy(*source, full_dest);
-
-            if io_result.is_err() {
-                let err = io_result.unwrap_err();
-                error!("error: {:s}", err.to_str());
-                fail!()
-            }
-        }
-    }
-}
-
-pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::IoResult<bool> {
-    let mut raw_p1 = ~p1.clone();
-    let mut raw_p2 = ~p2.clone();
-
-    let p1_lstat = match fs::lstat(raw_p1) {
-        Ok(stat) => stat,
-        Err(e)   => return Err(e),
-    };
-
-    let p2_lstat = match fs::lstat(raw_p2) {
-        Ok(stat) => stat,
-        Err(e)   => return Err(e),
-    };
-
-    // We have to take symlinks and relative paths into account.
-    if p1_lstat.kind == io::TypeSymlink {
-        raw_p1 = ~fs::readlink(raw_p1).unwrap();
-    }
-    raw_p1 = ~os::make_absolute(raw_p1);
-
-    if p2_lstat.kind == io::TypeSymlink {
-        raw_p2 = ~fs::readlink(raw_p2).unwrap();
-    }
-    raw_p2 = ~os::make_absolute(raw_p2);
-
-    Ok(raw_p1 == raw_p2)
+							  let result = Process::kill(x, signal_value as int);
+								match result {
+									Ok(t) => (),
+									Err(e) => ()
+								
+								};
+						},
+					  None => {
+							  println!("{}: failed to parse argument {}", PROGNAME, signalname);
+								sys_exit(EXIT_ERR);
+						},
+				};
+		}
 }
