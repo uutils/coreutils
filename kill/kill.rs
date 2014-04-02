@@ -1,6 +1,6 @@
-#[crate_id(name="kill", vers="0.0.1", author="Maciej Dziardziel")];
-#[feature(macro_rules)];
-#[feature(phase)];
+#![crate_id(name="kill", vers="0.0.1", author="Maciej Dziardziel")]
+#![feature(macro_rules)]
+#![feature(phase)]
 
 /*
  * This file is part of the uutils coreutils package.
