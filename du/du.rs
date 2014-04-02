@@ -1,4 +1,4 @@
-#[crate_id(name="du", vers="1.0.0", author="Derek Chiang")];
+#![crate_id(name="du", vers="1.0.0", author="Derek Chiang")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,8 +9,8 @@
  * file that was distributed with this source code.
  */
 
-#[allow(uppercase_variables)];
-#[feature(macro_rules)];
+#![allow(uppercase_variables)]
+#![feature(macro_rules)]
 
 extern crate getopts;
 extern crate sync;
@@ -39,17 +39,16 @@ struct Options {
 
 // this takes `my_stat` to avoid having to stat files multiple times.
 fn du(path: &Path, mut my_stat: FileStat,
-      options_arc: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
+      options: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
     let mut stats = ~[];
     let mut futures = ~[];
-    let options = options_arc.get();
 
     if my_stat.kind == TypeDirectory {
         let read = match fs::readdir(path) {
             Ok(read) => read,
             Err(e) => {
-                writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
-                         options.program_name, path.display(), e);
+                safe_writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
+                              options.program_name, path.display(), e);
                 return ~[Arc::new(my_stat)]
             }
         };
@@ -57,7 +56,7 @@ fn du(path: &Path, mut my_stat: FileStat,
         for f in read.move_iter() {
             let this_stat = safe_unwrap!(fs::lstat(&f));
             if this_stat.kind == TypeDirectory {
-                let oa_clone = options_arc.clone();
+                let oa_clone = options.clone();
                 futures.push(Future::spawn(proc() { du(&f, this_stat, oa_clone, depth + 1) }))
             } else {
                 my_stat.size += this_stat.size;
@@ -70,14 +69,13 @@ fn du(path: &Path, mut my_stat: FileStat,
     }
 
     for future in futures.mut_iter() {
-        for stat_arc in future.get().move_rev_iter() {
-            let stat = stat_arc.get();
+        for stat in future.get().move_rev_iter() {
             if !options.separate_dirs && stat.path.dir_path() == my_stat.path {
                 my_stat.size += stat.size;
                 my_stat.unstable.blocks += stat.unstable.blocks;
             }
             if options.max_depth == None || depth < options.max_depth.unwrap() {
-                stats.push(stat_arc.clone());
+                stats.push(stat.clone());
             }
         }
     }
@@ -213,7 +211,7 @@ ers of 1000).",
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {~[~"./"]} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {vec!(~"./")} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 
@@ -315,8 +313,7 @@ Try '{program} --help' for more information.", s, program = program);
         let iter = du(&path, stat, options_arc.clone(), 0).move_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
-        for (index, stat_arc) in iter.enumerate() {
-            let stat = stat_arc.get();
+        for (index, stat) in iter.enumerate() {
             let size = match matches.opt_present("apparent-size") {
                 true => stat.unstable.nlink * stat.size,
                 // C's stat is such that each block is assume to be 512 bytes
@@ -351,7 +348,7 @@ Try '{program} --help' for more information.", s, program = program);
                 print!("{:<10} {}", convert_size(size), stat.path.display());
             }
             print!("{}", line_separator);
-            if options_arc.get().total && index == (len - 1) {
+            if options_arc.total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
                 grand_total += size;
@@ -359,7 +356,7 @@ Try '{program} --help' for more information.", s, program = program);
         }
     }
 
-    if options_arc.get().total {
+    if options_arc.total {
         print!("{:<10} total", convert_size(grand_total));
         print!("{}", line_separator);
     }

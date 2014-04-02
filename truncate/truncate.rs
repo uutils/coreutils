@@ -1,4 +1,4 @@
-#[crate_id(name="truncate", vers="1.0.0", author="Arcterus")];
+#![crate_id(name="truncate", vers="1.0.0", author="Arcterus")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -107,7 +107,7 @@ file based on its current size:
     }
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<~str>, size: Option<~str>, filenames: ~[~str]) {
+fn truncate(no_create: bool, _: bool, reference: Option<~str>, size: Option<~str>, filenames: Vec<~str>) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {
@@ -176,7 +176,7 @@ fn parse_size(size: ~str) -> (u64, TruncateMode) {
             }
         }
         slice
-    }.bytes().to_owned_vec();
+    }.to_owned().into_bytes();
     let mut number = match u64::parse_bytes(bytes, 10) {
         Some(num) => num,
         None => {

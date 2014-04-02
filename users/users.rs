@@ -1,4 +1,4 @@
-#[crate_id(name="users", vers="1.0.0", author="KokaKiwi")];
+#![crate_id(name="users", vers="1.0.0", author="KokaKiwi")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,9 +12,9 @@
 /* last synced with: whoami (GNU coreutils) 8.22 */
 
 // Allow dead code here in order to keep all fields, constants here, for consistency.
-#[allow(dead_code, non_camel_case_types)];
+#![allow(dead_code, non_camel_case_types)]
 
-#[feature(macro_rules, globs)];
+#![feature(macro_rules, globs)]
 
 extern crate getopts;
 
@@ -77,7 +77,7 @@ fn main() {
 
     let mut filename = DEFAULT_FILE;
     if matches.free.len() > 0 {
-        filename = matches.free[0].as_slice();
+        filename = matches.free.get(0).as_slice();
     }
 
     exec(filename);

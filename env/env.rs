@@ -1,4 +1,4 @@
-#[crate_id(name="env", vers="1.0.0", author="LeoTestard")];
+#![crate_id(name="env", vers="1.0.0", author="LeoTestard")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,7 +11,7 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-#[allow(non_camel_case_types)];
+#![allow(non_camel_case_types)]
 
 struct options {
     ignore_env: bool,

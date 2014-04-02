@@ -1,4 +1,4 @@
-#[crate_id(name="rm", vers="1.0.0", author="Arcterus")];
+#![crate_id(name="rm", vers="1.0.0", author="Arcterus")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -119,7 +119,7 @@ fn main() {
 }
 
 // TODO: implement one-file-system
-fn remove(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
+fn remove(files: Vec<~str>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
     for filename in files.iter() {
         let file = Path::new(filename.to_owned());
         if file.exists() {
@@ -131,7 +131,7 @@ fn remove(files: &[~str], force: bool, interactive: InteractiveMode, one_fs: boo
                             crash!(1, "{}", f.to_str());
                         }
                     };
-                    remove(walk_dir.map(|x| x.as_str().unwrap().to_owned()).to_owned_vec(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
+                    remove(walk_dir.map(|x| x.as_str().unwrap().to_owned()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
                     remove_dir(&file, *filename, interactive, verbose);
                 } else if dir && (*filename != ~"/" || !preserve_root) {
                     remove_dir(&file, *filename, interactive, verbose);

@@ -1,4 +1,4 @@
-#[crate_id(name="mkdir", vers="1.0.0", author="Nicholas Juszczak")];
+#![crate_id(name="mkdir", vers="1.0.0", author="Nicholas Juszczak")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -28,7 +28,7 @@ static VERSION: &'static str = "1.0.0";
  */
 fn main() {
     let args = os::args();
-    
+
     let opts = ~[
         // Linux-specific options, not implemented
         // getopts::optflag("Z", "context", "set SELinux secutiry context" +
@@ -91,8 +91,8 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: ~[~str], mk_parents: bool, mode: u32, verbose: bool) {
-    let mut parent_dirs: ~[~str] = ~[];
+fn exec(dirs: Vec<~str>, mk_parents: bool, mode: u32, verbose: bool) {
+    let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {
             let path = Path::new((*dir).clone());

@@ -1,6 +1,7 @@
-#[allow(non_camel_case_types)];
+#![allow(non_camel_case_types)]
+#![allow(dead_code)]
 
-pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,c_utmp};
+pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,BOOT_TIME,c_utmp};
 #[cfg(target_os = "linux")]
 mod utmpx {
     use std::libc;

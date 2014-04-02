@@ -1,4 +1,4 @@
-#[crate_id(name="rmdir", vers="1.0.0", author="Arcterus")];
+#![crate_id(name="rmdir", vers="1.0.0", author="Arcterus")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -60,7 +60,7 @@ fn main() {
     }
 }
 
-fn remove(dirs: &[~str], ignore: bool, parents: bool, verbose: bool) {
+fn remove(dirs: Vec<~str>, ignore: bool, parents: bool, verbose: bool) {
     for dir in dirs.iter() {
         let path = Path::new(dir.to_owned());
         if path.exists() {

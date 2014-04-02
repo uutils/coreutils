@@ -7,13 +7,21 @@
  * file that was distributed with this source code.
  */
 
-#[macro_escape];
+#![macro_escape]
 
 #[macro_export]
 macro_rules! show_error(
     ($exitcode:expr, $($args:expr),+) => ({
         ::std::os::set_exit_status($exitcode);
         safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+    })
+)
+
+#[macro_export]
+macro_rules! show_warning(
+    ($($args:expr),+) => ({
+        safe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
 )

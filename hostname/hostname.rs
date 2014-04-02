@@ -1,4 +1,4 @@
-#[crate_id(name="hostname", vers="1.0.0", author="Alan Andrade")];
+#![crate_id(name="hostname", vers="1.0.0", author="Alan Andrade")]
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -14,7 +14,7 @@
 
 extern crate getopts;
 
-use std::{os,libc,vec,str};
+use std::{os,libc,str};
 use getopts::{optflag, getopts, usage};
 
 extern {
@@ -78,7 +78,7 @@ fn help_menu(program: &str, options: &[getopts::OptGroup]) {
 
 fn xgethostname() -> ~str {
     let namelen = 256u;
-    let mut name = vec::from_elem(namelen, 0u8);
+    let mut name = Vec::from_elem(namelen, 0u8);
 
     let err = unsafe {
         gethostname (name.as_mut_ptr() as *libc::c_char,

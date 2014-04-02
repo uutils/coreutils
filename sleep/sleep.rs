@@ -1,4 +1,4 @@
-#[crate_id(name="sleep", vers="1.0.0", author="Arcterus")];
+#![crate_id(name="sleep", vers="1.0.0", author="Arcterus")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -62,7 +62,7 @@ specified by the sum of their values.", opts));
     }
 }
 
-fn sleep(args: &[~str]) {
+fn sleep(args: Vec<~str>) {
     let sleep_time = args.iter().fold(0.0, |result, arg| {
         let suffix_time = match match_suffix(unsafe { cast::transmute(arg) }) {
             Ok(m) => m,

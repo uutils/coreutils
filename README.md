@@ -92,7 +92,6 @@ To do
 - factor
 - find-mount-point
 - fmt
-- fold
 - getlimits
 - group-list
 - hostid
@@ -108,7 +107,6 @@ To do
 - ls-vdir
 - ls
 - make-prime-list
-- md5sum
 - mkfifo
 - mknod
 - mktemp
@@ -154,7 +152,6 @@ To do
 - unexpand
 - uniq (in progress)
 - unlink
-- uptime
 - who
 
 License

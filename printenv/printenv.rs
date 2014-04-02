@@ -1,4 +1,4 @@
-#[crate_id(name="printenv", vers="1.0.0", author="Seldaek")];
+#![crate_id(name="printenv", vers="1.0.0", author="Seldaek")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,7 +11,7 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -58,7 +58,7 @@ fn main() {
     exec(matches.free, separator);
 }
 
-pub fn exec(args: ~[~str], separator: &str) {
+pub fn exec(args: Vec<~str>, separator: &str) {
     if args.is_empty() {
         let vars = os::env();
         for (env_var, value) in vars.move_iter() {

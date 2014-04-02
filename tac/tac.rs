@@ -1,4 +1,4 @@
-#[crate_id(name = "tac", vers = "1.0.0", author = "Arcterus")];
+#![crate_id(name = "tac", vers = "1.0.0", author = "Arcterus")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#[feature(macro_rules)];
+#![feature(macro_rules)]
 
 extern crate getopts;
 
@@ -63,7 +63,7 @@ fn main() {
     }
 }
 
-fn tac(filenames: ~[~str], before: bool, _: bool, separator: ~str) {
+fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
                            crash_if_err!(1, io::File::open(&Path::new(filename))));

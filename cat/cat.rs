@@ -1,5 +1,5 @@
-#[crate_id(name="cat", vers="1.0.0", author="Seldaek")];
-#[feature(managed_boxes)];
+#![crate_id(name="cat", vers="1.0.0", author="Seldaek")]
+#![feature(managed_boxes)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +17,7 @@ extern crate getopts;
 use std::os;
 use std::io::{print, File};
 use std::io::stdio::{stdout_raw, stdin_raw};
-use std::io::{BufferedReader, BufferedWriter};
+use std::io::{BufferedWriter};
 
 fn main() {
     let args = os::args();
@@ -68,7 +68,7 @@ fn main() {
     let squeeze_blank = matches.opt_present("squeeze-blank");
     let mut files = matches.free;
     if files.is_empty() {
-        files = ~[~"-"];
+        files = vec!(~"-");
     }
 
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);
@@ -96,7 +96,7 @@ fn is_newline_char(byte: u8) -> bool {
     byte == LF
 }
 
-pub fn exec(files: ~[~str], number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
+pub fn exec(files: Vec<~str>, number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
         let mut counter: uint = 1;

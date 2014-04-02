@@ -1,4 +1,4 @@
-#[crate_id(name="base64", vers="1.0.0", author="Jordy Dickinson")];
+#![crate_id(name="base64", vers="1.0.0", author="Jordy Dickinson")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,8 +9,8 @@
  * that was distributed with this source code.
  */
 
-#[feature(phase)];
-#[feature(macro_rules)];
+#![feature(phase)]
+#![feature(macro_rules)]
 
 extern crate serialize;
 extern crate getopts;
@@ -76,10 +76,10 @@ fn main() {
         },
         None => 76
     };
-    let mut input = if matches.free.is_empty() || matches.free[0] == ~"-" {
+    let mut input = if matches.free.is_empty() || matches.free.get(0).as_slice() == "-" {
         ~stdin() as ~Reader
     } else {
-        let path = Path::new(matches.free[0]);
+        let path = Path::new(matches.free.get(0).clone());
         ~File::open(&path) as ~Reader
     };
 
@@ -100,10 +100,10 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
     to_decode = str::replace(to_decode, "\n", "");
 
     if ignore_garbage {
-        let standard_chars =
+        let standard_chars: ~[char] =
             bytes!("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             "abcdefghijklmnopqrstuvwxyz",
-            "0123456789+/").map(|b| char::from_u32(*b as u32).unwrap());
+            "0123456789+/").iter().map(|b| char::from_u32(*b as u32).unwrap()).collect();
 
         to_decode = to_decode
             .trim_chars(&|c| !standard_chars.contains(&c))

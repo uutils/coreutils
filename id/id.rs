@@ -1,4 +1,4 @@
-#[crate_id(name="id", version="1.0.0", author="Alan Andrade")];
+#![crate_id(name="id", version="1.0.0", author="Alan Andrade")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,11 +13,11 @@
  *  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
  */
 
-#[allow(non_camel_case_types)];
-#[feature(macro_rules)];
+#![allow(non_camel_case_types)]
+#![feature(macro_rules)]
 extern crate getopts;
 
-use std::{libc, os, vec};
+use std::{libc, os};
 use std::ptr::read;
 use std::libc::{
     c_char,
@@ -318,7 +318,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     }
 
     let mut ngroups;
-    let mut groups = vec::with_capacity(NGROUPS as uint);
+    let mut groups = Vec::with_capacity(NGROUPS as uint);
 
     if use_ggl && possible_pw.is_some() {
         ngroups = NGROUPS;
