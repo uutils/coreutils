@@ -80,20 +80,25 @@ fn main() {
     let mut output = ~"";
     if matches.opt_present("sysname") || matches.opt_present("all")
         || !matches.opts_present([~"nodename", ~"release", ~"version", ~"machine"]) {
-            output = output + uname.sysname + " ";
+            output.push_str(uname.sysname);
+            output.push_str(" ");
     }
 
     if matches.opt_present("nodename") || matches.opt_present("all") {
-        output = output + uname.nodename + " ";
+        output.push_str(uname.nodename);
+        output.push_str(" ");
     }
     if matches.opt_present("release") || matches.opt_present("all") {
-        output = output + uname.release + " ";
+        output.push_str(uname.release);
+        output.push_str(" ");
     }
     if matches.opt_present("version") || matches.opt_present("all") {
-        output = output + uname.version + " ";
+        output.push_str(uname.version);
+        output.push_str(" ");
     }
     if matches.opt_present("machine") || matches.opt_present("all") {
-        output = output + uname.machine + " ";
+        output.push_str(uname.machine);
+        output.push_str(" ");
     }
     println!("{}", output.trim_left())
 }
