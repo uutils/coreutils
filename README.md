@@ -94,7 +94,6 @@ To do
 - fmt
 - getlimits
 - group-list
-- hostid
 - install
 - join
 - lbracket
