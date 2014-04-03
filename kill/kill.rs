@@ -38,11 +38,11 @@ use signals::{
 #[path = "./signals.rs"] mod signals;
 
 
-static PROGNAME :&'static str = "kill";
-static VERSION  :&'static str = "0.0.1";
+static PROGNAME: &'static str = "kill";
+static VERSION:  &'static str = "0.0.1";
 
-static EXIT_OK  :i32 = 0;
-static EXIT_ERR :i32 = 1;
+static EXIT_OK:  i32 = 0;
+static EXIT_ERR: i32 = 1;
 
 
 
