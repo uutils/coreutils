@@ -74,8 +74,7 @@ fn main() {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            let msg = format!("{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage));
-            show_error!(EXIT_ERR, "{}", msg);
+            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage));
             return
         },
     };
