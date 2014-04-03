@@ -195,7 +195,7 @@ fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
     return None;
 }
 
-fn kill(signalname: ~str, pids: ~[~str]) {
+fn kill(signalname: ~str, pids: std::vec::Vec<~str>) {
     let optional_signal_value = signal_by_name_or_value(signalname.clone());
     let mut signal_value:uint = DEFAULT_SIGNAL;
     match optional_signal_value {
