@@ -10,7 +10,7 @@
 pub static DEFAULT_SIGNAL:uint = 15;
 
 
-pub struct Signal<'a> { name:&'a str, value: uint}
+pub struct Signal<'a> { pub name:&'a str, pub value: uint}
 
 /*
 
