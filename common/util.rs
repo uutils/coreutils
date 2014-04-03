@@ -12,7 +12,7 @@
 #[macro_export]
 macro_rules! show_error(
     ($exitcode:expr, $($args:expr),+) => ({
-        ::std::os::set_exit_status($exitcode);
+        ::std::os::set_exit_status($exitcode as int);
         safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
@@ -30,6 +30,14 @@ macro_rules! show_warning(
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
         show_error!($exitcode, $($args),+);
+        unsafe { ::std::libc::exit($exitcode as ::std::libc::types::os::arch::c95::c_int); }
+    })
+)
+
+
+#[macro_export]
+macro_rules! exit(
+    ($exitcode:expr) => ({
         unsafe { ::std::libc::exit($exitcode); }
     })
 )

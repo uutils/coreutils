@@ -37,8 +37,10 @@ use signals::{
 
 mod signals;
 
+#[path = "../common/util.rs"]
+mod util;
 
-static PROGNAME: &'static str = "kill";
+static NAME: &'static str = "kill";
 static VERSION:  &'static str = "0.0.1";
 
 static EXIT_OK:  i32 = 0;
@@ -52,12 +54,6 @@ pub enum Mode {
     List,
     Help,
     Version,
-}
-
-
-//global exit with status
-fn sys_exit(status:std::libc::c_int){
-    unsafe {std::libc::exit(status) }
 }
 
 
@@ -78,10 +74,9 @@ fn main() {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            error!("{}: {:s}", PROGNAME, e.to_err_msg());
-            help(PROGNAME, usage);
-            std::os::set_exit_status(1);
-            return;
+            error!("{}: {:s}", NAME, e.to_err_msg());
+            help(NAME, usage);
+            exit!(EXIT_ERR)
         },
     };
 
@@ -102,24 +97,17 @@ fn main() {
         Kill    => kill(matches.opt_str("signal").unwrap_or(~"9"), matches.free),
         Table   => table(),
         List    => list(matches.opt_str("list")),
-        Help    => help(PROGNAME, usage),
+        Help    => help(NAME, usage),
         Version => version(),
     }
 }
 
 fn version() {
-    println!("{} {}", PROGNAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 fn table() {
 
-    /* Compute the maximum width of a signal number. */
-    /*let mut signum = 1;
-    let mut num_width = 1;
-    while signum <= ALL_SIGNALS.len() / 10 {
-        num_width += 1;
-        signum *= 10;
-    }*/
     let mut name_width = 0;
     /* Compute the maximum width of a signal name. */
     for s in ALL_SIGNALS.iter() {
@@ -144,14 +132,15 @@ fn print_signal(signal_name_or_value: ~str) {
     for signal in ALL_SIGNALS.iter() {
         if signal.name == signal_name_or_value  || ("SIG" + signal.name) == signal_name_or_value {
             println!("{}", signal.value)
-            sys_exit(EXIT_OK);
+            exit!(EXIT_OK)
         } else if signal_name_or_value == signal.value.to_str() {
             println!("{}", signal.name);
-            sys_exit(EXIT_OK);
+            exit!(EXIT_OK)
         }
     }
-    println!("{}: unknown signal name {}", PROGNAME, signal_name_or_value)
-    sys_exit(EXIT_ERR);
+    crash!(EXIT_ERR, "unknown signal name {}", signal_name_or_value)
+
+
 }
 
 fn print_signals() {
@@ -201,8 +190,7 @@ fn kill(signalname: ~str, pids: std::vec::Vec<~str>) {
     match optional_signal_value {
         Some(x) => signal_value = x,
         None => {
-            println!("{}: unknown signal name {}", PROGNAME, signalname);
-            sys_exit(EXIT_ERR);
+            crash!(EXIT_ERR, "unknown signal name {}", signalname)
         }
     }
     for pid in pids.iter() {
@@ -216,8 +204,7 @@ fn kill(signalname: ~str, pids: std::vec::Vec<~str>) {
                 };
             },
             None => {
-                println!("{}: failed to parse argument {}", PROGNAME, signalname);
-                sys_exit(EXIT_ERR);
+                crash!(EXIT_ERR, "failed to parse argument {}", signalname)
             },
         };
     }
