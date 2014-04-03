@@ -97,7 +97,6 @@ To do
 - hostid
 - install
 - join
-- kill
 - lbracket
 - libstdbuf
 - link
