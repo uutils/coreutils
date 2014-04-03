@@ -30,7 +30,7 @@ PROGS       := \
   head \
 
 UNIX_PROGS := \
-	kill \
+  kill \
   logname \
   users \
   whoami \
