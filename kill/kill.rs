@@ -35,7 +35,7 @@ use signals::{
     DEFAULT_SIGNAL,
 };
 
-#[path = "./signals.rs"] mod signals;
+mod signals;
 
 
 static PROGNAME: &'static str = "kill";
