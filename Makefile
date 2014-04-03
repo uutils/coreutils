@@ -36,7 +36,8 @@ UNIX_PROGS := \
   tty \
   groups \
   id \
-  uptime
+  uptime \
+  uname
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
