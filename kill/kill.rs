@@ -74,9 +74,9 @@ fn main() {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            error!("{}: {:s}", NAME, e.to_err_msg());
-            help(NAME, usage);
-            exit!(EXIT_ERR)
+					  let msg = format!("{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage));
+						show_error!(EXIT_ERR, "{}", msg);
+						return
         },
     };
 
@@ -165,10 +165,13 @@ fn list(arg: Option<~str>) {
     };
 }
 
+fn get_help_text(progname: &str, usage: &str) -> ~str {
+    let msg = format!("Usage: \n {0} {1}", progname, usage);
+		msg
+}
 
 fn help(progname: &str, usage: &str) {
-    let msg = format!("Usage: \n {0} {1}", progname, usage);
-    println!("{}", msg);
+    println!("{}", get_help_text(progname, usage));
 }
 
 fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {

@@ -30,7 +30,7 @@ macro_rules! show_warning(
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
         show_error!($exitcode, $($args),+);
-        unsafe { ::std::libc::exit($exitcode as ::std::libc::types::os::arch::c95::c_int); }
+        unsafe { ::std::libc::exit($exitcode as ::std::libc::c_int); }
     })
 )
 
