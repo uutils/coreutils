@@ -30,6 +30,7 @@ PROGS       := \
   head \
 
 UNIX_PROGS := \
+  hostid \
   kill \
   logname \
   users \
