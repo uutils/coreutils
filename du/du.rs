@@ -13,6 +13,7 @@
 #![feature(macro_rules)]
 
 extern crate getopts;
+extern crate libc;
 extern crate sync;
 extern crate time;
 

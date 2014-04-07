@@ -13,6 +13,7 @@
 
 
 extern crate getopts;
+extern crate libc;
 extern crate collections;
 extern crate serialize;
 

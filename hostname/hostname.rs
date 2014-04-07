@@ -13,8 +13,9 @@
  */
 
 extern crate getopts;
+extern crate libc;
 
-use std::{os,libc,str};
+use std::{os,str};
 use getopts::{optflag, getopts, usage};
 
 extern {

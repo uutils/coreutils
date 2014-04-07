@@ -6,6 +6,7 @@
 // TODO: Support -f flag
 
 extern crate getopts;
+extern crate libc;
 
 use std::os;
 

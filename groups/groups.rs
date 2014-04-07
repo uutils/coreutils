@@ -11,6 +11,7 @@
 #![feature(macro_rules)]
 
 extern crate getopts;
+extern crate libc;
 
 use std::os;
 use getopts::{

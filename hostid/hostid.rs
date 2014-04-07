@@ -15,6 +15,7 @@
 extern crate getopts;
 extern crate collections;
 extern crate serialize;
+extern crate libc;
 
 
 #[phase(syntax, link)] extern crate log;
@@ -27,7 +28,7 @@ use getopts::{
     usage,
 };
 
-use std::libc::{c_long};
+use libc::{c_long};
 
 #[path = "../common/util.rs"]
 mod util;

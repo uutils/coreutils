@@ -1,5 +1,5 @@
 #![feature(macro_rules)]
-#![crate_id(name="echo", vers="1.0.0", author="Derek Chiang")]
+#[crate_id(name="echo", vers="1.0.0", author="Derek Chiang")]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,6 +11,7 @@
  */
 
 extern crate getopts;
+extern crate libc;
 
 use std::os;
 use std::io::{print, println};

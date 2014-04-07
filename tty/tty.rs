@@ -17,8 +17,9 @@
 #![feature(macro_rules)]
 
 extern crate getopts;
+extern crate libc;
 
-use std::{libc,str,os};
+use std::{str,os};
 use std::io::println;
 use std::io::stdio::stderr;
 use getopts::{optflag,getopts};
