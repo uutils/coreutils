@@ -4,7 +4,7 @@
 pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,BOOT_TIME,c_utmp};
 #[cfg(target_os = "linux")]
 mod utmpx {
-    use std::libc;
+    use libc;
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmp";
 
@@ -48,7 +48,7 @@ mod utmpx {
 
 #[cfg(target_os = "macos")]
 mod utmpx {
-    use std::libc;
+    use libc;
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmpx";
 

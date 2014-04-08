@@ -14,6 +14,7 @@
 
 extern crate serialize;
 extern crate getopts;
+extern crate libc;
 #[phase(syntax, link)] extern crate log;
 
 use std::char;

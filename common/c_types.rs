@@ -2,7 +2,7 @@
 
 extern crate getopts;
 
-use std::libc::{
+use libc::{
     c_char,
     c_int,
     uid_t,

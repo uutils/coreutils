@@ -12,6 +12,7 @@
 #![feature(macro_rules)]
 
 extern crate getopts;
+extern crate libc;
 
 use std::io::{File, Open, ReadWrite, fs};
 use std::os;

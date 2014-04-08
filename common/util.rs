@@ -30,7 +30,7 @@ macro_rules! show_warning(
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
         show_error!($exitcode, $($args),+);
-        unsafe { ::std::libc::exit($exitcode as ::std::libc::c_int); }
+        unsafe { ::libc::exit($exitcode as ::libc::c_int); }
     })
 )
 
@@ -38,7 +38,7 @@ macro_rules! crash(
 #[macro_export]
 macro_rules! exit(
     ($exitcode:expr) => ({
-        unsafe { ::std::libc::exit($exitcode); }
+        unsafe { ::libc::exit($exitcode); }
     })
 )
 

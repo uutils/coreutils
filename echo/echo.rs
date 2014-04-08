@@ -11,6 +11,7 @@
  */
 
 extern crate getopts;
+extern crate libc;
 
 use std::os;
 use std::io::{print, println};
