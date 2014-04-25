@@ -93,10 +93,10 @@ fn main() {
 }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = str::from_utf8_owned(match input.read_to_end() {
+    let mut to_decode = match input.read_to_str() {
         Ok(m) => m,
         Err(f) => fail!(f.to_str())
-    }).unwrap();
+    };
 
     to_decode = str::replace(to_decode, "\n", "");
 
@@ -107,7 +107,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
             "0123456789+/").iter().map(|b| char::from_u32(*b as u32).unwrap()).collect();
 
         to_decode = to_decode
-            .trim_chars(&|c| !standard_chars.contains(&c))
+            .trim_chars(|c| !standard_chars.contains(&c))
             .to_owned();
     }
 
@@ -144,7 +144,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
         Ok(m) => m,
         Err(f) => fail!(f.to_str())
     };
-    let mut encoded = to_encode.to_base64(b64_conf);
+    let mut encoded = to_encode.as_slice().to_base64(b64_conf);
 
     // To my knowledge, RFC 3548 does not specify which line endings to use. It
     // seems that rust's base64 algorithm uses CRLF as prescribed by RFC 2045.
