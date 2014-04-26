@@ -70,7 +70,11 @@ fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
                            crash_if_err!(1, io::File::open(&Path::new(filename))));
         let mut data = crash_if_err!(1, file.read_to_str());
         if data.ends_with("\n") {
-            data.pop_char();  // removes blank line that is inserted otherwise
+            // removes blank line that is inserted otherwise
+            let mut buf = data.into_strbuf();
+            let len = buf.len();
+            buf.truncate(len - 1);
+            data = buf.into_owned();
         }
         let split_vec: ~[&str] = data.split_str(separator).collect();
         let rev: ~str = split_vec.rev_iter().fold(~"", |a, &b|

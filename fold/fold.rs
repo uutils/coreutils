@@ -76,17 +76,16 @@ fn main() {
 }
 
 fn handle_obsolete(args: ~[~str]) -> (~[~str], Option<~str>) {
-    let mut args = args;
+    let mut args: Vec<~str> = args.move_iter().collect();
     let mut i = 0;
     while i < args.len() {
-        if args[i].char_at(0) == '-' && args[i].len() > 1 && args[i].char_at(1).is_digit() {
-            let mut removed = args.remove(i).unwrap();
-            removed.shift_char();
-            return (args, Some(removed));
+        if args.get(i).char_at(0) == '-' && args.get(i).len() > 1 && args.get(i).char_at(1).is_digit() {
+            return (args.as_slice().to_owned(),
+                    Some(args.remove(i).unwrap().slice_from(1).to_owned()));
         }
         i += 1;
     }
-    (args, None)
+    (args.as_slice().to_owned(), None)
 }
 
 fn fold(filenames: Vec<~str>, bytes: bool, spaces: bool, width: uint) {
@@ -103,12 +102,12 @@ fn fold(filenames: Vec<~str>, bytes: bool, spaces: bool, width: uint) {
 fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, width: uint) {
     let mut file = file;
     for line in file.lines() {
-        let mut line = safe_unwrap!(line);
+        let line = safe_unwrap!(line);
         if line.len() == 1 {
             println!("");
             continue;
         }
-        line.pop_char();
+        let line = line.slice_to(line.len() - 1);
         if bytes {
             let mut i = 0;
             while i < line.len() {
@@ -128,27 +127,28 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                 i += slice.len();
             }
         } else {
-            let mut output = ~"";
+            let mut output = StrBuf::new();
             let mut count = 0;
             for (i, ch) in line.chars().enumerate() {
                 match ch {
                     '\t' => {
                         count += 8;
                         if count > width {
-                            println!("{}", output);
-                            output = ~"";
+                            println!("{}", output.as_slice());
+                            output.truncate(0);
                             count = 8;
                         }
                     }
                     '\x08' => {
                         if count > 0 {
                             count -= 1;
-                            output.pop_char();
+                            let len = output.len() - 1;
+                            output.truncate(len);
                         }
                         continue;
                     }
                     '\r' => {
-                        output = ~"";
+                        output.truncate(0);
                         count = 0;
                         continue;
                     }
@@ -157,23 +157,24 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                 output.push_char(ch);
                 if count == width {
                     let (val, ncount) = {
+                        let slice = output.as_slice();
                         let (out, val, ncount) =
                             if spaces && i + 1 != line.len() {
-                                match output.rfind(|ch: char| ch.is_whitespace()) {
+                                match slice.rfind(|ch: char| ch.is_whitespace()) {
                                     Some(m) => {
-                                        let routput = output.slice_from(m + 1).to_owned();
+                                        let routput = slice.slice_from(m + 1).to_owned();
                                         let ncount = routput.chars().fold(0, |out, ch: char| out + if ch == '\t' { 8 } else { 1 });
-                                        (output.slice_to(m + 1), routput, ncount)
+                                        (slice.slice_to(m + 1), routput, ncount)
                                     },
-                                    None => (output.as_slice(), ~"", 0)
+                                    None => (slice, ~"", 0)
                                 }
                             } else {
-                                (output.as_slice(), ~"", 0)
+                                (slice, ~"", 0)
                             };
                         println!("{}", out);
                         (val, ncount)
                     };
-                    output = val;
+                    output = val.into_strbuf();
                     count = ncount;
                 }
             }

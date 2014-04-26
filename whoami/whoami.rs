@@ -16,11 +16,11 @@
 #![feature(macro_rules)]
 
 extern crate getopts;
+extern crate libc;
 
 use std::io::print;
 use std::os;
 use std::str;
-use std::libc;
 use c_types::{c_passwd, getpwuid};
 
 #[path = "../common/util.rs"] mod util;

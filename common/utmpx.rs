@@ -1,10 +1,12 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
+extern crate libc;
+
 pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,BOOT_TIME,c_utmp};
 #[cfg(target_os = "linux")]
 mod utmpx {
-    use libc;
+    use super::libc;
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmp";
 
@@ -25,30 +27,30 @@ mod utmpx {
     pub static ACCOUNTING: libc::c_short = 9;
 
     pub struct c_exit_status {
-        e_termination: libc::c_short,
-        e_exit: libc::c_short,
+        pub e_termination: libc::c_short,
+        pub e_exit: libc::c_short,
     }
 
     pub struct c_utmp {
-        ut_type: libc::c_short,
-        ut_pid: libc::pid_t,
-        ut_line: [libc::c_char, ..UT_LINESIZE],
-        ut_id: [libc::c_char, ..UT_IDSIZE],
+        pub ut_type: libc::c_short,
+        pub ut_pid: libc::pid_t,
+        pub ut_line: [libc::c_char, ..UT_LINESIZE],
+        pub ut_id: [libc::c_char, ..UT_IDSIZE],
 
-        ut_user: [libc::c_char, ..UT_NAMESIZE],
-        ut_host: [libc::c_char, ..UT_HOSTSIZE],
-        ut_exit: c_exit_status,
-        ut_session: libc::c_long,
-        ut_tv: libc::timeval,
+        pub ut_user: [libc::c_char, ..UT_NAMESIZE],
+        pub ut_host: [libc::c_char, ..UT_HOSTSIZE],
+        pub ut_exit: c_exit_status,
+        pub ut_session: libc::c_long,
+        pub ut_tv: libc::timeval,
 
-        ut_addr_v6: [libc::int32_t, ..4],
-        __unused: [libc::c_char, ..20],
+        pub ut_addr_v6: [libc::int32_t, ..4],
+        pub __unused: [libc::c_char, ..20],
     }
 }
 
 #[cfg(target_os = "macos")]
 mod utmpx {
-    use libc;
+    use super::libc;
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmpx";
 
@@ -69,19 +71,19 @@ mod utmpx {
     pub static ACCOUNTING: libc::c_short = 9;
 
     pub struct c_exit_status {
-        e_termination: libc::c_short,
-        e_exit: libc::c_short,
+        pub e_termination: libc::c_short,
+        pub e_exit: libc::c_short,
     }
 
     pub struct c_utmp {
-        ut_user: [libc::c_char, ..UT_NAMESIZE],
-        ut_id: [libc::c_char, ..UT_IDSIZE],
-        ut_line: [libc::c_char, ..UT_LINESIZE],
-        ut_pid: libc::pid_t,
-        ut_type: libc::c_short,
-        ut_tv: libc::timeval,
-        ut_host: [libc::c_char, ..UT_HOSTSIZE],
-        __unused: [libc::c_char, ..16]
+        pub ut_user: [libc::c_char, ..UT_NAMESIZE],
+        pub ut_id: [libc::c_char, ..UT_IDSIZE],
+        pub ut_line: [libc::c_char, ..UT_LINESIZE],
+        pub ut_pid: libc::pid_t,
+        pub ut_type: libc::c_short,
+        pub ut_tv: libc::timeval,
+        pub ut_host: [libc::c_char, ..UT_HOSTSIZE],
+        pub __unused: [libc::c_char, ..16]
     }
 }
 

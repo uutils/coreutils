@@ -16,9 +16,9 @@
 struct options {
     ignore_env: bool,
     null: bool,
-    unsets: ~[~str],
-    sets: ~[(~str, ~str)],
-    program: ~[~str]
+    unsets: Vec<~str>,
+    sets: Vec<(~str, ~str)>,
+    program: Vec<~str>
 }
 
 fn usage(prog: &str) {
@@ -59,9 +59,9 @@ fn main() {
     let mut opts = ~options {
         ignore_env: false,
         null: false,
-        unsets: ~[],
-        sets: ~[],
-        program: ~[]
+        unsets: vec!(),
+        sets: vec!(),
+        program: vec!()
     };
 
     let mut wait_cmd = false;
@@ -191,7 +191,7 @@ fn main() {
     }
 
     if opts.program.len() >= 1 {
-        match std::io::process::Process::status(opts.program[0].as_slice(), opts.program.slice_from(1)) {
+        match std::io::process::Process::status(opts.program.get(0).as_slice(), opts.program.slice_from(1)) {
             Ok(exit) =>
                 std::os::set_exit_status(match exit {
                     std::io::process::ExitStatus(s) => s,

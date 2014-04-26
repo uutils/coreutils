@@ -1,14 +1,14 @@
 #![allow(dead_code, non_camel_case_types)]
 
-extern crate getopts;
+extern crate libc;
 
-use libc::{
+use self::libc::{
     c_char,
     c_int,
     uid_t,
-    time_t,
-    getgroups
+    time_t
 };
+use self::libc::funcs::posix88::unistd::getgroups;
 
 use std::vec::Vec;
 
@@ -16,16 +16,16 @@ use std::ptr::read;
 use std::str::raw::from_c_str;
 
 pub struct c_passwd {
-    pw_name:    *c_char,    /* user name */
-    pw_passwd:  *c_char,    /* user name */
-    pw_uid:     c_int,      /* user uid */
-    pw_gid:     c_int,      /* user gid */
-    pw_change:  time_t,
-    pw_class:   *c_char,
-    pw_gecos:   *c_char,
-    pw_dir:     *c_char,
-    pw_shell:   *c_char,
-    pw_expire:  time_t
+    pub pw_name:    *c_char,    /* user name */
+    pub pw_passwd:  *c_char,    /* user name */
+    pub pw_uid:     c_int,      /* user uid */
+    pub pw_gid:     c_int,      /* user gid */
+    pub pw_change:  time_t,
+    pub pw_class:   *c_char,
+    pub pw_gecos:   *c_char,
+    pub pw_dir:     *c_char,
+    pub pw_shell:   *c_char,
+    pub pw_expire:  time_t
 }
 
 #[cfg(target_os = "macos")]
@@ -48,19 +48,19 @@ pub struct utsname {
 }
 
 pub struct c_group {
-    gr_name: *c_char /* group name */
+    pub gr_name: *c_char /* group name */
 }
 
 pub struct c_tm {
-    tm_sec: c_int,         /* seconds */
-    tm_min: c_int,         /* minutes */
-    tm_hour: c_int,        /* hours */
-    tm_mday: c_int,        /* day of the month */
-    tm_mon: c_int,         /* month */
-    tm_year: c_int,        /* year */
-    tm_wday: c_int,        /* day of the week */
-    tm_yday: c_int,        /* day in the year */
-    tm_isdst: c_int       /* daylight saving time */
+    pub tm_sec: c_int,         /* seconds */
+    pub tm_min: c_int,         /* minutes */
+    pub tm_hour: c_int,        /* hours */
+    pub tm_mday: c_int,        /* day of the month */
+    pub tm_mon: c_int,         /* month */
+    pub tm_year: c_int,        /* year */
+    pub tm_wday: c_int,        /* day of the week */
+    pub tm_yday: c_int,        /* day in the year */
+    pub tm_isdst: c_int       /* daylight saving time */
 }
 
 extern {
