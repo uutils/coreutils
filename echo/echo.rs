@@ -27,8 +27,8 @@ fn print_char(c: char) {
     print!("{}", c);
 }
 
-fn to_char(bytes: &[u8], base: uint) -> char {
-    uint::parse_bytes(bytes, base).unwrap() as u8 as char
+fn to_char(bytes: &Vec<u8>, base: uint) -> char {
+    uint::parse_bytes(bytes.as_slice(), base).unwrap() as u8 as char
 }
 
 fn isxdigit(c: u8) -> bool {
@@ -53,20 +53,20 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
         _ => fail!(),
     };
 
-    let mut bytes: ~[u8] = ~[];
+    let mut bytes = vec!();
     for offset in range(0, max_digits) {
         let c = string[index + offset as uint];
         if is_legal_digit(c) {
             bytes.push(c as u8);
         } else {
             if bytes.len() > 0 {
-                return (to_char(bytes, base), offset);
+                return (to_char(&bytes, base), offset);
             } else {
                 return (' ', offset);
             }
         }
     }
-    return (to_char(bytes, base), max_digits)
+    return (to_char(&bytes, base), max_digits)
 }
 
 fn main() {

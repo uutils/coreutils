@@ -57,7 +57,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
                            comment);
-        let names = std::vec::append_one(m.free.clone(), ~"-");
+        let names = m.free.clone().move_iter().collect::<Vec<~str>>().append_one(~"-").as_slice().to_owned();
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };

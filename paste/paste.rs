@@ -76,8 +76,7 @@ fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
                 };
                 delim_count += 1;
             }
-            output.pop_char();
-            println!("{}", output);
+            println!("{}", output.slice_to(output.len() - 1));
         }
     } else {
         let mut eof = Vec::from_elem(files.len(), false);
@@ -104,8 +103,7 @@ fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
             if files.len() == eof_count {
                 break;
             }
-            output.pop_char();
-            println!("{}", output);
+            println!("{}", output.slice_to(output.len() - 1));
             delim_count = 0;
         }
     }

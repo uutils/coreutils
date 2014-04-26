@@ -9,6 +9,8 @@
 
 #![macro_escape]
 
+extern crate libc;
+
 #[macro_export]
 macro_rules! show_error(
     ($exitcode:expr, $($args:expr),+) => ({
@@ -30,7 +32,7 @@ macro_rules! show_warning(
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
         show_error!($exitcode, $($args),+);
-        unsafe { ::libc::exit($exitcode as ::libc::c_int); }
+        unsafe { self::libc::exit($exitcode as self::libc::c_int); }
     })
 )
 
@@ -38,7 +40,7 @@ macro_rules! crash(
 #[macro_export]
 macro_rules! exit(
     ($exitcode:expr) => ({
-        unsafe { ::libc::exit($exitcode); }
+        unsafe { self::libc::exit($exitcode); }
     })
 )
 

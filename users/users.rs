@@ -17,10 +17,10 @@
 #![feature(macro_rules, globs)]
 
 extern crate getopts;
+extern crate libc;
 
 use std::io::print;
 use std::cast;
-use std::libc;
 use std::os;
 use std::ptr;
 use std::str;
@@ -90,7 +90,7 @@ fn exec(filename: &str) {
         }
     });
 
-    let mut users: ~[~str] = ~[];
+    let mut users = vec!();
 
     unsafe {
         setutxent();

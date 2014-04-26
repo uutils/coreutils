@@ -94,7 +94,7 @@ pub fn wc(files: Vec<~str>, matches: &Matches) {
     let mut total_byte_count: uint = 0;
     let mut total_longest_line_length: uint = 0;
 
-    let mut results: ~[Result] = ~[];
+    let mut results = vec!();
     let mut max_str_len: uint = 0;
 
     for path in files.iter() {
@@ -123,14 +123,14 @@ pub fn wc(files: Vec<~str>, matches: &Matches) {
                     byte_count += raw_line.iter().len();
 
                     // try and convert the bytes to UTF-8 first
-                    match from_utf8(raw_line) {
+                    match from_utf8(raw_line.as_slice()) {
                         Some(line) => {
                             word_count += line.words().len();
                             current_char_count = line.chars().len();
                             char_count += current_char_count;
                         },
                         None => {
-                            word_count += raw_line.split(|&x| is_word_seperator(x)).len();
+                            word_count += raw_line.as_slice().split(|&x| is_word_seperator(x)).len();
                             for byte in raw_line.iter() {
                                 match byte.is_ascii() {
                                     true => {

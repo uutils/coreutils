@@ -15,13 +15,14 @@
 #![feature(macro_rules, globs)]
 
 extern crate getopts;
+extern crate libc;
 
 use std::os;
 use std::cast::transmute;
-use std::io::{print,File};
-use std::libc::{time_t,c_double,c_int,c_char};
+use std::io::{print, File};
 use std::ptr::null;
 use std::from_str::from_str;
+use libc::{time_t, c_double, c_int, c_char};
 use c_types::c_tm;
 use utmpx::*;
 
@@ -89,7 +90,7 @@ fn print_loadavg() {
     else {
         print!("load average: ")
         for n in range(0, loads) {
-            print!("{:.2f}{}", avg[n], if n == loads - 1 { "\n" }
+            print!("{:.2f}{}", avg[n as uint], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
     }

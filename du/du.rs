@@ -40,9 +40,9 @@ struct Options {
 
 // this takes `my_stat` to avoid having to stat files multiple times.
 fn du(path: &Path, mut my_stat: FileStat,
-      options: Arc<Options>, depth: uint) -> ~[Arc<FileStat>] {
-    let mut stats = ~[];
-    let mut futures = ~[];
+      options: Arc<Options>, depth: uint) -> Vec<Arc<FileStat>> {
+    let mut stats = vec!();
+    let mut futures = vec!();
 
     if my_stat.kind == TypeDirectory {
         let read = match fs::readdir(path) {
@@ -50,7 +50,7 @@ fn du(path: &Path, mut my_stat: FileStat,
             Err(e) => {
                 safe_writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
                               options.program_name, path.display(), e);
-                return ~[Arc::new(my_stat)]
+                return vec!(Arc::new(my_stat))
             }
         };
 
@@ -70,7 +70,7 @@ fn du(path: &Path, mut my_stat: FileStat,
     }
 
     for future in futures.mut_iter() {
-        for stat in future.get().move_rev_iter() {
+        for stat in future.get().move_iter().rev() {
             if !options.separate_dirs && stat.path.dir_path() == my_stat.path {
                 my_stat.size += stat.size;
                 my_stat.unstable.blocks += stat.unstable.blocks;
@@ -229,8 +229,8 @@ ers of 1000).",
         Some(s) => {
             let mut found_number = false;
             let mut found_letter = false;
-            let mut numbers = ~[];
-            let mut letters = ~[];
+            let mut numbers = vec!();
+            let mut letters = vec!();
             for c in s.chars() {
                 if found_letter && c.is_digit() || !found_number && !c.is_digit() {
                     println!("{}: invalid --block-size argument '{}'", program, s);
@@ -243,8 +243,8 @@ ers of 1000).",
                     letters.push(c);
                 }
             }
-            let number = std::uint::parse_bytes(numbers, 10).unwrap();
-            let multiple = match std::str::from_chars(letters).as_slice() {
+            let number = std::uint::parse_bytes(numbers.as_slice(), 10).unwrap();
+            let multiple = match std::str::from_chars(letters.as_slice()).as_slice() {
                 "K" => 1024, "M" => 1024 * 1024, "G" => 1024 * 1024 * 1024,
                 "T" => 1024 * 1024 * 1024 * 1024, "P" => 1024 * 1024 * 1024 * 1024 * 1024,
                 "E" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,

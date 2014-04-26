@@ -16,18 +16,18 @@
 #![allow(non_camel_case_types)]
 #![feature(macro_rules)]
 extern crate getopts;
+extern crate libc;
 
-use std::{libc, os};
+use std::os;
 use std::ptr::read;
-use std::libc::{
+use libc::{
     c_char,
     c_int,
     uid_t,
     getgid,
-    getegid,
-    getuid,
-    getlogin
+    getuid
 };
+use libc::funcs::posix88::unistd::{getegid, geteuid, getgroups, getlogin};
 use std::str::raw::from_c_str;
 use getopts::{getopts, optflag, usage};
 use c_types::{
@@ -44,7 +44,7 @@ use c_types::{
 #[cfg(not(target_os = "linux"))]
 mod audit {
     pub use std::mem::uninit;
-    use std::libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
+    use libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
 
     pub type au_id_t    = uid_t;
     pub type au_asid_t  = pid_t;
@@ -53,22 +53,22 @@ mod audit {
     pub type au_class_t = c_int;
 
     pub struct au_mask {
-        am_success: c_uint,
-        am_failure: c_uint
+        pub am_success: c_uint,
+        pub am_failure: c_uint
     }
     pub type au_mask_t = au_mask;
 
     pub struct au_tid_addr {
-        port: dev_t,
+        pub port: dev_t,
     }
     pub type au_tid_addr_t = au_tid_addr;
 
     pub struct c_auditinfo_addr {
-        ai_auid: au_id_t,           /* Audit user ID */
-        ai_mask: au_mask_t,         /* Audit masks. */
-        ai_termid: au_tid_addr_t,   /* Terminal ID. */
-        ai_asid: au_asid_t,         /* Audit session ID. */
-        ai_flags: uint64_t          /* Audit session flags */
+        pub ai_auid: au_id_t,           /* Audit user ID */
+        pub ai_mask: au_mask_t,         /* Audit masks. */
+        pub ai_termid: au_tid_addr_t,   /* Terminal ID. */
+        pub ai_asid: au_asid_t,         /* Audit session ID. */
+        pub ai_flags: uint64_t          /* Audit session flags */
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
@@ -327,7 +327,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         unsafe { getgrouplist(pw_name, gid, groups.as_ptr(), &mut ngroups) };
     } else {
         ngroups = unsafe {
-            libc::getgroups(NGROUPS, groups.as_mut_ptr() as *mut u32)
+            getgroups(NGROUPS, groups.as_mut_ptr() as *mut u32)
         };
     }
 
@@ -348,7 +348,7 @@ fn id_print(possible_pw: Option<c_passwd>,
             unsafe { from_c_str(read(gr).gr_name) });
     }
 
-    let euid = unsafe { libc::geteuid() };
+    let euid = unsafe { geteuid() };
     if p_euid && (euid != uid as u32) {
         print!(" euid={:u}", euid);
         let pw = unsafe { getpwuid(euid as i32) };

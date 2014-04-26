@@ -15,7 +15,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::num;
-use std::cast;
 use std::os;
 use std::io::{print, timer};
 
@@ -65,7 +64,7 @@ specified by the sum of their values.", opts));
 
 fn sleep(args: Vec<~str>) {
     let sleep_time = args.iter().fold(0.0, |result, arg| {
-        let suffix_time = match match_suffix(unsafe { cast::transmute(arg) }) {
+        let (arg, suffix_time) = match match_suffix(arg) {
             Ok(m) => m,
             Err(f) => {
                 crash!(1, "{}", f)
@@ -75,10 +74,10 @@ fn sleep(args: Vec<~str>) {
             if suffix_time == 0 {
                 0.0
             } else {
-                match num::from_str_radix::<f64>((*arg), 10) {
+                match num::from_str_radix::<f64>((arg), 10) {
                     Some(m) => m,
                     None => {
-                        crash!(1, "Invalid time interval '{}'", *arg)
+                        crash!(1, "Invalid time interval '{}'", arg)
                     }
                 }
             };
@@ -87,20 +86,19 @@ fn sleep(args: Vec<~str>) {
     timer::sleep((sleep_time * 1000.0) as u64);
 }
 
-fn match_suffix(arg: &mut ~str) -> Result<int, ~str> {
-    let result = match (*arg).pop_char().unwrap() {
-        's' | 'S' => Ok(1),
-        'm' | 'M' => Ok(60),
-        'h' | 'H' => Ok(60 * 60),
-        'd' | 'D' => Ok(60 * 60 * 24),
+fn match_suffix(arg: &~str) -> Result<(~str, int), ~str> {
+    let result = match (*arg).char_at_reverse(0) {
+        's' | 'S' => 1,
+        'm' | 'M' => 60,
+        'h' | 'H' => 60 * 60,
+        'd' | 'D' => 60 * 60 * 24,
         val => {
-            (*arg).push_char(val);
             if !val.is_alphabetic() {
-                return Ok(1)
+                return Ok(((*arg).clone(), 1))
             } else {
-                return Err(format!("Invalid time interval '{}'", *arg))
+                return Err(format!("Invalid time interval '{}'", arg))
             }
         }
     };
-    result
+    Ok(((*arg).slice_to((*arg).len() - 1).to_owned(), result))
 }

@@ -31,10 +31,7 @@ use getopts::{
     usage,
 };
 
-use signals::{
-    ALL_SIGNALS,
-    DEFAULT_SIGNAL,
-};
+use signals::ALL_SIGNALS;
 
 mod signals;
 
@@ -46,8 +43,6 @@ static VERSION:  &'static str = "0.0.1";
 
 static EXIT_OK:  i32 = 0;
 static EXIT_ERR: i32 = 1;
-
-
 
 pub enum Mode {
     Kill,
@@ -185,13 +180,10 @@ fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
 
 fn kill(signalname: ~str, pids: std::vec::Vec<~str>) {
     let optional_signal_value = signal_by_name_or_value(signalname.clone());
-    let mut signal_value:uint = DEFAULT_SIGNAL;
-    match optional_signal_value {
-        Some(x) => signal_value = x,
-        None => {
-            crash!(EXIT_ERR, "unknown signal name {}", signalname)
-        }
-    }
+    let signal_value = match optional_signal_value {
+        Some(x) => x,
+        None => crash!(EXIT_ERR, "unknown signal name {}", signalname)
+    };
     for pid in pids.iter() {
         match from_str::<i32>(*pid) {
             Some(x) => {
@@ -201,9 +193,7 @@ fn kill(signalname: ~str, pids: std::vec::Vec<~str>) {
                   Err(_) => ()
                 };
             },
-            None => {
-                crash!(EXIT_ERR, "failed to parse argument {}", signalname)
-            },
+            None => crash!(EXIT_ERR, "failed to parse argument {}", signalname)
         };
     }
 }
