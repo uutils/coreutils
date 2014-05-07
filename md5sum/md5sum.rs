@@ -16,6 +16,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::fs::File;
+use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
 use std::os;
 use crypto::digest::Digest;
@@ -66,7 +67,12 @@ fn main() {
         let quiet = matches.opt_present("quiet") || status;
         let strict = matches.opt_present("strict");
         let warn = matches.opt_present("warn") && !status;
-        md5sum(matches.free, binary, check, tag, status, quiet, strict, warn);
+        let files = if matches.free.is_empty() {
+            vec!("-".to_owned())
+        } else {
+            matches.free
+        };
+        md5sum(files, binary, check, tag, status, quiet, strict, warn);
     }
 }
 
@@ -77,9 +83,16 @@ fn md5sum(files: Vec<~str>, binary: bool, check: bool, tag: bool, status: bool, 
     let mut failed = 0;
     for filename in files.iter() {
         let filename: &str = *filename;
-        let mut file = safe_unwrap!(File::open(&Path::new(filename)));
+        let mut file = BufferedReader::new(
+            if filename == "-".to_owned() {
+                ~stdin_raw() as ~Reader
+            } else {
+                ~safe_unwrap!(File::open(&Path::new(filename))) as ~Reader
+            }
+        );
         if check {
-            let mut buffer = BufferedReader::new(file);
+            let mut buffer = file;
+            //let mut buffer = BufferedReader::new(file);
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
                 let (ck_filename, sum) = match from_gnu(line, bytes) {
@@ -132,7 +145,7 @@ fn md5sum(files: Vec<~str>, binary: bool, check: bool, tag: bool, status: bool, 
     }
 }
 
-fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut File, binary: bool) -> ~str {
+fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> ~str {
     let data =
         if binary {
             (safe_unwrap!(file.read_to_end())).as_slice().to_owned()

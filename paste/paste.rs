@@ -57,8 +57,14 @@ fn main() {
 }
 
 fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
-    let mut files: ~[io::BufferedReader<io::File>] = filenames.move_iter().map(|name|
-        io::BufferedReader::new(crash_if_err!(1, io::File::open(&Path::new(name))))
+    let mut files: ~[io::BufferedReader<~Reader>] = filenames.move_iter().map(|name|
+        io::BufferedReader::new(
+            if name == "-".to_owned() {
+                ~io::stdio::stdin_raw() as ~Reader
+            } else {
+                ~crash_if_err!(1, io::File::open(&Path::new(name))) as ~Reader
+            }
+        )
     ).collect();
     let delimiters: ~[~str] = delimiters.chars().map(|x| x.to_str()).collect();
     let mut delim_count = 0;

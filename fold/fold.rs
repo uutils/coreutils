@@ -71,7 +71,12 @@ fn main() {
             },
             None => 80
         };
-        fold(matches.free, bytes, spaces, width);
+        let files = if matches.free.is_empty() {
+            vec!("-".to_owned())
+        } else {
+            matches.free
+        };
+        fold(files, bytes, spaces, width);
     }
 }
 
@@ -89,13 +94,16 @@ fn handle_obsolete(args: ~[~str]) -> (~[~str], Option<~str>) {
 }
 
 fn fold(filenames: Vec<~str>, bytes: bool, spaces: bool, width: uint) {
-    if filenames.len() == 0 {
-        fold_file(io::stdin(), bytes, spaces, width);
-    } else {
-        for filename in filenames.iter() {
-            let filename: &str = *filename;
-            fold_file(BufferedReader::new(safe_unwrap!(File::open(&Path::new(filename)))), bytes, spaces, width);
-        }
+    for filename in filenames.iter() {
+        let filename: &str = *filename;
+        let buffer = BufferedReader::new(
+            if filename == "-".to_owned() {
+                ~io::stdio::stdin_raw() as ~Reader
+            } else {
+                ~safe_unwrap!(File::open(&Path::new(filename))) as ~Reader
+            }
+        );
+        fold_file(buffer, bytes, spaces, width);
     }
 }
 
