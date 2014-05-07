@@ -125,7 +125,7 @@ fn remove(files: Vec<~str>, force: bool, interactive: InteractiveMode, one_fs: b
         let file = Path::new(filename.to_owned());
         if file.exists() {
             if file.is_dir() {
-                if recursive && (*filename != ~"/" || !preserve_root) {
+                if recursive && (*filename != "/".to_owned() || !preserve_root) {
                     let walk_dir = match fs::walk_dir(&file) {
                         Ok(m) => m,
                         Err(f) => {
@@ -134,7 +134,7 @@ fn remove(files: Vec<~str>, force: bool, interactive: InteractiveMode, one_fs: b
                     };
                     remove(walk_dir.map(|x| x.as_str().unwrap().to_owned()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
                     remove_dir(&file, *filename, interactive, verbose);
-                } else if dir && (*filename != ~"/" || !preserve_root) {
+                } else if dir && (*filename != "/".to_owned() || !preserve_root) {
                     remove_dir(&file, *filename, interactive, verbose);
                 } else {
                     if recursive {

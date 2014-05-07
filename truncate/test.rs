@@ -15,7 +15,7 @@ fn make_file(name: &str) -> io::File {
 #[test]
 fn test_increase_file_size() {
     let mut file = make_file(TFILE1);
-    if !Process::status(PROG, [~"-s", ~"+5K", TFILE1.to_owned()]).unwrap().success() {
+    if !Process::status(PROG, ["-s".to_owned(), "+5K".to_owned(), TFILE1.to_owned()]).unwrap().success() {
         fail!();
     }
     file.seek(0, io::SeekEnd);
@@ -29,7 +29,7 @@ fn test_increase_file_size() {
 fn test_decrease_file_size() {
     let mut file = make_file(TFILE2);
     file.write(bytes!("1234567890"));
-    if !Process::status(PROG, [~"--size=-4", TFILE2.to_owned()]).unwrap().success() {
+    if !Process::status(PROG, ["--size=-4".to_owned(), TFILE2.to_owned()]).unwrap().success() {
         fail!();
     }
     file.seek(0, io::SeekEnd);

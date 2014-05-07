@@ -70,7 +70,7 @@ fn main() {
 
     let mut files = matches.free.clone();
     if files.is_empty() {
-        files = vec!(~"-");
+        files = vec!("-".to_owned());
     }
 
     wc(files, &matches);
@@ -181,7 +181,7 @@ pub fn wc(files: Vec<~str>, matches: &Matches) {
     }
 
     if files.len() > 1 {
-        print_stats(&~"total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
+        print_stats(&"total".to_owned(), total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
     }
 }
 
@@ -214,7 +214,7 @@ fn print_stats(filename: &~str, line_count: uint, word_count: uint, char_count: 
         print!("{:1$}", byte_count, max_str_len + 1);
     }
 
-    if *filename != ~"-" {
+    if *filename != "-".to_owned() {
         println!(" {}", *filename);
     }
     else {

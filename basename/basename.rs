@@ -15,7 +15,6 @@ extern crate libc;
 
 use std::io::{print, println};
 use std::os;
-use std::str;
 use std::str::StrSlice;
 
 #[path = "../common/util.rs"]
@@ -86,17 +85,17 @@ fn main() {
     println(name);
 }
 
-fn strip_dir(fullname :&~str) -> ~str {
-    let mut name = ~"";
+fn strip_dir(fullname: &~str) -> ~str {
+    let mut name = StrBuf::new();
 
-    for c in fullname.chars_rev() {
+    for c in fullname.chars().rev() {
         if c == '/' || c == '\\' {
-            return name;
+            break;
         }
-        name = str::from_char(c) + name;
+        name.push_char(c);
     }
 
-    return fullname.clone();
+    return name.as_slice().chars().rev().collect();
 }
 
 fn strip_suffix(name: &~str, suffix: &~str) -> ~str {

@@ -212,7 +212,7 @@ ers of 1000).",
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {vec!(~"./")} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {vec!("./".to_owned())} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 

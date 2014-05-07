@@ -83,7 +83,7 @@ fn main() {
         Ok(n) => n,
         Err(s) => { show_error!(1, "{:s}", s); return; }
     };
-    let separator = escape_sequences(matches.opt_str("s").unwrap_or(~"\n"));
+    let separator = escape_sequences(matches.opt_str("s").unwrap_or("\n".to_owned()));
     let terminator = escape_sequences(matches.opt_str("t").unwrap_or(separator.clone()));
     print_seq(first, step, last, separator, terminator, matches.opt_present("w"));
 }

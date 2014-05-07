@@ -166,10 +166,10 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                         let ncount = routput.chars().fold(0, |out, ch: char| out + if ch == '\t' { 8 } else { 1 });
                                         (slice.slice_to(m + 1), routput, ncount)
                                     },
-                                    None => (slice, ~"", 0)
+                                    None => (slice, "".to_owned(), 0)
                                 }
                             } else {
-                                (slice, ~"", 0)
+                                (slice, "".to_owned(), 0)
                             };
                         println!("{}", out);
                         (val, ncount)

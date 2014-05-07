@@ -50,7 +50,7 @@ fn main() {
         let serial = matches.opt_present("serial");
         let delimiters = match matches.opt_str("delimiters") {
             Some(m) => m,
-            None => ~"\t"
+            None => "\t".to_owned()
         };
         paste(matches.free, serial, delimiters);
     }
@@ -64,7 +64,7 @@ fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
     let mut delim_count = 0;
     if serial {
         for file in files.mut_iter() {
-            let mut output = ~"";
+            let mut output = "".to_owned();
             loop {
                 output = output + match file.read_line() {
                     Ok(line) => line.trim_right() + delimiters[delim_count % delimiters.len()],
@@ -81,7 +81,7 @@ fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
     } else {
         let mut eof = Vec::from_elem(files.len(), false);
         loop {
-            let mut output = ~"";
+            let mut output = "".to_owned();
             let mut eof_count = 0;
             for (i, file) in files.mut_iter().enumerate() {
                 if *eof.get(i) {

@@ -80,7 +80,7 @@ fn main() {
     let uname = unsafe { getuname() };
     let mut output = StrBuf::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
-        || !matches.opts_present([~"nodename", ~"release", ~"version", ~"machine"]) {
+        || !matches.opts_present(["nodename".to_owned(), "release".to_owned(), "version".to_owned(), "machine".to_owned()]) {
             output.push_str(uname.sysname);
             output.push_str(" ");
     }

@@ -58,7 +58,7 @@ fn main() {
                     m
                 }
             }
-            None => ~"\n"
+            None => "\n".to_owned()
         };
         tac(matches.free, before, regex, separator);
     }
@@ -77,7 +77,7 @@ fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
             data = buf.into_owned();
         }
         let split_vec: ~[&str] = data.split_str(separator).collect();
-        let rev: ~str = split_vec.rev_iter().fold(~"", |a, &b|
+        let rev: ~str = split_vec.iter().rev().fold("".to_owned(), |a, &b|
             a + if before {
                 separator + b
             } else {

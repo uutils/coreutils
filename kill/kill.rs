@@ -89,7 +89,7 @@ fn main() {
     };
 
     match mode {
-        Kill    => kill(matches.opt_str("signal").unwrap_or(~"9"), matches.free),
+        Kill    => kill(matches.opt_str("signal").unwrap_or("9".to_owned()), matches.free),
         Table   => table(),
         List    => list(matches.opt_str("list")),
         Help    => help(NAME, usage),
@@ -166,7 +166,7 @@ fn help(progname: &str, usage: &str) {
 }
 
 fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
-    if signal_name_or_value == ~"0"{
+    if signal_name_or_value == "0".to_owned() {
         return Some(0);
     }
     for signal in ALL_SIGNALS.iter() {
