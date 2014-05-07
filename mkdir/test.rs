@@ -43,7 +43,7 @@ fn test_mkdir_dup_dir() {
 #[test]
 fn test_mkdir_mode() {
     cleanup(test_dir3);
-    let prog = Process::status(exe.into_owned(), [~"-m", ~"755", test_dir3.into_owned()]);
+    let prog = Process::status(exe.into_owned(), ["-m".to_owned(), "755".to_owned(), test_dir3.into_owned()]);
     let exit_success = prog.unwrap().success();
     cleanup(test_dir3);
     assert_eq!(exit_success, true);
@@ -52,7 +52,7 @@ fn test_mkdir_mode() {
 #[test]
 fn test_mkdir_parent() {
     cleanup(test_dir4);
-    let prog = Process::status(exe.into_owned(), [~"-p", test_dir4.into_owned()]);
+    let prog = Process::status(exe.into_owned(), ["-p".to_owned(), test_dir4.into_owned()]);
     let exit_success = prog.unwrap().success();
     cleanup(test_dir4);
     assert_eq!(exit_success, true);

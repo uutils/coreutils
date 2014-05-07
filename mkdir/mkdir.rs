@@ -16,6 +16,7 @@ extern crate libc;
 
 use std::os;
 use std::io::fs;
+use std::io::FilePermission;
 use std::num::strconv;
 
 #[path = "../common/util.rs"]
@@ -62,19 +63,19 @@ fn main() {
 
     // Translate a ~str in octal form to u32, default to 755
     // Not tested on Windows
-    let mode_match = matches.opts_str(&[~"mode"]);
-    let mode: u32 = if mode_match.is_some() {
+    let mode_match = matches.opts_str(&["mode".to_owned()]);
+    let mode: FilePermission = if mode_match.is_some() {
         let m = mode_match.unwrap();
-        let res = strconv::from_str_common(m, 8, false, false, false,
-                                           strconv::ExpNone,
-                                           false, false);
+        let res: Option<u32> = strconv::from_str_common(m, 8, false, false, false,
+                                                        strconv::ExpNone,
+                                                        false, false);
         if res.is_some() {
-            res.unwrap()
+            unsafe { std::cast::transmute(res.unwrap()) }
         } else {
             crash!(1, "no mode given");
         }
     } else {
-        0o755
+        unsafe { std::cast::transmute(0o755 as u32) }
     };
 
     let dirs = matches.free;
@@ -92,7 +93,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<~str>, mk_parents: bool, mode: u32, verbose: bool) {
+fn exec(dirs: Vec<~str>, mk_parents: bool, mode: FilePermission, verbose: bool) {
     let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {
@@ -141,7 +142,7 @@ fn exec(dirs: Vec<~str>, mk_parents: bool, mode: u32, verbose: bool) {
 /**
  * Wrapper to catch errors, return false if failed
  */
-fn mkdir(path: &Path, mode: u32) {
+fn mkdir(path: &Path, mode: FilePermission) {
     match fs::mkdir(path, mode) {
         Ok(_) => {},
         Err(e) => {

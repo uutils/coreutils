@@ -13,6 +13,7 @@
 
 extern crate crypto = "rust-crypto";
 extern crate getopts;
+extern crate libc;
 
 use std::io::fs::File;
 use std::io::BufferedReader;
@@ -134,7 +135,7 @@ fn md5sum(files: Vec<~str>, binary: bool, check: bool, tag: bool, status: bool, 
 fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut File, binary: bool) -> ~str {
     let data =
         if binary {
-            safe_unwrap!(file.read_to_end())
+            (safe_unwrap!(file.read_to_end())).as_slice().to_owned()
         } else {
             (safe_unwrap!(file.read_to_str())).into_bytes()
         };

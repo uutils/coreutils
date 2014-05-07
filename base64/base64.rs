@@ -161,7 +161,7 @@ fn help(progname: &str, usage: &str) {
     println!("");
     println(usage);
 
-    let msg = ~"With no FILE, or when FILE is -, read standard input.\n\n\
+    let msg = "With no FILE, or when FILE is -, read standard input.\n\n\
         The data are encoded as described for the base64 alphabet in RFC \
         3548. When\ndecoding, the input may contain newlines in addition \
         to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \

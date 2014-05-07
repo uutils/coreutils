@@ -62,13 +62,13 @@ fn main() {
     if matches.opt_present("number-nonblank") {
         number_mode = NumberNonEmpty;
     }
-    let show_nonprint = matches.opts_present([~"show-nonprinting", ~"show-all", ~"t", ~"e"]);
-    let show_ends = matches.opts_present([~"show-ends", ~"show-all", ~"e"]);
-    let show_tabs = matches.opts_present([~"show-tabs",  ~"show-all", ~"t"]);
+    let show_nonprint = matches.opts_present(["show-nonprinting".to_owned(), "show-all".to_owned(), "t".to_owned(), "e".to_owned()]);
+    let show_ends = matches.opts_present(["show-ends".to_owned(), "show-all".to_owned(), "e".to_owned()]);
+    let show_tabs = matches.opts_present(["show-tabs".to_owned(), "show-all".to_owned(), "t".to_owned()]);
     let squeeze_blank = matches.opt_present("squeeze-blank");
     let mut files = matches.free;
     if files.is_empty() {
-        files = vec!(~"-");
+        files = vec!("-".to_owned());
     }
 
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);
