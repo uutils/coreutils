@@ -60,14 +60,24 @@ fn main() {
             }
             None => "\n".to_owned()
         };
-        tac(matches.free, before, regex, separator);
+        let files = if matches.free.is_empty() {
+            vec!("-".to_owned())
+        } else {
+            matches.free
+        };
+        tac(files, before, regex, separator);
     }
 }
 
 fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
-                           crash_if_err!(1, io::File::open(&Path::new(filename))));
+            if filename == "-".to_owned() {
+                ~io::stdio::stdin_raw() as ~Reader
+            } else {
+                ~crash_if_err!(1, io::File::open(&Path::new(filename))) as ~Reader
+            }
+        );
         let mut data = crash_if_err!(1, file.read_to_str());
         if data.ends_with("\n") {
             // removes blank line that is inserted otherwise
