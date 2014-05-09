@@ -56,7 +56,7 @@ fn main() {
     let prog = args[0].as_slice();
 
     // to handle arguments the same way than GNU env, we can't use getopts
-    let mut opts = ~options {
+    let mut opts = box options {
         ignore_env: false,
         null: false,
         unsets: vec!(),

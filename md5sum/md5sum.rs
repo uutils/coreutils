@@ -85,9 +85,9 @@ fn md5sum(files: Vec<~str>, binary: bool, check: bool, tag: bool, status: bool, 
         let filename: &str = *filename;
         let mut file = BufferedReader::new(
             if filename == "-".to_owned() {
-                ~stdin_raw() as ~Reader
+                box stdin_raw() as Box<Reader>
             } else {
-                ~safe_unwrap!(File::open(&Path::new(filename))) as ~Reader
+                box safe_unwrap!(File::open(&Path::new(filename))) as Box<Reader>
             }
         );
         if check {

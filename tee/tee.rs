@@ -36,7 +36,7 @@ struct Options {
     append: bool,
     ignore_interrupts: bool,
     print_and_exit: Option<~str>,
-    files: ~Vec<Path>
+    files: Box<Vec<Path>>
 }
 
 fn options(args: &[~str]) -> Result<Options, ()> {
@@ -66,7 +66,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
-            files: ~names.iter().map(|name| Path::new(name.clone())).collect()
+            files: box names.iter().map(|name| Path::new(name.clone())).collect()
         })
     }).map_err(|message| warn(message))
 }
@@ -81,7 +81,7 @@ fn exec(options: Options) -> Result<(), ()> {
 fn tee(options: Options) -> Result<(), ()> {
     let writers = options.files.iter().map(|path| open(path, options.append)).collect();
     let output = &mut MultiWriter::new(writers);
-    let input = &mut NamedReader { inner: ~stdin() as ~Reader };
+    let input = &mut NamedReader { inner: box stdin() as Box<Reader> };
     if copy(input, output).is_err() || output.flush().is_err() {
         Err(())
     } else {
@@ -89,22 +89,22 @@ fn tee(options: Options) -> Result<(), ()> {
     }
 }
 
-fn open(path: &Path, append: bool) -> ~Writer {
+fn open(path: &Path, append: bool) -> Box<Writer> {
     let inner = if *path == Path::new("-") {
-        ~stdout() as ~Writer
+        box stdout() as Box<Writer>
     } else {
         let mode = if append { Append } else { Truncate };
         match File::open_mode(path, mode, Write) {
-            Ok(file) => ~file as ~Writer,
-            Err(_) => ~NullWriter as ~Writer
+            Ok(file) => box file as Box<Writer>,
+            Err(_) => box NullWriter as Box<Writer>
         }
     };
-    ~NamedWriter { inner: inner, path: ~path.clone() } as ~Writer
+    box NamedWriter { inner: inner, path: box path.clone() } as Box<Writer>
 }
 
 struct NamedWriter {
-    inner: ~Writer,
-    path: ~Path
+    inner: Box<Writer>,
+    path: Box<Path>
 }
 
 impl Writer for NamedWriter {
@@ -112,7 +112,7 @@ impl Writer for NamedWriter {
         with_path(self.path.clone(), || {
             let val = self.inner.write(buf);
             if val.is_err() {
-                self.inner = ~NullWriter as ~Writer;
+                self.inner = box NullWriter as Box<Writer>;
             }
             val
         })
@@ -122,7 +122,7 @@ impl Writer for NamedWriter {
         with_path(self.path.clone(), || {
             let val = self.inner.flush();
             if val.is_err() {
-                self.inner = ~NullWriter as ~Writer;
+                self.inner = box NullWriter as Box<Writer>;
             }
             val
         })
@@ -130,7 +130,7 @@ impl Writer for NamedWriter {
 }
 
 struct NamedReader {
-    inner: ~Reader
+    inner: Box<Reader>
 }
 
 impl Reader for NamedReader {
