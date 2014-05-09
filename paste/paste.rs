@@ -57,12 +57,12 @@ fn main() {
 }
 
 fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
-    let mut files: ~[io::BufferedReader<~Reader>] = filenames.move_iter().map(|name|
+    let mut files: ~[io::BufferedReader<Box<Reader>>] = filenames.move_iter().map(|name|
         io::BufferedReader::new(
             if name == "-".to_owned() {
-                ~io::stdio::stdin_raw() as ~Reader
+                box io::stdio::stdin_raw() as Box<Reader>
             } else {
-                ~crash_if_err!(1, io::File::open(&Path::new(name))) as ~Reader
+                box crash_if_err!(1, io::File::open(&Path::new(name))) as Box<Reader>
             }
         )
     ).collect();

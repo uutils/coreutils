@@ -98,9 +98,9 @@ fn fold(filenames: Vec<~str>, bytes: bool, spaces: bool, width: uint) {
         let filename: &str = *filename;
         let buffer = BufferedReader::new(
             if filename == "-".to_owned() {
-                ~io::stdio::stdin_raw() as ~Reader
+                box io::stdio::stdin_raw() as Box<Reader>
             } else {
-                ~safe_unwrap!(File::open(&Path::new(filename))) as ~Reader
+                box safe_unwrap!(File::open(&Path::new(filename))) as Box<Reader>
             }
         );
         fold_file(buffer, bytes, spaces, width);

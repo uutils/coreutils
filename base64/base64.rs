@@ -37,7 +37,7 @@ mod util;
 static NAME: &'static str = "base64";
 
 fn main() {
-    let args = ~os::args();
+    let args = box os::args();
     let opts = ~[
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
@@ -78,10 +78,10 @@ fn main() {
         None => 76
     };
     let mut input = if matches.free.is_empty() || matches.free.get(0).as_slice() == "-" {
-        ~stdin() as ~Reader
+        box stdin() as Box<Reader>
     } else {
         let path = Path::new(matches.free.get(0).clone());
-        ~File::open(&path) as ~Reader
+        box File::open(&path) as Box<Reader>
     };
 
     match mode {

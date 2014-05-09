@@ -222,15 +222,15 @@ fn print_stats(filename: &~str, line_count: uint, word_count: uint, char_count: 
     }
 }
 
-fn open(path: ~str) -> Option<BufferedReader<~Reader>> {
+fn open(path: ~str) -> Option<BufferedReader<Box<Reader>>> {
     if "-" == path {
-        let reader = ~stdin() as ~Reader;
+        let reader = box stdin() as Box<Reader>;
         return Some(BufferedReader::new(reader));
     }
 
     match File::open(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => {
-            let reader = ~fd as ~Reader;
+            let reader = box fd as Box<Reader>;
             return Some(BufferedReader::new(reader));
         },
         Err(e) => {

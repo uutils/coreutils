@@ -73,9 +73,9 @@ fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
             if filename == "-".to_owned() {
-                ~io::stdio::stdin_raw() as ~Reader
+                box io::stdio::stdin_raw() as Box<Reader>
             } else {
-                ~crash_if_err!(1, io::File::open(&Path::new(filename))) as ~Reader
+                box crash_if_err!(1, io::File::open(&Path::new(filename))) as Box<Reader>
             }
         );
         let mut data = crash_if_err!(1, file.read_to_str());

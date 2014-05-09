@@ -175,13 +175,13 @@ pub fn exec(files: Vec<~str>, number: NumberingMode, show_nonprint: bool, show_e
     }
 }
 
-fn open(path: ~str) -> Option<~Reader> {
+fn open(path: ~str) -> Option<Box<Reader>> {
     if "-" == path {
-        return Some(~stdin_raw() as ~Reader);
+        return Some(box stdin_raw() as Box<Reader>);
     }
 
     match File::open(&std::path::Path::new(path.as_slice())) {
-        Ok(fd) => return Some(~fd as ~Reader),
+        Ok(fd) => return Some(box fd as Box<Reader>),
         Err(e) => fail!("cat: {0:s}: {1:s}", path, e.to_str())
     }
 }
