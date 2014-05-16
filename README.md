@@ -75,7 +75,6 @@ To do
 - chown-core
 - chown
 - chroot
-- cksum
 - copy
 - cp-hash
 - cp (some work done in ```dev``` branch)
