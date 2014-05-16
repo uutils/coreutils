@@ -17,7 +17,6 @@ extern crate getopts;
 extern crate libc;
 #[phase(syntax, link)] extern crate log;
 
-use std::char;
 use std::io::{println, File, stdin, stdout};
 use std::os;
 use std::str;
@@ -101,13 +100,9 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
     to_decode = str::replace(to_decode, "\n", "");
 
     if ignore_garbage {
-        let standard_chars: ~[char] =
-            bytes!("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-            "abcdefghijklmnopqrstuvwxyz",
-            "0123456789+/").iter().map(|b| char::from_u32(*b as u32).unwrap()).collect();
-
+        let standard_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         to_decode = to_decode
-            .trim_chars(|c| !standard_chars.contains(&c))
+            .trim_chars(|c| !standard_chars.contains_char(c))
             .to_owned();
     }
 
