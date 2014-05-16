@@ -26,6 +26,7 @@ PROGS       := \
   tee \
   true \
   truncate \
+  unlink \
   wc \
   yes \
   hostname \
