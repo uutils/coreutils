@@ -191,7 +191,10 @@ fn main() {
     }
 
     if opts.program.len() >= 1 {
-        match std::io::process::Process::status(opts.program.get(0).as_slice(), opts.program.slice_from(1)) {
+        use std::io::process::{Command, InheritFd};
+        let prog = opts.program.get(0).clone();
+        let args = opts.program.slice_from(1);
+        match Command::new(prog).args(args).stdin(InheritFd(0)).stdout(InheritFd(1)).stderr(InheritFd(2)).status() {
             Ok(exit) =>
                 std::os::set_exit_status(match exit {
                     std::io::process::ExitStatus(s) => s,
