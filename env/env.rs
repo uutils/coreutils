@@ -53,7 +53,7 @@ fn print_env(null: bool) {
 
 fn main() {
     let args = std::os::args();
-    let prog = args[0].as_slice();
+    let prog = args.get(0).as_slice();
 
     // to handle arguments the same way than GNU env, we can't use getopts
     let mut opts = box options {
