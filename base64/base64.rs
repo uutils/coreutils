@@ -115,7 +115,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         Ok(bytes) => {
             let mut out = stdout();
 
-            match out.write(bytes) {
+            match out.write(bytes.as_slice()) {
                 Ok(_) => {}
                 Err(f) => { crash!(1, "{}", f.to_str()); }
             }
