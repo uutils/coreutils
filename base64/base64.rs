@@ -55,7 +55,7 @@ fn main() {
         }
     };
 
-    let progname = args[0].clone();
+    let progname = args.get(0).clone();
     let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", opts);
     let mode = if matches.opt_present("help") {
         Help

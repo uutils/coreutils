@@ -25,7 +25,7 @@ extern {
 
 fn main () {
     let args = os::args();
-    let program = args[0].to_owned();
+    let program = args.get(0).to_owned();
 
     let options = [
         optflag("f", "full", "Default option to show full name"),

@@ -25,7 +25,7 @@ static VERSION: &'static str = "1.0.0";
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
     let opts = ~[
         getopts::optflag("s", "serial", "paste one file at a time instead of in parallel"),

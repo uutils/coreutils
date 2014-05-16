@@ -88,7 +88,7 @@ fn du(path: &Path, mut my_stat: FileStat,
 
 fn main() {
     let args = os::args();
-    let program = args[0].as_slice();
+    let program = args.get(0).as_slice();
     let opts = ~[
         // In task
         getopts::optflag("a", "all", " write counts for all files, not just directories"),

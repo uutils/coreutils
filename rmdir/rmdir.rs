@@ -24,7 +24,7 @@ static NAME: &'static str = "rmdir";
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
     let opts = ~[
         getopts::optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty"),

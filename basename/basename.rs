@@ -25,7 +25,7 @@ static VERSION: &'static str = "1.0.0";
 
 fn main() {
     let args = os::args();
-    let program = strip_dir(&args[ 0 ].clone());
+    let program = strip_dir(args.get(0));
 
     //
     // Argument parsing
@@ -64,7 +64,7 @@ fn main() {
     }
     // too many arguments
     else if args.len() > 3 {
-        println(program + ": extra operand `" + args[ 3 ] + "'");
+        println(program + ": extra operand `" + args.get(3).clone() + "'");
         println("Try `" + program + " --help' for more information.");
         return;
     }
@@ -73,12 +73,12 @@ fn main() {
     // Main Program Processing
     //
 
-    let fullname = args[ 1 ].clone();
+    let fullname = args.get(1).clone();
 
     let mut name = strip_dir(&fullname);
 
     if args.len() > 2 {
-        let suffix = args[ 2 ].clone();
+        let suffix = args.get(2).clone();
         name = strip_suffix(&name, &suffix);
     }
 

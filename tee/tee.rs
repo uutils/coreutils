@@ -25,7 +25,7 @@ static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    match options(args()).and_then(exec) {
+    match options(args().as_slice()).and_then(exec) {
         Ok(_) => set_exit_status(0),
         Err(_) => set_exit_status(1)
     }
@@ -149,5 +149,5 @@ fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
 }
 
 fn warn(message: &str) {
-    error!("{}: {}", args()[0], message);
+    error!("{}: {}", args().get(0), message);
 }

@@ -25,7 +25,7 @@ static NAME: &'static str = "sleep";
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),

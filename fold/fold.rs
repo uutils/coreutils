@@ -29,9 +29,9 @@ static VERSION: &'static str = "1.0.0";
 fn main() {
     let args = os::args();
 
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
-    let (args, obs_width) = handle_obsolete(args);
+    let (args, obs_width) = handle_obsolete(args.as_slice().to_owned());
 
     let opts = [
         getopts::optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)"),
