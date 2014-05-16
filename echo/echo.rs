@@ -71,7 +71,7 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("n", "", "do not output the trailing newline"),
         getopts::optflag("e", "", "enable interpretation of backslash escapes"),

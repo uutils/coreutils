@@ -53,7 +53,7 @@ static NAME: &'static str = "uname";
 
 fn main() {
     let args = os::args();
-    let program = args[0].as_slice();
+    let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("a", "all", "Behave as though all of the options -mnrsv were specified."),

@@ -20,7 +20,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::print;
-use std::cast;
+use std::mem;
 use std::os;
 use std::ptr;
 use std::str;
@@ -49,7 +49,7 @@ static NAME: &'static str = "users";
 
 fn main() {
     let args = os::args();
-    let program = args[0].as_slice();
+    let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
@@ -103,7 +103,7 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = str::raw::from_c_str(cast::transmute(&(*line).ut_user));
+                let user = str::raw::from_c_str(mem::transmute(&(*line).ut_user));
                 users.push(user);
             }
         }

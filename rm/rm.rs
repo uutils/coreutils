@@ -31,7 +31,7 @@ static NAME: &'static str = "rm";
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
     // TODO: make getopts support -R in addition to -r
     let opts = ~[

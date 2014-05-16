@@ -43,7 +43,7 @@ static NAME: &'static str = "whoami";
 
 fn main() {
     let args = os::args();
-    let program = args[0].as_slice();
+    let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),

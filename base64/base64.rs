@@ -17,7 +17,6 @@ extern crate getopts;
 extern crate libc;
 #[phase(syntax, link)] extern crate log;
 
-use std::char;
 use std::io::{println, File, stdin, stdout};
 use std::os;
 use std::str;
@@ -55,7 +54,7 @@ fn main() {
         }
     };
 
-    let progname = args[0].clone();
+    let progname = args.get(0).clone();
     let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", opts);
     let mode = if matches.opt_present("help") {
         Help
@@ -101,13 +100,9 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
     to_decode = str::replace(to_decode, "\n", "");
 
     if ignore_garbage {
-        let standard_chars: ~[char] =
-            bytes!("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-            "abcdefghijklmnopqrstuvwxyz",
-            "0123456789+/").iter().map(|b| char::from_u32(*b as u32).unwrap()).collect();
-
+        let standard_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         to_decode = to_decode
-            .trim_chars(|c| !standard_chars.contains(&c))
+            .trim_chars(|c| !standard_chars.contains_char(c))
             .to_owned();
     }
 
@@ -115,7 +110,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         Ok(bytes) => {
             let mut out = stdout();
 
-            match out.write(bytes) {
+            match out.write(bytes.as_slice()) {
                 Ok(_) => {}
                 Err(f) => { crash!(1, "{}", f.to_str()); }
             }

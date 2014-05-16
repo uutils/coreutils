@@ -25,7 +25,7 @@ static VERSION: &'static str = "1.0.0";
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
     let opts = ~[
         getopts::optflag("s", "serial", "paste one file at a time instead of in parallel"),
@@ -57,7 +57,7 @@ fn main() {
 }
 
 fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
-    let mut files: ~[io::BufferedReader<Box<Reader>>] = filenames.move_iter().map(|name|
+    let mut files: Vec<io::BufferedReader<Box<Reader>>> = filenames.move_iter().map(|name|
         io::BufferedReader::new(
             if name == "-".to_owned() {
                 box io::stdio::stdin_raw() as Box<Reader>
@@ -66,14 +66,14 @@ fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
             }
         )
     ).collect();
-    let delimiters: ~[~str] = delimiters.chars().map(|x| x.to_str()).collect();
+    let delimiters: Vec<~str> = delimiters.chars().map(|x| x.to_str()).collect();
     let mut delim_count = 0;
     if serial {
         for file in files.mut_iter() {
             let mut output = "".to_owned();
             loop {
                 output = output + match file.read_line() {
-                    Ok(line) => line.trim_right() + delimiters[delim_count % delimiters.len()],
+                    Ok(line) => line.trim_right() + delimiters.get(delim_count % delimiters.len()).clone(),
                     Err(f) => if f.kind == io::EndOfFile {
                         break
                     } else {
@@ -103,7 +103,7 @@ fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
                         }
                     }
                 }
-                output = output + delimiters[delim_count % delimiters.len()];
+                output = output + delimiters.get(delim_count % delimiters.len()).clone();
                 delim_count += 1;
             }
             if files.len() == eof_count {

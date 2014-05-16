@@ -25,7 +25,7 @@ static VERSION: &'static str = "1.0.0";
 
 fn main() {
     let args = os::args();
-    let program = args[0].clone();
+    let program = args.get(0).clone();
 
     let opts = ~[
         getopts::optflag("b", "before", "attach the separator before instead of after"),
@@ -86,7 +86,7 @@ fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
             buf.truncate(len - 1);
             data = buf.into_owned();
         }
-        let split_vec: ~[&str] = data.split_str(separator).collect();
+        let split_vec: Vec<&str> = data.split_str(separator).collect();
         let rev: ~str = split_vec.iter().rev().fold("".to_owned(), |a, &b|
             a + if before {
                 separator + b
