@@ -5,6 +5,7 @@ PROGS       := \
   base64 \
   basename \
   cat \
+  comm \
   dirname \
   echo \
   env \
