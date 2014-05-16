@@ -96,7 +96,7 @@ fn xgethostname() -> ~str {
 }
 
 fn xsethostname(name: &~str) {
-    let vec_name: ~[libc::c_char] = name.bytes().map(|c| c as i8).collect();
+    let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as i8).collect();
 
     let err = unsafe {
         sethostname (vec_name.as_ptr(), vec_name.len() as i32)
