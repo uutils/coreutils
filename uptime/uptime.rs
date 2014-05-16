@@ -18,7 +18,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::os;
-use std::cast::transmute;
+use std::mem::transmute;
 use std::io::{print, File};
 use std::ptr::null;
 use std::from_str::from_str;

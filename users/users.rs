@@ -20,7 +20,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::print;
-use std::cast;
+use std::mem;
 use std::os;
 use std::ptr;
 use std::str;
@@ -103,7 +103,7 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = str::raw::from_c_str(cast::transmute(&(*line).ut_user));
+                let user = str::raw::from_c_str(mem::transmute(&(*line).ut_user));
                 users.push(user);
             }
         }

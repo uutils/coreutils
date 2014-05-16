@@ -70,12 +70,12 @@ fn main() {
                                                         strconv::ExpNone,
                                                         false, false);
         if res.is_some() {
-            unsafe { std::cast::transmute(res.unwrap()) }
+            unsafe { std::mem::transmute(res.unwrap()) }
         } else {
             crash!(1, "no mode given");
         }
     } else {
-        unsafe { std::cast::transmute(0o755 as u32) }
+        unsafe { std::mem::transmute(0o755 as u32) }
     };
 
     let dirs = matches.free;
