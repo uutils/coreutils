@@ -1,6 +1,6 @@
-#[crate_id(name="cp", vers="1.0.0", author="Jordy Dickinson")];
-#[feature(macro_rules)];
-#[feature(phase)];
+#![crate_id(name="cp", vers="1.0.0", author="Jordy Dickinson")]
+#![feature(macro_rules)]
+#![feature(phase)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -32,7 +32,7 @@ pub enum Mode {
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let opts = ~[
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),
@@ -45,7 +45,7 @@ fn main() {
         },
     };
 
-    let progname = args[0].clone();
+    let progname = args.get(0);
     let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
     let mode = if matches.opt_present("version") {
         Version
@@ -57,7 +57,7 @@ fn main() {
 
     match mode {
         Copy    => copy(matches),
-        Help    => help(progname, usage),
+        Help    => help(progname.as_slice(), usage.as_slice()),
         Version => version(),
     }
 }
@@ -76,27 +76,27 @@ fn help(progname: &str, usage: &str) {
 }
 
 fn copy(matches: getopts::Matches) {
-    let sources = if matches.free.len() < 1 {
+    let sources : Vec<Path> = if matches.free.len() < 1 {
         error!("error: Missing SOURCE argument. Try --help.");
         fail!()
     } else {
         // All but the last argument:
-        matches.free.slice(0, matches.free.len() - 2)
-            .map(|arg| ~Path::new(arg.clone()))
+        matches.free.slice(0, matches.free.len() - 2).iter()
+            .map(|arg| Path::new(arg.clone())).collect()
     };
     let dest = if matches.free.len() < 2 {
         error!("error: Missing DEST argument. Try --help.");
         fail!()
     } else {
         // Only the last argument:
-        ~Path::new(matches.free[matches.free.len() - 1].clone())
+        Path::new(matches.free.get(matches.free.len() - 1).as_slice())
     };
 
     assert!(sources.len() >= 1);
 
     if sources.len() == 1 {
-        let source = sources[0].clone();
-        let same_file = match paths_refer_to_same_file(source, dest) {
+        let source = sources.get(0);
+        let same_file = match paths_refer_to_same_file(source, &dest) {
             Ok(b)  => b,
             Err(e) => if e.kind == io::FileNotFound {
                 false
@@ -113,7 +113,7 @@ fn copy(matches: getopts::Matches) {
             fail!();
         }
 
-        let io_result = fs::copy(source, dest);
+        let io_result = fs::copy(source, &dest);
 
         if io_result.is_err() {
             let err = io_result.unwrap_err();
@@ -121,13 +121,13 @@ fn copy(matches: getopts::Matches) {
             fail!();
         }
     } else {
-        if fs::stat(dest).unwrap().kind != io::TypeDirectory {
+        if fs::stat(&dest).unwrap().kind != io::TypeDirectory {
             error!("error: TARGET must be a directory");
             fail!();
         }
 
         for source in sources.iter() {
-            if fs::stat(*source).unwrap().kind != io::TypeFile {
+            if fs::stat(source).unwrap().kind != io::TypeFile {
                 error!("error: \"{:s}\" is not a file", source.display().to_str());
                 continue;
             }
@@ -138,7 +138,7 @@ fn copy(matches: getopts::Matches) {
 
             println!("{:s}", full_dest.display().to_str());
 
-            let io_result = fs::copy(*source, full_dest);
+            let io_result = fs::copy(source, &full_dest);
 
             if io_result.is_err() {
                 let err = io_result.unwrap_err();
@@ -150,29 +150,29 @@ fn copy(matches: getopts::Matches) {
 }
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::IoResult<bool> {
-    let mut raw_p1 = ~p1.clone();
-    let mut raw_p2 = ~p2.clone();
+    let mut raw_p1 = p1.clone();
+    let mut raw_p2 = p2.clone();
 
-    let p1_lstat = match fs::lstat(raw_p1) {
+    let p1_lstat = match fs::lstat(&raw_p1) {
         Ok(stat) => stat,
         Err(e)   => return Err(e),
     };
 
-    let p2_lstat = match fs::lstat(raw_p2) {
+    let p2_lstat = match fs::lstat(&raw_p2) {
         Ok(stat) => stat,
         Err(e)   => return Err(e),
     };
 
     // We have to take symlinks and relative paths into account.
     if p1_lstat.kind == io::TypeSymlink {
-        raw_p1 = ~fs::readlink(raw_p1).unwrap();
+        raw_p1 = fs::readlink(&raw_p1).unwrap();
     }
-    raw_p1 = ~os::make_absolute(raw_p1);
+    raw_p1 = os::make_absolute(&raw_p1);
 
     if p2_lstat.kind == io::TypeSymlink {
-        raw_p2 = ~fs::readlink(raw_p2).unwrap();
+        raw_p2 = fs::readlink(&raw_p2).unwrap();
     }
-    raw_p2 = ~os::make_absolute(raw_p2);
+    raw_p2 = os::make_absolute(&raw_p2);
 
     Ok(raw_p1 == raw_p2)
 }

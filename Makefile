@@ -7,6 +7,7 @@ PROGS       := \
   cat \
   cksum \
   comm \
+  cp \
   dirname \
   echo \
   env \
