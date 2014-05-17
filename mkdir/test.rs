@@ -1,4 +1,4 @@
-use std::io::process::Process;
+use std::io::process::Command;
 use std::io::fs::rmdir;
 
 static exe: &'static str = "build/mkdir";
@@ -12,14 +12,14 @@ fn cleanup(dir: &'static str) {
     let d = dir.into_owned();
     let p = Path::new(d.into_owned());
     if p.exists() {
-        rmdir(&p);
+        rmdir(&p).unwrap();
     }
 }
 
 #[test]
 fn test_mkdir_mkdir() {
     cleanup(test_dir1);
-    let prog = Process::status(exe.into_owned(), [test_dir1.into_owned()]);
+    let prog = Command::new(exe).arg(test_dir1).status();
     let exit_success = prog.unwrap().success();
     cleanup(test_dir1);
     assert_eq!(exit_success, true);
@@ -28,13 +28,13 @@ fn test_mkdir_mkdir() {
 #[test]
 fn test_mkdir_dup_dir() {
     cleanup(test_dir2);
-    let prog = Process::status(exe.into_owned(), [test_dir2.into_owned()]);
+    let prog = Command::new(exe).arg(test_dir2).status();
     let exit_success = prog.unwrap().success();
     if !exit_success {
         cleanup(test_dir2);
         fail!();
     }
-    let prog2 = Process::status(exe.into_owned(), [test_dir2.into_owned()]);
+    let prog2 = Command::new(exe).arg(test_dir2).status();
     let exit_success2 = prog2.unwrap().success();
     cleanup(test_dir2);
     assert_eq!(exit_success2, false);
@@ -43,7 +43,7 @@ fn test_mkdir_dup_dir() {
 #[test]
 fn test_mkdir_mode() {
     cleanup(test_dir3);
-    let prog = Process::status(exe.into_owned(), ["-m".to_owned(), "755".to_owned(), test_dir3.into_owned()]);
+    let prog = Command::new(exe).arg("-m").arg("755").arg(test_dir3).status();
     let exit_success = prog.unwrap().success();
     cleanup(test_dir3);
     assert_eq!(exit_success, true);
@@ -52,7 +52,7 @@ fn test_mkdir_mode() {
 #[test]
 fn test_mkdir_parent() {
     cleanup(test_dir4);
-    let prog = Process::status(exe.into_owned(), ["-p".to_owned(), test_dir4.into_owned()]);
+    let prog = Command::new(exe).arg("-p").arg(test_dir4).status();
     let exit_success = prog.unwrap().success();
     cleanup(test_dir4);
     assert_eq!(exit_success, true);
@@ -61,7 +61,7 @@ fn test_mkdir_parent() {
 #[test]
 fn test_mkdir_no_parent() {
     cleanup(test_dir5);
-    let prog = Process::status(exe.into_owned(), [test_dir5.into_owned()]);
+    let prog = Command::new(exe).arg(test_dir5).status();
     let exit_success = prog.unwrap().success();
     cleanup(test_dir5);
     assert_eq!(exit_success, false);
