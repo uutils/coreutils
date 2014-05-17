@@ -24,7 +24,7 @@ extern {
 }
 
 fn main () {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).to_owned();
 
     let options = [
@@ -59,7 +59,7 @@ fn main () {
 
             println!("{:s}", hostname);
         }
-        1 => { xsethostname( matches.free.last().unwrap() ) }
+        1 => { xsethostname( &matches.free.last().unwrap().as_slice().to_owned() ) }
         _ => { help_menu(program, options); }
     };
 }

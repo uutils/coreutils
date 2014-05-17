@@ -36,7 +36,7 @@ mod util;
 static NAME: &'static str = "base64";
 
 fn main() {
-    let args = box os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let opts = ~[
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
@@ -67,7 +67,7 @@ fn main() {
     };
     let ignore_garbage = matches.opt_present("ignore-garbage");
     let line_wrap = match matches.opt_str("wrap") {
-        Some(s) => match from_str(s) {
+        Some(s) => match from_str(s.as_slice()) {
             Some(s) => s,
             None => {
                 error!("error: {:s}", "Argument to option 'wrap' improperly formatted.");
@@ -86,7 +86,7 @@ fn main() {
     match mode {
         Decode  => decode(input, ignore_garbage),
         Encode  => encode(input, line_wrap),
-        Help    => help(progname, usage),
+        Help    => help(progname.as_slice(), usage.as_slice()),
         Version => version()
     }
 }
@@ -139,16 +139,16 @@ fn encode(input: &mut Reader, line_wrap: uint) {
         Ok(m) => m,
         Err(f) => fail!(f.to_str())
     };
-    let mut encoded = to_encode.as_slice().to_base64(b64_conf);
+    let encoded = to_encode.as_slice().to_base64(b64_conf);
 
     // To my knowledge, RFC 3548 does not specify which line endings to use. It
     // seems that rust's base64 algorithm uses CRLF as prescribed by RFC 2045.
     // However, since GNU base64 outputs only LF (presumably because that is
     // the standard UNIX line ending), we strip CRs from the output to maintain
     // compatibility.
-    encoded = encoded.replace("\r", "");
+    let final = encoded.replace("\r", "");
 
-    println(encoded);
+    println(final);
 }
 
 fn help(progname: &str, usage: &str) {

@@ -29,7 +29,7 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = ~[
         // Linux-specific options, not implemented
@@ -63,10 +63,10 @@ fn main() {
 
     // Translate a ~str in octal form to u32, default to 755
     // Not tested on Windows
-    let mode_match = matches.opts_str(&["mode".to_owned()]);
+    let mode_match = matches.opts_str(&["mode".to_strbuf()]);
     let mode: FilePermission = if mode_match.is_some() {
         let m = mode_match.unwrap();
-        let res: Option<u32> = strconv::from_str_common(m, 8, false, false, false,
+        let res: Option<u32> = strconv::from_str_common(m.as_slice(), 8, false, false, false,
                                                         strconv::ExpNone,
                                                         false, false);
         if res.is_some() {
@@ -93,7 +93,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<~str>, mk_parents: bool, mode: FilePermission, verbose: bool) {
+fn exec(dirs: Vec<StrBuf>, mk_parents: bool, mode: FilePermission, verbose: bool) {
     let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {
@@ -103,7 +103,7 @@ fn exec(dirs: Vec<~str>, mk_parents: bool, mode: FilePermission, verbose: bool) 
             match parent {
                 Some(p) => {
                     if !Path::new(p).exists() {
-                        parent_dirs.push(p.into_owned())
+                        parent_dirs.push(p.to_strbuf())
                     }
                 },
                 None => ()

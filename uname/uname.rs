@@ -52,7 +52,7 @@ unsafe fn getuname() -> utsrust {
 static NAME: &'static str = "uname";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
@@ -74,13 +74,13 @@ fn main() {
         println!("Usage:");
         println!("  {:s}", program);
         println!("");
-        print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", opts));
+        print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", opts).as_slice());
         return;
     }
     let uname = unsafe { getuname() };
     let mut output = StrBuf::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
-        || !matches.opts_present(["nodename".to_owned(), "release".to_owned(), "version".to_owned(), "machine".to_owned()]) {
+        || !matches.opts_present(["nodename".to_strbuf(), "release".to_strbuf(), "version".to_strbuf(), "machine".to_strbuf()]) {
             output.push_str(uname.sysname);
             output.push_str(" ");
     }

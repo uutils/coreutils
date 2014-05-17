@@ -24,8 +24,8 @@ static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
-    let program = strip_dir(args.get(0));
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let program = strip_dir(os::args().get(0));
 
     //
     // Argument parsing
@@ -46,7 +46,7 @@ fn main() {
         println!("Print NAME with any leading directory components removed.");
         println!("If specified, also remove a trailing SUFFIX.");
 
-        print(getopts::usage("", opts));
+        print(getopts::usage("", opts).as_slice());
 
         return;
     }
@@ -64,7 +64,7 @@ fn main() {
     }
     // too many arguments
     else if args.len() > 3 {
-        println(program + ": extra operand `" + args.get(3).clone() + "'");
+        println(program + ": extra operand `" + args.get(3).as_slice() + "'");
         println("Try `" + program + " --help' for more information.");
         return;
     }
@@ -75,11 +75,11 @@ fn main() {
 
     let fullname = args.get(1).clone();
 
-    let mut name = strip_dir(&fullname);
+    let mut name = strip_dir(&fullname.as_slice().to_owned());
 
     if args.len() > 2 {
         let suffix = args.get(2).clone();
-        name = strip_suffix(&name, &suffix);
+        name = strip_suffix(&name, &suffix.to_owned());
     }
 
     println(name);

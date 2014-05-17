@@ -24,7 +24,7 @@ static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -58,21 +58,21 @@ fn main() {
                     m
                 }
             }
-            None => "\n".to_owned()
+            None => "\n".to_strbuf()
         };
         let files = if matches.free.is_empty() {
-            vec!("-".to_owned())
+            vec!("-".to_strbuf())
         } else {
             matches.free
         };
-        tac(files, before, regex, separator);
+        tac(files, before, regex, separator.as_slice());
     }
 }
 
-fn tac(filenames: Vec<~str>, before: bool, _: bool, separator: ~str) {
+fn tac(filenames: Vec<StrBuf>, before: bool, _: bool, separator: &str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
-            if filename == "-".to_owned() {
+            if filename.as_slice() == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>
             } else {
                 box crash_if_err!(1, io::File::open(&Path::new(filename))) as Box<Reader>

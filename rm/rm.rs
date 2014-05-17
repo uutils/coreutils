@@ -30,7 +30,7 @@ enum InteractiveMode {
 static NAME: &'static str = "rm";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     // TODO: make getopts support -R in addition to -r
@@ -60,7 +60,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Remove (unlink) the FILE(s).", opts));
+        print(getopts::usage("Remove (unlink) the FILE(s).", opts).as_slice());
         println!("");
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
@@ -120,37 +120,38 @@ fn main() {
 }
 
 // TODO: implement one-file-system
-fn remove(files: Vec<~str>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
+fn remove(files: Vec<StrBuf>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
     for filename in files.iter() {
-        let file = Path::new(filename.to_owned());
+        let filename = filename.as_slice();
+        let file = Path::new(filename);
         if file.exists() {
             if file.is_dir() {
-                if recursive && (*filename != "/".to_owned() || !preserve_root) {
+                if recursive && (filename != "/" || !preserve_root) {
                     let walk_dir = match fs::walk_dir(&file) {
                         Ok(m) => m,
                         Err(f) => {
                             crash!(1, "{}", f.to_str());
                         }
                     };
-                    remove(walk_dir.map(|x| x.as_str().unwrap().to_owned()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
-                    remove_dir(&file, *filename, interactive, verbose);
-                } else if dir && (*filename != "/".to_owned() || !preserve_root) {
-                    remove_dir(&file, *filename, interactive, verbose);
+                    remove(walk_dir.map(|x| x.as_str().unwrap().to_strbuf()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
+                    remove_dir(&file, filename, interactive, verbose);
+                } else if dir && (filename != "/" || !preserve_root) {
+                    remove_dir(&file, filename, interactive, verbose);
                 } else {
                     if recursive {
                         show_error!(1, "could not remove directory '{}'",
-                                       *filename);
+                                       filename);
                     } else {
                         show_error!(1,
                                     "could not remove directory '{}' (did you mean to pass '-r'?)",
-                                    *filename);
+                                    filename);
                     }
                 }
             } else {
-                remove_file(&file, *filename, interactive, verbose);
+                remove_file(&file, filename.as_slice(), interactive, verbose);
             }
         } else if !force {
-            show_error!(1, "no such file or directory '{}'", *filename);
+            show_error!(1, "no such file or directory '{}'", filename);
         }
     }
 }

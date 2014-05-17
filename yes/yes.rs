@@ -25,7 +25,7 @@ mod util;
 static NAME: &'static str = "yes";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
@@ -43,7 +43,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [STRING]... [OPTION]...", program);
         println!("");
-        print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts));
+        print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts).as_slice());
         return;
     }
     if matches.opt_present("version") {

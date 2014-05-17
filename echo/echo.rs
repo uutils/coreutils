@@ -70,7 +70,7 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("n", "", "do not output the trailing newline"),
@@ -92,7 +92,7 @@ fn main() {
         println!("  {0:s} [SHORT-OPTION]... [STRING]...", program);
         println!("  {0:s} LONG-OPTION", program);
         println!("");
-        println(getopts::usage("Echo the STRING(s) to standard output.", opts));
+        println(getopts::usage("Echo the STRING(s) to standard output.", opts).as_slice());
         println("If -e is in effect, the following sequences are recognized:
 
 \\\\      backslash

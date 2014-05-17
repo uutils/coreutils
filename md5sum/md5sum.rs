@@ -28,7 +28,7 @@ static NAME: &'static str = "md5sum";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let program = args.get(0).clone();
 
@@ -68,7 +68,7 @@ fn main() {
         let strict = matches.opt_present("strict");
         let warn = matches.opt_present("warn") && !status;
         let files = if matches.free.is_empty() {
-            vec!("-".to_owned())
+            vec!("-".to_strbuf())
         } else {
             matches.free
         };
@@ -76,13 +76,13 @@ fn main() {
     }
 }
 
-fn md5sum(files: Vec<~str>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) {
+fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) {
     let mut md5 = crypto::md5::Md5::new();
     let bytes = md5.output_bits() / 4;
     let mut bad_format = 0;
     let mut failed = 0;
     for filename in files.iter() {
-        let filename: &str = *filename;
+        let filename: &str = filename.as_slice();
         let mut file = BufferedReader::new(
             if filename == "-".to_owned() {
                 box stdin_raw() as Box<Reader>

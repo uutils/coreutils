@@ -48,7 +48,7 @@ extern {
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("v", "version", "output version information and exit"),
@@ -68,7 +68,7 @@ fn main() {
         println!("");
         print(getopts::usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes.", opts));
+                              in the run queue over the last 1, 5 and 15 minutes.", opts).as_slice());
         return;
     }
 
