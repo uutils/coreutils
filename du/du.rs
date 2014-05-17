@@ -38,13 +38,17 @@ struct Options {
     separate_dirs: bool,
 }
 
+struct Stat {
+    path: Path,
+    fstat: FileStat,
+}
 // this takes `my_stat` to avoid having to stat files multiple times.
-fn du(path: &Path, mut my_stat: FileStat,
-      options: Arc<Options>, depth: uint) -> Vec<Arc<FileStat>> {
+fn du(path: &Path, mut my_stat: Stat,
+      options: Arc<Options>, depth: uint) -> Vec<Arc<Stat>> {
     let mut stats = vec!();
     let mut futures = vec!();
 
-    if my_stat.kind == TypeDirectory {
+    if my_stat.fstat.kind == TypeDirectory {
         let read = match fs::readdir(path) {
             Ok(read) => read,
             Err(e) => {
@@ -55,13 +59,13 @@ fn du(path: &Path, mut my_stat: FileStat,
         };
 
         for f in read.move_iter() {
-            let this_stat = safe_unwrap!(fs::lstat(&f));
-            if this_stat.kind == TypeDirectory {
+            let this_stat = Stat{path: f.clone(), fstat: safe_unwrap!(fs::lstat(&f))};
+            if this_stat.fstat.kind == TypeDirectory {
                 let oa_clone = options.clone();
                 futures.push(Future::spawn(proc() { du(&f, this_stat, oa_clone, depth + 1) }))
             } else {
-                my_stat.size += this_stat.size;
-                my_stat.unstable.blocks += this_stat.unstable.blocks;
+                my_stat.fstat.size += this_stat.fstat.size;
+                my_stat.fstat.unstable.blocks += this_stat.fstat.unstable.blocks;
                 if options.all {
                     stats.push(Arc::new(this_stat))
                 }
@@ -72,8 +76,8 @@ fn du(path: &Path, mut my_stat: FileStat,
     for future in futures.mut_iter() {
         for stat in future.get().move_iter().rev() {
             if !options.separate_dirs && stat.path.dir_path() == my_stat.path {
-                my_stat.size += stat.size;
-                my_stat.unstable.blocks += stat.unstable.blocks;
+                my_stat.fstat.size += stat.fstat.size;
+                my_stat.fstat.unstable.blocks += stat.fstat.unstable.blocks;
             }
             if options.max_depth == None || depth < options.max_depth.unwrap() {
                 stats.push(stat.clone());
@@ -87,7 +91,7 @@ fn du(path: &Path, mut my_stat: FileStat,
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).as_slice();
     let opts = ~[
         // In task
@@ -191,7 +195,7 @@ ers of 1000).",
     let summarize = matches.opt_present("summarize");
 
     let max_depth_str = matches.opt_str("max-depth");
-    let max_depth = max_depth_str.as_ref().and_then(|s| from_str::<uint>(*s));
+    let max_depth = max_depth_str.as_ref().and_then(|s| from_str::<uint>(s.as_slice()));
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
             println!("{}: warning: summarizing conflicts with --max-depth={:s}", program, *s);
@@ -212,7 +216,7 @@ ers of 1000).",
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {vec!("./".to_owned())} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {vec!("./".to_strbuf())} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 
@@ -231,7 +235,7 @@ ers of 1000).",
             let mut found_letter = false;
             let mut numbers = vec!();
             let mut letters = vec!();
-            for c in s.chars() {
+            for c in s.as_slice().chars() {
                 if found_letter && c.is_digit() || !found_number && !c.is_digit() {
                     println!("{}: invalid --block-size argument '{}'", program, s);
                     return
@@ -311,24 +315,24 @@ Try '{program} --help' for more information.", s, program = program);
     for path_str in strs.move_iter() {
         let path = Path::new(path_str);
         let stat = safe_unwrap!(fs::lstat(&path));
-        let iter = du(&path, stat, options_arc.clone(), 0).move_iter();
+        let iter = du(&path, Stat{path: path.clone(), fstat: stat}, options_arc.clone(), 0).move_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat) in iter.enumerate() {
             let size = match matches.opt_present("apparent-size") {
-                true => stat.unstable.nlink * stat.size,
+                true => stat.fstat.unstable.nlink * stat.fstat.size,
                 // C's stat is such that each block is assume to be 512 bytes
                 // See: http://linux.die.net/man/2/stat
-                false => stat.unstable.blocks * 512,
+                false => stat.fstat.unstable.blocks * 512,
             };
             if matches.opt_present("time") {
                 let time_str = {
                     let (secs, nsecs) = {
                         let time = match matches.opt_str("time") {
                             Some(s) => match s.as_slice() {
-                                "accessed" => stat.accessed,
-                                "created" => stat.created,
-                                "modified" => stat.modified,
+                                "accessed" => stat.fstat.accessed,
+                                "created" => stat.fstat.created,
+                                "modified" => stat.fstat.modified,
                                 _ => {
                                     println!("{program}: invalid argument 'modified' for '--time'
     Valid arguments are:
@@ -337,7 +341,7 @@ Try '{program} --help' for more information.", s, program = program);
                                     return
                                 }
                             },
-                            None => stat.modified
+                            None => stat.fstat.modified
                         };
                         ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
