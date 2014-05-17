@@ -146,7 +146,6 @@ To do
 - uname-uname
 - unexpand
 - uniq (in progress)
-- unlink
 - who
 
 License
