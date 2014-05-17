@@ -88,7 +88,7 @@ extern {
 static NAME: &'static str = "id";
 
 fn main () {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let args_t = args.tail();
 
     let options = [

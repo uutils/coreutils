@@ -23,16 +23,15 @@ use getopts::{optopt, optflag, getopts, usage};
 static PROGRAM: &'static str = "head";
 
 fn main () {
-    let args = os::args();
-
-    let options = args.tail().to_owned();
     let mut line_count = 10u;
 
     // handle obsolete -number syntax
-    let options = match obsolete(options) {
+    let options = match obsolete(os::args().tail().to_owned()) {
         (args, Some(n)) => { line_count = n; args },
         (args, None) => args
     };
+
+    let args: Vec<StrBuf> = options.iter().map(|x| x.to_strbuf()).collect();
 
     let possible_options = [
         optopt("n", "number", "Number of lines to print", "n"),
@@ -40,7 +39,7 @@ fn main () {
         optflag("V", "version", "version")
     ];
 
-    let given_options = match getopts(options, possible_options) {
+    let given_options = match getopts(args.as_slice(), possible_options) {
         Ok (m) => { m }
         Err(_) => {
             println!("{:s}", usage(PROGRAM, possible_options));
@@ -56,7 +55,7 @@ fn main () {
 
     match given_options.opt_str("n") {
         Some(n) => {
-            match from_str(n) {
+            match from_str(n.as_slice()) {
                 Some(m) => { line_count = m }
                 None => {}
             }

@@ -17,7 +17,7 @@ use std::io::print;
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("z", "zero", "separate output with NUL rather than newline"),
@@ -38,7 +38,7 @@ fn main() {
         println!("");
         print(getopts::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
-directory).", opts));
+directory).", opts).as_slice());
         return;
     }
 

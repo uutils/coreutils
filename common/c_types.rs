@@ -73,9 +73,9 @@ extern {
     pub fn getgrgid(gid: uid_t) -> *c_group;
 }
 
-pub fn get_pw_from_args(free: &Vec<~str>) -> Option<c_passwd> {
+pub fn get_pw_from_args(free: &Vec<StrBuf>) -> Option<c_passwd> {
     if free.len() == 1 {
-        let username = free.get(0).clone();
+        let username = free.get(0).as_slice();
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit()) {

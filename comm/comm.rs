@@ -82,6 +82,7 @@ fn open_file(name: &str) -> IoResult<Box<Buffer>> {
 }
 
 pub fn main() {
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let opts = [
         getopts::optflag("1", "", "suppress column 1 (lines uniq to FILE1)"),
         getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),
@@ -89,7 +90,7 @@ pub fn main() {
         getopts::optflag("h", "help", "display this help and exit"),
     ];
 
-    let matches = match getopts::getopts(os::args().tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(err) => fail!("{}", err.to_err_msg()),
     };
@@ -100,7 +101,7 @@ pub fn main() {
         println!("Usage:");
         println!("  {} [OPTIONS] FILE1 FILE2", NAME);
         println!("");
-        print(getopts::usage("Compare sorted files line by line.", opts.as_slice()));
+        print(getopts::usage("Compare sorted files line by line.", opts.as_slice()).as_slice());
         if matches.free.len() != 2 {
             os::set_exit_status(1);
         }
@@ -108,8 +109,8 @@ pub fn main() {
     }
 
 
-    let mut f1 = open_file(matches.free.get(0).clone()).unwrap();
-    let mut f2 = open_file(matches.free.get(1).clone()).unwrap();
+    let mut f1 = open_file(matches.free.get(0).as_slice()).unwrap();
+    let mut f2 = open_file(matches.free.get(1).as_slice()).unwrap();
 
     comm(&mut f1, &mut f2, &matches)
 }

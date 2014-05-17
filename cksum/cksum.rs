@@ -78,12 +78,13 @@ fn open_file(name: &str) -> IoResult<Box<Reader>> {
 }
 
 pub fn main() {
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(os::args().tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(err) => fail!("{}", err.to_err_msg()),
     };
@@ -94,7 +95,7 @@ pub fn main() {
         println!("Usage:");
         println!("  {} [OPTIONS] [FILE]...", NAME);
         println!("");
-        print(getopts::usage("Print CRC and size for each file.", opts.as_slice()));
+        print(getopts::usage("Print CRC and size for each file.", opts.as_slice()).as_slice());
         return;
     }
 
@@ -114,7 +115,7 @@ pub fn main() {
     }
 
     for fname in files.iter() {
-        match cksum(*fname) {
+        match cksum(fname.as_slice()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
             Err(err) => show_error!(2, "'{}' {}", fname, err),
         }

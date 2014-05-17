@@ -20,8 +20,8 @@ use std::io::stdio::{stdout_raw, stdin_raw};
 use std::io::{BufferedWriter};
 
 fn main() {
-    let args = os::args();
-    let program = args.get(0).clone();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("A", "show-all", "equivalent to -vET"),
         getopts::optflag("b", "number-nonblank", "number nonempty output lines, overrides -n"),
@@ -45,7 +45,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Concatenate FILE(s), or standard input, to standard output.", opts));
+        print(getopts::usage("Concatenate FILE(s), or standard input, to standard output.", opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return;
@@ -62,13 +62,13 @@ fn main() {
     if matches.opt_present("number-nonblank") {
         number_mode = NumberNonEmpty;
     }
-    let show_nonprint = matches.opts_present(["show-nonprinting".to_owned(), "show-all".to_owned(), "t".to_owned(), "e".to_owned()]);
-    let show_ends = matches.opts_present(["show-ends".to_owned(), "show-all".to_owned(), "e".to_owned()]);
-    let show_tabs = matches.opts_present(["show-tabs".to_owned(), "show-all".to_owned(), "t".to_owned()]);
+    let show_nonprint = matches.opts_present(["show-nonprinting".to_strbuf(), "show-all".to_strbuf(), "t".to_strbuf(), "e".to_strbuf()]);
+    let show_ends = matches.opts_present(["show-ends".to_strbuf(), "show-all".to_strbuf(), "e".to_strbuf()]);
+    let show_tabs = matches.opts_present(["show-tabs".to_strbuf(), "show-all".to_strbuf(), "t".to_strbuf()]);
     let squeeze_blank = matches.opt_present("squeeze-blank");
     let mut files = matches.free;
     if files.is_empty() {
-        files = vec!("-".to_owned());
+        files = vec!("-".to_strbuf());
     }
 
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);
@@ -96,7 +96,7 @@ fn is_newline_char(byte: u8) -> bool {
     byte == LF
 }
 
-pub fn exec(files: Vec<~str>, number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
+pub fn exec(files: Vec<StrBuf>, number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
         let mut counter: uint = 1;

@@ -47,7 +47,7 @@ enum TruncateMode {
 static NAME: &'static str = "truncate";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -108,7 +108,7 @@ file based on its current size:
     }
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<~str>, size: Option<~str>, filenames: Vec<~str>) {
+fn truncate(no_create: bool, _: bool, reference: Option<StrBuf>, size: Option<StrBuf>, filenames: Vec<StrBuf>) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {
@@ -119,10 +119,10 @@ fn truncate(no_create: bool, _: bool, reference: Option<~str>, size: Option<~str
             };
             (get_file_size!(rfile, return), Reference)
         }
-        None => parse_size(size.unwrap())
+        None => parse_size(size.unwrap().as_slice())
     };
     for filename in filenames.iter() {
-        let filename: &str = *filename;
+        let filename = filename.as_slice();
         let path = Path::new(filename);
         if path.exists() || !no_create {
             match File::open_mode(&path, Open, ReadWrite) {
@@ -152,7 +152,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<~str>, size: Option<~str
     }
 }
 
-fn parse_size(size: ~str) -> (u64, TruncateMode) {
+fn parse_size(size: &str) -> (u64, TruncateMode) {
     let mode = match size.char_at(0) {
         '+' => Extend,
         '-' => Reduce,

@@ -25,7 +25,7 @@ mod util;
 static NAME: &'static str = "printenv";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),
@@ -44,7 +44,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [VARIABLE]... [OPTION]...", program);
         println!("");
-        print(getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts));
+        print(getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts).as_slice());
         return;
     }
     if matches.opt_present("version") {
@@ -59,7 +59,7 @@ fn main() {
     exec(matches.free, separator);
 }
 
-pub fn exec(args: Vec<~str>, separator: &str) {
+pub fn exec(args: Vec<StrBuf>, separator: &str) {
     if args.is_empty() {
         let vars = os::env();
         for (env_var, value) in vars.move_iter() {
@@ -70,7 +70,7 @@ pub fn exec(args: Vec<~str>, separator: &str) {
     }
 
     for env_var in args.iter() {
-        match os::getenv(*env_var) {
+        match os::getenv(env_var.as_slice()) {
             Some(var) => {
                 print(var);
                 print(separator);

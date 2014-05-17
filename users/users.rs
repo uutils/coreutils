@@ -48,7 +48,7 @@ extern {
 static NAME: &'static str = "users";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
@@ -66,7 +66,7 @@ fn main() {
         println!("Usage:");
         println!("  {:s} [OPTION]... [FILE]", program);
         println!("");
-        print(getopts::usage("Output who is currently logged in according to FILE.", opts));
+        print(getopts::usage("Output who is currently logged in according to FILE.", opts).as_slice());
         return;
     }
 

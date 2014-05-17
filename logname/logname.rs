@@ -44,7 +44,7 @@ fn version() {
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     //
@@ -66,7 +66,7 @@ fn main() {
         println!("Usage:");
         println!("  {:s}", program);
         println!("");
-        print(getopts::usage("print user's login name", opts));
+        print(getopts::usage("print user's login name", opts).as_slice());
         return;
     }
     if matches.opt_present("version") {

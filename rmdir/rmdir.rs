@@ -23,7 +23,7 @@ mod util;
 static NAME: &'static str = "rmdir";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -47,7 +47,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... DIRECTORY...", program);
         println!("");
-        print(getopts::usage("Remove the DIRECTORY(ies), if they are empty.", opts));
+        print(getopts::usage("Remove the DIRECTORY(ies), if they are empty.", opts).as_slice());
     } else if matches.opt_present("version") {
         println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {
@@ -61,12 +61,12 @@ fn main() {
     }
 }
 
-fn remove(dirs: Vec<~str>, ignore: bool, parents: bool, verbose: bool) {
+fn remove(dirs: Vec<StrBuf>, ignore: bool, parents: bool, verbose: bool) {
     for dir in dirs.iter() {
-        let path = Path::new(dir.to_owned());
+        let path = Path::new(dir.as_slice());
         if path.exists() {
             if path.is_dir() {
-                remove_dir(&path, dir, ignore, parents, verbose);
+                remove_dir(&path, dir.as_slice(), ignore, parents, verbose);
             } else {
                 show_error!(1, "failed to remove '{}' (file)", *dir);
             }
@@ -76,7 +76,7 @@ fn remove(dirs: Vec<~str>, ignore: bool, parents: bool, verbose: bool) {
     }
 }
 
-fn remove_dir(path: &Path, dir: &~str, ignore: bool, parents: bool, verbose: bool) {
+fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) {
     let mut walk_dir = match fs::walk_dir(path) {
         Ok(m) => m,
         Err(f) => {
@@ -88,12 +88,12 @@ fn remove_dir(path: &Path, dir: &~str, ignore: bool, parents: bool, verbose: boo
         match fs::rmdir(path) {
             Ok(_) => {
                 if verbose {
-                    println!("Removed directory '{}'", *dir);
+                    println!("Removed directory '{}'", dir);
                 }
                 if parents {
                     let dirname = path.dirname_str().unwrap();
                     if dirname != "." {
-                        remove_dir(&Path::new(dirname), &dirname.to_owned(), ignore, parents, verbose);
+                        remove_dir(&Path::new(dirname), dirname, ignore, parents, verbose);
                     }
                 }
             }
@@ -102,7 +102,7 @@ fn remove_dir(path: &Path, dir: &~str, ignore: bool, parents: bool, verbose: boo
             }
         }
     } else if !ignore {
-        show_error!(1, "Failed to remove directory '{}' (non-empty)", *dir);
+        show_error!(1, "Failed to remove directory '{}' (non-empty)", dir);
     }
 }
 

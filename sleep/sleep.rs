@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "sleep";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -51,7 +51,7 @@ fn main() {
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.", opts));
+specified by the sum of their values.", opts).as_slice());
     } else if matches.opt_present("version") {
         println!("sleep 1.0.0");
     } else if matches.free.is_empty() {
@@ -62,9 +62,9 @@ specified by the sum of their values.", opts));
     }
 }
 
-fn sleep(args: Vec<~str>) {
+fn sleep(args: Vec<StrBuf>) {
     let sleep_time = args.iter().fold(0.0, |result, arg| {
-        let (arg, suffix_time) = match match_suffix(arg) {
+        let (arg, suffix_time) = match match_suffix(arg.as_slice()) {
             Ok(m) => m,
             Err(f) => {
                 crash!(1, "{}", f)
@@ -86,19 +86,19 @@ fn sleep(args: Vec<~str>) {
     timer::sleep((sleep_time * 1000.0) as u64);
 }
 
-fn match_suffix(arg: &~str) -> Result<(~str, int), ~str> {
-    let result = match (*arg).char_at_reverse(0) {
+fn match_suffix(arg: &str) -> Result<(~str, int), ~str> {
+    let result = match (arg).char_at_reverse(0) {
         's' | 'S' => 1,
         'm' | 'M' => 60,
         'h' | 'H' => 60 * 60,
         'd' | 'D' => 60 * 60 * 24,
         val => {
             if !val.is_alphabetic() {
-                return Ok(((*arg).clone(), 1))
+                return Ok(((arg).to_owned(), 1))
             } else {
                 return Err(format!("Invalid time interval '{}'", arg))
             }
         }
     };
-    Ok(((*arg).slice_to((*arg).len() - 1).to_owned(), result))
+    Ok(((arg).slice_to((arg).len() - 1).to_owned(), result))
 }

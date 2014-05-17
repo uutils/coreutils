@@ -54,7 +54,7 @@ pub enum Mode {
 
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = ~[
         optflag("h", "help", "display this help and exit"),
@@ -70,7 +70,7 @@ fn main() {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage));
+            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
             return
         },
     };
@@ -89,10 +89,10 @@ fn main() {
     };
 
     match mode {
-        Kill    => kill(matches.opt_str("signal").unwrap_or("9".to_owned()), matches.free),
+        Kill    => kill(matches.opt_str("signal").unwrap_or("9".to_strbuf()).as_slice(), matches.free),
         Table   => table(),
         List    => list(matches.opt_str("list")),
-        Help    => help(NAME, usage),
+        Help    => help(NAME, usage.as_slice()),
         Version => version(),
     }
 }
@@ -149,9 +149,9 @@ fn print_signals() {
     }
 }
 
-fn list(arg: Option<~str>) {
+fn list(arg: Option<StrBuf>) {
     match arg {
-      Some(x) => print_signal(x),
+      Some(x) => print_signal(x.to_owned()),
       None => print_signals(),
     };
 }
@@ -178,14 +178,14 @@ fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
     return None;
 }
 
-fn kill(signalname: ~str, pids: std::vec::Vec<~str>) {
-    let optional_signal_value = signal_by_name_or_value(signalname.clone());
+fn kill(signalname: &str, pids: std::vec::Vec<StrBuf>) {
+    let optional_signal_value = signal_by_name_or_value(signalname.to_owned());
     let signal_value = match optional_signal_value {
         Some(x) => x,
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)
     };
     for pid in pids.iter() {
-        match from_str::<i32>(*pid) {
+        match from_str::<i32>(pid.as_slice()) {
             Some(x) => {
                 let result = Process::kill(x, signal_value as int);
                 match result {

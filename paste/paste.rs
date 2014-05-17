@@ -24,7 +24,7 @@ static NAME: &'static str = "paste";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -50,16 +50,16 @@ fn main() {
         let serial = matches.opt_present("serial");
         let delimiters = match matches.opt_str("delimiters") {
             Some(m) => m,
-            None => "\t".to_owned()
+            None => "\t".to_strbuf()
         };
-        paste(matches.free, serial, delimiters);
+        paste(matches.free, serial, delimiters.as_slice());
     }
 }
 
-fn paste(filenames: Vec<~str>, serial: bool, delimiters: ~str) {
+fn paste(filenames: Vec<StrBuf>, serial: bool, delimiters: &str) {
     let mut files: Vec<io::BufferedReader<Box<Reader>>> = filenames.move_iter().map(|name|
         io::BufferedReader::new(
-            if name == "-".to_owned() {
+            if name.as_slice() == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>
             } else {
                 box crash_if_err!(1, io::File::open(&Path::new(name))) as Box<Reader>

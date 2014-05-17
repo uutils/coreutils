@@ -47,9 +47,11 @@ fn options(args: &[~str]) -> Result<Options, ()> {
         optflag("V", "version", "output version information and exit"),
     ];
 
+    let args: Vec<StrBuf> = args.iter().map(|x| x.to_strbuf()).collect();
+
     getopts(args.tail(), opts).map_err(|e| e.to_err_msg()).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
-        let program = args[0].clone();
+        let program = args.get(0).as_slice();
         let arguments = "[OPTION]... [FILE]...";
         let brief = "Copy standard input to each FILE, and also to standard " +
                     "output.";
@@ -57,18 +59,18 @@ fn options(args: &[~str]) -> Result<Options, ()> {
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
                            comment);
-        let names = m.free.clone().move_iter().collect::<Vec<~str>>().append_one("-".to_owned()).as_slice().to_owned();
+        let names = m.free.clone().move_iter().collect::<Vec<StrBuf>>().append_one("-".to_strbuf());
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };
         Ok(Options {
-            program: program,
+            program: program.into_owned(),
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
             files: box names.iter().map(|name| Path::new(name.clone())).collect()
         })
-    }).map_err(|message| warn(message))
+    }).map_err(|message| warn(message.as_slice()))
 }
 
 fn exec(options: Options) -> Result<(), ()> {

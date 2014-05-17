@@ -27,11 +27,10 @@ static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
 
+    let (args, obs_width) = handle_obsolete(os::args().as_slice().to_owned());
     let program = args.get(0).clone();
-
-    let (args, obs_width) = handle_obsolete(args.as_slice().to_owned());
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = [
         getopts::optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)"),
@@ -62,7 +61,10 @@ fn main() {
             if matches.opt_present("w") {
                 matches.opt_str("w")
             } else {
-                obs_width
+                match obs_width {
+                    Some(v) => Some(v.to_strbuf()),
+                    None => None,
+                }
             };
         let width = match poss_width {
             Some(inp_width) => match uint::parse_bytes(inp_width.as_bytes(), 10) {
@@ -72,7 +74,7 @@ fn main() {
             None => 80
         };
         let files = if matches.free.is_empty() {
-            vec!("-".to_owned())
+            vec!("-".to_strbuf())
         } else {
             matches.free
         };
@@ -93,9 +95,9 @@ fn handle_obsolete(args: ~[~str]) -> (~[~str], Option<~str>) {
     (args.as_slice().to_owned(), None)
 }
 
-fn fold(filenames: Vec<~str>, bytes: bool, spaces: bool, width: uint) {
+fn fold(filenames: Vec<StrBuf>, bytes: bool, spaces: bool, width: uint) {
     for filename in filenames.iter() {
-        let filename: &str = *filename;
+        let filename: &str = filename.as_slice();
         let buffer = BufferedReader::new(
             if filename == "-".to_owned() {
                 box io::stdio::stdin_raw() as Box<Reader>

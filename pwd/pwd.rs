@@ -24,7 +24,7 @@ static NAME: &'static str = "pwd";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("", "help", "display this help and exit"),
@@ -44,7 +44,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION] NAME...", program);
         println!("");
-        print(getopts::usage("Print the full filename of the current working directory.", opts));
+        print(getopts::usage("Print the full filename of the current working directory.", opts).as_slice());
     } else if matches.opt_present("version") {
         return println!("pwd version: {}", VERSION);
     } else {

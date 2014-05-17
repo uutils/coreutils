@@ -50,7 +50,7 @@ extern {
 }
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = ~[
         optflag("", "help", "display this help and exit"),
@@ -63,7 +63,7 @@ fn main() {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage));
+            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
             return
         },
     };
@@ -78,7 +78,7 @@ fn main() {
 
     match mode {
         HostId  => hostid(),
-        Help    => help(NAME, usage),
+        Help    => help(NAME, usage.as_slice()),
         Version => version(),
     }
 }

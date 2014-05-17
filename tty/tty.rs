@@ -35,7 +35,7 @@ extern {
 static NAME: &'static str = "tty";
 
 fn main () {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let options = [
         optflag("s", "silent", "print nothing, only return an exit status")
@@ -46,7 +46,7 @@ fn main () {
             m.opt_present("s")
         },
         Err(f) => {
-            println(f.to_err_msg());
+            println(f.to_err_msg().as_slice());
             usage();
             return
         }

@@ -34,7 +34,7 @@ struct Result {
 static NAME: &'static str = "wc";
 
 fn main() {
-    let args = os::args();
+    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("c", "bytes", "print the byte counts"),
@@ -57,7 +57,7 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Print newline, word and byte counts for each FILE", opts));
+        print(getopts::usage("Print newline, word and byte counts for each FILE", opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return;
@@ -70,7 +70,7 @@ fn main() {
 
     let mut files = matches.free.clone();
     if files.is_empty() {
-        files = vec!("-".to_owned());
+        files = vec!("-".to_strbuf());
     }
 
     wc(files, &matches);
@@ -87,7 +87,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: Vec<~str>, matches: &Matches) {
+pub fn wc(files: Vec<StrBuf>, matches: &Matches) {
     let mut total_line_count: uint = 0;
     let mut total_word_count: uint = 0;
     let mut total_char_count: uint = 0;
@@ -155,7 +155,7 @@ pub fn wc(files: Vec<~str>, matches: &Matches) {
         }
 
         results.push(Result {
-            filename: path.clone(),
+            filename: path.as_slice().to_owned(),
             bytes: byte_count,
             chars: char_count,
             lines: line_count,
