@@ -25,6 +25,7 @@ PROGS       := \
   seq \
   tac \
   tee \
+  tr \
   true \
   truncate \
   unlink \
@@ -60,6 +61,7 @@ TEST_PROGS  := \
   cat \
   mkdir \
   seq \
+  tr \
   truncate \
 
 TEST        ?= $(TEST_PROGS)
