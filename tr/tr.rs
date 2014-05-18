@@ -1,4 +1,5 @@
 #![crate_id(name="tr", vers="1.0.0", author="Michael Gehring")]
+#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -21,6 +22,9 @@ use std::io::stdio::{stdin,stdout};
 use std::iter::FromIterator;
 use std::os;
 use std::vec::Vec;
+
+#[path="../common/util.rs"]
+mod util;
 
 static NAME : &'static str = "tr";
 static VERSION : &'static str = "1.0.0";
@@ -82,7 +86,7 @@ fn expand_set(s: &str) -> Vec<char> {
     set
 }
 
-fn delete(set: Vec<char>) {
+fn delete(set: Vec<char>, complement: bool) {
     let mut bset = BitvSet::new();
     let mut out = stdout();
 
@@ -90,9 +94,15 @@ fn delete(set: Vec<char>) {
         bset.insert(c as uint);
     }
 
+    let is_allowed = if complement {
+        |c: char| bset.contains(&(c as uint))
+    } else {
+        |c: char| !bset.contains(&(c as uint))
+    };
+
     for c in stdin().chars() {
         match c {
-            Ok(c) if !bset.contains(&(c as uint)) => out.write_char(c).unwrap(),
+            Ok(c) if is_allowed(c) => out.write_char(c).unwrap(),
             Ok(_) => (),
             Err(err) => fail!("{}", err),
         };
@@ -139,6 +149,8 @@ fn usage(opts: &[OptGroup]) {
 pub fn main() {
     let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let opts = [
+        getopts::optflag("c", "complement", "use the complement of SET1"),
+        getopts::optflag("C", "", "same as -c"),
         getopts::optflag("d", "delete", "delete characters in SET1"),
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
@@ -146,12 +158,15 @@ pub fn main() {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(err) => fail!("{}", err.to_err_msg()),
+        Err(err) => {
+            show_error!(1, "{}", err.to_err_msg());
+            return;
+        }
     };
 
     if matches.opt_present("help") {
         usage(opts);
-        return
+        return;
     }
 
     if matches.opt_present("version") {
@@ -162,15 +177,21 @@ pub fn main() {
     if matches.free.len() == 0 {
         usage(opts);
         os::set_exit_status(1);
-        return
+        return;
     }
 
     let dflag = matches.opt_present("d");
+    let cflag = matches.opts_present(["c".to_strbuf(), "C".to_strbuf()]);
     let sets = matches.free;
+
+    if cflag && !dflag {
+        show_error!(1, "-c is only supported with -d");
+        return;
+    }
 
     if dflag {
         let set1 = expand_set(sets.get(0).as_slice());
-        delete(set1);
+        delete(set1, cflag);
     } else {
         let set1 = expand_set(sets.get(0).as_slice());
         let set2 = expand_set(sets.get(1).as_slice());
