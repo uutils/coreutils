@@ -88,12 +88,18 @@ pub fn main() {
         getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),
         getopts::optflag("3", "", "suppress column 3 (lines that appear in both files)"),
         getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("V", "version", "output version information and exit"),
     ];
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(err) => fail!("{}", err.to_err_msg()),
     };
+
+    if matches.opt_present("version") {
+        println!("{} {}", NAME, VERSION);
+        return;
+    }
 
     if matches.opt_present("help") || matches.free.len() != 2 {
         println!("{} {}", NAME, VERSION);
