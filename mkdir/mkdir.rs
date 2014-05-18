@@ -79,6 +79,9 @@ fn main() {
     };
 
     let dirs = matches.free;
+    if dirs.is_empty() {
+        crash!(1, "missing operand");
+    }
     exec(dirs, mk_parents, mode, verbose_flag);
 }
 
