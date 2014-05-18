@@ -12,7 +12,8 @@
 extern crate collections;
 extern crate getopts;
 
-use collections::hashmap::{HashMap, HashSet};
+use collections::hashmap::HashSet;
+use collections::smallintmap::SmallIntMap;
 use getopts::OptGroup;
 use std::char::from_u32;
 use std::io::print;
@@ -99,21 +100,21 @@ fn delete(set: Vec<char>) {
 }
 
 fn tr(set1: &[char], set2: &[char]) {
-    let mut map = HashMap::new();
+    let mut map = SmallIntMap::<char>::new();
     let mut out = stdout();
 
     for i in range(0, set1.len()) {
         if i >= set2.len() {
-            map.insert(set1[i], set2[set2.len()-1]);
+            map.insert(set1[i] as uint, set2[set2.len()-1]);
         } else {
-            map.insert(set1[i], set2[i]);
+            map.insert(set1[i] as uint, set2[i]);
         }
     }
 
     for c in stdin().chars() {
         match c {
             Ok(inc) => {
-                let trc = match map.find(&inc) {
+                let trc = match map.find(&(inc as uint)) {
                     Some(t) => *t,
                     None => inc,
                 };
