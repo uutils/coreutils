@@ -61,6 +61,7 @@ TEST_PROGS  := \
   cat \
   mkdir \
   seq \
+  tr \
   truncate \
 
 TEST        ?= $(TEST_PROGS)
