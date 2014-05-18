@@ -12,7 +12,7 @@
 extern crate collections;
 extern crate getopts;
 
-use collections::hashmap::HashSet;
+use collections::bitv::BitvSet;
 use collections::smallintmap::SmallIntMap;
 use getopts::OptGroup;
 use std::char::from_u32;
@@ -83,16 +83,16 @@ fn expand_set(s: &str) -> Vec<char> {
 }
 
 fn delete(set: Vec<char>) {
-    let mut hset = HashSet::new();
+    let mut bset = BitvSet::new();
     let mut out = stdout();
 
     for &c in set.iter() {
-        hset.insert(c);
+        bset.insert(c as uint);
     }
 
     for c in stdin().chars() {
         match c {
-            Ok(c) if !hset.contains(&c) => out.write_char(c).unwrap(),
+            Ok(c) if !bset.contains(&(c as uint)) => out.write_char(c).unwrap(),
             Ok(_) => (),
             Err(err) => fail!("{}", err),
         };
