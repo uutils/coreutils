@@ -25,6 +25,7 @@ PROGS       := \
   seq \
   tac \
   tee \
+  tr \
   true \
   truncate \
   unlink \
