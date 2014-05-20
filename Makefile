@@ -13,6 +13,7 @@ PROGS       := \
   dirname \
   echo \
   env \
+  dd \
   du \
   factor \
   false \
