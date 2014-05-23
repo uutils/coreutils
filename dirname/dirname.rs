@@ -17,7 +17,7 @@ use std::io::print;
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("z", "zero", "separate output with NUL rather than newline"),

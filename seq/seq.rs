@@ -21,14 +21,14 @@ fn print_usage(opts: ~[getopts::OptGroup]) {
     println!("{:s}", getopts::usage("Print sequences of numbers", opts));
 }
 
-fn parse_float(s: &str) -> Result<f32, ~str>{
+fn parse_float(s: &str) -> Result<f32, StrBuf>{
     match from_str(s) {
         Some(n) => Ok(n),
         None => Err(format!("seq: invalid floating point argument: {:s}", s))
     }
 }
 
-fn escape_sequences(s: &str) -> ~str {
+fn escape_sequences(s: &str) -> StrBuf {
     s.replace("\\n", "\n").
         replace("\\t", "\t")
 }
@@ -96,7 +96,7 @@ fn done_printing(next: f32, step: f32, last: f32) -> bool {
     }
 }
 
-fn print_seq(first: f32, step: f32, last: f32, separator: ~str, terminator: ~str, pad: bool) {
+fn print_seq(first: f32, step: f32, last: f32, separator: StrBuf, terminator: StrBuf, pad: bool) {
     let mut i = first;
     let maxlen = first.max(last).to_str().len();
     while !done_printing(i, step, last) {

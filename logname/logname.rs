@@ -18,7 +18,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{print, println};
+use std::io::print;
 use std::os;
 use std::str;
 use libc::c_char;
@@ -30,7 +30,7 @@ extern {
     pub fn getlogin() -> *libc::c_char;
 }
 
-unsafe fn get_userlogin() -> ~str {
+unsafe fn get_userlogin() -> StrBuf {
     let login: *libc::c_char = getlogin();
 
     str::raw::from_c_str(login)
@@ -40,11 +40,11 @@ static NAME: &'static str = "logname";
 static VERSION: &'static str = "1.0.0";
 
 fn version() {
-    println(NAME + " " + VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
 
     //

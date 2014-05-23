@@ -55,10 +55,10 @@ fn main() {
         string = matches.free.connect(" ");
     }
 
-    exec(string);
+    exec(string.as_slice());
 }
 
-pub fn exec(string: ~str) {
+pub fn exec(string: &str) {
     loop {
         println(string);
     }

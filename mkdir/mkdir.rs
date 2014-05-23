@@ -89,8 +89,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
     println!("mkdir v{} - make a new directory with the given path", VERSION);
     println!("");
     println!("Usage:");
-    print!("{}", getopts::usage("Create the given DIRECTORY(ies)" +
-                               " if they do not exist", opts));
+    print!("{}", getopts::usage("Create the given DIRECTORY(ies) if they do not exist", opts));
 }
 
 /**

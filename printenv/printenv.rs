@@ -72,7 +72,7 @@ pub fn exec(args: Vec<StrBuf>, separator: &str) {
     for env_var in args.iter() {
         match os::getenv(env_var.as_slice()) {
             Some(var) => {
-                print(var);
+                print(var.as_slice());
                 print(separator);
             }
             _ => ()

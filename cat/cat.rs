@@ -20,7 +20,7 @@ use std::io::stdio::{stdout_raw, stdin_raw};
 use std::io::{BufferedWriter};
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("A", "show-all", "equivalent to -vET"),
@@ -103,7 +103,7 @@ pub fn exec(files: Vec<StrBuf>, number: NumberingMode, show_nonprint: bool, show
         let is_numbering = number == NumberAll || number == NumberNonEmpty;
 
         for path in files.iter() {
-            let mut reader = match open(path.to_owned()) {
+            let mut reader = match open(path.as_slice()) {
                 Some(f) => f,
                 None => { continue }
             };
@@ -158,7 +158,7 @@ pub fn exec(files: Vec<StrBuf>, number: NumberingMode, show_nonprint: bool, show
     let mut buf = ~[0, .. 1024 * 64];
     // passthru mode
     for path in files.iter() {
-        let mut reader = match open(path.to_owned()) {
+        let mut reader = match open(path.as_slice()) {
             Some(f) => f,
             None => { continue }
         };
@@ -175,7 +175,7 @@ pub fn exec(files: Vec<StrBuf>, number: NumberingMode, show_nonprint: bool, show
     }
 }
 
-fn open(path: ~str) -> Option<Box<Reader>> {
+fn open(path: &str) -> Option<Box<Reader>> {
     if "-" == path {
         return Some(box stdin_raw() as Box<Reader>);
     }

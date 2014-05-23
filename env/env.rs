@@ -16,9 +16,9 @@
 struct options {
     ignore_env: bool,
     null: bool,
-    unsets: Vec<~str>,
-    sets: Vec<(~str, ~str)>,
-    program: Vec<~str>
+    unsets: Vec<StrBuf>,
+    sets: Vec<(StrBuf, StrBuf)>,
+    program: Vec<StrBuf>
 }
 
 fn usage(prog: &str) {
@@ -77,7 +77,7 @@ fn main() {
 
         if wait_cmd {
             // we still accept NAME=VAL here but not other options
-            let mut sp = opt.splitn('=', 1);
+            let mut sp = opt.as_slice().splitn('=', 1);
             let name = sp.next();
             let value = sp.next();
 
@@ -91,7 +91,7 @@ fn main() {
                     break;
                 }
             }
-        } else if opt.starts_with("--") {
+        } else if opt.as_slice().starts_with("--") {
             match opt.as_slice() {
                 "--help" => { usage(prog); return }
                 "--version" => { version(); return }
@@ -113,7 +113,7 @@ fn main() {
                     return
                 }
             }
-        } else if opt.starts_with("-") {
+        } else if opt.as_slice().starts_with("-") {
             if opt.len() == 0 {
                 // implies -i and stop parsing opts
                 wait_cmd = true;
@@ -121,7 +121,7 @@ fn main() {
                 continue;
             }
 
-            let mut chars = opt.chars();
+            let mut chars = opt.as_slice().chars();
             chars.next();
 
             for c in chars {
@@ -148,7 +148,7 @@ fn main() {
             }
         } else {
             // is it a NAME=VALUE like opt ?
-            let mut sp = opt.splitn('=', 1);
+            let mut sp = opt.as_slice().splitn('=', 1);
             let name = sp.next();
             let value = sp.next();
 

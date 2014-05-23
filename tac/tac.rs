@@ -79,21 +79,24 @@ fn tac(filenames: Vec<StrBuf>, before: bool, _: bool, separator: &str) {
             }
         );
         let mut data = crash_if_err!(1, file.read_to_str());
-        if data.ends_with("\n") {
+        if data.as_slice().ends_with("\n") {
             // removes blank line that is inserted otherwise
             let mut buf = data.into_strbuf();
             let len = buf.len();
             buf.truncate(len - 1);
             data = buf.into_owned();
         }
-        let split_vec: Vec<&str> = data.split_str(separator).collect();
-        let rev: ~str = split_vec.iter().rev().fold("".to_owned(), |a, &b|
-            a + if before {
-                separator + b
+        let split_vec: Vec<&str> = data.as_slice().split_str(separator).collect();
+        let rev: StrBuf = split_vec.iter().rev().fold(StrBuf::new(), |mut a, &b| {
+            if before {
+               a.push_str(separator);
+               a.push_str(b);
             } else {
-                b + separator
+                a.push_str(b);
+                a.push_str(separator);
             }
-        );
+            a
+        });
         print!("{}", rev);
     }
 }

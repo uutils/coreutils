@@ -167,8 +167,8 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
              }
     };
 
-    match uptime_text.words().next() {
-        Some(s) => match from_str(s.replace(".","")) {
+    match uptime_text.as_slice().words().next() {
+        Some(s) => match from_str(s.replace(".","").as_slice()) {
                     Some(n) => n,
                     None => -1
                    },

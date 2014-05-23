@@ -66,23 +66,26 @@ fn paste(filenames: Vec<StrBuf>, serial: bool, delimiters: &str) {
             }
         )
     ).collect();
-    let delimiters: Vec<~str> = delimiters.chars().map(|x| x.to_str()).collect();
+    let delimiters: Vec<StrBuf> = delimiters.chars().map(|x| x.to_str()).collect();
     let mut delim_count = 0;
     if serial {
         for file in files.mut_iter() {
-            let mut output = "".to_owned();
+            let mut output = StrBuf::new();
             loop {
-                output = output + match file.read_line() {
-                    Ok(line) => line.trim_right() + delimiters.get(delim_count % delimiters.len()).clone(),
+                match file.read_line() {
+                    Ok(line) => {
+                        output.push_str(line.as_slice().trim_right());
+                        output.push_str(delimiters.get(delim_count % delimiters.len()).as_slice());
+                    }
                     Err(f) => if f.kind == io::EndOfFile {
                         break
                     } else {
                         crash!(1, "{}", f.to_str())
                     }
-                };
+                }
                 delim_count += 1;
             }
-            println!("{}", output.slice_to(output.len() - 1));
+            println!("{}", output.as_slice().slice_to(output.len() - 1));
         }
     } else {
         let mut eof = Vec::from_elem(files.len(), false);
@@ -94,7 +97,7 @@ fn paste(filenames: Vec<StrBuf>, serial: bool, delimiters: &str) {
                     eof_count += 1;
                 } else {
                     match file.read_line() {
-                        Ok(line) => output = output + line.slice_to(line.len() - 1),
+                        Ok(line) => output.push_str(line.as_slice().slice_to(line.len() - 1)),
                         Err(f) => if f.kind == io::EndOfFile {
                             *eof.get_mut(i) = true;
                             eof_count += 1;
@@ -103,13 +106,13 @@ fn paste(filenames: Vec<StrBuf>, serial: bool, delimiters: &str) {
                         }
                     }
                 }
-                output = output + delimiters.get(delim_count % delimiters.len()).clone();
+                output.push_str(delimiters.get(delim_count % delimiters.len()).as_slice());
                 delim_count += 1;
             }
             if files.len() == eof_count {
                 break;
             }
-            println!("{}", output.slice_to(output.len() - 1));
+            println!("{}", output.as_slice().slice_to(output.len() - 1));
             delim_count = 0;
         }
     }

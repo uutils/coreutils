@@ -24,8 +24,8 @@ static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
-    let program = strip_dir(os::args().get(0));
+    let args = os::args();
+    let program = strip_dir(args.get(0).as_slice());
 
     //
     // Argument parsing
@@ -52,20 +52,20 @@ fn main() {
     }
 
     if matches.opt_present("version") {
-        println(program + " " + VERSION);
+        println!("{} {}", program, VERSION);
         return;
     }
 
     // too few arguments
     if args.len() < 2 {
-        println(program + ": missing operand");
-        println("Try `" + program + " --help' for more information.");
+        println!("{}: {}", program, "missing operand");
+        println!("Try '{} --help' for more information.", program);
         return;
     }
     // too many arguments
     else if args.len() > 3 {
-        println(program + ": extra operand `" + args.get(3).as_slice() + "'");
-        println("Try `" + program + " --help' for more information.");
+        println!("{}: extra operand '{}'", program, args.get(3));
+        println!("Try '{} --help' for more information.", program);
         return;
     }
 
@@ -73,19 +73,19 @@ fn main() {
     // Main Program Processing
     //
 
-    let fullname = args.get(1).clone();
+    let fullname = args.get(1);
 
-    let mut name = strip_dir(&fullname.as_slice().to_owned());
+    let mut name = strip_dir(fullname.as_slice());
 
     if args.len() > 2 {
         let suffix = args.get(2).clone();
-        name = strip_suffix(&name, &suffix.to_owned());
+        name = strip_suffix(name.as_slice(), suffix.as_slice());
     }
 
-    println(name);
+    println(name.as_slice());
 }
 
-fn strip_dir(fullname: &~str) -> ~str {
+fn strip_dir(fullname: &str) -> StrBuf {
     let mut name = StrBuf::new();
 
     for c in fullname.chars().rev() {
@@ -98,14 +98,14 @@ fn strip_dir(fullname: &~str) -> ~str {
     return name.as_slice().chars().rev().collect();
 }
 
-fn strip_suffix(name: &~str, suffix: &~str) -> ~str {
+fn strip_suffix(name: &str, suffix: &str) -> StrBuf {
     if name == suffix {
-        return name.clone();
+        return name.into_strbuf();
     }
 
-    if name.ends_with(*suffix) {
-        return name.slice_to(name.len() - suffix.len()).into_owned();
+    if name.ends_with(suffix) {
+        return name.slice_to(name.len() - suffix.len()).into_strbuf();
     }
 
-    return name.clone();
+    return name.into_strbuf();
 }

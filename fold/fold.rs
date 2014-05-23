@@ -28,9 +28,9 @@ static VERSION: &'static str = "1.0.0";
 
 fn main() {
 
-    let (args, obs_width) = handle_obsolete(os::args().as_slice().to_owned());
+    let args = os::args();
+    let (args, obs_width) = handle_obsolete(args.as_slice());
     let program = args.get(0).clone();
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = [
         getopts::optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)"),
@@ -82,24 +82,24 @@ fn main() {
     }
 }
 
-fn handle_obsolete(args: ~[~str]) -> (~[~str], Option<~str>) {
-    let mut args: Vec<~str> = args.move_iter().collect();
+fn handle_obsolete(args: &[StrBuf]) -> (Vec<StrBuf>, Option<StrBuf>) {
+    let mut args = Vec::<StrBuf>::from_slice(args);
     let mut i = 0;
     while i < args.len() {
-        if args.get(i).char_at(0) == '-' && args.get(i).len() > 1 && args.get(i).char_at(1).is_digit() {
-            return (args.as_slice().to_owned(),
-                    Some(args.remove(i).unwrap().slice_from(1).to_owned()));
+        if args.get(i).as_slice().char_at(0) == '-' && args.get(i).len() > 1 && args.get(i).as_slice().char_at(1).is_digit() {
+            return (args.clone(),
+                    Some(args.remove(i).unwrap().as_slice().slice_from(1).to_owned()));
         }
         i += 1;
     }
-    (args.as_slice().to_owned(), None)
+    (args, None)
 }
 
 fn fold(filenames: Vec<StrBuf>, bytes: bool, spaces: bool, width: uint) {
     for filename in filenames.iter() {
         let filename: &str = filename.as_slice();
         let buffer = BufferedReader::new(
-            if filename == "-".to_owned() {
+            if filename == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>
             } else {
                 box safe_unwrap!(File::open(&Path::new(filename))) as Box<Reader>
@@ -117,7 +117,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
             println!("");
             continue;
         }
-        let line = line.slice_to(line.len() - 1);
+        let line = line.as_slice().slice_to(line.len() - 1);
         if bytes {
             let mut i = 0;
             while i < line.len() {
@@ -173,7 +173,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 match slice.rfind(|ch: char| ch.is_whitespace()) {
                                     Some(m) => {
                                         let routput = slice.slice_from(m + 1).to_owned();
-                                        let ncount = routput.chars().fold(0, |out, ch: char| out + if ch == '\t' { 8 } else { 1 });
+                                        let ncount = routput.as_slice().chars().fold(0, |out, ch: char| out + if ch == '\t' { 8 } else { 1 });
                                         (slice.slice_to(m + 1), routput, ncount)
                                     },
                                     None => (slice, "".to_owned(), 0)

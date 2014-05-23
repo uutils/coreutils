@@ -55,8 +55,8 @@ fn main () {
     let tty = unsafe { str::raw::from_c_str(ttyname(libc::STDIN_FILENO)) };
 
     if !silent {
-        if !tty.is_whitespace() {
-            println(tty);
+        if !tty.as_slice().is_whitespace() {
+            println(tty.as_slice());
         } else {
             println!("not a tty");
         }

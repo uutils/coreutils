@@ -30,7 +30,7 @@ extern {
     pub fn geteuid() -> libc::c_int;
 }
 
-unsafe fn getusername() -> ~str {
+unsafe fn getusername() -> StrBuf {
     let passwd: *c_passwd = getpwuid(geteuid());
 
     let pw_name: *libc::c_char = (*passwd).pw_name;

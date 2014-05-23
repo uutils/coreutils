@@ -67,17 +67,17 @@ fn sleep(args: Vec<StrBuf>) {
         let (arg, suffix_time) = match match_suffix(arg.as_slice()) {
             Ok(m) => m,
             Err(f) => {
-                crash!(1, "{}", f)
+                crash!(1, "{}", f.to_strbuf())
             }
         };
         let num =
             if suffix_time == 0 {
                 0.0
             } else {
-                match num::from_str_radix::<f64>((arg), 10) {
+                match num::from_str_radix::<f64>((arg.as_slice()), 10) {
                     Some(m) => m,
                     None => {
-                        crash!(1, "Invalid time interval '{}'", arg)
+                        crash!(1, "Invalid time interval '{}'", arg.to_strbuf())
                     }
                 }
             };
@@ -86,7 +86,7 @@ fn sleep(args: Vec<StrBuf>) {
     timer::sleep((sleep_time * 1000.0) as u64);
 }
 
-fn match_suffix(arg: &str) -> Result<(~str, int), ~str> {
+fn match_suffix(arg: &str) -> Result<(StrBuf, int), StrBuf> {
     let result = match (arg).char_at_reverse(0) {
         's' | 'S' => 1,
         'm' | 'M' => 60,
@@ -94,7 +94,7 @@ fn match_suffix(arg: &str) -> Result<(~str, int), ~str> {
         'd' | 'D' => 60 * 60 * 24,
         val => {
             if !val.is_alphabetic() {
-                return Ok(((arg).to_owned(), 1))
+                return Ok((arg.to_strbuf(), 1))
             } else {
                 return Err(format!("Invalid time interval '{}'", arg))
             }

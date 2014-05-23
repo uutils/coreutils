@@ -36,7 +36,7 @@ mod util;
 static NAME: &'static str = "base64";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let opts = ~[
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
@@ -97,16 +97,16 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         Err(f) => fail!(f.to_str())
     };
 
-    to_decode = str::replace(to_decode, "\n", "");
+    to_decode = str::replace(to_decode.as_slice(), "\n", "");
 
     if ignore_garbage {
         let standard_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        to_decode = to_decode
+        to_decode = to_decode.as_slice()
             .trim_chars(|c| !standard_chars.contains_char(c))
-            .to_owned();
+            .into_owned()
     }
 
-    match to_decode.from_base64() {
+    match to_decode.as_slice().from_base64() {
         Ok(bytes) => {
             let mut out = stdout();
 
@@ -148,7 +148,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
     // compatibility.
     let final = encoded.replace("\r", "");
 
-    println(final);
+    println(final.as_slice());
 }
 
 fn help(progname: &str, usage: &str) {

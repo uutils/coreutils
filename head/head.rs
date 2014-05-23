@@ -26,12 +26,12 @@ fn main () {
     let mut line_count = 10u;
 
     // handle obsolete -number syntax
-    let options = match obsolete(os::args().tail().to_owned()) {
+    let options = match obsolete(os::args().tail()) {
         (args, Some(n)) => { line_count = n; args },
         (args, None) => args
     };
 
-    let args: Vec<StrBuf> = options.iter().map(|x| x.to_strbuf()).collect();
+    let args = options;
 
     let possible_options = [
         optopt("n", "number", "Number of lines to print", "n"),
@@ -96,14 +96,14 @@ fn main () {
 //
 // In case is found, the options vector will get rid of that object so that
 // getopts works correctly.
-fn obsolete (options: ~[~str]) -> (~[~str], Option<uint>) {
-    let mut options: Vec<~str> = options.move_iter().collect();
+fn obsolete (options: &[StrBuf]) -> (Vec<StrBuf>, Option<uint>) {
+    let mut options: Vec<StrBuf> = Vec::from_slice(options);
     let mut a = 0;
     let b = options.len();
-    let mut current;
 
     while a < b {
-        current = options.get(a).clone();
+        let current = options.get(a).clone();
+        let current = current.as_slice();
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
@@ -115,7 +115,7 @@ fn obsolete (options: ~[~str]) -> (~[~str], Option<uint>) {
                 if pos == len - 1 {
                     options.remove(a);
                     let number : Option<uint> = from_str(current.slice(1,len));
-                    return (options.as_slice().to_owned(), Some(number.unwrap()));
+                    return (options, Some(number.unwrap()));
                 }
             }
         }
@@ -123,7 +123,7 @@ fn obsolete (options: ~[~str]) -> (~[~str], Option<uint>) {
         a += 1;
     };
 
-    (options.as_slice().to_owned(), None)
+    (options, None)
 }
 
 fn head<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint) {
