@@ -27,11 +27,11 @@ use c_types::utsname;
 #[path = "../common/c_types.rs"] mod c_types;
 
 struct utsrust {
-    sysname: ~str,
-    nodename: ~str,
-    release: ~str,
-    version: ~str,
-    machine: ~str
+    sysname: StrBuf,
+    nodename: StrBuf,
+    release: StrBuf,
+    version: StrBuf,
+    machine: StrBuf 
 }
 
 extern {
@@ -81,24 +81,24 @@ fn main() {
     let mut output = StrBuf::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
         || !matches.opts_present(["nodename".to_strbuf(), "release".to_strbuf(), "version".to_strbuf(), "machine".to_strbuf()]) {
-            output.push_str(uname.sysname);
+            output.push_str(uname.sysname.as_slice());
             output.push_str(" ");
     }
 
     if matches.opt_present("nodename") || matches.opt_present("all") {
-        output.push_str(uname.nodename);
+        output.push_str(uname.nodename.as_slice());
         output.push_str(" ");
     }
     if matches.opt_present("release") || matches.opt_present("all") {
-        output.push_str(uname.release);
+        output.push_str(uname.release.as_slice());
         output.push_str(" ");
     }
     if matches.opt_present("version") || matches.opt_present("all") {
-        output.push_str(uname.version);
+        output.push_str(uname.version.as_slice());
         output.push_str(" ");
     }
     if matches.opt_present("machine") || matches.opt_present("all") {
-        output.push_str(uname.machine);
+        output.push_str(uname.machine.as_slice());
         output.push_str(" ");
     }
     println!("{}", output.as_slice().trim_left())

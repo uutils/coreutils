@@ -32,7 +32,7 @@ static VERSION: &'static str = "1.0.0";
 
 struct Options {
     all: bool,
-    program_name: ~str,
+    program_name: StrBuf,
     max_depth: Option<uint>,
     total: bool,
     separate_dirs: bool,
@@ -268,7 +268,7 @@ ers of 1000).",
         None => 1024
     };
 
-    let convert_size = |size: u64| -> ~str {
+    let convert_size = |size: u64| -> StrBuf {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
             if size > MB {
                 format!("{:.1f}M", (size as f64) / (MB as f64))

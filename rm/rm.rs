@@ -192,9 +192,9 @@ fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: b
 
 fn prompt_file(path: &Path, name: &str) -> bool {
     if path.is_dir() {
-        prompt(format!("Remove directory '{}'? ", name))
+        prompt(format!("Remove directory '{}'? ", name).as_slice())
     } else {
-        prompt(format!("Remove file '{}'? ", name))
+        prompt(format!("Remove file '{}'? ", name).as_slice())
     }
 }
 
@@ -207,7 +207,7 @@ fn read_prompt() -> bool {
     stdio::flush();
     match BufferedReader::new(stdin()).read_line() {
         Ok(line) => {
-            match line.char_at(0) {
+            match line.as_slice().char_at(0) {
                 'y' | 'Y' => true,
                 'n' | 'N' => false,
                 _ => {

@@ -32,14 +32,14 @@ fn main() {
 }
 
 struct Options {
-    program: ~str,
+    program: StrBuf,
     append: bool,
     ignore_interrupts: bool,
-    print_and_exit: Option<~str>,
+    print_and_exit: Option<StrBuf>,
     files: Box<Vec<Path>>
 }
 
-fn options(args: &[~str]) -> Result<Options, ()> {
+fn options(args: &[StrBuf]) -> Result<Options, ()> {
     let opts = ~[
         optflag("a", "append", "append to the given FILEs, do not overwrite"),
         optflag("i", "ignore-interrupts", "ignore interrupt signals"),
@@ -53,8 +53,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
         let version = format!("{} {}", NAME, VERSION);
         let program = args.get(0).as_slice();
         let arguments = "[OPTION]... [FILE]...";
-        let brief = "Copy standard input to each FILE, and also to standard " +
-                    "output.";
+        let brief = "Copy standard input to each FILE, and also to standard output.";
         let comment = "If a FILE is -, copy again to standard output.";
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
@@ -64,7 +63,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
                        else if m.opt_present("version") { Some(version) }
                        else { None };
         Ok(Options {
-            program: program.into_owned(),
+            program: program.to_strbuf(),
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
@@ -75,7 +74,7 @@ fn options(args: &[~str]) -> Result<Options, ()> {
 
 fn exec(options: Options) -> Result<(), ()> {
     match options.print_and_exit {
-        Some(text) => Ok(println(text)),
+        Some(text) => Ok(println(text.as_slice())),
         None => tee(options)
     }
 }
@@ -145,7 +144,7 @@ impl Reader for NamedReader {
 
 fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
     match cb() {
-        Err(f) => { warn(format!("{}: {}", path.display(), f.to_str())); Err(f) }
+        Err(f) => { warn(format!("{}: {}", path.display(), f.to_str()).as_slice()); Err(f) }
         okay => okay
     }
 }

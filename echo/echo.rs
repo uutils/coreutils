@@ -118,7 +118,7 @@ fn main() {
         let string = matches.free.connect(" ");
         if matches.opt_present("e") {
             let mut prev_was_slash = false;
-            let mut iter = string.chars().enumerate();
+            let mut iter = string.as_slice().chars().enumerate();
             loop {
                 match iter.next() {
                     Some((index, c)) => {
@@ -142,7 +142,7 @@ fn main() {
                                 't' => print_char('\t'),
                                 'v' => print_char('\x0B'),
                                 'x' => {
-                                    let (c, num_char_used) = convert_str(string, index + 1, 16u);
+                                    let (c, num_char_used) = convert_str(string.as_slice(), index + 1, 16u);
                                     if num_char_used == 0 {
                                         print_char('\\');
                                         print_char('x');
@@ -154,7 +154,7 @@ fn main() {
                                     }
                                 },
                                 '0' => {
-                                    let (c, num_char_used) = convert_str(string, index + 1, 8u);
+                                    let (c, num_char_used) = convert_str(string.as_slice(), index + 1, 8u);
                                     if num_char_used == 0 {
                                         print_char('\\');
                                         print_char('0');
@@ -176,7 +176,7 @@ fn main() {
                 }
             }
         } else {
-            print(string);
+            print(string.as_slice());
         }
     }
 

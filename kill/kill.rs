@@ -121,12 +121,12 @@ fn table() {
     }
 }
 
-fn print_signal(signal_name_or_value: ~str) {
+fn print_signal(signal_name_or_value: &str) {
     for signal in ALL_SIGNALS.iter() {
-        if signal.name == signal_name_or_value  || ("SIG" + signal.name) == signal_name_or_value {
+        if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name).as_slice()) == signal_name_or_value {
             println!("{}", signal.value)
             exit!(EXIT_OK)
-        } else if signal_name_or_value == signal.value.to_str() {
+        } else if signal_name_or_value == signal.value.to_str().as_slice() {
             println!("{}", signal.name);
             exit!(EXIT_OK)
         }
@@ -151,27 +151,26 @@ fn print_signals() {
 
 fn list(arg: Option<StrBuf>) {
     match arg {
-      Some(x) => print_signal(x.to_owned()),
+      Some(x) => print_signal(x.as_slice()),
       None => print_signals(),
     };
 }
 
-fn get_help_text(progname: &str, usage: &str) -> ~str {
-    let msg = format!("Usage: \n {0} {1}", progname, usage);
-    msg
+fn get_help_text(progname: &str, usage: &str) -> StrBuf {
+    format!("Usage: \n {0} {1}", progname, usage)
 }
 
 fn help(progname: &str, usage: &str) {
     println!("{}", get_help_text(progname, usage));
 }
 
-fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
-    if signal_name_or_value == "0".to_owned() {
+fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<uint> {
+    if signal_name_or_value == "0" {
         return Some(0);
     }
     for signal in ALL_SIGNALS.iter() {
-        let long_name = "SIG" + signal.name;
-        if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_str()) || (long_name == signal_name_or_value) {
+        let long_name = format!("SIG{}", signal.name);
+        if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_str().as_slice()) || (long_name.as_slice() == signal_name_or_value) {
             return Some(signal.value);
         }
     }
@@ -179,7 +178,7 @@ fn signal_by_name_or_value(signal_name_or_value:~str) -> Option<uint> {
 }
 
 fn kill(signalname: &str, pids: std::vec::Vec<StrBuf>) {
-    let optional_signal_value = signal_by_name_or_value(signalname.to_owned());
+    let optional_signal_value = signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)

@@ -84,7 +84,7 @@ fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool
     for filename in files.iter() {
         let filename: &str = filename.as_slice();
         let mut file = BufferedReader::new(
-            if filename == "-".to_owned() {
+            if filename == "-" {
                 box stdin_raw() as Box<Reader>
             } else {
                 box safe_unwrap!(File::open(&Path::new(filename))) as Box<Reader>
@@ -95,9 +95,9 @@ fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool
             //let mut buffer = BufferedReader::new(file);
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
-                let (ck_filename, sum) = match from_gnu(line, bytes) {
+                let (ck_filename, sum) = match from_gnu(line.as_slice(), bytes) {
                     Some(m) => m,
-                    None => match from_bsd(line, bytes) {
+                    None => match from_bsd(line.as_slice(), bytes) {
                         Some(m) => m,
                         None => {
                             bad_format += 1;
@@ -112,7 +112,7 @@ fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool
                     }
                 };
                 let real_sum = calc_sum(&mut md5, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary);
-                if sum == real_sum {
+                if sum == real_sum.as_slice() {
                     if !quiet {
                         println!("{}: OK", ck_filename);
                     }
@@ -145,15 +145,15 @@ fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool
     }
 }
 
-fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> ~str {
+fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> StrBuf {
     let data =
         if binary {
-            (safe_unwrap!(file.read_to_end())).as_slice().to_owned()
+            (safe_unwrap!(file.read_to_end()))
         } else {
             (safe_unwrap!(file.read_to_str())).into_bytes()
         };
     md5.reset();
-    md5.input(data);
+    md5.input(data.as_slice());
     md5.result_str()
 }
 

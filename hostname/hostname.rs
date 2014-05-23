@@ -36,31 +36,31 @@ fn main () {
 
     let matches = match getopts(args.tail(), options) {
         Ok(m) => { m }
-        _ => { help_menu(program, options); return; }
+        _ => { help_menu(program.as_slice(), options); return; }
     };
 
     if matches.opt_present("h") {
-        help_menu(program, options);
+        help_menu(program.as_slice(), options);
         return
     }
     if matches.opt_present("V") { version(); return }
 
     match matches.free.len() {
         0 => {
-            let hostname: ~str = xgethostname();
+            let hostname = xgethostname();
 
             if matches.opt_present("s") {
-                let pos = hostname.find_str(".");
+                let pos = hostname.as_slice().find_str(".");
                 if pos.is_some() {
-                    println!("{:s}", hostname.slice_to(pos.unwrap()));
+                    println!("{:s}", hostname.as_slice().slice_to(pos.unwrap()));
                     return;
                 }
             }
 
-            println!("{:s}", hostname);
+            println!("{:s}", hostname.as_slice());
         }
-        1 => { xsethostname( &matches.free.last().unwrap().as_slice().to_owned() ) }
-        _ => { help_menu(program, options); }
+        1 => { xsethostname( matches.free.last().unwrap().as_slice() ) }
+        _ => { help_menu(program.as_slice(), options); }
     };
 }
 
@@ -77,7 +77,7 @@ fn help_menu(program: &str, options: &[getopts::OptGroup]) {
     print!("{:s}", usage("Print or set the system's host name.", options));
 }
 
-fn xgethostname() -> ~str {
+fn xgethostname() -> StrBuf {
     let namelen = 256u;
     let mut name = Vec::from_elem(namelen, 0u8);
 
@@ -95,7 +95,7 @@ fn xgethostname() -> ~str {
     str::from_utf8(name.slice_to(last_char)).unwrap().to_owned()
 }
 
-fn xsethostname(name: &~str) {
+fn xsethostname(name: &str) {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as i8).collect();
 
     let err = unsafe {
@@ -103,6 +103,6 @@ fn xsethostname(name: &~str) {
     };
 
     if err != 0 {
-        println!("Cannot set hostname to {:s}", *name);
+        println!("Cannot set hostname to {:s}", name);
     }
 }

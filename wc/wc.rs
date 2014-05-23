@@ -23,7 +23,7 @@ use getopts::Matches;
 mod util;
 
 struct Result {
-    filename: ~str,
+    filename: StrBuf,
     bytes: uint,
     chars: uint,
     lines: uint,
@@ -155,7 +155,7 @@ pub fn wc(files: Vec<StrBuf>, matches: &Matches) {
         }
 
         results.push(Result {
-            filename: path.as_slice().to_owned(),
+            filename: path.to_strbuf(),
             bytes: byte_count,
             chars: char_count,
             lines: line_count,
@@ -177,15 +177,15 @@ pub fn wc(files: Vec<StrBuf>, matches: &Matches) {
     }
 
     for result in results.iter() {
-        print_stats(&result.filename, result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
+        print_stats(result.filename.as_slice(), result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
     }
 
     if files.len() > 1 {
-        print_stats(&"total".to_owned(), total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
+        print_stats("total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
     }
 }
 
-fn print_stats(filename: &~str, line_count: uint, word_count: uint, char_count: uint,
+fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: uint,
     byte_count: uint, longest_line_length: uint, matches: &Matches, max_str_len: uint) {
     if matches.opt_present("lines") {
         print!("{:1$}", line_count, max_str_len);
@@ -214,16 +214,16 @@ fn print_stats(filename: &~str, line_count: uint, word_count: uint, char_count: 
         print!("{:1$}", byte_count, max_str_len + 1);
     }
 
-    if *filename != "-".to_owned() {
-        println!(" {}", *filename);
+    if filename != "-" {
+        println!(" {}", filename.as_slice());
     }
     else {
         println!("");
     }
 }
 
-fn open(path: ~str) -> Option<BufferedReader<Box<Reader>>> {
-    if "-" == path {
+fn open(path: StrBuf) -> Option<BufferedReader<Box<Reader>>> {
+    if "-" == path.as_slice() {
         let reader = box stdin() as Box<Reader>;
         return Some(BufferedReader::new(reader));
     }
