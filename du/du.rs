@@ -91,7 +91,7 @@ fn du(path: &Path, mut my_stat: Stat,
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).as_slice();
     let opts = ~[
         // In task

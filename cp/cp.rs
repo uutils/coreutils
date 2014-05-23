@@ -32,7 +32,7 @@ pub enum Mode {
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let opts = ~[
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),

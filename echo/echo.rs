@@ -70,7 +70,7 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("n", "", "do not output the trailing newline"),

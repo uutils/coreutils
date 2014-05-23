@@ -31,7 +31,7 @@ fn main () {
         (args, None) => args
     };
 
-    let args: Vec<StrBuf> = options.iter().map(|x| x.to_strbuf()).collect();
+    let args = options;
 
     let possible_options = [
         optopt("n", "number", "Number of lines to print", "n"),

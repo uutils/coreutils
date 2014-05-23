@@ -44,7 +44,7 @@ fn version() {
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
 
     //

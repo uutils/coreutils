@@ -36,7 +36,7 @@ mod util;
 static NAME: &'static str = "base64";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let opts = ~[
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),

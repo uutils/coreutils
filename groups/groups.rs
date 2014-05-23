@@ -26,7 +26,7 @@ use c_types::{get_pw_from_args, group};
 static NAME: &'static str = "groups";
 
 fn main () {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let options = [
             optflag("h", "", "Help")
         ];

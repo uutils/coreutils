@@ -24,8 +24,8 @@ extern {
 }
 
 fn main () {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
-    let program = args.get(0).to_owned();
+    let args = os::args();
+    let program = args.get(0);
 
     let options = [
         optflag("f", "full", "Default option to show full name"),
