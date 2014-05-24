@@ -139,7 +139,6 @@ To do
 - tail
 - test
 - timeout
-- touch
 - tr
 - tsort
 - uname-arch
