@@ -25,6 +25,7 @@ PROGS       := \
   seq \
   tac \
   tee \
+  touch \
   tr \
   true \
   truncate \
