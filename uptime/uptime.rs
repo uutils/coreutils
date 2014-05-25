@@ -48,7 +48,7 @@ extern {
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("v", "version", "output version information and exit"),

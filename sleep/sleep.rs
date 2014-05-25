@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "sleep";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -62,7 +62,7 @@ specified by the sum of their values.", opts).as_slice());
     }
 }
 
-fn sleep(args: Vec<StrBuf>) {
+fn sleep(args: Vec<String>) {
     let sleep_time = args.iter().fold(0.0, |result, arg| {
         let (arg, suffix_time) = match match_suffix(arg.as_slice()) {
             Ok(m) => m,
@@ -86,7 +86,7 @@ fn sleep(args: Vec<StrBuf>) {
     timer::sleep((sleep_time * 1000.0) as u64);
 }
 
-fn match_suffix(arg: &str) -> Result<(StrBuf, int), StrBuf> {
+fn match_suffix(arg: &str) -> Result<(String, int), String> {
     let result = match (arg).char_at_reverse(0) {
         's' | 'S' => 1,
         'm' | 'M' => 60,

@@ -24,7 +24,7 @@ static NAME: &'static str = "pwd";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("", "help", "display this help and exit"),

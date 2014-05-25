@@ -85,8 +85,8 @@ fn main() {
     println(name.as_slice());
 }
 
-fn strip_dir(fullname: &str) -> StrBuf {
-    let mut name = StrBuf::new();
+fn strip_dir(fullname: &str) -> String {
+    let mut name = String::new();
 
     for c in fullname.chars().rev() {
         if c == '/' || c == '\\' {
@@ -98,7 +98,7 @@ fn strip_dir(fullname: &str) -> StrBuf {
     return name.as_slice().chars().rev().collect();
 }
 
-fn strip_suffix(name: &str, suffix: &str) -> StrBuf {
+fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
         return name.into_strbuf();
     }

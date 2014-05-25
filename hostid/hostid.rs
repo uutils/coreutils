@@ -50,7 +50,7 @@ extern {
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = [
         optflag("", "help", "display this help and exit"),
@@ -87,7 +87,7 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-fn get_help_text(progname: &str, usage: &str) -> StrBuf {
+fn get_help_text(progname: &str, usage: &str) -> String {
     format!("Usage: \n {0} {1}", progname, usage)
 }
 

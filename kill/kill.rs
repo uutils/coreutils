@@ -149,14 +149,14 @@ fn print_signals() {
     }
 }
 
-fn list(arg: Option<StrBuf>) {
+fn list(arg: Option<String>) {
     match arg {
       Some(x) => print_signal(x.as_slice()),
       None => print_signals(),
     };
 }
 
-fn get_help_text(progname: &str, usage: &str) -> StrBuf {
+fn get_help_text(progname: &str, usage: &str) -> String {
     format!("Usage: \n {0} {1}", progname, usage)
 }
 
@@ -177,7 +177,7 @@ fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<uint> {
     return None;
 }
 
-fn kill(signalname: &str, pids: std::vec::Vec<StrBuf>) {
+fn kill(signalname: &str, pids: std::vec::Vec<String>) {
     let optional_signal_value = signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,

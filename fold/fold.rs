@@ -82,8 +82,8 @@ fn main() {
     }
 }
 
-fn handle_obsolete(args: &[StrBuf]) -> (Vec<StrBuf>, Option<StrBuf>) {
-    let mut args = Vec::<StrBuf>::from_slice(args);
+fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
+    let mut args = Vec::<String>::from_slice(args);
     let mut i = 0;
     while i < args.len() {
         if args.get(i).as_slice().char_at(0) == '-' && args.get(i).len() > 1 && args.get(i).as_slice().char_at(1).is_digit() {
@@ -95,7 +95,7 @@ fn handle_obsolete(args: &[StrBuf]) -> (Vec<StrBuf>, Option<StrBuf>) {
     (args, None)
 }
 
-fn fold(filenames: Vec<StrBuf>, bytes: bool, spaces: bool, width: uint) {
+fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
     for filename in filenames.iter() {
         let filename: &str = filename.as_slice();
         let buffer = BufferedReader::new(
@@ -137,7 +137,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                 i += slice.len();
             }
         } else {
-            let mut output = StrBuf::new();
+            let mut output = String::new();
             let mut count = 0;
             for (i, ch) in line.chars().enumerate() {
                 match ch {

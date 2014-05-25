@@ -23,7 +23,7 @@ use getopts::Matches;
 mod util;
 
 struct Result {
-    filename: StrBuf,
+    filename: String,
     bytes: uint,
     chars: uint,
     lines: uint,
@@ -34,7 +34,7 @@ struct Result {
 static NAME: &'static str = "wc";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("c", "bytes", "print the byte counts"),
@@ -87,7 +87,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: Vec<StrBuf>, matches: &Matches) {
+pub fn wc(files: Vec<String>, matches: &Matches) {
     let mut total_line_count: uint = 0;
     let mut total_word_count: uint = 0;
     let mut total_char_count: uint = 0;
@@ -222,7 +222,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
     }
 }
 
-fn open(path: StrBuf) -> Option<BufferedReader<Box<Reader>>> {
+fn open(path: String) -> Option<BufferedReader<Box<Reader>>> {
     if "-" == path.as_slice() {
         let reader = box stdin() as Box<Reader>;
         return Some(BufferedReader::new(reader));

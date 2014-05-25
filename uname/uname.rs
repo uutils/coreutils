@@ -27,11 +27,11 @@ use c_types::utsname;
 #[path = "../common/c_types.rs"] mod c_types;
 
 struct utsrust {
-    sysname: StrBuf,
-    nodename: StrBuf,
-    release: StrBuf,
-    version: StrBuf,
-    machine: StrBuf 
+    sysname: String,
+    nodename: String,
+    release: String,
+    version: String,
+    machine: String 
 }
 
 extern {
@@ -52,7 +52,7 @@ unsafe fn getuname() -> utsrust {
 static NAME: &'static str = "uname";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),
@@ -78,7 +78,7 @@ fn main() {
         return;
     }
     let uname = unsafe { getuname() };
-    let mut output = StrBuf::new();
+    let mut output = String::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
         || !matches.opts_present(["nodename".to_strbuf(), "release".to_strbuf(), "version".to_strbuf(), "machine".to_strbuf()]) {
             output.push_str(uname.sysname.as_slice());
