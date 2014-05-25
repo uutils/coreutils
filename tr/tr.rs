@@ -147,7 +147,7 @@ fn usage(opts: &[OptGroup]) {
 }
 
 pub fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let opts = [
         getopts::optflag("c", "complement", "use the complement of SET1"),
         getopts::optflag("C", "", "same as -c"),

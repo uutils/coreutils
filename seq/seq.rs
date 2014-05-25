@@ -34,7 +34,7 @@ fn escape_sequences(s: &str) -> String {
 }
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let opts = ~[
         getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
         getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),

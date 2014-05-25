@@ -50,7 +50,7 @@ extern {
 }
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
 
     let opts = [
         optflag("", "help", "display this help and exit"),

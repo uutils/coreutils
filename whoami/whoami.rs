@@ -42,7 +42,7 @@ unsafe fn getusername() -> String {
 static NAME: &'static str = "whoami";
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),

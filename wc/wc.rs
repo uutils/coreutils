@@ -34,7 +34,7 @@ struct Result {
 static NAME: &'static str = "wc";
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("c", "bytes", "print the byte counts"),
