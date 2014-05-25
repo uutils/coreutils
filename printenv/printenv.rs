@@ -25,7 +25,7 @@ mod util;
 static NAME: &'static str = "printenv";
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),

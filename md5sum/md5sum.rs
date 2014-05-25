@@ -28,7 +28,7 @@ static NAME: &'static str = "md5sum";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
 
     let program = args.get(0).clone();
 

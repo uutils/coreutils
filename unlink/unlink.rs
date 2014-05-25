@@ -27,7 +27,7 @@ mod util;
 static NAME: &'static str = "unlink";
 
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),

@@ -29,7 +29,7 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 fn main() {
-    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args = os::args();
 
     let opts = ~[
         // Linux-specific options, not implemented
