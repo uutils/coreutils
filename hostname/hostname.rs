@@ -77,7 +77,7 @@ fn help_menu(program: &str, options: &[getopts::OptGroup]) {
     print!("{:s}", usage("Print or set the system's host name.", options));
 }
 
-fn xgethostname() -> StrBuf {
+fn xgethostname() -> String {
     let namelen = 256u;
     let mut name = Vec::from_elem(namelen, 0u8);
 

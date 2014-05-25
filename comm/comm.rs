@@ -21,8 +21,8 @@ use std::path::Path;
 static NAME : &'static str = "comm";
 static VERSION : &'static str = "1.0.0";
 
-fn mkdelim(col: uint, opts: &getopts::Matches) -> StrBuf {
-    let mut s = StrBuf::new();
+fn mkdelim(col: uint, opts: &getopts::Matches) -> String {
+    let mut s = String::new();
     let delim = match opts.opt_str("output-delimiter") {
         Some(d) => d.clone(),
         None => "\t".to_strbuf(),

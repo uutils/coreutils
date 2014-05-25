@@ -30,7 +30,7 @@ enum InteractiveMode {
 static NAME: &'static str = "rm";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     // TODO: make getopts support -R in addition to -r
@@ -120,7 +120,7 @@ fn main() {
 }
 
 // TODO: implement one-file-system
-fn remove(files: Vec<StrBuf>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
+fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) {
     for filename in files.iter() {
         let filename = filename.as_slice();
         let file = Path::new(filename);

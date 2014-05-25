@@ -16,9 +16,9 @@
 struct options {
     ignore_env: bool,
     null: bool,
-    unsets: Vec<StrBuf>,
-    sets: Vec<(StrBuf, StrBuf)>,
-    program: Vec<StrBuf>
+    unsets: Vec<String>,
+    sets: Vec<(String, String)>,
+    program: Vec<String>
 }
 
 fn usage(prog: &str) {

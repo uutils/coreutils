@@ -24,7 +24,7 @@ static NAME: &'static str = "paste";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -56,7 +56,7 @@ fn main() {
     }
 }
 
-fn paste(filenames: Vec<StrBuf>, serial: bool, delimiters: &str) {
+fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
     let mut files: Vec<io::BufferedReader<Box<Reader>>> = filenames.move_iter().map(|name|
         io::BufferedReader::new(
             if name.as_slice() == "-" {
@@ -66,11 +66,11 @@ fn paste(filenames: Vec<StrBuf>, serial: bool, delimiters: &str) {
             }
         )
     ).collect();
-    let delimiters: Vec<StrBuf> = delimiters.chars().map(|x| x.to_str()).collect();
+    let delimiters: Vec<String> = delimiters.chars().map(|x| x.to_str()).collect();
     let mut delim_count = 0;
     if serial {
         for file in files.mut_iter() {
-            let mut output = StrBuf::new();
+            let mut output = String::new();
             loop {
                 match file.read_line() {
                     Ok(line) => {

@@ -24,7 +24,7 @@ static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -69,7 +69,7 @@ fn main() {
     }
 }
 
-fn tac(filenames: Vec<StrBuf>, before: bool, _: bool, separator: &str) {
+fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
     for filename in filenames.move_iter() {
         let mut file = io::BufferedReader::new(
             if filename.as_slice() == "-" {
@@ -87,7 +87,7 @@ fn tac(filenames: Vec<StrBuf>, before: bool, _: bool, separator: &str) {
             data = buf.into_owned();
         }
         let split_vec: Vec<&str> = data.as_slice().split_str(separator).collect();
-        let rev: StrBuf = split_vec.iter().rev().fold(StrBuf::new(), |mut a, &b| {
+        let rev: String = split_vec.iter().rev().fold(String::new(), |mut a, &b| {
             if before {
                a.push_str(separator);
                a.push_str(b);

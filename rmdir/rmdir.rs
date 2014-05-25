@@ -23,7 +23,7 @@ mod util;
 static NAME: &'static str = "rmdir";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -61,7 +61,7 @@ fn main() {
     }
 }
 
-fn remove(dirs: Vec<StrBuf>, ignore: bool, parents: bool, verbose: bool) {
+fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) {
     for dir in dirs.iter() {
         let path = Path::new(dir.as_slice());
         if path.exists() {

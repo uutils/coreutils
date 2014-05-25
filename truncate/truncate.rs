@@ -47,7 +47,7 @@ enum TruncateMode {
 static NAME: &'static str = "truncate";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).clone();
 
     let opts = ~[
@@ -108,7 +108,7 @@ file based on its current size:
     }
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<StrBuf>, size: Option<StrBuf>, filenames: Vec<StrBuf>) {
+fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {

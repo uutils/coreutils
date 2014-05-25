@@ -96,7 +96,7 @@ fn is_newline_char(byte: u8) -> bool {
     byte == LF
 }
 
-pub fn exec(files: Vec<StrBuf>, number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
+pub fn exec(files: Vec<String>, number: NumberingMode, show_nonprint: bool, show_ends: bool, show_tabs: bool, squeeze_blank: bool) {
 
     if NumberNone != number || show_nonprint || show_ends || show_tabs || squeeze_blank {
         let mut counter: uint = 1;

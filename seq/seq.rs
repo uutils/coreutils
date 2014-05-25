@@ -21,20 +21,20 @@ fn print_usage(opts: ~[getopts::OptGroup]) {
     println!("{:s}", getopts::usage("Print sequences of numbers", opts));
 }
 
-fn parse_float(s: &str) -> Result<f32, StrBuf>{
+fn parse_float(s: &str) -> Result<f32, String>{
     match from_str(s) {
         Some(n) => Ok(n),
         None => Err(format!("seq: invalid floating point argument: {:s}", s))
     }
 }
 
-fn escape_sequences(s: &str) -> StrBuf {
+fn escape_sequences(s: &str) -> String {
     s.replace("\\n", "\n").
         replace("\\t", "\t")
 }
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let opts = ~[
         getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
         getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),
@@ -96,7 +96,7 @@ fn done_printing(next: f32, step: f32, last: f32) -> bool {
     }
 }
 
-fn print_seq(first: f32, step: f32, last: f32, separator: StrBuf, terminator: StrBuf, pad: bool) {
+fn print_seq(first: f32, step: f32, last: f32, separator: String, terminator: String, pad: bool) {
     let mut i = first;
     let maxlen = first.max(last).to_str().len();
     while !done_printing(i, step, last) {

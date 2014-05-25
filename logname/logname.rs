@@ -30,7 +30,7 @@ extern {
     pub fn getlogin() -> *libc::c_char;
 }
 
-unsafe fn get_userlogin() -> StrBuf {
+unsafe fn get_userlogin() -> String {
     let login: *libc::c_char = getlogin();
 
     str::raw::from_c_str(login)

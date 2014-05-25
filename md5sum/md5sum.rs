@@ -28,7 +28,7 @@ static NAME: &'static str = "md5sum";
 static VERSION: &'static str = "1.0.0";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let program = args.get(0).clone();
 
@@ -76,7 +76,7 @@ fn main() {
     }
 }
 
-fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) {
+fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) {
     let mut md5 = crypto::md5::Md5::new();
     let bytes = md5.output_bits() / 4;
     let mut bad_format = 0;
@@ -145,7 +145,7 @@ fn md5sum(files: Vec<StrBuf>, binary: bool, check: bool, tag: bool, status: bool
     }
 }
 
-fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> StrBuf {
+fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> String {
     let data =
         if binary {
             (safe_unwrap!(file.read_to_end()))

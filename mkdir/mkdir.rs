@@ -29,7 +29,7 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
 
     let opts = ~[
         // Linux-specific options, not implemented
@@ -95,7 +95,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<StrBuf>, mk_parents: bool, mode: FilePermission, verbose: bool) {
+fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) {
     let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {

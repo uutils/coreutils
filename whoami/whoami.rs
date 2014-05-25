@@ -30,7 +30,7 @@ extern {
     pub fn geteuid() -> libc::c_int;
 }
 
-unsafe fn getusername() -> StrBuf {
+unsafe fn getusername() -> String {
     let passwd: *c_passwd = getpwuid(geteuid());
 
     let pw_name: *libc::c_char = (*passwd).pw_name;
@@ -42,7 +42,7 @@ unsafe fn getusername() -> StrBuf {
 static NAME: &'static str = "whoami";
 
 fn main() {
-    let args: Vec<StrBuf> = os::args().iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = os::args().iter().map(|x| x.to_strbuf()).collect();
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),

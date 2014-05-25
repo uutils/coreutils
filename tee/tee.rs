@@ -32,14 +32,14 @@ fn main() {
 }
 
 struct Options {
-    program: StrBuf,
+    program: String,
     append: bool,
     ignore_interrupts: bool,
-    print_and_exit: Option<StrBuf>,
+    print_and_exit: Option<String>,
     files: Box<Vec<Path>>
 }
 
-fn options(args: &[StrBuf]) -> Result<Options, ()> {
+fn options(args: &[String]) -> Result<Options, ()> {
     let opts = ~[
         optflag("a", "append", "append to the given FILEs, do not overwrite"),
         optflag("i", "ignore-interrupts", "ignore interrupt signals"),
@@ -47,7 +47,7 @@ fn options(args: &[StrBuf]) -> Result<Options, ()> {
         optflag("V", "version", "output version information and exit"),
     ];
 
-    let args: Vec<StrBuf> = args.iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = args.iter().map(|x| x.to_strbuf()).collect();
 
     getopts(args.tail(), opts).map_err(|e| e.to_err_msg()).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
@@ -58,7 +58,7 @@ fn options(args: &[StrBuf]) -> Result<Options, ()> {
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
                            comment);
-        let names = m.free.clone().move_iter().collect::<Vec<StrBuf>>().append_one("-".to_strbuf());
+        let names = m.free.clone().move_iter().collect::<Vec<String>>().append_one("-".to_strbuf());
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };

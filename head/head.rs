@@ -96,8 +96,8 @@ fn main () {
 //
 // In case is found, the options vector will get rid of that object so that
 // getopts works correctly.
-fn obsolete (options: &[StrBuf]) -> (Vec<StrBuf>, Option<uint>) {
-    let mut options: Vec<StrBuf> = Vec::from_slice(options);
+fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
+    let mut options: Vec<String> = Vec::from_slice(options);
     let mut a = 0;
     let b = options.len();
 
