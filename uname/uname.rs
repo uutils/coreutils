@@ -18,7 +18,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::os;
-use std::mem::uninit;
+use std::mem::uninitialized;
 use std::io::print;
 use std::str::raw::from_c_str;
 use c_types::utsname;
@@ -39,7 +39,7 @@ extern {
 }
 
 unsafe fn getuname() -> utsrust {
-    let mut uts: utsname = uninit();
+    let mut uts: utsname = uninitialized();
     uname(&mut uts);
     utsrust {
         sysname: from_c_str(uts.sysname.as_ptr()), nodename: from_c_str(uts.nodename.as_ptr()),
