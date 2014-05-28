@@ -127,7 +127,7 @@ fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
 }
 
 fn head<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint) {
-    for line in reader.lines().take(line_count) { print!("{}", line); }
+    for line in reader.lines().take(line_count) { print!("{}", line.unwrap()); }
 }
 
 fn version () {
