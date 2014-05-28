@@ -87,7 +87,7 @@ fn main() {
                 }
                 _ => {
                     // read the program now
-                    opts.program.push(opt.to_owned());
+                    opts.program.push(opt.to_string());
                     break;
                 }
             }
@@ -103,7 +103,7 @@ fn main() {
 
                     match var {
                         None => println!("{:s}: this option requires an argument: {:s}", prog, opt.as_slice()),
-                        Some(s) => opts.unsets.push(s.to_owned())
+                        Some(s) => opts.unsets.push(s.to_string())
                     }
                 }
 
@@ -136,7 +136,7 @@ fn main() {
 
                         match var {
                             None => println!("{:s}: this option requires an argument: {:s}", prog, opt.as_slice()),
-                            Some(s) => opts.unsets.push(s.to_owned())
+                            Some(s) => opts.unsets.push(s.to_string())
                         }
                     }
                     _ => {
@@ -160,7 +160,7 @@ fn main() {
                 }
                 // no, its a program-like opt
                 _ => {
-                    opts.program.push(opt.to_owned());
+                    opts.program.push(opt.to_string());
                     break;
                 }
             }
@@ -171,7 +171,7 @@ fn main() {
 
     // read program arguments
     for opt in iter {
-        opts.program.push(opt.to_owned());
+        opts.program.push(opt.to_string());
     }
 
     let env = std::os::env();

@@ -92,7 +92,7 @@ fn xgethostname() -> String {
 
     let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
 
-    str::from_utf8(name.slice_to(last_char)).unwrap().to_owned()
+    str::from_utf8(name.slice_to(last_char)).unwrap().to_string()
 }
 
 fn xsethostname(name: &str) {

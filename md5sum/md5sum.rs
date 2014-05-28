@@ -68,7 +68,7 @@ fn main() {
         let strict = matches.opt_present("strict");
         let warn = matches.opt_present("warn") && !status;
         let files = if matches.free.is_empty() {
-            vec!("-".to_strbuf())
+            vec!("-".to_string())
         } else {
             matches.free
         };

@@ -133,7 +133,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                             crash!(1, "{}", f.to_str());
                         }
                     };
-                    remove(walk_dir.map(|x| x.as_str().unwrap().to_strbuf()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
+                    remove(walk_dir.map(|x| x.as_str().unwrap().to_string()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose);
                     remove_dir(&file, filename, interactive, verbose);
                 } else if dir && (filename != "/" || !preserve_root) {
                     remove_dir(&file, filename, interactive, verbose);

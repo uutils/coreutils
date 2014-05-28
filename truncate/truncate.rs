@@ -177,7 +177,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
             }
         }
         slice
-    }.to_owned().into_bytes();
+    }.to_string().into_bytes();
     let mut number = match u64::parse_bytes(bytes.as_slice(), 10) {
         Some(num) => num,
         None => {

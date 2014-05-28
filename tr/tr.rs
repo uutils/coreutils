@@ -181,7 +181,7 @@ pub fn main() {
     }
 
     let dflag = matches.opt_present("d");
-    let cflag = matches.opts_present(["c".to_strbuf(), "C".to_strbuf()]);
+    let cflag = matches.opts_present(["c".to_string(), "C".to_string()]);
     let sets = matches.free;
 
     if cflag && !dflag {

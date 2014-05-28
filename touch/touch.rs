@@ -60,18 +60,18 @@ fn main() {
         return;
     }
 
-    if matches.opt_present("date") && matches.opts_present(["reference".to_owned(), "t".to_owned()]) ||
-       matches.opt_present("reference") && matches.opts_present(["date".to_owned(), "t".to_owned()]) ||
-       matches.opt_present("t") && matches.opts_present(["date".to_owned(), "reference".to_owned()]) {
+    if matches.opt_present("date") && matches.opts_present(["reference".to_string(), "t".to_string()]) ||
+       matches.opt_present("reference") && matches.opts_present(["date".to_string(), "t".to_string()]) ||
+       matches.opt_present("t") && matches.opts_present(["date".to_string(), "reference".to_string()]) {
         fail!("Invalid options: cannot specify reference time from more than one source");
     }
 
     let (mut atime, mut mtime) =
         if matches.opt_present("reference") {
-            let path = Path::new(matches.opt_str("reference").unwrap().to_owned());
+            let path = Path::new(matches.opt_str("reference").unwrap().to_string());
             let stat = stat(&path, !matches.opt_present("no-dereference"));
             (stat.accessed, stat.modified)
-        } else if matches.opts_present(["date".to_owned(), "t".to_owned()]) {
+        } else if matches.opts_present(["date".to_string(), "t".to_string()]) {
             let timestamp = if matches.opt_present("date") {
                 parse_date(matches.opt_str("date").unwrap().as_slice())
             } else {
@@ -85,11 +85,11 @@ fn main() {
         };
 
     for filename in matches.free.iter() {
-        let path = Path::new(filename.to_owned());
+        let path = Path::new(filename.to_string());
 
         if !path.exists() {
             // no-dereference included here for compatibility
-            if matches.opts_present(["no-create".to_owned(), "no-dereference".to_owned()]) {
+            if matches.opts_present(["no-create".to_string(), "no-dereference".to_string()]) {
                 continue;
             }
 
@@ -99,27 +99,27 @@ fn main() {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.opts_present(["date".to_owned(), "reference".to_owned(), "t".to_owned()]) {
+            if !matches.opts_present(["date".to_string(), "reference".to_string(), "t".to_string()]) {
                 continue;
             }
         }
 
         // If changing "only" atime or mtime, grab the existing value of the other.
         // Note that "-a" and "-m" may be passed together; this is not an xor.
-        if matches.opts_present(["a".to_owned(), "m".to_owned(), "time".to_owned()]) {
+        if matches.opts_present(["a".to_string(), "m".to_string(), "time".to_string()]) {
             let stat = stat(&path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 
             if !(matches.opt_present("a") ||
-                 time.contains(&"access".to_strbuf()) ||
-                 time.contains(&"atime".to_strbuf()) ||
-                 time.contains(&"use".to_strbuf())) {
+                 time.contains(&"access".to_string()) ||
+                 time.contains(&"atime".to_string()) ||
+                 time.contains(&"use".to_string())) {
                 atime = stat.accessed;
             }
 
             if !(matches.opt_present("m") ||
-                 time.contains(&"modify".to_strbuf()) ||
-                 time.contains(&"mtime".to_strbuf())) {
+                 time.contains(&"modify".to_string()) ||
+                 time.contains(&"mtime".to_string())) {
                 mtime = stat.modified;
             }
         }

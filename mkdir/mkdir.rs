@@ -63,7 +63,7 @@ fn main() {
 
     // Translate a ~str in octal form to u32, default to 755
     // Not tested on Windows
-    let mode_match = matches.opts_str(&["mode".to_strbuf()]);
+    let mode_match = matches.opts_str(&["mode".to_string()]);
     let mode: FilePermission = if mode_match.is_some() {
         let m = mode_match.unwrap();
         let res: Option<u32> = strconv::from_str_common(m.as_slice(), 8, false, false, false,
@@ -105,7 +105,7 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
             match parent {
                 Some(p) => {
                     if !Path::new(p).exists() {
-                        parent_dirs.push(p.to_strbuf())
+                        parent_dirs.push(p.to_string())
                     }
                 },
                 None => ()

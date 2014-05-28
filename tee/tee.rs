@@ -47,7 +47,7 @@ fn options(args: &[String]) -> Result<Options, ()> {
         optflag("V", "version", "output version information and exit"),
     ];
 
-    let args: Vec<String> = args.iter().map(|x| x.to_strbuf()).collect();
+    let args: Vec<String> = args.iter().map(|x| x.to_string()).collect();
 
     getopts(args.tail(), opts).map_err(|e| e.to_err_msg()).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
@@ -58,12 +58,12 @@ fn options(args: &[String]) -> Result<Options, ()> {
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
                            comment);
-        let names = m.free.clone().move_iter().collect::<Vec<String>>().append_one("-".to_strbuf());
+        let names = m.free.clone().move_iter().collect::<Vec<String>>().append_one("-".to_string());
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };
         Ok(Options {
-            program: program.to_strbuf(),
+            program: program.to_string(),
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,

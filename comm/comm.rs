@@ -25,7 +25,7 @@ fn mkdelim(col: uint, opts: &getopts::Matches) -> String {
     let mut s = String::new();
     let delim = match opts.opt_str("output-delimiter") {
         Some(d) => d.clone(),
-        None => "\t".to_strbuf(),
+        None => "\t".to_string(),
     };
 
     if col > 1 && !opts.opt_present("1") {

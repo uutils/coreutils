@@ -50,7 +50,7 @@ fn main() {
         println!("yes 1.0.0");
         return;
     }
-    let mut string = "y".to_owned();
+    let mut string = "y".to_string();
     if !matches.free.is_empty() {
         string = matches.free.connect(" ");
     }

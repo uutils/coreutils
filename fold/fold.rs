@@ -62,7 +62,7 @@ fn main() {
                 matches.opt_str("w")
             } else {
                 match obs_width {
-                    Some(v) => Some(v.to_strbuf()),
+                    Some(v) => Some(v.to_string()),
                     None => None,
                 }
             };
@@ -74,7 +74,7 @@ fn main() {
             None => 80
         };
         let files = if matches.free.is_empty() {
-            vec!("-".to_strbuf())
+            vec!("-".to_string())
         } else {
             matches.free
         };
@@ -88,7 +88,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     while i < args.len() {
         if args.get(i).as_slice().char_at(0) == '-' && args.get(i).len() > 1 && args.get(i).as_slice().char_at(1).is_digit() {
             return (args.clone(),
-                    Some(args.remove(i).unwrap().as_slice().slice_from(1).to_owned()));
+                    Some(args.remove(i).unwrap().as_slice().slice_from(1).to_string()));
         }
         i += 1;
     }
@@ -172,19 +172,19 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                             if spaces && i + 1 != line.len() {
                                 match slice.rfind(|ch: char| ch.is_whitespace()) {
                                     Some(m) => {
-                                        let routput = slice.slice_from(m + 1).to_owned();
+                                        let routput = slice.slice_from(m + 1).to_string();
                                         let ncount = routput.as_slice().chars().fold(0, |out, ch: char| out + if ch == '\t' { 8 } else { 1 });
                                         (slice.slice_to(m + 1), routput, ncount)
                                     },
-                                    None => (slice, "".to_owned(), 0)
+                                    None => (slice, "".to_string(), 0)
                                 }
                             } else {
-                                (slice, "".to_owned(), 0)
+                                (slice, "".to_string(), 0)
                             };
                         println!("{}", out);
                         (val, ncount)
                     };
-                    output = val.into_strbuf();
+                    output = val.into_string();
                     count = ncount;
                 }
             }

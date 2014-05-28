@@ -80,7 +80,7 @@ fn main() {
     let uname = unsafe { getuname() };
     let mut output = String::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
-        || !matches.opts_present(["nodename".to_strbuf(), "release".to_strbuf(), "version".to_strbuf(), "machine".to_strbuf()]) {
+        || !matches.opts_present(["nodename".to_string(), "release".to_string(), "version".to_string(), "machine".to_string()]) {
             output.push_str(uname.sysname.as_slice());
             output.push_str(" ");
     }
