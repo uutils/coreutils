@@ -52,7 +52,7 @@ pub enum Mode {
     Version,
 }
 
-
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

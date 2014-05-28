@@ -24,6 +24,7 @@ use getopts::{getopts, optflag, usage};
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
+#[allow(dead_code)]
 fn main() { uumain(args()); }
 
 pub fn uumain(args: Vec<String>) {

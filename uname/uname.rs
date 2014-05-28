@@ -51,6 +51,7 @@ unsafe fn getuname() -> utsrust {
 
 static NAME: &'static str = "uname";
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

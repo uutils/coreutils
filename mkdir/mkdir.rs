@@ -28,6 +28,7 @@ static VERSION: &'static str = "1.0.0";
 /**
  * Handles option parsing
  */
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

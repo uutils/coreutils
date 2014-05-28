@@ -22,6 +22,7 @@ use getopts::{optopt, optflag, getopts, usage};
 
 static PROGRAM: &'static str = "head";
 
+#[allow(dead_code)]
 fn main () { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

@@ -47,6 +47,7 @@ extern {
     fn utmpxname(file: *c_char) -> c_int;
 }
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

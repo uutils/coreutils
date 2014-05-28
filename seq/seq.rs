@@ -33,6 +33,7 @@ fn escape_sequences(s: &str) -> String {
         replace("\\t", "\t")
 }
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

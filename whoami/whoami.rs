@@ -41,6 +41,7 @@ unsafe fn getusername() -> String {
 
 static NAME: &'static str = "whoami";
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

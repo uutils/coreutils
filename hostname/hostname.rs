@@ -23,6 +23,7 @@ extern {
     fn sethostname(name: *libc::c_char, namelen: libc::c_int) -> libc::c_int;
 }
 
+#[allow(dead_code)]
 fn main () { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

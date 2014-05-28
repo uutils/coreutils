@@ -90,6 +90,7 @@ fn du(path: &Path, mut my_stat: Stat,
     return stats;
 }
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

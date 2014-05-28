@@ -25,6 +25,7 @@ use c_types::{get_pw_from_args, group};
 
 static NAME: &'static str = "groups";
 
+#[allow(dead_code)]
 fn main () { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

@@ -23,6 +23,7 @@ mod util;
 static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

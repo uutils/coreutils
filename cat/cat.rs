@@ -19,6 +19,7 @@ use std::io::{print, File};
 use std::io::stdio::{stdout_raw, stdin_raw};
 use std::io::{BufferedWriter};
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

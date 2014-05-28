@@ -77,7 +77,8 @@ fn open_file(name: &str) -> IoResult<Box<Reader>> {
     }
 }
 
-pub fn main() { uumain(os::args()); } 
+#[allow(dead_code)]
+fn main() { uumain(os::args()); } 
 
 pub fn uumain(args: Vec<String>) {
     let opts = [

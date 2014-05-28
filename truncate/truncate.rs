@@ -46,6 +46,7 @@ enum TruncateMode {
 
 static NAME: &'static str = "truncate";
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

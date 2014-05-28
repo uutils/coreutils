@@ -69,6 +69,7 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
     return (to_char(&bytes, base), max_digits)
 }
 
+#[allow(dead_code)]
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

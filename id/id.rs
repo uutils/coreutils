@@ -87,6 +87,7 @@ extern {
 
 static NAME: &'static str = "id";
 
+#[allow(dead_code)]
 fn main () { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {

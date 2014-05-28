@@ -90,9 +90,8 @@ pub fn uumain(args: Vec<String>) {
     }
 }
 
-fn main() {
-    uumain(os::args());
-}
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
     let mut to_decode = match input.read_to_str() {
