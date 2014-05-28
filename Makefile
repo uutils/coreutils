@@ -59,7 +59,7 @@ EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 CRATES      := \
-  $(sort $(filter $(EXES), $(filter-out md5sum, $(EXES))))
+  $(sort $(filter $(EXES), $(filter-out md5sum true false, $(EXES))))
 
 # Programs with usable tests
 TEST_PROGS  := \
