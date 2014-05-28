@@ -43,7 +43,7 @@ use c_types::{
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::mem::uninit;
+    pub use std::mem::uninitialized;
     use libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
 
     pub type au_id_t    = uid_t;
@@ -287,7 +287,7 @@ fn auditid() { }
 
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
-    let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninit() };
+    let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
     let address = &auditinfo as *audit::c_auditinfo_addr_t;
     if  unsafe { audit::getaudit(address) } < 0 {
         println!("Couldlnt retrieve information");
