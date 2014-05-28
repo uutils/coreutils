@@ -210,13 +210,13 @@ ers of 1000).",
 
     let options = Options {
         all: matches.opt_present("all"),
-        program_name: program.to_owned(),
+        program_name: program.to_string(),
         max_depth: max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {vec!("./".to_strbuf())} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {vec!("./".to_string())} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 

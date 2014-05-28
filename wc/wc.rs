@@ -70,7 +70,7 @@ fn main() {
 
     let mut files = matches.free.clone();
     if files.is_empty() {
-        files = vec!("-".to_strbuf());
+        files = vec!("-".to_string());
     }
 
     wc(files, &matches);
@@ -98,7 +98,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) {
     let mut max_str_len: uint = 0;
 
     for path in files.iter() {
-        let mut reader = match open(path.to_owned()) {
+        let mut reader = match open(path.to_string()) {
             Some(f) => f,
             None => { continue }
         };
@@ -155,7 +155,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) {
         }
 
         results.push(Result {
-            filename: path.to_strbuf(),
+            filename: path.to_string(),
             bytes: byte_count,
             chars: char_count,
             lines: line_count,

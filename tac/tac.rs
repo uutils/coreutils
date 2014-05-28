@@ -58,10 +58,10 @@ fn main() {
                     m
                 }
             }
-            None => "\n".to_strbuf()
+            None => "\n".to_string()
         };
         let files = if matches.free.is_empty() {
-            vec!("-".to_strbuf())
+            vec!("-".to_string())
         } else {
             matches.free
         };
@@ -81,7 +81,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         let mut data = crash_if_err!(1, file.read_to_str());
         if data.as_slice().ends_with("\n") {
             // removes blank line that is inserted otherwise
-            let mut buf = data.into_strbuf();
+            let mut buf = data.into_string();
             let len = buf.len();
             buf.truncate(len - 1);
             data = buf.into_owned();

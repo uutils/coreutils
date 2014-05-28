@@ -50,7 +50,7 @@ fn main() {
         let serial = matches.opt_present("serial");
         let delimiters = match matches.opt_str("delimiters") {
             Some(m) => m,
-            None => "\t".to_strbuf()
+            None => "\t".to_string()
         };
         paste(matches.free, serial, delimiters.as_slice());
     }
@@ -90,7 +90,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
     } else {
         let mut eof = Vec::from_elem(files.len(), false);
         loop {
-            let mut output = "".to_owned();
+            let mut output = "".to_string();
             let mut eof_count = 0;
             for (i, file) in files.mut_iter().enumerate() {
                 if *eof.get(i) {

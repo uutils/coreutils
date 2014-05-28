@@ -89,7 +89,7 @@ fn main() {
     };
 
     match mode {
-        Kill    => kill(matches.opt_str("signal").unwrap_or("9".to_strbuf()).as_slice(), matches.free),
+        Kill    => kill(matches.opt_str("signal").unwrap_or("9".to_string()).as_slice(), matches.free),
         Table   => table(),
         List    => list(matches.opt_str("list")),
         Help    => help(NAME, usage.as_slice()),

@@ -100,12 +100,12 @@ fn strip_dir(fullname: &str) -> String {
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
-        return name.into_strbuf();
+        return name.into_string();
     }
 
     if name.ends_with(suffix) {
-        return name.slice_to(name.len() - suffix.len()).into_strbuf();
+        return name.slice_to(name.len() - suffix.len()).into_string();
     }
 
-    return name.into_strbuf();
+    return name.into_string();
 }
