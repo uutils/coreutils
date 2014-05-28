@@ -102,7 +102,6 @@ To do
 - ls-ls
 - ls-vdir
 - ls
-- make-prime-list
 - mkfifo
 - mknod
 - mktemp
