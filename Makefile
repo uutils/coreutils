@@ -23,6 +23,7 @@ PROGS       := \
   rmdir \
   sleep \
   seq \
+  sum \
   tac \
   tee \
   touch \

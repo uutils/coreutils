@@ -133,7 +133,6 @@ To do
 - stat
 - stdbuf
 - stty (in progress)
-- sum
 - sync
 - tac-pipe
 - tail
