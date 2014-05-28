@@ -33,8 +33,9 @@ fn escape_sequences(s: &str) -> String {
         replace("\\t", "\t")
 }
 
-fn main() {
-    let args = os::args();
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let opts = ~[
         getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
         getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),

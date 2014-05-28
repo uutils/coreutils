@@ -87,8 +87,9 @@ fn open_file(name: &str) -> IoResult<Box<Buffer>> {
     }
 }
 
-pub fn main() {
-    let args = os::args();
+pub fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let opts = [
         getopts::optflag("1", "", "suppress column 1 (lines uniq to FILE1)"),
         getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),

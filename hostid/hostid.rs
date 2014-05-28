@@ -49,8 +49,9 @@ extern {
     pub fn gethostid() -> c_long;
 }
 
-fn main() {
-    let args = os::args();
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
 
     let opts = [
         optflag("", "help", "display this help and exit"),

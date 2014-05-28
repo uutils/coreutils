@@ -53,8 +53,9 @@ pub enum Mode {
 }
 
 
-fn main() {
-    let args = os::args();
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
 
     let opts = ~[
         optflag("h", "help", "display this help and exit"),

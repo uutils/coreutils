@@ -87,8 +87,9 @@ extern {
 
 static NAME: &'static str = "id";
 
-fn main () {
-    let args = os::args();
+fn main () { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let args_t = args.tail();
 
     let options = [

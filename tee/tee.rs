@@ -24,8 +24,10 @@ use getopts::{getopts, optflag, usage};
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
-fn main() {
-    match options(args().as_slice()).and_then(exec) {
+fn main() { uumain(args()); }
+
+pub fn uumain(args: Vec<String>) {
+    match options(args.as_slice()).and_then(exec) {
         Ok(_) => set_exit_status(0),
         Err(_) => set_exit_status(1)
     }

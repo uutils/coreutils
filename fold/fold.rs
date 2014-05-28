@@ -26,9 +26,10 @@ mod util;
 static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
-fn main() {
+fn main() { uumain(os::args()); }
 
-    let args = os::args();
+pub fn uumain(args: Vec<String>) {
+
     let (args, obs_width) = handle_obsolete(args.as_slice());
     let program = args.get(0).clone();
 

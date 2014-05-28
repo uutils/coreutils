@@ -51,8 +51,9 @@ unsafe fn getuname() -> utsrust {
 
 static NAME: &'static str = "uname";
 
-fn main() {
-    let args = os::args();
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("h", "help", "display this help and exit"),

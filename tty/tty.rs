@@ -34,9 +34,9 @@ extern {
 
 static NAME: &'static str = "tty";
 
-fn main () {
-    let args = os::args();
+fn main () { uumain(os::args()); }
 
+pub fn uumain(args: Vec<String>) {
     let options = [
         optflag("s", "silent", "print nothing, only return an exit status")
     ];
