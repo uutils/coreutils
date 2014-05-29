@@ -77,7 +77,6 @@ To do
 - chroot
 - copy
 - cp-hash
-- cp (some work done in ```dev``` branch)
 - csplit
 - cut
 - date
@@ -137,7 +136,6 @@ To do
 - tail
 - test
 - timeout
-- tr
 - tsort
 - uname-arch
 - uname-uname
