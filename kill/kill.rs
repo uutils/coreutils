@@ -52,9 +52,10 @@ pub enum Mode {
     Version,
 }
 
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
 
-fn main() {
-    let args = os::args();
+pub fn uumain(args: Vec<String>) {
 
     let opts = ~[
         optflag("h", "help", "display this help and exit"),

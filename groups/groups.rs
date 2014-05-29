@@ -25,8 +25,10 @@ use c_types::{get_pw_from_args, group};
 
 static NAME: &'static str = "groups";
 
-fn main () {
-    let args = os::args();
+#[allow(dead_code)]
+fn main () { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let options = [
             optflag("h", "", "Help")
         ];

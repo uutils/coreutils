@@ -43,8 +43,10 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
     //

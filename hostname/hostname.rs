@@ -23,8 +23,10 @@ extern {
     fn sethostname(name: *libc::c_char, namelen: libc::c_int) -> libc::c_int;
 }
 
-fn main () {
-    let args = os::args();
+#[allow(dead_code)]
+fn main () { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0);
 
     let options = [

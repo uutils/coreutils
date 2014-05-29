@@ -28,8 +28,10 @@ static VERSION: &'static str = "1.0.0";
 /**
  * Handles option parsing
  */
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
 
     let opts = ~[
         // Linux-specific options, not implemented

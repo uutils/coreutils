@@ -47,8 +47,10 @@ extern {
     fn utmpxname(file: *c_char) -> c_int;
 }
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("v", "version", "output version information and exit"),

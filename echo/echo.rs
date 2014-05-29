@@ -69,8 +69,10 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
     return (to_char(&bytes, base), max_digits)
 }
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("n", "", "do not output the trailing newline"),

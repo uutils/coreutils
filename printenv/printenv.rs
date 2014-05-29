@@ -24,8 +24,10 @@ mod util;
 
 static NAME: &'static str = "printenv";
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
     let opts = ~[
         getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),

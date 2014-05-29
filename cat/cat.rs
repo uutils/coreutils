@@ -19,8 +19,10 @@ use std::io::{print, File};
 use std::io::stdio::{stdout_raw, stdin_raw};
 use std::io::{BufferedWriter};
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).as_slice();
     let opts = ~[
         getopts::optflag("A", "show-all", "equivalent to -vET"),

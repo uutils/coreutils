@@ -22,11 +22,14 @@ use getopts::{optopt, optflag, getopts, usage};
 
 static PROGRAM: &'static str = "head";
 
-fn main () {
+#[allow(dead_code)]
+fn main () { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let mut line_count = 10u;
 
     // handle obsolete -number syntax
-    let options = match obsolete(os::args().tail()) {
+    let options = match obsolete(args.tail()) {
         (args, Some(n)) => { line_count = n; args },
         (args, None) => args
     };

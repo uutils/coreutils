@@ -29,8 +29,10 @@ enum InteractiveMode {
 
 static NAME: &'static str = "rm";
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { uumain(os::args()); }
+
+pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
     // TODO: make getopts support -R in addition to -r
