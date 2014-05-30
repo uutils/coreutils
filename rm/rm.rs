@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
     // TODO: make getopts support -R in addition to -r
-    let opts = ~[
+    let opts = [
         getopts::optflag("f", "force", "ignore nonexistent files and arguments, never prompt"),
         getopts::optflag("i", "", "prompt before every removal"),
         getopts::optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"),

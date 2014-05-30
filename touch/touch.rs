@@ -26,7 +26,7 @@ static VERSION: &'static str = "1.0.0";
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
-    let opts = ~[
+    let opts = [
         getopts::optflag("a", "",               "change only the access time"),
         getopts::optflag("c", "no-create",      "do not create any files"),
         getopts::optopt( "d", "date",           "parse argument and use it instead of current time", "STRING"),

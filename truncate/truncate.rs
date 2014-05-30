@@ -52,7 +52,7 @@ fn main() { uumain(os::args()); }
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
-    let opts = ~[
+    let opts = [
         getopts::optflag("c", "no-create", "do not create files that do not exist"),
         getopts::optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)"),
         getopts::optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE"),

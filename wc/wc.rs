@@ -38,7 +38,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
-    let opts = ~[
+    let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
         getopts::optflag("m", "chars", "print the character counts"),
         getopts::optflag("l", "lines", "print the newline counts"),

@@ -15,7 +15,7 @@ mod util;
 
 static NAME: &'static str = "seq";
 
-fn print_usage(opts: ~[getopts::OptGroup]) {
+fn print_usage(opts: &[getopts::OptGroup]) {
     println!("seq 1.0.0\n");
     println!("Usage:\n  seq [-w] [-s string] [-t string] [first [step]] last\n");
     println!("{:s}", getopts::usage("Print sequences of numbers", opts));
@@ -37,7 +37,7 @@ fn escape_sequences(s: &str) -> String {
 fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
-    let opts = ~[
+    let opts = [
         getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
         getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),
         getopts::optflag("w", "widths", "Equalize widths of all numbers by padding with zeros"),

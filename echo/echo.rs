@@ -74,7 +74,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
-    let opts = ~[
+    let opts = [
         getopts::optflag("n", "", "do not output the trailing newline"),
         getopts::optflag("e", "", "enable interpretation of backslash escapes"),
         getopts::optflag("E", "", "disable interpretation of backslash escapes (default)"),

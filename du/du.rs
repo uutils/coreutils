@@ -95,7 +95,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).as_slice();
-    let opts = ~[
+    let opts = [
         // In task
         getopts::optflag("a", "all", " write counts for all files, not just directories"),
         // In main
