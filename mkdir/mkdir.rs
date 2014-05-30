@@ -33,7 +33,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
 
-    let opts = ~[
+    let opts = [
         // Linux-specific options, not implemented
         // getopts::optflag("Z", "context", "set SELinux secutiry context" +
         // " of each created directory to CTX"),

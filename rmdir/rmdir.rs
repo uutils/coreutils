@@ -28,7 +28,7 @@ fn main() { uumain(os::args()); }
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
-    let opts = ~[
+    let opts = [
         getopts::optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty"),
         getopts::optflag("p", "parents", "remove DIRECTORY and its ancestors; e.g., 'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a"),
         getopts::optflag("v", "verbose", "output a diagnostic for every directory processed"),

@@ -36,7 +36,7 @@ mod util;
 static NAME: &'static str = "base64";
 
 pub fn uumain(args: Vec<String>) {
-    let opts = ~[
+    let opts = [
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
         optopt("w", "wrap",

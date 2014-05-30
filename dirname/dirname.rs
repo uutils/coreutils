@@ -21,7 +21,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
-    let opts = ~[
+    let opts = [
         getopts::optflag("z", "zero", "separate output with NUL rather than newline"),
         getopts::optflag("", "help", "display this help and exit"),
         getopts::optflag("", "version", "output version information and exit"),

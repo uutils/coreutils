@@ -56,7 +56,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).as_slice();
-    let opts = ~[
+    let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("a", "all", "Behave as though all of the options -mnrsv were specified."),
         getopts::optflag("m", "machine", "print the machine hardware name."),

@@ -32,7 +32,7 @@ pub fn uumain(args: Vec<String>) {
     //
     // Argument parsing
     //
-    let opts = ~[
+    let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];

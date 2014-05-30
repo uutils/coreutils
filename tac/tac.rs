@@ -29,7 +29,7 @@ fn main() { uumain(os::args()); }
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
-    let opts = ~[
+    let opts = [
         getopts::optflag("b", "before", "attach the separator before instead of after"),
         getopts::optflag("r", "regex", "interpret the sequence as a regular expression (NOT IMPLEMENTED)"),
         getopts::optopt("s", "separator", "use STRING as the separator instead of newline", "STRING"),

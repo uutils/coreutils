@@ -29,7 +29,7 @@ fn main() { uumain(os::args()); }
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
 
-    let opts = ~[
+    let opts = [
         getopts::optflag("s", "serial", "paste one file at a time instead of in parallel"),
         getopts::optopt("d", "delimiters", "reuse characters from LIST instead of TABs", "LIST"),
         getopts::optflag("h", "help", "display this help and exit"),

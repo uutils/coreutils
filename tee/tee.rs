@@ -43,7 +43,7 @@ struct Options {
 }
 
 fn options(args: &[String]) -> Result<Options, ()> {
-    let opts = ~[
+    let opts = [
         optflag("a", "append", "append to the given FILEs, do not overwrite"),
         optflag("i", "ignore-interrupts", "ignore interrupt signals"),
         optflag("h", "help", "display this help and exit"),

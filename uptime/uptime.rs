@@ -52,7 +52,7 @@ fn main() { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let program = args.get(0).clone();
-    let opts = ~[
+    let opts = [
         getopts::optflag("v", "version", "output version information and exit"),
         getopts::optflag("h", "help", "display this help and exit"),
     ];
