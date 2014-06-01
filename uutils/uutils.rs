@@ -114,7 +114,7 @@ fn usage(cmap: &HashMap<&str, fn(Vec<String>)>) {
         println!("");
         println!("Usage:");
         println!("  {} [util [arguments...]", NAME);
-        println!("Utils:");
+        println!("Currently defined functions:");
         let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
         utils.sort();
         for util in utils.iter() {
