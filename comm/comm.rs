@@ -11,7 +11,7 @@
 
 extern crate getopts;
 
-use std::cmp::TotalOrd;
+use std::cmp::Ord;
 use std::io::{BufferedReader, IoResult, print};
 use std::io::fs::File;
 use std::io::stdio::stdin;

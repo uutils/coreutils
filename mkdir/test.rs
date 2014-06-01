@@ -9,8 +9,8 @@ static test_dir4: &'static str = "tmp/mkdir_test4/mkdir_test4_1";
 static test_dir5: &'static str = "tmp/mkdir_test5/mkdir_test5_1";
 
 fn cleanup(dir: &'static str) {
-    let d = dir.into_owned();
-    let p = Path::new(d.into_owned());
+    let d = dir.into_string();
+    let p = Path::new(d.into_string());
     if p.exists() {
         rmdir(&p).unwrap();
     }

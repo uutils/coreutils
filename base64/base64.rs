@@ -105,7 +105,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         let standard_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         to_decode = to_decode.as_slice()
             .trim_chars(|c| !standard_chars.contains_char(c))
-            .into_owned()
+            .into_string()
     }
 
     match to_decode.as_slice().from_base64() {

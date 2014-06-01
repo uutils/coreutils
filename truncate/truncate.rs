@@ -33,7 +33,7 @@ macro_rules! get_file_size(
     })
 )
 
-#[deriving(Eq)]
+#[deriving(Eq, PartialEq)]
 enum TruncateMode {
     Reference,
     Extend,

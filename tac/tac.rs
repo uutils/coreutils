@@ -86,7 +86,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
             let mut buf = data.into_string();
             let len = buf.len();
             buf.truncate(len - 1);
-            data = buf.into_owned();
+            data = buf.into_string();
         }
         let split_vec: Vec<&str> = data.as_slice().split_str(separator).collect();
         let rev: String = split_vec.iter().rev().fold(String::new(), |mut a, &b| {
