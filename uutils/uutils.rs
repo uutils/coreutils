@@ -120,6 +120,7 @@ fn usage(cmap: &HashMap<&str, fn(Vec<String>)>) {
         for util in utils.iter() {
             println!("\t{}", util);
         }
+        println!("");
 }
 
 fn main() {
@@ -128,24 +129,54 @@ fn main() {
 
     // try binary name as util name.
     let binary = Path::new(args.get(0).as_slice());
-    let util = binary.filename_str().unwrap();
-    if umap.contains_key(&util) {
-        let &uumain = umap.get(&util);
+    let binary_as_util = binary.filename_str().unwrap();
+    if umap.contains_key(&binary_as_util) {
+        let &uumain = umap.get(&binary_as_util);
         uumain(args);
+        return
+    } else if binary_as_util.starts_with("uutils")
+        || binary_as_util.starts_with("busybox") {
+            // uutils can be called as either "uutils", "busybox"
+            // "uutils-suffix" or "busybox-suffix". Not sure
+            // what busybox uses the -suffix pattern for.
+    } else {
+        println!("{}: applet not found", binary_as_util);
+        os::set_exit_status(1);
         return
     }
 
     // try first arg as util name.
     if args.len() >= 2 {
         args.shift();
-        let util = args.get(0).as_slice().clone();
+        let util = args.get(0).as_slice();
         if umap.contains_key(&util) {
             let &uumain = umap.get(&util);
             uumain(args.clone());
             return
+        } else if args.get(0).as_slice() == "--help" {
+            // see if they want help on a specific util
+            if args.len() >= 2 {
+                let util = args.get(1).as_slice();
+                if umap.contains_key(&util) {
+                    let &uumain = umap.get(&util);
+                    uumain(vec!["--help".to_string()]);
+                    return
+                } else {
+                    println!("{}: applet not found", util);
+                    os::set_exit_status(1);
+                    return
+                }
+            }
+            usage(&umap);
+            return
+        } else {
+            println!("{}: applet not found", util);
+            os::set_exit_status(1);
+            return
         }
+    } else {
+        // no arguments provided
+        usage(&umap);
+        return
     }
-
-    usage(&umap);
-    os::set_exit_status(1);
 }
