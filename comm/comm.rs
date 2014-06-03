@@ -38,6 +38,13 @@ fn mkdelim(col: uint, opts: &getopts::Matches) -> String {
     s
 }
 
+fn ensure_nl(line: String) -> String {
+    match line.as_slice().chars().last() {
+        Some('\n') => line,
+        _ => line.append("\n"),
+    }
+}
+
 fn comm(a: &mut Box<Buffer>, b: &mut Box<Buffer>, opts: &getopts::Matches) {
 
     let delim = Vec::from_fn(4, |col| mkdelim(col, opts));
@@ -56,19 +63,19 @@ fn comm(a: &mut Box<Buffer>, b: &mut Box<Buffer>, opts: &getopts::Matches) {
         match ord {
             Less => {
                 if !opts.opt_present("1") {
-                    print!("{}{}", delim.get(1), ra.unwrap());
+                    print!("{}{}", delim.get(1), ra.map(ensure_nl).unwrap());
                 }
                 ra = a.read_line();
             }
             Greater => {
                 if !opts.opt_present("2") {
-                    print!("{}{}", delim.get(2), rb.unwrap());
+                    print!("{}{}", delim.get(2), rb.map(ensure_nl).unwrap());
                 }
                 rb = b.read_line();
             }
             Equal => {
                 if !opts.opt_present("3") {
-                    print!("{}{}", delim.get(3), ra.unwrap());
+                    print!("{}{}", delim.get(3), ra.map(ensure_nl).unwrap());
                 }
                 ra = a.read_line();
                 rb = b.read_line();
