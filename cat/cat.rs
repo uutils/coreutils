@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) {
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, PartialEq)]
 enum NumberingMode {
     NumberNone,
     NumberNonEmpty,

@@ -24,7 +24,7 @@ use getopts::{
     usage,
 };
 
-#[deriving(Eq)]
+#[deriving(Eq, PartialEq)]
 pub enum Mode {
     Copy,
     Help,

@@ -1,5 +1,7 @@
 include common.mk
 
+SRC_DIR=$(shell pwd)
+
 # Possible programs
 PROGS       := \
   base64 \
@@ -136,4 +138,23 @@ ifeq ($(MULTICALL), 1)
 $(foreach crate,$(CRATES),$(eval $(call CRATE_BUILD,$(crate),$(shell $(RUSTC) --crate-type rlib --crate-file-name --out-dir build $(crate)/$(crate).rs))))
 endif
 
-.PHONY: all test clean
+# Test under the busybox testsuite
+ifeq ($(MULTICALL), 1)
+build/busybox: build/uutils
+	rm -f build/busybox
+	ln -s $(SRC_DIR)/build/uutils build/busybox
+
+ifeq ($(BUSYBOX_SRC),)
+busytest:
+	@echo
+	@echo "To run \`busytest\` set BUSYBOX_SRC to the directory of the compiled busybox source code."
+	@echo "Optionally set RUNTEST_ARGS to arguments to pass to the busybox \`runtest\` program."
+	@echo
+	@false
+else
+busytest: build/busybox
+	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(SRC_DIR)/build tstdir=$(BUSYBOX_SRC)/testsuite $(BUSYBOX_SRC)/testsuite/runtest $(RUNTEST_ARGS))
+endif
+endif
+
+.PHONY: all test clean busytest

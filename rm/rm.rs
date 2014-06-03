@@ -20,7 +20,7 @@ use std::io::{print, stdin, stdio, fs, BufferedReader};
 #[path = "../common/util.rs"]
 mod util;
 
-#[deriving(Eq)]
+#[deriving(Eq, PartialEq)]
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,
