@@ -83,7 +83,7 @@ fn copy(matches: getopts::Matches) {
         fail!()
     } else {
         // All but the last argument:
-        matches.free.slice(0, matches.free.len() - 2).iter()
+        matches.free.slice(0, matches.free.len() - 1).iter()
             .map(|arg| Path::new(arg.clone())).collect()
     };
     let dest = if matches.free.len() < 2 {
