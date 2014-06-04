@@ -36,11 +36,11 @@ PROGS       := \
   unlink \
   wc \
   yes \
-  hostname \
   head \
 
 UNIX_PROGS := \
   hostid \
+  hostname \
   kill \
   logname \
   users \
