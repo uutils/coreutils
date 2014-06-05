@@ -27,6 +27,9 @@ static NAME: &'static str = "factor";
 fn factor(mut num: u64) -> Vec<u64> {
     let mut ret = Vec::new();
 
+    if num < 2 {
+        return ret;
+    }
     while num % 2 == 0 {
         num /= 2;
         ret.push(2);
