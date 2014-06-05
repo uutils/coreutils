@@ -86,7 +86,6 @@ To do
 - expand (in progress)
 - expr
 - extent-scan
-- factor
 - find-mount-point
 - fmt
 - getlimits
