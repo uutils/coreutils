@@ -95,9 +95,9 @@ fn open_file(name: &str) -> IoResult<Box<Buffer>> {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         getopts::optflag("1", "", "suppress column 1 (lines uniq to FILE1)"),
         getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),
@@ -114,7 +114,7 @@ pub fn uumain(args: Vec<String>) {
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-        return;
+        return 0;
     }
 
     if matches.opt_present("help") || matches.free.len() != 2 {
@@ -125,14 +125,16 @@ pub fn uumain(args: Vec<String>) {
         println!("");
         print(getopts::usage("Compare sorted files line by line.", opts.as_slice()).as_slice());
         if matches.free.len() != 2 {
-            os::set_exit_status(1);
+            return 0;
         }
-        return;
+        return 0;
     }
 
 
     let mut f1 = open_file(matches.free.get(0).as_slice()).unwrap();
     let mut f2 = open_file(matches.free.get(1).as_slice()).unwrap();
 
-    comm(&mut f1, &mut f2, &matches)
+    comm(&mut f1, &mut f2, &matches);
+
+    return 0;
 }

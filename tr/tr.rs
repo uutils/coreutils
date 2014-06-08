@@ -147,9 +147,9 @@ fn usage(opts: &[OptGroup]) {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         getopts::optflag("c", "complement", "use the complement of SET1"),
         getopts::optflag("C", "", "same as -c"),
@@ -162,24 +162,23 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => m,
         Err(err) => {
             show_error!(1, "{}", err.to_err_msg());
-            return;
+            return 0;
         }
     };
 
     if matches.opt_present("help") {
         usage(opts);
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-        return;
+        return 0;
     }
 
     if matches.free.len() == 0 {
         usage(opts);
-        os::set_exit_status(1);
-        return;
+        return 1;
     }
 
     let dflag = matches.opt_present("d");
@@ -188,7 +187,7 @@ pub fn uumain(args: Vec<String>) {
 
     if cflag && !dflag {
         show_error!(1, "-c is only supported with -d");
-        return;
+        return 0;
     }
 
     if dflag {
@@ -199,4 +198,6 @@ pub fn uumain(args: Vec<String>) {
         let set2 = expand_set(sets.get(1).as_slice());
         tr(set1.as_slice(), set2.as_slice());
     }
+
+    return 0;
 }

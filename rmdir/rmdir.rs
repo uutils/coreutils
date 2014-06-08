@@ -23,9 +23,9 @@ mod util;
 static NAME: &'static str = "rmdir";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     let opts = [
@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => m,
         Err(f) => {
             show_error!(1, "{}", f.to_err_msg());
-            return;
+            return 0;
         }
     };
 
@@ -61,6 +61,8 @@ pub fn uumain(args: Vec<String>) {
         let verbose = matches.opt_present("verbose");
         remove(matches.free, ignore, parents, verbose);
     }
+
+    return 0;
 }
 
 fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) {

@@ -90,9 +90,9 @@ fn du(path: &Path, mut my_stat: Stat,
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         // In task
@@ -163,7 +163,7 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => m,
         Err(f) => {
             show_error!(1, "Invalid options\n{}", f.to_err_msg());
-            return
+            return 0;
         }
     };
 
@@ -187,10 +187,10 @@ ers of 1000).",
                  program = program,
                  version = VERSION,
                  usage = getopts::usage("Summarize disk usage of each FILE, recursively for directories.", opts));
-        return
+        return 0;
     } else if matches.opt_present("version") {
         println!("{} version: {}", program, VERSION);
-        return
+        return 0;
     }
 
     let summarize = matches.opt_present("summarize");
@@ -200,11 +200,11 @@ ers of 1000).",
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
             println!("{}: warning: summarizing conflicts with --max-depth={:s}", program, *s);
-            return
+            return 0;
         }
         (Some(ref s), None) => {
             println!("{}: invalid maximum depth '{:s}'", program, *s);
-            return
+            return 0;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
     }
@@ -239,7 +239,7 @@ ers of 1000).",
             for c in s.as_slice().chars() {
                 if found_letter && c.is_digit() || !found_number && !c.is_digit() {
                     println!("{}: invalid --block-size argument '{}'", program, s);
-                    return
+                    return 0;
                 } else if c.is_digit() {
                     found_number = true;
                     numbers.push(c as u8);
@@ -261,7 +261,7 @@ ers of 1000).",
                 "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 _ => {
-                    println!("{}: invalid --block-size argument '{}'", program, s); return
+                    println!("{}: invalid --block-size argument '{}'", program, s); return 0;
                 }
             };
             number * multiple
@@ -300,7 +300,7 @@ Valid arguments are:
 - 'long-iso'
 - 'iso'
 Try '{program} --help' for more information.", s, program = program);
-                    return
+                    return 0;
                 }
             }
         },
@@ -339,7 +339,7 @@ Try '{program} --help' for more information.", s, program = program);
     Valid arguments are:
       - 'accessed', 'created', 'modified'
     Try '{program} --help' for more information.", program = program);
-                                    return
+                                    return 0;
                                 }
                             },
                             None => stat.fstat.modified
@@ -366,4 +366,6 @@ Try '{program} --help' for more information.", s, program = program);
         print!("{:<10} total", convert_size(grand_total));
         print!("{}", line_separator);
     }
+
+    return 0;
 }

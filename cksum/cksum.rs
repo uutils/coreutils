@@ -78,9 +78,9 @@ fn open_file(name: &str) -> IoResult<Box<Reader>> {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); } 
+fn main() { os::set_exit_status(uumain(os::args())); } 
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
@@ -98,12 +98,12 @@ pub fn uumain(args: Vec<String>) {
         println!("  {} [OPTIONS] [FILE]...", NAME);
         println!("");
         print(getopts::usage("Print CRC and size for each file.", opts.as_slice()).as_slice());
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-        return;
+        return 0;
     }
 
     let files = matches.free;
@@ -113,7 +113,7 @@ pub fn uumain(args: Vec<String>) {
             Ok((crc, size)) => println!("{} {}", crc, size),
             Err(err) => show_error!(2, "{}", err),
         }
-        return
+        return 0;
     }
 
     for fname in files.iter() {
@@ -122,4 +122,6 @@ pub fn uumain(args: Vec<String>) {
             Err(err) => show_error!(2, "'{}' {}", fname, err),
         }
     }
+
+    return 0;
 }

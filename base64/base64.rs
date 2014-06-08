@@ -35,7 +35,7 @@ mod util;
 
 static NAME: &'static str = "base64";
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
@@ -88,10 +88,12 @@ pub fn uumain(args: Vec<String>) {
         Help    => help(progname.as_slice(), usage.as_slice()),
         Version => version()
     }
+
+    return 0;
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
     let mut to_decode = match input.read_to_str() {

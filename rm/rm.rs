@@ -30,9 +30,9 @@ enum InteractiveMode {
 static NAME: &'static str = "rm";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     // TODO: make getopts support -R in addition to -r
@@ -113,12 +113,14 @@ pub fn uumain(args: Vec<String>) {
                     "Remove all arguments? "
                 };
             if !prompt(msg) {
-                return;
+                return 0;
             }
         }
         remove(matches.free, force, interactive, one_fs, preserve_root,
                recursive, dir, verbose);
     }
+
+    return 0;
 }
 
 // TODO: implement one-file-system

@@ -50,9 +50,9 @@ extern {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
 
     let opts = [
         optflag("", "help", "display this help and exit"),
@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => m,
         Err(e) => {
             show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
-            return
+            return 0;
         },
     };
 
@@ -83,6 +83,8 @@ pub fn uumain(args: Vec<String>) {
         Help    => help(NAME, usage.as_slice()),
         Version => version(),
     }
+
+    return 0;
 }
 
 fn version() {

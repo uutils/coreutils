@@ -47,9 +47,9 @@ enum TruncateMode {
 static NAME: &'static str = "truncate";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     let opts = [
@@ -108,6 +108,8 @@ file based on its current size:
             truncate(no_create, io_blocks, reference, size, matches.free);
         }
     }
+
+    return 0;
 }
 
 fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) {

@@ -58,9 +58,9 @@ use std::collections::hashmap::HashMap;
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
-fn util_map() -> HashMap<&str, fn(Vec<String>)> {
-    fn uutrue(_: Vec<String>) { os::set_exit_status(0); }
-    fn uufalse(_: Vec<String>) { os::set_exit_status(1); }
+fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
+    fn uutrue(_: Vec<String>) -> int { 0 }
+    fn uufalse(_: Vec<String>) -> int { 1 }
 
     let mut map = HashMap::new();
     map.insert("base64", base64::uumain);
@@ -108,7 +108,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>)> {
     map
 }
 
-fn usage(cmap: &HashMap<&str, fn(Vec<String>)>) {
+fn usage(cmap: &HashMap<&str, fn(Vec<String>) -> int>) {
         println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
@@ -131,7 +131,7 @@ fn main() {
     let binary_as_util = binary.filename_str().unwrap();
     if umap.contains_key(&binary_as_util) {
         let &uumain = umap.get(&binary_as_util);
-        uumain(args);
+        os::set_exit_status(uumain(args));
         return
     } else if binary_as_util.starts_with("uutils")
         || binary_as_util.starts_with("busybox") {
@@ -150,7 +150,7 @@ fn main() {
         let util = args.get(0).as_slice();
         if umap.contains_key(&util) {
             let &uumain = umap.get(&util);
-            uumain(args.clone());
+            os::set_exit_status(uumain(args.clone()));
             return
         } else if args.get(0).as_slice() == "--help" {
             // see if they want help on a specific util
@@ -158,7 +158,7 @@ fn main() {
                 let util = args.get(1).as_slice();
                 if umap.contains_key(&util) {
                     let &uumain = umap.get(&util);
-                    uumain(vec!["--help".to_string()]);
+                    os::set_exit_status(uumain(vec!["--help".to_string()]));
                     return
                 } else {
                     println!("{}: applet not found", util);
@@ -167,6 +167,7 @@ fn main() {
                 }
             }
             usage(&umap);
+            os::set_exit_status(0);
             return
         } else {
             println!("{}: applet not found", util);
@@ -176,6 +177,7 @@ fn main() {
     } else {
         // no arguments provided
         usage(&umap);
+        os::set_exit_status(0);
         return
     }
 }

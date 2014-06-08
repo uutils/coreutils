@@ -77,9 +77,9 @@ fn open(name: &str) -> IoResult<Box<Reader>> {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         getopts::optflag("r", "", "use the BSD compatible algorithm (default)"),
@@ -102,11 +102,11 @@ pub fn uumain(args: Vec<String>) {
         print(getopts::usage("checksum and count the blocks in a file", opts).as_slice());
         println!("");
         println!("With no FILE, or when  FILE is -, read standard input.");
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("{} {}", program, VERSION);
-        return;
+        return 0;
     }
 
     let sysv = matches.opt_present("sysv");
@@ -128,4 +128,6 @@ pub fn uumain(args: Vec<String>) {
     };
 
     println!("{} {}", sum, blocks);
+
+    return 0;
 }

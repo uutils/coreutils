@@ -26,9 +26,9 @@ use c_types::{get_pw_from_args, group};
 static NAME: &'static str = "groups";
 
 #[allow(dead_code)]
-fn main () { uumain(os::args()); }
+fn main () { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let options = [
             optflag("h", "", "Help")
         ];
@@ -37,9 +37,11 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => { m },
         Err(_) => {
             show_error!(1, "{}", usage(NAME, options));
-            return;
+            return 0;
         }
     };
 
     group(get_pw_from_args(&matches.free), true);
+
+    return 0;
 }

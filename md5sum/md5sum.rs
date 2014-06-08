@@ -27,8 +27,10 @@ mod util;
 static NAME: &'static str = "md5sum";
 static VERSION: &'static str = "1.0.0";
 
-fn main() {
-    let args = os::args();
+#[allow(dead_code)]
+fn main() { os::set_exit_status(uumain(os::args())); }
+
+pub fn uumain(args: Vec<String>) -> int {
 
     let program = args.get(0).clone();
 
@@ -72,11 +74,16 @@ fn main() {
         } else {
             matches.free
         };
-        md5sum(files, binary, check, tag, status, quiet, strict, warn);
+        match md5sum(files, binary, check, tag, status, quiet, strict, warn) {
+            Ok(()) => return 0,
+            Err(e) => return e
+        }
     }
+
+    return 0;
 }
 
-fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) {
+fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), int> {
     let mut md5 = crypto::md5::Md5::new();
     let bytes = md5.output_bits() / 4;
     let mut bad_format = 0;
@@ -102,7 +109,7 @@ fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool
                         None => {
                             bad_format += 1;
                             if strict {
-                                os::set_exit_status(1);
+                                return Err(1);
                             }
                             if warn {
                                 show_warning!("{}: {}: improperly formatted MD5 checksum line", filename, i + 1);
@@ -121,7 +128,7 @@ fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool
                         println!("{}: FAILED", ck_filename);
                     }
                     failed += 1;
-                    os::set_exit_status(1);
+                    return Err(1);
                 }
             }
         } else {
@@ -143,6 +150,8 @@ fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool
             show_warning!("{} computed checksum did NOT match", failed);
         }
     }
+
+    return Ok(());
 }
 
 fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> String {

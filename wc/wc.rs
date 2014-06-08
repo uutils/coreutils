@@ -34,9 +34,9 @@ struct Result {
 static NAME: &'static str = "wc";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
@@ -62,12 +62,12 @@ pub fn uumain(args: Vec<String>) {
         print(getopts::usage("Print newline, word and byte counts for each FILE", opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("wc 1.0.0");
-        return;
+        return 0;
     }
 
     let mut files = matches.free.clone();
@@ -76,6 +76,8 @@ pub fn uumain(args: Vec<String>) {
     }
 
     wc(files, &matches);
+
+    return 0;
 }
 
 static CR: u8 = '\r' as u8;

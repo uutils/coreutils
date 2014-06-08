@@ -54,9 +54,9 @@ fn print_env(null: bool) {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let prog = args.get(0).as_slice();
 
     // to handle arguments the same way than GNU env, we can't use getopts
@@ -97,8 +97,8 @@ pub fn uumain(args: Vec<String>) {
             }
         } else if opt.as_slice().starts_with("--") {
             match opt.as_slice() {
-                "--help" => { usage(prog); return }
-                "--version" => { version(); return }
+                "--help" => { usage(prog); return 0; }
+                "--version" => { version(); return 0; }
 
                 "--ignore-environment" => opts.ignore_env = true,
                 "--null" => opts.null = true,
@@ -114,7 +114,7 @@ pub fn uumain(args: Vec<String>) {
                 _ => {
                     println!("{:s}: invalid option \"{:s}\"", prog, *opt);
                     println!("Type \"{:s} --help\" for detailed informations", prog);
-                    return
+                    return 0;
                 }
             }
         } else if opt.as_slice().starts_with("-") {
@@ -131,8 +131,8 @@ pub fn uumain(args: Vec<String>) {
             for c in chars {
                 // short versions of options
                 match c {
-                    'h' => { usage(prog); return }
-                    'V' => { version(); return }
+                    'h' => { usage(prog); return 0; }
+                    'V' => { version(); return 0; }
                     'i' => opts.ignore_env = true,
                     '0' => opts.null = true,
                     'u' => {
@@ -146,7 +146,7 @@ pub fn uumain(args: Vec<String>) {
                     _ => {
                         println!("{:s}: illegal option -- {:c}", prog, c);
                         println!("Type \"{:s} --help\" for detailed informations", prog);
-                        return
+                        return 0;
                     }
                 }
             }
@@ -200,14 +200,16 @@ pub fn uumain(args: Vec<String>) {
         let args = opts.program.slice_from(1);
         match Command::new(prog).args(args).stdin(InheritFd(0)).stdout(InheritFd(1)).stderr(InheritFd(2)).status() {
             Ok(exit) =>
-                std::os::set_exit_status(match exit {
+                return match exit {
                     std::io::process::ExitStatus(s) => s,
                     _ => 1
-                }),
-            Err(_) => std::os::set_exit_status(1)
+                },
+            Err(_) => return 1
         }
     } else {
         // no program provided
         print_env(opts.null);
     }
+
+    return 0;
 }

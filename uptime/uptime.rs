@@ -48,9 +48,9 @@ extern {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("v", "version", "output version information and exit"),
@@ -62,7 +62,7 @@ pub fn uumain(args: Vec<String>) {
     };
     if matches.opt_present("version") {
         println!("uptime 1.0.0");
-        return;
+        return 0;
     }
     if matches.opt_present("help") || matches.free.len() > 0 {
         println!("Usage:");
@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) {
         print(getopts::usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
                               in the run queue over the last 1, 5 and 15 minutes.", opts).as_slice());
-        return;
+        return 0;
     }
 
     print_time();
@@ -80,6 +80,8 @@ pub fn uumain(args: Vec<String>) {
     print_uptime(upsecs);
     print_nusers(user_count);
     print_loadavg();
+
+    return 0;
 }
 
 fn print_loadavg() {

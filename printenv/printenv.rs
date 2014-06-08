@@ -25,9 +25,9 @@ mod util;
 static NAME: &'static str = "printenv";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),
@@ -47,11 +47,11 @@ pub fn uumain(args: Vec<String>) {
         println!("  {0:s} [VARIABLE]... [OPTION]...", program);
         println!("");
         print(getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", opts).as_slice());
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("printenv 1.0.0");
-        return;
+        return 0;
     }
     let mut separator = "\n";
     if matches.opt_present("null") {
@@ -59,6 +59,8 @@ pub fn uumain(args: Vec<String>) {
     };
 
     exec(matches.free, separator);
+
+    return 0;
 }
 
 pub fn exec(args: Vec<String>, separator: &str) {

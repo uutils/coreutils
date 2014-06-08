@@ -88,9 +88,9 @@ extern {
 static NAME: &'static str = "id";
 
 #[allow(dead_code)]
-fn main () { uumain(os::args()); }
+fn main () { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let args_t = args.tail();
 
     let options = [
@@ -109,18 +109,18 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => { m },
         Err(_) => {
             println!("{:s}", usage(NAME, options));
-            return;
+            return 0;
         }
     };
 
     if matches.opt_present("h") {
         println!("{:s}", usage(NAME, options));
-        return;
+        return 0;
     }
 
     if matches.opt_present("A") {
         auditid();
-        return;
+        return 0;
     }
 
 
@@ -149,7 +149,7 @@ pub fn uumain(args: Vec<String>) {
         } else {
             println!("{:u}", id);
         }
-        return;
+        return 0;
     }
 
     if uflag {
@@ -171,22 +171,22 @@ pub fn uumain(args: Vec<String>) {
             println!("{:d}", id);
         }
 
-        return;
+        return 0;
     }
 
     if matches.opt_present("G") {
         group(possible_pw, nflag);
-        return;
+        return 0;
     }
 
     if matches.opt_present("P") {
         pline(possible_pw);
-        return;
+        return 0;
     };
 
     if matches.opt_present("p") {
         pretty(possible_pw);
-        return;
+        return 0;
     }
 
     if possible_pw.is_some() {
@@ -194,6 +194,8 @@ pub fn uumain(args: Vec<String>) {
     } else {
         id_print(possible_pw, false, true, true)
     }
+
+    return 0;
 }
 
 fn pretty(possible_pw: Option<c_passwd>) {

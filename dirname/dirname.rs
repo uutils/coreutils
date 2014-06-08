@@ -17,9 +17,9 @@ use std::io::print;
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("z", "zero", "separate output with NUL rather than newline"),
@@ -41,11 +41,12 @@ pub fn uumain(args: Vec<String>) {
         print(getopts::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
 directory).", opts).as_slice());
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
-        return println!("dirname version: {:s}", VERSION);
+        println!("dirname version: {:s}", VERSION);
+        return 0;
     }
 
     let separator = match matches.opt_present("zero") {
@@ -66,4 +67,6 @@ directory).", opts).as_slice());
         println!("{0:s}: missing operand", program);
         println!("Try '{0:s} --help' for more information.", program);
     }
+
+    return 0;
 }

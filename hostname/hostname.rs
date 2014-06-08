@@ -24,9 +24,9 @@ extern {
 }
 
 #[allow(dead_code)]
-fn main () { uumain(os::args()); }
+fn main () { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0);
 
     let options = [
@@ -38,14 +38,14 @@ pub fn uumain(args: Vec<String>) {
 
     let matches = match getopts(args.tail(), options) {
         Ok(m) => { m }
-        _ => { help_menu(program.as_slice(), options); return; }
+        _ => { help_menu(program.as_slice(), options); return 0; }
     };
 
     if matches.opt_present("h") {
         help_menu(program.as_slice(), options);
-        return
+        return 0
     }
-    if matches.opt_present("V") { version(); return }
+    if matches.opt_present("V") { version(); return 0 }
 
     match matches.free.len() {
         0 => {
@@ -55,7 +55,7 @@ pub fn uumain(args: Vec<String>) {
                 let pos = hostname.as_slice().find_str(".");
                 if pos.is_some() {
                     println!("{:s}", hostname.as_slice().slice_to(pos.unwrap()));
-                    return;
+                    return 0;
                 }
             }
 
@@ -64,6 +64,8 @@ pub fn uumain(args: Vec<String>) {
         1 => { xsethostname( matches.free.last().unwrap().as_slice() ) }
         _ => { help_menu(program.as_slice(), options); }
     };
+
+    return 0;
 }
 
 fn version() {

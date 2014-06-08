@@ -24,9 +24,9 @@ static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     let opts = [
@@ -69,6 +69,8 @@ pub fn uumain(args: Vec<String>) {
         };
         tac(files, before, regex, separator.as_slice());
     }
+
+    return 0;
 }
 
 fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {

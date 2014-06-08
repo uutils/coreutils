@@ -44,9 +44,9 @@ fn version() {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     //
@@ -69,14 +69,16 @@ pub fn uumain(args: Vec<String>) {
         println!("  {:s}", program);
         println!("");
         print(getopts::usage("print user's login name", opts).as_slice());
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         version();
-        return;
+        return 0;
     }
 
     exec();
+
+    return 0;
 }
 
 fn exec() {

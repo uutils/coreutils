@@ -24,9 +24,9 @@ mod util;
 static NAME: &'static str = "sleep";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     let opts = [
@@ -37,7 +37,7 @@ pub fn uumain(args: Vec<String>) {
         Ok(m) => m,
         Err(f) => {
             show_error!(1, "{}", f.to_err_msg());
-            return
+            return 0;
         }
     };
 
@@ -62,6 +62,8 @@ specified by the sum of their values.", opts).as_slice());
     } else {
         sleep(matches.free);
     }
+
+    return 0;
 }
 
 fn sleep(args: Vec<String>) {

@@ -18,19 +18,19 @@ extern crate getopts;
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::io::{IoResult};
 use std::io::util::{copy, NullWriter, MultiWriter};
-use std::os::{args, set_exit_status};
+use std::os;
 use getopts::{getopts, optflag, usage};
 
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     match options(args.as_slice()).and_then(exec) {
-        Ok(_) => set_exit_status(0),
-        Err(_) => set_exit_status(1)
+        Ok(_) => 0,
+        Err(_) => 1
     }
 }
 
@@ -153,5 +153,5 @@ fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
 }
 
 fn warn(message: &str) {
-    error!("{}: {}", args().get(0), message);
+    error!("{}: {}", os::args().get(0), message);
 }

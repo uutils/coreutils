@@ -29,9 +29,9 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
 
     let opts = [
         // Linux-specific options, not implemented
@@ -54,11 +54,11 @@ pub fn uumain(args: Vec<String>) {
 
     if args.len() == 1 || matches.opt_present("help") {
         print_help(opts);
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("mkdir v{}", VERSION);
-        return;
+        return 0;
     }
     let verbose_flag = matches.opt_present("verbose");
     let mk_parents = matches.opt_present("parents");
@@ -85,6 +85,8 @@ pub fn uumain(args: Vec<String>) {
         crash!(1, "missing operand");
     }
     exec(dirs, mk_parents, mode, verbose_flag);
+
+    return 0;
 }
 
 fn print_help(opts: &[getopts::OptGroup]) {

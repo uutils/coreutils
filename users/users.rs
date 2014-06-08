@@ -48,9 +48,9 @@ extern {
 static NAME: &'static str = "users";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -69,12 +69,12 @@ pub fn uumain(args: Vec<String>) {
         println!("  {:s} [OPTION]... [FILE]", program);
         println!("");
         print(getopts::usage("Output who is currently logged in according to FILE.", opts).as_slice());
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("users 1.0.0");
-        return;
+        return 0;
     }
 
     let mut filename = DEFAULT_FILE;
@@ -83,6 +83,8 @@ pub fn uumain(args: Vec<String>) {
     }
 
     exec(filename);
+
+    return 0;
 }
 
 fn exec(filename: &str) {
