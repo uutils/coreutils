@@ -84,9 +84,10 @@ pub fn uumain(args: Vec<String>) -> int {
     if dirs.is_empty() {
         crash!(1, "missing operand");
     }
-    exec(dirs, mk_parents, mode, verbose_flag);
-
-    return 0;
+    match exec(dirs, mk_parents, mode, verbose_flag) {
+        Ok(()) => return 0,
+        Err(e) => return e
+    }
 }
 
 fn print_help(opts: &[getopts::OptGroup]) {
@@ -99,7 +100,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) {
+fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), int> {
     let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {
@@ -118,7 +119,10 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
     }
     // Recursively build parent dirs that are needed
     if !parent_dirs.is_empty() {
-        exec(parent_dirs, mk_parents, mode, verbose);
+        match exec(parent_dirs, mk_parents, mode, verbose) {
+            Ok(()) => ( /* keep going */ ),
+            Err(e) => return Err(e)
+        }
     }
 
     for dir in dirs.iter() {
@@ -140,9 +144,12 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
                 } else {
                     format!("directory '{}' already exists", *dir)
                 };
-            show_error!(1, "{}", error_msg);
+            display_error!("{}", error_msg);
+            return Err(1);
         }
     }
+
+    return Ok(());
 }
 
 /**

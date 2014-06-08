@@ -20,6 +20,16 @@ macro_rules! show_error(
     })
 )
 
+// FIXME #211: Transitional until there are no further users of `show_error!`.
+// Then this can be renamed.
+#[macro_export]
+macro_rules! display_error(
+    ($($args:expr),+) => ({
+        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+    })
+)
+
 #[macro_export]
 macro_rules! show_warning(
     ($($args:expr),+) => ({
