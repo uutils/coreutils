@@ -12,18 +12,7 @@
 extern crate libc;
 
 #[macro_export]
-macro_rules! show_error(
-    ($exitcode:expr, $($args:expr),+) => ({
-        ::std::os::set_exit_status($exitcode as int);
-        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
-        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
-    })
-)
-
-// FIXME #211: Transitional until there are no further users of `show_error!`.
-// Then this can be renamed.
-#[macro_export]
-macro_rules! display_error(
+macro_rules! show_errer(
     ($($args:expr),+) => ({
         safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
@@ -41,7 +30,8 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
-        show_error!($exitcode, $($args),+);
+        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
         unsafe { self::libc::exit($exitcode as self::libc::c_int); }
     })
 )

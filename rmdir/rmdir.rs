@@ -38,8 +38,8 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_error!(1, "{}", f.to_err_msg());
-            return 0;
+            show_errer!("{}", f.to_err_msg());
+            return 1;
         }
     };
 
@@ -53,39 +53,50 @@ pub fn uumain(args: Vec<String>) -> int {
     } else if matches.opt_present("version") {
         println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {
-        show_error!(1, "missing an argument");
-        show_error!(1, "for help, try '{0:s} --help'", program);
+        show_errer!("missing an argument");
+        show_errer!("for help, try '{0:s} --help'", program);
+        return 1;
     } else {
         let ignore = matches.opt_present("ignore-fail-on-non-empty");
         let parents = matches.opt_present("parents");
         let verbose = matches.opt_present("verbose");
-        remove(matches.free, ignore, parents, verbose);
+        match remove(matches.free, ignore, parents, verbose) {
+            Ok(()) => ( /* pass */ ),
+            Err(e) => return e
+        }
     }
 
     return 0;
 }
 
-fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) {
+fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), int>{
     for dir in dirs.iter() {
         let path = Path::new(dir.as_slice());
         if path.exists() {
             if path.is_dir() {
-                remove_dir(&path, dir.as_slice(), ignore, parents, verbose);
+                match remove_dir(&path, dir.as_slice(), ignore, parents, verbose) {
+                    Ok(()) => ( /* pass */ ),
+                    Err(e) => return Err(e)
+                }
             } else {
-                show_error!(1, "failed to remove '{}' (file)", *dir);
+                show_errer!("failed to remove '{}' (file)", *dir);
+                return Err(1);
             }
         } else {
-            show_error!(1, "no such file or directory '{}'", *dir);
+            show_errer!("no such file or directory '{}'", *dir);
+            return Err(1);
         }
     }
+
+    return Ok(());
 }
 
-fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) {
+fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), int> {
     let mut walk_dir = match fs::walk_dir(path) {
         Ok(m) => m,
         Err(f) => {
-            show_error!(1, "{}", f.to_str());
-            return;
+            show_errer!("{}", f.to_str());
+            return Err(1);
         }
     };
     if walk_dir.next() == None {
@@ -97,16 +108,23 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
                 if parents {
                     let dirname = path.dirname_str().unwrap();
                     if dirname != "." {
-                        remove_dir(&Path::new(dirname), dirname, ignore, parents, verbose);
+                        match remove_dir(&Path::new(dirname), dirname, ignore, parents, verbose) {
+                            Ok(()) => ( /* pass */ ),
+                            Err(e) => return Err(e)
+                        }
                     }
                 }
             }
             Err(f) => {
-                show_error!(1, "{}", f.to_str());
+                show_errer!("{}", f.to_str());
+                return Err(1);
             }
         }
     } else if !ignore {
-        show_error!(1, "Failed to remove directory '{}' (non-empty)", dir);
+        show_errer!("Failed to remove directory '{}' (non-empty)", dir);
+        return Err(1);
     }
+
+    return Ok(());
 }
 

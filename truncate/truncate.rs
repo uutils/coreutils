@@ -21,18 +21,6 @@ use std::u64;
 #[path = "../common/util.rs"]
 mod util;
 
-macro_rules! get_file_size(
-    ($file:ident, $action:expr) => ({
-        match fs::stat($file.path()) {
-            Ok(stat) => stat.size,
-            Err(f) => {
-                show_error!(1, "{}", f.to_str());
-                $action
-            }
-        }
-    })
-)
-
 #[deriving(Eq, PartialEq)]
 enum TruncateMode {
     Reference,
@@ -95,8 +83,8 @@ file based on its current size:
     } else if matches.opt_present("version") {
         println!("truncate 1.0.0");
     } else if matches.free.is_empty() {
-        show_error!(1, "missing an argument");
-        crash!(1, "for help, try '{0:s} --help'", program);
+        show_errer!("missing an argument");
+        return 1;
     } else {
         let no_create = matches.opt_present("no-create");
         let io_blocks = matches.opt_present("io-blocks");
@@ -105,14 +93,17 @@ file based on its current size:
         if reference.is_none() && size.is_none() {
             crash!(1, "you must specify either --reference or --size");
         } else {
-            truncate(no_create, io_blocks, reference, size, matches.free);
+            match truncate(no_create, io_blocks, reference, size, matches.free) {
+                Ok(()) => ( /* pass */ ),
+                Err(e) => return e
+            }
         }
     }
 
     return 0;
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) {
+fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), int> {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {
@@ -121,7 +112,13 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     crash!(1, "{}", f.to_str())
                 }
             };
-            (get_file_size!(rfile, return), Reference)
+            match fs::stat(rfile.path()) {
+                Ok(stat) => (stat.size, Reference),
+                Err(f) => {
+                    show_errer!("{}", f.to_str());
+                    return Err(1);
+                }
+            }
         }
         None => parse_size(size.unwrap().as_slice())
     };
@@ -131,7 +128,13 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
         if path.exists() || !no_create {
             match File::open_mode(&path, Open, ReadWrite) {
                 Ok(mut file) => {
-                    let fsize = get_file_size!(file, continue);
+                    let fsize = match fs::stat(file.path()) {
+                        Ok(stat) => stat.size,
+                        Err(f) => {
+                            show_warning!("{}", f.to_str());
+                            continue;
+                        }
+                    };
                     let tsize = match mode {
                         Reference => refsize,
                         Extend => fsize + refsize,
@@ -144,16 +147,19 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     match file.truncate(tsize as i64) {
                         Ok(_) => {}
                         Err(f) => {
-                            show_error!(1, "{}", f.to_str());
+                            show_errer!("{}", f.to_str());
+                            return Err(1);
                         }
                     }
                 }
                 Err(f) => {
-                    show_error!(1, "{}", f.to_str());
+                    show_errer!("{}", f.to_str());
+                    return Err(1);
                 }
             }
         }
     }
+    return Ok(());
 }
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {

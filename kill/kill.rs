@@ -41,8 +41,8 @@ mod util;
 static NAME: &'static str = "kill";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_OK:  i32 = 0;
-static EXIT_ERR: i32 = 1;
+static EXIT_OK:  int = 0;
+static EXIT_ERR: int = 1;
 
 pub enum Mode {
     Kill,
@@ -71,8 +71,8 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
-            return 0
+            show_errer!("{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
+            return EXIT_ERR;
         },
     };
 
@@ -128,10 +128,10 @@ fn print_signal(signal_name_or_value: &str) {
     for signal in ALL_SIGNALS.iter() {
         if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name).as_slice()) == signal_name_or_value {
             println!("{}", signal.value)
-            exit!(EXIT_OK)
+            exit!(EXIT_OK as i32)
         } else if signal_name_or_value == signal.value.to_str().as_slice() {
             println!("{}", signal.name);
-            exit!(EXIT_OK)
+            exit!(EXIT_OK as i32)
         }
     }
     crash!(EXIT_ERR, "unknown signal name {}", signal_name_or_value)

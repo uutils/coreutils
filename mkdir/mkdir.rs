@@ -144,7 +144,7 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
                 } else {
                     format!("directory '{}' already exists", *dir)
                 };
-            display_error!("{}", error_msg);
+            show_errer!("{}", error_msg);
             return Err(1);
         }
     }

@@ -47,9 +47,9 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m }
         Err(f) => {
-            show_error!(1, "{:s}", f.to_err_msg());
+            show_errer!("{:s}", f.to_err_msg());
             print_usage(opts);
-            return 0;
+            return 1;
         }
     };
     if matches.opt_present("help") {
@@ -67,7 +67,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let first = if matches.free.len() > 1 {
         match parse_float(matches.free.get(0).as_slice()) {
             Ok(n) => n,
-            Err(s) => { show_error!(1, "{:s}", s); return 0; }
+            Err(s) => { show_errer!("{:s}", s); return 1; }
         }
     } else {
         1.0
@@ -75,14 +75,14 @@ pub fn uumain(args: Vec<String>) -> int {
     let step = if matches.free.len() > 2 {
         match parse_float(matches.free.get(1).as_slice()) {
             Ok(n) => n,
-            Err(s) => { show_error!(1, "{:s}", s); return 0; }
+            Err(s) => { show_errer!("{:s}", s); return 1; }
         }
     } else {
         1.0
     };
     let last = match parse_float(matches.free.get(matches.free.len()-1).as_slice()) {
         Ok(n) => n,
-        Err(s) => { show_error!(1, "{:s}", s); return 0; }
+        Err(s) => { show_errer!("{:s}", s); return 1; }
     };
     let separator = escape_sequences(matches.opt_str("s").unwrap_or("\n".to_string()).as_slice());
     let terminator = escape_sequences(matches.opt_str("t").unwrap_or(separator.to_string()).as_slice());

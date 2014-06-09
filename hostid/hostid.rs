@@ -36,7 +36,7 @@ mod util;
 static NAME:     &'static str = "hostid";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_ERR: i32 = 1;
+static EXIT_ERR: int = 1;
 
 pub enum Mode {
     HostId,
@@ -65,8 +65,8 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
-            return 0;
+            show_errer!("{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
+            return EXIT_ERR;
         },
     };
 

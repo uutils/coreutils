@@ -111,7 +111,10 @@ pub fn uumain(args: Vec<String>) -> int {
     if files.is_empty() {
         match cksum("-") {
             Ok((crc, size)) => println!("{} {}", crc, size),
-            Err(err) => show_error!(2, "{}", err),
+            Err(err) => {
+                show_errer!("{}", err);
+                return 2;
+            }
         }
         return 0;
     }
@@ -119,7 +122,10 @@ pub fn uumain(args: Vec<String>) -> int {
     for fname in files.iter() {
         match cksum(fname.as_slice()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
-            Err(err) => show_error!(2, "'{}' {}", fname, err),
+            Err(err) => {
+                show_errer!("'{}' {}", fname, err);
+                return 2;
+            }
         }
     }
 
