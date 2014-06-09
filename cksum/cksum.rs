@@ -112,7 +112,7 @@ pub fn uumain(args: Vec<String>) -> int {
         match cksum("-") {
             Ok((crc, size)) => println!("{} {}", crc, size),
             Err(err) => {
-                show_errer!("{}", err);
+                show_error!("{}", err);
                 return 2;
             }
         }
@@ -123,7 +123,7 @@ pub fn uumain(args: Vec<String>) -> int {
         match cksum(fname.as_slice()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
             Err(err) => {
-                show_errer!("'{}' {}", fname, err);
+                show_error!("'{}' {}", fname, err);
                 return 2;
             }
         }

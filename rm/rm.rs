@@ -79,8 +79,8 @@ pub fn uumain(args: Vec<String>) -> int {
     } else if matches.opt_present("version") {
         println!("rm 1.0.0");
     } else if matches.free.is_empty() {
-        show_errer!("missing an argument");
-        show_errer!("for help, try '{0:s} --help'", program);
+        show_error!("missing an argument");
+        show_error!("for help, try '{0:s} --help'", program);
         return 0;
     } else {
         let force = matches.opt_present("force");
@@ -156,11 +156,11 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                     }
                 } else {
                     if recursive {
-                        show_errer!("could not remove directory '{}'",
+                        show_error!("could not remove directory '{}'",
                                        filename);
                         return Err(1);
                     } else {
-                        show_errer!("could not remove directory '{}' (did you mean to pass '-r'?)",
+                        show_error!("could not remove directory '{}' (did you mean to pass '-r'?)",
                                     filename);
                         return Err(1);
                     }
@@ -172,7 +172,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                 }
             }
         } else if !force {
-            show_errer!("no such file or directory '{}'", filename);
+            show_error!("no such file or directory '{}'", filename);
             return Err(1);
         }
     }
@@ -191,7 +191,7 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
         match fs::rmdir(path) {
             Ok(_) => if verbose { println!("Removed '{}'", name); },
             Err(f) => {
-                show_errer!("{}", f.to_str());
+                show_error!("{}", f.to_str());
                 return Err(1);
             }
         }
@@ -211,7 +211,7 @@ fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: b
         match fs::unlink(path) {
             Ok(_) => if verbose { println!("Removed '{}'", name); },
             Err(f) => {
-                show_errer!("{}", f.to_str());
+                show_error!("{}", f.to_str());
                 return Err(1);
             }
         }

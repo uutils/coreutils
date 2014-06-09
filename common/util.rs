@@ -12,7 +12,7 @@
 extern crate libc;
 
 #[macro_export]
-macro_rules! show_errer(
+macro_rules! show_error(
     ($($args:expr),+) => ({
         safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);

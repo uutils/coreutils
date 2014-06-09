@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_errer!("{}", f.to_err_msg());
+            show_error!("{}", f.to_err_msg());
             return 1;
         }
     };
@@ -57,8 +57,8 @@ specified by the sum of their values.", opts).as_slice());
     } else if matches.opt_present("version") {
         println!("sleep 1.0.0");
     } else if matches.free.is_empty() {
-        show_errer!("missing an argument");
-        show_errer!("for help, try '{0:s} --help'", program);
+        show_error!("missing an argument");
+        show_error!("for help, try '{0:s} --help'", program);
         return 1;
     } else {
         sleep(matches.free);

@@ -244,7 +244,7 @@ fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
             return Ok(BufferedReader::new(reader));
         },
         Err(e) => {
-            show_errer!("wc: {0:s}: {1:s}", path, e.desc.to_str());
+            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_str());
             return Err(1);
         }
     }

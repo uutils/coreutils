@@ -162,7 +162,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_errer!("Invalid options\n{}", f.to_err_msg());
+            show_error!("Invalid options\n{}", f.to_err_msg());
             return 1;
         }
     };

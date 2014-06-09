@@ -83,7 +83,7 @@ file based on its current size:
     } else if matches.opt_present("version") {
         println!("truncate 1.0.0");
     } else if matches.free.is_empty() {
-        show_errer!("missing an argument");
+        show_error!("missing an argument");
         return 1;
     } else {
         let no_create = matches.opt_present("no-create");
@@ -115,7 +115,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
             match fs::stat(rfile.path()) {
                 Ok(stat) => (stat.size, Reference),
                 Err(f) => {
-                    show_errer!("{}", f.to_str());
+                    show_error!("{}", f.to_str());
                     return Err(1);
                 }
             }
@@ -147,13 +147,13 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     match file.truncate(tsize as i64) {
                         Ok(_) => {}
                         Err(f) => {
-                            show_errer!("{}", f.to_str());
+                            show_error!("{}", f.to_str());
                             return Err(1);
                         }
                     }
                 }
                 Err(f) => {
-                    show_errer!("{}", f.to_str());
+                    show_error!("{}", f.to_str());
                     return Err(1);
                 }
             }

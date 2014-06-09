@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), options) {
         Ok(m) => { m },
         Err(_) => {
-            show_errer!("{}", usage(NAME, options));
+            show_error!("{}", usage(NAME, options));
             return 1;
         }
     };

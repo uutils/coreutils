@@ -38,7 +38,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_errer!("{}", f.to_err_msg());
+            show_error!("{}", f.to_err_msg());
             return 1;
         }
     };
@@ -53,8 +53,8 @@ pub fn uumain(args: Vec<String>) -> int {
     } else if matches.opt_present("version") {
         println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {
-        show_errer!("missing an argument");
-        show_errer!("for help, try '{0:s} --help'", program);
+        show_error!("missing an argument");
+        show_error!("for help, try '{0:s} --help'", program);
         return 1;
     } else {
         let ignore = matches.opt_present("ignore-fail-on-non-empty");
@@ -79,11 +79,11 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
                     Err(e) => return Err(e)
                 }
             } else {
-                show_errer!("failed to remove '{}' (file)", *dir);
+                show_error!("failed to remove '{}' (file)", *dir);
                 return Err(1);
             }
         } else {
-            show_errer!("no such file or directory '{}'", *dir);
+            show_error!("no such file or directory '{}'", *dir);
             return Err(1);
         }
     }
@@ -95,7 +95,7 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
     let mut walk_dir = match fs::walk_dir(path) {
         Ok(m) => m,
         Err(f) => {
-            show_errer!("{}", f.to_str());
+            show_error!("{}", f.to_str());
             return Err(1);
         }
     };
@@ -116,12 +116,12 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
                 }
             }
             Err(f) => {
-                show_errer!("{}", f.to_str());
+                show_error!("{}", f.to_str());
                 return Err(1);
             }
         }
     } else if !ignore {
-        show_errer!("Failed to remove directory '{}' (non-empty)", dir);
+        show_error!("Failed to remove directory '{}' (non-empty)", dir);
         return Err(1);
     }
 

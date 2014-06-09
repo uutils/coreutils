@@ -161,7 +161,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(err) => {
-            show_errer!("{}", err.to_err_msg());
+            show_error!("{}", err.to_err_msg());
             return 1;
         }
     };
@@ -186,7 +186,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let sets = matches.free;
 
     if cflag && !dflag {
-        show_errer!("-c is only supported with -d");
+        show_error!("-c is only supported with -d");
         return 1;
     }
 
