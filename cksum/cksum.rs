@@ -119,15 +119,16 @@ pub fn uumain(args: Vec<String>) -> int {
         return 0;
     }
 
+    let mut exit_code = 0;
     for fname in files.iter() {
         match cksum(fname.as_slice()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
             Err(err) => {
                 show_error!("'{}' {}", fname, err);
-                return 2;
+                exit_code = 2;
             }
         }
     }
 
-    return 0;
+    return exit_code;
 }

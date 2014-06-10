@@ -81,7 +81,7 @@ pub fn uumain(args: Vec<String>) -> int {
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
         show_error!("for help, try '{0:s} --help'", program);
-        return 0;
+        return 1;
     } else {
         let force = matches.opt_present("force");
         let interactive =
@@ -129,6 +129,8 @@ pub fn uumain(args: Vec<String>) -> int {
 
 // TODO: implement one-file-system
 fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> Result<(), int> {
+    let mut r = Ok(());
+
     for filename in files.iter() {
         let filename = filename.as_slice();
         let file = Path::new(filename);
@@ -141,43 +143,31 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                             crash!(1, "{}", f.to_str());
                         }
                     };
-                    match remove(walk_dir.map(|x| x.as_str().unwrap().to_string()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose) {
-                        Ok(()) => ( /* pass */ ),
-                        Err(e) => return Err(e)
-                    }
-                    match remove_dir(&file, filename, interactive, verbose) {
-                        Ok(()) => ( /* pass */ ),
-                        Err(e) => return Err(e)
-                    }
+                    r = remove(walk_dir.map(|x| x.as_str().unwrap().to_string()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose).and(r);
+                    r = remove_dir(&file, filename, interactive, verbose).and(r);
                 } else if dir && (filename != "/" || !preserve_root) {
-                    match remove_dir(&file, filename, interactive, verbose) {
-                        Ok(()) => ( /* pass */ ),
-                        Err(e) => return Err(e)
-                    }
+                    r = remove_dir(&file, filename, interactive, verbose).and(r);
                 } else {
                     if recursive {
                         show_error!("could not remove directory '{}'",
                                        filename);
-                        return Err(1);
+                        r = Err(1);
                     } else {
                         show_error!("could not remove directory '{}' (did you mean to pass '-r'?)",
                                     filename);
-                        return Err(1);
+                        r = Err(1);
                     }
                 }
             } else {
-                match remove_file(&file, filename.as_slice(), interactive, verbose) {
-                    Ok(()) => ( /* pass */ ),
-                    Err(e) => return Err(e)
-                }
+                r = remove_file(&file, filename.as_slice(), interactive, verbose).and(r);
             }
         } else if !force {
             show_error!("no such file or directory '{}'", filename);
-            return Err(1);
+            r = Err(1);
         }
     }
 
-    return Ok(());
+    return r;
 }
 
 fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {

@@ -101,6 +101,8 @@ fn print_help(opts: &[getopts::OptGroup]) {
  * Create the list of new directories
  */
 fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), int> {
+    let mut result = Ok(());
+
     let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {
@@ -121,7 +123,7 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
     if !parent_dirs.is_empty() {
         match exec(parent_dirs, mk_parents, mode, verbose) {
             Ok(()) => ( /* keep going */ ),
-            Err(e) => return Err(e)
+            Err(e) => result = Err(e)
         }
     }
 
@@ -145,11 +147,11 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
                     format!("directory '{}' already exists", *dir)
                 };
             show_error!("{}", error_msg);
-            return Err(1);
+            result = Err(1)
         }
     }
 
-    return Ok(());
+    return result;
 }
 
 /**

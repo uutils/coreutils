@@ -70,25 +70,24 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), int>{
+    let mut r = Ok(());
+
     for dir in dirs.iter() {
         let path = Path::new(dir.as_slice());
         if path.exists() {
             if path.is_dir() {
-                match remove_dir(&path, dir.as_slice(), ignore, parents, verbose) {
-                    Ok(()) => ( /* pass */ ),
-                    Err(e) => return Err(e)
-                }
+                r = remove_dir(&path, dir.as_slice(), ignore, parents, verbose).and(r);
             } else {
                 show_error!("failed to remove '{}' (file)", *dir);
-                return Err(1);
+                r = Err(1);
             }
         } else {
             show_error!("no such file or directory '{}'", *dir);
-            return Err(1);
+            r = Err(1);
         }
     }
 
-    return Ok(());
+    return r;
 }
 
 fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), int> {
@@ -99,6 +98,9 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
             return Err(1);
         }
     };
+
+    let mut r = Ok(());
+    
     if walk_dir.next() == None {
         match fs::rmdir(path) {
             Ok(_) => {
@@ -108,23 +110,20 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
                 if parents {
                     let dirname = path.dirname_str().unwrap();
                     if dirname != "." {
-                        match remove_dir(&Path::new(dirname), dirname, ignore, parents, verbose) {
-                            Ok(()) => ( /* pass */ ),
-                            Err(e) => return Err(e)
-                        }
+                        r = remove_dir(&Path::new(dirname), dirname, ignore, parents, verbose).and(r);
                     }
                 }
             }
             Err(f) => {
                 show_error!("{}", f.to_str());
-                return Err(1);
+                r = Err(1);
             }
         }
     } else if !ignore {
         show_error!("Failed to remove directory '{}' (non-empty)", dir);
-        return Err(1);
+        r = Err(1);
     }
 
-    return Ok(());
+    return r;
 }
 
