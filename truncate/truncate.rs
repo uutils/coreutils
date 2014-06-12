@@ -100,7 +100,7 @@ file based on its current size:
         }
     }
 
-    return 0;
+    0
 }
 
 fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), int> {
@@ -159,7 +159,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
             }
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {

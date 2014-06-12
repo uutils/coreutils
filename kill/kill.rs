@@ -97,7 +97,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Version => version(),
     }
 
-    return 0;
+    0
 }
 
 fn version() {
@@ -177,7 +177,7 @@ fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<uint> {
             return Some(signal.value);
         }
     }
-    return None;
+    None
 }
 
 fn kill(signalname: &str, pids: std::vec::Vec<String>) {

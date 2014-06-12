@@ -124,7 +124,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return 0;
+    0
 }
 
 // TODO: implement one-file-system
@@ -167,7 +167,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
         }
     }
 
-    return r;
+    r
 }
 
 fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {
@@ -187,7 +187,7 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {
@@ -207,7 +207,7 @@ fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: b
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn prompt_file(path: &Path, name: &str) -> bool {

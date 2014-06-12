@@ -84,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     exec(filename);
 
-    return 0;
+    0
 }
 
 fn exec(filename: &str) {

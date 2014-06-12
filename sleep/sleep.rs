@@ -64,7 +64,7 @@ specified by the sum of their values.", opts).as_slice());
         sleep(matches.free);
     }
 
-    return 0;
+    0
 }
 
 fn sleep(args: Vec<String>) {

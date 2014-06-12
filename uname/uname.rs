@@ -105,5 +105,5 @@ pub fn uumain(args: Vec<String>) -> int {
     }
     println!("{}", output.as_slice().trim_left());
 
-    return 0;
+    0
 }

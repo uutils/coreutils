@@ -80,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return 0;
+    0
 }
 
 fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), int> {
@@ -150,7 +150,7 @@ fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn calc_sum(md5: &mut crypto::md5::Md5, file: &mut Reader, binary: bool) -> String {

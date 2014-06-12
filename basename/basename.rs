@@ -86,7 +86,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     println(name.as_slice());
 
-    return 0;
+    0
 }
 
 fn strip_dir(fullname: &str) -> String {
@@ -99,7 +99,7 @@ fn strip_dir(fullname: &str) -> String {
         name.push_char(c);
     }
 
-    return name.as_slice().chars().rev().collect();
+    name.as_slice().chars().rev().collect()
 }
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
@@ -111,5 +111,5 @@ fn strip_suffix(name: &str, suffix: &str) -> String {
         return name.slice_to(name.len() - suffix.len()).into_string();
     }
 
-    return name.into_string();
+    name.into_string()
 }

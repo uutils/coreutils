@@ -129,5 +129,5 @@ pub fn uumain(args: Vec<String>) -> int {
 
     println!("{} {}", sum, blocks);
 
-    return 0;
+    0
 }

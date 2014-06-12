@@ -60,7 +60,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     exec(matches.free, separator);
 
-    return 0;
+    0
 }
 
 pub fn exec(args: Vec<String>, separator: &str) {

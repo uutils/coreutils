@@ -88,7 +88,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let terminator = escape_sequences(matches.opt_str("t").unwrap_or(separator.to_string()).as_slice());
     print_seq(first, step, last, separator, terminator, matches.opt_present("w"));
 
-    return 0;
+    0
 }
 
 fn done_printing(next: f32, step: f32, last: f32) -> bool {

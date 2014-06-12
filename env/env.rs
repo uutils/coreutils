@@ -211,5 +211,5 @@ pub fn uumain(args: Vec<String>) -> int {
         print_env(opts.null);
     }
 
-    return 0;
+    0
 }

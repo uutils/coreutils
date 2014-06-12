@@ -83,7 +83,7 @@ pub fn uumain(args: Vec<String>) -> int {
         fold(files, bytes, spaces, width);
     }
 
-    return 0;
+    0
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {

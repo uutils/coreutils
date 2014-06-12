@@ -130,5 +130,5 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return exit_code;
+    exit_code
 }

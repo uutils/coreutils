@@ -81,7 +81,7 @@ pub fn uumain(args: Vec<String>) -> int {
     print_nusers(user_count);
     print_loadavg();
 
-    return 0;
+    0
 }
 
 fn print_loadavg() {

@@ -195,7 +195,7 @@ pub fn uumain(args: Vec<String>) -> int {
         id_print(possible_pw, false, true, true)
     }
 
-    return 0;
+    0
 }
 
 fn pretty(possible_pw: Option<c_passwd>) {

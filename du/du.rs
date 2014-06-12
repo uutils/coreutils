@@ -86,7 +86,7 @@ fn du(path: &Path, mut my_stat: Stat,
 
     stats.push(Arc::new(my_stat));
 
-    return stats;
+    stats
 }
 
 #[allow(dead_code)]
@@ -367,5 +367,5 @@ Try '{program} --help' for more information.", s, program = program);
         print!("{}", line_separator);
     }
 
-    return 0;
+    0
 }

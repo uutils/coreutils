@@ -85,8 +85,8 @@ pub fn uumain(args: Vec<String>) -> int {
         crash!(1, "missing operand");
     }
     match exec(dirs, mk_parents, mode, verbose_flag) {
-        Ok(()) => return 0,
-        Err(e) => return e
+        Ok(()) => 0,
+        Err(e) => e
     }
 }
 
@@ -151,7 +151,7 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
         }
     }
 
-    return result;
+    result
 }
 
 /**

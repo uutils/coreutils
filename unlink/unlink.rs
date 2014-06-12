@@ -87,5 +87,5 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return 0;
+    0
 }

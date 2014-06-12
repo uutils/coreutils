@@ -199,5 +199,5 @@ pub fn uumain(args: Vec<String>) -> int {
         tr(set1.as_slice(), set2.as_slice());
     }
 
-    return 0;
+    0
 }

@@ -81,7 +81,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);
 
-    return 0;
+    0
 }
 
 #[deriving(Eq, PartialEq)]
@@ -285,12 +285,12 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
     }
 
     match File::open(&std::path::Path::new(path)) {
-        Ok(f) => return Some((box f as Box<Reader>, false)),
+        Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
             (writeln!(stderr(), "cat: {0:s}: {1:s}", path, e.to_str())).unwrap();
-            return None;
+            None
         },
-    };
+    }
 }
 
 struct UnsafeWriter<'a, W> {

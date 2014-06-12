@@ -136,5 +136,5 @@ pub fn uumain(args: Vec<String>) -> int {
 
     comm(&mut f1, &mut f2, &matches);
 
-    return 0;
+    0
 }

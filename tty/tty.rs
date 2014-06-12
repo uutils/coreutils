@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     };
 
-    return exit_code as int;
+    exit_code as int
 }
 
 fn usage () {

@@ -68,5 +68,5 @@ directory).", opts).as_slice());
         println!("Try '{0:s} --help' for more information.", program);
     }
 
-    return 0;
+    0
 }

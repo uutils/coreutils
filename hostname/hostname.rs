@@ -65,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> int {
         _ => { help_menu(program.as_slice(), options); }
     };
 
-    return 0;
+    0
 }
 
 fn version() {

@@ -70,7 +70,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     exec();
 
-    return 0;
+    0
 }
 
 pub fn exec() {

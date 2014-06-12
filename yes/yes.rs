@@ -59,7 +59,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     exec(string.as_slice());
 
-    return 0;
+    0
 }
 
 pub fn exec(string: &str) {

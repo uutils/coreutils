@@ -94,7 +94,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return 0;
+    0
 }
 
 // It searches for an option in the form of -123123

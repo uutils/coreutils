@@ -81,7 +81,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Err(e) => return e
     }
 
-    return 0;
+    0
 }
 
 static CR: u8 = '\r' as u8;
@@ -192,7 +192,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
         print_stats("total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: uint,
@@ -241,11 +241,11 @@ fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
     match File::open(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => {
             let reader = box fd as Box<Reader>;
-            return Ok(BufferedReader::new(reader));
+            Ok(BufferedReader::new(reader))
         },
         Err(e) => {
             show_error!("wc: {0:s}: {1:s}", path, e.desc.to_str());
-            return Err(1);
+            Err(1)
         }
     }
 }

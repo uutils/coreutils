@@ -132,7 +132,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return 0;
+    0
 }
 
 fn stat(path: &Path, follow: bool) -> std::io::FileStat {

@@ -57,7 +57,7 @@ pub fn uumain(args: Vec<String>) -> int {
         paste(matches.free, serial, delimiters.as_slice());
     }
 
-    return 0;
+    0
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {

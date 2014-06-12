@@ -43,5 +43,5 @@ pub fn uumain(args: Vec<String>) -> int {
 
     group(get_pw_from_args(&matches.free), true);
 
-    return 0;
+    0
 }

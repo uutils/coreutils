@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    return 0;
+    0
 }
 
 fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), int>{
@@ -87,7 +87,7 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
         }
     }
 
-    return r;
+    r
 }
 
 fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), int> {
@@ -124,6 +124,6 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
         r = Err(1);
     }
 
-    return r;
+    r
 }
 

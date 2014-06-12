@@ -84,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Version => version(),
     }
 
-    return 0;
+    0
 }
 
 fn version() {

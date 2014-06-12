@@ -70,7 +70,7 @@ pub fn uumain(args: Vec<String>) -> int {
         tac(files, before, regex, separator.as_slice());
     }
 
-    return 0;
+    0
 }
 
 fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
