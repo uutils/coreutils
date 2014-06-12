@@ -1,4 +1,4 @@
-uutils coreutils [![Build Status](https://travis-ci.org/uutils/coreutils.png?branch=master)](https://travis-ci.org/uutils/coreutils)
+uutils coreutils [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 ================
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
