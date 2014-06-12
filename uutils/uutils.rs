@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate collections;
 extern crate getopts;
 
 extern crate base64;
@@ -54,7 +53,7 @@ extern crate whoami;
 extern crate yes;
 
 use std::os;
-use collections::hashmap::HashMap;
+use std::collections::hashmap::HashMap;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";

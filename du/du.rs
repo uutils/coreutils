@@ -14,15 +14,14 @@
 
 extern crate getopts;
 extern crate libc;
-extern crate sync;
 extern crate time;
 
 use std::os;
 use std::io::{stderr, fs, FileStat, TypeDirectory};
 use std::option::Option;
 use std::path::Path;
+use std::sync::{Arc, Future};
 use time::Timespec;
-use sync::{Arc, Future};
 
 #[path = "../common/util.rs"]
 mod util;
