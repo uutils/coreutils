@@ -13,7 +13,7 @@
  */
 
 extern crate getopts;
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::io::{IoResult};
@@ -35,8 +35,10 @@ pub fn uumain(args: Vec<String>) {
 }
 
 struct Options {
+    #[allow(dead_code)]
     program: String,
     append: bool,
+    #[allow(dead_code)]
     ignore_interrupts: bool,
     print_and_exit: Option<String>,
     files: Box<Vec<Path>>

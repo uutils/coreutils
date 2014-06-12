@@ -22,7 +22,7 @@ use std::io::{stderr, fs, FileStat, TypeDirectory};
 use std::option::Option;
 use std::path::Path;
 use time::Timespec;
-use sync::{Arc, Future};
+use std::sync::{Arc, Future};
 
 #[path = "../common/util.rs"]
 mod util;
