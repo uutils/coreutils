@@ -132,7 +132,7 @@ To do
 - stty (in progress)
 - sync
 - tac-pipe
-- tail
+- tail (not all features implemented)
 - test
 - timeout
 - tsort

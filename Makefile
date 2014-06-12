@@ -37,6 +37,7 @@ PROGS       := \
   wc \
   yes \
   head \
+  tail \
 
 UNIX_PROGS := \
   hostid \
