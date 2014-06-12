@@ -1,11 +1,21 @@
 #![crate_id(name="cut", vers="1.0.0", author="Rolf Morel")]
+
+/*
+ * This file is part of the uutils coreutils package.
+ *
+ * (c) Rolf Morel <rolfmorel@gmail.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 #![feature(macro_rules)]
 
 extern crate getopts;
 extern crate libc;
 
 use std::os;
-use std::io::{print,stdin,stdout,File,BufferedWriter,BufferedReader};
+use std::io::{print,File,BufferedWriter,BufferedReader,stdin};
 use getopts::{optopt, optflag, getopts, usage};
 
 use ranges::Range;
@@ -52,79 +62,186 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     Ok(range_vec)
 }
 
-fn cut_bytes(files: Vec<String>, ranges: Vec<Range>, opts: Options) -> int {
+fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
+                        ranges: &Vec<Range>,
+                        opts: &Options) -> int {
     let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
-    let (use_delim, out_delim) = match opts.out_delim {
+    let (use_delim, out_delim) = match opts.out_delim.clone() {
         Some(delim) => (true, delim),
-        None => (false, "".to_string())
+        None => (false, "".to_str())
     };
 
-    for filename in files.move_iter() {
-        let mut file = match open(&filename) {
-            Some(file) => file,
-            None => continue
-        };
+    let mut byte_pos = 0;
+    let mut print_delim = false;
+    let mut range_pos = 0;
 
-        let mut byte_pos = 0;
-        let mut print_delim = false;
-        let mut range_pos = 0;
-
-        loop {
-            let byte = match file.read_u8() {
-                Ok(byte) => byte,
-                Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => {
-                    if byte_pos > 0 {
-                        out.write_u8('\n' as u8);
-                    }
-                    break
+    loop {
+        let mut byte = [0u8];
+        match reader.read(byte) {
+            Ok(1) => (),
+            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => {
+                if byte_pos > 0 {
+                    out.write_u8('\n' as u8).unwrap();
                 }
-                _ => fail!(),
-            };
+                break
+            }
+            _ => fail!(),
+        }
+        let byte = byte[0];
 
-            if byte == ('\n' as u8) {
-                out.write_u8('\n' as u8);
-                byte_pos = 0;
-                print_delim = false;
-                range_pos = 0;
-            } else {
-                byte_pos += 1;
+        if byte == ('\n' as u8) {
+            out.write_u8('\n' as u8).unwrap();
+            byte_pos = 0;
+            print_delim = false;
+            range_pos = 0;
+        } else {
+            byte_pos += 1;
 
-                if byte_pos > ranges.get(range_pos).high {
-                    range_pos += 1;
-                }
+            if byte_pos > ranges.get(range_pos).high {
+                range_pos += 1;
+            }
 
-                let cur_range = *ranges.get(range_pos);
+            let cur_range = *ranges.get(range_pos);
 
-                if byte_pos >= cur_range.low {
-                    if use_delim {
-                        if print_delim && byte_pos == cur_range.low {
-                            out.write_str(out_delim.as_slice());
-                        }
-
-                        print_delim = true;
+            if byte_pos >= cur_range.low {
+                if use_delim {
+                    if print_delim && byte_pos == cur_range.low {
+                        out.write_str(out_delim.as_slice()).unwrap();
                     }
 
-                    out.write_u8(byte);
+                    print_delim = true;
                 }
+
+                out.write_u8(byte).unwrap();
             }
         }
     }
 
-    return 0;
+    0
 }
 
-fn cut_charachters(files: Vec<String>, ranges: Vec<Range>,
-                   opts: Options) -> int {
-    return 0;
+fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
+                             ranges: &Vec<Range>,
+                             opts: &Options) -> int {
+    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
+    let (use_delim, out_delim) = match opts.out_delim.clone() {
+        Some(delim) => (true, delim),
+        None => (false, "".to_str())
+    };
+
+    let mut char_pos = 0;
+    let mut print_delim = false;
+    let mut range_pos = 0;
+
+    loop {
+        let character = match reader.read_char() {
+            Ok(character) => character,
+            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => {
+                if char_pos > 0 {
+                    out.write_u8('\n' as u8).unwrap();
+                }
+                break
+            }
+            Err(std::io::IoError{ kind: std::io::InvalidInput, ..}) => {
+                fail!("Invalid utf8");
+            }
+            _ => fail!(),
+        };
+
+        if character == '\n' {
+            out.write_u8('\n' as u8).unwrap();
+            char_pos = 0;
+            print_delim = false;
+            range_pos = 0;
+        } else {
+            char_pos += 1;
+
+            if char_pos > ranges.get(range_pos).high {
+                range_pos += 1;
+            }
+
+            let cur_range = *ranges.get(range_pos);
+
+            if char_pos >= cur_range.low {
+                if use_delim {
+                    if print_delim && char_pos == cur_range.low {
+                        out.write_str(out_delim.as_slice()).unwrap();
+                    }
+
+                    print_delim = true;
+                }
+
+                out.write_char(character).unwrap();
+            }
+        }
+    }
+
+    0
 }
 
-fn cut_fields(files: Vec<String>, ranges: Vec<Range>,
-              opts: FieldOptions) -> int {
+fn cut_fields<T: Reader>(reader: BufferedReader<T>,
+                         ranges: &Vec<Range>,
+                         opts: &FieldOptions) -> int {
     for range in ranges.iter() {
         println!("{}-{}", range.low, range.high);
     }
 
-    return 0;
+    0
+}
+
+fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
+    let mut stdin_read = false;
+    let mut exit_code = 0;
+
+    if filenames.len() == 0 { filenames.push("-".to_str()); }
+
+    for filename in filenames.iter() {
+        if filename.as_slice() == "-" {
+            if stdin_read { continue; }
+
+            exit_code |= match mode {
+                Bytes(ref ranges, ref opts) => {
+                    cut_bytes(stdin(), ranges, opts)
+                }
+                Characters(ref ranges, ref opts) => {
+                    cut_characters(stdin(), ranges, opts)
+                }
+                Fields(ref ranges, ref opts) => {
+                    cut_fields(stdin(), ranges, opts)
+                }
+            };
+
+            stdin_read = true;
+        } else {
+            let path = Path::new(filename.as_slice());
+
+            if ! path.exists() {
+                show_error!("{}: No such file or directory", filename);
+                continue;
+            }
+
+            let buf_file = match File::open(&path) {
+                Ok(file) => BufferedReader::new(file),
+                Err(e) => {
+                    show_error!("{0:s}: {1:s}", filename.as_slice(),
+                                e.desc.to_str());
+                    continue
+                }
+            };
+
+            exit_code |= match mode {
+                Bytes(ref ranges, ref opts) => cut_bytes(buf_file, ranges, opts),
+                Characters(ref ranges, ref opts) => {
+                    cut_characters(buf_file, ranges, opts)
+                }
+                Fields(ref ranges, ref opts) => {
+                    cut_fields(buf_file, ranges, opts)
+                }
+            };
+        }
+    }
+
+    exit_code
 }
 
 #[allow(dead_code)]
@@ -145,10 +262,10 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("", "version", "output version information and exit"),
     ];
 
-    let mut matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_error!(1, "Invalid options\n{}", f.to_err_msg())
+            show_error!("Invalid options\n{}", f.to_err_msg())
             return 1;
         }
     };
@@ -179,107 +296,53 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     let complement = matches.opt_present("complement");
-    let mut out_delim = matches.opt_str("output-delimiter");
 
-    let mode = match (matches.opt_str("bytes"), matches.opt_str("characters"),
-                      matches.opt_str("fields")) {
+    let mode_parse = match (matches.opt_str("bytes"),
+                            matches.opt_str("characters"),
+                            matches.opt_str("fields")) {
         (Some(byte_ranges), None, None) => {
-            match list_to_ranges(byte_ranges.as_slice(), complement) {
-                Ok(ranges) => Bytes(ranges, Options{ out_delim: out_delim }),
-                Err(msg) => {
-                    show_error!(1, "{}", msg);
-                    return 1;
-                }
-            }
+            list_to_ranges(byte_ranges.as_slice(), complement).map(|ranges|
+                Bytes(ranges,
+                      Options{ out_delim: matches.opt_str("output-delimiter") })
+            )
         }
         (None ,Some(char_ranges), None) => {
-            match list_to_ranges(char_ranges.as_slice(), complement) {
-                Ok(ranges) => Characters(ranges,
-                                         Options{ out_delim: out_delim }),
-                Err(msg) => {
-                    show_error!(1, "{}", msg);
-                    return 1;
-                }
-            }
+            list_to_ranges(char_ranges.as_slice(), complement).map(|ranges|
+                Characters(ranges,
+                           Options{ out_delim: matches.opt_str("output-delimiter") })
+            )
         }
         (None, None ,Some(field_ranges)) => {
-            match list_to_ranges(field_ranges.as_slice(), complement) {
-                Ok(ranges) => {
+            list_to_ranges(field_ranges.as_slice(), complement).map(|ranges|
+                {
                     use std::str::from_char;
 
-                    let only_delimited = matches.opt_present("only-delimited");
                     let delim = matches.opt_str("delimiter")
                                        .filtered(|s| s.len() == 1)
                                        .map(|s| s.as_slice().char_at(0))
                                        .unwrap_or('\t');
-                    if out_delim.is_none() {
-                        out_delim = Some(from_char(delim));
-                    }
+                    let out_delim = matches.opt_str("output-delimiter")
+                                           .unwrap_or(from_char(delim));
+                    let only_delimited = matches.opt_present("only-delimited");
 
                     Fields(ranges,
                            FieldOptions{ delimiter: delim,
-                                         out_delimeter: out_delim.unwrap(),
+                                         out_delimeter: out_delim,
                                          only_delimited: only_delimited })
                 }
-                Err(msg) => {
-                    show_error!(1, "{}", msg);
-                    return 1;
-                }
-            }
+            )
         }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => {
-            crash!(1, "only one type of list may be specified");
+            Err("only one type of list may be specified".to_str())
         }
-        _ => crash!(1, "you must specify a list of bytes, characters, or fields")
+        _ => Err("you must specify a list of bytes, characters, or fields".to_str())
     };
 
-    match mode {
-        Bytes(..) | Characters(..) => {
-            if matches.opt_present("delimiter") {
-                show_error!(1, "an input delimiter may be specified only when operating on fields");
-                return 1;
-            }
-            if matches.opt_present("only-delimited") {
-                show_error!(1, "suppressing non-delimited lines makes sense only when operating on fields");
-                return 1;
-            }
-        }
-        _ => ()
-    }
-
-    for filename in matches.free.iter() {
-        if ! (filename.as_slice() == "-" ||
-              Path::new(filename.as_slice()).exists()) {
-            show_error!(1, "{}: No such file or directory", filename);
-            return 1;
+    match mode_parse {
+        Ok(mode) => cut_files(matches.free, mode),
+        Err(err_msg) => {
+            show_error!("{}", err_msg);
+            1
         }
     }
-
-    if matches.free.len() == 0 { matches.free.push("-".to_string()); }
-
-    match mode {
-        Bytes(ranges, opts) => return cut_bytes(matches.free, ranges, opts),
-        Characters(ranges, opts) => return  cut_charachters(matches.free,
-                                                            ranges, opts),
-        Fields(ranges, opts) => return cut_fields(matches.free, ranges, opts),
-    }
-}
-
-fn open(path: &String) -> Option<BufferedReader<Box<Reader>>> {
-    if "-" == path.as_slice() {
-        let reader = box stdin() as Box<Reader>;
-        return Some(BufferedReader::new(reader));
-    }
-
-    match File::open(&std::path::Path::new(path.as_slice())) {
-        Ok(fd) => {
-            let reader = box fd as Box<Reader>;
-            return Some(BufferedReader::new(reader));
-        },
-        Err(e) => {
-            show_error!(1, "{0:s}: {1:s}", *path, e.desc.to_str());
-        }
-    }
-
-    None
 }
