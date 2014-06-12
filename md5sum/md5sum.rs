@@ -128,7 +128,6 @@ fn md5sum(files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool
                         println!("{}: FAILED", ck_filename);
                     }
                     failed += 1;
-                    return Err(1);
                 }
             }
         } else {
