@@ -27,9 +27,9 @@ mod util;
 static NAME: &'static str = "unlink";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -50,12 +50,12 @@ pub fn uumain(args: Vec<String>) {
         println!("  {0:s} [FILE]... [OPTION]...", program);
         println!("");
         print(getopts::usage("Unlink the file at [FILE].", opts).as_slice());
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("unlink 1.0.0");
-        return;
+        return 0;
     }
 
     if matches.free.len() == 0 {
@@ -86,4 +86,6 @@ pub fn uumain(args: Vec<String>) {
             crash!(1, "cannot unlink '{0}': {1}", path.display(), e.desc);
         }
     }
+
+    0
 }

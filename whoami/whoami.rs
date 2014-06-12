@@ -42,9 +42,9 @@ unsafe fn getusername() -> String {
 static NAME: &'static str = "whoami";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -61,14 +61,16 @@ pub fn uumain(args: Vec<String>) {
         println!("  {:s}", program);
         println!("");
         print(getopts::usage("print effective userid", opts).as_slice());
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("whoami 1.0.0");
-        return;
+        return 0;
     }
 
     exec();
+
+    0
 }
 
 pub fn exec() {

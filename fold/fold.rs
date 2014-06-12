@@ -27,9 +27,9 @@ static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
 
     let (args, obs_width) = handle_obsolete(args.as_slice());
     let program = args.get(0).clone();
@@ -82,6 +82,8 @@ pub fn uumain(args: Vec<String>) {
         };
         fold(files, bytes, spaces, width);
     }
+
+    0
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {

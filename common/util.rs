@@ -13,8 +13,7 @@ extern crate libc;
 
 #[macro_export]
 macro_rules! show_error(
-    ($exitcode:expr, $($args:expr),+) => ({
-        ::std::os::set_exit_status($exitcode as int);
+    ($($args:expr),+) => ({
         safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
@@ -31,7 +30,8 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
-        show_error!($exitcode, $($args),+);
+        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
         unsafe { self::libc::exit($exitcode as self::libc::c_int); }
     })
 )

@@ -24,9 +24,9 @@ mod util;
 static NAME: &'static str = "sleep";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
 
     let opts = [
@@ -36,8 +36,8 @@ pub fn uumain(args: Vec<String>) {
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_error!(1, "{}", f.to_err_msg());
-            return
+            show_error!("{}", f.to_err_msg());
+            return 1;
         }
     };
 
@@ -57,11 +57,14 @@ specified by the sum of their values.", opts).as_slice());
     } else if matches.opt_present("version") {
         println!("sleep 1.0.0");
     } else if matches.free.is_empty() {
-        show_error!(1, "missing an argument");
-        show_error!(1, "for help, try '{0:s} --help'", program);
+        show_error!("missing an argument");
+        show_error!("for help, try '{0:s} --help'", program);
+        return 1;
     } else {
         sleep(matches.free);
     }
+
+    0
 }
 
 fn sleep(args: Vec<String>) {

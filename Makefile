@@ -145,6 +145,11 @@ build/busybox: build/uutils
 	rm -f build/busybox
 	ln -s $(SRC_DIR)/build/uutils build/busybox
 
+# This is a busybox-specific config file their test suite wants to parse.
+# For now it's blank.
+build/.config: build/uutils
+	touch $@
+
 ifeq ($(BUSYBOX_SRC),)
 busytest:
 	@echo
@@ -153,7 +158,7 @@ busytest:
 	@echo
 	@false
 else
-busytest: build/busybox
+busytest: build/busybox build/.config
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(SRC_DIR)/build tstdir=$(BUSYBOX_SRC)/testsuite $(BUSYBOX_SRC)/testsuite/runtest $(RUNTEST_ARGS))
 endif
 endif

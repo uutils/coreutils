@@ -52,9 +52,9 @@ unsafe fn getuname() -> utsrust {
 static NAME: &'static str = "uname";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -77,7 +77,7 @@ pub fn uumain(args: Vec<String>) {
         println!("  {:s}", program);
         println!("");
         print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", opts).as_slice());
-        return;
+        return 0;
     }
     let uname = unsafe { getuname() };
     let mut output = String::new();
@@ -103,5 +103,7 @@ pub fn uumain(args: Vec<String>) {
         output.push_str(uname.machine.as_slice());
         output.push_str(" ");
     }
-    println!("{}", output.as_slice().trim_left())
+    println!("{}", output.as_slice().trim_left());
+
+    0
 }

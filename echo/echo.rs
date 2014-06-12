@@ -66,13 +66,14 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
             }
         }
     }
-    return (to_char(&bytes, base), max_digits)
+
+    (to_char(&bytes, base), max_digits)
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("n", "", "do not output the trailing newline"),
@@ -109,11 +110,12 @@ pub fn uumain(args: Vec<String>) {
 \\v      vertical tab
 \\0NNN   byte with octal value NNN (1 to 3 digits)
 \\xHH    byte with hexadecimal value HH (1 to 2 digits)");
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
-        return println!("echo version: {:s}", VERSION);
+        println!("echo version: {:s}", VERSION);
+        return 0;
     }
 
     if !matches.free.is_empty() {
@@ -185,4 +187,6 @@ pub fn uumain(args: Vec<String>) {
     if !matches.opt_present("n") {
         println!("")
     }
+
+    0
 }

@@ -12,7 +12,7 @@
  */
 
 extern crate getopts;
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 use std::os;
 use std::io;
@@ -32,9 +32,9 @@ pub enum Mode {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),
@@ -62,6 +62,8 @@ pub fn uumain(args: Vec<String>) {
         Help    => help(progname.as_slice(), usage.as_slice()),
         Version => version(),
     }
+
+    0
 }
 
 fn version() {

@@ -20,9 +20,9 @@ use std::io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         getopts::optflag("A", "show-all", "equivalent to -vET"),
@@ -53,11 +53,11 @@ pub fn uumain(args: Vec<String>) {
                              standard output.", opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("cat 1.0.0");
-        return;
+        return 0;
     }
 
     let mut number_mode = NumberNone;
@@ -80,6 +80,8 @@ pub fn uumain(args: Vec<String>) {
     }
 
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);
+
+    0
 }
 
 #[deriving(Eq, PartialEq)]
@@ -283,12 +285,12 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
     }
 
     match File::open(&std::path::Path::new(path)) {
-        Ok(f) => return Some((box f as Box<Reader>, false)),
+        Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
             (writeln!(stderr(), "cat: {0:s}: {1:s}", path, e.to_str())).unwrap();
-            return None;
+            None
         },
-    };
+    }
 }
 
 struct UnsafeWriter<'a, W> {

@@ -24,9 +24,9 @@ static NAME: &'static str = "pwd";
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("", "help", "display this help and exit"),
@@ -48,9 +48,15 @@ pub fn uumain(args: Vec<String>) {
         println!("");
         print(getopts::usage("Print the full filename of the current working directory.", opts).as_slice());
     } else if matches.opt_present("version") {
-        return println!("pwd version: {}", VERSION);
+        println!("pwd version: {}", VERSION);
+
+        return 0;
     } else {
         let cwd = std::os::getcwd();
         println!("{}", cwd.display());
+
+        return 0;
     }
+
+    0
 }

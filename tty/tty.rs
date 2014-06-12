@@ -35,9 +35,9 @@ extern {
 static NAME: &'static str = "tty";
 
 #[allow(dead_code)]
-fn main () { uumain(os::args()); }
+fn main () { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let options = [
         optflag("s", "silent", "print nothing, only return an exit status")
     ];
@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) {
         Err(f) => {
             println(f.to_err_msg().as_slice());
             usage();
-            return
+            return 2;
         }
     };
 
@@ -71,10 +71,9 @@ pub fn uumain(args: Vec<String>) {
         }
     };
 
-    os::set_exit_status(exit_code as int);
+    exit_code as int
 }
 
 fn usage () {
     safe_writeln!(&mut stderr() as &mut Writer, "usage: tty [-s]");
-    os::set_exit_status(2);
 }

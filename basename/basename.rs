@@ -24,9 +24,9 @@ static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = strip_dir(args.get(0).as_slice());
 
     //
@@ -50,25 +50,25 @@ pub fn uumain(args: Vec<String>) {
 
         print(getopts::usage("", opts).as_slice());
 
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("{} {}", program, VERSION);
-        return;
+        return 0;
     }
 
     // too few arguments
     if args.len() < 2 {
         println!("{}: {}", program, "missing operand");
         println!("Try '{} --help' for more information.", program);
-        return;
+        return 0;
     }
     // too many arguments
     else if args.len() > 3 {
         println!("{}: extra operand '{}'", program, args.get(3));
         println!("Try '{} --help' for more information.", program);
-        return;
+        return 0;
     }
 
     //
@@ -85,6 +85,8 @@ pub fn uumain(args: Vec<String>) {
     }
 
     println(name.as_slice());
+
+    0
 }
 
 fn strip_dir(fullname: &str) -> String {
@@ -97,7 +99,7 @@ fn strip_dir(fullname: &str) -> String {
         name.push_char(c);
     }
 
-    return name.as_slice().chars().rev().collect();
+    name.as_slice().chars().rev().collect()
 }
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
@@ -109,5 +111,5 @@ fn strip_suffix(name: &str, suffix: &str) -> String {
         return name.slice_to(name.len() - suffix.len()).into_string();
     }
 
-    return name.into_string();
+    name.into_string()
 }

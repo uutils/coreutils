@@ -18,7 +18,7 @@ extern crate serialize;
 extern crate libc;
 
 
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 use std::os;
 
@@ -36,7 +36,7 @@ mod util;
 static NAME:     &'static str = "hostid";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_ERR: i32 = 1;
+static EXIT_ERR: int = 1;
 
 pub enum Mode {
     HostId,
@@ -50,9 +50,9 @@ extern {
 }
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
 
     let opts = [
         optflag("", "help", "display this help and exit"),
@@ -65,8 +65,8 @@ pub fn uumain(args: Vec<String>) {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!(EXIT_ERR, "{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
-            return
+            show_error!("{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
+            return EXIT_ERR;
         },
     };
 
@@ -83,6 +83,8 @@ pub fn uumain(args: Vec<String>) {
         Help    => help(NAME, usage.as_slice()),
         Version => version(),
     }
+
+    0
 }
 
 fn version() {

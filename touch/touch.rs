@@ -23,9 +23,9 @@ static NAME: &'static str = "touch";
 static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         getopts::optflag("a", "",               "change only the access time"),
         getopts::optflag("c", "no-create",      "do not create any files"),
@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) {
 
     if matches.opt_present("version") {
         println!("{:s} {:s}", NAME, VERSION);
-        return;
+        return 0;
     }
 
     if matches.opt_present("help") || matches.free.is_empty() {
@@ -59,7 +59,7 @@ pub fn uumain(args: Vec<String>) {
         println!("");
         println!("{:s}", getopts::usage("Update the access and modification times of \
                                          each FILE to the current time.", opts));
-        return;
+        return 0;
     }
 
     if matches.opt_present("date") && matches.opts_present(["reference".to_string(), "t".to_string()]) ||
@@ -131,6 +131,8 @@ pub fn uumain(args: Vec<String>) {
             Err(e) => fail!("Unable to modify times\n{}", e.desc)
         }
     }
+
+    0
 }
 
 fn stat(path: &Path, follow: bool) -> std::io::FileStat {

@@ -17,6 +17,7 @@ extern crate libc;
 use std::os;
 use std::str::from_utf8;
 use std::io::{print, stdin, File, BufferedReader};
+use StdResult = std::result::Result;
 use getopts::Matches;
 
 #[path = "../common/util.rs"]
@@ -34,9 +35,9 @@ struct Result {
 static NAME: &'static str = "wc";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
@@ -62,12 +63,12 @@ pub fn uumain(args: Vec<String>) {
         print(getopts::usage("Print newline, word and byte counts for each FILE", opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
-        return;
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("wc 1.0.0");
-        return;
+        return 0;
     }
 
     let mut files = matches.free.clone();
@@ -75,7 +76,12 @@ pub fn uumain(args: Vec<String>) {
         files = vec!("-".to_string());
     }
 
-    wc(files, &matches);
+    match wc(files, &matches) {
+        Ok(()) => ( /* pass */ ),
+        Err(e) => return e
+    }
+
+    0
 }
 
 static CR: u8 = '\r' as u8;
@@ -89,7 +95,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: Vec<String>, matches: &Matches) {
+pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
     let mut total_line_count: uint = 0;
     let mut total_word_count: uint = 0;
     let mut total_char_count: uint = 0;
@@ -101,8 +107,8 @@ pub fn wc(files: Vec<String>, matches: &Matches) {
 
     for path in files.iter() {
         let mut reader = match open(path.to_string()) {
-            Some(f) => f,
-            None => { continue }
+            Ok(f) => f,
+            Err(e) => { return Err(e); }
         };
 
         let mut line_count: uint = 0;
@@ -185,6 +191,8 @@ pub fn wc(files: Vec<String>, matches: &Matches) {
     if files.len() > 1 {
         print_stats("total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
     }
+
+    Ok(())
 }
 
 fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: uint,
@@ -224,21 +232,20 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
     }
 }
 
-fn open(path: String) -> Option<BufferedReader<Box<Reader>>> {
+fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
     if "-" == path.as_slice() {
         let reader = box stdin() as Box<Reader>;
-        return Some(BufferedReader::new(reader));
+        return Ok(BufferedReader::new(reader));
     }
 
     match File::open(&std::path::Path::new(path.as_slice())) {
         Ok(fd) => {
             let reader = box fd as Box<Reader>;
-            return Some(BufferedReader::new(reader));
+            Ok(BufferedReader::new(reader))
         },
         Err(e) => {
-            show_error!(1, "wc: {0:s}: {1:s}", path, e.desc.to_str());
+            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_str());
+            Err(1)
         }
     }
-
-    None
 }

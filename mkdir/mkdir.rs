@@ -29,9 +29,9 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
 
     let opts = [
         // Linux-specific options, not implemented
@@ -54,11 +54,11 @@ pub fn uumain(args: Vec<String>) {
 
     if args.len() == 1 || matches.opt_present("help") {
         print_help(opts);
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("mkdir v{}", VERSION);
-        return;
+        return 0;
     }
     let verbose_flag = matches.opt_present("verbose");
     let mk_parents = matches.opt_present("parents");
@@ -84,7 +84,10 @@ pub fn uumain(args: Vec<String>) {
     if dirs.is_empty() {
         crash!(1, "missing operand");
     }
-    exec(dirs, mk_parents, mode, verbose_flag);
+    match exec(dirs, mk_parents, mode, verbose_flag) {
+        Ok(()) => 0,
+        Err(e) => e
+    }
 }
 
 fn print_help(opts: &[getopts::OptGroup]) {
@@ -97,7 +100,9 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) {
+fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), int> {
+    let mut result = Ok(());
+
     let mut parent_dirs = Vec::new();
     if mk_parents {
         for dir in dirs.iter() {
@@ -116,7 +121,10 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
     }
     // Recursively build parent dirs that are needed
     if !parent_dirs.is_empty() {
-        exec(parent_dirs, mk_parents, mode, verbose);
+        match exec(parent_dirs, mk_parents, mode, verbose) {
+            Ok(()) => ( /* keep going */ ),
+            Err(e) => result = Err(e)
+        }
     }
 
     for dir in dirs.iter() {
@@ -138,9 +146,12 @@ fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool
                 } else {
                     format!("directory '{}' already exists", *dir)
                 };
-            show_error!(1, "{}", error_msg);
+            show_error!("{}", error_msg);
+            result = Err(1)
         }
     }
+
+    result
 }
 
 /**

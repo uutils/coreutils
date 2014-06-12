@@ -23,9 +23,9 @@ use getopts::{optopt, optflag, getopts, usage};
 static PROGRAM: &'static str = "head";
 
 #[allow(dead_code)]
-fn main () { uumain(os::args()); }
+fn main () { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let mut line_count = 10u;
 
     // handle obsolete -number syntax
@@ -46,15 +46,15 @@ pub fn uumain(args: Vec<String>) {
         Ok (m) => { m }
         Err(_) => {
             println!("{:s}", usage(PROGRAM, possible_options));
-            return
+            return 0;
         }
     };
 
     if given_options.opt_present("h") {
         println!("{:s}", usage(PROGRAM, possible_options));
-        return;
+        return 0;
     }
-    if given_options.opt_present("V") { version(); return }
+    if given_options.opt_present("V") { version(); return 0 }
 
     match given_options.opt_str("n") {
         Some(n) => {
@@ -93,6 +93,8 @@ pub fn uumain(args: Vec<String>) {
             head(&mut buffer, line_count);
         }
     }
+
+    0
 }
 
 // It searches for an option in the form of -123123

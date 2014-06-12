@@ -25,9 +25,9 @@ mod util;
 static NAME: &'static str = "yes";
 
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -46,11 +46,11 @@ pub fn uumain(args: Vec<String>) {
         println!("  {0:s} [STRING]... [OPTION]...", program);
         println!("");
         print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts).as_slice());
-        return;
+        return 0;
     }
     if matches.opt_present("version") {
         println!("yes 1.0.0");
-        return;
+        return 0;
     }
     let mut string = "y".to_string();
     if !matches.free.is_empty() {
@@ -58,6 +58,8 @@ pub fn uumain(args: Vec<String>) {
     }
 
     exec(string.as_slice());
+
+    0
 }
 
 pub fn exec(string: &str) {
