@@ -2,7 +2,7 @@ uutils coreutils [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg
 ================
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
-utils in [Rust](http://rust-lang.org). This repo is to aggregate the GNU
+utils in [Rust](http://www.rust-lang.org). This repo is to aggregate the GNU
 coreutils rewrites.
 
 Why?
