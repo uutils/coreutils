@@ -15,7 +15,7 @@
 extern crate serialize;
 extern crate getopts;
 extern crate libc;
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 use std::io::{println, File, stdin, stdout};
 use std::os;

@@ -13,7 +13,7 @@
  */
 
 extern crate getopts;
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::io::{IoResult};

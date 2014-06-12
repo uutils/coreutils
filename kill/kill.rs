@@ -17,7 +17,7 @@ extern crate libc;
 extern crate collections;
 extern crate serialize;
 
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 
 use std::os;
 use std::from_str::from_str;
