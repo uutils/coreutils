@@ -67,6 +67,11 @@ EXES        := \
 CRATES      := \
   $(sort $(filter $(EXES), $(filter-out md5sum true false, $(EXES))))
 
+INSTALL     ?= $(EXES)
+
+INSTALLEES  := \
+  $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES)))
+
 # Programs with usable tests
 TEST_PROGS  := \
   cat \
@@ -151,9 +156,9 @@ install: build/uutils
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)$(BINDIR)/uutils
 else
-install: $(EXES_PATHS)
+install: $(addprefix build/,$(INSTALLEES))
 	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
-	for prog in $(EXES); do \
+	for prog in $(INSTALLEES); do \
 		install build/$$prog $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)$$prog; \
 	done
 
