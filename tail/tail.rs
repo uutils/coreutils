@@ -25,9 +25,9 @@ use std::io::timer::sleep;
 static PROGRAM: &'static str = "tail";
 
 #[allow(dead_code)]
-fn main () { uumain(os::args()); }
+fn main () { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let mut line_count = 10u;
     let mut sleep_sec = 1000u64;
 
@@ -51,15 +51,15 @@ pub fn uumain(args: Vec<String>) {
         Ok (m) => { m }
         Err(_) => {
             println!("{:s}", usage(PROGRAM, possible_options));
-            return
+            return 0;
         }
     };
 
     if given_options.opt_present("h") {
         println!("{:s}", usage(PROGRAM, possible_options));
-        return;
+        return 0;
     }
-    if given_options.opt_present("V") { version(); return }
+    if given_options.opt_present("V") { version(); return 0; }
 
     let follow = given_options.opt_present("f");
     if follow {
@@ -89,7 +89,7 @@ pub fn uumain(args: Vec<String>) {
 
     if files.is_empty() {
         let mut buffer = BufferedReader::new(stdin());
-        tail(&mut buffer, line_count, follow, sleep_sec);
+        tail(&mut buffer, line_count, follow, sleep_sec)
     } else {
         let mut multiple = false;
         let mut firstime = true;
@@ -111,6 +111,7 @@ pub fn uumain(args: Vec<String>) {
             let mut buffer = BufferedReader::new(reader);
             tail(&mut buffer, line_count, follow, sleep_sec);
         }
+        return 0;
     }
 }
 
@@ -148,7 +149,7 @@ fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
     (options, None)
 }
 
-fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool, sleep_sec:u64) {
+fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool, sleep_sec:u64) -> int{
     // read through each line and store them in a ringbuffer that always contains
     // line_count lines. When reaching the end of file, output the lines in the
     // ringbuf.
@@ -178,8 +179,9 @@ fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool
             }
         }
     }
+    return 0;
 }
 
 fn version () {
-    println!("tail version 0.0.1");
+    println!("tail version 1.0.0");
 }

@@ -140,7 +140,6 @@ To do
 - install
 - join
 - libstdbuf
-- link
 - ln
 - ls
 - mkfifo
