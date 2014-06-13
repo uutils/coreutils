@@ -70,8 +70,20 @@ make PROG_PREFIX=PREFIX_GOES_HERE install
 Uninstallation Instructions
 ---------------------------
 
-Do the same command as in the Installation Instructions above, but replace
-```install``` with ```uninstall```.
+To uninstall all utilities:
+```
+make uninstall
+```
+
+To uninstall the multicall binary:
+```
+make MULTICALL=1 uninstall
+```
+
+To uninstall every program (other than the multicall binary) with a set prefix:
+```
+make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+```
 
 Test Instructions
 -----------------
