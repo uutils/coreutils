@@ -29,7 +29,7 @@ fn main () { uumain(os::args()); }
 
 pub fn uumain(args: Vec<String>) {
     let mut line_count = 10u;
-    let mut sleep_sec = 1000u;
+    let mut sleep_sec = 1000u64;
 
     // handle obsolete -number syntax
     let options = match obsolete(args.tail()) {
