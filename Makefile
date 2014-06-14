@@ -22,6 +22,7 @@ PROGS       := \
   fold \
   md5sum \
   mkdir \
+  nl \
   paste \
   printenv \
   pwd \
@@ -78,6 +79,7 @@ INSTALLEES  := \
 TEST_PROGS  := \
   cat \
   mkdir \
+  nl \
   seq \
   tr \
   truncate \
