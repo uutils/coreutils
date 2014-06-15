@@ -42,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            error!("error: {:s}", e.to_err_msg());
+            error!("error: {}", e);
             fail!()
         },
     };

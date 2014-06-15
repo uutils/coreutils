@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m)  => m,
-        Err(e) => fail!("Invalid options\n{}", e.to_err_msg())
+        Err(e) => fail!("Invalid options\n{}", e)
     };
 
     if matches.opt_present("version") {

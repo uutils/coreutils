@@ -109,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(err) => fail!("{}", err.to_err_msg()),
+        Err(err) => fail!("{}", err),
     };
 
     if matches.opt_present("version") {

@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> int {
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f.to_err_msg())
+        Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("version") {
         println!("uptime 1.0.0");
