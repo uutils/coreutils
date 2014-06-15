@@ -41,6 +41,7 @@ PROGS       := \
   yes \
   head \
   tail \
+  whoami
 
 UNIX_PROGS := \
   groups \
@@ -53,8 +54,7 @@ UNIX_PROGS := \
   tty \
   uname \
   uptime \
-  users \
-  whoami
+  users
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
