@@ -52,13 +52,13 @@ mod platform {
     use std::str;
 
     extern "system" {
-        pub fn GetUserName(out: *libc::c_char, len: *libc::uint32_t) -> libc::uint8_t;
+        pub fn GetUserNameA(out: *libc::c_char, len: *libc::uint32_t) -> libc::uint8_t;
     }
 
     #[allow(unused_unsafe)]
     pub unsafe fn getusername() -> String {
         let buffer: [libc::c_char, ..2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
-        if !GetUserName(buffer.as_ptr(), &(buffer.len() as libc::uint32_t)) == 0 {
+        if !GetUserNameA(buffer.as_ptr(), &(buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }
         str::raw::from_c_str(buffer.as_ptr())
