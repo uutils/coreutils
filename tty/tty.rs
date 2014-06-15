@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
             m.opt_present("s")
         },
         Err(f) => {
-            println(f.to_err_msg().as_slice());
+            println!("{}", f);
             usage();
             return 2;
         }

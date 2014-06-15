@@ -52,7 +52,7 @@ fn options(args: &[String]) -> Result<Options, ()> {
 
     let args: Vec<String> = args.iter().map(|x| x.to_string()).collect();
 
-    getopts(args.tail(), opts).map_err(|e| e.to_err_msg()).and_then(|m| {
+    getopts(args.tail(), opts).map_err(|e| format!("{}", e)).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
         let program = args.get(0).as_slice();
         let arguments = "[OPTION]... [FILE]...";

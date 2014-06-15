@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!("{}\n{}", e.to_err_msg(),  get_help_text(NAME, usage.as_slice()));
+            show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));
             return EXIT_ERR;
         },
     };
