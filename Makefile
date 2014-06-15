@@ -41,6 +41,7 @@ PROGS       := \
   yes \
   head \
   tail \
+  link \
 
 UNIX_PROGS := \
   hostid \
