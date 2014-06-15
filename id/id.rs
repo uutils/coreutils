@@ -256,6 +256,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
         unsafe { read(getpwuid(getuid() as i32)) }
@@ -279,6 +280,31 @@ fn pline(possible_pw: Option<c_passwd>) {
         pw_class,
         pw.pw_change,
         pw.pw_expire,
+        pw_gecos,
+        pw_dir,
+        pw_shell);
+}
+
+#[cfg(target_os = "linux")]
+fn pline(possible_pw: Option<c_passwd>) {
+    let pw = if possible_pw.is_none() {
+        unsafe { read(getpwuid(getuid() as i32)) }
+    } else {
+        possible_pw.unwrap()
+    };
+
+    let pw_name     = unsafe { from_c_str(pw.pw_name)  };
+    let pw_passwd   = unsafe { from_c_str(pw.pw_passwd)};
+    let pw_gecos    = unsafe { from_c_str(pw.pw_gecos) };
+    let pw_dir      = unsafe { from_c_str(pw.pw_dir)   };
+    let pw_shell    = unsafe { from_c_str(pw.pw_shell) };
+
+    println!(
+        "{:s}:{:s}:{:d}:{:d}:{:s}:{:s}:{:s}",
+        pw_name,
+        pw_passwd,
+        pw.pw_uid,
+        pw.pw_gid,
         pw_gecos,
         pw_dir,
         pw_shell);
