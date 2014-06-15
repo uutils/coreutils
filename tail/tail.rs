@@ -149,7 +149,7 @@ fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
 }
 
 fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool, sleep_sec:u64) {
-    // read trough each line and store them in a ringbuffer that always contains
+    // read through each line and store them in a ringbuffer that always contains
     // line_count lines. When reaching the end of file, output the lines in the
     // ringbuf.
     let mut ringbuf : RingBuf<String> = RingBuf::new();
