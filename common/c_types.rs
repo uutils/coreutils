@@ -6,8 +6,8 @@ use self::libc::{
     c_char,
     c_int,
     uid_t,
-    time_t
 };
+#[cfg(target_os = "macos")] use self::libc::time_t;
 use self::libc::funcs::posix88::unistd::getgroups;
 
 use std::vec::Vec;
@@ -15,6 +15,7 @@ use std::vec::Vec;
 use std::ptr::read;
 use std::str::raw::from_c_str;
 
+#[cfg(target_os = "macos")]
 pub struct c_passwd {
     pub pw_name:    *c_char,    /* user name */
     pub pw_passwd:  *c_char,    /* user name */
@@ -26,6 +27,17 @@ pub struct c_passwd {
     pub pw_dir:     *c_char,
     pub pw_shell:   *c_char,
     pub pw_expire:  time_t
+}
+
+#[cfg(target_os = "linux")]
+pub struct c_passwd {
+    pub pw_name:    *c_char,    /* user name */
+    pub pw_passwd:  *c_char,    /* user name */
+    pub pw_uid:     c_int,      /* user uid */
+    pub pw_gid:     c_int,      /* user gid */
+    pub pw_gecos:   *c_char,
+    pub pw_dir:     *c_char,
+    pub pw_shell:   *c_char,
 }
 
 #[cfg(target_os = "macos")]
