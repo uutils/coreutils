@@ -14,9 +14,10 @@
 extern crate getopts;
 extern crate libc;
 
-use std::num;
+use std::f64;
 use std::os;
 use std::io::{print, timer};
+use std::u64;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -79,7 +80,7 @@ fn sleep(args: Vec<String>) {
             if suffix_time == 0 {
                 0.0
             } else {
-                match num::from_str_radix::<f64>((arg.as_slice()), 10) {
+                match from_str::<f64>(arg.as_slice()) {
                     Some(m) => m,
                     None => {
                         crash!(1, "Invalid time interval '{}'", arg.to_string())
@@ -88,7 +89,7 @@ fn sleep(args: Vec<String>) {
             };
         result + num * suffix_time as f64
     });
-    timer::sleep((sleep_time * 1000.0) as u64);
+    timer::sleep(if sleep_time == f64::INFINITY { u64::MAX } else { (sleep_time * 1000.0) as u64 });
 }
 
 fn match_suffix(arg: &str) -> Result<(String, int), String> {
@@ -100,6 +101,8 @@ fn match_suffix(arg: &str) -> Result<(String, int), String> {
         val => {
             if !val.is_alphabetic() {
                 return Ok((arg.to_string(), 1))
+            } else if arg == "inf" || arg == "infinity" {
+                return Ok(("inf".to_string(), 1))
             } else {
                 return Err(format!("Invalid time interval '{}'", arg))
             }
