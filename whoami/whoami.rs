@@ -20,23 +20,49 @@ extern crate libc;
 
 use std::io::print;
 use std::os;
-use std::str;
-use c_types::{c_passwd, getpwuid};
 
 #[path = "../common/util.rs"] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
 
-extern {
-    pub fn geteuid() -> libc::c_int;
+#[cfg(unix)]
+mod platform {
+    use super::libc;
+    use std::str;
+    use self::c_types::{c_passwd, getpwuid};
+
+    #[path = "../../common/c_types.rs"] mod c_types;
+
+    extern {
+        pub fn geteuid() -> libc::c_int;
+    }
+
+    pub unsafe fn getusername() -> String {
+        let passwd: *c_passwd = getpwuid(geteuid());
+
+        let pw_name: *libc::c_char = (*passwd).pw_name;
+        let name = str::raw::from_c_str(pw_name);
+
+        name
+    }
 }
 
-unsafe fn getusername() -> String {
-    let passwd: *c_passwd = getpwuid(geteuid());
+#[cfg(windows)]
+mod platform {
+    pub use super::libc;
+    use std::mem;
+    use std::str;
 
-    let pw_name: *libc::c_char = (*passwd).pw_name;
-    let name = str::raw::from_c_str(pw_name);
+    extern "system" {
+        pub fn GetUserNameA(out: *libc::c_char, len: *libc::uint32_t) -> libc::uint8_t;
+    }
 
-    name
+    #[allow(unused_unsafe)]
+    pub unsafe fn getusername() -> String {
+        let buffer: [libc::c_char, ..2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
+        if !GetUserNameA(buffer.as_ptr(), &(buffer.len() as libc::uint32_t)) == 0 {
+            crash!(1, "username is too long");
+        }
+        str::raw::from_c_str(buffer.as_ptr())
+    }
 }
 
 static NAME: &'static str = "whoami";
@@ -75,7 +101,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
 pub fn exec() {
     unsafe {
-        let username = getusername();
+        let username = platform::getusername();
         println!("{:s}", username);
     }
 }
