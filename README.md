@@ -171,7 +171,6 @@ To do
 - stat
 - stdbuf
 - stty (in progress)
-- sync
 - tail (not all features implemented)
 - test
 - timeout

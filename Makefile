@@ -43,17 +43,18 @@ PROGS       := \
   tail \
 
 UNIX_PROGS := \
+  groups \
   hostid \
   hostname \
+  id \
   kill \
   logname \
-  users \
-  whoami \
+  sync \
   tty \
-  groups \
-  id \
+  uname \
   uptime \
-  uname
+  users \
+  whoami
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
