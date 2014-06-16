@@ -6,6 +6,7 @@ use self::libc::{
     c_char,
     c_int,
     uid_t,
+    gid_t,
 };
 #[cfg(target_os = "macos")] use self::libc::time_t;
 use self::libc::funcs::posix88::unistd::getgroups;
@@ -60,7 +61,10 @@ pub struct utsname {
 }
 
 pub struct c_group {
-    pub gr_name: *c_char /* group name */
+    pub gr_name:   *c_char,  // group name
+    pub gr_passwd: *c_char,  // password
+    pub gr_gid:    gid_t,    // group id
+    pub gr_mem:    **c_char, // member list
 }
 
 pub struct c_tm {
