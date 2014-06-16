@@ -11,7 +11,6 @@
 #![feature(macro_rules)]
 extern crate getopts;
 extern crate libc;
-extern crate debug;
 
 use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
