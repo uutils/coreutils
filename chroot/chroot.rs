@@ -74,8 +74,8 @@ pub fn uumain(args: Vec<String>) -> int {
     let command: Vec<&str> = match opts.free.len() {
         1 => {
             let shell: &str = match userShell {
-                None => {defaultShell}
-                Some(ref s) => {s.as_slice()}
+                None => defaultShell,
+                Some(ref s) => s.as_slice()
             };
             vec!(shell, defaultOption)
         }
