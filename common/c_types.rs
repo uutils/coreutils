@@ -13,6 +13,7 @@ use self::libc::funcs::posix88::unistd::getgroups;
 
 use std::vec::Vec;
 
+use std::io::IoError;
 use std::ptr::read;
 use std::str::raw::from_c_str;
 
@@ -138,6 +139,9 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
         };
     }
 
+    if ngroups < 0 {
+        crash!(1, "{}", IoError::last_error());
+    }
 
     unsafe { groups.set_len(ngroups as uint) };
 
