@@ -45,6 +45,7 @@ PROGS       := \
   whoami
 
 UNIX_PROGS := \
+  chroot \
   groups \
   hostid \
   hostname \
