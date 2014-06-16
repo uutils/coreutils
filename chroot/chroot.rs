@@ -45,9 +45,9 @@ pub fn uumain(args: Vec<String>) -> int {
     ];
 
     let opts = match getopts(args.tail(), options) {
-        Ok(m) => {m}
+        Ok(m) => m,
         Err(f) => {
-            println!("{}", f);
+            show_error!("{}", f);
             help_menu(program.as_slice(), options);
             return 1
         }
@@ -79,7 +79,7 @@ pub fn uumain(args: Vec<String>) -> int {
             };
             vec!(shell, defaultOption)
         }
-        _ => { opts.free.slice(1, opts.free.len()).iter().map(|x| x.as_slice()).collect() }
+        _ => opts.free.slice(1, opts.free.len()).iter().map(|x| x.as_slice()).collect()
     };
 
     set_context(&newroot, &opts);
@@ -105,7 +105,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
             };
             s
         }
-        None => { Vec::new() }
+        None => Vec::new()
     };
     let user = if userspec.is_empty() { userStr.as_slice() } else { userspec.get(0).as_slice() };
     let group = if userspec.is_empty() { groupStr.as_slice() } else { userspec.get(1).as_slice() };
@@ -133,7 +133,7 @@ fn enter_chroot(root: &Path) {
 fn set_main_group(group: &str) {
     if !group.is_empty() {
         let group_id = match get_group(group) {
-            None => { crash!(1, "no such group: {}", group) }
+            None => crash!(1, "no such group: {}", group),
             Some(g) => g.gr_gid
         };
         let err = unsafe { setgid(group_id) };
@@ -148,8 +148,8 @@ fn set_groups(groups: &str) {
         let groupsVec: Vec<libc::gid_t> = FromIterator::from_iter(
             groups.split(',').map(
                 |x| match get_group(x) {
-                    None => { crash!(1, "no such group: {}", x) }
-                    Some(g) => { g.gr_gid }
+                    None => crash!(1, "no such group: {}", x),
+                    Some(g) => g.gr_gid
                 })
             );
         let err = unsafe {
