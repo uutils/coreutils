@@ -32,7 +32,7 @@ mod platform {
     #[path = "../../common/c_types.rs"] mod c_types;
 
     extern {
-        pub fn geteuid() -> libc::c_int;
+        pub fn geteuid() -> libc::uid_t;
     }
 
     pub unsafe fn getusername() -> String {

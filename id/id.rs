@@ -23,6 +23,7 @@ use std::ptr::read;
 use libc::{
     c_char,
     c_int,
+    gid_t,
     uid_t,
     getgid,
     getuid
@@ -80,8 +81,8 @@ mod audit {
 extern {
     fn getgrgid(gid: uid_t) -> *c_group;
     fn getgrouplist(name:   *c_char,
-                    basegid: c_int,
-                    groups: *c_int,
+                    basegid: gid_t,
+                    groups: *gid_t,
                     ngroups: *mut c_int) -> c_int;
 }
 
@@ -136,11 +137,11 @@ pub fn uumain(args: Vec<String>) -> int {
             possible_pw.unwrap().pw_gid
         } else {
             if rflag {
-                unsafe { getgid() as i32 }
+                unsafe { getgid() }
             } else {
-                unsafe { getegid() as i32 }
+                unsafe { getegid() }
             }
-        } as u32;
+        };
         let gr = unsafe { getgrgid(id) };
 
         if nflag && gr.is_not_null() {
@@ -156,9 +157,9 @@ pub fn uumain(args: Vec<String>) -> int {
         let id = if possible_pw.is_some() {
             possible_pw.unwrap().pw_uid
         } else if rflag {
-            unsafe { getgid() as i32 }
+            unsafe { getgid() }
         } else {
-            unsafe { getegid() as i32 }
+            unsafe { getegid() }
         };
 
         let pw = unsafe { getpwuid(id) };
@@ -168,7 +169,7 @@ pub fn uumain(args: Vec<String>) -> int {
             };
             println!("{:s}", pw_name);
         } else {
-            println!("{:d}", id);
+            println!("{:u}", id);
         }
 
         return 0;
@@ -208,7 +209,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
     } else {
         let login = unsafe { from_c_str(getlogin()) };
         let rid = unsafe { getuid() };
-        let pw = unsafe { getpwuid(rid as i32) };
+        let pw = unsafe { getpwuid(rid) };
 
         let is_same_user = unsafe {
             from_c_str(read(pw).pw_name) == login
@@ -228,7 +229,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
 
         let eid = unsafe { getegid() };
         if eid == rid {
-            let pw = unsafe { getpwuid(eid as i32) };
+            let pw = unsafe { getpwuid(eid) };
             if pw.is_not_null() {
                 println!(
                     "euid\t{:s}",
@@ -288,7 +289,7 @@ fn pline(possible_pw: Option<c_passwd>) {
 #[cfg(target_os = "linux")]
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
-        unsafe { read(getpwuid(getuid() as i32)) }
+        unsafe { read(getpwuid(getuid())) }
     } else {
         possible_pw.unwrap()
     };
@@ -300,7 +301,7 @@ fn pline(possible_pw: Option<c_passwd>) {
     let pw_shell    = unsafe { from_c_str(pw.pw_shell) };
 
     println!(
-        "{:s}:{:s}:{:d}:{:d}:{:s}:{:s}:{:s}",
+        "{:s}:{:s}:{:u}:{:u}:{:s}:{:s}:{:s}",
         pw_name,
         pw_passwd,
         pw.pw_uid,
@@ -343,8 +344,8 @@ fn id_print(possible_pw: Option<c_passwd>,
         uid = possible_pw.unwrap().pw_uid;
         gid = possible_pw.unwrap().pw_gid;
     } else {
-        uid = unsafe { getuid() as i32 };
-        gid = unsafe { getgid() as i32 };
+        uid = unsafe { getuid() };
+        gid = unsafe { getgid() };
     }
 
     let mut ngroups;
@@ -363,15 +364,15 @@ fn id_print(possible_pw: Option<c_passwd>,
 
     if possible_pw.is_some() {
         print!(
-            "uid={:d}({:s})",
+            "uid={:u}({:s})",
             uid,
             unsafe { from_c_str(possible_pw.unwrap().pw_name) });
     } else {
         print!("uid={:u}", unsafe { getuid() });
     }
 
-    print!(" gid={:d}", gid);
-    let gr = unsafe { getgrgid(gid as u32) };
+    print!(" gid={:u}", gid);
+    let gr = unsafe { getgrgid(gid) };
     if gr.is_not_null() {
         print!(
             "({:s})",
@@ -379,9 +380,9 @@ fn id_print(possible_pw: Option<c_passwd>,
     }
 
     let euid = unsafe { geteuid() };
-    if p_euid && (euid != uid as u32) {
+    if p_euid && (euid != uid) {
         print!(" euid={:u}", euid);
-        let pw = unsafe { getpwuid(euid as i32) };
+        let pw = unsafe { getpwuid(euid) };
         if pw.is_not_null() {
             print!(
                 "({:s})",
@@ -408,7 +409,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         let mut first = true;
         for &gr in groups.iter() {
             if !first { print!(",") }
-            print!("{:d}", gr);
+            print!("{:u}", gr);
             let group = unsafe { getgrgid(gr as u32) };
             if group.is_not_null() {
                 let name = unsafe {
