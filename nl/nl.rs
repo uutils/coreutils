@@ -114,7 +114,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let given_options = match getopts(args.tail(), possible_options) {
         Ok (m) => { m }
         Err(f) => {
-            show_error!("{}", f.to_err_msg());
+            show_error!("{}", f);
             print_usage(possible_options);
             return 1
         }
