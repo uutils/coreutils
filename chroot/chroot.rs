@@ -24,8 +24,8 @@ extern {
     fn setgroups(size: libc::c_int, list: *libc::uid_t) -> libc::c_int;
 }
 
-static NAME : &'static str = "chroot";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "chroot";
+static VERSION: &'static str = "1.0.0";
 
 #[allow(dead_code)]
 fn main () { std::os::set_exit_status(uumain(std::os::args())); }
@@ -62,8 +62,8 @@ pub fn uumain(args: Vec<String>) -> int {
         return 1
     }
 
-    let defaultShell : &'static str = "/bin/sh";
-    let defaultOption : &'static str = "-i";
+    let defaultShell: &'static str = "/bin/sh";
+    let defaultOption: &'static str = "-i";
     let userShell = std::os::getenv("SHELL");
 
     let newroot = Path::new(opts.free.get(0).as_slice());
@@ -71,9 +71,9 @@ pub fn uumain(args: Vec<String>) -> int {
         crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
     }
 
-    let command : Vec<&str> = match opts.free.len() {
+    let command: Vec<&str> = match opts.free.len() {
         1 => {
-            let shell : &str = match userShell {
+            let shell: &str = match userShell {
                 None => {defaultShell}
                 Some(ref s) => {s.as_slice()}
             };
@@ -86,7 +86,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     unsafe {
         let executable = command.get(0).as_slice().to_c_str().unwrap();
-        let mut commandParts : Vec<*i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
+        let mut commandParts: Vec<*i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
         commandParts.push(std::ptr::null());
         execvp(executable as *libc::c_char, commandParts.as_ptr() as **libc::c_char) as int
     }
@@ -99,7 +99,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
     let groupsStr = options.opt_str("groups").unwrap_or_default();
     let userspec = match userspecStr {
         Some(ref u) => {
-            let s : Vec<&str> = u.as_slice().split(':').collect();
+            let s: Vec<&str> = u.as_slice().split(':').collect();
             if s.len() != 2 {
                 crash!(1, "invalid userspec: `{:s}`", u.as_slice())
             };
@@ -145,7 +145,7 @@ fn set_main_group(group: &str) {
 
 fn set_groups(groups: &str) {
     if !groups.is_empty() {
-        let groupsVec : Vec<libc::uid_t> = FromIterator::from_iter(
+        let groupsVec: Vec<libc::uid_t> = FromIterator::from_iter(
             groups.split(',').map(
                 |x| match get_group(x) {
                     None => { crash!(1, "no such group: {}", x) }
