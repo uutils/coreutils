@@ -6,6 +6,7 @@ use self::libc::{
     c_char,
     c_int,
     uid_t,
+    gid_t,
 };
 #[cfg(target_os = "macos")] use self::libc::time_t;
 use self::libc::funcs::posix88::unistd::getgroups;
@@ -19,8 +20,8 @@ use std::str::raw::from_c_str;
 pub struct c_passwd {
     pub pw_name:    *c_char,    /* user name */
     pub pw_passwd:  *c_char,    /* user name */
-    pub pw_uid:     c_int,      /* user uid */
-    pub pw_gid:     c_int,      /* user gid */
+    pub pw_uid:     uid_t,      /* user uid */
+    pub pw_gid:     gid_t,      /* user gid */
     pub pw_change:  time_t,
     pub pw_class:   *c_char,
     pub pw_gecos:   *c_char,
@@ -33,8 +34,8 @@ pub struct c_passwd {
 pub struct c_passwd {
     pub pw_name:    *c_char,    /* user name */
     pub pw_passwd:  *c_char,    /* user name */
-    pub pw_uid:     c_int,      /* user uid */
-    pub pw_gid:     c_int,      /* user gid */
+    pub pw_uid:     uid_t,      /* user uid */
+    pub pw_gid:     gid_t,      /* user gid */
     pub pw_gecos:   *c_char,
     pub pw_dir:     *c_char,
     pub pw_shell:   *c_char,
@@ -76,13 +77,13 @@ pub struct c_tm {
 }
 
 extern {
-    pub fn getpwuid(uid: c_int) -> *c_passwd;
+    pub fn getpwuid(uid: uid_t) -> *c_passwd;
     pub fn getpwnam(login: *c_char) -> *c_passwd;
     pub fn getgrouplist(name:   *c_char,
-                        basegid: c_int,
-                        groups: *c_int,
+                        basegid: gid_t,
+                        groups: *gid_t,
                         ngroups: *mut c_int) -> c_int;
-    pub fn getgrgid(gid: uid_t) -> *c_group;
+    pub fn getgrgid(gid: gid_t) -> *c_group;
 }
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
@@ -91,8 +92,8 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit()) {
-            let id = from_str::<i32>(username).unwrap();
-            let pw_pointer = unsafe { getpwuid(id) };
+            let id = from_str::<u32>(username).unwrap();
+            let pw_pointer = unsafe { getpwuid(id as uid_t) };
 
             if pw_pointer.is_not_null() {
                 Some(unsafe { read(pw_pointer) })
@@ -133,7 +134,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
         }
     } else {
         ngroups = unsafe {
-            getgroups(NGROUPS, groups.as_mut_ptr() as *mut u32)
+            getgroups(NGROUPS, groups.as_mut_ptr() as *mut gid_t)
         };
     }
 
@@ -142,7 +143,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
 
     for &g in groups.iter() {
         if nflag {
-            let group = unsafe { getgrgid(g as u32) };
+            let group = unsafe { getgrgid(g) };
             if group.is_not_null() {
                 let name = unsafe {
                     from_c_str(read(group).gr_name)
@@ -150,7 +151,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
                 print!("{:s} ", name);
             }
         } else {
-            print!("{:d} ", g);
+            print!("{:u} ", g);
         }
     }
 
