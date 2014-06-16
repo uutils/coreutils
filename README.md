@@ -124,7 +124,6 @@ To do
 - chgrp
 - chmod
 - chown
-- chroot
 - copy
 - cp (not much done)
 - csplit

@@ -88,6 +88,7 @@ extern {
                         groups: *gid_t,
                         ngroups: *mut c_int) -> c_int;
     pub fn getgrgid(gid: gid_t) -> *c_group;
+    pub fn getgrnam(name: *c_char) -> *c_group;
 }
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
@@ -108,7 +109,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         // Passed the username as a string
         } else {
             let pw_pointer = unsafe {
-                getpwnam(username.as_slice().as_ptr() as *i8)
+                getpwnam(username.as_slice().to_c_str().unwrap() as *libc::c_char)
             };
             if pw_pointer.is_not_null() {
                 Some(unsafe { read(pw_pointer) })
@@ -117,6 +118,21 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
             }
         }
     } else {
+        None
+    }
+}
+
+pub fn get_group(groupname: &str) -> Option<c_group> {
+    let group = if groupname.chars().all(|c| c.is_digit()) {
+        unsafe { getgrgid(from_str::<gid_t>(groupname).unwrap()) }
+    } else {
+        unsafe { getgrnam(groupname.to_c_str().unwrap() as *c_char) }
+    };
+
+    if group.is_not_null() {
+        Some(unsafe { read(group) })
+    }
+    else {
         None
     }
 }
