@@ -21,7 +21,7 @@ use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
 
 extern {
     fn chroot(path: *libc::c_char) -> libc::c_int;
-    fn setgroups(size: libc::c_int, list: *libc::uid_t) -> libc::c_int;
+    fn setgroups(size: libc::c_int, list: *libc::gid_t) -> libc::c_int;
 }
 
 static NAME: &'static str = "chroot";
@@ -145,7 +145,7 @@ fn set_main_group(group: &str) {
 
 fn set_groups(groups: &str) {
     if !groups.is_empty() {
-        let groupsVec: Vec<libc::uid_t> = FromIterator::from_iter(
+        let groupsVec: Vec<libc::gid_t> = FromIterator::from_iter(
             groups.split(',').map(
                 |x| match get_group(x) {
                     None => { crash!(1, "no such group: {}", x) }
@@ -154,7 +154,7 @@ fn set_groups(groups: &str) {
             );
         let err = unsafe {
             setgroups(groupsVec.len() as libc::c_int,
-                      groupsVec.as_slice().as_ptr() as *libc::uid_t)
+                      groupsVec.as_slice().as_ptr() as *libc::gid_t)
         };
         if err != 0 {
             crash!(1, "cannot set groups: {:s}", strerror(err).as_slice())

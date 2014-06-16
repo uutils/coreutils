@@ -124,7 +124,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
 
 pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit()) {
-        unsafe { getgrgid(from_str::<uid_t>(groupname).unwrap()) }
+        unsafe { getgrgid(from_str::<gid_t>(groupname).unwrap()) }
     } else {
         unsafe { getgrnam(groupname.to_c_str().unwrap() as *c_char) }
     };
