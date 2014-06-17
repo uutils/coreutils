@@ -21,7 +21,16 @@ use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
 
 extern {
     fn chroot(path: *libc::c_char) -> libc::c_int;
+}
+
+#[cfg(target_os = "macos")]
+extern {
     fn setgroups(size: libc::c_int, list: *libc::gid_t) -> libc::c_int;
+}
+
+#[cfg(target_os = "linux")]
+extern {
+    fn setgroups(size: libc::size_t, list: *libc::gid_t) -> libc::c_int;
 }
 
 static NAME: &'static str = "chroot";
@@ -112,7 +121,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
 
     enter_chroot(root);
 
-    set_groups(groupsStr.as_slice());
+    set_groups_from_str(groupsStr.as_slice());
     set_main_group(group);
     set_user(user);
 }
@@ -143,7 +152,23 @@ fn set_main_group(group: &str) {
     }
 }
 
-fn set_groups(groups: &str) {
+#[cfg(target_os = "macos")]
+fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+    unsafe {
+        setgroups(groups.len() as libc::c_int,
+                  groups.as_slice().as_ptr())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+    unsafe {
+        setgroups(groups.len() as libc::size_t,
+                  groups.as_slice().as_ptr())
+    }
+}
+
+fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
         let groupsVec: Vec<libc::gid_t> = FromIterator::from_iter(
             groups.split(',').map(
@@ -152,10 +177,7 @@ fn set_groups(groups: &str) {
                     Some(g) => g.gr_gid
                 })
             );
-        let err = unsafe {
-            setgroups(groupsVec.len() as libc::c_int,
-                      groupsVec.as_slice().as_ptr() as *libc::gid_t)
-        };
+        let err = set_groups(groupsVec);
         if err != 0 {
             crash!(1, "cannot set groups: {:s}", strerror(err).as_slice())
         }
