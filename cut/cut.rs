@@ -71,50 +71,42 @@ fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
         None => (false, "".to_str())
     };
 
-    let mut byte_pos = 0;
-    let mut print_delim = false;
-    let mut range_pos = 0;
-
-    loop {
-        let mut byte = [0u8];
-        match reader.read(byte) {
-            Ok(1) => (),
-            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => {
-                if byte_pos > 0 {
-                    out.write_u8('\n' as u8).unwrap();
-                }
-                break
-            }
+    'newline: loop {
+        let line = match reader.read_until(b'\n') {
+            Ok(line) => line,
+            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => break,
             _ => fail!(),
-        }
-        let byte = byte[0];
+        };
 
-        if byte == ('\n' as u8) {
-            out.write_u8('\n' as u8).unwrap();
-            byte_pos = 0;
-            print_delim = false;
-            range_pos = 0;
-        } else {
-            byte_pos += 1;
+        let line_len = line.len();
+        let mut print_delim = false;
 
-            if byte_pos > ranges.get(range_pos).high {
-                range_pos += 1;
-            }
+        for &Range{ low: low, high: high } in ranges.iter() {
+            if low > line_len { break; }
 
-            let cur_range = *ranges.get(range_pos);
-
-            if byte_pos >= cur_range.low {
-                if use_delim {
-                    if print_delim && byte_pos == cur_range.low {
-                        out.write_str(out_delim.as_slice()).unwrap();
-                    }
-
-                    print_delim = true;
+            if use_delim {
+                if print_delim {
+                    out.write_str(out_delim.as_slice());
                 }
+                print_delim = true;
+            }
 
-                out.write_u8(byte).unwrap();
+            if high >= line_len {
+                let segment = line.slice(low - 1, line_len);
+
+                out.write(segment);
+
+                if *line.get(line_len - 1) == b'\n' {
+                    continue 'newline
+                }
+            } else {
+                let segment = line.slice(low - 1, high);
+
+                out.write(segment);
             }
         }
+
+        out.write(&[b'\n']);
     }
 
     0
