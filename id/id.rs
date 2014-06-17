@@ -383,7 +383,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     }
 
     let egid = unsafe { getegid() };
-    if p_egid && (egid != gid as u32) {
+    if p_egid && (egid != gid) {
         print!(" egid={:u}", egid);
         unsafe {
             let grp = getgrgid(egid);
