@@ -349,11 +349,14 @@ Try '{program} --help' for more information.", s, program = program);
                     let time_spec = Timespec::new(secs, nsecs);
                     time::at(time_spec).strftime(time_format_str)
                 };
-                print!("{:<10} {:<30} {}", convert_size(size), time_str, stat.path.display());
+                if !summarize || (summarize && index == len-1) {
+                    print!("{:<10} {:<30} {}{}", convert_size(size), time_str, stat.path.display(), line_separator);
+                }
             } else {
-                print!("{:<10} {}", convert_size(size), stat.path.display());
+                if !summarize || (summarize && index == len-1) {
+                    print!("{:<10} {}{}", convert_size(size), stat.path.display(), line_separator);
+                }
             }
-            print!("{}", line_separator);
             if options_arc.total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
