@@ -64,11 +64,10 @@ fn print_factors_str(num_str: &str) {
     print_factors(num);
 }
 
-
 #[allow(dead_code)]
-fn main() { uumain(os::args()); }
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-pub fn uumain(args: Vec<String>) {
+pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
     let opts = [
         getopts::optflag("h", "help", "show this help message"),
@@ -89,11 +88,11 @@ pub fn uumain(args: Vec<String>) {
                 \n\
                 {usage}", program = program, version = VERSION, usage = getopts::usage("Print the prime factors of the given number(s). \
                                         If none are specified, read from standard input.", opts));
-        return;
+        return 1;
     }
     if matches.opt_present("version") {
         println!("{} {}", program, VERSION);
-        return;
+        return 0;
     }
 
     if matches.free.is_empty() {
@@ -105,4 +104,5 @@ pub fn uumain(args: Vec<String>) {
             print_factors_str(num_str.as_slice());
         }
     }
+    0
 }
