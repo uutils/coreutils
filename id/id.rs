@@ -21,14 +21,12 @@ extern crate libc;
 use std::os;
 use std::ptr::read;
 use libc::{
-    c_char,
     c_int,
-    gid_t,
     uid_t,
     getgid,
     getuid
 };
-use libc::funcs::posix88::unistd::{getegid, geteuid, getgroups, getlogin};
+use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
 use std::str::raw::from_c_str;
 use getopts::{getopts, optflag, usage};
 use c_types::{
@@ -308,8 +306,6 @@ fn pline(possible_pw: Option<c_passwd>) {
         pw_dir,
         pw_shell);
 }
-
-static NGROUPS: i32 = 20;
 
 #[cfg(target_os = "linux")]
 fn auditid() { }
