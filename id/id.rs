@@ -191,9 +191,9 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if possible_pw.is_some() {
-        id_print(possible_pw, true, false, false)
+        id_print(possible_pw, false, false)
     } else {
-        id_print(possible_pw, false, true, true)
+        id_print(possible_pw, true, true)
     }
 
     0
@@ -333,7 +333,6 @@ fn auditid() {
 }
 
 fn id_print(possible_pw: Option<c_passwd>,
-            use_ggl: bool,
             p_euid: bool,
             p_egid: bool) {
 
@@ -351,7 +350,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     let mut ngroups;
     let mut groups = Vec::with_capacity(NGROUPS as uint);
 
-    if use_ggl && possible_pw.is_some() {
+    if possible_pw.is_some() {
         ngroups = NGROUPS;
         let pw_name = possible_pw.unwrap().pw_name;
 
