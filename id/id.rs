@@ -260,7 +260,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
 #[cfg(target_os = "macos")]
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
-        unsafe { read(getpwuid(getuid() as i32)) }
+        unsafe { read(getpwuid(getuid())) }
     } else {
         possible_pw.unwrap()
     };
@@ -273,7 +273,7 @@ fn pline(possible_pw: Option<c_passwd>) {
     let pw_shell    = unsafe { from_c_str(pw.pw_shell) };
 
     println!(
-        "{:s}:{:s}:{:d}:{:d}:{:s}:{:d}:{:d}:{:s}:{:s}:{:s}",
+        "{:s}:{:s}:{:u}:{:u}:{:s}:{:d}:{:d}:{:s}:{:s}:{:s}",
         pw_name,
         pw_passwd,
         pw.pw_uid,
