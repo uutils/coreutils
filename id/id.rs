@@ -21,19 +21,19 @@ extern crate libc;
 use std::os;
 use std::ptr::read;
 use libc::{
-    c_char,
     c_int,
-    gid_t,
     uid_t,
     getgid,
     getuid
 };
-use libc::funcs::posix88::unistd::{getegid, geteuid, getgroups, getlogin};
+use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
 use std::str::raw::from_c_str;
 use getopts::{getopts, optflag, usage};
 use c_types::{
     c_passwd,
     c_group,
+    get_groups,
+    get_group_list,
     get_pw_from_args,
     getpwuid,
     group
@@ -80,10 +80,6 @@ mod audit {
 
 extern {
     fn getgrgid(gid: uid_t) -> *c_group;
-    fn getgrouplist(name:   *c_char,
-                    basegid: gid_t,
-                    groups: *gid_t,
-                    ngroups: *mut c_int) -> c_int;
 }
 
 static NAME: &'static str = "id";
@@ -191,9 +187,9 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if possible_pw.is_some() {
-        id_print(possible_pw, true, false, false)
+        id_print(possible_pw, false, false)
     } else {
-        id_print(possible_pw, false, true, true)
+        id_print(possible_pw, true, true)
     }
 
     0
@@ -311,8 +307,6 @@ fn pline(possible_pw: Option<c_passwd>) {
         pw_shell);
 }
 
-static NGROUPS: i32 = 20;
-
 #[cfg(target_os = "linux")]
 fn auditid() { }
 
@@ -321,7 +315,7 @@ fn auditid() {
     let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
     let address = &auditinfo as *audit::c_auditinfo_addr_t;
     if  unsafe { audit::getaudit(address) } < 0 {
-        println!("Couldlnt retrieve information");
+        println!("couldn't retrieve information");
         return;
     }
 
@@ -333,7 +327,6 @@ fn auditid() {
 }
 
 fn id_print(possible_pw: Option<c_passwd>,
-            use_ggl: bool,
             p_euid: bool,
             p_egid: bool) {
 
@@ -348,19 +341,14 @@ fn id_print(possible_pw: Option<c_passwd>,
         gid = unsafe { getgid() };
     }
 
-    let mut ngroups;
-    let mut groups = Vec::with_capacity(NGROUPS as uint);
+    let groups = match possible_pw {
+        Some(pw) => get_group_list(pw.pw_name, pw.pw_gid),
+        None => get_groups(),
+    };
 
-    if use_ggl && possible_pw.is_some() {
-        ngroups = NGROUPS;
-        let pw_name = possible_pw.unwrap().pw_name;
-
-        unsafe { getgrouplist(pw_name, gid, groups.as_ptr(), &mut ngroups) };
-    } else {
-        ngroups = unsafe {
-            getgroups(NGROUPS, groups.as_mut_ptr() as *mut u32)
-        };
-    }
+    let groups = groups.unwrap_or_else(|errno| {
+        crash!(1, "failed to get group list (errno={:d})", errno);
+    });
 
     if possible_pw.is_some() {
         print!(
@@ -391,7 +379,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     }
 
     let egid = unsafe { getegid() };
-    if p_egid && (egid != gid as u32) {
+    if p_egid && (egid != gid) {
         print!(" egid={:u}", egid);
         unsafe {
             let grp = getgrgid(egid);
@@ -401,16 +389,14 @@ fn id_print(possible_pw: Option<c_passwd>,
         }
     }
 
-    unsafe { groups.set_len(ngroups as uint) };
-
-    if ngroups > 0 {
+    if groups.len() > 0 {
         print!(" groups=");
 
         let mut first = true;
         for &gr in groups.iter() {
             if !first { print!(",") }
             print!("{:u}", gr);
-            let group = unsafe { getgrgid(gr as u32) };
+            let group = unsafe { getgrgid(gr) };
             if group.is_not_null() {
                 let name = unsafe {
                     from_c_str(read(group).gr_name)
@@ -419,7 +405,7 @@ fn id_print(possible_pw: Option<c_passwd>,
             }
             first = false
         }
-
-        println!("");
     }
+
+    println!("");
 }
