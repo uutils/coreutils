@@ -20,7 +20,16 @@ use getopts::{optflag, getopts, usage};
 
 extern {
     fn gethostname(name: *libc::c_char, namelen: libc::size_t) -> libc::c_int;
+}
+
+#[cfg(target_os = "macos")]
+extern {
     fn sethostname(name: *libc::c_char, namelen: libc::c_int) -> libc::c_int;
+}
+
+#[cfg(target_os = "linux")]
+extern {
+    fn sethostname(name: *libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
 
 #[allow(dead_code)]
@@ -99,11 +108,25 @@ fn xgethostname() -> String {
     str::from_utf8(name.slice_to(last_char)).unwrap().to_string()
 }
 
+#[cfg(target_os = "macos")]
 fn xsethostname(name: &str) {
-    let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as i8).collect();
+    let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
     let err = unsafe {
-        sethostname (vec_name.as_ptr(), vec_name.len() as i32)
+        sethostname (vec_name.as_ptr(), vec_name.len() as libc::c_int)
+    };
+
+    if err != 0 {
+        println!("Cannot set hostname to {:s}", name);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn xsethostname(name: &str) {
+    let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
+
+    let err = unsafe {
+        sethostname (vec_name.as_ptr(), vec_name.len() as libc::size_t)
     };
 
     if err != 0 {
