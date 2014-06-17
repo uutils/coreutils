@@ -315,7 +315,7 @@ fn auditid() {
     let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
     let address = &auditinfo as *audit::c_auditinfo_addr_t;
     if  unsafe { audit::getaudit(address) } < 0 {
-        println!("Couldlnt retrieve information");
+        println!("couldn't retrieve information");
         return;
     }
 
