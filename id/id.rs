@@ -34,6 +34,8 @@ use getopts::{getopts, optflag, usage};
 use c_types::{
     c_passwd,
     c_group,
+    get_groups,
+    get_group_list,
     get_pw_from_args,
     getpwuid,
     group
@@ -80,10 +82,6 @@ mod audit {
 
 extern {
     fn getgrgid(gid: uid_t) -> *c_group;
-    fn getgrouplist(name:   *c_char,
-                    basegid: gid_t,
-                    groups: *gid_t,
-                    ngroups: *mut c_int) -> c_int;
 }
 
 static NAME: &'static str = "id";
@@ -347,19 +345,14 @@ fn id_print(possible_pw: Option<c_passwd>,
         gid = unsafe { getgid() };
     }
 
-    let mut ngroups;
-    let mut groups = Vec::with_capacity(NGROUPS as uint);
+    let groups = match possible_pw {
+        Some(pw) => get_group_list(pw.pw_name, pw.pw_gid),
+        None => get_groups(),
+    };
 
-    if possible_pw.is_some() {
-        ngroups = NGROUPS;
-        let pw_name = possible_pw.unwrap().pw_name;
-
-        unsafe { getgrouplist(pw_name, gid, groups.as_ptr(), &mut ngroups) };
-    } else {
-        ngroups = unsafe {
-            getgroups(NGROUPS, groups.as_mut_ptr() as *mut u32)
-        };
-    }
+    let groups = groups.unwrap_or_else(|errno| {
+        crash!(1, "failed to get group list (errno={:d})", errno);
+    });
 
     if possible_pw.is_some() {
         print!(
@@ -400,16 +393,14 @@ fn id_print(possible_pw: Option<c_passwd>,
         }
     }
 
-    unsafe { groups.set_len(ngroups as uint) };
-
-    if ngroups > 0 {
+    if groups.len() > 0 {
         print!(" groups=");
 
         let mut first = true;
         for &gr in groups.iter() {
             if !first { print!(",") }
             print!("{:u}", gr);
-            let group = unsafe { getgrgid(gr as u32) };
+            let group = unsafe { getgrgid(gr) };
             if group.is_not_null() {
                 let name = unsafe {
                     from_c_str(read(group).gr_name)
@@ -418,7 +409,7 @@ fn id_print(possible_pw: Option<c_passwd>,
             }
             first = false
         }
-
-        println!("");
     }
+
+    println!("");
 }
