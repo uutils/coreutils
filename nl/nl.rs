@@ -75,6 +75,7 @@ enum NumberFormat {
     RightZero,
 }
 
+#[allow(dead_code)]
 fn main () {
   os::set_exit_status(uumain(os::args()));
 }
