@@ -137,7 +137,7 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     }
 }
 
-fn get_group_list(name: *c_char, gid: gid_t) -> Result<Vec<gid_t>, int> {
+pub fn get_group_list(name: *c_char, gid: gid_t) -> Result<Vec<gid_t>, int> {
     let mut ngroups = 0 as c_int;
 
     unsafe { getgrouplist(name, gid, 0 as *mut gid_t, &mut ngroups) };
@@ -151,7 +151,7 @@ fn get_group_list(name: *c_char, gid: gid_t) -> Result<Vec<gid_t>, int> {
     }
 }
 
-fn get_groups() -> Result<Vec<gid_t>, int> {
+pub fn get_groups() -> Result<Vec<gid_t>, int> {
     let ngroups = unsafe { getgroups(0, 0 as *mut gid_t) };
     if ngroups == -1 {
         return Err(os::errno());
