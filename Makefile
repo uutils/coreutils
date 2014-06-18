@@ -97,11 +97,11 @@ command     = sh -c '$(1)'
 # Main exe build rule
 define EXE_BUILD
 ifeq ($(wildcard $(1)/Makefile),)
-build/$(1): $(1)/$(1).rs | build
+build/$(1): $(1)/$(1).rs common/*.rs | build
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -o build/$(1) $(1)/$(1).rs)
 clean_$(1):
 else
-build/$(1): $(1)/$(1).rs | build
+build/$(1): $(1)/$(1).rs common/*.rs | build
 	cd $(1) && make
 clean_$(1):
 	cd $(1) && make clean
@@ -109,7 +109,7 @@ endif
 endef
 
 define CRATE_BUILD
-build/$(2): $(1)/$(1).rs | build
+build/$(2): $(1)/$(1).rs common/*.rs | build
 	$(call command,$(RUSTC) $(RUSTCFLAGS) --crate-type rlib $(1)/$(1).rs --out-dir build)
 endef
 

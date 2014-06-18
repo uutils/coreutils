@@ -5,6 +5,7 @@ extern crate libc;
 use self::libc::{
     c_char,
     c_int,
+    int32_t,
     uid_t,
     gid_t,
 };
@@ -81,14 +82,27 @@ pub struct c_tm {
 }
 
 extern {
+    pub fn setgrent();
+    pub fn endgrent();
+
     pub fn getpwuid(uid: uid_t) -> *c_passwd;
     pub fn getpwnam(login: *c_char) -> *c_passwd;
-    pub fn getgrouplist(name:   *c_char,
-                        basegid: gid_t,
-                        groups: *mut gid_t,
-                        ngroups: *mut c_int) -> c_int;
+    pub fn getgrent() -> *c_group;
     pub fn getgrgid(gid: gid_t) -> *c_group;
     pub fn getgrnam(name: *c_char) -> *c_group;
+}
+
+#[cfg(target_os = "macos")]
+extern {
+    pub fn getgroupcount(name: *c_char, gid: gid_t) -> int32_t;
+}
+
+#[cfg(target_os = "linux")]
+extern {
+    pub fn getgrouplist(name: *c_char,
+                        gid: gid_t,
+                        groups: *mut gid_t,
+                        ngroups: *mut c_int) -> c_int;
 }
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
@@ -137,17 +151,31 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     }
 }
 
-pub fn get_group_list(name: *c_char, gid: gid_t) -> Result<Vec<gid_t>, int> {
-    let mut ngroups = 0 as c_int;
+pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
+    let mut ngroups: c_int = 32;
+    let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as uint);
 
-    unsafe { getgrouplist(name, gid, 0 as *mut gid_t, &mut ngroups) };
-    let mut groups = Vec::from_elem(ngroups as uint, 0 as gid_t);
-    let err = unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups) };
-    if err == -1 {
-        Err(os::errno())
+    if unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups as *mut c_int) } == -1 {
+        groups.reserve(ngroups as uint);
+        unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups); }
     } else {
         groups.truncate(ngroups as uint);
-        Ok(groups)
+    }
+    unsafe { groups.set_len(ngroups as uint); }
+
+    groups
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn getgrouplist(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
+    let ngroups = getgroupcount(name, gid);
+    let oldsize = *grcnt;
+    *grcnt = ngroups;
+    if oldsize >= ngroups {
+        getgroups(ngroups, groups);
+        0
+    } else {
+        -1
     }
 }
 
@@ -170,7 +198,7 @@ pub fn get_groups() -> Result<Vec<gid_t>, int> {
 pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
 
     let groups = match possible_pw {
-        Some(pw) => get_group_list(pw.pw_name, pw.pw_gid),
+        Some(pw) => Ok(get_group_list(pw.pw_name, pw.pw_gid)),
         None => get_groups(),
     };
 
