@@ -165,7 +165,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         _ => return match boot_time {
                 Some(t) => {
                     let now = unsafe { time(null()) };
-                    (now - t) * 100 // Return in ms
+                    ((now - t) * 100) as i64 // Return in ms
                 },
                 _ => -1
              }
