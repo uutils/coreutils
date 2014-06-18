@@ -121,51 +121,51 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
         None => (false, "".to_str())
     };
 
-    let mut char_pos = 0;
-    let mut print_delim = false;
-    let mut range_pos = 0;
-
-    loop {
-        let character = match reader.read_char() {
-            Ok(character) => character,
-            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => {
-                if char_pos > 0 {
-                    out.write_u8('\n' as u8).unwrap();
-                }
-                break
-            }
-            Err(std::io::IoError{ kind: std::io::InvalidInput, ..}) => {
-                fail!("Invalid utf8");
-            }
+    'newline: loop {
+        let line = match reader.read_line() {
+            Ok(line) => line,
+            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => break,
             _ => fail!(),
         };
 
-        if character == '\n' {
-            out.write_u8('\n' as u8).unwrap();
-            char_pos = 0;
-            print_delim = false;
-            range_pos = 0;
-        } else {
-            char_pos += 1;
+        let mut char_pos = 0;
+        let mut char_indices = line.as_slice().char_indices();
+        let mut print_delim = false;
 
-            if char_pos > ranges.get(range_pos).high {
-                range_pos += 1;
-            }
+        for &Range{ low: low, high: high } in ranges.iter() {
+            let low_idx = match char_indices.nth(low - char_pos - 1) {
+                Some((low_idx, _)) => low_idx,
+                None => break
+            };
 
-            let cur_range = *ranges.get(range_pos);
-
-            if char_pos >= cur_range.low {
-                if use_delim {
-                    if print_delim && char_pos == cur_range.low {
-                        out.write_str(out_delim.as_slice()).unwrap();
-                    }
-
-                    print_delim = true;
+            if use_delim {
+                if print_delim {
+                    out.write_str(out_delim.as_slice());
                 }
-
-                out.write_char(character).unwrap();
+                print_delim = true;
             }
+
+            match char_indices.nth(high - low) {
+                Some((high_idx, _)) => {
+                    let segment = line.as_bytes().slice(low_idx, high_idx);
+
+                    out.write(segment);
+                }
+                None => {
+                    let bytes = line.as_bytes();
+                    let segment = bytes.slice(low_idx, bytes.len());
+
+                    out.write(segment);
+
+                    if line.as_bytes()[bytes.len() - 1] == b'\n' {
+                        continue 'newline
+                    }
+                }
+            }
+
+            char_pos = high + 1;
         }
+        out.write(&[b'\n']);
     }
 
     0
@@ -215,8 +215,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
             let buf_file = match File::open(&path) {
                 Ok(file) => BufferedReader::new(file),
                 Err(e) => {
-                    show_error!("{0:s}: {1:s}", filename.as_slice(),
-                                e.desc.to_str());
+                    show_error!("{}: {}", filename, e.desc);
                     continue
                 }
             };
@@ -240,7 +239,6 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
 fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
     let opts = [
         optopt("b", "bytes", "select only these bytes", "LIST"),
         optopt("c", "characters", "select only these characters", "LIST"),
@@ -264,7 +262,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if matches.opt_present("help") {
         println!("Usage:");
-        println!("  {0:s} OPTION... [FILE]...", program);
+        println!("  {0} OPTION... [FILE]...", args.get(0));
         println!("");
         print(usage("Print selected parts of lines from each FILE to standard output.", opts).as_slice());
         println!("");
