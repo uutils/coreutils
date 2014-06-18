@@ -117,6 +117,8 @@ pub fn uumain(args: Vec<String>) -> int {
         matches.free
     };
 
+    let print_names = sysv || files.len() > 1;
+
     for file in files.iter() {
         let reader = match open(file.as_slice()) {
             Ok(f) => f,
@@ -128,7 +130,11 @@ pub fn uumain(args: Vec<String>) -> int {
             bsd_sum(reader)
         };
 
-        println!("{} {}", sum, blocks);
+        if print_names {
+            println!("{} {} {}", sum, blocks, file);
+        } else {
+            println!("{} {}", sum, blocks);
+        }
     }
 
     0
