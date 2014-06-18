@@ -21,5 +21,24 @@ static NAME: &'static str = "tsort";
 fn main() { os::set_exit_status(uumain(os::args())); }
 
 fn uumain(args: Vec<String>) -> int {
+
+	let mut Vec<node> nodes = build_graph(...);
+	tsort(&nodes);
+
+	// Now check for cycles and print out necessary stuff
+
 	return 0
+}
+
+fn build_graph(...) -> Vec<node> {
+
+}
+
+fn tsort(nodes: &mut Vec<node>) {
+	
+}
+
+// How we represent nodes
+struct node {
+
 }
