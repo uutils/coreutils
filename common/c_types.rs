@@ -155,7 +155,7 @@ pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
     let mut ngroups: c_int = 32;
     let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as uint);
 
-    if unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups as *mut c_int) } == -1 {
+    if unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
         groups.reserve(ngroups as uint);
         unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups); }
     } else {
