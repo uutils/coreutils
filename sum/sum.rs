@@ -111,23 +111,31 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let sysv = matches.opt_present("sysv");
 
-    let file = if matches.free.is_empty() {
-        "-"
+    let files = if matches.free.is_empty() {
+        Vec::from_elem(1, "-".to_string())
     } else {
-        matches.free.get(0).as_slice()
+        matches.free
     };
 
-    let reader = match open(file) {
-        Ok(f) => f,
-        _ => crash!(1, "unable to open file")
-    };
-    let (blocks, sum) = if sysv {
-        sysv_sum(reader)
-    } else {
-        bsd_sum(reader)
-    };
+    let print_names = sysv || files.len() > 1;
 
-    println!("{} {}", sum, blocks);
+    for file in files.iter() {
+        let reader = match open(file.as_slice()) {
+            Ok(f) => f,
+            _ => crash!(1, "unable to open file")
+        };
+        let (blocks, sum) = if sysv {
+            sysv_sum(reader)
+        } else {
+            bsd_sum(reader)
+        };
+
+        if print_names {
+            println!("{} {} {}", sum, blocks, file);
+        } else {
+            println!("{} {}", sum, blocks);
+        }
+    }
 
     0
 }
