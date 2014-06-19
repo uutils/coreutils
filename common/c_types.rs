@@ -161,7 +161,7 @@ pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
 #[cfg(target_os = "linux")]
 #[inline(always)]
 unsafe fn get_group_list_internal(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
-    getgrouplist(name, gid, groups, grcnt);
+    getgrouplist(name, gid, groups, grcnt)
 }
 
 #[cfg(target_os = "macos")]
