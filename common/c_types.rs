@@ -5,11 +5,11 @@ extern crate libc;
 use self::libc::{
     c_char,
     c_int,
-    int32_t,
     uid_t,
     gid_t,
 };
 #[cfg(target_os = "macos")] use self::libc::time_t;
+#[cfg(target_os = "macos")] use self::libc::int32_t;
 use self::libc::funcs::posix88::unistd::getgroups;
 
 use std::vec::Vec;
