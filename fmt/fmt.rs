@@ -24,8 +24,8 @@ use parasplit::{ParagraphStream, ParaWords};
 macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
-            Ok(_)   => (),
-            Err(_)  => unsafe { ::libc::exit(1) }
+            Ok(_) => (),
+            Err(_) => unsafe { ::libc::exit(1) }
         }
     )
 )
@@ -39,21 +39,21 @@ static NAME: &'static str = "fmt";
 static VERSION: &'static str = "0.0.1";
 
 struct FmtOptions {
-    crown       : bool,
-    tagged      : bool,
-    mail        : bool,
-    split_only  : bool,
-    use_prefix  : bool,
-    prefix      : String,
-    xprefix     : bool,
-    prefix_len  : uint,
+    crown           : bool,
+    tagged          : bool,
+    mail            : bool,
+    split_only      : bool,
+    use_prefix      : bool,
+    prefix          : String,
+    xprefix         : bool,
+    prefix_len      : uint,
     use_anti_prefix : bool,
-    anti_prefix : String,
-    xanti_prefix: bool,
-    uniform     : bool,
-    width       : uint,
-    goal        : uint,
-    tabwidth    : uint,
+    anti_prefix     : String,
+    xanti_prefix    : bool,
+    uniform         : bool,
+    width           : uint,
+    goal            : uint,
+    tabwidth        : uint,
 }
 
 #[allow(dead_code)]
@@ -97,71 +97,86 @@ fn uumain(args: Vec<String>) -> int {
         return 0
     }
 
-    let mut fmt_opts = FmtOptions { crown       : false
-                                  , tagged      : false
-                                  , mail        : false
-                                  , uniform     : false
-                                  , split_only  : false
-                                  , use_prefix  : false
-                                  , prefix      : String::new()
-                                  , xprefix     : false
-                                  , prefix_len  : 0
-                                  , use_anti_prefix : false
-                                  , anti_prefix : String::new()
-                                  , xanti_prefix: false
-                                  , width       : 78
-                                  , goal        : 72
-                                  , tabwidth    : 8
-                                  };
-    
+    let mut fmt_opts = FmtOptions {
+        crown           : false,
+        tagged          : false,
+        mail            : false,
+        uniform         : false,
+        split_only      : false,
+        use_prefix      : false,
+        prefix          : String::new(),
+        xprefix         : false,
+        prefix_len      : 0,
+        use_anti_prefix : false,
+        anti_prefix     : String::new(),
+        xanti_prefix    : false,
+        width           : 78,
+        goal            : 72,
+        tabwidth        : 8,
+    };
+
     if matches.opt_present("t") { fmt_opts.tagged       = true; }
     if matches.opt_present("c") { fmt_opts.crown        = true; fmt_opts.tagged = false; }
     if matches.opt_present("m") { fmt_opts.mail         = true; }
     if matches.opt_present("u") { fmt_opts.uniform      = true; }
-    if matches.opt_present("s") { fmt_opts.split_only   = true; fmt_opts.crown = false; fmt_opts.tagged = false; }
+    if matches.opt_present("s") { fmt_opts.split_only   = true; fmt_opts.crown  = false; fmt_opts.tagged = false; }
     if matches.opt_present("x") { fmt_opts.xprefix      = true; }
     if matches.opt_present("X") { fmt_opts.xanti_prefix = true; }
 
     match matches.opt_str("p") {
-        Some(s) => { fmt_opts.prefix = s; fmt_opts.use_prefix = true; fmt_opts.prefix_len = fmt_opts.prefix.as_slice().char_len() },
-        None    => ()
+        Some(s) => {
+            fmt_opts.prefix = s;
+            fmt_opts.use_prefix = true;
+            fmt_opts.prefix_len = fmt_opts.prefix.as_slice().char_len()
+        }
+        None => ()
     };
 
     match matches.opt_str("P") {
-        Some(s) => { fmt_opts.anti_prefix = s; fmt_opts.use_anti_prefix = true; },
-        None    => ()
+        Some(s) => {
+            fmt_opts.anti_prefix = s;
+            fmt_opts.use_anti_prefix = true;
+        }
+        None => ()
     };
 
     match matches.opt_str("w") {
-        Some(s) => { fmt_opts.width = match from_str(s.as_slice()) {
-                                        Some(t) => t,
-                                        None    => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
-                                      };
-                     fmt_opts.goal = std::cmp::min(fmt_opts.width * 92 / 100, fmt_opts.width - 4);
-                   },
-        None    => ()
+        Some(s) => {
+            fmt_opts.width =
+                match from_str(s.as_slice()) {
+                    Some(t) => t,
+                    None => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
+                };
+            fmt_opts.goal = std::cmp::min(fmt_opts.width * 92 / 100, fmt_opts.width - 4);
+        }
+        None => ()
     };
 
     match matches.opt_str("g") {
-        Some(s) => { fmt_opts.goal = match from_str(s.as_slice()) {
-                                        Some(t) => t,
-                                        None    => { crash!(1, "Invalid GOAL specification: `{}'", s); }
-                                     };
-                     if ! matches.opt_present("w") {
-                         fmt_opts.width = std::cmp::max(fmt_opts.goal * 100 / 92, fmt_opts.goal + 4);
-                     } else if fmt_opts.goal > fmt_opts.width {
-                         crash!(1, "GOAL cannot be greater than WIDTH.");
-                     }
-                   },
-        None    => ()
+        Some(s) => {
+            fmt_opts.goal =
+                match from_str(s.as_slice()) {
+                    Some(t) => t,
+                    None => { crash!(1, "Invalid GOAL specification: `{}'", s); }
+                };
+            if !matches.opt_present("w") {
+                fmt_opts.width = std::cmp::max(fmt_opts.goal * 100 / 92, fmt_opts.goal + 4);
+            } else if fmt_opts.goal > fmt_opts.width {
+                crash!(1, "GOAL cannot be greater than WIDTH.");
+            }
+        }
+        None => ()
     };
 
     match matches.opt_str("T") {
-        Some(s) => fmt_opts.tabwidth = match from_str(s.as_slice()) {
-                                        Some(t) => t,
-                                        None    => { crash!(1, "Invalid TABWIDTH specification: `{}'", s); }
-                                       },
-        None    => ()
+        Some(s) => {
+            fmt_opts.tabwidth =
+                match from_str(s.as_slice()) {
+                    Some(t) => t,
+                    None => { crash!(1, "Invalid TABWIDTH specification: `{}'", s); }
+                };
+        }
+        None => ()
     };
 
     if fmt_opts.tabwidth < 1 {
@@ -179,17 +194,19 @@ fn uumain(args: Vec<String>) -> int {
     let mut ostream = box BufferedWriter::new(stdout_raw()) as Box<Writer>;
 
     for i in files.iter().map(|x| x.as_slice()) {
-        let mut fp = match open_file(i) {
-                         Err(e) =>  { show_warning!("{}: {}",i,e);
-                                      continue;
-                                    }
-                         Ok(f)  => f
-                     };
+        let mut fp =
+            match open_file(i) {
+                Err(e) => {
+                    show_warning!("{}: {}",i,e);
+                    continue;
+                }
+                Ok(f) => f
+            };
         let mut pStream = ParagraphStream::new(&fmt_opts, &mut fp);
         for paraResult in pStream {
             match paraResult {
-                Err(s)      => silent_unwrap!(ostream.write(s.as_bytes())),
-                Ok(para)    => {
+                Err(s) => silent_unwrap!(ostream.write(s.as_bytes())),
+                Ok(para) => {
                     // indent
                     let pIndent = para.pfxind_str.clone().append(fmt_opts.prefix.as_slice()).append(para.indent_str.as_slice());
                     let pIndentLen = para.pfxind_len + fmt_opts.prefix_len + para.indent_len;
@@ -204,7 +221,7 @@ fn uumain(args: Vec<String>) -> int {
                             // handle "init" portion
                             silent_unwrap!(ostream.write(para.init_str.as_bytes()));
                             para.init_len
-                        } else if ! para.mail_header {
+                        } else if !para.mail_header {
                             // for non-(crown, tagged) that's the same as a normal indent
                             silent_unwrap!(ostream.write(pIndent.as_bytes()));
                             pIndentLen
@@ -243,8 +260,8 @@ fn open_file(filename: &str) -> IoResult<FileOrStdReader> {
         Ok(BufferedReader::new(box stdin_raw() as Box<Reader>))
     } else {
         match File::open(&Path::new(filename)) {
-            Ok(f)   => Ok(BufferedReader::new(box f as Box<Reader>)),
-            Err(e)  => return Err(e)
+            Ok(f) => Ok(BufferedReader::new(box f as Box<Reader>)),
+            Err(e) => return Err(e)
         }
     }
 }
