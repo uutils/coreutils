@@ -200,11 +200,11 @@ ers of 1000).",
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
             println!("{}: warning: summarizing conflicts with --max-depth={:s}", program, *s);
-            return 0;
+            return 1;
         }
         (Some(ref s), None) => {
             println!("{}: invalid maximum depth '{:s}'", program, *s);
-            return 0;
+            return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
     }
@@ -239,7 +239,7 @@ ers of 1000).",
             for c in s.as_slice().chars() {
                 if found_letter && c.is_digit() || !found_number && !c.is_digit() {
                     println!("{}: invalid --block-size argument '{}'", program, s);
-                    return 0;
+                    return 1;
                 } else if c.is_digit() {
                     found_number = true;
                     numbers.push(c as u8);
@@ -261,7 +261,8 @@ ers of 1000).",
                 "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 _ => {
-                    println!("{}: invalid --block-size argument '{}'", program, s); return 0;
+                    println!("{}: invalid --block-size argument '{}'", program, s);
+                    return 1;
                 }
             };
             number * multiple
@@ -300,7 +301,7 @@ Valid arguments are:
 - 'long-iso'
 - 'iso'
 Try '{program} --help' for more information.", s, program = program);
-                    return 0;
+                    return 1;
                 }
             }
         },
@@ -339,7 +340,7 @@ Try '{program} --help' for more information.", s, program = program);
     Valid arguments are:
       - 'accessed', 'created', 'modified'
     Try '{program} --help' for more information.", program = program);
-                                    return 0;
+                                    return 1;
                                 }
                             },
                             None => stat.fstat.modified
