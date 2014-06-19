@@ -8,8 +8,7 @@ use self::libc::{
     uid_t,
     gid_t,
 };
-#[cfg(target_os = "macos")] use self::libc::time_t;
-#[cfg(target_os = "macos")] use self::libc::int32_t;
+#[cfg(target_os = "macos")] use self::libc::{int32_t, time_t};
 use self::libc::funcs::posix88::unistd::getgroups;
 
 use std::vec::Vec;
