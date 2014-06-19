@@ -61,19 +61,22 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
 
     let mut bytes = vec!();
     for offset in range(0, max_digits) {
+        if string.len() <= index + offset as uint {
+            break;
+        }
         let c = string[index + offset as uint];
         if is_legal_digit(c) {
             bytes.push(c as u8);
         } else {
-            if bytes.len() > 0 {
-                return (to_char(&bytes, base), offset);
-            } else {
-                return (' ', offset);
-            }
+            break;
         }
     }
 
-    (to_char(&bytes, base), max_digits)
+    if bytes.len() == 0 {
+        (' ', 0)
+    } else {
+        (to_char(&bytes, base), bytes.len() as int)
+    }
 }
 
 fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<String>> {
@@ -181,8 +184,7 @@ pub fn uumain(args: Vec<String>) -> int {
                                 '0' => {
                                     let (c, num_char_used) = convert_str(string.as_slice(), index + 1, 8u);
                                     if num_char_used == 0 {
-                                        print_char('\\');
-                                        print_char('0');
+                                        print_char('\0');
                                     } else {
                                         print_char(c);
                                         for _ in range(0, num_char_used) {
