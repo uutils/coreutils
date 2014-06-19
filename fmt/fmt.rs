@@ -59,7 +59,7 @@ struct FmtOptions {
 #[allow(dead_code)]
 fn main() { os::set_exit_status(uumain(os::args())) }
 
-fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> int {
 
     let opts = [
         getopts::optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line."),

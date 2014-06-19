@@ -42,7 +42,7 @@ extern crate rmdir;
 extern crate seq;
 extern crate sleep;
 extern crate sum;
-extern crate sync;
+//extern crate sync;
 extern crate tac;
 extern crate tail;
 extern crate tee;
@@ -60,6 +60,11 @@ extern crate yes;
 
 use std::os;
 use std::collections::hashmap::HashMap;
+
+// TODO: find a way to use extern crate for this
+#[path = "../sync/sync.rs"]
+#[allow(unused_attribute)]
+mod sync;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
