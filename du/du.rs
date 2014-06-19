@@ -271,9 +271,9 @@ ers of 1000).",
 
     let convert_size = |size: u64| -> String {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            if size > MB {
+            if size >= MB {
                 format!("{:.1f}M", (size as f64) / (MB as f64))
-            } else if size > KB {
+            } else if size >= KB {
                 format!("{:.1f}K", (size as f64) / (KB as f64))
             } else {
                 format!("{}B", size)
@@ -350,11 +350,11 @@ Try '{program} --help' for more information.", s, program = program);
                     time::at(time_spec).strftime(time_format_str)
                 };
                 if !summarize || (summarize && index == len-1) {
-                    print!("{:<10} {:<30} {}{}", convert_size(size), time_str, stat.path.display(), line_separator);
+                    print!("{}\t{}\t{}{}", convert_size(size), time_str, stat.path.display(), line_separator);
                 }
             } else {
                 if !summarize || (summarize && index == len-1) {
-                    print!("{:<10} {}{}", convert_size(size), stat.path.display(), line_separator);
+                    print!("{}\t{}{}", convert_size(size), stat.path.display(), line_separator);
                 }
             }
             if options_arc.total && index == (len - 1) {
@@ -366,7 +366,7 @@ Try '{program} --help' for more information.", s, program = program);
     }
 
     if options_arc.total {
-        print!("{:<10} total", convert_size(grand_total));
+        print!("{}\ttotal", convert_size(grand_total));
         print!("{}", line_separator);
     }
 
