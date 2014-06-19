@@ -42,7 +42,7 @@ extern crate rmdir;
 extern crate seq;
 extern crate sleep;
 extern crate sum;
-extern crate sync;
+extern crate uusync;
 extern crate tac;
 extern crate tail;
 extern crate tee;
@@ -101,7 +101,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     map.insert("seq", seq::uumain);
     map.insert("sleep", sleep::uumain);
     map.insert("sum", sum::uumain);
-    map.insert("sync", sync::uumain);
+    map.insert("sync", uusync::uumain);
     map.insert("tac", tac::uumain);
     map.insert("tail", tail::uumain);
     map.insert("tee", tee::uumain);
