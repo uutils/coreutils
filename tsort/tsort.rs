@@ -28,6 +28,7 @@ fn uumain(args: Vec<String>) -> int {
 	print_nodes(sorted, /* stdout */);
 
 	if nodes.length() > 0 {
+		// Print error message to stderr
 		print_nodes(nodes, /* stderr */);
 		return 1;  // error because there were extras
 	}
