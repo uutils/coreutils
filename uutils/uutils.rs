@@ -117,17 +117,17 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
 }
 
 fn usage(cmap: &HashMap<&str, fn(Vec<String>) -> int>) {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [util [arguments...]", NAME);
-        println!("Currently defined functions:");
-        let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
-        utils.sort();
-        for util in utils.iter() {
-            println!("\t{}", util);
-        }
-        println!("");
+    println!("{} {}", NAME, VERSION);
+    println!("");
+    println!("Usage:");
+    println!("  {} [util [arguments...]", NAME);
+    println!("Currently defined functions:");
+    let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
+    utils.sort();
+    for util in utils.iter() {
+        println!("\t{}", util);
+    }
+    println!("");
 }
 
 fn main() {

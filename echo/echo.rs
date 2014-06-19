@@ -20,8 +20,14 @@ use std::uint;
 #[path = "../common/util.rs"]
 mod util;
 
+#[allow(dead_code)]
 static NAME: &'static str = "echo";
 static VERSION: &'static str = "1.0.0";
+
+struct EchoOptions {
+    newline: bool,
+    escape: bool
+}
 
 fn print_char(c: char) {
     print!("{}", c);
@@ -70,33 +76,27 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, int) {
     (to_char(&bytes, base), max_digits)
 }
 
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
-
-pub fn uumain(args: Vec<String>) -> int {
+fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<String>> {
+    let mut echo_args = vec!();
     let program = args.get(0).clone();
-    let opts = [
-        getopts::optflag("n", "", "do not output the trailing newline"),
-        getopts::optflag("e", "", "enable interpretation of backslash escapes"),
-        getopts::optflag("E", "", "disable interpretation of backslash escapes (default)"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-
-    let matches = match getopts::getopts(args.tail(), opts) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
-    };
-
-    if matches.opt_present("help") {
-        println!("echo {:s} - display a line of text", VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0:s} [SHORT-OPTION]... [STRING]...", program);
-        println!("  {0:s} LONG-OPTION", program);
-        println!("");
-        println(getopts::usage("Echo the STRING(s) to standard output.", opts).as_slice());
-        println("If -e is in effect, the following sequences are recognized:
+    for arg in args.move_iter().skip(1) {
+        match arg.as_slice() {
+            "--help" | "-h" => {
+                let opts = [
+                    getopts::optflag("n", "", "do not output the trailing newline"),
+                    getopts::optflag("e", "", "enable interpretation of backslash escapes"),
+                    getopts::optflag("E", "", "disable interpretation of backslash escapes (default)"),
+                    getopts::optflag("h", "help", "display this help and exit"),
+                    getopts::optflag("V", "version", "output version information and exit"),
+                ];
+                println!("echo {:s} - display a line of text", VERSION);
+                println!("");
+                println!("Usage:");
+                println!("  {0:s} [SHORT-OPTION]... [STRING]...", program);
+                println!("  {0:s} LONG-OPTION", program);
+                println!("");
+                println(getopts::usage("Echo the STRING(s) to standard output.", opts).as_slice());
+                println("If -e is in effect, the following sequences are recognized:
 
 \\\\      backslash
 \\a      alert (BEL)
@@ -110,17 +110,38 @@ pub fn uumain(args: Vec<String>) -> int {
 \\v      vertical tab
 \\0NNN   byte with octal value NNN (1 to 3 digits)
 \\xHH    byte with hexadecimal value HH (1 to 2 digits)");
-        return 0;
+                return None;
+            }
+            "--version" | "-V" => {
+                println!("echo version: {:s}", VERSION);
+                return None;
+            }
+            "-n" => options.newline = true,
+            "-e" => options.escape = true,
+            "-E" => options.escape = false,
+            _ => echo_args.push(arg)
+        }
     }
+    Some(echo_args)
+}
 
-    if matches.opt_present("version") {
-        println!("echo version: {:s}", VERSION);
-        return 0;
-    }
+#[allow(dead_code)]
+fn main() { os::set_exit_status(uumain(os::args())); }
 
-    if !matches.free.is_empty() {
-        let string = matches.free.connect(" ");
-        if matches.opt_present("e") {
+pub fn uumain(args: Vec<String>) -> int {
+    let mut options = EchoOptions {
+        newline: false,
+        escape: false
+    };
+
+    let free = match parse_options(args, &mut options) {
+        Some(vec) => vec,
+        None => return 0
+    };
+
+    if !free.is_empty() {
+        let string = free.connect(" ");
+        if options.escape {
             let mut prev_was_slash = false;
             let mut iter = string.as_slice().chars().enumerate();
             loop {
@@ -184,7 +205,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    if !matches.opt_present("n") {
+    if !options.newline {
         println!("")
     }
 
