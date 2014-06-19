@@ -23,10 +23,12 @@ fn main() { os::set_exit_status(uumain(os::args())); }
 fn uumain(args: Vec<String>) -> int {
 
 	let mut nodes = build_graph(...);
-	tsort(&nodes);
+	let sorted = tsort(&nodes);
+
+	print_nodes(sorted, /* stdout */);
 
 	if nodes.length() > 0 {
-		print_extras(nodes);
+		print_nodes(nodes, /* stderr */);
 		return 1;  // error because there were extras
 	}
 
@@ -44,16 +46,17 @@ fn build_graph(...) -> Box<Vec<node>> {
 }
 
 // Topological sort the passed nodes. This is done by removing nodes, one by one,
-// from the vector. Only nodes with in-degree 0 will be removed. If no nodes
-// have in-degree 0, none will be removed. Thus, if this function returns and the
-// vector still has nodes in it, there is a cycle.
-fn tsort(nodes: &mut Box<Vec<node>>) {
+// from the vector and placed into the return vector. Only nodes with in-degree
+// 0 will be removed. If no nodes have in-degree 0, none will be removed.
+// Thus, if this function returns and the passed vector still has nodes in it
+// (i.e. if the returned vector is shorter than the initial vector was), there
+// is a cycle.
+fn tsort(nodes: &mut Box<Vec<node>>) -> Box<Vec<node>> {
 
 }
 
-// Prints all the nodes in the passed vector to stderr. Should be called if 
-// there's a cycle in the graph
-fn print_extras(nodes: Box<Vec<Node>>) {
+// Prints all the nodes in the passed vector to the passed stream.
+fn print_nodes(nodes: Box<Vec<Node>>, /* somehow a stream */) {
 
 }
 
