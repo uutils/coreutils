@@ -196,7 +196,7 @@ busytest:
 	@false
 else
 busytest: build/busybox build/.config
-	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(SRC_DIR)/build tstdir=$(BUSYBOX_SRC)/testsuite $(BUSYBOX_SRC)/testsuite/runtest $(RUNTEST_ARGS))
+	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(SRC_DIR)/build ./runtest $(RUNTEST_ARGS))
 endif
 endif
 
