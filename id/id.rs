@@ -21,7 +21,6 @@ extern crate libc;
 use std::os;
 use std::ptr::read;
 use libc::{
-    c_int,
     uid_t,
     getgid,
     getuid
