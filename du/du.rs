@@ -199,11 +199,11 @@ ers of 1000).",
     let max_depth = max_depth_str.as_ref().and_then(|s| from_str::<uint>(s.as_slice()));
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
-            println!("{}: warning: summarizing conflicts with --max-depth={:s}", program, *s);
+            show_error!("summarizing conflicts with --max-depth={:s}", *s);
             return 1;
         }
         (Some(ref s), None) => {
-            println!("{}: invalid maximum depth '{:s}'", program, *s);
+            show_error!("invalid maximum depth '{:s}'", *s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
@@ -238,7 +238,7 @@ ers of 1000).",
             let mut letters = vec!();
             for c in s.as_slice().chars() {
                 if found_letter && c.is_digit() || !found_number && !c.is_digit() {
-                    println!("{}: invalid --block-size argument '{}'", program, s);
+                    show_error!("invalid --block-size argument '{}'", s);
                     return 1;
                 } else if c.is_digit() {
                     found_number = true;
@@ -261,7 +261,7 @@ ers of 1000).",
                 "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 _ => {
-                    println!("{}: invalid --block-size argument '{}'", program, s);
+                    show_error!("invalid --block-size argument '{}'", s);
                     return 1;
                 }
             };
@@ -295,12 +295,12 @@ ers of 1000).",
                 "long-iso" => "%Y-%m-%d %H:%M",
                 "iso" => "%Y-%m-%d",
                 _ => {
-                    println!("{program}: invalid argument '{}' for 'time style'
+                    show_error!("invalid argument '{}' for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
-Try '{program} --help' for more information.", s, program = program);
+Try '{} --help' for more information.", s, program);
                     return 1;
                 }
             }
@@ -336,10 +336,10 @@ Try '{program} --help' for more information.", s, program = program);
                                 "created" => stat.fstat.created,
                                 "modified" => stat.fstat.modified,
                                 _ => {
-                                    println!("{program}: invalid argument 'modified' for '--time'
+                                    show_error!("invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
-    Try '{program} --help' for more information.", program = program);
+    Try '{} --help' for more information.", program);
                                     return 1;
                                 }
                             },
