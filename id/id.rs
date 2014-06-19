@@ -21,7 +21,6 @@ extern crate libc;
 use std::os;
 use std::ptr::read;
 use libc::{
-    c_int,
     uid_t,
     getgid,
     getuid
@@ -342,7 +341,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     }
 
     let groups = match possible_pw {
-        Some(pw) => get_group_list(pw.pw_name, pw.pw_gid),
+        Some(pw) => Ok(get_group_list(pw.pw_name, pw.pw_gid)),
         None => get_groups(),
     };
 

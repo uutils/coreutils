@@ -97,9 +97,10 @@ command     = sh -c '$(1)'
 
 # Main exe build rule
 define EXE_BUILD
+-include build/$(1).d
 ifeq ($(wildcard $(1)/Makefile),)
 build/$(1): $(1)/$(1).rs | build
-	$(call command,$(RUSTC) $(RUSTCFLAGS) -o build/$(1) $(1)/$(1).rs)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --dep-info build/$(1).d -o build/$(1) $(1)/$(1).rs)
 clean_$(1):
 else
 build/$(1): $(1)/$(1).rs | build
@@ -110,8 +111,9 @@ endif
 endef
 
 define CRATE_BUILD
+-include build/$(1).d
 build/$(2): $(1)/$(1).rs | build
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --crate-type rlib $(1)/$(1).rs --out-dir build)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
 endef
 
 # Test exe built rules
@@ -129,8 +131,10 @@ all: $(EXES_PATHS)
 else
 all: build/uutils
 
+-include build/uutils.d
+
 build/uutils: uutils/uutils.rs $(addprefix build/, $(foreach crate,$(CRATES),$(shell $(RUSTC) --crate-type rlib --crate-file-name $(crate)/$(crate).rs)))
-	$(RUSTC) $(RUSTCFLAGS) -L build/ uutils/uutils.rs -o $@
+	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d uutils/uutils.rs -o $@
 endif
 
 test: tmp $(addprefix test_,$(TESTS))
