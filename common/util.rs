@@ -32,7 +32,7 @@ macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
         safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         safe_writeln!(&mut ::std::io::stderr(), $($args),+);
-        unsafe { self::libc::exit($exitcode as self::libc::c_int); }
+        unsafe { ::util::libc::exit($exitcode as ::util::libc::c_int); }
     })
 )
 
@@ -40,7 +40,7 @@ macro_rules! crash(
 #[macro_export]
 macro_rules! exit(
     ($exitcode:expr) => ({
-        unsafe { self::libc::exit($exitcode); }
+        unsafe { ::util::libc::exit($exitcode); }
     })
 )
 
