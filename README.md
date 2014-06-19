@@ -134,7 +134,6 @@ To do
 - dircolors
 - expand (in progress)
 - expr
-- fmt
 - getlimits
 - install
 - join

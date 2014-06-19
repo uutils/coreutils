@@ -19,6 +19,7 @@ PROGS       := \
   du \
   factor \
   false \
+  fmt \
   fold \
   md5sum \
   mkdir \
