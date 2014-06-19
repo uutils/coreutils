@@ -82,27 +82,19 @@ pub struct c_tm {
 }
 
 extern {
-    pub fn setgrent();
-    pub fn endgrent();
-
     pub fn getpwuid(uid: uid_t) -> *c_passwd;
     pub fn getpwnam(login: *c_char) -> *c_passwd;
-    pub fn getgrent() -> *c_group;
     pub fn getgrgid(gid: gid_t) -> *c_group;
     pub fn getgrnam(name: *c_char) -> *c_group;
+    pub fn getgrouplist(name: *c_char,
+                        gid: gid_t,
+                        groups: *mut gid_t,
+                        ngroups: *mut c_int) -> c_int;
 }
 
 #[cfg(target_os = "macos")]
 extern {
     pub fn getgroupcount(name: *c_char, gid: gid_t) -> int32_t;
-}
-
-#[cfg(target_os = "linux")]
-extern {
-    pub fn getgrouplist(name: *c_char,
-                        gid: gid_t,
-                        groups: *mut gid_t,
-                        ngroups: *mut c_int) -> c_int;
 }
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
@@ -155,9 +147,9 @@ pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
     let mut ngroups: c_int = 32;
     let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as uint);
 
-    if unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
+    if unsafe { get_group_list_internal(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
         groups.reserve(ngroups as uint);
-        unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups); }
+        unsafe { get_group_list_internal(name, gid, groups.as_mut_ptr(), &mut ngroups); }
     } else {
         groups.truncate(ngroups as uint);
     }
@@ -166,13 +158,19 @@ pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
     groups
 }
 
+#[cfg(target_os = "linux")]
+#[inline(always)]
+unsafe fn get_group_list_internal(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
+    getgrouplist(name, gid, groups, grcnt);
+}
+
 #[cfg(target_os = "macos")]
-unsafe fn getgrouplist(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
+unsafe fn get_group_list_internal(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
     let ngroups = getgroupcount(name, gid);
     let oldsize = *grcnt;
     *grcnt = ngroups;
     if oldsize >= ngroups {
-        getgroups(ngroups, groups);
+        getgrouplist(name, gid, groups, grcnt);
         0
     } else {
         -1
