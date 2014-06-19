@@ -1,4 +1,4 @@
-#![crate_id(name="fmt", vers="0.0.1", author="kwantam")]
+#![crate_id(name="fmt", vers="0.0.2", author="kwantam")]
 /*
  * This file is part of `fmt` from the uutils coreutils package.
  *
@@ -12,20 +12,19 @@
 
 extern crate core;
 extern crate getopts;
-extern crate libc;
 
 use std::io::{BufferedReader, BufferedWriter, File, IoResult};
-use std::io::stdio::{stdin_raw, stdout_raw, stdout};
+use std::io::stdio::{stdin_raw, stdout_raw};
 use std::os;
-use linebreak::break_simple;
-use parasplit::{ParagraphStream, ParaWords};
+use linebreak::break_lines;
+use parasplit::ParagraphStream;
 
 #[macro_export]
 macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
             Ok(_) => (),
-            Err(_) => unsafe { ::libc::exit(1) }
+            Err(_) => unsafe { ::util::libc::exit(1) }
         }
     )
 )
@@ -36,7 +35,7 @@ mod parasplit;
 
 // program's NAME and VERSION are used for -V and -h
 static NAME: &'static str = "fmt";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = "0.0.2";
 
 struct FmtOptions {
     crown           : bool,
@@ -46,7 +45,6 @@ struct FmtOptions {
     use_prefix      : bool,
     prefix          : String,
     xprefix         : bool,
-    prefix_len      : uint,
     use_anti_prefix : bool,
     anti_prefix     : String,
     xanti_prefix    : bool,
@@ -106,7 +104,6 @@ pub fn uumain(args: Vec<String>) -> int {
         use_prefix      : false,
         prefix          : String::new(),
         xprefix         : false,
-        prefix_len      : 0,
         use_anti_prefix : false,
         anti_prefix     : String::new(),
         xanti_prefix    : false,
@@ -127,7 +124,6 @@ pub fn uumain(args: Vec<String>) -> int {
         Some(s) => {
             fmt_opts.prefix = s;
             fmt_opts.use_prefix = true;
-            fmt_opts.prefix_len = fmt_opts.prefix.as_slice().char_len()
         }
         None => ()
     };
@@ -206,36 +202,7 @@ pub fn uumain(args: Vec<String>) -> int {
         for paraResult in pStream {
             match paraResult {
                 Err(s) => silent_unwrap!(ostream.write(s.as_bytes())),
-                Ok(para) => {
-                    // indent
-                    let pIndent = para.pfxind_str.clone().append(fmt_opts.prefix.as_slice()).append(para.indent_str.as_slice());
-                    let pIndentLen = para.pfxind_len + fmt_opts.prefix_len + para.indent_len;
-
-                    // words
-                    let pWords = ParaWords::new(&fmt_opts, &para);
-                    let mut pWords_words = pWords.words().map(|&x| x);
-
-                    // print the init, if it exists, and get its length
-                    let pInitLen =
-                        if fmt_opts.crown || fmt_opts.tagged {
-                            // handle "init" portion
-                            silent_unwrap!(ostream.write(para.init_str.as_bytes()));
-                            para.init_len
-                        } else if !para.mail_header {
-                            // for non-(crown, tagged) that's the same as a normal indent
-                            silent_unwrap!(ostream.write(pIndent.as_bytes()));
-                            pIndentLen
-                        } else {
-                            // except that mail headers get no indent at all
-                            0
-                        };
-
-                    // does ths paragraph require uniform spacing?
-                    let uniform = para.mail_header || fmt_opts.uniform;
-
-                    break_simple(&mut pWords_words, fmt_opts.width, pIndent.as_slice(), pIndentLen, pInitLen, uniform, &mut ostream);
-                    silent_unwrap!(ostream.write("\n".as_bytes()));
-                }
+                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
             }
         }
 
@@ -247,7 +214,9 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
-    break_simple(&mut getopts::short_usage(arg0, opts).as_slice().words(), 64, "       ", 7, 0, true, &mut(box stdout() as Box<Writer>));
+    let short_usage = getopts::short_usage(arg0, opts);
+    println!("{}", short_usage.as_slice().slice_to(60));
+    print!("      {}", short_usage.as_slice().slice_from(60));
     println!("\n\n{}{}", getopts::usage("Reformat paragraphs from input files (or stdin) to stdout.", opts), errmsg);
 }
 
