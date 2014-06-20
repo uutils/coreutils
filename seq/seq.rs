@@ -15,13 +15,14 @@ mod util;
 
 static NAME: &'static str = "seq";
 
-fn print_usage(opts: &[getopts::OptGroup]) {
-    println!("seq 1.0.0\n");
-    println!("Usage:\n  seq [-w] [-s string] [-t string] [first [step]] last\n");
-    println!("{:s}", getopts::usage("Print sequences of numbers", opts));
+#[deriving(Clone)]
+struct SeqOptions {
+    separator: String,
+    terminator: Option<String>,
+    widths: bool
 }
 
-fn parse_float(s: &str) -> Result<f32, String>{
+fn parse_float(s: &str) -> Result<f64, String>{
     match from_str(s) {
         Some(n) => Ok(n),
         None => Err(format!("seq: invalid floating point argument: {:s}", s))
@@ -33,10 +34,95 @@ fn escape_sequences(s: &str) -> String {
         replace("\\t", "\t")
 }
 
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
+fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, int> {
+    let mut seq_args = vec!();
+    let program = args.get(0).clone();
+    let mut iter = args.move_iter().skip(1);
+    loop {
+        match iter.next() {
+            Some(arg) => match arg.as_slice() {
+                "--help" | "-h" => {
+                    print_help(&program);
+                    return Err(0);
+                }
+                "--version" | "-V" => {
+                    print_version();
+                    return Err(0);
+                }
+                "-s" | "--separator" => match iter.next() {
+                    Some(sep) => options.separator = sep,
+                    None => {
+                        show_error!("expected a separator after {}", arg);
+                        return Err(1);
+                    }
+                },
+                "-t" | "--terminator" => match iter.next() {
+                    Some(term) => options.terminator = Some(term),
+                    None => {
+                        show_error!("expected a terminator after '{}'", arg);
+                        return Err(1);
+                    }
+                },
+                "-w" | "--widths" => options.widths = true,
+                _ => {
+                    if arg.len() > 1 && arg.as_slice().char_at(0) == '-' {
+                        let argptr: *String = &arg;  // escape from the borrow checker
+                        let mut chiter = unsafe { (*argptr).as_slice() }.chars().skip(1);
+                        let mut ch = ' ';
+                        while match chiter.next() { Some(m) => { ch = m; true } None => false } {
+                            match ch {
+                                'h' => {
+                                    print_help(&program);
+                                    return Err(0);
+                                }
+                                'V' => {
+                                    print_version();
+                                    return Err(0);
+                                }
+                                's' => match iter.next() {
+                                    Some(sep) => {
+                                        options.separator = sep;
+                                        let next = chiter.next();
+                                        if next.is_some() {
+                                            show_error!("unexpected character ('{}')", next.unwrap());
+                                            return Err(1);
+                                        }
+                                    }
+                                    None => {
+                                        show_error!("expected a separator after {}", arg);
+                                        return Err(1);
+                                    }
+                                },
+                                't' => match iter.next() {
+                                    Some(term) => {
+                                        options.terminator = Some(term);
+                                        let next = chiter.next();
+                                        if next.is_some() {
+                                            show_error!("unexpected character ('{}')", next.unwrap());
+                                            return Err(1);
+                                        }
+                                    }
+                                    None => {
+                                        show_error!("expected a terminator after {}", arg);
+                                        return Err(1);
+                                    }
+                                },
+                                'w' => options.widths = true,
+                                _ => { seq_args.push(arg); break }
+                            }
+                        }
+                    } else {
+                        seq_args.push(arg);
+                    }
+                }
+            },
+            None => break
+        }
+    }
+    Ok(seq_args)
+}
 
-pub fn uumain(args: Vec<String>) -> int {
+fn print_help(program: &String) {
     let opts = [
         getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
         getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),
@@ -44,62 +130,73 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "print this help text and exit"),
         getopts::optflag("V", "version", "print version and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
-        Ok(m) => { m }
-        Err(f) => {
-            show_error!("{}", f);
-            print_usage(opts);
-            return 1;
-        }
+    println!("seq 1.0.0\n");
+    println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n", *program);
+    println!("{:s}", getopts::usage("Print sequences of numbers", opts));
+}
+
+fn print_version() {
+    println!("seq 1.0.0\n");
+}
+
+#[allow(dead_code)]
+fn main() { os::set_exit_status(uumain(os::args())); }
+
+pub fn uumain(args: Vec<String>) -> int {
+    let program = args.get(0).clone();
+    let mut options = SeqOptions {
+        separator: "\n".to_string(),
+        terminator: None,
+        widths: false
     };
-    if matches.opt_present("help") {
-        print_usage(opts);
-        return 0;
+    let free = match parse_options(args, &mut options) {
+        Ok(m) => m,
+        Err(f) => return f
+    };
+    if free.len() < 1 || free.len() > 3 {
+        crash!(1, "too {} operands.\nTry '{} --help' for more information.",
+               if free.len() < 1 { "few" } else { "many" }, program);
     }
-    if matches.opt_present("version") {
-        println!("seq 1.0.0");
-        return 0;
-    }
-    if matches.free.len() < 1 || matches.free.len() > 3 {
-        print_usage(opts);
-        return 1;
-    }
-    let first = if matches.free.len() > 1 {
-        match parse_float(matches.free.get(0).as_slice()) {
+    let first = if free.len() > 1 {
+        match parse_float(free.get(0).as_slice()) {
             Ok(n) => n,
             Err(s) => { show_error!("{:s}", s); return 1; }
         }
     } else {
         1.0
     };
-    let step = if matches.free.len() > 2 {
-        match parse_float(matches.free.get(1).as_slice()) {
+    let step = if free.len() > 2 {
+        match parse_float(free.get(1).as_slice()) {
             Ok(n) => n,
             Err(s) => { show_error!("{:s}", s); return 1; }
         }
     } else {
         1.0
     };
-    let last = match parse_float(matches.free.get(matches.free.len()-1).as_slice()) {
+    let last = match parse_float(free.get(free.len()-1).as_slice()) {
         Ok(n) => n,
         Err(s) => { show_error!("{:s}", s); return 1; }
     };
-    let separator = escape_sequences(matches.opt_str("s").unwrap_or("\n".to_string()).as_slice());
-    let terminator = escape_sequences(matches.opt_str("t").unwrap_or(separator.to_string()).as_slice());
-    print_seq(first, step, last, separator, terminator, matches.opt_present("w"));
+    let separator = escape_sequences(options.separator.as_slice());
+    let terminator = match options.terminator {
+        Some(term) => escape_sequences(term.as_slice()),
+        None => separator.clone()
+    };
+    print_seq(first, step, last, separator, terminator, options.widths);
 
     0
 }
 
-fn done_printing(next: f32, step: f32, last: f32) -> bool {
-    if step > 0f32 {
+#[inline(always)]
+fn done_printing(next: f64, step: f64, last: f64) -> bool {
+    if step > 0f64 {
         next > last
     } else {
         next < last
     }
 }
 
-fn print_seq(first: f32, step: f32, last: f32, separator: String, terminator: String, pad: bool) {
+fn print_seq(first: f64, step: f64, last: f64, separator: String, terminator: String, pad: bool) {
     let mut i = first;
     let maxlen = first.max(last).to_str().len();
     while !done_printing(i, step, last) {
@@ -115,5 +212,7 @@ fn print_seq(first: f32, step: f32, last: f32, separator: String, terminator: St
             print!("{:s}", separator);
         }
     }
-    print!("{:s}", terminator);
+    if i != first {
+        print!("{:s}", terminator);
+    }
 }
