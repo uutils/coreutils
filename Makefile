@@ -99,21 +99,15 @@ command     = sh -c '$(1)'
 # Main exe build rule
 define EXE_BUILD
 -include build/$(1).d
-ifeq ($(wildcard $(1)/Makefile),)
-build/$(1): $(1)/$(1).rs | build
+
+build/$(1): $(1)/$(1).rs deps | build
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info build/$(1).d -o build/$(1) $(1)/$(1).rs)
-clean_$(1):
-else
-build/$(1): $(1)/$(1).rs | build
-	cd $(1) && make
-clean_$(1):
-	cd $(1) && make clean
-endif
 endef
 
 define CRATE_BUILD
 -include build/$(1).d
-build/$(2): $(1)/$(1).rs | build
+
+build/$(2): $(1)/$(1).rs deps | build
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
 endef
 
@@ -139,17 +133,17 @@ build/uutils: uutils/uutils.rs $(addprefix build/, $(foreach crate,$(CRATES),$(s
 endif
 
 # Dependencies
-LIBCRYPTO := $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
+LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
 -include build/rust-crypto.d
-build/$(LIBCRYPTO):
+build/$(LIBCRYPTO): build
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
 
-deps: build build/$(LIBCRYPTO)
+deps: build/$(LIBCRYPTO)
 
 test: tmp $(addprefix test_,$(TESTS))
 	$(RM) -rf tmp
 
-clean: $(addprefix clean_,$(EXES))
+clean:
 	$(RM) -rf build tmp
 
 build:
