@@ -70,7 +70,7 @@ EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 CRATES      := \
-  $(sort $(filter $(EXES), $(filter-out md5sum true false, $(EXES))))
+  $(sort $(filter $(EXES), $(filter-out true false, $(EXES))))
 
 INSTALL     ?= $(EXES)
 
@@ -95,12 +95,13 @@ TESTS       := \
 EXES_PATHS  := $(addprefix build/,$(EXES))
 command     = sh -c '$(1)'
 
+
 # Main exe build rule
 define EXE_BUILD
 -include build/$(1).d
 ifeq ($(wildcard $(1)/Makefile),)
 build/$(1): $(1)/$(1).rs | build
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --dep-info build/$(1).d -o build/$(1) $(1)/$(1).rs)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info build/$(1).d -o build/$(1) $(1)/$(1).rs)
 clean_$(1):
 else
 build/$(1): $(1)/$(1).rs | build
@@ -113,7 +114,7 @@ endef
 define CRATE_BUILD
 -include build/$(1).d
 build/$(2): $(1)/$(1).rs | build
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
 endef
 
 # Test exe built rules
@@ -127,15 +128,23 @@ endef
 
 # Main rules
 ifneq ($(MULTICALL), 1)
-all: $(EXES_PATHS)
+all: deps $(EXES_PATHS)
 else
-all: build/uutils
+all: deps build/uutils
 
 -include build/uutils.d
 
 build/uutils: uutils/uutils.rs $(addprefix build/, $(foreach crate,$(CRATES),$(shell $(RUSTC) --crate-type rlib --crate-file-name $(crate)/$(crate).rs)))
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d uutils/uutils.rs -o $@
 endif
+
+# Dependencies
+LIBCRYPTO := $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
+-include build/rust-crypto.d
+build/$(LIBCRYPTO):
+	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
+
+deps: build build/$(LIBCRYPTO)
 
 test: tmp $(addprefix test_,$(TESTS))
 	$(RM) -rf tmp
@@ -200,4 +209,4 @@ busytest: build/busybox build/.config
 endif
 endif
 
-.PHONY: all test clean busytest install uninstall
+.PHONY: all deps test clean busytest install uninstall
