@@ -22,7 +22,7 @@ fn test_output_multi_files_print_all_chars() {
 fn test_stdin_squeeze() {
     let mut process= Command::new("build/cat").arg("-A").spawn().unwrap();
 
-    process.stdin.take_unwrap().write(bytes!("\x00\x01\x02")).unwrap();
+    process.stdin.take_unwrap().write(b"\x00\x01\x02").unwrap();
     let po = process.wait_with_output().unwrap();
     let out = str::from_utf8(po.output.as_slice()).unwrap();
 
@@ -33,7 +33,7 @@ fn test_stdin_squeeze() {
 fn test_stdin_number_non_blank() {
     let mut process = Command::new("build/cat").arg("-b").arg("-").spawn().unwrap();
 
-    process.stdin.take_unwrap().write(bytes!("\na\nb\n\n\nc")).unwrap();
+    process.stdin.take_unwrap().write(b"\na\nb\n\n\nc").unwrap();
     let po = process.wait_with_output().unwrap();
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
 

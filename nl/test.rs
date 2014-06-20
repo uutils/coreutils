@@ -5,7 +5,7 @@ use std::str;
 fn test_stdin_nonewline() {
     
     let mut process = Command::new("build/nl").spawn().unwrap();
-    process.stdin.take_unwrap().write(bytes!("No Newline")).unwrap();
+    process.stdin.take_unwrap().write(b"No Newline").unwrap();
     let po = process.wait_with_output().unwrap();
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
 
@@ -17,7 +17,7 @@ fn test_stdin_newline() {
     let mut process = Command::new("build/nl").arg("-s").arg("-")
         .arg("-w").arg("1").spawn().unwrap();
 
-    process.stdin.take_unwrap().write(bytes!("Line One\nLine Two\n")).unwrap();
+    process.stdin.take_unwrap().write(b"Line One\nLine Two\n").unwrap();
     let po = process.wait_with_output().unwrap();
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
 
