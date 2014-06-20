@@ -70,7 +70,7 @@ EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 CRATES      := \
-  $(sort $(filter $(EXES), $(filter-out md5sum true false, $(EXES))))
+  $(sort $(filter $(EXES), $(filter-out true false, $(EXES))))
 
 INSTALL     ?= $(EXES)
 
