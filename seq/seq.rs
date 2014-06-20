@@ -64,6 +64,10 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                     }
                 },
                 "-w" | "--widths" => options.widths = true,
+                "--" => {
+                    seq_args.push_all_move(iter.collect());
+                    break;
+                },
                 _ => {
                     if arg.len() > 1 && arg.as_slice().char_at(0) == '-' {
                         let argptr: *String = &arg;  // escape from the borrow checker
