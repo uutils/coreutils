@@ -1,4 +1,4 @@
-#![crate_id(name="uusync", vers="1.0.0", author="Alexander Fomin")]
+#![crate_id = "uusync#1.0.0"]
 /*
  * This file is part of the uutils coreutils package.
  *
