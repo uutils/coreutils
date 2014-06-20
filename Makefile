@@ -100,14 +100,14 @@ command     = sh -c '$(1)'
 define EXE_BUILD
 -include build/$(1).d
 
-build/$(1): $(1)/$(1).rs deps | build
+build/$(1): $(1)/$(1).rs | build deps
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info build/$(1).d -o build/$(1) $(1)/$(1).rs)
 endef
 
 define CRATE_BUILD
 -include build/$(1).d
 
-build/$(2): $(1)/$(1).rs deps | build
+build/$(2): $(1)/$(1).rs | build deps
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
 endef
 
@@ -122,9 +122,9 @@ endef
 
 # Main rules
 ifneq ($(MULTICALL), 1)
-all: deps $(EXES_PATHS)
+all: $(EXES_PATHS)
 else
-all: deps build/uutils
+all: build/uutils
 
 -include build/uutils.d
 
@@ -135,7 +135,7 @@ endif
 # Dependencies
 LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
 -include build/rust-crypto.d
-build/$(LIBCRYPTO): build
+build/$(LIBCRYPTO): | build
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
 
 deps: build/$(LIBCRYPTO)
