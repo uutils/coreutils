@@ -96,7 +96,7 @@ fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<Str
             "-e" => options.escape = true,
             "-E" => options.escape = false,
             _ => {
-                if arg.as_slice().char_at(0) == '-' && arg.len() > 1 {
+                if arg.len() > 1 && arg.as_slice().char_at(0) == '-' {
                     let mut newopts = options.clone();
                     let argptr: *String = &arg;  // escape from the borrow checker
                     for ch in unsafe { (*argptr).as_slice() }.chars().skip(1) {
