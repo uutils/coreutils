@@ -46,14 +46,13 @@ impl Line {
 struct FileLine {
     line       : String,
     indent_end : uint,     // the end of the indent, always the start of the text
-    prefix_end : uint,     // the end of the PREFIX
     pfxind_end : uint,     // the end of the PREFIX's indent, that is, the spaces before the prefix
-    indent_len : uint,     // display length of indent taking into account TABWIDTH
-    pfxind_len : uint,     // PREFIX indent length taking into account TABWIDTH
+    indent_len : uint,     // display length of indent taking into account tabs
+    prefix_len : uint,     // PREFIX indent length taking into account tabs
 }
 
 // iterator that produces a stream of Lines from a file
-struct FileLines<'a> {
+pub struct FileLines<'a> {
     opts  : &'a FmtOptions,
     lines : Lines<'a, FileOrStdReader>,
 }
@@ -99,14 +98,35 @@ impl<'a> FileLines<'a> {
         (false, 0)
     }
 
-    fn displayed_length(&self, s: &str) -> uint {
-        s.char_len() + (self.opts.tabwidth - 1) * s.chars().filter(|x| x == &'\t').count()
+    fn compute_indent(&self, string: &str, prefix_end: uint) -> (uint, uint, uint) {
+        let mut prefix_len = 0;
+        let mut indent_len = 0;
+        let mut indent_end = 0;
+        for (os, c) in string.char_indices() {
+            if os == prefix_end {
+                // we found the end of the prefix, so this is the printed length of the prefix here
+                prefix_len = indent_len;
+            }
+
+            if (os >= prefix_end) && !c.is_whitespace() {
+                // found first non-whitespace after prefix, this is indent_end
+                indent_end = os;
+                break;
+            } else if c == '\t' {
+                // compute tab length
+                indent_len = (indent_len / self.opts.tabwidth + 1) * self.opts.tabwidth;
+            } else {
+                // non-tab character
+                indent_len += 1;
+            }
+        }
+        (indent_end, prefix_len, indent_len)
     }
 }
 
 impl<'a> Iterator<Line> for FileLines<'a> {
     fn next(&mut self) -> Option<Line> {
-        let mut n =
+        let n =
             match self.lines.next() {
                 Some(t) => match t {
                     Ok(tt) => tt,
@@ -128,79 +148,31 @@ impl<'a> Iterator<Line> for FileLines<'a> {
         let (pmatch, poffset) = self.match_prefix(n.as_slice());
         if !pmatch {
             return Some(NoFormatLine(n, false));
+        } else if n.as_slice().slice_from(poffset + self.opts.prefix.len()).is_whitespace() {
+            // if the line matches the prefix, but is blank after,
+            // don't allow lines to be combined through it (that is,
+            // treat it like a blank line, except that since it's
+            // not truly blank we will not allow mail headers on the
+            // following line)
+            return Some(NoFormatLine(n, false));
         }
 
-        // if this line matches the anti_prefix
+        // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(n.as_slice()) {
             return Some(NoFormatLine(n, false));
         }
 
-        // replace trailing newline, if any, with space
-        let CharRange {ch, next: i} = n.as_slice().char_range_at_reverse(n.len());
-        if ch == '\n' {
-            unsafe {
-                let nmut = n.as_mut_bytes();
-                nmut[i] = ' ' as u8;
-            }
-            if i > 0 {
-                let CharRange {ch, next: _} = n.as_slice().char_range_at_reverse(i);
-                if ch == '.' {
-                    n.push_char(' ');
-                }
-            }
-        }
-
-        let nLen = n.len();
         // figure out the indent, prefix, and prefixindent ending points
-        let (indEnd, pfxEnd, pfxIndEnd) = 
-            if self.opts.use_prefix {
-                let pfxEnd = poffset + self.opts.prefix.len();
-                let nSlice = n.as_slice().slice_from(pfxEnd);
-                let nSlice2 = nSlice.trim_left();
-                (pfxEnd + nSlice.len() - nSlice2.len(), pfxEnd, poffset)
-            } else {
-                let nSlice = n.as_slice().trim_left();
-                (nLen - nSlice.len(), 0, 0)
-            };
-
-        // indent length
-        let indLen =
-            if indEnd > 0 {
-                self.displayed_length(n.as_slice().slice(pfxEnd, indEnd))
-            } else {
-                0
-            };
-
-        // prefix indent length
-        let pfxIndLen =
-            if pfxIndEnd > 0 {
-                self.displayed_length(n.as_slice().slice_to(pfxIndEnd))
-            } else {
-                0
-            };
-
-        // if we are in uniform mode, all tabs after the indent should be replaced by spaces.
-        // NOTE that in this implementation, [?!.]\t is NOT detected as a sentence break, but
-        // [?!.]\t\t is. We could expand tabs to two spaces to force detection of tab as
-        // sentence ending
-        if self.opts.uniform {
-            let tabinds: Vec<uint> = n.as_slice().slice_from(indEnd).char_indices().filter_map(|(i, c)| if c == '\t' { Some(i) } else { None }).collect();
-            unsafe {
-                let nmut = n.as_mut_bytes();
-                for i in tabinds.iter() {
-                    nmut[*i] = ' ' as u8;
-                }
-            }
-        }
+        let prefix_end = poffset + self.opts.prefix.len();
+        let (indent_end, prefix_len, indent_len) = self.compute_indent(n.as_slice(), prefix_end);
 
         Some(FormatLine(FileLine {
             line       : n,
-            indent_end : indEnd,
-            prefix_end : pfxEnd,
-            pfxind_end : pfxIndEnd,
-            indent_len : indLen,
-            pfxind_len : pfxIndLen,
+            indent_end : indent_end,
+            pfxind_end : poffset,
+            indent_len : indent_len,
+            prefix_len : prefix_len
         }))
     }
 }
@@ -211,22 +183,18 @@ impl<'a> Iterator<Line> for FileLines<'a> {
 // is only there to help us in deciding how to merge lines into Paragraphs
 #[deriving(Show)]
 pub struct Paragraph {
-    lines           : Vec<String>,  // the lines of the file
+        lines       : Vec<String>,  // the lines of the file
     pub init_str    : String,       // string representing the init, that is, the first line's indent
     pub init_len    : uint,         // printable length of the init string considering TABWIDTH
-    init_end        : uint,         // byte location of end of init in first line String
+        init_end    : uint,         // byte location of end of init in first line String
     pub indent_str  : String,       // string representing indent
     pub indent_len  : uint,         // length of above
-    indent_end      : uint,         // byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
-    pub pfxind_str  : String,       // string representing the prefix indent
-    pub pfxind_len  : uint,         // length of above
+        indent_end  : uint,         // byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
     pub mail_header : bool          // we need to know if this is a mail header because we do word splitting differently in that case
 }
 
 // an iterator producing a stream of paragraphs from a stream of lines
 // given a set of options.
-// NOTE as you iterate through the paragraphs, any NoFormatLines are
-// immediately dumped to stdout!
 pub struct ParagraphStream<'a> {
     lines     : Peekable<Line,FileLines<'a>>,
     next_mail : bool,
@@ -296,8 +264,8 @@ impl<'a> Iterator<Result<Paragraph,String>> for ParagraphStream<'a> {
         let mut indent_str = String::new();
         let mut indent_end = 0;
         let mut indent_len = 0;
-        let mut pfxind_str = String::new();
-        let mut pfxind_len = 0;
+        let mut prefix_len = 0;
+        let mut pfxind_end = 0;
         let mut pLines = Vec::new();
 
         let mut in_mail = false;
@@ -328,16 +296,22 @@ impl<'a> Iterator<Result<Paragraph,String>> for ParagraphStream<'a> {
                     } else {
                         if self.opts.crown || self.opts.tagged {
                             init_str.push_str(fl.line.as_slice().slice_to(fl.indent_end));
-                            init_len = fl.indent_len + fl.pfxind_len + self.opts.prefix_len;
+                            init_len = fl.indent_len;
                             init_end = fl.indent_end;
-                        } 
+                        } else {
+                            second_done = true;
+                        }
 
                         // these will be overwritten in the 2nd line of crown or tagged mode, but
                         // we are not guaranteed to get to the 2nd line, e.g., if the next line
                         // is a NoFormatLine or None. Thus, we set sane defaults the 1st time around
-                        indent_str.push_str(fl.line.as_slice().slice(fl.prefix_end, fl.indent_end));
+                        indent_str.push_str(fl.line.as_slice().slice_to(fl.indent_end));
                         indent_len = fl.indent_len;
                         indent_end = fl.indent_end;
+
+                        // save these to check for matching lines
+                        prefix_len = fl.prefix_len;
+                        pfxind_end = fl.pfxind_end;
 
                         // in tagged mode, add 4 spaces of additional indenting by default
                         // (gnu fmt's behavior is different: it seems to find the closest column to
@@ -348,36 +322,31 @@ impl<'a> Iterator<Result<Paragraph,String>> for ParagraphStream<'a> {
                             indent_str.push_str("    ");
                             indent_len += 4;
                         }
-
-                        if self.opts.use_prefix {
-                            pfxind_str.push_str(fl.line.as_slice().slice_to(fl.pfxind_end));
-                            pfxind_len = fl.pfxind_len;
-                        }
                     }
                 } else if in_mail {
                     // lines following mail headers must begin with spaces
-                    if (self.opts.use_prefix && fl.pfxind_end == 0) || (!self.opts.use_prefix && fl.indent_end == 0) {
+                    if fl.indent_end == 0 || (self.opts.use_prefix && fl.pfxind_end == 0) {
                         break;  // this line does not begin with spaces
                     }
-                } else if !second_done && (self.opts.crown || self.opts.tagged) {
+                } else if !second_done {
                     // now we have enough info to handle crown margin and tagged mode
-                    if pfxind_len != fl.pfxind_len {
-                        // in both crown and tagged modes we require that pfxind is the same
+                    if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
+                        // in both crown and tagged modes we require that prefix_len is the same
                         break;
-                    } else if self.opts.tagged && (indent_end == fl.indent_end) {
-                        // in tagged mode, indent also has to be different
+                    } else if self.opts.tagged && indent_len - 4 == fl.indent_len && indent_end == fl.indent_end {
+                        // in tagged mode, indent has to be *different* on following lines
                         break;
                     } else {
                         // this is part of the same paragraph, get the indent info from this line
                         indent_str.clear();
-                        indent_str.push_str(fl.line.as_slice().slice(fl.prefix_end, fl.indent_end));
+                        indent_str.push_str(fl.line.as_slice().slice_to(fl.indent_end));
                         indent_len = fl.indent_len;
                         indent_end = fl.indent_end;
                     }
                     second_done = true;
                 } else {
                     // detect mismatch
-                    if (indent_end != fl.indent_end) || (indent_len != fl.indent_len) || (pfxind_len != fl.pfxind_len) {
+                    if indent_end != fl.indent_end || pfxind_end != fl.pfxind_end || indent_len != fl.indent_len || prefix_len != fl.prefix_len {
                         break;
                     }
                 }
@@ -404,8 +373,6 @@ impl<'a> Iterator<Result<Paragraph,String>> for ParagraphStream<'a> {
             indent_str  : indent_str,
             indent_len  : indent_len,
             indent_end  : indent_end,
-            pfxind_str  : pfxind_str,
-            pfxind_len  : pfxind_len,
             mail_header : in_mail
         }))
     }
@@ -414,7 +381,7 @@ impl<'a> Iterator<Result<Paragraph,String>> for ParagraphStream<'a> {
 pub struct ParaWords<'a> {
     opts  : &'a FmtOptions,
     para  : &'a Paragraph,
-    words : Vec<&'a str>
+    words : Vec<WordInfo<'a>>
 }
 
 impl<'a> ParaWords<'a> {
@@ -429,44 +396,80 @@ impl<'a> ParaWords<'a> {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
-            self.words.push_all_move(self.para.lines.iter().flat_map(|x| x.as_slice().trim_left().words()).collect());
+            self.words.push_all_move(self.para.lines.iter().flat_map(|x| x.as_slice().words()).map(|x| WordInfo {
+                word           : x,
+                word_start     : 0,
+                word_nchars    : x.char_len(),
+                before_tab     : None,
+                after_tab      : 0,
+                sentence_start : false,
+                ends_punct     : false,
+                new_line       : false
+            }).collect());
         } else {
             // first line
             self.words.push_all_move(
                 if self.opts.crown || self.opts.tagged {
                     // crown and tagged mode has the "init" in the first line, so slice from there
-                    WordSplit::new(self.opts.uniform, self.para.lines.get(0).as_slice().slice_from(self.para.init_end))
+                    WordSplit::new(self.opts, self.para.lines.get(0).as_slice().slice_from(self.para.init_end))
                 } else {
                     // otherwise we slice from the indent
-                    WordSplit::new(self.opts.uniform, self.para.lines.get(0).as_slice().slice_from(self.para.indent_end))
+                    WordSplit::new(self.opts, self.para.lines.get(0).as_slice().slice_from(self.para.indent_end))
                 }.collect());
 
             if self.para.lines.len() > 1 {
                 let indent_end = self.para.indent_end;
-                let uniform = self.opts.uniform;
+                let opts = self.opts;
                 self.words.push_all_move(
                     self.para.lines.iter().skip(1)
-                    .flat_map(|x| WordSplit::new(uniform, x.as_slice().slice_from(indent_end)))
+                    .flat_map(|x| WordSplit::new(opts, x.as_slice().slice_from(indent_end)))
                     .collect());
             }
         }
     }
 
-    pub fn words(&'a self) -> Items<'a,&'a str> { return self.words.iter() }
+    pub fn words(&'a self) -> Items<'a,WordInfo<'a>> { return self.words.iter() }
 }
 
 struct WordSplit<'a> {
-    uniform  : bool,
-    string   : &'a str,
-    length   : uint,
-    position : uint
+    opts       : &'a FmtOptions,
+    string     : &'a str,
+    length     : uint,
+    position   : uint,
+    prev_punct : bool
 }
 
 impl<'a> WordSplit<'a> {
-    fn new<'a>(uniform: bool, string: &'a str) -> WordSplit<'a> {
+    fn analyze_tabs(&self, string: &str) -> (Option<uint>, uint, Option<uint>) {
+        // given a string, determine (length before tab) and (printed length after first tab)
+        // if there are no tabs, beforetab = -1 and aftertab is the printed length
+        let mut beforetab = None;
+        let mut aftertab = 0;
+        let mut word_start = None;
+        for (os, c) in string.char_indices() {
+            if !c.is_whitespace() {
+                word_start = Some(os);
+                break;
+            } else if c == '\t' {
+                if beforetab == None {
+                    beforetab = Some(aftertab);
+                    aftertab = 0;
+                } else {
+                    aftertab = (aftertab / self.opts.tabwidth + 1) * self.opts.tabwidth;
+                }
+            } else {
+                aftertab += 1;
+            }
+        }
+        (beforetab, aftertab, word_start)
+    }
+}
+
+impl<'a> WordSplit<'a> {
+    fn new<'a>(opts: &'a FmtOptions, string: &'a str) -> WordSplit<'a> {
         // wordsplits *must* start at a non-whitespace character
         let trim_string = string.trim_left();
-        WordSplit { uniform: uniform, string: trim_string, length: string.len(), position: 0 }
+        WordSplit { opts: opts, string: trim_string, length: string.len(), position: 0, prev_punct: false }
     }
 
     fn is_punctuation(c: char) -> bool {
@@ -477,56 +480,72 @@ impl<'a> WordSplit<'a> {
     }
 }
 
-impl<'a> Iterator<&'a str> for WordSplit<'a> {
-    fn next(&mut self) -> Option<&'a str> {
+pub struct WordInfo<'a> {
+    pub word           : &'a str,
+    pub word_start     : uint,
+    pub word_nchars    : uint,
+    pub before_tab     : Option<uint>,
+    pub after_tab      : uint,
+    pub sentence_start : bool,
+    pub ends_punct     : bool,
+    pub new_line       : bool
+}
+
+// returns (&str, is_start_of_sentence)
+impl<'a> Iterator<WordInfo<'a>> for WordSplit<'a> {
+    fn next(&mut self) -> Option<WordInfo<'a>> {
         if self.position >= self.length {
             return None
         }
 
         let old_position = self.position;
+        let new_line = old_position == 0;
 
-        // find the start of the next whitespace segment
-        let ws_start =
-            match self.string.slice_from(old_position).find(|x: char| x.is_whitespace()) {
-                None => self.length,
-                Some(s) => s + old_position
-            };
-
-        if ws_start == self.length {
-            self.position = self.length;
-            return Some(self.string.slice_from(old_position));
-        }
-
-        // find the end of the next whitespace segment
-        // note that this preserves the invariant that self.position points to
-        // non-whitespace character OR end of string
-        self.position =
-            match self.string.slice_from(ws_start).find(|x: char| !x.is_whitespace()) {
-                None => self.length,
-                Some(s) => s + ws_start
-            };
-
-        let is_sentence_end = match self.string.char_range_at_reverse(ws_start) {
-            CharRange { ch, next: _ } if WordSplit::is_punctuation(ch) => self.position - ws_start > 2,
-            _ => false
+        // find the start of the next word, and record if we find a tab character
+        let (before_tab, after_tab, word_start) = match self.analyze_tabs(self.string.slice_from(old_position)) {
+            (b, a, Some(s)) => (b, a, s + old_position),
+            (_, _, None) => {
+                self.position = self.length;
+                return None;
+            }
         };
 
-        Some(
-            if self.uniform {
-                // if the last non-whitespace character is a [?!.] and
-                // there are two or more spaces, this is the end of a
-                // sentence, so keep one extra space.
-                if is_sentence_end {
-                    self.string.slice(old_position, ws_start + 1)
-                } else {
-                    self.string.slice(old_position, ws_start)
-                }
+        // find the beginning of the next whitespace
+        // note that this preserves the invariant that self.position
+        // points to whitespace character OR end of string
+        let mut word_nchars = 0;
+        self.position =
+            match self.string.slice_from(word_start)
+            .find(|x: char| if !x.is_whitespace() { word_nchars += 1; false } else { true }) {
+                None => self.length,
+                Some(s) => s + word_start
+            };
+
+        let word_start_relative = word_start - old_position;
+        // if the previous sentence was punctuation and this sentence has >2 whitespace or one tab, is a new sentence.
+        let is_start_of_sentence = self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
+
+        // now record whether this word ends in punctuation
+        self.prev_punct = match self.string.char_range_at_reverse(self.position) {
+            CharRange { ch, next: _ } => WordSplit::is_punctuation(ch)
+        };
+
+        let (word, word_start_relative, before_tab, after_tab) =
+            if self.opts.uniform {
+                (self.string.slice(word_start, self.position), 0, None, 0)
             } else {
-                // in non-uniform mode, we just keep the whole thing
-                // eventually we will want to annotate where the sentence boundaries are
-                // so that we can give preference to splitting lines appropriately
-                self.string.slice(old_position, self.position)
-            }
-        )
+                (self.string.slice(old_position, self.position), word_start_relative, before_tab, after_tab)
+            };
+
+        Some(WordInfo {
+            word           : word,
+            word_start     : word_start_relative,
+            word_nchars    : word_nchars,
+            before_tab     : before_tab,
+            after_tab      : after_tab,
+            sentence_start : is_start_of_sentence,
+            ends_punct     : self.prev_punct,
+            new_line       : new_line
+        })
     }
 }
