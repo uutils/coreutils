@@ -1,4 +1,5 @@
 #![crate_id(name="cat", vers="1.0.0", author="Seldaek")]
+#![feature(unsafe_destructor)]
 
 /*
  * This file is part of the uutils coreutils package.
