@@ -5,3 +5,4 @@ install:
 script:
   - make
   - make test
+  - make MULTICALL=1
