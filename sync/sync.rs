@@ -169,7 +169,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn version() {
-    println!("uusync (uutils) 1.0.0");
+    println!("sync (uutils) 1.0.0");
     println!("The MIT License");
     println!("");
     println!("Author -- Alexander Fomin.");
