@@ -125,7 +125,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("");
         print(getopts::usage("Compare sorted files line by line.", opts.as_slice()).as_slice());
         if matches.free.len() != 2 {
-            return 0;
+            return 1;
         }
         return 0;
     }
