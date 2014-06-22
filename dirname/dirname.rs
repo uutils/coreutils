@@ -66,6 +66,7 @@ directory).", opts).as_slice());
     } else {
         println!("{0:s}: missing operand", program);
         println!("Try '{0:s} --help' for more information.", program);
+        return 1;
     }
 
     0

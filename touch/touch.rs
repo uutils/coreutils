@@ -59,6 +59,9 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("");
         println!("{:s}", getopts::usage("Update the access and modification times of \
                                          each FILE to the current time.", opts));
+        if matches.free.is_empty() {
+            return 1;
+        }
         return 0;
     }
 

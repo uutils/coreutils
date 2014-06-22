@@ -114,7 +114,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 _ => {
                     println!("{:s}: invalid option \"{:s}\"", prog, *opt);
                     println!("Type \"{:s} --help\" for detailed informations", prog);
-                    return 0;
+                    return 1;
                 }
             }
         } else if opt.as_slice().starts_with("-") {
@@ -146,7 +146,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     _ => {
                         println!("{:s}: illegal option -- {:c}", prog, c);
                         println!("Type \"{:s} --help\" for detailed informations", prog);
-                        return 0;
+                        return 1;
                     }
                 }
             }

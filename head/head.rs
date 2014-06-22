@@ -46,7 +46,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Ok (m) => { m }
         Err(_) => {
             println!("{:s}", usage(PROGRAM, possible_options));
-            return 0;
+            return 1;
         }
     };
 

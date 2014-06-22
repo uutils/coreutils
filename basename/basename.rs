@@ -62,13 +62,13 @@ pub fn uumain(args: Vec<String>) -> int {
     if args.len() < 2 {
         println!("{}: {}", program, "missing operand");
         println!("Try '{} --help' for more information.", program);
-        return 0;
+        return 1;
     }
     // too many arguments
     else if args.len() > 3 {
         println!("{}: extra operand '{}'", program, args.get(3));
         println!("Try '{} --help' for more information.", program);
-        return 0;
+        return 1;
     }
 
     //
