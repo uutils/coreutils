@@ -21,7 +21,7 @@ PROGS       := \
   false \
   fmt \
   fold \
-  md5sum \
+  hashsum \
   mkdir \
   nl \
   paste \
@@ -62,6 +62,14 @@ UNIX_PROGS := \
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
 endif
+
+ALIASES := \
+	hashsum:md5sum \
+	hashsum:sha1sum \
+	hashsum:sha224sum \
+	hashsum:sha256sum \
+	hashsum:sha384sum \
+	hashsum:sha512sum
 
 BUILD       ?= $(PROGS)
 
@@ -111,6 +119,15 @@ build/$(2): $(1)/$(1).rs | build deps
 	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
 endef
 
+# Aliases build rule
+ALIAS_SOURCE = $(firstword $(subst :, ,$(1)))
+ALIAS_TARGET = $(word 2,$(subst :, ,$(1)))
+define MAKE_ALIAS
+all: build/$(call ALIAS_TARGET,$(1))
+build/$(call ALIAS_TARGET,$(1)): build/$(call ALIAS_SOURCE,$(1))
+	$(call command,install build/$(call ALIAS_SOURCE,$(1)) build/$(call ALIAS_TARGET,$(1)))
+endef
+
 # Test exe built rules
 define TEST_BUILD
 test_$(1): tmp/$(1)_test build/$(1)
@@ -158,6 +175,7 @@ ifeq ($(MULTICALL), 1)
 $(foreach crate,$(CRATES),$(eval $(call CRATE_BUILD,$(crate),$(shell $(RUSTC) --crate-type rlib --crate-file-name --out-dir build $(crate)/$(crate).rs))))
 else
 $(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
+$(foreach alias,$(ALIASES),$(eval $(call MAKE_ALIAS,$(alias))))
 endif
 $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 
