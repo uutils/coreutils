@@ -53,6 +53,7 @@ UNIX_PROGS := \
   id \
   kill \
   logname \
+  mkfifo \
   sync \
   tty \
   uname \

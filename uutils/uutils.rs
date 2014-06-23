@@ -34,6 +34,7 @@ extern crate kill;
 extern crate logname;
 extern crate md5sum;
 extern crate mkdir;
+extern crate mkfifo;
 extern crate nl;
 extern crate paste;
 extern crate printenv;
@@ -94,6 +95,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     map.insert("logname", logname::uumain);
     map.insert("md5sum", md5sum::uumain);
     map.insert("mkdir", mkdir::uumain);
+    map.insert("mkfifo", mkfifo::uumain);
     map.insert("nl", nl::uumain);
     map.insert("paste", paste::uumain);
     map.insert("printenv", printenv::uumain);
