@@ -31,6 +31,7 @@ extern crate hostid;
 extern crate hostname;
 extern crate id;
 extern crate kill;
+extern crate link;
 extern crate logname;
 extern crate md5sum;
 extern crate mkdir;
@@ -92,6 +93,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     map.insert("hostname", hostname::uumain);
     map.insert("id", id::uumain);
     map.insert("kill", kill::uumain);
+    map.insert("link", link::uumain);
     map.insert("logname", logname::uumain);
     map.insert("md5sum", md5sum::uumain);
     map.insert("mkdir", mkdir::uumain);

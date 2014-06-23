@@ -21,6 +21,7 @@ PROGS       := \
   false \
   fmt \
   fold \
+  link \
   hashsum \
   mkdir \
   nl \
