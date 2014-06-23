@@ -33,7 +33,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts(args.tail(), options) {
         Ok(m) => { m }
-        _ => { help(program.as_slice(), options); return 0 }
+        _ => { help(program.as_slice(), options); return 1 }
     };
 
     if matches.opt_present("h") {
