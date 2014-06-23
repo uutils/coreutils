@@ -8,6 +8,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::cmp;
 use std::os;
 
 #[path = "../common/util.rs"]
@@ -161,8 +162,15 @@ pub fn uumain(args: Vec<String>) -> int {
         crash!(1, "too {} operands.\nTry '{} --help' for more information.",
                if free.len() < 1 { "few" } else { "many" }, program);
     }
+    let mut largest_dec = 0;
+    let mut padding = 0;
     let first = if free.len() > 1 {
-        match parse_float(free.get(0).as_slice()) {
+        let slice = free.get(0).as_slice();
+        let len = slice.len();
+        let dec = slice.find('.').unwrap_or(len);
+        largest_dec = len - dec;
+        padding = dec;
+        match parse_float(slice) {
             Ok(n) => n,
             Err(s) => { show_error!("{:s}", s); return 1; }
         }
@@ -170,6 +178,11 @@ pub fn uumain(args: Vec<String>) -> int {
         1.0
     };
     let step = if free.len() > 2 {
+        let slice = free.get(1).as_slice();
+        let len = slice.len();
+        let dec = slice.find('.').unwrap_or(len);
+        largest_dec = cmp::max(largest_dec, len - dec);
+        padding = cmp::max(padding, dec);
         match parse_float(free.get(1).as_slice()) {
             Ok(n) => n,
             Err(s) => { show_error!("{:s}", s); return 1; }
@@ -177,46 +190,63 @@ pub fn uumain(args: Vec<String>) -> int {
     } else {
         1.0
     };
-    let last = match parse_float(free.get(free.len()-1).as_slice()) {
-        Ok(n) => n,
-        Err(s) => { show_error!("{:s}", s); return 1; }
+    let last = {
+        let slice = free.get(free.len() - 1).as_slice();
+        padding = cmp::max(padding, slice.find('.').unwrap_or(slice.len()));
+        match parse_float(slice) {
+            Ok(n) => n,
+            Err(s) => { show_error!("{:s}", s); return 1; }
+        }
     };
     let separator = escape_sequences(options.separator.as_slice());
     let terminator = match options.terminator {
         Some(term) => escape_sequences(term.as_slice()),
         None => separator.clone()
     };
-    print_seq(first, step, last, separator, terminator, options.widths);
+    print_seq(first, step, last, largest_dec, separator, terminator, options.widths, padding);
 
     0
 }
 
 #[inline(always)]
 fn done_printing(next: f64, step: f64, last: f64) -> bool {
-    if step > 0f64 {
+    if step >= 0f64 {
         next > last
     } else {
         next < last
     }
 }
 
-fn print_seq(first: f64, step: f64, last: f64, separator: String, terminator: String, pad: bool) {
-    let mut i = first;
-    let maxlen = first.max(last).to_str().len();
-    while !done_printing(i, step, last) {
-        let ilen = i.to_str().len();
-        if pad && ilen < maxlen {
-            for _ in range(0, maxlen - ilen) {
+fn print_seq(first: f64, step: f64, last: f64, largest_dec: uint, separator: String, terminator: String, pad: bool, padding: uint) {
+    let mut i = 0;
+    let mut value = first + i as f64 * step;
+    while !done_printing(value, step, last) {
+        let istr = value.to_str();
+        let ilen = istr.len();
+        let before_dec = istr.as_slice().find('.').unwrap_or(ilen);
+        if pad && before_dec < padding {
+            for _ in range(0, padding - before_dec) {
                 print!("0");
             }
         }
-        print!("{:f}", i);
-        i += step;
-        if !done_printing(i, step, last) {
+        print!("{}", istr);
+        let mut idec = ilen - before_dec;
+        if idec < largest_dec {
+            if idec == 0 {
+                print!(".");
+                idec += 1;
+            }
+            for _ in range(idec, largest_dec) {
+                print!("0")
+            }
+        }
+        i += 1;
+        value = first + i as f64 * step;
+        if !done_printing(value, step, last) {
             print!("{:s}", separator);
         }
     }
-    if i != first {
+    if (first >= last && step < 0f64) || (first <= last && step > 0f64) {
         print!("{:s}", terminator);
     }
 }
