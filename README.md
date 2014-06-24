@@ -144,7 +144,6 @@ To do
 - mktemp
 - mv
 - nice
-- nohup
 - nproc
 - numfmt
 - od
