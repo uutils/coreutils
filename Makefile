@@ -56,6 +56,7 @@ UNIX_PROGS := \
   kill \
   logname \
   mkfifo \
+  nohup \
   tty \
   uname \
   uptime \
