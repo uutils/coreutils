@@ -1,0 +1,211 @@
+[project]
+name = "uutils-coreutils"
+version = "0.0.1"
+authors = []
+
+[[bin]]
+name = "base64"
+path = "base64/base64.rs"
+
+[[bin]]
+name = "basename"
+path = "basename/basename.rs"
+
+[[bin]]
+name = "cat"
+path = "cat/cat.rs"
+
+[[bin]]
+name = "chroot"
+path = "chroot/chroot.rs"
+
+[[bin]]
+name = "cksum"
+path = "cksum/cksum.rs"
+
+[[bin]]
+name = "comm"
+path = "comm/comm.rs"
+
+[[bin]]
+name = "cp"
+path = "cp/cp.rs"
+
+[[bin]]
+name = "dirname"
+path = "dirname/dirname.rs"
+
+[[bin]]
+name = "du"
+path = "du/du.rs"
+
+[[bin]]
+name = "echo"
+path = "echo/echo.rs"
+
+[[bin]]
+name = "env"
+path = "env/env.rs"
+
+[[bin]]
+name = "factor"
+path = "factor/factor.rs"
+
+[[bin]]
+name = "false"
+path = "false/false.rs"
+
+[[bin]]
+name = "fmt"
+path = "fmt/fmt.rs"
+
+[[bin]]
+name = "fold"
+path = "fold/fold.rs"
+
+[[bin]]
+name = "groups"
+path = "groups/groups.rs"
+
+[[bin]]
+name = "hashsum"
+path = "hashsum/hashsum.rs"
+
+[[bin]]
+name = "head"
+path = "head/head.rs"
+
+[[bin]]
+name = "hostid"
+path = "hostid/hostid.rs"
+
+[[bin]]
+name = "hostname"
+path = "hostname/hostname.rs"
+
+[[bin]]
+name = "id"
+path = "id/id.rs"
+
+[[bin]]
+name = "kill"
+path = "kill/kill.rs"
+
+[[bin]]
+name = "link"
+path = "link/link.rs"
+
+[[bin]]
+name = "logname"
+path = "logname/logname.rs"
+
+[[bin]]
+name = "mkdir"
+path = "mkdir/mkdir.rs"
+
+[[bin]]
+name = "mkfifo"
+path = "mkfifo/mkfifo.rs"
+
+[[bin]]
+name = "nl"
+path = "nl/nl.rs"
+
+[[bin]]
+name = "paste"
+path = "paste/paste.rs"
+
+[[bin]]
+name = "printenv"
+path = "printenv/printenv.rs"
+
+[[bin]]
+name = "pwd"
+path = "pwd/pwd.rs"
+
+[[bin]]
+name = "rm"
+path = "rm/rm.rs"
+
+[[bin]]
+name = "rmdir"
+path = "rmdir/rmdir.rs"
+
+[[bin]]
+name = "seq"
+path = "seq/seq.rs"
+
+[[bin]]
+name = "sleep"
+path = "sleep/sleep.rs"
+
+[[bin]]
+name = "sum"
+path = "sum/sum.rs"
+
+[[bin]]
+name = "sync"
+path = "sync/sync.rs"
+
+[[bin]]
+name = "tac"
+path = "tac/tac.rs"
+
+[[bin]]
+name = "tail"
+path = "tail/tail.rs"
+
+[[bin]]
+name = "tee"
+path = "tee/tee.rs"
+
+[[bin]]
+name = "touch"
+path = "touch/touch.rs"
+
+[[bin]]
+name = "tr"
+path = "tr/tr.rs"
+
+[[bin]]
+name = "true"
+path = "true/true.rs"
+
+[[bin]]
+name = "truncate"
+path = "truncate/truncate.rs"
+
+[[bin]]
+name = "tty"
+path = "tty/tty.rs"
+
+[[bin]]
+name = "uname"
+path = "uname/uname.rs"
+
+[[bin]]
+name = "unlink"
+path = "unlink/unlink.rs"
+
+[[bin]]
+name = "uptime"
+path = "uptime/uptime.rs"
+
+[[bin]]
+name = "users"
+path = "users/users.rs"
+
+[[bin]]
+name = "wc"
+path = "wc/wc.rs"
+
+[[bin]]
+name = "whoami"
+path = "whoami/whoami.rs"
+
+[[bin]]
+name = "yes"
+path = "yes/yes.rs"
+
+[dependencies.rust-crypto]
+git = "https://github.com/dagenix/rust-crypto"
