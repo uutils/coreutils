@@ -113,7 +113,9 @@ these steps:
 1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement ls"
 2. State that you are working on this utility.
 3. Develop the utility.
-4. Submit a pull request and close the issue.  Your pull request should include deleting the utility from the to-do list on this README.
+4. Add the reference to your utility into uutils/uutils.rs (required for multibinary).
+5. Remove utility from the to-do list on this README.
+6. Submit a pull request and close the issue.
 
 The steps above imply that, before starting to work on a utility, you should search the issues to make sure no one else is working on it.
 
