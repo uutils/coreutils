@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::os;
-use std::io::{print,File,BufferedWriter,BufferedReader,stdin};
+use std::io::{File, BufferedWriter, BufferedReader, stdin, print};
 use getopts::{optopt, optflag, getopts, usage};
 
 use ranges::Range;
@@ -32,8 +32,8 @@ struct Options {
 }
 
 struct FieldOptions {
-    delimiter: char,
-    out_delimeter: String,
+    delimiter: String,  // one char long, String because of UTF8 representation
+    out_delimeter: Option<String>,
     only_delimited: bool,
 }
 
@@ -44,22 +44,11 @@ enum Mode {
 }
 
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
-    use std::uint;
-
-    let mut range_vec = {
-        try!(
-            if complement {
-                Range::from_list(list).map(|r| ranges::complement(&r))
-            } else {
-                Range::from_list(list)
-            }
-        )
-    };
-
-    // add sentinel value for increased performance during cutting
-    range_vec.push(Range{ low: uint::MAX, high: uint::MAX });
-
-    Ok(range_vec)
+    if complement {
+        Range::from_list(list).map(|r| ranges::complement(&r))
+    } else {
+        Range::from_list(list)
+    }
 }
 
 fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
@@ -74,19 +63,19 @@ fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
     'newline: loop {
         let line = match reader.read_until(b'\n') {
             Ok(line) => line,
-            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => break,
+            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
             _ => fail!(),
         };
 
         let line_len = line.len();
         let mut print_delim = false;
 
-        for &Range{ low: low, high: high } in ranges.iter() {
+        for &Range { low: low, high: high } in ranges.iter() {
             if low > line_len { break; }
 
             if use_delim {
                 if print_delim {
-                    out.write_str(out_delim.as_slice());
+                    out.write_str(out_delim.as_slice()).unwrap();
                 }
                 print_delim = true;
             }
@@ -94,7 +83,7 @@ fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
             if high >= line_len {
                 let segment = line.slice(low - 1, line_len);
 
-                out.write(segment);
+                out.write(segment).unwrap();
 
                 if *line.get(line_len - 1) == b'\n' {
                     continue 'newline
@@ -102,11 +91,11 @@ fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
             } else {
                 let segment = line.slice(low - 1, high);
 
-                out.write(segment);
+                out.write(segment).unwrap();
             }
         }
 
-        out.write(&[b'\n']);
+        out.write(&[b'\n']).unwrap();
     }
 
     0
@@ -124,7 +113,7 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
     'newline: loop {
         let line = match reader.read_line() {
             Ok(line) => line,
-            Err(std::io::IoError{ kind: std::io::EndOfFile, ..}) => break,
+            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
             _ => fail!(),
         };
 
@@ -132,7 +121,7 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
         let mut char_indices = line.as_slice().char_indices();
         let mut print_delim = false;
 
-        for &Range{ low: low, high: high } in ranges.iter() {
+        for &Range { low: low, high: high } in ranges.iter() {
             let low_idx = match char_indices.nth(low - char_pos - 1) {
                 Some((low_idx, _)) => low_idx,
                 None => break
@@ -140,7 +129,7 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
 
             if use_delim {
                 if print_delim {
-                    out.write_str(out_delim.as_slice());
+                    out.write_str(out_delim.as_slice()).unwrap();
                 }
                 print_delim = true;
             }
@@ -149,13 +138,13 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
                 Some((high_idx, _)) => {
                     let segment = line.as_bytes().slice(low_idx, high_idx);
 
-                    out.write(segment);
+                    out.write(segment).unwrap();
                 }
                 None => {
                     let bytes = line.as_bytes();
                     let segment = bytes.slice(low_idx, bytes.len());
 
-                    out.write(segment);
+                    out.write(segment).unwrap();
 
                     if line.as_bytes()[bytes.len() - 1] == b'\n' {
                         continue 'newline
@@ -165,17 +154,207 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
 
             char_pos = high + 1;
         }
-        out.write(&[b'\n']);
+        out.write(&[b'\n']).unwrap();
     }
 
     0
 }
 
-fn cut_fields<T: Reader>(reader: BufferedReader<T>,
+#[deriving(Clone)]
+struct Searcher<'a> {
+    haystack: &'a [u8],
+    needle: &'a [u8],
+    position: uint
+}
+
+impl<'a> Searcher<'a> {
+    fn new(haystack: &'a [u8], needle: &'a [u8]) -> Searcher<'a> {
+        Searcher {
+            haystack: haystack,
+            needle: needle,
+            position: 0
+        }
+    }
+}
+
+impl<'a> Iterator<(uint, uint)> for Searcher<'a> {
+    fn next(&mut self) -> Option<(uint, uint)> {
+        if self.needle.len() == 1 {
+            for offset in range(self.position, self.haystack.len()) {
+                if self.haystack[offset] == self.needle[0] {
+                    self.position = offset + 1;
+                    return Some((offset, offset + 1));
+                }
+            }
+
+            self.position = self.haystack.len();
+            return None;
+        }
+
+        while self.position + self.needle.len() <= self.haystack.len() {
+            if self.haystack.slice(self.position,
+                                   self.position + self.needle.len()) == self.needle {
+                let match_pos = self.position;
+                self.position += self.needle.len();
+                return Some((match_pos, match_pos + self.needle.len()));
+            } else {
+                self.position += 1;
+            }
+        }
+        None
+    }
+}
+
+fn cut_fields_delimiter<T: Reader>(mut reader: BufferedReader<T>,
+                                   ranges: &Vec<Range>,
+                                   delim: &String,
+                                   only_delimited: bool,
+                                   out_delim: &String) -> int {
+    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
+
+    'newline: loop {
+        let line = match reader.read_until(b'\n') {
+            Ok(line) => line,
+            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
+            _ => fail!(),
+        };
+
+        let mut fields_pos = 1;
+        let mut low_idx = 0;
+        let mut delim_search = Searcher::new(line.as_slice(),
+                                             delim.as_bytes()).peekable();
+        let mut print_delim = false;
+
+        if delim_search.peek().is_none() {
+            if ! only_delimited {
+                out.write(line.as_slice()).unwrap();
+                if *line.get(line.len() - 1) != b'\n' {
+                    out.write([b'\n']).unwrap();
+                }
+            }
+
+            continue
+        }
+
+        for &Range { low: low, high: high } in ranges.iter() {
+            if low - fields_pos > 0 {
+                low_idx = match delim_search.nth(low - fields_pos - 1) {
+                    Some((_, beyond_delim)) => beyond_delim,
+                    None => break
+                };
+            }
+
+            for _ in range(0, high - low + 1) {
+                if print_delim {
+                    out.write_str(out_delim.as_slice()).unwrap();
+                }
+
+                match delim_search.next() {
+                    Some((high_idx, next_low_idx)) => {
+                        let segment = line.slice(low_idx, high_idx);
+
+                        out.write(segment).unwrap();
+
+                        print_delim = true;
+
+                        low_idx = next_low_idx;
+                        fields_pos = high + 1;
+                    }
+                    None => {
+                        let segment = line.slice(low_idx, line.len());
+
+                        out.write(segment).unwrap();
+
+                        if *line.get(line.len() - 1) == b'\n' {
+                            continue 'newline
+                        }
+                        break
+                    }
+                }
+            }
+        }
+
+        out.write(&[b'\n']).unwrap();
+    }
+
+    0
+}
+
+fn cut_fields<T: Reader>(mut reader: BufferedReader<T>,
                          ranges: &Vec<Range>,
                          opts: &FieldOptions) -> int {
-    for range in ranges.iter() {
-        println!("{}-{}", range.low, range.high);
+    match opts.out_delimeter {
+        Some(ref delim) => {
+            return cut_fields_delimiter(reader, ranges, &opts.delimiter,
+                                        opts.only_delimited, delim);
+        }
+        None => ()
+    }
+
+    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
+
+    'newline: loop {
+        let line = match reader.read_until(b'\n') {
+            Ok(line) => line,
+            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
+            _ => fail!(),
+        };
+
+        let mut fields_pos = 1;
+        let mut low_idx = 0;
+        let mut delim_search = Searcher::new(line.as_slice(),
+                                             opts.delimiter.as_bytes()).peekable();
+        let mut print_delim = false;
+
+        if delim_search.peek().is_none() {
+            if ! opts.only_delimited {
+                out.write(line.as_slice()).unwrap();
+                if *line.get(line.len() - 1) != b'\n' {
+                    out.write([b'\n']).unwrap();
+                }
+            }
+
+            continue
+        }
+
+        for &Range { low: low, high: high } in ranges.iter() {
+            if low - fields_pos > 0 {
+                low_idx = match delim_search.nth(low - fields_pos - 1) {
+                    Some((_, beyond_delim)) => beyond_delim,
+                    None => break
+                };
+            }
+
+            if print_delim {
+                if low_idx >= opts.delimiter.as_bytes().len() {
+                    low_idx -= opts.delimiter.as_bytes().len();
+                }
+            }
+
+            match delim_search.nth(high - low) {
+                Some((high_idx, next_low_idx)) => {
+                    let segment = line.slice(low_idx, high_idx);
+
+                    out.write(segment).unwrap();
+
+                    print_delim = true;
+                    low_idx = next_low_idx;
+                    fields_pos = high + 1;
+                }
+                None => {
+                    let segment = line.slice(low_idx, line.len());
+
+                    out.write(segment).unwrap();
+
+                    if *line.get(line.len() - 1) == b'\n' {
+                        continue 'newline
+                    }
+                    break
+                }
+            }
+        }
+
+        out.write(&[b'\n']).unwrap();
     }
 
     0
@@ -255,7 +434,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
-            show_error!("Invalid options\n{}", f.to_err_msg())
+            show_error!("Invalid options\n{}", f)
             return 1;
         }
     };
@@ -293,32 +472,41 @@ pub fn uumain(args: Vec<String>) -> int {
         (Some(byte_ranges), None, None) => {
             list_to_ranges(byte_ranges.as_slice(), complement).map(|ranges|
                 Bytes(ranges,
-                      Options{ out_delim: matches.opt_str("output-delimiter") })
+                      Options { out_delim: matches.opt_str("output-delimiter") })
             )
         }
-        (None ,Some(char_ranges), None) => {
+        (None, Some(char_ranges), None) => {
             list_to_ranges(char_ranges.as_slice(), complement).map(|ranges|
                 Characters(ranges,
-                           Options{ out_delim: matches.opt_str("output-delimiter") })
+                           Options { out_delim: matches.opt_str("output-delimiter") })
             )
         }
-        (None, None ,Some(field_ranges)) => {
-            list_to_ranges(field_ranges.as_slice(), complement).map(|ranges|
+        (None, None, Some(field_ranges)) => {
+            list_to_ranges(field_ranges.as_slice(), complement).and_then(|ranges|
                 {
-                    use std::str::from_char;
-
-                    let delim = matches.opt_str("delimiter")
-                                       .filtered(|s| s.len() == 1)
-                                       .map(|s| s.as_slice().char_at(0))
-                                       .unwrap_or('\t');
-                    let out_delim = matches.opt_str("output-delimiter")
-                                           .unwrap_or(from_char(delim));
+                    let out_delim = matches.opt_str("output-delimiter");
                     let only_delimited = matches.opt_present("only-delimited");
 
-                    Fields(ranges,
-                           FieldOptions{ delimiter: delim,
-                                         out_delimeter: out_delim,
-                                         only_delimited: only_delimited })
+                    match matches.opt_str("delimiter") {
+                        Some(delim) => {
+                            if delim.as_slice().char_len() != 1 {
+                                Err("the delimiter must be a single character".to_str())
+                            } else {
+                                Ok(Fields(ranges,
+                                          FieldOptions {
+                                              delimiter: delim,
+                                              out_delimeter: out_delim,
+                                              only_delimited: only_delimited
+                                          }))
+                            }
+                        }
+                        None => Ok(Fields(ranges,
+                                          FieldOptions {
+                                              delimiter: "\t".to_str(),
+                                              out_delimeter: out_delim,
+                                              only_delimited: only_delimited
+                                          }))
+                    }
                 }
             )
         }
@@ -331,7 +519,9 @@ pub fn uumain(args: Vec<String>) -> int {
     match mode_parse {
         Ok(mode) => cut_files(matches.free, mode),
         Err(err_msg) => {
-            show_error!("{}", err_msg);
+            show_error!("{}\n\
+                         Try '{} --help' for more information",
+                        err_msg, args.get(0));
             1
         }
     }

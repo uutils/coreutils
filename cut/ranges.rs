@@ -24,20 +24,20 @@ impl std::from_str::FromStr for Range {
         match (parts.next(), parts.next()) {
             (Some(nm), None) => {
                 from_str::<uint>(nm).filtered(|nm| *nm > 0)
-                                    .map(|nm| Range{ low: nm, high: nm })
+                                    .map(|nm| Range { low: nm, high: nm })
             }
             (Some(n), Some(m)) if m.len() == 0 => {
                 from_str::<uint>(n).filtered(|low| *low > 0)
-                                   .map(|low| Range{ low: low, high: MAX })
+                                   .map(|low| Range { low: low, high: MAX })
             }
             (Some(n), Some(m)) if n.len() == 0 => {
                 from_str::<uint>(m).filtered(|high| *high >= 1)
-                                   .map(|high| Range{ low: 1, high: high })
+                                   .map(|high| Range { low: 1, high: high })
             }
             (Some(n), Some(m)) => {
                 match (from_str::<uint>(n), from_str::<uint>(m)) {
                     (Some(low), Some(high)) if low > 0 && low <= high => {
-                        Some(Range{ low: low, high: high })
+                        Some(Range { low: low, high: high })
                     }
                     _ => None
                 }
@@ -82,7 +82,7 @@ pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
     if ranges.len() > 0 && ranges.get(0).low > 1 {
-        complements.push(Range{ low: 1, high: ranges.get(0).low - 1 });
+        complements.push(Range { low: 1, high: ranges.get(0).low - 1 });
     }
 
     let mut ranges_iter = ranges.iter().peekable();
@@ -90,14 +90,18 @@ pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
         match (ranges_iter.next(), ranges_iter.peek()) {
             (Some(left), Some(right)) => {
                 if left.high + 1 != right.low {
-                    complements.push(Range{ low: left.high + 1,
-                                            high: right.low - 1 });
+                    complements.push(Range {
+                                         low: left.high + 1,
+                                         high: right.low - 1
+                                     });
                 }
             }
             (Some(last), None) => {
                 if last.high < uint::MAX {
-                    complements.push(Range{ low: last.high + 1,
-                                            high: uint::MAX });
+                    complements.push(Range {
+                                        low: last.high + 1,
+                                        high: uint::MAX
+                                     });
                 }
             }
             _ => break
