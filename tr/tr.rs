@@ -20,7 +20,6 @@ use std::char::from_u32;
 use std::io::print;
 use std::io::stdio::{stdin,stdout};
 use std::iter::FromIterator;
-use std::os;
 use std::vec::Vec;
 
 #[path="../common/util.rs"]
@@ -145,9 +144,6 @@ fn usage(opts: &[OptGroup]) {
         println!("");
         print(getopts::usage("Translate or delete characters.", opts).as_slice());
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [

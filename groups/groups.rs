@@ -12,7 +12,6 @@
 
 extern crate getopts;
 
-use std::os;
 use getopts::{
     optflag,
     getopts,
@@ -25,9 +24,6 @@ use c_types::{get_pw_from_args, group};
 
 static NAME: &'static str = "groups";
 static VERSION: &'static str = "1.0.0";
-
-#[allow(dead_code)]
-fn main () { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

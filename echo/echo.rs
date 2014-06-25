@@ -13,7 +13,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::io::{print, println};
 use std::uint;
 
@@ -162,9 +161,6 @@ fn print_help(program: &String) {
 fn print_version() {
     println!("echo version: {:s}", VERSION);
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let mut options = EchoOptions {

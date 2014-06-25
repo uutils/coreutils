@@ -18,7 +18,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::ptr::read;
 use libc::{
     uid_t,
@@ -82,9 +81,6 @@ extern {
 }
 
 static NAME: &'static str = "id";
-
-#[allow(dead_code)]
-fn main () { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let args_t = args.tail();

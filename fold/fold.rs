@@ -17,7 +17,6 @@ extern crate libc;
 use std::io;
 use std::io::fs::File;
 use std::io::BufferedReader;
-use std::os;
 use std::uint;
 
 #[path = "../common/util.rs"]
@@ -25,9 +24,6 @@ mod util;
 
 static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
 

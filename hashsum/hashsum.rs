@@ -21,7 +21,6 @@ extern crate getopts;
 use std::io::fs::File;
 use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
-use std::os;
 use regex::Regex;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -87,9 +86,6 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&str, Box<Digest>)
         }
     }
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

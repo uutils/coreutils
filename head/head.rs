@@ -12,7 +12,6 @@
 
 extern crate getopts;
 
-use std::os;
 use std::char;
 use std::io::{stdin};
 use std::io::BufferedReader;
@@ -21,9 +20,6 @@ use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage};
 
 static PROGRAM: &'static str = "head";
-
-#[allow(dead_code)]
-fn main () { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let mut line_count = 10u;

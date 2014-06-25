@@ -19,7 +19,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::{str,os};
+use std::str;
 use std::io::println;
 use std::io::stdio::stderr;
 use getopts::{optflag,getopts};
@@ -33,9 +33,6 @@ extern {
 }
 
 static NAME: &'static str = "tty";
-
-#[allow(dead_code)]
-fn main () { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let options = [

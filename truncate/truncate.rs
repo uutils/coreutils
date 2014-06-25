@@ -15,7 +15,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{File, Open, ReadWrite, fs};
-use std::os;
 use std::u64;
 
 #[path = "../common/util.rs"]
@@ -33,9 +32,6 @@ enum TruncateMode {
 }
 
 static NAME: &'static str = "truncate";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

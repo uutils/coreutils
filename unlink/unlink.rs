@@ -16,7 +16,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::io;
 use std::io::fs;
 use std::io::print;
@@ -25,9 +24,6 @@ use std::io::print;
 mod util;
 
 static NAME: &'static str = "unlink";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

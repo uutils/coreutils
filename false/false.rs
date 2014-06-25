@@ -1,4 +1,4 @@
-#![crate_id(name="false", vers="1.0.0", author="Seldaek")]
+#![crate_id = "uufalse#1.0.0"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,6 +9,6 @@
  * file that was distributed with this source code.
  */
 
-fn main() {
-    std::os::set_exit_status(1);
+pub fn uumain(_: Vec<String>) -> int  {
+	1
 }

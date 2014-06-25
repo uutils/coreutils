@@ -15,7 +15,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::f64;
-use std::os;
 use std::io::{print, timer};
 use std::u64;
 
@@ -23,9 +22,6 @@ use std::u64;
 mod util;
 
 static NAME: &'static str = "sleep";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

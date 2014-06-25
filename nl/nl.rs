@@ -16,7 +16,6 @@ extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
-use std::os;
 use std::io::{stdin};
 use std::io::BufferedReader;
 use std::io::fs::File;
@@ -73,11 +72,6 @@ enum NumberFormat {
     Left,
     Right,
     RightZero,
-}
-
-#[allow(dead_code)]
-fn main () {
-  os::set_exit_status(uumain(os::args()));
 }
 
 pub fn uumain(args: Vec<String>) -> int {

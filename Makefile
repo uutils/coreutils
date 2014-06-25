@@ -81,12 +81,12 @@ EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 CRATES      := \
-  $(sort $(filter $(EXES), $(filter-out true false, $(EXES))))
+  $(sort $(EXES))
 
 INSTALL     ?= $(EXES)
 
 INSTALLEES  := \
-  $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES)))
+  $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils))
 
 # Programs with usable tests
 TEST_PROGS  := \
@@ -109,17 +109,18 @@ command     = sh -c '$(1)'
 
 # Main exe build rule
 define EXE_BUILD
--include build/$(1).d
+build/gen/$(1).rs: build/mkmain
+	build/mkmain $(1) build/gen/$(1).rs
 
-build/$(1): $(1)/$(1).rs | build deps
-	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info build/$(1).d -o build/$(1) $(1)/$(1).rs)
+build/$(1): build/gen/$(1).rs build/$(1).timestamp | build deps
+	$(RUSTC) $(RUSTCFLAGS) -L build/ -o build/$(1) build/gen/$(1).rs
 endef
 
 define CRATE_BUILD
 -include build/$(1).d
-
-build/$(2): $(1)/$(1).rs | build deps
-	$(call command,$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build)
+build/$(1).timestamp: $(1)/$(1).rs | build deps
+	$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build
+	@touch build/$(1).timestamp
 endef
 
 # Aliases build rule
@@ -141,16 +142,11 @@ tmp/$(1)_test: $(1)/test.rs
 endef
 
 # Main rules
-ifneq ($(MULTICALL), 1)
-all: $(EXES_PATHS)
-else
-all: build/uutils
+all: $(EXES_PATHS) build/uutils
 
 -include build/uutils.d
-
-build/uutils: uutils/uutils.rs $(addprefix build/, $(foreach crate,$(CRATES),$(shell $(RUSTC) --crate-type rlib --crate-file-name $(crate)/$(crate).rs)))
+build/uutils: uutils/uutils.rs $(addprefix build/, $(addsuffix .timestamp, $(CRATES)))
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d uutils/uutils.rs -o $@
-endif
 
 # Dependencies
 LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
@@ -158,7 +154,13 @@ LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypt
 build/$(LIBCRYPTO): | build
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
 
+build/mkmain: mkmain.rs | build
+	$(RUSTC) $(RUSTCFLAGS) -L build mkmain.rs -o $@
+
 deps: build/$(LIBCRYPTO)
+
+crates:
+	echo $(EXES)
 
 test: tmp $(addprefix test_,$(TESTS))
 	$(RM) -rf tmp
@@ -168,28 +170,17 @@ clean:
 
 build:
 	git submodule update --init
-	mkdir build
+	mkdir -p build/gen
 
 tmp:
 	mkdir tmp
 
 # Creating necessary rules for each targets
-ifeq ($(MULTICALL), 1)
-$(foreach crate,$(CRATES),$(eval $(call CRATE_BUILD,$(crate),$(shell $(RUSTC) --crate-type rlib --crate-file-name --out-dir build $(crate)/$(crate).rs))))
-else
+$(foreach crate,$(CRATES),$(eval $(call CRATE_BUILD,$(crate))))
 $(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
 $(foreach alias,$(ALIASES),$(eval $(call MAKE_ALIAS,$(alias))))
-endif
 $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 
-ifeq ($(MULTICALL), 1)
-install: build/uutils
-	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
-	install build/uutils $(DESTDIR)$(PREFIX)$(BINDIR)/uutils
-
-uninstall:
-	rm -f $(DESTDIR)$(PREFIX)$(BINDIR)/uutils
-else
 install: $(addprefix build/,$(INSTALLEES))
 	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
 	for prog in $(INSTALLEES); do \
@@ -198,10 +189,8 @@ install: $(addprefix build/,$(INSTALLEES))
 
 uninstall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX),$(PROGS))
-endif
 
 # Test under the busybox testsuite
-ifeq ($(MULTICALL), 1)
 build/busybox: build/uutils
 	rm -f build/busybox
 	ln -s $(SRC_DIR)/build/uutils build/busybox
@@ -221,7 +210,6 @@ busytest:
 else
 busytest: build/busybox build/.config
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(SRC_DIR)/build ./runtest $(RUNTEST_ARGS))
-endif
 endif
 
 .PHONY: all deps test clean busytest install uninstall

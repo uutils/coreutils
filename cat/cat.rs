@@ -14,14 +14,10 @@
 
 extern crate getopts;
 
-use std::os;
 use std::io::{print, File};
 use std::io::stdio::{stdout_raw, stdin_raw, stderr};
 use std::io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();

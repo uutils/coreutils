@@ -14,7 +14,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::u64;
-use std::os;
 use std::vec::{Vec};
 use std::io::{stdin};
 
@@ -63,9 +62,6 @@ fn print_factors_str(num_str: &str) {
     };
     print_factors(num);
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();

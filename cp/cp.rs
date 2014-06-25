@@ -31,9 +31,6 @@ pub enum Mode {
     Version,
 }
 
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
-
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         optflag("h", "help", "display this help and exit"),

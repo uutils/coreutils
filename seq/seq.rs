@@ -10,7 +10,6 @@ extern crate libc;
 
 use std::cmp;
 use std::io;
-use std::os;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -158,9 +157,6 @@ fn print_help(program: &String) {
 fn print_version() {
     println!("seq 1.0.0\n");
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

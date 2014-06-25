@@ -17,7 +17,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::mem::uninitialized;
 use std::io::print;
 use std::str::raw::from_c_str;
@@ -50,9 +49,6 @@ unsafe fn getuname() -> utsrust {
 
 
 static NAME: &'static str = "uname";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
