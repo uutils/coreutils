@@ -5,6 +5,7 @@
  *
  * (c) Arcterus <arcterus@mail.com>
  * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
+ * (c) Gil Cottle <gcottle@redtown.org>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,14 +13,16 @@
 
 #![feature(macro_rules)]
 
+extern crate regex;
+
 extern crate crypto = "rust-crypto";
 extern crate getopts;
-extern crate libc;
 
 use std::io::fs::File;
 use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
 use std::os;
+use regex::Regex;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
 use crypto::sha1::Sha1;
@@ -159,9 +162,13 @@ fn usage(program: &str, binary_name: &str, opts: &[getopts::OptGroup]) {
 }
 
 fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), int> {
-    let bytes = digest.output_bits() / 4;
     let mut bad_format = 0;
     let mut failed = 0;
+    let binary_marker = if binary {
+        "*"
+    } else {
+        " "
+    };
     for filename in files.iter() {
         let filename: &str = filename.as_slice();
         let mut file = BufferedReader::new(
@@ -172,14 +179,34 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             }
         );
         if check {
+
+            // Set up Regexes for line validation and parsing
+            let bytes = digest.output_bits() / 4;
+            let gnu_re = safe_unwrap!(
+                Regex::new(
+                    format!(
+                        r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
+                        bytes
+                    ).as_slice()
+                )
+            );
+            let bsd_re = safe_unwrap!(
+                Regex::new(
+                    format!(
+                        r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{{{digest_size}}})",
+                        algorithm = algoname,
+                        digest_size = bytes
+                    ).as_slice()
+                )
+            );
+
             let mut buffer = file;
-            //let mut buffer = BufferedReader::new(file);
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
-                let (ck_filename, sum) = match from_gnu(line.as_slice(), bytes) {
-                    Some(m) => m,
-                    None => match from_bsd(algoname, line.as_slice(), bytes) {
-                        Some(m) => m,
+                let (ck_filename, sum, binary_check) = match gnu_re.captures(line.as_slice()) {
+                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lower(), caps.name("binary") == "*"),
+                    None => match bsd_re.captures(line.as_slice()) {
+                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lower(), true),
                         None => {
                             bad_format += 1;
                             if strict {
@@ -192,8 +219,9 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let real_sum = calc_sum(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary);
-                if sum == real_sum.as_slice() {
+                let real_sum = calc_sum(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check)
+                    .as_slice().to_ascii().to_lower();
+                if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
                         println!("{}: OK", ck_filename);
                     }
@@ -209,7 +237,7 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             if tag {
                 println!("{} ({}) = {}", algoname, filename, sum);
             } else {
-                println!("{}  {}", sum, filename);
+                println!("{} {}{}", sum, binary_marker, filename);
             }
         }
     }
@@ -239,25 +267,3 @@ fn calc_sum(digest: &mut Box<Digest>, file: &mut Reader, binary: bool) -> String
     digest.result_str()
 }
 
-fn from_gnu<'a>(line: &'a str, bytes: uint) -> Option<(&'a str, &'a str)> {
-    let sum = line.slice_to(bytes);
-    if sum.len() < bytes || line.slice(bytes, bytes + 2) != "  " {
-        None
-    } else {
-        Some((line.slice(bytes + 2, line.len() - 1), sum))
-    }
-}
-
-fn from_bsd<'a>(algoname: &str, line: &'a str, bytes: uint) -> Option<(&'a str, &'a str)> {
-    let expected = format!("{} (", algoname);
-    if line.slice(0, expected.len()) == expected.as_slice() {
-        let rparen = match line.find(')') {
-            Some(m) => m,
-            None => return None
-        };
-        if rparen > expected.len() && line.slice(rparen + 1, rparen + 4) == " = " && line.len() - 1 == rparen + 4 + bytes {
-            return Some((line.slice(expected.len(), rparen), line.slice(rparen + 4, line.len() - 1)));
-        }
-    }
-    None
-}
