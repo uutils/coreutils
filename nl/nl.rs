@@ -204,7 +204,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
             // a header) or the current char does not form part of
             // a new group, then this line is not a segment indicator.
             if matched_groups >= 3
-                || settings.section_delimiter[std::bool::to_bit::<uint>(odd)] != c {
+                || settings.section_delimiter[if odd { 1 } else { 0 }] != c {
                 matched_groups = 0;
                 break;
             }
