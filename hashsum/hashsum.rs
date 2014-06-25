@@ -180,17 +180,25 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
         );
         if check {
 
-            // Set up Regexs for line validation and parsing
+            // Set up Regexes for line validation and parsing
             let bytes = digest.output_bits() / 4;
-            let gnu_re = safe_unwrap!(Regex::new(format!(
+            let gnu_re = safe_unwrap!(
+                Regex::new(
+                    format!(
                         r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
                         bytes
-                        ).as_slice()));
-            let bsd_re = safe_unwrap!(Regex::new(format!(
+                    ).as_slice()
+                )
+            );
+            let bsd_re = safe_unwrap!(
+                Regex::new(
+                    format!(
                         r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{{{digest_size}}})",
                         algorithm = algoname,
                         digest_size = bytes
-                        ).as_slice()));
+                    ).as_slice()
+                )
+            );
 
             let mut buffer = file;
             for (i, line) in buffer.lines().enumerate() {
