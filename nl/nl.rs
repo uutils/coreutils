@@ -170,7 +170,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let line_no_width_initial = line_no_width;
     // Stores the smallest integer with one more digit than line_no, so that
     // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = std::num::pow(10, line_no_width) as u64;
+    let mut line_no_threshold = std::num::pow(10u64, line_no_width);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
         RightZero => '0',
@@ -232,7 +232,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
                     if settings.renumber {
                         line_no = settings.starting_line_number;
                         line_no_width = line_no_width_initial;
-                        line_no_threshold = std::num::pow(10, line_no_width) as u64;
+                        line_no_threshold = std::num::pow(10u64, line_no_width);
                     }
                     &settings.header_numbering
                 },
