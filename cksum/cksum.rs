@@ -25,7 +25,7 @@ static VERSION : &'static str = "1.0.0";
 fn crc_update(mut crc: u32, input: u8) -> u32 {
     crc ^= input as u32 << 24;
 
-    for _ in range(0, 8) {
+    for _ in range(0u, 8) {
         if crc & 0x80000000 != 0 {
             crc <<= 1;
             crc ^= 0x04c11db7;
