@@ -21,6 +21,8 @@ extern crate getopts;
 use std::io::fs::File;
 use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
+use std::io::IoError;
+use std::io::EndOfFile;
 use std::os;
 use regex::Regex;
 use crypto::digest::Digest;
@@ -211,7 +213,7 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let real_sum = calc_sum(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check)
+                let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
                     .as_slice().to_ascii().to_lower();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
@@ -225,7 +227,7 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                 }
             }
         } else {
-            let sum = calc_sum(&mut digest, &mut file, binary);
+            let sum = safe_unwrap!(digest_reader(&mut digest, &mut file, binary));
             if tag {
                 println!("{} ({}) = {}", algoname, filename, sum);
             } else {
@@ -247,15 +249,28 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
     Ok(())
 }
 
-fn calc_sum(digest: &mut Box<Digest>, file: &mut Reader, binary: bool) -> String {
-    let data =
-        if binary {
-            (safe_unwrap!(file.read_to_end()))
-        } else {
-            (safe_unwrap!(file.read_to_str())).into_bytes()
-        };
+fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) -> Result<String, IoError> {
     digest.reset();
-    digest.input(data.as_slice());
-    digest.result_str()
+
+    // Digest file, do not hold too much in memory at any given moment
+    let mut buffer = [0, ..524288];
+    loop {
+        match reader.read(buffer) {
+            Ok(0) => {},
+            Ok(nread) => {
+                digest.input(buffer.slice(0, nread));
+            },
+            Err(e) => match e.kind {
+                EndOfFile => {
+                    break;
+                },
+                _ => {
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Ok(digest.result_str())
 }
 
