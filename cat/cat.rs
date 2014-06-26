@@ -177,7 +177,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         };
 
         // Flush all 1024 iterations.
-        let mut flush_counter = range(0, 1024);
+        let mut flush_counter = range(0u, 1024);
 
         let mut in_buf  = [0, .. 1024 * 32];
         let mut out_buf = [0, .. 1024 * 64];
@@ -191,7 +191,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
             for &byte in in_buf.slice_to(n).iter() {
                 if flush_counter.next().is_none() {
                     writer.possibly_flush();
-                    flush_counter = range(0, 1024);
+                    flush_counter = range(0u, 1024);
                 }
                 if byte == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {

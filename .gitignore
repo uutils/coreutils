@@ -1,4 +1,5 @@
 /build/
+/target/
 *~
 .*.swp
 .*.swo

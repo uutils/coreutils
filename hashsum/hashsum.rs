@@ -164,8 +164,8 @@ fn usage(program: &str, binary_name: &str, opts: &[getopts::OptGroup]) {
 }
 
 fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), int> {
-    let mut bad_format = 0;
-    let mut failed = 0;
+    let mut bad_format = 0u;
+    let mut failed = 0u;
     let binary_marker = if binary {
         "*"
     } else {

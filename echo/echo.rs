@@ -60,7 +60,7 @@ fn convert_str(string: &str, index: uint, base: uint) -> (char, uint) {
     };
 
     let mut bytes = vec!();
-    for offset in range(0, max_digits) {
+    for offset in range(0u, max_digits) {
         if string.len() <= index + offset as uint {
             break;
         }
