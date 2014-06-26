@@ -269,6 +269,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
     digest.reset();
 
     // Digest file, do not hold too much in memory at any given moment
+    let windows = cfg!(windows);
     let mut buffer = [0, ..524288];
     let mut vec = Vec::with_capacity(524288);
     let mut looking_for_newline = false;
@@ -276,7 +277,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
         match reader.read(buffer) {
             Ok(0) => {},
             Ok(nread) => {
-                if cfg!(windows) && !binary {
+                if windows && !binary {
                     // Windows text mode returns '\n' when reading '\r\n'
                     for i in range(0, nread) {
                         if looking_for_newline {
@@ -309,7 +310,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
             }
         }
     }
-    if cfg!(windows) && looking_for_newline {
+    if windows && looking_for_newline {
         vec.push('\r' as u8);
         digest.input(vec.as_slice());
     }
