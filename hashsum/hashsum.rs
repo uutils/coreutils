@@ -304,6 +304,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
     if cfg!(windows) && looking_for_newline {
         vec.push('\r' as u8);
     }
+    digest.input(vec.as_slice());
 
     Ok(digest.result_str())
 }
