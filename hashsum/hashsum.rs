@@ -98,11 +98,14 @@ pub fn uumain(args: Vec<String>) -> int {
     let binary = Path::new(program.as_slice());
     let binary_name = binary.filename_str().unwrap();
 
+    // Default binary in Windows, text mode otherwise
+    let binary_flag_default = cfg!(windows);
+
     let mut opts: Vec<getopts::OptGroup> = vec!(
-        getopts::optflag("b", "binary", "read in binary mode"),
+        getopts::optflag("b", "binary", format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" }).as_slice()),
         getopts::optflag("c", "check", "read hashsums from the FILEs and check them"),
         getopts::optflag("", "tag", "create a BSD-style checksum"),
-        getopts::optflag("t", "text", "read in text mode (default)"),
+        getopts::optflag("t", "text", format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" }).as_slice()),
         getopts::optflag("q", "quiet", "don't print OK for each successfully verified file"),
         getopts::optflag("s", "status", "don't output anything, status code shows success"),
         getopts::optflag("", "strict", "exit non-zero for improperly formatted checksum lines"),
@@ -125,7 +128,12 @@ pub fn uumain(args: Vec<String>) -> int {
     } else {
         let (name, algo) = detect_algo(binary_name.as_slice(), &matches);
 
-        let binary = matches.opt_present("binary");
+        let binary_flag = matches.opt_present("binary");
+        let text_flag = matches.opt_present("text");
+        if binary_flag && text_flag {
+            crash!(1, "cannot set binary and text mode at the same time");
+        }
+        let binary = if binary_flag { true } else if text_flag { false } else { binary_flag_default };
         let check = matches.opt_present("check");
         let tag = matches.opt_present("tag");
         let status = matches.opt_present("status");
