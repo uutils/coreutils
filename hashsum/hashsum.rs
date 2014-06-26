@@ -266,7 +266,18 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
         match reader.read(buffer) {
             Ok(0) => {},
             Ok(nread) => {
-                digest.input(buffer.slice(0, nread));
+                if cfg!(windows) && !binary {
+                    // Windows text mode ignores return carriage
+                    let mut vec = Vec::with_capacity(nread);
+                    for i in range(0, nread) {
+                        if buffer[i] != ('\r' as u8) {
+                           vec.push(buffer[i]);
+                        }
+                    }
+                    digest.input(vec.as_slice());
+                } else {
+                    digest.input(buffer.slice(0, nread));
+                }
             },
             Err(e) => match e.kind {
                 EndOfFile => {
