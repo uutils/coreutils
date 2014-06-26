@@ -13,6 +13,21 @@ use std::slice::Items;
 use std::str::CharRange;
 use FileOrStdReader;
 use FmtOptions;
+use charwidth;
+
+#[inline(always)]
+fn char_width(c: char) -> uint {
+    if (c as uint) < 0xA0 {
+        // if it is ASCII, call it exactly 1 wide (including control chars)
+        // calling control chars' widths 1 is consistent with OpenBSD fmt
+        1
+    } else {
+        // otherwise, get the unicode width
+        // note that we shouldn't actually get None here because only c < 0xA0
+        // can return None, but for safety and future-proofing we do it this way
+        charwidth::width(c).unwrap_or(1)
+    }
+}
 
 // lines with PSKIP, lacking PREFIX, or which are entirely blank are
 // NoFormatLines; otherwise, they are FormatLines
@@ -117,7 +132,7 @@ impl<'a> FileLines<'a> {
                 indent_len = (indent_len / self.opts.tabwidth + 1) * self.opts.tabwidth;
             } else {
                 // non-tab character
-                indent_len += 1;
+                indent_len += char_width(c);
             }
         }
         (indent_end, prefix_len, indent_len)
@@ -196,7 +211,7 @@ pub struct Paragraph {
 // an iterator producing a stream of paragraphs from a stream of lines
 // given a set of options.
 pub struct ParagraphStream<'a> {
-    lines     : Peekable<Line,FileLines<'a>>,
+    lines     : Peekable<Line, FileLines<'a>>,
     next_mail : bool,
     opts      : &'a FmtOptions,
 }
@@ -238,8 +253,8 @@ impl<'a> ParagraphStream<'a> {
     }
 }
 
-impl<'a> Iterator<Result<Paragraph,String>> for ParagraphStream<'a> {
-    fn next(&mut self) -> Option<Result<Paragraph,String>> {
+impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
+    fn next(&mut self) -> Option<Result<Paragraph, String>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat =
             match self.lines.peek() {
@@ -396,39 +411,37 @@ impl<'a> ParaWords<'a> {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
-            self.words.push_all_move(self.para.lines.iter().flat_map(|x| x.as_slice().words()).map(|x| WordInfo {
+            self.words.extend(self.para.lines.iter().flat_map(|x| x.as_slice().words()).map(|x| WordInfo {
                 word           : x,
                 word_start     : 0,
-                word_nchars    : x.char_len(),
+                word_nchars    : x.len(),  // OK for mail headers; only ASCII allowed (unicode is escaped)
                 before_tab     : None,
                 after_tab      : 0,
                 sentence_start : false,
                 ends_punct     : false,
                 new_line       : false
-            }).collect());
+            }));
         } else {
             // first line
-            self.words.push_all_move(
+            self.words.extend(
                 if self.opts.crown || self.opts.tagged {
                     // crown and tagged mode has the "init" in the first line, so slice from there
                     WordSplit::new(self.opts, self.para.lines.get(0).as_slice().slice_from(self.para.init_end))
                 } else {
                     // otherwise we slice from the indent
                     WordSplit::new(self.opts, self.para.lines.get(0).as_slice().slice_from(self.para.indent_end))
-                }.collect());
+                });
 
             if self.para.lines.len() > 1 {
                 let indent_end = self.para.indent_end;
                 let opts = self.opts;
-                self.words.push_all_move(
-                    self.para.lines.iter().skip(1)
-                    .flat_map(|x| WordSplit::new(opts, x.as_slice().slice_from(indent_end)))
-                    .collect());
+                self.words.extend(
+                    self.para.lines.iter().skip(1).flat_map(|x| WordSplit::new(opts, x.as_slice().slice_from(indent_end))));
             }
         }
     }
 
-    pub fn words(&'a self) -> Items<'a,WordInfo<'a>> { return self.words.iter() }
+    pub fn words(&'a self) -> Items<'a, WordInfo<'a>> { return self.words.iter() }
 }
 
 struct WordSplit<'a> {
@@ -516,7 +529,7 @@ impl<'a> Iterator<WordInfo<'a>> for WordSplit<'a> {
         let mut word_nchars = 0;
         self.position =
             match self.string.slice_from(word_start)
-            .find(|x: char| if !x.is_whitespace() { word_nchars += 1; false } else { true }) {
+            .find(|x: char| if !x.is_whitespace() { word_nchars += char_width(x); false } else { true }) {
                 None => self.length,
                 Some(s) => s + word_start
             };
