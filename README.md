@@ -165,7 +165,7 @@ To do
 - split
 - stat
 - stdbuf
-- stty (in progress)
+- stty
 - tail (not all features implemented)
 - test
 - timeout
