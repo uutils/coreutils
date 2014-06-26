@@ -33,6 +33,7 @@ PROGS       := \
   sleep \
   seq \
   sum \
+  sync \
   tac \
   tee \
   touch \
@@ -55,7 +56,6 @@ UNIX_PROGS := \
   kill \
   logname \
   mkfifo \
-  sync \
   tty \
   uname \
   uptime \
