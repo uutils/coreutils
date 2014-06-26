@@ -37,6 +37,7 @@ extern crate hashsum;
 extern crate mkdir;
 extern crate mkfifo;
 extern crate nl;
+extern crate nohup;
 extern crate paste;
 extern crate printenv;
 extern crate pwd;
@@ -104,6 +105,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     map.insert("mkdir", mkdir::uumain);
     map.insert("mkfifo", mkfifo::uumain);
     map.insert("nl", nl::uumain);
+    map.insert("nohup", nohup::uumain);
     map.insert("paste", paste::uumain);
     map.insert("printenv", printenv::uumain);
     map.insert("pwd", pwd::uumain);
