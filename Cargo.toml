@@ -112,6 +112,10 @@ name = "nl"
 path = "nl/nl.rs"
 
 [[bin]]
+name = "nohup"
+path = "nohup/nohup.rs"
+
+[[bin]]
 name = "paste"
 path = "paste/paste.rs"
 
