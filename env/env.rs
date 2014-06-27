@@ -13,8 +13,6 @@
 
 #![allow(non_camel_case_types)]
 
-use std::os;
-
 struct options {
     ignore_env: bool,
     null: bool,
@@ -52,9 +50,6 @@ fn print_env(null: bool) {
         );
     }
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let prog = args.get(0).as_slice();

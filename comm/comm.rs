@@ -15,7 +15,6 @@ use std::cmp::Ord;
 use std::io::{BufferedReader, IoResult, print};
 use std::io::fs::File;
 use std::io::stdio::stdin;
-use std::os;
 use std::path::Path;
 
 static NAME : &'static str = "comm";
@@ -93,9 +92,6 @@ fn open_file(name: &str) -> IoResult<Box<Buffer>> {
         }
     }
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [

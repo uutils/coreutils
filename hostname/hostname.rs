@@ -15,7 +15,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::{os,str};
+use std::str;
 use getopts::{optflag, getopts, usage};
 
 extern {
@@ -31,9 +31,6 @@ extern {
 extern {
     fn sethostname(name: *libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
-
-#[allow(dead_code)]
-fn main () { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0);

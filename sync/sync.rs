@@ -15,7 +15,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use getopts::{optflag, getopts, usage};
 
 #[path = "../common/util.rs"] mod util;
@@ -135,11 +134,6 @@ mod platform {
         0
     }
 }
-
-static NAME: &'static str = "sync";
-
-#[allow(dead_code)]
-fn main () { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0);

@@ -23,9 +23,6 @@ mod util;
 static NAME : &'static str = "mkfifo";
 static VERSION : &'static str = "1.0.0";
 
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
-
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         getopts::optopt("m", "mode", "file permissions for the fifo", "(default 0666)"),

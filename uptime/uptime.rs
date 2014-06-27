@@ -17,7 +17,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::mem::transmute;
 use std::io::{print, File};
 use std::ptr::null;
@@ -46,9 +45,6 @@ extern {
 
     fn utmpxname(file: *c_char) -> c_int;
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

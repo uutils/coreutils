@@ -14,7 +14,6 @@ extern crate getopts;
 
 use std::io::{BufferedReader, EndOfFile, File, IoError, IoResult, print};
 use std::io::stdio::stdin;
-use std::os;
 
 #[path="../common/util.rs"]
 mod util;
@@ -76,9 +75,6 @@ fn open_file(name: &str) -> IoResult<Box<Reader>> {
         }
     }
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); } 
 
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [

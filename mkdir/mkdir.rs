@@ -14,7 +14,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::io::fs;
 use std::io::FilePermission;
 use std::num::strconv;
@@ -28,9 +27,6 @@ static VERSION: &'static str = "1.0.0";
 /**
  * Handles option parsing
  */
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
-
 pub fn uumain(args: Vec<String>) -> int {
 
     let opts = [

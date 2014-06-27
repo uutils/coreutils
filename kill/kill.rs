@@ -19,7 +19,6 @@ extern crate serialize;
 
 #[phase(plugin, link)] extern crate log;
 
-use std::os;
 use std::from_str::from_str;
 use std::io::process::Process;
 
@@ -51,9 +50,6 @@ pub enum Mode {
     Help,
     Version,
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
 

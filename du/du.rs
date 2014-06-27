@@ -16,7 +16,6 @@ extern crate getopts;
 extern crate libc;
 extern crate time;
 
-use std::os;
 use std::io::{stderr, fs, FileStat, TypeDirectory};
 use std::option::Option;
 use std::path::Path;
@@ -88,9 +87,6 @@ fn du(path: &Path, mut my_stat: Stat,
 
     stats
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();
