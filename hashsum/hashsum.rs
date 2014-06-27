@@ -23,7 +23,6 @@ use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
 use std::io::IoError;
 use std::io::EndOfFile;
-use std::os;
 use regex::Regex;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
