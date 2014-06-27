@@ -13,6 +13,7 @@ PROGS       := \
   cksum \
   comm \
   cp \
+  cut \
   dirname \
   echo \
   env \

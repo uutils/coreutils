@@ -114,7 +114,6 @@ To do
 - copy
 - cp (not much done)
 - csplit
-- cut
 - date
 - dd
 - df

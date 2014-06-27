@@ -32,6 +32,10 @@ name = "cp"
 path = "cp/cp.rs"
 
 [[bin]]
+name = "cut"
+path = "cut/cut.rs"
+
+[[bin]]
 name = "dirname"
 path = "dirname/dirname.rs"
 

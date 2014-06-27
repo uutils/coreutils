@@ -18,6 +18,7 @@ extern crate chroot;
 extern crate cksum;
 extern crate comm;
 extern crate cp;
+extern crate cut;
 extern crate dirname;
 extern crate du;
 extern crate echo;
@@ -80,6 +81,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     map.insert("cksum", cksum::uumain);
     map.insert("comm", comm::uumain);
     map.insert("cp", cp::uumain);
+    map.insert("cut", cut::uumain);
     map.insert("dirname", dirname::uumain);
     map.insert("du", du::uumain);
     map.insert("echo", echo::uumain);
