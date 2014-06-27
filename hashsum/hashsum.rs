@@ -21,6 +21,8 @@ extern crate getopts;
 use std::io::fs::File;
 use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
+use std::io::IoError;
+use std::io::EndOfFile;
 use regex::Regex;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -92,11 +94,14 @@ pub fn uumain(args: Vec<String>) -> int {
     let binary = Path::new(program.as_slice());
     let binary_name = binary.filename_str().unwrap();
 
+    // Default binary in Windows, text mode otherwise
+    let binary_flag_default = cfg!(windows);
+
     let mut opts: Vec<getopts::OptGroup> = vec!(
-        getopts::optflag("b", "binary", "read in binary mode"),
+        getopts::optflag("b", "binary", format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" }).as_slice()),
         getopts::optflag("c", "check", "read hashsums from the FILEs and check them"),
         getopts::optflag("", "tag", "create a BSD-style checksum"),
-        getopts::optflag("t", "text", "read in text mode (default)"),
+        getopts::optflag("t", "text", format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" }).as_slice()),
         getopts::optflag("q", "quiet", "don't print OK for each successfully verified file"),
         getopts::optflag("s", "status", "don't output anything, status code shows success"),
         getopts::optflag("", "strict", "exit non-zero for improperly formatted checksum lines"),
@@ -119,7 +124,12 @@ pub fn uumain(args: Vec<String>) -> int {
     } else {
         let (name, algo) = detect_algo(binary_name.as_slice(), &matches);
 
-        let binary = matches.opt_present("binary");
+        let binary_flag = matches.opt_present("binary");
+        let text_flag = matches.opt_present("text");
+        if binary_flag && text_flag {
+            crash!(1, "cannot set binary and text mode at the same time");
+        }
+        let binary = if binary_flag { true } else if text_flag { false } else { binary_flag_default };
         let check = matches.opt_present("check");
         let tag = matches.opt_present("tag");
         let status = matches.opt_present("status");
@@ -215,7 +225,7 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let real_sum = calc_sum(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check)
+                let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
                     .as_slice().to_ascii().to_lower();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
@@ -229,7 +239,7 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                 }
             }
         } else {
-            let sum = calc_sum(&mut digest, &mut file, binary);
+            let sum = safe_unwrap!(digest_reader(&mut digest, &mut file, binary));
             if tag {
                 println!("{} ({}) = {}", algoname, filename, sum);
             } else {
@@ -251,15 +261,56 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
     Ok(())
 }
 
-fn calc_sum(digest: &mut Box<Digest>, file: &mut Reader, binary: bool) -> String {
-    let data =
-        if binary {
-            (safe_unwrap!(file.read_to_end()))
-        } else {
-            (safe_unwrap!(file.read_to_str())).into_bytes()
-        };
+fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) -> Result<String, IoError> {
     digest.reset();
-    digest.input(data.as_slice());
-    digest.result_str()
+
+    // Digest file, do not hold too much in memory at any given moment
+    let windows = cfg!(windows);
+    let mut buffer = [0, ..524288];
+    let mut vec = Vec::with_capacity(524288);
+    let mut looking_for_newline = false;
+    loop {
+        match reader.read(buffer) {
+            Ok(0) => {},
+            Ok(nread) => {
+                if windows && !binary {
+                    // Windows text mode returns '\n' when reading '\r\n'
+                    for i in range(0, nread) {
+                        if looking_for_newline {
+                            if buffer[i] != ('\n' as u8) {
+                                vec.push('\r' as u8);
+                            }
+                            if buffer[i] != ('\r' as u8) {
+                                vec.push(buffer[i]);
+                                looking_for_newline = false;
+                            }
+                        } else if buffer[i] != ('\r' as u8) {
+                            vec.push(buffer[i]);
+                        } else {
+                            looking_for_newline = true;
+                        }
+                    }
+                    digest.input(vec.as_slice());
+                    vec.clear();
+                } else {
+                    digest.input(buffer.slice(0, nread));
+                }
+            },
+            Err(e) => match e.kind {
+                EndOfFile => {
+                    break;
+                },
+                _ => {
+                    return Err(e);
+                }
+            }
+        }
+    }
+    if windows && looking_for_newline {
+        vec.push('\r' as u8);
+        digest.input(vec.as_slice());
+    }
+
+    Ok(digest.result_str())
 }
 
