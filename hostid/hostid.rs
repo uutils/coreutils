@@ -20,8 +20,6 @@ extern crate libc;
 
 #[phase(plugin, link)] extern crate log;
 
-use std::os;
-
 use getopts::{
     getopts,
     optflag,
@@ -48,9 +46,6 @@ pub enum Mode {
 extern {
     pub fn gethostid() -> c_long;
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
 

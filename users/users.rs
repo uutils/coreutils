@@ -21,7 +21,6 @@ extern crate libc;
 
 use std::io::print;
 use std::mem;
-use std::os;
 use std::ptr;
 use std::str;
 use utmpx::*;
@@ -46,9 +45,6 @@ extern {
 }
 
 static NAME: &'static str = "users";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();

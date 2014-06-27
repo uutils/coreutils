@@ -19,7 +19,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::print;
-use std::os;
 use std::str;
 use libc::c_char;
 
@@ -42,9 +41,6 @@ static VERSION: &'static str = "1.0.0";
 fn version() {
     println!("{} {}", NAME, VERSION);
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();

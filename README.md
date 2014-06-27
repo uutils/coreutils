@@ -34,11 +34,6 @@ To build only a few of the available utilities:
 make BUILD='UTILITY_1 UTILITY_2'
 ```
 
-To build the multicall binary (_i.e._ BusyBox-like binary):
-```
-make MULTICALL=1
-```
-
 Installation Instructions
 -------------------------
 
@@ -57,12 +52,7 @@ To install only a few of the available utilities:
 make INSTALL='UTILITY_1 UTILITY_2' install
 ```
 
-To install the multicall binary:
-```
-make MULTICALL=1 install
-```
-
-To install every program (other than the multicall binary) with a prefix:
+To install every program with a prefix:
 ```
 make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
@@ -75,12 +65,7 @@ To uninstall all utilities:
 make uninstall
 ```
 
-To uninstall the multicall binary:
-```
-make MULTICALL=1 uninstall
-```
-
-To uninstall every program (other than the multicall binary) with a set prefix:
+To uninstall every program with a set prefix:
 ```
 make PROG_PREFIX=PREFIX_GOES_HERE uninstall
 ```

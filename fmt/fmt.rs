@@ -15,7 +15,6 @@ extern crate getopts;
 
 use std::io::{BufferedReader, BufferedWriter, File, IoResult};
 use std::io::stdio::{stdin_raw, stdout_raw};
-use std::os;
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 
@@ -53,9 +52,6 @@ struct FmtOptions {
     goal            : uint,
     tabwidth        : uint,
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())) }
 
 pub fn uumain(args: Vec<String>) -> int {
 

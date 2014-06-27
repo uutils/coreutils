@@ -14,16 +14,12 @@ extern crate getopts;
 extern crate time;
 
 use std::io::File;
-use std::os;
 
 #[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "touch";
 static VERSION: &'static str = "1.0.0";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [

@@ -13,7 +13,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::io::{File, IoResult, print};
 use std::io::stdio::{stdin_raw};
 
@@ -75,9 +74,6 @@ fn open(name: &str) -> IoResult<Box<Reader>> {
 		}
 	}
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();

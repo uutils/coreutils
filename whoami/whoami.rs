@@ -19,7 +19,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::print;
-use std::os;
 
 #[path = "../common/util.rs"] mod util;
 
@@ -66,9 +65,6 @@ mod platform {
 }
 
 static NAME: &'static str = "whoami";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).as_slice();

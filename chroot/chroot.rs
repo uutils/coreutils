@@ -36,9 +36,6 @@ extern {
 static NAME: &'static str = "chroot";
 static VERSION: &'static str = "1.0.0";
 
-#[allow(dead_code)]
-fn main () { std::os::set_exit_status(uumain(std::os::args())); }
-
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0);
 

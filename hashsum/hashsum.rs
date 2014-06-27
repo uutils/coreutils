@@ -90,9 +90,6 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&str, Box<Digest>)
     }
 }
 
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
-
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0).clone();
     let binary = Path::new(program.as_slice());

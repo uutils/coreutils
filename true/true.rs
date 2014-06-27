@@ -1,4 +1,4 @@
-#![crate_id(name="true", vers="1.0.0", author="Seldaek")]
+#![crate_id = "uutrue#1.0.0"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,5 +9,6 @@
  * file that was distributed with this source code.
  */
 
-fn main() {
+pub fn uumain(_: Vec<String>) -> int {
+	0
 }

@@ -14,7 +14,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{print, println};
-use std::os;
 use std::str::StrSlice;
 
 #[path = "../common/util.rs"]
@@ -22,9 +21,6 @@ mod util;
 
 static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = strip_dir(args.get(0).as_slice());

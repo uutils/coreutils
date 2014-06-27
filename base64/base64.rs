@@ -18,7 +18,6 @@ extern crate libc;
 #[phase(plugin, link)] extern crate log;
 
 use std::io::{println, File, stdin, stdout};
-use std::os;
 use std::str;
 
 use getopts::{
@@ -91,9 +90,6 @@ pub fn uumain(args: Vec<String>) -> int {
 
     0
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
     let mut to_decode = match input.read_to_str() {
