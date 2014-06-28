@@ -35,7 +35,10 @@ extern {
 
 #[cfg(target_os = "macos")]
 fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(s: &mut T) {
-    s.seek(0, std::rt::rtio::SeekEnd);
+    match s.seek(0, std::rt::rtio::SeekEnd) {
+        Ok(_) => {}
+        Err(f) => crash!(1, "{}", f.detail.unwrap())
+    }
 }
 
 #[cfg(target_os = "linux")]

@@ -14,7 +14,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::io::{File, BufferedWriter, BufferedReader, stdin, print};
 use getopts::{optopt, optflag, getopts, usage};
 
