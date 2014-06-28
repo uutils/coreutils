@@ -46,9 +46,6 @@ fn _vprocmgr_detach_from_console(_: u32) -> *libc::c_int { std::ptr::null() }
 #[cfg(target_os = "freebsd")]
 fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(_: &mut T) {}
 
-#[allow(dead_code)]
-fn main () { std::os::set_exit_status(uumain(std::os::args())); }
-
 pub fn uumain(args: Vec<String>) -> int {
     let program = args.get(0);
 
@@ -78,7 +75,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     unsafe { signal(SIGHUP, SIG_IGN) };
 
-    if _vprocmgr_detach_from_console(0) != std::ptr::null() { crash!(2, "Cannot detach from console")};
+    if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() { crash!(2, "Cannot detach from console")};
 
     unsafe {
         // we ignore the memory leak here because it doesn't matter anymore
