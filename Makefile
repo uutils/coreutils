@@ -30,6 +30,7 @@ PROGS       := \
   printenv \
   pwd \
   realpath \
+  relpath \
   rm \
   rmdir \
   sleep \
