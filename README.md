@@ -139,7 +139,6 @@ To do
 - printf
 - ptx
 - readlink
-- realpath
 - relpath
 - remove
 - runcon

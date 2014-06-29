@@ -29,6 +29,7 @@ PROGS       := \
   paste \
   printenv \
   pwd \
+  realpath \
   rm \
   rmdir \
   sleep \
