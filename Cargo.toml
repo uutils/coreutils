@@ -132,6 +132,14 @@ name = "pwd"
 path = "pwd/pwd.rs"
 
 [[bin]]
+name = "realpath"
+path = "realpath/realpath.rs"
+
+[[bin]]
+name = "relpath"
+path = "relpath/relpath.rs"
+
+[[bin]]
 name = "rm"
 path = "rm/rm.rs"
 

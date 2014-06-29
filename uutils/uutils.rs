@@ -42,6 +42,8 @@ extern crate nohup;
 extern crate paste;
 extern crate printenv;
 extern crate pwd;
+extern crate realpath;
+extern crate relpath;
 extern crate rm;
 extern crate rmdir;
 extern crate seq;
@@ -111,6 +113,8 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     map.insert("paste", paste::uumain);
     map.insert("printenv", printenv::uumain);
     map.insert("pwd", pwd::uumain);
+    map.insert("realpath", realpath::uumain);
+    map.insert("relpath", relpath::uumain);
     map.insert("rm", rm::uumain);
     map.insert("rmdir", rmdir::uumain);
     map.insert("seq", seq::uumain);
