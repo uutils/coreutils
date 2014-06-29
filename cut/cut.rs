@@ -14,7 +14,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
 use std::io::{File, BufferedWriter, BufferedReader, stdin, print};
 use getopts::{optopt, optflag, getopts, usage};
 
@@ -413,9 +412,6 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
 
     exit_code
 }
-
-#[allow(dead_code)]
-fn main() { os::set_exit_status(uumain(os::args())); }
 
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [
