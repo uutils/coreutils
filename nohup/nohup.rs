@@ -30,7 +30,7 @@ static VERSION: &'static str = "1.0.0";
 
 #[cfg(target_os = "macos")]
 extern {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *libc::c_int;
+    fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
 #[cfg(target_os = "macos")]
@@ -43,7 +43,7 @@ fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(s: &mut T) {
 
 #[cfg(target_os = "linux")]
 #[cfg(target_os = "freebsd")]
-fn _vprocmgr_detach_from_console(_: u32) -> *libc::c_int { std::ptr::null() }
+fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
 #[cfg(target_os = "linux")]
 #[cfg(target_os = "freebsd")]
@@ -83,9 +83,9 @@ pub fn uumain(args: Vec<String>) -> int {
     unsafe {
         // we ignore the memory leak here because it doesn't matter anymore
         let executable = opts.free.get(0).as_slice().to_c_str().unwrap();
-        let mut args: Vec<*i8> = opts.free.iter().map(|x| x.to_c_str().unwrap()).collect();
+        let mut args: Vec<*const i8> = opts.free.iter().map(|x| x.to_c_str().unwrap()).collect();
         args.push(std::ptr::null());
-        execvp(executable as *libc::c_char, args.as_ptr() as **libc::c_char) as int
+        execvp(executable as *const libc::c_char, args.as_ptr() as *mut *const libc::c_char) as int
     }
 }
 

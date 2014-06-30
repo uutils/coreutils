@@ -19,7 +19,7 @@ extern crate libc;
 
 use std::mem::transmute;
 use std::io::{print, File};
-use std::ptr::null;
+use std::ptr::{mut_null, null};
 use std::from_str::from_str;
 use libc::{time_t, c_double, c_int, c_char};
 use c_types::c_tm;
@@ -34,16 +34,16 @@ use utmpx::*;
 static NAME: &'static str = "uptime";
 
 extern {
-    fn time(timep: *time_t) -> time_t;
-    fn localtime(timep: *time_t) -> *c_tm;
+    fn time(timep: *mut time_t) -> time_t;
+    fn localtime(timep: *const time_t) -> *const c_tm;
 
-    fn getloadavg(loadavg: *c_double, nelem: c_int) -> c_int;
+    fn getloadavg(loadavg: *mut c_double, nelem: c_int) -> c_int;
 
-    fn getutxent() -> *c_utmp;
+    fn getutxent() -> *const c_utmp;
     fn setutxent();
     fn endutxent();
 
-    fn utmpxname(file: *c_char) -> c_int;
+    fn utmpxname(file: *const c_char) -> c_int;
 }
 
 pub fn uumain(args: Vec<String>) -> int {
@@ -81,8 +81,8 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn print_loadavg() {
-    let avg: [c_double, ..3] = [0.0, ..3];
-    let loads: i32 = unsafe { transmute(getloadavg(avg.as_ptr(), 3)) };
+    let mut avg: [c_double, ..3] = [0.0, ..3];
+    let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
     if loads == -1 {
         print!("\n");
@@ -143,7 +143,7 @@ fn print_nusers(nusers: uint) {
 }
 
 fn print_time() {
-    let local_time = unsafe { *localtime(&time(null())) };
+    let local_time = unsafe { *localtime(&time(mut_null())) };
 
     if local_time.tm_hour >= 0 && local_time.tm_min >= 0 &&
        local_time.tm_sec >= 0 {
@@ -160,7 +160,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         Ok(s) => s,
         _ => return match boot_time {
                 Some(t) => {
-                    let now = unsafe { time(null()) };
+                    let now = unsafe { time(mut_null()) };
                     ((now - t) * 100) as i64 // Return in ms
                 },
                 _ => -1

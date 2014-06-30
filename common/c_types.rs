@@ -14,32 +14,32 @@ use self::libc::funcs::posix88::unistd::getgroups;
 use std::vec::Vec;
 
 use std::os;
-use std::ptr::read;
+use std::ptr::{mut_null, read};
 use std::str::raw::from_c_str;
 
 #[cfg(target_os = "macos")]
 pub struct c_passwd {
-    pub pw_name:    *c_char,    /* user name */
-    pub pw_passwd:  *c_char,    /* user name */
+    pub pw_name:    *const c_char,    /* user name */
+    pub pw_passwd:  *const c_char,    /* user name */
     pub pw_uid:     uid_t,      /* user uid */
     pub pw_gid:     gid_t,      /* user gid */
     pub pw_change:  time_t,
-    pub pw_class:   *c_char,
-    pub pw_gecos:   *c_char,
-    pub pw_dir:     *c_char,
-    pub pw_shell:   *c_char,
+    pub pw_class:   *const c_char,
+    pub pw_gecos:   *const c_char,
+    pub pw_dir:     *const c_char,
+    pub pw_shell:   *const c_char,
     pub pw_expire:  time_t
 }
 
 #[cfg(target_os = "linux")]
 pub struct c_passwd {
-    pub pw_name:    *c_char,    /* user name */
-    pub pw_passwd:  *c_char,    /* user name */
+    pub pw_name:    *const c_char,    /* user name */
+    pub pw_passwd:  *const c_char,    /* user name */
     pub pw_uid:     uid_t,      /* user uid */
     pub pw_gid:     gid_t,      /* user gid */
-    pub pw_gecos:   *c_char,
-    pub pw_dir:     *c_char,
-    pub pw_shell:   *c_char,
+    pub pw_gecos:   *const c_char,
+    pub pw_dir:     *const c_char,
+    pub pw_shell:   *const c_char,
 }
 
 #[cfg(target_os = "macos")]
@@ -62,10 +62,10 @@ pub struct utsname {
 }
 
 pub struct c_group {
-    pub gr_name:   *c_char,  // group name
-    pub gr_passwd: *c_char,  // password
+    pub gr_name:   *const c_char,  // group name
+    pub gr_passwd: *const c_char,  // password
     pub gr_gid:    gid_t,    // group id
-    pub gr_mem:    **c_char, // member list
+    pub gr_mem:    *const *const c_char, // member list
 }
 
 pub struct c_tm {
@@ -81,11 +81,11 @@ pub struct c_tm {
 }
 
 extern {
-    pub fn getpwuid(uid: uid_t) -> *c_passwd;
-    pub fn getpwnam(login: *c_char) -> *c_passwd;
-    pub fn getgrgid(gid: gid_t) -> *c_group;
-    pub fn getgrnam(name: *c_char) -> *c_group;
-    pub fn getgrouplist(name: *c_char,
+    pub fn getpwuid(uid: uid_t) -> *const c_passwd;
+    pub fn getpwnam(login: *const c_char) -> *const c_passwd;
+    pub fn getgrgid(gid: gid_t) -> *const c_group;
+    pub fn getgrnam(name: *const c_char) -> *const c_group;
+    pub fn getgrouplist(name: *const c_char,
                         gid: gid_t,
                         groups: *mut gid_t,
                         ngroups: *mut c_int) -> c_int;
@@ -93,7 +93,7 @@ extern {
 
 #[cfg(target_os = "macos")]
 extern {
-    pub fn getgroupcount(name: *c_char, gid: gid_t) -> int32_t;
+    pub fn getgroupcount(name: *const c_char, gid: gid_t) -> int32_t;
 }
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
@@ -114,7 +114,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         // Passed the username as a string
         } else {
             let pw_pointer = unsafe {
-                getpwnam(username.as_slice().to_c_str().unwrap() as *libc::c_char)
+                getpwnam(username.as_slice().to_c_str().unwrap() as *const libc::c_char)
             };
             if pw_pointer.is_not_null() {
                 Some(unsafe { read(pw_pointer) })
@@ -131,7 +131,7 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit()) {
         unsafe { getgrgid(from_str::<gid_t>(groupname).unwrap()) }
     } else {
-        unsafe { getgrnam(groupname.to_c_str().unwrap() as *c_char) }
+        unsafe { getgrnam(groupname.to_c_str().unwrap() as *const c_char) }
     };
 
     if group.is_not_null() {
@@ -142,7 +142,7 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     }
 }
 
-pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
+pub fn get_group_list(name: *const c_char, gid: gid_t) -> Vec<gid_t> {
     let mut ngroups: c_int = 32;
     let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as uint);
 
@@ -159,12 +159,12 @@ pub fn get_group_list(name: *c_char, gid: gid_t) -> Vec<gid_t> {
 
 #[cfg(target_os = "linux")]
 #[inline(always)]
-unsafe fn get_group_list_internal(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
+unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
     getgrouplist(name, gid, groups, grcnt)
 }
 
 #[cfg(target_os = "macos")]
-unsafe fn get_group_list_internal(name: *c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
+unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
     let ngroups = getgroupcount(name, gid);
     let oldsize = *grcnt;
     *grcnt = ngroups;
@@ -177,7 +177,7 @@ unsafe fn get_group_list_internal(name: *c_char, gid: gid_t, groups: *mut gid_t,
 }
 
 pub fn get_groups() -> Result<Vec<gid_t>, int> {
-    let ngroups = unsafe { getgroups(0, 0 as *mut gid_t) };
+    let ngroups = unsafe { getgroups(0, mut_null()) };
     if ngroups == -1 {
         return Err(os::errno());
     }

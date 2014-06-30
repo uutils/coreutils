@@ -97,7 +97,7 @@ fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<Str
             _ => {
                 if arg.len() > 1 && arg.as_slice().char_at(0) == '-' {
                     let mut newopts = options.clone();
-                    let argptr: *String = &arg;  // escape from the borrow checker
+                    let argptr: *const String = &arg;  // escape from the borrow checker
                     for ch in unsafe { (*argptr).as_slice() }.chars().skip(1) {
                         match ch {
                             'h' => {

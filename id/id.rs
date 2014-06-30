@@ -72,12 +72,12 @@ mod audit {
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
     extern {
-        pub fn getaudit(auditinfo_addr: *c_auditinfo_addr_t) -> c_int;
+        pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
     }
 }
 
 extern {
-    fn getgrgid(gid: uid_t) -> *c_group;
+    fn getgrgid(gid: uid_t) -> *const c_group;
 }
 
 static NAME: &'static str = "id";
@@ -198,7 +198,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
         print!("uid\t{:s}\ngroups\t", pw_name);
         group(possible_pw, true);
     } else {
-        let login = unsafe { from_c_str(getlogin()) };
+        let login = unsafe { from_c_str(getlogin() as *const i8) };
         let rid = unsafe { getuid() };
         let pw = unsafe { getpwuid(rid) };
 
@@ -308,7 +308,7 @@ fn auditid() { }
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
     let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
-    let address = &auditinfo as *audit::c_auditinfo_addr_t;
+    let address = &auditinfo as *mut audit::c_auditinfo_addr_t;
     if  unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");
         return;

@@ -32,16 +32,16 @@ mod util;
 mod utmpx;
 
 extern {
-    fn getutxent() -> *c_utmp;
-    fn getutxid(ut: *c_utmp) -> *c_utmp;
-    fn getutxline(ut: *c_utmp) -> *c_utmp;
+    fn getutxent() -> *const c_utmp;
+    fn getutxid(ut: *const c_utmp) -> *const c_utmp;
+    fn getutxline(ut: *const c_utmp) -> *const c_utmp;
 
-    fn pututxline(ut: *c_utmp) -> *c_utmp;
+    fn pututxline(ut: *const c_utmp) -> *const c_utmp;
 
     fn setutxent();
     fn endutxent();
 
-    fn utmpxname(file: *libc::c_char) -> libc::c_int;
+    fn utmpxname(file: *const libc::c_char) -> libc::c_int;
 }
 
 static NAME: &'static str = "users";
