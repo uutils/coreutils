@@ -143,8 +143,8 @@ impl<'a> PartialEq for LineBreak<'a> {
 // NOTE "less than" in this case means "worse", i.e., more demerits
 #[allow(dead_code)]
 impl<'a> PartialOrd for LineBreak<'a> {
-    fn lt(&self, other: &LineBreak) -> bool {
-        self.demerits > other.demerits
+    fn partial_cmp(&self, other: &LineBreak) -> Option<Ordering> {
+	Some(self.demerits.cmp(&other.demerits))
     }
 }
 
