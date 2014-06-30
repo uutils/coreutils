@@ -139,7 +139,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<&'a WordInfo<'a>>>(mut iter: T, arg
 
                 // We find identical breakpoints here by comparing addresses of the references.
                 // This is OK because the backing vector is not mutating once we are linebreaking.
-                if winfo as *_ == next_break as *_ {
+                if winfo as *const _ == next_break as *const _ {
                     // OK, we found the matching word
                     if break_before {
                         write_newline(args.indent_str, args.ostream);
