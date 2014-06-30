@@ -1,4 +1,4 @@
-#![crate_id(name="fmt", vers="0.0.2", author="kwantam")]
+#![crate_id(name="fmt", vers="0.0.3", author="kwantam")]
 /*
  * This file is part of `fmt` from the uutils coreutils package.
  *
@@ -13,6 +13,7 @@
 extern crate core;
 extern crate getopts;
 
+use std::cmp;
 use std::io::{BufferedReader, BufferedWriter, File, IoResult};
 use std::io::stdio::{stdin_raw, stdout_raw};
 use linebreak::break_lines;
@@ -31,10 +32,11 @@ macro_rules! silent_unwrap(
 mod util;
 mod linebreak;
 mod parasplit;
+mod charwidth;
 
 // program's NAME and VERSION are used for -V and -h
 static NAME: &'static str = "fmt";
-static VERSION: &'static str = "0.0.2";
+static VERSION: &'static str = "0.0.3";
 
 struct FmtOptions {
     crown           : bool,
@@ -48,6 +50,7 @@ struct FmtOptions {
     anti_prefix     : String,
     xanti_prefix    : bool,
     uniform         : bool,
+    quick           : bool,
     width           : uint,
     goal            : uint,
     tabwidth        : uint,
@@ -68,8 +71,10 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace."),
         getopts::optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace."),
 
-        getopts::optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 78.", "WIDTH"),
-        getopts::optopt("g", "goal", "Goal width, default ~0.92*WIDTH. Must be less than WIDTH.", "GOAL"),
+        getopts::optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH"),
+        getopts::optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL"),
+
+        getopts::optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance."),
 
         getopts::optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH"),
 
@@ -96,6 +101,7 @@ pub fn uumain(args: Vec<String>) -> int {
         tagged          : false,
         mail            : false,
         uniform         : false,
+        quick           : false,
         split_only      : false,
         use_prefix      : false,
         prefix          : String::new(),
@@ -103,8 +109,8 @@ pub fn uumain(args: Vec<String>) -> int {
         use_anti_prefix : false,
         anti_prefix     : String::new(),
         xanti_prefix    : false,
-        width           : 78,
-        goal            : 72,
+        width           : 79,
+        goal            : 74,
         tabwidth        : 8,
     };
 
@@ -112,6 +118,7 @@ pub fn uumain(args: Vec<String>) -> int {
     if matches.opt_present("c") { fmt_opts.crown        = true; fmt_opts.tagged = false; }
     if matches.opt_present("m") { fmt_opts.mail         = true; }
     if matches.opt_present("u") { fmt_opts.uniform      = true; }
+    if matches.opt_present("q") { fmt_opts.quick        = true; }
     if matches.opt_present("s") { fmt_opts.split_only   = true; fmt_opts.crown  = false; fmt_opts.tagged = false; }
     if matches.opt_present("x") { fmt_opts.xprefix      = true; }
     if matches.opt_present("X") { fmt_opts.xanti_prefix = true; }
@@ -139,7 +146,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     Some(t) => t,
                     None => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
                 };
-            fmt_opts.goal = std::cmp::min(fmt_opts.width * 92 / 100, fmt_opts.width - 4);
+            fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
         }
         None => ()
     };
@@ -152,7 +159,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     None => { crash!(1, "Invalid GOAL specification: `{}'", s); }
                 };
             if !matches.opt_present("w") {
-                fmt_opts.width = std::cmp::max(fmt_opts.goal * 100 / 92, fmt_opts.goal + 4);
+                fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
             } else if fmt_opts.goal > fmt_opts.width {
                 crash!(1, "GOAL cannot be greater than WIDTH.");
             }
@@ -189,7 +196,7 @@ pub fn uumain(args: Vec<String>) -> int {
         let mut fp =
             match open_file(i) {
                 Err(e) => {
-                    show_warning!("{}: {}",i,e);
+                    show_warning!("{}: {}", i, e);
                     continue;
                 }
                 Ok(f) => f
