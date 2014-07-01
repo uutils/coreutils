@@ -219,7 +219,7 @@ fn num_prefix(i: uint, width: uint) -> String {
 fn split(settings: &Settings) -> int {
     let mut reader = io::BufferedReader::new(
         if settings.input.as_slice() == "-" {
-            box io::stdin() as Box<Reader>
+            box io::stdio::stdin_raw() as Box<Reader>
         } else {
             box match io::File::open(&Path::new(settings.input.clone())) {
                 Ok(a) => a,
