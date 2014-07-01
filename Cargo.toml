@@ -156,6 +156,10 @@ name = "sleep"
 path = "sleep/sleep.rs"
 
 [[bin]]
+name = "split"
+path = "split/split.rs"
+
+[[bin]]
 name = "sum"
 path = "sum/sum.rs"
 
