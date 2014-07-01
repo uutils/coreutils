@@ -240,7 +240,7 @@ fn split(settings: &Settings) -> int {
         request_new_file: true, // Request new file
     };
 
-    let mut writer = io::BufferedWriter::new(box io::stdout() as Box<Writer>);
+    let mut writer = io::BufferedWriter::new(box io::stdio::stdout_raw() as Box<Writer>);
     let mut fileno = 0;
     loop {
         if control.current_line.as_slice().char_len() == 0 {
