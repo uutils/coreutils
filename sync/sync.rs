@@ -16,6 +16,7 @@ extern crate getopts;
 extern crate libc;
 
 use getopts::{optflag, getopts, usage};
+#[cfg(windows)]use std::ptr::null;
 
 #[path = "../common/util.rs"] mod util;
 
@@ -39,22 +40,22 @@ mod platform {
     use std::{mem, str};
 
     extern "system" {
-        fn CreateFileA(lpFileName: *libc::c_char,
+        fn CreateFileA(lpFileName: *const libc::c_char,
                       dwDesiredAccess: libc::uint32_t,
                       dwShareMode: libc::uint32_t,
-                      lpSecurityAttributes: *libc::c_void, // *LPSECURITY_ATTRIBUTES
+                      lpSecurityAttributes: *const libc::c_void, // *LPSECURITY_ATTRIBUTES
                       dwCreationDisposition: libc::uint32_t,
                       dwFlagsAndAttributes: libc::uint32_t,
-                      hTemplateFile: *libc::c_void) -> *libc::c_void;
-        fn GetDriveTypeA(lpRootPathName: *libc::c_char) -> libc::c_uint;
+                      hTemplateFile: *const libc::c_void) -> *const libc::c_void;
+        fn GetDriveTypeA(lpRootPathName: *const libc::c_char) -> libc::c_uint;
         fn GetLastError() -> libc::uint32_t;
-        fn FindFirstVolumeA(lpszVolumeName: *libc::c_char,
-                            cchBufferLength: libc::uint32_t) -> *libc::c_void;
-        fn FindNextVolumeA(hFindVolume: *libc::c_void,
-                           lpszVolumeName: *libc::c_char,
+        fn FindFirstVolumeA(lpszVolumeName: *mut libc::c_char,
+                            cchBufferLength: libc::uint32_t) -> *const libc::c_void;
+        fn FindNextVolumeA(hFindVolume: *const libc::c_void,
+                           lpszVolumeName: *mut libc::c_char,
                            cchBufferLength: libc::uint32_t) -> libc::c_int;
-        fn FindVolumeClose(hFindVolume: *libc::c_void) -> libc::c_int;
-        fn FlushFileBuffers(hFile: *libc::c_void) -> libc::c_int;
+        fn FindVolumeClose(hFindVolume: *const libc::c_void) -> libc::c_int;
+        fn FlushFileBuffers(hFile: *const libc::c_void) -> libc::c_int;
     }
 
     #[allow(unused_unsafe)]
@@ -66,11 +67,11 @@ mod platform {
                     match CreateFileA(sliced_name_buffer,
                                       0xC0000000, // GENERIC_WRITE
                                       0x00000003, // FILE_SHARE_WRITE,
-                                      0 as *libc::c_void,
+                                      null(),
                                       0x00000003, // OPEN_EXISTING
                                       0,
-                                      0 as *libc::c_void) {
-                        _x if _x == -1 as *libc::c_void => { // INVALID_HANDLE_VALUE
+                                      null()) {
+                        _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
                             crash!(GetLastError(), "failed to create volume handle");
                         }
                         handle @ _ => {
@@ -85,10 +86,10 @@ mod platform {
     }
 
     #[allow(unused_unsafe)]
-    unsafe fn find_first_volume() -> (String, *libc::c_void) {
+    unsafe fn find_first_volume() -> (String, *const libc::c_void) {
         let name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
         match FindFirstVolumeA(name.as_ptr(), name.len() as libc::uint32_t) {
-            _x if _x == -1 as *libc::c_void => { // INVALID_HANDLE_VALUE
+            _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
                 crash!(GetLastError(), "failed to find first volume");
             }
             handle @ _ => {

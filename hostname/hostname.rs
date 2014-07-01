@@ -19,17 +19,17 @@ use std::str;
 use getopts::{optflag, getopts, usage};
 
 extern {
-    fn gethostname(name: *libc::c_char, namelen: libc::size_t) -> libc::c_int;
+    fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
 
 #[cfg(target_os = "macos")]
 extern {
-    fn sethostname(name: *libc::c_char, namelen: libc::c_int) -> libc::c_int;
+    fn sethostname(name: *const libc::c_char, namelen: libc::c_int) -> libc::c_int;
 }
 
 #[cfg(target_os = "linux")]
 extern {
-    fn sethostname(name: *libc::c_char, namelen: libc::size_t) -> libc::c_int;
+    fn sethostname(name: *const libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
 
 pub fn uumain(args: Vec<String>) -> int {
@@ -92,7 +92,7 @@ fn xgethostname() -> String {
     let mut name = Vec::from_elem(namelen, 0u8);
 
     let err = unsafe {
-        gethostname (name.as_mut_ptr() as *libc::c_char,
+        gethostname (name.as_mut_ptr() as *mut libc::c_char,
                                         namelen as libc::size_t)
     };
 

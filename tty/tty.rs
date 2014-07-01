@@ -28,7 +28,7 @@ use getopts::{optflag,getopts};
 mod util;
 
 extern {
-    fn ttyname(filedesc: libc::c_int) -> *libc::c_char;
+    fn ttyname(filedesc: libc::c_int) -> *const libc::c_char;
     fn isatty(filedesc: libc::c_int) -> libc::c_int;
 }
 

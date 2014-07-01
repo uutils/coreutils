@@ -35,9 +35,9 @@ mod platform {
     }
 
     pub unsafe fn getusername() -> String {
-        let passwd: *c_passwd = getpwuid(geteuid());
+        let passwd: *const c_passwd = getpwuid(geteuid());
 
-        let pw_name: *libc::c_char = (*passwd).pw_name;
+        let pw_name: *const libc::c_char = (*passwd).pw_name;
         let name = str::raw::from_c_str(pw_name);
 
         name
@@ -51,7 +51,7 @@ mod platform {
     use std::str;
 
     extern "system" {
-        pub fn GetUserNameA(out: *libc::c_char, len: *libc::uint32_t) -> libc::uint8_t;
+        pub fn GetUserNameA(out: *mut libc::c_char, len: *mut libc::uint32_t) -> libc::uint8_t;
     }
 
     #[allow(unused_unsafe)]

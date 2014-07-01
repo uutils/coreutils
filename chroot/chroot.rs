@@ -20,17 +20,17 @@ use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
 #[path = "../common/c_types.rs"] mod c_types;
 
 extern {
-    fn chroot(path: *libc::c_char) -> libc::c_int;
+    fn chroot(path: *const libc::c_char) -> libc::c_int;
 }
 
 #[cfg(target_os = "macos")]
 extern {
-    fn setgroups(size: libc::c_int, list: *libc::gid_t) -> libc::c_int;
+    fn setgroups(size: libc::c_int, list: *const libc::gid_t) -> libc::c_int;
 }
 
 #[cfg(target_os = "linux")]
 extern {
-    fn setgroups(size: libc::size_t, list: *libc::gid_t) -> libc::c_int;
+    fn setgroups(size: libc::size_t, list: *const libc::gid_t) -> libc::c_int;
 }
 
 static NAME: &'static str = "chroot";
@@ -92,9 +92,9 @@ pub fn uumain(args: Vec<String>) -> int {
 
     unsafe {
         let executable = command.get(0).as_slice().to_c_str().unwrap();
-        let mut commandParts: Vec<*i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
+        let mut commandParts: Vec<*const i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
         commandParts.push(std::ptr::null());
-        execvp(executable as *libc::c_char, commandParts.as_ptr() as **libc::c_char) as int
+        execvp(executable as *const libc::c_char, commandParts.as_ptr() as *mut *const libc::c_char) as int
     }
 }
 
@@ -129,7 +129,7 @@ fn enter_chroot(root: &Path) {
         crash!(1, "cannot chdir to {}", rootStr)
     };
     let err = unsafe {
-        chroot(".".to_c_str().unwrap() as *libc::c_char)
+        chroot(".".to_c_str().unwrap() as *const libc::c_char)
     };
     if err != 0 {
         crash!(1, "cannot chroot to {}: {:s}", rootStr, strerror(err).as_slice())
@@ -194,7 +194,7 @@ fn set_user(user: &str) {
 fn strerror(errno: i32) -> String {
     unsafe {
         let err = libc::funcs::c95::string::strerror(errno);
-        std::str::raw::from_c_str(err)
+        std::str::raw::from_c_str(err as *const i8)
     }
 }
 
