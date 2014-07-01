@@ -57,6 +57,11 @@ To install every program with a prefix:
 make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
 
+To install the multicall binary:
+```
+make install-multicall
+```
+
 Uninstallation Instructions
 ---------------------------
 
@@ -68,6 +73,11 @@ make uninstall
 To uninstall every program with a set prefix:
 ```
 make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+```
+
+To uninstall the multicall binary:
+```
+make uninstall-multicall
 ```
 
 Test Instructions
