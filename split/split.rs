@@ -1,4 +1,4 @@
-#![crate_id(name="mkdir", vers="1.0.0", author="Akira Hayakawa")]
+#![crate_id(name="split", vers="1.0.0", author="Akira Hayakawa")]
 
 /*
  * This file is part of the uutils coreutils package.
