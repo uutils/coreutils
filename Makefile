@@ -198,8 +198,20 @@ install: $(addprefix build/,$(INSTALLEES))
 		install build/$$prog $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)$$prog; \
 	done
 
+# TODO: figure out if there is way for prefixes to work with the symlinks
+install-multicall: build/uutils
+	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
+	install build/uutils $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)uutils
+	cd $(DESTDIR)$(PREFIX)$(BINDIR)
+	for prog in $(INSTALLEES); do \
+		ln -s $(PROG_PREFIX)uutils $$prog; \
+	done
+
 uninstall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX),$(PROGS))
+
+uninstall-multicall:
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)
 
 # Test under the busybox testsuite
 build/busybox: build/uutils
