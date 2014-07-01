@@ -11,59 +11,7 @@
 
 extern crate getopts;
 
-extern crate base64;
-extern crate basename;
-extern crate cat;
-extern crate chroot;
-extern crate cksum;
-extern crate comm;
-extern crate cp;
-extern crate cut;
-extern crate dirname;
-extern crate du;
-extern crate echo;
-extern crate env;
-extern crate factor;
-extern crate fmt;
-extern crate fold;
-extern crate groups;
-extern crate head;
-extern crate hostid;
-extern crate hostname;
-extern crate id;
-extern crate kill;
-extern crate link;
-extern crate logname;
-extern crate hashsum;
-extern crate mkdir;
-extern crate mkfifo;
-extern crate nl;
-extern crate nohup;
-extern crate paste;
-extern crate printenv;
-extern crate pwd;
-extern crate realpath;
-extern crate relpath;
-extern crate rm;
-extern crate rmdir;
-extern crate seq;
-extern crate sleep;
-extern crate sum;
-extern crate uusync;
-extern crate tac;
-extern crate tail;
-extern crate tee;
-extern crate touch;
-extern crate tr;
-extern crate truncate;
-extern crate tty;
-extern crate uname;
-extern crate unlink;
-extern crate uptime;
-extern crate users;
-extern crate wc;
-extern crate whoami;
-extern crate yes;
+@CRATES@
 
 use std::os;
 use std::collections::hashmap::HashMap;
@@ -76,66 +24,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     fn uufalse(_: Vec<String>) -> int { 1 }
 
     let mut map = HashMap::new();
-    map.insert("base64", base64::uumain);
-    map.insert("basename", basename::uumain);
-    map.insert("cat", cat::uumain);
-    map.insert("chroot", chroot::uumain);
-    map.insert("cksum", cksum::uumain);
-    map.insert("comm", comm::uumain);
-    map.insert("cp", cp::uumain);
-    map.insert("cut", cut::uumain);
-    map.insert("dirname", dirname::uumain);
-    map.insert("du", du::uumain);
-    map.insert("echo", echo::uumain);
-    map.insert("env", env::uumain);
-    map.insert("factor", factor::uumain);
-    map.insert("false", uufalse);
-    map.insert("fmt", fmt::uumain);
-    map.insert("fold", fold::uumain);
-    map.insert("groups", groups::uumain);
-    map.insert("head", head::uumain);
-    map.insert("hostid", hostid::uumain);
-    map.insert("hostname", hostname::uumain);
-    map.insert("id", id::uumain);
-    map.insert("kill", kill::uumain);
-    map.insert("link", link::uumain);
-    map.insert("logname", logname::uumain);
-    map.insert("md5sum", hashsum::uumain);
-    map.insert("sha1sum", hashsum::uumain);
-    map.insert("sha224sum", hashsum::uumain);
-    map.insert("sha256sum", hashsum::uumain);
-    map.insert("sha384sum", hashsum::uumain);
-    map.insert("sha512sum", hashsum::uumain);
-    map.insert("mkdir", mkdir::uumain);
-    map.insert("mkfifo", mkfifo::uumain);
-    map.insert("nl", nl::uumain);
-    map.insert("nohup", nohup::uumain);
-    map.insert("paste", paste::uumain);
-    map.insert("printenv", printenv::uumain);
-    map.insert("pwd", pwd::uumain);
-    map.insert("realpath", realpath::uumain);
-    map.insert("relpath", relpath::uumain);
-    map.insert("rm", rm::uumain);
-    map.insert("rmdir", rmdir::uumain);
-    map.insert("seq", seq::uumain);
-    map.insert("sleep", sleep::uumain);
-    map.insert("sum", sum::uumain);
-    map.insert("sync", uusync::uumain);
-    map.insert("tac", tac::uumain);
-    map.insert("tail", tail::uumain);
-    map.insert("tee", tee::uumain);
-    map.insert("touch", touch::uumain);
-    map.insert("tr", tr::uumain);
-    map.insert("true", uutrue);
-    map.insert("truncate", truncate::uumain);
-    map.insert("tty", tty::uumain);
-    map.insert("uname", uname::uumain);
-    map.insert("unlink", unlink::uumain);
-    map.insert("uptime", uptime::uumain);
-    map.insert("users", users::uumain);
-    map.insert("wc", wc::uumain);
-    map.insert("whoami", whoami::uumain);
-    map.insert("yes", yes::uumain);
+    @UTIL_MAP@
     map
 }
 
