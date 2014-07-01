@@ -149,15 +149,12 @@ tmp/$(1)_test: $(1)/test.rs
 endef
 
 # Main rules
-ifeq ($(BUILD), $(PROGS))
 all: $(EXES_PATHS) build/uutils
 
 -include build/uutils.d
-build/uutils: uutils/uutils.rs $(addprefix build/, $(addsuffix .timestamp, $(CRATES)))
-	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d uutils/uutils.rs -o $@
-else
-all: $(EXES_PATHS)
-endif
+build/uutils: uutils/uutils.rs build/mkuutils $(addprefix build/, $(addsuffix .timestamp, $(CRATES)))
+	build/mkuutils build/gen/uutils.rs $(BUILD)
+	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
 
 # Dependencies
 LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
@@ -167,6 +164,9 @@ build/$(LIBCRYPTO): | build
 
 build/mkmain: mkmain.rs | build
 	$(RUSTC) $(RUSTCFLAGS) -L build mkmain.rs -o $@
+
+build/mkuutils: mkuutils.rs | build
+	$(RUSTC) $(RUSTCFLAGS) -L build mkuutils.rs -o $@
 
 deps: build/$(LIBCRYPTO)
 
