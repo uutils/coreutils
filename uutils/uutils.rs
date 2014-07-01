@@ -20,9 +20,6 @@ static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
 fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
-    fn uutrue(_: Vec<String>) -> int { 0 }
-    fn uufalse(_: Vec<String>) -> int { 1 }
-
     let mut map = HashMap::new();
     @UTIL_MAP@
     map
