@@ -1,4 +1,4 @@
-Rudamentary tail implementation.
+Rudimentary tail implementation.
 
 ##Missing features:
 
