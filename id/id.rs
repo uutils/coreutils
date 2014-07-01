@@ -307,8 +307,8 @@ fn auditid() { }
 
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
-    let auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
-    let address = &auditinfo as *mut audit::c_auditinfo_addr_t;
+    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
+    let address = &mut auditinfo as *mut audit::c_auditinfo_addr_t;
     if  unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");
         return;
