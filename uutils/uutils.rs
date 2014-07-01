@@ -86,7 +86,7 @@ fn main() {
                         let util = args.get(1).as_slice();
                         match umap.find_equiv(&util) {
                             Some(&uumain) => {
-                                os::set_exit_status(uumain(vec!["--help".to_string()]));
+                                os::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
                                 return
                             }
                             None => {
