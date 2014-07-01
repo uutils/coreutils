@@ -23,7 +23,7 @@ fn util_map() -> HashMap<&str, fn(Vec<String>) -> int> {
     fn uutrue(_: Vec<String>) -> int { 0 }
     fn uufalse(_: Vec<String>) -> int { 1 }
 
-    let mut map = HashMap::new();
+    let mut map = HashMap::<&str, fn(Vec<String>) -> int>::new();
     @UTIL_MAP@
     map
 }
