@@ -130,9 +130,13 @@ endef
 ALIAS_SOURCE = $(firstword $(subst :, ,$(1)))
 ALIAS_TARGET = $(word 2,$(subst :, ,$(1)))
 define MAKE_ALIAS
+
+ifneq ($(ALIAS_TARGET,$(1)),)
 all: build/$(call ALIAS_TARGET,$(1))
 build/$(call ALIAS_TARGET,$(1)): build/$(call ALIAS_SOURCE,$(1))
 	$(call command,install build/$(call ALIAS_SOURCE,$(1)) build/$(call ALIAS_TARGET,$(1)))
+endif
+
 endef
 
 # Test exe built rules
@@ -145,11 +149,15 @@ tmp/$(1)_test: $(1)/test.rs
 endef
 
 # Main rules
+ifeq ($(BUILD), $(PROGS))
 all: $(EXES_PATHS) build/uutils
 
 -include build/uutils.d
 build/uutils: uutils/uutils.rs $(addprefix build/, $(addsuffix .timestamp, $(CRATES)))
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d uutils/uutils.rs -o $@
+else
+all: $(EXES_PATHS)
+endif
 
 # Dependencies
 LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
