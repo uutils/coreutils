@@ -51,7 +51,7 @@ fn isodigit(c: u8) -> bool {
     }
 }
 
-fn convert_str(string: &str, index: uint, base: uint) -> (char, uint) {
+fn convert_str(string: &[u8], index: uint, base: uint) -> (char, uint) {
     let (max_digits, is_legal_digit) = match base {
         8u => (3, isodigit),
         16u => (2, isxdigit),
@@ -201,7 +201,7 @@ pub fn uumain(args: Vec<String>) -> int {
                                 't' => print!("\t"),
                                 'v' => print!("\x0B"),
                                 'x' => {
-                                    let (c, num_char_used) = convert_str(string.as_slice(), index + 1, 16u);
+                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16u);
                                     if num_char_used == 0 {
                                         print!("\\x");
                                     } else {
@@ -212,7 +212,7 @@ pub fn uumain(args: Vec<String>) -> int {
                                     }
                                 },
                                 '0' => {
-                                    let (c, num_char_used) = convert_str(string.as_slice(), index + 1, 8u);
+                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8u);
                                     if num_char_used == 0 {
                                         print!("\0");
                                     } else {
@@ -223,7 +223,7 @@ pub fn uumain(args: Vec<String>) -> int {
                                     }
                                 }
                                 _ => {
-                                    let (esc_c, num_char_used) = convert_str(string.as_slice(), index, 8u);
+                                    let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8u);
                                     if num_char_used == 0 {
                                         print!("\\{}", c);
                                     } else {
