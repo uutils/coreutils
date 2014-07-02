@@ -25,7 +25,7 @@ fn char_width(c: char) -> uint {
         // otherwise, get the unicode width
         // note that we shouldn't actually get None here because only c < 0xA0
         // can return None, but for safety and future-proofing we do it this way
-        charwidth::width(c).unwrap_or(1)
+        charwidth::width(c, false).unwrap_or(1)
     }
 }
 
