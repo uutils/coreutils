@@ -20,9 +20,6 @@ static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
 fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
-    fn uutrue(_: Vec<String>) -> int { 0 }
-    fn uufalse(_: Vec<String>) -> int { 1 }
-
     let mut map = HashMap::new();
     @UTIL_MAP@
     map
@@ -58,8 +55,8 @@ fn main() {
         None => (),
     }
 
-    if binary_as_util.starts_with("uutils")
-        || binary_as_util.starts_with("busybox") {
+    if binary_as_util.ends_with("uutils")
+        || binary_as_util.ends_with("busybox") {
             // uutils can be called as either "uutils", "busybox"
             // "uutils-suffix" or "busybox-suffix". Not sure
             // what busybox uses the -suffix pattern for.

@@ -22,8 +22,8 @@ fn main() {
                 }
                 util_map.push_str(format!("map.insert(\"{}\", hashsum::uumain);\n", prog).as_slice());
             }
-            "true" => util_map.push_str("map.insert(\"true\", uutrue);\n"),
-            "false" => util_map.push_str("map.insert(\"false\", uufalse);\n"),
+            "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> int { 0 }\nmap.insert(\"true\", uutrue);\n"),
+            "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> int { 1 }\nmap.insert(\"false\", uufalse);\n"),
             "sync" => {
                 crates.push_str("extern crate uusync;\n");
                 util_map.push_str("map.insert(\"sync\", uusync::uumain);\n");
