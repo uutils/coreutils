@@ -16,6 +16,7 @@ use std::io::{stdin};
 use std::io::BufferedReader;
 use std::io::fs::File;
 use std::path::Path;
+use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 use std::collections::Deque;
 use std::collections::ringbuf::RingBuf;
@@ -123,18 +124,18 @@ fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
 
     while a < b {
         let current = options.get(a).clone();
-        let current = current.as_slice();
+        let current = current.as_bytes();
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
             for pos in range(1, len) {
                 // Ensure that the argument is only made out of digits
-                if !char::is_digit(current.char_at(pos)) { break; }
+                if !char::is_digit(current[pos] as char) { break; }
 
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number : Option<uint> = from_str(current.slice(1,len));
+                    let number : Option<uint> = from_str(from_utf8(current.slice(1,len)).unwrap());
                     return (options, Some(number.unwrap()));
                 }
             }
