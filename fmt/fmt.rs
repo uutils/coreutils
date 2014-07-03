@@ -217,10 +217,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
-    let short_usage = getopts::short_usage(arg0, opts);
-    println!("{}", short_usage.as_slice().slice_to(60));
-    print!("      {}", short_usage.as_slice().slice_from(60));
-    println!("\n\n{}{}", getopts::usage("Reformat paragraphs from input files (or stdin) to stdout.", opts), errmsg);
+    println!("Usage: {} [OPTION]... [FILE]...\n\n{}{}", arg0, getopts::usage("Reformat paragraphs from input files (or stdin) to stdout.", opts), errmsg);
 }
 
 // uniform interface for opening files
