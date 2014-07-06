@@ -1,4 +1,4 @@
-#![crate_id(name="nl", vers="1.0.0", author="Tobias Schottdorf")]
+#![crate_name = "nl"]
 #![feature(macro_rules)]
 /*
  * This file is part of the uutils coreutils package.

@@ -1,4 +1,4 @@
-#![crate_id = "uusync#1.0.0"]
+#![crate_name = "uusync"]
 /*
  * This file is part of the uutils coreutils package.
  *

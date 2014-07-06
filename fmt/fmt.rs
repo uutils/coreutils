@@ -1,4 +1,4 @@
-#![crate_id(name="fmt", vers="0.0.3", author="kwantam")]
+#![crate_name = "fmt"]
 /*
  * This file is part of `fmt` from the uutils coreutils package.
  *

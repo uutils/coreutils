@@ -1,4 +1,4 @@
-#![crate_id = "hashsum#1.0.0"]
+#![crate_name = "hashsum"]
 
 /*
  * This file is part of the uutils coreutils package.

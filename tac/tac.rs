@@ -1,4 +1,4 @@
-#![crate_id(name = "tac", vers = "1.0.0", author = "Arcterus")]
+#![crate_name = "tac"]
 
 /*
  * This file is part of the uutils coreutils package.

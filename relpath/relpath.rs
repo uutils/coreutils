@@ -1,4 +1,4 @@
-#![crate_id = "relpath#1.0.0"]
+#![crate_name = "relpath"]
 
 /*
  * This file is part of the uutils coreutils package.

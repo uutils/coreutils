@@ -1,4 +1,4 @@
-#![crate_id(name="unlink", vers="1.0.0", author="zvms")]
+#![crate_name = "unlink"]
 
 /*
  * This file is part of the uutils coreutils package.

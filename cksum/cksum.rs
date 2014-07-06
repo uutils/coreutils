@@ -1,4 +1,4 @@
-#![crate_id(name="cksum", vers="1.0.0", author="Michael Gehring")]
+#![crate_name = "cksum"]
 #![feature(macro_rules)]
 
 /*

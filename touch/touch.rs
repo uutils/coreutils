@@ -1,4 +1,4 @@
-#![crate_id(name="touch", vers="1.0.0", author="Nick Platt")]
+#![crate_name = "touch"]
 #![feature(macro_rules)]
 
 /*

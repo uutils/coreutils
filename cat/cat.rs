@@ -1,4 +1,4 @@
-#![crate_id(name="cat", vers="1.0.0", author="Seldaek")]
+#![crate_name = "cat"]
 #![feature(unsafe_destructor)]
 
 /*

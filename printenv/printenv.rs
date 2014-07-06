@@ -1,4 +1,4 @@
-#![crate_id(name="printenv", vers="1.0.0", author="Seldaek")]
+#![crate_name = "printenv"]
 
 /*
  * This file is part of the uutils coreutils package.

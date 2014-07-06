@@ -1,4 +1,4 @@
-#![crate_id(name="kill", vers="0.0.1", author="Maciej Dziardziel")]
+#![crate_name = "kill"]
 #![feature(macro_rules)]
 #![feature(phase)]
 

@@ -1,5 +1,5 @@
 #![feature(macro_rules)]
-#![crate_id(name="echo", vers="1.0.0", author="Derek Chiang")]
+#![crate_name = "echo"]
 
 /*
  * This file is part of the uutils coreutils package.
