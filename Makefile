@@ -45,6 +45,7 @@ PROGS       := \
   true \
   truncate \
   unlink \
+  uniq \
   wc \
   yes \
   head \
