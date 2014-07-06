@@ -204,6 +204,10 @@ name = "uname"
 path = "uname/uname.rs"
 
 [[bin]]
+name = "uniq"
+path = "uniq/uniq.rs"
+
+[[bin]]
 name = "unlink"
 path = "unlink/unlink.rs"
 
