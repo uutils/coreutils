@@ -1,4 +1,4 @@
-#![crate_id(name="sum", vers="1.0.0", author="T. Jameson Little")]
+#![crate_name = "sum"]
 #![feature(macro_rules)]
 
 /*

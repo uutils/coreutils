@@ -1,4 +1,4 @@
-#![crate_id(name="cp", vers="1.0.0", author="Jordy Dickinson")]
+#![crate_name = "cp"]
 #![feature(macro_rules)]
 #![feature(phase)]
 

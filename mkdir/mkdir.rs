@@ -1,4 +1,4 @@
-#![crate_id(name="mkdir", vers="1.0.0", author="Nicholas Juszczak")]
+#![crate_name = "mkdir"]
 
 /*
  * This file is part of the uutils coreutils package.

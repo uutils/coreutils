@@ -1,4 +1,4 @@
-#![crate_id = "uutrue#1.0.0"]
+#![crate_name= "uutrue"]
 
 /*
  * This file is part of the uutils coreutils package.

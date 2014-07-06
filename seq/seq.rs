@@ -1,4 +1,4 @@
-#![crate_id(name="seq", vers="1.0.0", author="Daniel MacDougall")]
+#![crate_name = "seq"]
 
 #![feature(macro_rules)]
 

@@ -1,4 +1,4 @@
-#![crate_id(name="uname", version="1.0.0", author="joaoxsouls")]
+#![crate_name = "uname"]
 
 /*
  * This file is part of the uutils coreutils package.

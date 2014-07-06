@@ -1,4 +1,4 @@
-#![crate_id = "chroot#1.0.0"]
+#![crate_name = "chroot"]
 /*
  * This file is part of the uutils coreutils package.
  *

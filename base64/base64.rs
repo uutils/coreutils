@@ -1,4 +1,4 @@
-#![crate_id(name="base64", vers="1.0.0", author="Jordy Dickinson")]
+#![crate_name = "base64"]
 
 /*
  * This file is part of the uutils coreutils package.

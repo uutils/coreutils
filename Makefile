@@ -158,7 +158,7 @@ build/uutils: uutils/uutils.rs build/mkuutils $(addprefix build/, $(addsuffix .t
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
 
 # Dependencies
-LIBCRYPTO = $(shell $(RUSTC) --crate-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
+LIBCRYPTO = $(shell $(RUSTC) --print-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
 -include build/rust-crypto.d
 build/$(LIBCRYPTO): | build
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/

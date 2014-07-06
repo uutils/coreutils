@@ -1,4 +1,4 @@
-#![crate_id(name="tty", version="1.0.0", author="Alan Andrade")]
+#![crate_name = "tty"]
 
 
 /*
