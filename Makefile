@@ -66,6 +66,7 @@ PROGS       := \
   split \
   seq \
   shuf \
+  sort \
   sum \
   sync \
   tac \
@@ -132,6 +133,7 @@ TEST_PROGS  := \
   mkdir \
   nl \
   seq \
+  sort \
   tr \
   truncate \
   unexpand
