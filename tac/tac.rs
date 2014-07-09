@@ -78,7 +78,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
                 box crash_if_err!(1, io::File::open(&Path::new(filename))) as Box<Reader>
             }
         );
-        let mut data = crash_if_err!(1, file.read_to_str());
+        let mut data = crash_if_err!(1, file.read_to_string());
         if data.as_slice().ends_with("\n") {
             // removes blank line that is inserted otherwise
             let mut buf = data.into_string();

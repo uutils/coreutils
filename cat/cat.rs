@@ -284,7 +284,7 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
     match File::open(&std::path::Path::new(path)) {
         Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
-            (writeln!(stderr(), "cat: {0:s}: {1:s}", path, e.to_str())).unwrap();
+            (writeln!(stderr(), "cat: {0:s}: {1:s}", path, e.to_string())).unwrap();
             None
         },
     }

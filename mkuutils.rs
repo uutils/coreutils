@@ -39,7 +39,7 @@ fn main() {
     // XXX: this all just assumes that the IO works correctly
     let mut out = File::open_mode(&Path::new(outfile), Truncate, Write).unwrap();
     let mut input = File::open(&Path::new("uutils/uutils.rs")).unwrap();
-    let main = input.read_to_str().unwrap().replace("@CRATES@", crates.as_slice()).replace("@UTIL_MAP@", util_map.as_slice());
+    let main = input.read_to_string().unwrap().replace("@CRATES@", crates.as_slice()).replace("@UTIL_MAP@", util_map.as_slice());
 
     match out.write(main.as_bytes()) {
         Err(e) => fail!("{}", e),

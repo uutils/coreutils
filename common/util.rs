@@ -59,7 +59,7 @@ macro_rules! crash_if_err(
     ($exitcode:expr, $exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!($exitcode, "{}", f.to_str())
+            Err(f) => crash!($exitcode, "{}", f.to_string())
         }
     )
 )
@@ -69,7 +69,7 @@ macro_rules! safe_write(
     ($fd:expr, $($args:expr),+) => (
         match write!($fd, $($args),+) {
             Ok(_) => {}
-            Err(f) => { fail!(f.to_str()); }
+            Err(f) => { fail!(f.to_string()); }
         }
     )
 )
@@ -79,7 +79,7 @@ macro_rules! safe_writeln(
     ($fd:expr, $($args:expr),+) => (
         match writeln!($fd, $($args),+) {
             Ok(_) => {}
-            Err(f) => { fail!(f.to_str()); }
+            Err(f) => { fail!(f.to_string()); }
         }
     )
 )
@@ -89,7 +89,7 @@ macro_rules! safe_unwrap(
     ($exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!(1, "{}", f.to_str())
+            Err(f) => crash!(1, "{}", f.to_string())
         }
     )
 )

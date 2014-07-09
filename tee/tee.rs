@@ -144,7 +144,7 @@ impl Reader for NamedReader {
 
 fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
     match cb() {
-        Err(f) => { warn(format!("{}: {}", path.display(), f.to_str()).as_slice()); Err(f) }
+        Err(f) => { warn(format!("{}: {}", path.display(), f.to_string()).as_slice()); Err(f) }
         okay => okay
     }
 }

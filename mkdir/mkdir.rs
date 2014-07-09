@@ -157,7 +157,7 @@ fn mkdir(path: &Path, mode: FilePermission) {
     match fs::mkdir(path, mode) {
         Ok(_) => {},
         Err(e) => {
-            crash!(1, "test {}", e.to_str());
+            crash!(1, "test {}", e.to_string());
         }
     }
 }

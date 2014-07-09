@@ -90,7 +90,7 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
     let mut walk_dir = match fs::walk_dir(path) {
         Ok(m) => m,
         Err(f) => {
-            show_error!("{}", f.to_str());
+            show_error!("{}", f.to_string());
             return Err(1);
         }
     };
@@ -111,7 +111,7 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
                 }
             }
             Err(f) => {
-                show_error!("{}", f.to_str());
+                show_error!("{}", f.to_string());
                 r = Err(1);
             }
         }
