@@ -105,13 +105,13 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
             let rfile = match File::open(&Path::new(rfilename.clone())) {
                 Ok(m) => m,
                 Err(f) => {
-                    crash!(1, "{}", f.to_str())
+                    crash!(1, "{}", f.to_string())
                 }
             };
             match fs::stat(rfile.path()) {
                 Ok(stat) => (stat.size, Reference),
                 Err(f) => {
-                    show_error!("{}", f.to_str());
+                    show_error!("{}", f.to_string());
                     return Err(1);
                 }
             }
@@ -127,7 +127,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     let fsize = match fs::stat(file.path()) {
                         Ok(stat) => stat.size,
                         Err(f) => {
-                            show_warning!("{}", f.to_str());
+                            show_warning!("{}", f.to_string());
                             continue;
                         }
                     };
@@ -143,13 +143,13 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     match file.truncate(tsize as i64) {
                         Ok(_) => {}
                         Err(f) => {
-                            show_error!("{}", f.to_str());
+                            show_error!("{}", f.to_string());
                             return Err(1);
                         }
                     }
                 }
                 Err(f) => {
-                    show_error!("{}", f.to_str());
+                    show_error!("{}", f.to_string());
                     return Err(1);
                 }
             }

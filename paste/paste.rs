@@ -66,7 +66,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
             }
         )
     ).collect();
-    let delimiters: Vec<String> = delimiters.chars().map(|x| x.to_str()).collect();
+    let delimiters: Vec<String> = delimiters.chars().map(|x| x.to_string()).collect();
     let mut delim_count = 0;
     if serial {
         for file in files.mut_iter() {
@@ -80,7 +80,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
                     Err(f) => if f.kind == io::EndOfFile {
                         break
                     } else {
-                        crash!(1, "{}", f.to_str())
+                        crash!(1, "{}", f.to_string())
                     }
                 }
                 delim_count += 1;
@@ -102,7 +102,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
                             *eof.get_mut(i) = true;
                             eof_count += 1;
                         } else {
-                            crash!(1, "{}", f.to_str());
+                            crash!(1, "{}", f.to_string());
                         }
                     }
                 }

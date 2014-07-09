@@ -56,7 +56,7 @@ fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
     let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
     let (use_delim, out_delim) = match opts.out_delim.clone() {
         Some(delim) => (true, delim),
-        None => (false, "".to_str())
+        None => (false, "".to_string())
     };
 
     'newline: loop {
@@ -106,7 +106,7 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
     let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
     let (use_delim, out_delim) = match opts.out_delim.clone() {
         Some(delim) => (true, delim),
-        None => (false, "".to_str())
+        None => (false, "".to_string())
     };
 
     'newline: loop {
@@ -363,7 +363,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
     let mut stdin_read = false;
     let mut exit_code = 0;
 
-    if filenames.len() == 0 { filenames.push("-".to_str()); }
+    if filenames.len() == 0 { filenames.push("-".to_string()); }
 
     for filename in filenames.iter() {
         if filename.as_slice() == "-" {
@@ -486,7 +486,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     match matches.opt_str("delimiter") {
                         Some(delim) => {
                             if delim.as_slice().char_len() != 1 {
-                                Err("the delimiter must be a single character".to_str())
+                                Err("the delimiter must be a single character".to_string())
                             } else {
                                 Ok(Fields(ranges,
                                           FieldOptions {
@@ -498,7 +498,7 @@ pub fn uumain(args: Vec<String>) -> int {
                         }
                         None => Ok(Fields(ranges,
                                           FieldOptions {
-                                              delimiter: "\t".to_str(),
+                                              delimiter: "\t".to_string(),
                                               out_delimeter: out_delim,
                                               only_delimited: only_delimited
                                           }))
@@ -507,9 +507,9 @@ pub fn uumain(args: Vec<String>) -> int {
             )
         }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => {
-            Err("only one type of list may be specified".to_str())
+            Err("only one type of list may be specified".to_string())
         }
-        _ => Err("you must specify a list of bytes, characters, or fields".to_str())
+        _ => Err("you must specify a list of bytes, characters, or fields".to_string())
     };
 
     match mode_parse {

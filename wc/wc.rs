@@ -177,7 +177,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
         }
 
         // used for formatting
-        max_str_len = total_byte_count.to_str().len();
+        max_str_len = total_byte_count.to_string().len();
     }
 
     for result in results.iter() {
@@ -240,7 +240,7 @@ fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
             Ok(BufferedReader::new(reader))
         },
         Err(e) => {
-            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_str());
+            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_string());
             Err(1)
         }
     }

@@ -102,15 +102,15 @@ fn copy(matches: getopts::Matches) {
             Err(e) => if e.kind == io::FileNotFound {
                 false
             } else {
-                error!("error: {:s}", e.to_str());
+                error!("error: {:s}", e.to_string());
                 fail!()
             }
         };
 
         if same_file {
             error!("error: \"{:s}\" and \"{:s}\" are the same file",
-                source.display().to_str(),
-                dest.display().to_str());
+                source.display().to_string(),
+                dest.display().to_string());
             fail!();
         }
 
@@ -118,7 +118,7 @@ fn copy(matches: getopts::Matches) {
 
         if io_result.is_err() {
             let err = io_result.unwrap_err();
-            error!("error: {:s}", err.to_str());
+            error!("error: {:s}", err.to_string());
             fail!();
         }
     } else {
@@ -129,7 +129,7 @@ fn copy(matches: getopts::Matches) {
 
         for source in sources.iter() {
             if fs::stat(source).unwrap().kind != io::TypeFile {
-                error!("error: \"{:s}\" is not a file", source.display().to_str());
+                error!("error: \"{:s}\" is not a file", source.display().to_string());
                 continue;
             }
 
@@ -137,13 +137,13 @@ fn copy(matches: getopts::Matches) {
 
             full_dest.push(source.filename_str().unwrap());
 
-            println!("{:s}", full_dest.display().to_str());
+            println!("{:s}", full_dest.display().to_string());
 
             let io_result = fs::copy(source, &full_dest);
 
             if io_result.is_err() {
                 let err = io_result.unwrap_err();
-                error!("error: {:s}", err.to_str());
+                error!("error: {:s}", err.to_string());
                 fail!()
             }
         }

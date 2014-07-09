@@ -125,7 +125,7 @@ fn print_signal(signal_name_or_value: &str) {
         if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name).as_slice()) == signal_name_or_value {
             println!("{}", signal.value)
             exit!(EXIT_OK as i32)
-        } else if signal_name_or_value == signal.value.to_str().as_slice() {
+        } else if signal_name_or_value == signal.value.to_string().as_slice() {
             println!("{}", signal.name);
             exit!(EXIT_OK as i32)
         }
@@ -169,7 +169,7 @@ fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<uint> {
     }
     for signal in ALL_SIGNALS.iter() {
         let long_name = format!("SIG{}", signal.name);
-        if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_str().as_slice()) || (long_name.as_slice() == signal_name_or_value) {
+        if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_string().as_slice()) || (long_name.as_slice() == signal_name_or_value) {
             return Some(signal.value);
         }
     }
