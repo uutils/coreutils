@@ -36,6 +36,7 @@ PROGS       := \
   sleep \
   split \
   seq \
+  shuf \
   sum \
   sync \
   tac \
