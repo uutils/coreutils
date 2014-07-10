@@ -1,4 +1,4 @@
-#![crate_id(name="shuf", vers="1.0.0", author="Arcterus")]
+#![crate_name = "shuf"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -114,7 +114,7 @@ With no FILE, or when FILE is -, read standard input.",
 fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, output: Option<String>, random: Option<String>) -> IoResult<()> {
     match mode {
         Echo => shuf_lines(input, repeat, zero, count, output, random),
-        InputRange(range) => shuf_lines(range.map(|num| num.to_str()).collect(), repeat, zero, count, output, random),
+        InputRange(range) => shuf_lines(range.map(|num| num.to_string()).collect(), repeat, zero, count, output, random),
         Default => {
             let lines: Vec<String> = input.move_iter().flat_map(|filename| {
                 let mut file = io::BufferedReader::new(crash_if_err!(1, io::File::open(&Path::new(filename.as_slice()))));
