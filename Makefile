@@ -26,6 +26,7 @@ PROGS       := \
   hashsum \
   mkdir \
   nl \
+  od \
   paste \
   printenv \
   pwd \
