@@ -142,7 +142,6 @@ To do
 - nice
 - nproc
 - numfmt
-- od
 - pathchk
 - pinky
 - pr

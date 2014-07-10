@@ -13,8 +13,6 @@ extern crate getopts;
 extern crate collections;
 
 use collections::string::String;
-use std::slice::bytes;
-
 use std::io::File;
 
 #[deriving(Show)]
@@ -24,6 +22,13 @@ pub fn uumain(args: Vec<String>) -> int {
    let opts = [
       getopts::optopt("A", "address-radix", "Select the base in which file offsets are printed.", "RADIX"),
       getopts::optopt("j", "skip-bytes", "Skip bytes input bytes before formatting and writing.", "BYTES"),
+      getopts::optopt("N", "read-bytes", "limit dump to BYTES input bytes", "BYTES"),
+      getopts::optopt("S", "strings", "output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.", "BYTES"),
+      getopts::optopt("t", "format", "select output format or formats", "TYPE"),
+      getopts::optflag("v", "output-duplicates", "do not use * to mark line suppression"),
+      getopts::optopt("w", "width", "output BYTES bytes per output line. 32 is implied when BYTES is not specified.", "BYTES"),
+      getopts::optflag("h", "help", "display this help and exit."),
+      getopts::optflag("v", "version", "output version information and exit."),
    ];
 
    let matches = match getopts::getopts(args.tail(), opts) {
