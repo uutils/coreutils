@@ -15,7 +15,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::str::from_utf8;
-use std::io::{print, stdin_raw, File, BufferedReader};
+use std::io::{print, File, BufferedReader};
+use std::io::stdio::stdin_raw;
 use StdResult = std::result::Result;
 use getopts::Matches;
 
