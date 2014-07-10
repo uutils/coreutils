@@ -35,6 +35,7 @@ PROGS       := \
   rmdir \
   sleep \
   seq \
+  shuf \
   sum \
   sync \
   tac \
