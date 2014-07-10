@@ -138,3 +138,8 @@ pub static ALL_SIGNALS:[Signal<'static>, ..31] = [
     Signal{ name: "USR1",   value:30 },
     Signal{ name: "USR2",   value:31 },
 ];
+
+#[inline(always)]
+pub fn is_signal(num: uint) -> bool {
+    num < ALL_SIGNALS.len()
+}

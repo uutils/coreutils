@@ -52,7 +52,6 @@ pub enum Mode {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-
     let opts = [
         optflag("h", "help", "display this help and exit"),
         optflag("V", "version", "output version information and exit"),
@@ -63,6 +62,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let usage = usage("[options] <pid> [...]", opts);
 
+    let (args, obs_signal) = handle_obsolete(args);
 
     let matches = match getopts(args.tail(), opts) {
         Ok(m) => m,
@@ -71,7 +71,6 @@ pub fn uumain(args: Vec<String>) -> int {
             return EXIT_ERR;
         },
     };
-
 
     let mode = if matches.opt_present("version") {
         Version
@@ -86,7 +85,7 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     match mode {
-        Kill    => kill(matches.opt_str("signal").unwrap_or("9".to_string()).as_slice(), matches.free),
+        Kill    => return kill(matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())).as_slice(), matches.free),
         Table   => table(),
         List    => list(matches.opt_str("list")),
         Help    => help(NAME, usage.as_slice()),
@@ -100,8 +99,29 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-fn table() {
+fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
+    let mut i = 0;
+    while i < args.len() {
+        // this is safe because slice is valid when it is referenced
+        let slice: &str = unsafe { std::mem::transmute(args.get(i).as_slice()) };
+        if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit() {
+            let val = slice.slice_from(1);
+            match from_str(val) {
+                Some(num) => {
+                    if signals::is_signal(num) {
+                        args.remove(i);
+                        return (args, Some(val.to_string()));
+                    }
+                }
+                None => break  /* getopts will error out for us */
+            }
+        }
+        i += 1;
+    }
+    (args, None)
+}
 
+fn table() {
     let mut name_width = 0;
     /* Compute the maximum width of a signal name. */
     for s in ALL_SIGNALS.iter() {
@@ -113,7 +133,7 @@ fn table() {
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         print!("{0: >#2} {1: <#8}", idx+1, signal.name);
         //TODO: obtain max signal width here
-        
+
         if (idx+1) % 7 == 0 {
             println!("");
         }
@@ -144,7 +164,7 @@ fn print_signals() {
         } else {
             pos += 1;
             print!(" ");
-        } 
+        }
     }
 }
 
@@ -176,7 +196,8 @@ fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<uint> {
     None
 }
 
-fn kill(signalname: &str, pids: std::vec::Vec<String>) {
+fn kill(signalname: &str, pids: std::vec::Vec<String>) -> int {
+    let mut status = 0;
     let optional_signal_value = signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,
@@ -187,11 +208,15 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) {
             Some(x) => {
                 let result = Process::kill(x, signal_value as int);
                 match result {
-                  Ok(_) => (),
-                  Err(_) => ()
+                    Ok(_) => (),
+                    Err(f) => {
+                        show_error!("{}", f);
+                        status = 1;
+                    }
                 };
             },
-            None => crash!(EXIT_ERR, "failed to parse argument {}", signalname)
+            None => crash!(EXIT_ERR, "failed to parse argument {}", pid)
         };
     }
+    status
 }
