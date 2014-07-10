@@ -152,6 +152,10 @@ name = "seq"
 path = "seq/seq.rs"
 
 [[bin]]
+name = "shuf"
+path = "shuf/shuf.rs"
+
+[[bin]]
 name = "sleep"
 path = "sleep/sleep.rs"
 
