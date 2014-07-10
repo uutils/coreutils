@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::str::from_utf8;
-use std::io::{print, stdin, File, BufferedReader};
+use std::io::{print, stdin_raw, File, BufferedReader};
 use StdResult = std::result::Result;
 use getopts::Matches;
 
@@ -87,6 +87,7 @@ static TAB: u8 = '\t' as u8;
 static SYN: u8 = 0x16 as u8;
 static FF: u8 = 0x0C as u8;
 
+#[inline(always)]
 fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
@@ -230,7 +231,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
 
 fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
     if "-" == path.as_slice() {
-        let reader = box stdin() as Box<Reader>;
+        let reader = box stdin_raw() as Box<Reader>;
         return Ok(BufferedReader::new(reader));
     }
 
