@@ -92,9 +92,9 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = match input.read_to_str() {
+    let mut to_decode = match input.read_to_string() {
         Ok(m) => m,
-        Err(f) => fail!(f.to_str())
+        Err(f) => fail!(f.to_string())
     };
 
     to_decode = str::replace(to_decode.as_slice(), "\n", "");
@@ -112,15 +112,15 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
 
             match out.write(bytes.as_slice()) {
                 Ok(_) => {}
-                Err(f) => { crash!(1, "{}", f.to_str()); }
+                Err(f) => { crash!(1, "{}", f.to_string()); }
             }
             match out.flush() {
                 Ok(_) => {}
-                Err(f) => { crash!(1, "{}", f.to_str()); }
+                Err(f) => { crash!(1, "{}", f.to_string()); }
             }
         }
         Err(s) => {
-            error!("error: {}", s.to_str());
+            error!("error: {}", s.to_string());
             fail!()
         }
     }
@@ -137,7 +137,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
     };
     let to_encode = match input.read_to_end() {
         Ok(m) => m,
-        Err(f) => fail!(f.to_str())
+        Err(f) => fail!(f.to_string())
     };
     let encoded = to_encode.as_slice().to_base64(b64_conf);
 

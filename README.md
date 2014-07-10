@@ -153,7 +153,6 @@ To do
 - runcon
 - setuidgid
 - shred
-- shuf
 - sort
 - split
 - stat

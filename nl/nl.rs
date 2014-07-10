@@ -158,9 +158,9 @@ pub fn uumain(args: Vec<String>) -> int {
 // nl implements the main functionality for an individual buffer.
 fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let mut line_no = settings.starting_line_number;
-    // The current line number's width as a string. Using to_str is inefficient
+    // The current line number's width as a string. Using to_string is inefficient
     // but since we only do it once, it should not hurt.
-    let mut line_no_width = line_no.to_str().len();
+    let mut line_no_width = line_no.to_string().len();
     let line_no_width_initial = line_no_width;
     // Stores the smallest integer with one more digit than line_no, so that
     // when line_no >= line_no_threshold, we need to use one more digit.

@@ -24,7 +24,7 @@ macro_rules! pipe_write(
                 if f.kind == io::BrokenPipe {
                     return
                 } else {
-                    fail!("{}", f.to_str())
+                    fail!("{}", f.to_string())
                 }
         }
     )
@@ -232,7 +232,7 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: uint, separator: Str
     let mut i = 0i;
     let mut value = first + i as f64 * step;
     while !done_printing(value, step, last) {
-        let istr = value.to_str();
+        let istr = value.to_string();
         let ilen = istr.len();
         let before_dec = istr.as_slice().find('.').unwrap_or(ilen);
         if pad && before_dec < padding {

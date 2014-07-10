@@ -14,7 +14,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{File, BufferedWriter, BufferedReader, stdin, print};
+use std::io::{stdio, File, BufferedWriter, BufferedReader, print};
 use getopts::{optopt, optflag, getopts, usage};
 
 use ranges::Range;
@@ -22,6 +22,7 @@ use ranges::Range;
 #[path = "../common/util.rs"]
 mod util;
 mod ranges;
+mod buffer;
 
 static NAME: &'static str = "cut";
 static VERSION: &'static str = "1.0.0";
@@ -50,67 +51,94 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-fn cut_bytes<T: Reader>(mut reader: BufferedReader<T>,
+fn cut_bytes<R: Reader>(reader: R,
                         ranges: &Vec<Range>,
                         opts: &Options) -> int {
-    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
-    let (use_delim, out_delim) = match opts.out_delim.clone() {
-        Some(delim) => (true, delim),
-        None => (false, "".to_str())
-    };
+    use buffer::Bytes::{Select, NewlineFound, Complete, Partial, EndOfFile};
+
+    let mut buf_read = buffer::BufReader::new(reader);
+    let mut out = BufferedWriter::new(stdio::stdout_raw());
 
     'newline: loop {
-        let line = match reader.read_until(b'\n') {
-            Ok(line) => line,
-            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
-            _ => fail!(),
-        };
-
-        let line_len = line.len();
+        let mut cur_pos = 1;
         let mut print_delim = false;
 
         for &Range { low: low, high: high } in ranges.iter() {
-            if low > line_len { break; }
+            // skip upto low
+            let orig_pos = cur_pos;
+            loop {
+                match buf_read.select(low - cur_pos) {
+                    NewlineFound(_) => {
+                        out.write(&[b'\n']).unwrap();
+                        continue 'newline
+                    }
+                    Complete(bytes) => {
+                        cur_pos += bytes.len();
+                        break
+                    }
+                    Partial(bytes) => cur_pos += bytes.len(),
+                    EndOfFile => {
+                        if orig_pos != cur_pos {
+                            out.write(&[b'\n']).unwrap();
+                        }
 
-            if use_delim {
-                if print_delim {
-                    out.write_str(out_delim.as_slice()).unwrap();
+                        break 'newline
+                    }
                 }
-                print_delim = true;
             }
 
-            if high >= line_len {
-                let segment = line.slice(low - 1, line_len);
-
-                out.write(segment).unwrap();
-
-                if *line.get(line_len - 1) == b'\n' {
-                    continue 'newline
+            match opts.out_delim {
+                Some(ref delim) => {
+                    if print_delim {
+                        out.write(delim.as_bytes()).unwrap();
+                    }
+                    print_delim = true;
                 }
-            } else {
-                let segment = line.slice(low - 1, high);
+                None => ()
+            }
 
-                out.write(segment).unwrap();
+            // write out from low to high
+            loop {
+                match buf_read.select(high - cur_pos + 1) {
+                    NewlineFound(bytes) => {
+                        out.write(bytes).unwrap();
+                        continue 'newline
+                    }
+                    Complete(bytes) => {
+                        out.write(bytes).unwrap();
+                        cur_pos = high + 1;
+                        break
+                    }
+                    Partial(bytes) => {
+                        cur_pos += bytes.len();
+                        out.write(bytes).unwrap();
+                    }
+                    EndOfFile => {
+                        if cur_pos != low || low == high {
+                            out.write(&[b'\n']).unwrap();
+                        }
+
+                        break 'newline
+                    }
+                }
             }
         }
 
-        out.write(&[b'\n']).unwrap();
+        buf_read.consume_line();
+        out.write([b'\n']).unwrap();
     }
 
     0
 }
 
-fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
+fn cut_characters<R: Reader>(reader: R,
                              ranges: &Vec<Range>,
                              opts: &Options) -> int {
-    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
-    let (use_delim, out_delim) = match opts.out_delim.clone() {
-        Some(delim) => (true, delim),
-        None => (false, "".to_str())
-    };
+    let mut buf_in = BufferedReader::new(reader);
+    let mut out = BufferedWriter::new(stdio::stdout_raw());
 
     'newline: loop {
-        let line = match reader.read_line() {
+        let line = match buf_in.read_line() {
             Ok(line) => line,
             Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
             _ => fail!(),
@@ -126,11 +154,14 @@ fn cut_characters<T: Reader>(mut reader: BufferedReader<T>,
                 None => break
             };
 
-            if use_delim {
-                if print_delim {
-                    out.write_str(out_delim.as_slice()).unwrap();
+            match opts.out_delim {
+                Some(ref delim) => {
+                    if print_delim {
+                        out.write(delim.as_bytes()).unwrap();
+                    }
+                    print_delim = true;
                 }
-                print_delim = true;
+                None => ()
             }
 
             match char_indices.nth(high - low) {
@@ -204,15 +235,16 @@ impl<'a> Iterator<(uint, uint)> for Searcher<'a> {
     }
 }
 
-fn cut_fields_delimiter<T: Reader>(mut reader: BufferedReader<T>,
+fn cut_fields_delimiter<R: Reader>(reader: R,
                                    ranges: &Vec<Range>,
                                    delim: &String,
                                    only_delimited: bool,
                                    out_delim: &String) -> int {
-    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
+    let mut buf_in = BufferedReader::new(reader);
+    let mut out = BufferedWriter::new(stdio::stdout_raw());
 
     'newline: loop {
-        let line = match reader.read_until(b'\n') {
+        let line = match buf_in.read_until(b'\n') {
             Ok(line) => line,
             Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
             _ => fail!(),
@@ -279,7 +311,7 @@ fn cut_fields_delimiter<T: Reader>(mut reader: BufferedReader<T>,
     0
 }
 
-fn cut_fields<T: Reader>(mut reader: BufferedReader<T>,
+fn cut_fields<R: Reader>(reader: R,
                          ranges: &Vec<Range>,
                          opts: &FieldOptions) -> int {
     match opts.out_delimeter {
@@ -290,10 +322,11 @@ fn cut_fields<T: Reader>(mut reader: BufferedReader<T>,
         None => ()
     }
 
-    let mut out = BufferedWriter::new(std::io::stdio::stdout_raw());
+    let mut buf_in = BufferedReader::new(reader);
+    let mut out = BufferedWriter::new(stdio::stdout_raw());
 
     'newline: loop {
-        let line = match reader.read_until(b'\n') {
+        let line = match buf_in.read_until(b'\n') {
             Ok(line) => line,
             Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
             _ => fail!(),
@@ -363,21 +396,21 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
     let mut stdin_read = false;
     let mut exit_code = 0;
 
-    if filenames.len() == 0 { filenames.push("-".to_str()); }
+    if filenames.len() == 0 { filenames.push("-".to_string()); }
 
     for filename in filenames.iter() {
         if filename.as_slice() == "-" {
-            if stdin_read { continue; }
+            if stdin_read { continue }
 
             exit_code |= match mode {
                 Bytes(ref ranges, ref opts) => {
-                    cut_bytes(stdin(), ranges, opts)
+                    cut_bytes(stdio::stdin_raw(), ranges, opts)
                 }
                 Characters(ref ranges, ref opts) => {
-                    cut_characters(stdin(), ranges, opts)
+                    cut_characters(stdio::stdin_raw(), ranges, opts)
                 }
                 Fields(ref ranges, ref opts) => {
-                    cut_fields(stdin(), ranges, opts)
+                    cut_fields(stdio::stdin_raw(), ranges, opts)
                 }
             };
 
@@ -387,11 +420,11 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
 
             if ! path.exists() {
                 show_error!("{}: No such file or directory", filename);
-                continue;
+                continue
             }
 
-            let buf_file = match File::open(&path) {
-                Ok(file) => BufferedReader::new(file),
+            let file = match File::open(&path) {
+                Ok(f) => f,
                 Err(e) => {
                     show_error!("{}: {}", filename, e.desc);
                     continue
@@ -399,13 +432,11 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
             };
 
             exit_code |= match mode {
-                Bytes(ref ranges, ref opts) => cut_bytes(buf_file, ranges, opts),
+                Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
                 Characters(ref ranges, ref opts) => {
-                    cut_characters(buf_file, ranges, opts)
+                    cut_characters(file, ranges, opts)
                 }
-                Fields(ref ranges, ref opts) => {
-                    cut_fields(buf_file, ranges, opts)
-                }
+                Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts)
             };
         }
     }
@@ -486,7 +517,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     match matches.opt_str("delimiter") {
                         Some(delim) => {
                             if delim.as_slice().char_len() != 1 {
-                                Err("the delimiter must be a single character".to_str())
+                                Err("the delimiter must be a single character".to_string())
                             } else {
                                 Ok(Fields(ranges,
                                           FieldOptions {
@@ -498,7 +529,7 @@ pub fn uumain(args: Vec<String>) -> int {
                         }
                         None => Ok(Fields(ranges,
                                           FieldOptions {
-                                              delimiter: "\t".to_str(),
+                                              delimiter: "\t".to_string(),
                                               out_delimeter: out_delim,
                                               only_delimited: only_delimited
                                           }))
@@ -507,9 +538,9 @@ pub fn uumain(args: Vec<String>) -> int {
             )
         }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => {
-            Err("only one type of list may be specified".to_str())
+            Err("only one type of list may be specified".to_string())
         }
-        _ => Err("you must specify a list of bytes, characters, or fields".to_str())
+        _ => Err("you must specify a list of bytes, characters, or fields".to_string())
     };
 
     match mode_parse {

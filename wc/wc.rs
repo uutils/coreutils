@@ -15,7 +15,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::str::from_utf8;
-use std::io::{print, stdin, File, BufferedReader};
+use std::io::{print, File, BufferedReader};
+use std::io::stdio::stdin_raw;
 use StdResult = std::result::Result;
 use getopts::Matches;
 
@@ -87,6 +88,7 @@ static TAB: u8 = '\t' as u8;
 static SYN: u8 = 0x16 as u8;
 static FF: u8 = 0x0C as u8;
 
+#[inline(always)]
 fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
@@ -177,7 +179,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
         }
 
         // used for formatting
-        max_str_len = total_byte_count.to_str().len();
+        max_str_len = total_byte_count.to_string().len();
     }
 
     for result in results.iter() {
@@ -230,7 +232,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
 
 fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
     if "-" == path.as_slice() {
-        let reader = box stdin() as Box<Reader>;
+        let reader = box stdin_raw() as Box<Reader>;
         return Ok(BufferedReader::new(reader));
     }
 
@@ -240,7 +242,7 @@ fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
             Ok(BufferedReader::new(reader))
         },
         Err(e) => {
-            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_str());
+            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_string());
             Err(1)
         }
     }

@@ -154,7 +154,7 @@ fn print_time() {
 
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
     let proc_uptime = File::open(&Path::new("/proc/uptime"))
-                            .read_to_str();
+                            .read_to_string();
 
     let uptime_text = match proc_uptime {
         Ok(s) => s,

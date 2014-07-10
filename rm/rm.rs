@@ -136,7 +136,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                     let walk_dir = match fs::walk_dir(&file) {
                         Ok(m) => m,
                         Err(f) => {
-                            crash!(1, "{}", f.to_str());
+                            crash!(1, "{}", f.to_string());
                         }
                     };
                     r = remove(walk_dir.map(|x| x.as_str().unwrap().to_string()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose).and(r);
@@ -177,7 +177,7 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
         match fs::rmdir(path) {
             Ok(_) => if verbose { println!("Removed '{}'", name); },
             Err(f) => {
-                show_error!("{}", f.to_str());
+                show_error!("{}", f.to_string());
                 return Err(1);
             }
         }
@@ -197,7 +197,7 @@ fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: b
         match fs::unlink(path) {
             Ok(_) => if verbose { println!("Removed '{}'", name); },
             Err(f) => {
-                show_error!("{}", f.to_str());
+                show_error!("{}", f.to_string());
                 return Err(1);
             }
         }
