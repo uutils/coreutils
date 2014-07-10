@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let mut matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "{}", f)
@@ -83,7 +83,16 @@ With no FILE, or when FILE is -, read standard input.",
                     }
                 }
             }
-            None => if echo { Echo } else { Default }
+            None => {
+                if echo {
+                    Echo
+                } else {
+                    if matches.free.len() == 0 {
+                        matches.free.push("-".to_string());
+                    }
+                    Default
+                }
+            }
         };
         let repeat = matches.opt_present("repeat");
         let zero = matches.opt_present("zero-terminated");
@@ -117,7 +126,18 @@ fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, o
         InputRange(range) => shuf_lines(range.map(|num| num.to_string()).collect(), repeat, zero, count, output, random),
         Default => {
             let lines: Vec<String> = input.move_iter().flat_map(|filename| {
-                let mut file = io::BufferedReader::new(crash_if_err!(1, io::File::open(&Path::new(filename.as_slice()))));
+                let slice = filename.as_slice();
+                let mut file_buf;
+                let mut stdin_buf;
+                let mut file = io::BufferedReader::new(
+                    if slice == "-" {
+                        stdin_buf = io::stdio::stdin_raw();
+                        &mut stdin_buf as &mut Reader
+                    } else {
+                        file_buf = crash_if_err!(1, io::File::open(&Path::new(slice)));
+                        &mut file_buf as &mut Reader
+                    }
+                );
                 let mut lines = vec!();
                 for line in file.lines() {
                     let mut line = crash_if_err!(1, line);
