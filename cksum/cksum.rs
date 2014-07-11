@@ -12,30 +12,26 @@
 
 extern crate getopts;
 
-use std::io::{BufferedReader, EndOfFile, File, IoError, IoResult, print};
-use std::io::stdio::stdin;
+use std::io::{EndOfFile, File, IoError, IoResult, print};
+use std::io::stdio::stdin_raw;
+use std::mem;
+
+use crc_table::CRC_TABLE;
 
 #[path="../common/util.rs"]
 mod util;
 
-static NAME : &'static str = "cksum";
-static VERSION : &'static str = "1.0.0";
+mod crc_table;
 
-fn crc_update(mut crc: u32, input: u8) -> u32 {
-    crc ^= input as u32 << 24;
+static NAME: &'static str = "cksum";
+static VERSION: &'static str = "1.0.0";
 
-    for _ in range(0u, 8) {
-        if crc & 0x80000000 != 0 {
-            crc <<= 1;
-            crc ^= 0x04c11db7;
-        } else {
-            crc <<= 1;
-        }
-    }
-
-    crc
+#[inline]
+fn crc_update(crc: u32, input: u8) -> u32 {
+    (crc << 8) ^ CRC_TABLE[((crc >> 24) as uint ^ input as uint) & 0xFF]
 }
 
+#[inline]
 fn crc_final(mut crc: u32, mut length: uint) -> u32 {
     while length != 0 {
         crc = crc_update(crc, length as u8);
@@ -50,11 +46,14 @@ fn cksum(fname: &str) -> IoResult<(u32, uint)> {
     let mut size = 0u;
 
     let mut rd = try!(open_file(fname));
+    let mut bytes: [u8, ..1024 * 1024] = unsafe { mem::uninitialized() };
     loop {
-        match rd.read_byte() {
-            Ok(b) => {
-                crc = crc_update(crc, b);
-                size += 1;
+        match rd.read(bytes) {
+            Ok(num_bytes) => {
+                for &b in bytes.iter().take(num_bytes) {
+                    crc = crc_update(crc, b);
+                }
+                size += num_bytes;
             }
             Err(err) =>  {
                 return match err {
@@ -68,10 +67,10 @@ fn cksum(fname: &str) -> IoResult<(u32, uint)> {
 
 fn open_file(name: &str) -> IoResult<Box<Reader>> {
     match name {
-        "-" => Ok(box stdin() as Box<Reader>),
+        "-" => Ok(box stdin_raw() as Box<Reader>),
         _   => {
             let f = try!(File::open(&Path::new(name)));
-            Ok(box BufferedReader::new(f) as Box<Reader>)
+            Ok(box f as Box<Reader>)
         }
     }
 }

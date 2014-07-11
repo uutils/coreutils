@@ -160,7 +160,7 @@ build/uutils: uutils/uutils.rs build/mkuutils $(addprefix build/, $(addsuffix .t
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
 
 # Dependencies
-LIBCRYPTO = $(shell $(RUSTC) --print-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
+LIBCRYPTO := $(shell $(RUSTC) --print-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
 -include build/rust-crypto.d
 build/$(LIBCRYPTO): | build
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
@@ -171,7 +171,10 @@ build/mkmain: mkmain.rs | build
 build/mkuutils: mkuutils.rs | build
 	$(RUSTC) $(RUSTCFLAGS) -L build mkuutils.rs -o $@
 
-deps: build/$(LIBCRYPTO)
+cksum/crc_table.rs: cksum/gen_table.rs
+	cd cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
+
+deps: build/$(LIBCRYPTO) cksum/crc_table.rs
 
 crates:
 	echo $(EXES)
