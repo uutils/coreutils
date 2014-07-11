@@ -236,13 +236,17 @@ fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
         return Ok(BufferedReader::new(reader));
     }
 
-    match File::open(&std::path::Path::new(path.as_slice())) {
+    let fpath = Path::new(path.as_slice());
+    if fpath.is_dir() {
+        show_info!("{}: is a directory", path);
+    }
+    match File::open(&fpath) {
         Ok(fd) => {
             let reader = box fd as Box<Reader>;
             Ok(BufferedReader::new(reader))
         },
         Err(e) => {
-            show_error!("wc: {0:s}: {1:s}", path, e.desc.to_string());
+            show_error!("wc: {}: {}", path, e);
             Err(1)
         }
     }
