@@ -17,8 +17,8 @@ extern crate getopts;
 extern crate libc;
 #[phase(plugin, link)] extern crate log;
 
-use std::io::{println, File, stdin, stdout};
-use std::str;
+use std::io::{println, File, stdout};
+use std::io::stdio::stdin_raw;
 
 use getopts::{
     getopts,
@@ -74,11 +74,15 @@ pub fn uumain(args: Vec<String>) -> int {
         },
         None => 76
     };
-    let mut input = if matches.free.is_empty() || matches.free.get(0).as_slice() == "-" {
-        box stdin() as Box<Reader>
+    let mut stdin_buf;
+    let mut file_buf;
+    let input = if matches.free.is_empty() || matches.free.get(0).as_slice() == "-" {
+        stdin_buf = stdin_raw();
+        &mut stdin_buf as &mut Reader
     } else {
-        let path = Path::new(matches.free.get(0).clone());
-        box File::open(&path) as Box<Reader>
+        let path = Path::new(matches.free.get(0).as_slice());
+        file_buf = File::open(&path);
+        &mut file_buf as &mut Reader
     };
 
     match mode {
@@ -94,33 +98,42 @@ pub fn uumain(args: Vec<String>) -> int {
 fn decode(input: &mut Reader, ignore_garbage: bool) {
     let mut to_decode = match input.read_to_string() {
         Ok(m) => m,
-        Err(f) => fail!(f.to_string())
+        Err(f) => fail!(f)
     };
 
-    to_decode = str::replace(to_decode.as_slice(), "\n", "");
+    let slice =
+        if ignore_garbage {
+            to_decode.as_slice()
+                .trim_chars(|c: char| {
+                    let num = match c.to_ascii_opt() {
+                        Some(ascii) => ascii.to_byte(),
+                        None => return false
+                    };
+                    !(num >= 'a' as u8 && num <= 'z' as u8 ||
+                      num >= 'A' as u8 && num <= 'Z' as u8 ||
+                      num >= '0' as u8 && num <= '9' as u8 ||
+                      num == '+' as u8 || num == '/' as u8)
+                })
+        } else {
+            to_decode = to_decode.as_slice().replace("\n", "");
+            to_decode.as_slice()
+        };
 
-    if ignore_garbage {
-        let standard_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        to_decode = to_decode.as_slice()
-            .trim_chars(|c| !standard_chars.contains_char(c))
-            .into_string()
-    }
-
-    match to_decode.as_slice().from_base64() {
+    match slice.from_base64() {
         Ok(bytes) => {
             let mut out = stdout();
 
             match out.write(bytes.as_slice()) {
                 Ok(_) => {}
-                Err(f) => { crash!(1, "{}", f.to_string()); }
+                Err(f) => { crash!(1, "{}", f); }
             }
             match out.flush() {
                 Ok(_) => {}
-                Err(f) => { crash!(1, "{}", f.to_string()); }
+                Err(f) => { crash!(1, "{}", f); }
             }
         }
         Err(s) => {
-            error!("error: {}", s.to_string());
+            error!("error: {}", s);
             fail!()
         }
     }
@@ -137,7 +150,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
     };
     let to_encode = match input.read_to_end() {
         Ok(m) => m,
-        Err(f) => fail!(f.to_string())
+        Err(err) => crash!(1, "{}", err)
     };
     let encoded = to_encode.as_slice().to_base64(b64_conf);
 
@@ -176,4 +189,3 @@ enum Mode {
     Help,
     Version
 }
-

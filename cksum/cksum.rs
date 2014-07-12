@@ -41,36 +41,35 @@ fn crc_final(mut crc: u32, mut length: uint) -> u32 {
     !crc
 }
 
+#[inline]
 fn cksum(fname: &str) -> IoResult<(u32, uint)> {
     let mut crc = 0u32;
     let mut size = 0u;
 
-    let mut rd = try!(open_file(fname));
+    let mut stdin_buf;
+    let mut file_buf;
+    let rd = match fname {
+        "-" => {
+            stdin_buf = stdin_raw();
+            &mut stdin_buf as &mut Reader
+        }
+        _ => {
+            file_buf = try!(File::open(&Path::new(fname)));
+            &mut file_buf as &mut Reader
+        }
+    };
+
     let mut bytes: [u8, ..1024 * 1024] = unsafe { mem::uninitialized() };
     loop {
         match rd.read(bytes) {
             Ok(num_bytes) => {
-                for &b in bytes.iter().take(num_bytes) {
+                for &b in bytes.slice_to(num_bytes).iter() {
                     crc = crc_update(crc, b);
                 }
                 size += num_bytes;
             }
-            Err(err) =>  {
-                return match err {
-                    IoError{kind: k, ..} if k == EndOfFile => Ok((crc_final(crc, size), size)),
-                    _ => Err(err),
-                }
-            }
-        }
-    }
-}
-
-fn open_file(name: &str) -> IoResult<Box<Reader>> {
-    match name {
-        "-" => Ok(box stdin_raw() as Box<Reader>),
-        _   => {
-            let f = try!(File::open(&Path::new(name)));
-            Ok(box f as Box<Reader>)
+            Err(IoError { kind: EndOfFile, .. }) => return Ok((crc_final(crc, size), size)),
+            Err(err) => return Err(err)
         }
     }
 }
