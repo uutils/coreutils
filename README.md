@@ -159,7 +159,7 @@ To do
 - stdbuf
 - stty
 - tail (not all features implemented)
-- test
+- test (not all features implemented)
 - timeout
 - tsort
 - unexpand

@@ -41,6 +41,7 @@ PROGS       := \
   sync \
   tac \
   tee \
+  test \
   touch \
   tr \
   true \
