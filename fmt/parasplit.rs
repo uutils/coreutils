@@ -13,7 +13,6 @@ use std::slice::Items;
 use std::str::CharRange;
 use FileOrStdReader;
 use FmtOptions;
-use charwidth;
 
 #[inline(always)]
 fn char_width(c: char) -> uint {
@@ -25,7 +24,7 @@ fn char_width(c: char) -> uint {
         // otherwise, get the unicode width
         // note that we shouldn't actually get None here because only c < 0xA0
         // can return None, but for safety and future-proofing we do it this way
-        charwidth::width(c, false).unwrap_or(1)
+        c.width(false).unwrap_or(1)
     }
 }
 
@@ -39,7 +38,7 @@ enum Line {
 
 impl Line {
     // when we know that it's a FormatLine, as in the ParagraphStream iterator
-    fn get_fileline(self) -> FileLine {
+    fn get_formatline(self) -> FileLine {
         match self {
             FormatLine(fl) => fl,
             NoFormatLine(..) => fail!("Found NoFormatLine when expecting FormatLine")
@@ -367,7 +366,7 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
                 }
             }
 
-            pLines.push(self.lines.next().unwrap().get_fileline().line);
+            pLines.push(self.lines.next().unwrap().get_formatline().line);
 
             // when we're in split-only mode, we never join lines, so stop here
             if self.opts.split_only {

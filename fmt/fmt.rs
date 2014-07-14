@@ -32,7 +32,6 @@ macro_rules! silent_unwrap(
 mod util;
 mod linebreak;
 mod parasplit;
-mod charwidth;
 
 // program's NAME and VERSION are used for -V and -h
 static NAME: &'static str = "fmt";
