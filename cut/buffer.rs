@@ -35,9 +35,9 @@ impl<R: Reader> BufReader<R> {
         }
     }
 
+    #[inline]
     fn read(&mut self) -> IoResult<uint> {
-        let buf_len = self.buffer.len();
-        let buffer_fill = self.buffer.mut_slice(self.end, buf_len);
+        let buffer_fill = self.buffer.mut_slice_from(self.end);
 
         match self.reader.read(buffer_fill) {
             Ok(nread) => {
@@ -53,9 +53,11 @@ impl<R: Reader> BufReader<R> {
         if self.end == self.start {
             self.start = 0;
             self.end = 0;
-        }
 
-        if self.end <= 2048 { self.read() } else { Ok(0) }
+            self.read()
+        } else {
+            Ok(0)
+        }
     }
 
     pub fn consume_line(&mut self) -> uint {
@@ -73,7 +75,8 @@ impl<R: Reader> BufReader<R> {
             if buffer_used == 0 { return bytes_consumed; }
 
             for idx in range(self.start, self.end) {
-                if self.buffer[idx] == b'\n' {
+                // the indices are always correct, use unsafe for speed
+                if unsafe { *self.buffer.unsafe_ref(idx) } == b'\n' {
                     self.start = idx + 1;
                     return bytes_consumed + idx + 1;
                 }
@@ -108,7 +111,8 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
         };
 
         for idx in range(self.start, self.start + max_segment_len) {
-            if self.buffer[idx] == b'\n' {
+            // the indices are always correct, use unsafe for speed
+            if unsafe { *self.buffer.unsafe_ref(idx) } == b'\n' {
                 let segment = self.buffer.slice(self.start, idx + 1);
 
                 self.start = idx + 1;
