@@ -184,6 +184,10 @@ name = "tee"
 path = "tee/tee.rs"
 
 [[bin]]
+name = "test"
+path = "test/test.rs"
+
+[[bin]]
 name = "touch"
 path = "touch/touch.rs"
 

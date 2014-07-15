@@ -22,6 +22,10 @@ fn main() {
                 }
                 util_map.push_str(format!("map.insert(\"{}\", hashsum::uumain);\n", prog).as_slice());
             }
+            "test" => {
+                crates.push_str("extern crate uutest;\n");
+                util_map.push_str("map.insert(\"test\", uutest::uumain);\n");
+            }
             "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> int { 0 }\nmap.insert(\"true\", uutrue);\n"),
             "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> int { 1 }\nmap.insert(\"false\", uufalse);\n"),
             "sync" => {

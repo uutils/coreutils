@@ -23,6 +23,7 @@ fn main() {
     }
 
     let crat = match args.get(1).as_slice() {
+        "test" => "uutest",
         "true" => "uutrue",
         "false" => "uufalse",
         "sync" => "uusync",
