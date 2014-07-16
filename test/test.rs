@@ -148,11 +148,11 @@ enum PathCondition {
 
 #[cfg(not(windows))]
 fn path(path: &[u8], cond: PathCondition) -> bool {
-    use libc::{stat, c_int, lstat, S_IFMT, S_IFLNK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFREG};
+    use libc::{stat, lstat, S_IFMT, S_IFLNK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFREG};
     use libc::{S_IFIFO, mode_t};
     static S_ISUID: mode_t = 0o4000;
     static S_ISGID: mode_t = 0o2000;
-    static S_IFSOCK: c_int = 0o140000;
+    static S_IFSOCK: mode_t = 0o140000;
 
     enum Permission {
         Read    = 0o4,
@@ -175,7 +175,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
     let mut stat = unsafe { std::mem::zeroed() };
     if cond == SymLink {
         if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {
-            if stat.st_mode as c_int & S_IFMT == S_IFLNK {
+            if stat.st_mode & S_IFMT == S_IFLNK {
                 return true;
             }
         }
@@ -184,7 +184,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
     if unsafe { libc::stat(path.as_ptr(), &mut stat) } != 0 {
         return false;
     }
-    let file_type = stat.st_mode as c_int & S_IFMT;
+    let file_type = stat.st_mode & S_IFMT;
     match cond {
         BlockSpecial     => file_type == S_IFBLK,
         CharacterSpecial => file_type == S_IFCHR,
