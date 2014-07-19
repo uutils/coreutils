@@ -3,7 +3,7 @@ use std::os;
 use std::path::Path;
 use std::str::replace;
 
-static TEMPLATE : &'static str = r"
+static TEMPLATE: &'static str = "\
 extern crate @UTIL_CRATE@;
 
 use std::os;

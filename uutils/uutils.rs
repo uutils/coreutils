@@ -29,14 +29,13 @@ fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> int>) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
-    println!("  {} [util [arguments...]", NAME);
+    println!("  {} [util [arguments...]]\n", NAME);
     println!("Currently defined functions:");
     let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
     utils.sort();
     for util in utils.iter() {
         println!("\t{}", util);
     }
-    println!("");
 }
 
 fn main() {
