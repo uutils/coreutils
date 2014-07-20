@@ -53,6 +53,7 @@ PROGS       := \
   tr \
   true \
   truncate \
+  tsort \
   unlink \
   uniq \
   wc \
