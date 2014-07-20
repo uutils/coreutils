@@ -34,6 +34,11 @@ To build only a few of the available utilities:
 make BUILD='UTILITY_1 UTILITY_2'
 ```
 
+To build with LTO and stripping:
+```
+make ENABLE_LTO=y ENABLE_STRIP=y
+```
+
 Installation Instructions
 -------------------------
 
