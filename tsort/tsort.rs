@@ -42,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("	{} [OPTIONS] FILE", NAME);
         println!("");
         io::print(getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", opts).as_slice());
-    	return 0;
+        return 0;
     }
 
     if matches.opt_present("V") {
