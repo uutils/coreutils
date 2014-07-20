@@ -161,7 +161,6 @@ To do
 - tail (not all features implemented)
 - test (not all features implemented)
 - timeout
-- tsort
 - unexpand
 - uniq (in progress)
 - who
