@@ -25,10 +25,10 @@ static NAME: &'static str = "tsort";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-	let opts = [
+    let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
-	];
+    ];
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} v{}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("	{} [OPTIONS] FILE", NAME);
+        println!("  {} [OPTIONS] FILE", NAME);
         println!("");
         io::print(getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", opts).as_slice());
         return 0;
