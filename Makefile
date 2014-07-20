@@ -1,10 +1,25 @@
+# Config options
+ENABLE_LTO    ?= n
+ENABLE_STRIP  ?= n
+
 # Binaries
-RUSTC       ?= rustc
-RM          := rm
+RUSTC         ?= rustc
+RM            := rm
 
 # Flags
-RUSTCFLAGS  := --opt-level=3
-RMFLAGS     :=
+RUSTCFLAGS    := --opt-level=3
+RMFLAGS       :=
+
+# Handle config setup
+ifeq ($(ENABLE_LTO),y)
+RUSTCBINFLAGS := $(RUSTCFLAGS) -Z lto
+else
+RUSTCBINFLAGS := $(RUSTCFLAGS)
+endif
+
+ifneq ($(ENABLE_STRIP),y)
+ENABLE_STRIP :=
+endif
 
 # Install directories
 PREFIX ?= /usr/local
@@ -135,7 +150,8 @@ build/gen/$(1).rs: build/mkmain
 	build/mkmain $(1) build/gen/$(1).rs
 
 build/$(1): build/gen/$(1).rs build/$($(1)_RLIB) | build deps
-	$(RUSTC) $(RUSTCFLAGS) -L build/ -o build/$(1) build/gen/$(1).rs
+	$(RUSTC) $(RUSTCBINFLAGS) -L build/ -o build/$(1) build/gen/$(1).rs
+	$(if $(ENABLE_STRIP),strip build/$(1),)
 endef
 
 define CRATE_BUILD
@@ -179,7 +195,8 @@ $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 -include build/uutils.d
 build/uutils: uutils/uutils.rs build/mkuutils $(RLIB_PATHS)
 	build/mkuutils build/gen/uutils.rs $(BUILD)
-	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
+	$(RUSTC) $(RUSTCBINFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
+	$(if $(ENABLE_STRIP),strip build/uutils)
 
 # Dependencies
 -include build/rust-crypto.d
