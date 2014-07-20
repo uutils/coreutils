@@ -59,14 +59,21 @@ pub fn uumain(args: Vec<String>) -> int {
         files[0].to_string()
     };
 
+    let mut stdin_buf;
+    let mut file_buf;
     let mut reader = io::BufferedReader::new(
         if input.as_slice() == "-" {
-            box io::stdio::stdin_raw() as Box<Reader>
+            stdin_buf = io::stdio::stdin_raw();
+            &mut stdin_buf as &mut Reader
         } else {
-            box match io::File::open(&Path::new(input.clone())) {
+            file_buf = match io::File::open(&Path::new(input.as_slice())) {
                 Ok(a) => a,
-                _ => crash!(1, "{}: No such file or directory", input)
-            } as Box<Reader>
+                _ => {
+                    show_error!("{}: No such file or directory", input);
+                    return 1;
+                }
+            };
+            &mut file_buf as &mut Reader
         }
     );
 
