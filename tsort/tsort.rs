@@ -97,7 +97,7 @@ pub fn uumain(args: Vec<String>) -> int {
     return 0
 }
 
-// We use String as a representatio of node here
+// We use String as a representation of node here
 // but using integer may improve performance.
 struct Graph {
     in_edges: HashMap<String, HashSet<String>>,
