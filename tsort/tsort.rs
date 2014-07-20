@@ -165,19 +165,16 @@ impl Graph {
             self.result.push(n.clone());
 
             let n_out_edges = self.out_edges.find_mut(&n).unwrap();
-            while !n_out_edges.is_empty() {
-                // n -> m
-                let m = (*n_out_edges)[0].clone();
-                n_out_edges.remove(0);
-
-                let m_in_edges = self.in_edges.find_mut(&m).unwrap();
+            for m in n_out_edges.iter() {
+                let m_in_edges = self.in_edges.find_mut(m).unwrap();
                 m_in_edges.remove(&n);
 
                 // If m doesn't have other in-coming edges add it to start_nodes
                 if m_in_edges.is_empty() {
-                    start_nodes.push(m);
+                    start_nodes.push(m.clone());
                 }
             }
+            n_out_edges.clear();
         }
     }
 
