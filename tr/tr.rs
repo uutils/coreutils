@@ -187,11 +187,11 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if dflag {
-        let set1 = expand_set(sets.get(0).as_slice());
+        let set1 = expand_set(sets[0].as_slice());
         delete(set1, cflag);
     } else {
-        let set1 = expand_set(sets.get(0).as_slice());
-        let set2 = expand_set(sets.get(1).as_slice());
+        let set1 = expand_set(sets[0].as_slice());
+        let set2 = expand_set(sets[1].as_slice());
         tr(set1.as_slice(), set2.as_slice());
     }
 

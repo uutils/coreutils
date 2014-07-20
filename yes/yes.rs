@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "yes";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),

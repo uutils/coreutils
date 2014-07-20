@@ -259,7 +259,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
         if delim_search.peek().is_none() {
             if ! only_delimited {
                 out.write(line.as_slice()).unwrap();
-                if *line.get(line.len() - 1) != b'\n' {
+                if line[line.len() - 1] != b'\n' {
                     out.write([b'\n']).unwrap();
                 }
             }
@@ -296,7 +296,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
 
                         out.write(segment).unwrap();
 
-                        if *line.get(line.len() - 1) == b'\n' {
+                        if line[line.len() - 1] == b'\n' {
                             continue 'newline
                         }
                         break
@@ -341,7 +341,7 @@ fn cut_fields<R: Reader>(reader: R,
         if delim_search.peek().is_none() {
             if ! opts.only_delimited {
                 out.write(line.as_slice()).unwrap();
-                if *line.get(line.len() - 1) != b'\n' {
+                if line[line.len() - 1] != b'\n' {
                     out.write([b'\n']).unwrap();
                 }
             }
@@ -378,7 +378,7 @@ fn cut_fields<R: Reader>(reader: R,
 
                     out.write(segment).unwrap();
 
-                    if *line.get(line.len() - 1) == b'\n' {
+                    if line[line.len() - 1] == b'\n' {
                         continue 'newline
                     }
                     break
@@ -468,7 +468,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if matches.opt_present("help") {
         println!("Usage:");
-        println!("  {0} OPTION... [FILE]...", args.get(0));
+        println!("  {0} OPTION... [FILE]...", args[0]);
         println!("");
         print(usage("Print selected parts of lines from each FILE to standard output.", opts).as_slice());
         println!("");
@@ -548,7 +548,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Err(err_msg) => {
             show_error!("{}\n\
                          Try '{} --help' for more information",
-                        err_msg, args.get(0));
+                        err_msg, args[0]);
             1
         }
     }

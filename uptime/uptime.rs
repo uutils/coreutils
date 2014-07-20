@@ -47,7 +47,7 @@ extern {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let opts = [
         getopts::optflag("v", "version", "output version information and exit"),
         getopts::optflag("h", "help", "display this help and exit"),
@@ -180,7 +180,7 @@ fn print_uptime(upsecs: i64) {
     let updays = upsecs / 86400;
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
-    if updays == 1 { 
+    if updays == 1 {
         print!("up {:1d} day, {:2d}:{:02d},  ", updays, uphours, upmins);
     }
     else if updays > 1 {

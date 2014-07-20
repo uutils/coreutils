@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> int {
         },
     };
 
-    let progname = args.get(0);
+    let progname = &args[0];
     let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
     let mode = if matches.opt_present("version") {
         Version
@@ -90,13 +90,13 @@ fn copy(matches: getopts::Matches) {
         fail!()
     } else {
         // Only the last argument:
-        Path::new(matches.free.get(matches.free.len() - 1).as_slice())
+        Path::new(matches.free[matches.free.len() - 1].as_slice())
     };
 
     assert!(sources.len() >= 1);
 
     if sources.len() == 1 {
-        let source = sources.get(0);
+        let source = &sources[0];
         let same_file = match paths_refer_to_same_file(source, &dest) {
             Ok(b)  => b,
             Err(e) => if e.kind == io::FileNotFound {

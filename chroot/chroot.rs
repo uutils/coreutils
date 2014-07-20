@@ -37,7 +37,7 @@ static NAME: &'static str = "chroot";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0);
+    let program = &args[0];
 
     let options = [
         optopt("u", "user", "User (ID or name) to switch before running the program", "USER"),
@@ -72,7 +72,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let defaultOption: &'static str = "-i";
     let userShell = std::os::getenv("SHELL");
 
-    let newroot = Path::new(opts.free.get(0).as_slice());
+    let newroot = Path::new(opts.free[0].as_slice());
     if !newroot.is_dir() {
         crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
     }
@@ -91,7 +91,7 @@ pub fn uumain(args: Vec<String>) -> int {
     set_context(&newroot, &opts);
 
     unsafe {
-        let executable = command.get(0).as_slice().to_c_str().unwrap();
+        let executable = command[0].as_slice().to_c_str().unwrap();
         let mut commandParts: Vec<*const i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
         commandParts.push(std::ptr::null());
         execvp(executable as *const libc::c_char, commandParts.as_ptr() as *mut *const libc::c_char) as int
@@ -113,8 +113,8 @@ fn set_context(root: &Path, options: &getopts::Matches) {
         }
         None => Vec::new()
     };
-    let user = if userspec.is_empty() { userStr.as_slice() } else { userspec.get(0).as_slice() };
-    let group = if userspec.is_empty() { groupStr.as_slice() } else { userspec.get(1).as_slice() };
+    let user = if userspec.is_empty() { userStr.as_slice() } else { userspec[0].as_slice() };
+    let group = if userspec.is_empty() { groupStr.as_slice() } else { userspec[1].as_slice() };
 
     enter_chroot(root);
 

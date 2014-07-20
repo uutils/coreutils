@@ -66,9 +66,9 @@ impl Range {
         for i in range(0, ranges.len()) {
             let j = i + 1;
 
-            while j < ranges.len() && ranges.get(j).low <= ranges.get(i).high {
+            while j < ranges.len() && ranges[j].low <= ranges[i].high {
                 let j_high = ranges.remove(j).unwrap().high;
-                ranges.get_mut(i).high = max(ranges.get(i).high, j_high);
+                ranges.get_mut(i).high = max(ranges[i].high, j_high);
             }
         }
 
@@ -81,8 +81,8 @@ pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
 
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
-    if ranges.len() > 0 && ranges.get(0).low > 1 {
-        complements.push(Range { low: 1, high: ranges.get(0).low - 1 });
+    if ranges.len() > 0 && ranges[0].low > 1 {
+        complements.push(Range { low: 1, high: ranges[0].low - 1 });
     }
 
     let mut ranges_iter = ranges.iter().peekable();

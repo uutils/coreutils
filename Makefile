@@ -1,5 +1,12 @@
-include common.mk
+# Binaries
+RUSTC       ?= rustc
+RM          := rm
 
+# Flags
+RUSTCFLAGS  := --opt-level=3
+RMFLAGS     :=
+
+# Install directories
 PREFIX ?= /usr/local
 BINDIR ?= /bin
 
@@ -87,8 +94,7 @@ BUILD       ?= $(PROGS)
 EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
-CRATES      := \
-  $(sort $(EXES))
+CRATE_RLIBS :=
 
 INSTALL     ?= $(EXES)
 
@@ -109,25 +115,33 @@ TEST        ?= $(TEST_PROGS)
 TESTS       := \
   $(filter $(TEST),$(filter-out $(DONT_TEST),$(filter $(BUILD),$(filter-out $(DONT_BUILD),$(TEST_PROGS)))))
 
+# Setup for building crates
+define BUILD_SETUP
+X := $(shell $(RUSTC) --print-file-name --crate-type rlib $(1)/$(1).rs)
+$(1)_RLIB := $$(X)
+CRATE_RLIBS += $$(X)
+endef
+$(foreach crate,$(EXES),$(eval $(call BUILD_SETUP,$(crate))))
+
 # Utils stuff
 EXES_PATHS  := $(addprefix build/,$(EXES))
+RLIB_PATHS  := $(addprefix build/,$(CRATE_RLIBS))
 command     = sh -c '$(1)'
-
 
 # Main exe build rule
 define EXE_BUILD
 build/gen/$(1).rs: build/mkmain
 	build/mkmain $(1) build/gen/$(1).rs
 
-build/$(1): build/gen/$(1).rs build/$(1).timestamp | build deps
+build/$(1): build/gen/$(1).rs build/$($(1)_RLIB) | build deps
 	$(RUSTC) $(RUSTCFLAGS) -L build/ -o build/$(1) build/gen/$(1).rs
 endef
 
 define CRATE_BUILD
 -include build/$(1).d
-build/$(1).timestamp: $(1)/$(1).rs | build deps
+
+build/$($(1)_RLIB): $(1)/$(1).rs | build deps
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build
-	@touch build/$(1).timestamp
 endef
 
 # Aliases build rule
@@ -155,16 +169,22 @@ endef
 # Main rules
 all: $(EXES_PATHS) build/uutils
 
+# Creating necessary rules for each targets
+$(foreach crate,$(EXES),$(eval $(call CRATE_BUILD,$(crate))))
+$(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
+$(foreach alias,$(ALIASES),$(eval $(call MAKE_ALIAS,$(alias))))
+$(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
+
 -include build/uutils.d
-build/uutils: uutils/uutils.rs build/mkuutils $(addprefix build/, $(addsuffix .timestamp, $(CRATES)))
+build/uutils: uutils/uutils.rs build/mkuutils $(RLIB_PATHS)
 	build/mkuutils build/gen/uutils.rs $(BUILD)
 	$(RUSTC) $(RUSTCFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
 
 # Dependencies
-LIBCRYPTO := $(shell $(RUSTC) --print-file-name --crate-type rlib deps/rust-crypto/src/rust-crypto/lib.rs)
 -include build/rust-crypto.d
-build/$(LIBCRYPTO): | build
+build/.rust-crypto: | build
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
+	@touch $@
 
 build/mkmain: mkmain.rs | build
 	$(RUSTC) $(RUSTCFLAGS) -L build mkmain.rs -o $@
@@ -175,7 +195,7 @@ build/mkuutils: mkuutils.rs | build
 cksum/crc_table.rs: cksum/gen_table.rs
 	cd cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
-deps: build/$(LIBCRYPTO) cksum/crc_table.rs
+deps: build/.rust-crypto cksum/crc_table.rs
 
 crates:
 	echo $(EXES)
@@ -192,12 +212,6 @@ build:
 
 tmp:
 	mkdir tmp
-
-# Creating necessary rules for each targets
-$(foreach crate,$(CRATES),$(eval $(call CRATE_BUILD,$(crate))))
-$(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
-$(foreach alias,$(ALIASES),$(eval $(call MAKE_ALIAS,$(alias))))
-$(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 
 install: $(addprefix build/,$(INSTALLEES))
 	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)

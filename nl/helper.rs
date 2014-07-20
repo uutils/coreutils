@@ -1,8 +1,6 @@
 extern crate getopts;
 extern crate regex;
 
-use std::str;
-
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
     match chars {
@@ -10,7 +8,7 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
         ['t'] => { Ok(::NumberForNonEmpty) },
         ['n'] => { Ok(::NumberForNone) },
         ['p', ..rest] => {
-            match regex::Regex::new(str::from_chars(rest).as_slice()) {
+            match regex::Regex::new(String::from_chars(rest).as_slice()) {
                 Ok(re) => Ok(::NumberForRegularExpression(re)),
                 Err(_) => Err(String::from_str("Illegal regular expression")),
             }

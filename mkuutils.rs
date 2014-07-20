@@ -15,12 +15,18 @@ fn main() {
     let mut hashsum = false;
     for prog in args.slice_from(2).iter() {
         match prog.as_slice() {
-            "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
+            "hashsum" | "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
                 if !hashsum {
                     crates.push_str("extern crate hashsum;\n");
+                    util_map.push_str("map.insert(\"hashsum\", hashsum::uumain);\n");
+                    util_map.push_str("map.insert(\"md5sum\", hashsum::uumain);\n");
+                    util_map.push_str("map.insert(\"sha1sum\", hashsum::uumain);\n");
+                    util_map.push_str("map.insert(\"sha224sum\", hashsum::uumain);\n");
+                    util_map.push_str("map.insert(\"sha256sum\", hashsum::uumain);\n");
+                    util_map.push_str("map.insert(\"sha384sum\", hashsum::uumain);\n");
+                    util_map.push_str("map.insert(\"sha512sum\", hashsum::uumain);\n");
                     hashsum = true;
                 }
-                util_map.push_str(format!("map.insert(\"{}\", hashsum::uumain);\n", prog).as_slice());
             }
             "test" => {
                 crates.push_str("extern crate uutest;\n");
@@ -38,7 +44,7 @@ fn main() {
             }
         }
     }
-    let outfile = args.get(1).as_slice();
+    let outfile = args[1].as_slice();
 
     // XXX: this all just assumes that the IO works correctly
     let mut out = File::open_mode(&Path::new(outfile), Truncate, Write).unwrap();

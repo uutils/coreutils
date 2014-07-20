@@ -80,7 +80,7 @@ fn convert_str(string: &[u8], index: uint, base: uint) -> (char, uint) {
 
 fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<String>> {
     let mut echo_args = vec!();
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     'argloop: for arg in args.move_iter().skip(1) {
         match arg.as_slice() {
             "--help" | "-h" => {

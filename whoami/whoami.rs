@@ -67,7 +67,7 @@ mod platform {
 static NAME: &'static str = "whoami";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),

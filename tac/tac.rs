@@ -23,7 +23,7 @@ static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let opts = [
         getopts::optflag("b", "before", "attach the separator before instead of after"),

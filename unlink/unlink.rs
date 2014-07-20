@@ -26,7 +26,7 @@ mod util;
 static NAME: &'static str = "unlink";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
@@ -57,10 +57,10 @@ pub fn uumain(args: Vec<String>) -> int {
     if matches.free.len() == 0 {
         crash!(1, "missing operand\nTry '{0:s} --help' for more information.", program);
     } else if matches.free.len() > 1 {
-        crash!(1, "extra operand: '{1}'\nTry '{0:s} --help' for more information.", program, matches.free.get(1));
+        crash!(1, "extra operand: '{1}'\nTry '{0:s} --help' for more information.", program, matches.free[1]);
     }
 
-    let path = Path::new(matches.free.get(0).clone());
+    let path = Path::new(matches.free[0].clone());
 
     let result = path.lstat().and_then(|info| {
         match info.kind {

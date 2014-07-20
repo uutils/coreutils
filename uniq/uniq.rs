@@ -43,7 +43,7 @@ impl Uniq {
 
         for io_line in reader.lines() {
             let line = crash_if_err!(1, io_line);
-            if !lines.is_empty() && self.cmp_key(lines.get(0)) != self.cmp_key(&line) {
+            if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
                 let print_delimiter = delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
                 lines.truncate(0);
@@ -83,7 +83,7 @@ impl Uniq {
         let mut count = if self.all_repeated { 1 } else { lines.len() };
         if lines.len() == 1 && !self.repeats_only
                 || lines.len() > 1 && !self.uniques_only {
-            self.print_line(writer, lines.get(0), count, print_delimiter);
+            self.print_line(writer, &lines[0], count, print_delimiter);
             first_line_printed = true;
             count += 1;
         }
@@ -119,7 +119,7 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program_path = Path::new(args.get(0).clone());
+    let program_path = Path::new(args[0].clone());
     let program = program_path.filename_str().unwrap_or(NAME);
 
     let opts = [
@@ -159,10 +159,10 @@ pub fn uumain(args: Vec<String>) -> int {
     } else {
         let (in_file_name, out_file_name) = match matches.free.len() {
             0 => ("-".into_string(), "-".into_string()),
-            1 => (matches.free.get(0).clone(), "-".into_string()),
-            2 => (matches.free.get(0).clone(), matches.free.get(1).clone()),
+            1 => (matches.free[0].clone(), "-".into_string()),
+            2 => (matches.free[0].clone(), matches.free[1].clone()),
             _ => {
-                crash!(1, "Extra operand: {}", matches.free.get(2));
+                crash!(1, "Extra operand: {}", matches.free[2]);
             }
         };
         let uniq = Uniq {

@@ -23,7 +23,7 @@ static NAME: &'static str = "paste";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let opts = [
         getopts::optflag("s", "serial", "paste one file at a time instead of in parallel"),
@@ -75,7 +75,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
                 match file.read_line() {
                     Ok(line) => {
                         output.push_str(line.as_slice().trim_right());
-                        output.push_str(delimiters.get(delim_count % delimiters.len()).as_slice());
+                        output.push_str(delimiters[delim_count % delimiters.len()].as_slice());
                     }
                     Err(f) => if f.kind == io::EndOfFile {
                         break
@@ -93,7 +93,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
             let mut output = "".to_string();
             let mut eof_count = 0;
             for (i, file) in files.mut_iter().enumerate() {
-                if *eof.get(i) {
+                if eof[i] {
                     eof_count += 1;
                 } else {
                     match file.read_line() {
@@ -106,7 +106,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
                         }
                     }
                 }
-                output.push_str(delimiters.get(delim_count % delimiters.len()).as_slice());
+                output.push_str(delimiters[delim_count % delimiters.len()].as_slice());
                 delim_count += 1;
             }
             if files.len() == eof_count {

@@ -30,7 +30,7 @@ struct utsrust {
     nodename: String,
     release: String,
     version: String,
-    machine: String 
+    machine: String
 }
 
 extern {
@@ -51,7 +51,7 @@ unsafe fn getuname() -> utsrust {
 static NAME: &'static str = "uname";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("a", "all", "Behave as though all of the options -mnrsv were specified."),

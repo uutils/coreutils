@@ -109,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> int {
             tail(&mut buffer, line_count, follow, sleep_sec);
         }
     }
-    
+
     0
 }
 
@@ -123,7 +123,7 @@ fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
     let b = options.len();
 
     while a < b {
-        let current = options.get(a).clone();
+        let current = options[a].clone();
         let current = current.as_bytes();
 
         if current.len() > 1 && current[0] == '-' as u8 {
