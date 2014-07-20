@@ -204,6 +204,10 @@ name = "truncate"
 path = "truncate/truncate.rs"
 
 [[bin]]
+name = "tsort"
+path = "tsort/tsort.rs"
+
+[[bin]]
 name = "tty"
 path = "tty/tty.rs"
 
