@@ -26,7 +26,7 @@ static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
 	let opts = [
-		getopts::optflag("h", "help", "display this help and exit"),
+        getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
 	];
 
