@@ -154,8 +154,7 @@ impl Graph {
         }
 
         while !start_nodes.is_empty() {
-            let n = start_nodes[0].clone();
-            start_nodes.remove(0);
+            let n = start_nodes.shift().unwrap();
 
             self.result.push(n.clone());
 
