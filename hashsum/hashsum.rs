@@ -59,7 +59,7 @@ fn get_algo_opts(program: &str) -> Vec<getopts::OptGroup> {
     }
 }
 
-fn detect_algo(program: &str, matches: &getopts::Matches) -> (&str, Box<Digest>) {
+fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<Digest>) {
     let mut alg: Option<Box<Digest>> = None;
     let mut name: &'static str = "";
     match program {
