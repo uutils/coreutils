@@ -21,7 +21,7 @@ static NAME: &'static str = "realpath";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0);
+    let program = &args[0];
     let options = [
         optflag("h", "help", "Show help and exit"),
         optflag("V", "version", "Show version and exit"),

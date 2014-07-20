@@ -47,7 +47,7 @@ extern {
 static NAME: &'static str = "users";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
@@ -75,7 +75,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let mut filename = DEFAULT_FILE;
     if matches.free.len() > 0 {
-        filename = matches.free.get(0).as_slice();
+        filename = matches.free[0].as_slice();
     }
 
     exec(filename);

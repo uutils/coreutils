@@ -35,7 +35,7 @@ static NAME: &'static str = "shuf";
 static VERSION: &'static str = "0.0.1";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let opts = [
         getopts::optflag("e", "echo", "treat each ARG as an input line"),
@@ -164,7 +164,7 @@ fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, out
     let max = if repeat { count } else { cmp::min(count, len) };
     for _ in range(0, max) {
         let idx = rng.next_u32() as uint % len;
-        try!(write!(output, "{}{}", lines.get(idx), if zero { '\0' } else { '\n' }));
+        try!(write!(output, "{}{}", lines[idx], if zero { '\0' } else { '\n' }));
         if !repeat {
             lines.remove(idx);
             len -= 1;
@@ -178,15 +178,14 @@ fn parse_range(input_range: String) -> Result<RangeInclusive<uint>, (String, int
     if split.len() != 2 {
         Err(("invalid range format".to_string(), 1))
     } else {
-        let begin = match from_str::<uint>(*split.get(0)) {
+        let begin = match from_str::<uint>(split[0]) {
             Some(m) => m,
-            None => return Err((format!("{} is not a valid number", split.get(0)), 1))
+            None => return Err((format!("{} is not a valid number", split[0]), 1))
         };
-        let end = match from_str::<uint>(*split.get(1)) {
+        let end = match from_str::<uint>(split[1]) {
             Some(m) => m,
-            None => return Err((format!("{} is not a valid number", split.get(1)), 1))
+            None => return Err((format!("{} is not a valid number", split[1]), 1))
         };
         Ok(range_inclusive(begin, end))
     }
 }
-

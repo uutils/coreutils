@@ -44,7 +44,7 @@ fn main() {
             }
         }
     }
-    let outfile = args.get(1).as_slice();
+    let outfile = args[1].as_slice();
 
     // XXX: this all just assumes that the IO works correctly
     let mut out = File::open_mode(&Path::new(outfile), Truncate, Write).unwrap();

@@ -20,7 +20,7 @@ use std::io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("A", "show-all", "equivalent to -vET"),
         getopts::optflag("b", "number-nonblank",

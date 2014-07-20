@@ -51,7 +51,7 @@ fn escape_sequences(s: &str) -> String {
 
 fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, int> {
     let mut seq_args = vec!();
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let mut iter = args.move_iter().skip(1);
     loop {
         match iter.next() {
@@ -159,7 +159,7 @@ fn print_version() {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let mut options = SeqOptions {
         separator: "\n".to_string(),
         terminator: None,
@@ -176,7 +176,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let mut largest_dec = 0;
     let mut padding = 0;
     let first = if free.len() > 1 {
-        let slice = free.get(0).as_slice();
+        let slice = free[0].as_slice();
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = len - dec;
@@ -189,12 +189,12 @@ pub fn uumain(args: Vec<String>) -> int {
         1.0
     };
     let step = if free.len() > 2 {
-        let slice = free.get(1).as_slice();
+        let slice = free[1].as_slice();
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
         padding = cmp::max(padding, dec);
-        match parse_float(free.get(1).as_slice()) {
+        match parse_float(free[1].as_slice()) {
             Ok(n) => n,
             Err(s) => { show_error!("{:s}", s); return 1; }
         }
@@ -202,7 +202,7 @@ pub fn uumain(args: Vec<String>) -> int {
         1.0
     };
     let last = {
-        let slice = free.get(free.len() - 1).as_slice();
+        let slice = free[free.len() - 1].as_slice();
         padding = cmp::max(padding, slice.find('.').unwrap_or(slice.len()));
         match parse_float(slice) {
             Ok(n) => n,

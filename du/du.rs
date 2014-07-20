@@ -89,7 +89,7 @@ fn du(path: &Path, mut my_stat: Stat,
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         // In task
         getopts::optflag("a", "all", " write counts for all files, not just directories"),
@@ -245,7 +245,7 @@ ers of 1000).",
                 }
             }
             let number = std::uint::parse_bytes(numbers.as_slice(), 10).unwrap();
-            let multiple = match std::str::from_chars(letters.as_slice()).as_slice() {
+            let multiple = match String::from_chars(letters.as_slice()).as_slice() {
                 "K" => 1024, "M" => 1024 * 1024, "G" => 1024 * 1024 * 1024,
                 "T" => 1024 * 1024 * 1024 * 1024, "P" => 1024 * 1024 * 1024 * 1024 * 1024,
                 "E" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,

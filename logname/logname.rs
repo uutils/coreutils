@@ -43,7 +43,7 @@ fn version() {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     //
     // Argument parsing

@@ -76,7 +76,7 @@ fn open(name: &str) -> IoResult<Box<Reader>> {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("r", "", "use the BSD compatible algorithm (default)"),
         getopts::optflag("s", "sysv", "use System V compatible algorithm"),

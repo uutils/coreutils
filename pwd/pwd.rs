@@ -23,7 +23,7 @@ static NAME: &'static str = "pwd";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let opts = [
         getopts::optflag("", "help", "display this help and exit"),
         getopts::optflag("", "version", "output version information and exit"),

@@ -22,7 +22,7 @@ mod util;
 static NAME: &'static str = "rmdir";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let opts = [
         getopts::optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty"),
@@ -96,7 +96,7 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
     };
 
     let mut r = Ok(());
-    
+
     if walk_dir.next() == None {
         match fs::rmdir(path) {
             Ok(_) => {
@@ -122,4 +122,3 @@ fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool
 
     r
 }
-

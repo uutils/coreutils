@@ -425,10 +425,10 @@ impl<'a> ParaWords<'a> {
             self.words.extend(
                 if self.opts.crown || self.opts.tagged {
                     // crown and tagged mode has the "init" in the first line, so slice from there
-                    WordSplit::new(self.opts, self.para.lines.get(0).as_slice().slice_from(self.para.init_end))
+                    WordSplit::new(self.opts, self.para.lines[0].as_slice().slice_from(self.para.init_end))
                 } else {
                     // otherwise we slice from the indent
-                    WordSplit::new(self.opts, self.para.lines.get(0).as_slice().slice_from(self.para.indent_end))
+                    WordSplit::new(self.opts, self.para.lines[0].as_slice().slice_from(self.para.indent_end))
                 });
 
             if self.para.lines.len() > 1 {

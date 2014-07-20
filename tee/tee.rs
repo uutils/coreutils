@@ -31,6 +31,7 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 }
 
+#[allow(dead_code)]
 struct Options {
     program: String,
     append: bool,
@@ -51,7 +52,7 @@ fn options(args: &[String]) -> Result<Options, ()> {
 
     getopts(args.tail(), opts).map_err(|e| format!("{}", e)).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
-        let program = args.get(0).as_slice();
+        let program = args[0].as_slice();
         let arguments = "[OPTION]... [FILE]...";
         let brief = "Copy standard input to each FILE, and also to standard output.";
         let comment = "If a FILE is -, copy again to standard output.";
@@ -110,7 +111,7 @@ struct NamedWriter {
 
 impl Writer for NamedWriter {
     fn write(&mut self, buf: &[u8]) -> IoResult<()> {
-        with_path(self.path.clone(), || {
+        with_path(&*self.path.clone(), || {
             let val = self.inner.write(buf);
             if val.is_err() {
                 self.inner = box NullWriter as Box<Writer>;
@@ -120,7 +121,7 @@ impl Writer for NamedWriter {
     }
 
     fn flush(&mut self) -> IoResult<()> {
-        with_path(self.path.clone(), || {
+        with_path(&*self.path.clone(), || {
             let val = self.inner.flush();
             if val.is_err() {
                 self.inner = box NullWriter as Box<Writer>;

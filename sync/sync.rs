@@ -137,7 +137,7 @@ mod platform {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0);
+    let program = &args[0];
 
     let options = [
         optflag("h", "help", "display this help and exit"),

@@ -83,11 +83,11 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts.as_slice()) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, args.get(0))
+        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, args[0])
     };
 
     if matches.opt_present("h") {
-        print_usage(args.get(0).as_slice(), opts.as_slice(), "");
+        print_usage(args[0].as_slice(), opts.as_slice(), "");
     }
 
     if matches.opt_present("V") || matches.opt_present("h") {

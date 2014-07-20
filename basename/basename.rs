@@ -23,7 +23,7 @@ static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = strip_dir(args.get(0).as_slice());
+    let program = strip_dir(args[0].as_slice());
 
     //
     // Argument parsing
@@ -62,7 +62,7 @@ pub fn uumain(args: Vec<String>) -> int {
     }
     // too many arguments
     else if args.len() > 3 {
-        println!("{}: extra operand '{}'", program, args.get(3));
+        println!("{}: extra operand '{}'", program, args[3]);
         println!("Try '{} --help' for more information.", program);
         return 1;
     }
@@ -71,12 +71,12 @@ pub fn uumain(args: Vec<String>) -> int {
     // Main Program Processing
     //
 
-    let fullname = args.get(1);
+    let fullname = &args[1];
 
     let mut name = strip_dir(fullname.as_slice());
 
     if args.len() > 2 {
-        let suffix = args.get(2).clone();
+        let suffix = args[2].clone();
         name = strip_suffix(name.as_slice(), suffix.as_slice());
     }
 

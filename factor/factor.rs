@@ -64,7 +64,7 @@ fn print_factors_str(num_str: &str) {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).as_slice();
+    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "show this help message"),
         getopts::optflag("v", "version", "print the version and exit"),

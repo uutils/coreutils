@@ -35,7 +35,7 @@ struct Result {
 static NAME: &'static str = "wc";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
         getopts::optflag("m", "chars", "print the character counts"),

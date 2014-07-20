@@ -28,7 +28,7 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> int {
 
     let (args, obs_width) = handle_obsolete(args.as_slice());
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let opts = [
         getopts::optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)"),
@@ -86,7 +86,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     let mut args = Vec::<String>::from_slice(args);
     let mut i = 0;
     while i < args.len() {
-        if args.get(i).as_slice().char_at(0) == '-' && args.get(i).len() > 1 && args.get(i).as_slice().char_at(1).is_digit() {
+        if args[i].as_slice().char_at(0) == '-' && args[i].len() > 1 && args[i].as_slice().char_at(1).is_digit() {
             return (args.clone(),
                     Some(args.remove(i).unwrap().as_slice().slice_from(1).to_string()));
         }

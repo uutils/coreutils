@@ -52,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     };
 
-    let progname = args.get(0).clone();
+    let progname = args[0].clone();
     let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", opts);
     let mode = if matches.opt_present("help") {
         Help
@@ -76,11 +76,11 @@ pub fn uumain(args: Vec<String>) -> int {
     };
     let mut stdin_buf;
     let mut file_buf;
-    let input = if matches.free.is_empty() || matches.free.get(0).as_slice() == "-" {
+    let input = if matches.free.is_empty() || matches.free[0].as_slice() == "-" {
         stdin_buf = stdin_raw();
         &mut stdin_buf as &mut Reader
     } else {
-        let path = Path::new(matches.free.get(0).as_slice());
+        let path = Path::new(matches.free[0].as_slice());
         file_buf = File::open(&path);
         &mut file_buf as &mut Reader
     };

@@ -43,7 +43,7 @@ fn main() {
     let mut args = os::args();
 
     // try binary name as util name.
-    let binary = Path::new(args.get(0).as_slice());
+    let binary = Path::new(args[0].as_slice());
     let binary_as_util = binary.filename_str().unwrap();
 
     match umap.find_equiv(&binary_as_util) {
@@ -68,7 +68,7 @@ fn main() {
     // try first arg as util name.
     if args.len() >= 2 {
         args.shift();
-        let util = args.get(0).as_slice();
+        let util = args[0].as_slice();
 
         match umap.find_equiv(&util) {
             Some(&uumain) => {
@@ -76,10 +76,10 @@ fn main() {
                 return
             }
             None => {
-                if args.get(0).as_slice() == "--help" {
+                if args[0].as_slice() == "--help" {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
-                        let util = args.get(1).as_slice();
+                        let util = args[1].as_slice();
                         match umap.find_equiv(&util) {
                             Some(&uumain) => {
                                 os::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));

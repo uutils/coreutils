@@ -50,7 +50,7 @@ fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null(
 fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(_: &mut T) {}
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0);
+    let program = &args[0];
 
     let options = [
         optflag("h", "help", "Show help and exit"),
@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     unsafe {
         // we ignore the memory leak here because it doesn't matter anymore
-        let executable = opts.free.get(0).as_slice().to_c_str().unwrap();
+        let executable = opts.free[0].as_slice().to_c_str().unwrap();
         let mut args: Vec<*const i8> = opts.free.iter().map(|x| x.to_c_str().unwrap()).collect();
         args.push(std::ptr::null());
         execvp(executable as *const libc::c_char, args.as_ptr() as *mut *const libc::c_char) as int

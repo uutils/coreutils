@@ -98,7 +98,7 @@ extern {
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
     if free.len() == 1 {
-        let username = free.get(0).as_slice();
+        let username = free[0].as_slice();
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit()) {

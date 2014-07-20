@@ -289,7 +289,7 @@ fn find_kp_breakpoints<'a, T: Iterator<&'a WordInfo<'a>>>(iter: T, args: &BreakA
 
         if next_active_breaks.is_empty() {
             // every potential linebreak is too long! choose the linebreak with the least demerits, ld_idx
-            let new_break = restart_active_breaks(args, linebreaks.get(ld_idx), ld_idx, w, slen, minlength);
+            let new_break = restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w, slen, minlength);
             next_active_breaks.push(linebreaks.len());
             linebreaks.push(new_break);
             least_demerits = 0;
@@ -312,7 +312,7 @@ fn find_kp_breakpoints<'a, T: Iterator<&'a WordInfo<'a>>>(iter: T, args: &BreakA
 fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<uint>) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut breakwords = vec!();
     // of the active paths, we select the one with the fewest demerits
-    let mut best_idx = match active.iter().min_by(|&&a| paths.get(a).demerits) {
+    let mut best_idx = match active.iter().min_by(|&&a| paths[a].demerits) {
         None => crash!(1, "Failed to find a k-p linebreak solution. This should never happen."),
         Some(&s) => s
     };
@@ -320,7 +320,7 @@ fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<uint>) -> Vec<(&
     // now, chase the pointers back through the break list, recording
     // the words at which we should break
     loop {
-        let next_best = paths.get(best_idx);
+        let next_best = paths[best_idx];
         match next_best.linebreak {
             None => return breakwords,
             Some(prev) => {

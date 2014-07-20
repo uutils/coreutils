@@ -62,19 +62,19 @@ fn comm(a: &mut Box<Buffer>, b: &mut Box<Buffer>, opts: &getopts::Matches) {
         match ord {
             Less => {
                 if !opts.opt_present("1") {
-                    print!("{}{}", delim.get(1), ra.map(ensure_nl).unwrap());
+                    print!("{}{}", delim[1], ra.map(ensure_nl).unwrap());
                 }
                 ra = a.read_line();
             }
             Greater => {
                 if !opts.opt_present("2") {
-                    print!("{}{}", delim.get(2), rb.map(ensure_nl).unwrap());
+                    print!("{}{}", delim[2], rb.map(ensure_nl).unwrap());
                 }
                 rb = b.read_line();
             }
             Equal => {
                 if !opts.opt_present("3") {
-                    print!("{}{}", delim.get(3), ra.map(ensure_nl).unwrap());
+                    print!("{}{}", delim[3], ra.map(ensure_nl).unwrap());
                 }
                 ra = a.read_line();
                 rb = b.read_line();
@@ -127,8 +127,8 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
 
-    let mut f1 = open_file(matches.free.get(0).as_slice()).unwrap();
-    let mut f2 = open_file(matches.free.get(1).as_slice()).unwrap();
+    let mut f1 = open_file(matches.free[0].as_slice()).unwrap();
+    let mut f2 = open_file(matches.free[1].as_slice()).unwrap();
 
     comm(&mut f1, &mut f2, &matches);
 

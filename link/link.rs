@@ -50,8 +50,8 @@ pub fn uumain(args: Vec<String>) -> int {
         return 0;
     }
 
-    let old = Path::new(matches.free.get(0).as_slice());
-    let new = Path::new(matches.free.get(1).as_slice());
+    let old = Path::new(matches.free[0].as_slice());
+    let new = Path::new(matches.free[1].as_slice());
 
     match link(&old, &new) {
         Ok(_) => 0,

@@ -52,7 +52,7 @@ fn print_env(null: bool) {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let prog = args.get(0).as_slice();
+    let prog = args[0].as_slice();
 
     // to handle arguments the same way than GNU env, we can't use getopts
     let mut opts = box options {
@@ -191,7 +191,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if opts.program.len() >= 1 {
         use std::io::process::{Command, InheritFd};
-        let prog = opts.program.get(0).clone();
+        let prog = opts.program[0].clone();
         let args = opts.program.slice_from(1);
         match Command::new(prog).args(args).stdin(InheritFd(0)).stdout(InheritFd(1)).stderr(InheritFd(2)).status() {
             Ok(exit) =>

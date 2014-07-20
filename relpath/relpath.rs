@@ -21,7 +21,7 @@ static NAME: &'static str = "relpath";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0);
+    let program = &args[0];
     let options = [
         optflag("h", "help", "Show help and exit"),
         optflag("V", "version", "Show version and exit"),
@@ -46,9 +46,9 @@ pub fn uumain(args: Vec<String>) -> int {
         return 1
     }
 
-    let to = Path::new(opts.free.get(0).as_slice());
+    let to = Path::new(opts.free[0].as_slice());
     let from = if opts.free.len() > 1 {
-        Path::new(opts.free.get(1).as_slice())
+        Path::new(opts.free[1].as_slice())
     } else {
         std::os::getcwd()
     };

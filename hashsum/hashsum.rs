@@ -90,7 +90,7 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&str, Box<Digest>)
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
     let binary = Path::new(program.as_slice());
     let binary_name = binary.filename_str().unwrap();
 
@@ -313,4 +313,3 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
 
     Ok(digest.result_str())
 }
-

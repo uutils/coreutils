@@ -22,14 +22,14 @@ fn main() {
         return;
     }
 
-    let crat = match args.get(1).as_slice() {
+    let crat = match args[1].as_slice() {
         "test" => "uutest",
         "true" => "uutrue",
         "false" => "uufalse",
         "sync" => "uusync",
         s => s.clone(),
     };
-    let outfile  = args.get(2).as_slice();
+    let outfile  = args[2].as_slice();
 
     let main = std::str::replace(TEMPLATE, "@UTIL_CRATE@", crat);
     let mut out = File::open_mode(&Path::new(outfile), Truncate, ReadWrite);

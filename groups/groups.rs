@@ -26,7 +26,7 @@ static NAME: &'static str = "groups";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0).clone();
+    let program = args[0].clone();
 
     let options = [
         optflag("h", "help", "display this help menu and exit"),

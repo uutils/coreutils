@@ -33,7 +33,7 @@ extern {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    let program = args.get(0);
+    let program = &args[0];
 
     let options = [
         optflag("f", "full", "Default option to show full name"),
