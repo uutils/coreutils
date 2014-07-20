@@ -90,9 +90,8 @@ pub fn uumain(args: Vec<String>) -> int {
         crash!(1, "{}, input contains a loop:", input);
     }
 
-    let mut writer = io::BufferedWriter::new(box io::stdio::stdout_raw() as Box<Writer>);
     for x in g.result.iter() {
-        crash_if_err!(1, writer.write_line(x.as_slice()));
+        println!("{}", x);
     }
 
 	return 0
