@@ -22,10 +22,12 @@ ENABLE_STRIP :=
 endif
 
 # Install directories
-PREFIX ?= /usr/local
-BINDIR ?= /bin
+PREFIX  ?= /usr/local
+BINDIR  ?= /bin
 
-SRC_DIR=$(shell pwd)
+BASEDIR  ?= .
+SRCDIR   := $(BASEDIR)/src
+BUILDDIR := $(BASEDIR)/build
 
 # Possible programs
 PROGS       := \
@@ -133,32 +135,32 @@ TESTS       := \
 
 # Setup for building crates
 define BUILD_SETUP
-X := $(shell $(RUSTC) --print-file-name --crate-type rlib $(1)/$(1).rs)
+X := $(shell $(RUSTC) --print-file-name --crate-type rlib $(SRCDIR)/$(1)/$(1).rs)
 $(1)_RLIB := $$(X)
 CRATE_RLIBS += $$(X)
 endef
 $(foreach crate,$(EXES),$(eval $(call BUILD_SETUP,$(crate))))
 
 # Utils stuff
-EXES_PATHS  := $(addprefix build/,$(EXES))
-RLIB_PATHS  := $(addprefix build/,$(CRATE_RLIBS))
+EXES_PATHS  := $(addprefix $(BUILDDIR)/,$(EXES))
+RLIB_PATHS  := $(addprefix $(BUILDDIR)/,$(CRATE_RLIBS))
 command     = sh -c '$(1)'
 
 # Main exe build rule
 define EXE_BUILD
-build/gen/$(1).rs: build/mkmain
-	build/mkmain $(1) build/gen/$(1).rs
+$(BUILDDIR)/gen/$(1).rs: $(BUILDDIR)/mkmain
+	$(BUILDDIR)/mkmain $(1) $$@
 
-build/$(1): build/gen/$(1).rs build/$($(1)_RLIB) | build deps
-	$(RUSTC) $(RUSTCBINFLAGS) -L build/ -o build/$(1) build/gen/$(1).rs
-	$(if $(ENABLE_STRIP),strip build/$(1),)
+$(BUILDDIR)/$(1): $(BUILDDIR)/gen/$(1).rs $(BUILDDIR)/$($(1)_RLIB) | $(BUILDDIR) deps
+	$(RUSTC) $(RUSTCBINFLAGS) -L $(BUILDDIR)/ -o $$@ $$<
+	$(if $(ENABLE_STRIP),strip $$@,)
 endef
 
 define CRATE_BUILD
--include build/$(1).d
+-include $(BUILDDIR)/$(1).d
 
-build/$($(1)_RLIB): $(1)/$(1).rs | build deps
-	$(RUSTC) $(RUSTCFLAGS) -L build/ --crate-type rlib --dep-info build/$(1).d $(1)/$(1).rs --out-dir build
+$(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
+	$(RUSTC) $(RUSTCFLAGS) -L $(BUILDDIR)/ --crate-type rlib --dep-info $(BUILDDIR)/$(1).d $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -167,24 +169,24 @@ ALIAS_TARGET = $(word 2,$(subst :, ,$(1)))
 define MAKE_ALIAS
 
 ifneq ($(ALIAS_TARGET,$(1)),)
-all: build/$(call ALIAS_TARGET,$(1))
-build/$(call ALIAS_TARGET,$(1)): build/$(call ALIAS_SOURCE,$(1))
-	$(call command,install build/$(call ALIAS_SOURCE,$(1)) build/$(call ALIAS_TARGET,$(1)))
+all: $(BUILDDIR)/$(call ALIAS_TARGET,$(1))
+$(BUILDDIR)/$(call ALIAS_TARGET,$(1)): $(BUILDDIR)/$(call ALIAS_SOURCE,$(1))
+	$(call command,install $$@ $$<)
 endif
 
 endef
 
 # Test exe built rules
 define TEST_BUILD
-test_$(1): tmp/$(1)_test build/$(1)
-	$(call command,tmp/$(1)_test)
+test_$(1): tmp/$(1)_test $(BUILDDIR)/$(1)
+	$(call command,$$<)
 
-tmp/$(1)_test: $(1)/test.rs
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o tmp/$(1)_test $(1)/test.rs)
+tmp/$(1)_test: $(SRCDIR)/$(1)/test.rs
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o $$@ $$<)
 endef
 
 # Main rules
-all: $(EXES_PATHS) build/uutils
+all: $(EXES_PATHS) $(BUILDDIR)/uutils
 
 # Creating necessary rules for each targets
 $(foreach crate,$(EXES),$(eval $(call CRATE_BUILD,$(crate))))
@@ -192,28 +194,28 @@ $(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
 $(foreach alias,$(ALIASES),$(eval $(call MAKE_ALIAS,$(alias))))
 $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 
--include build/uutils.d
-build/uutils: uutils/uutils.rs build/mkuutils $(RLIB_PATHS)
-	build/mkuutils build/gen/uutils.rs $(BUILD)
-	$(RUSTC) $(RUSTCBINFLAGS) -L build/ --dep-info $@.d build/gen/uutils.rs -o $@
-	$(if $(ENABLE_STRIP),strip build/uutils)
+-include $(BUILDDIR)/uutils.d
+$(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS)
+	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(BUILD)
+	$(RUSTC) $(RUSTCBINFLAGS) -L $(BUILDDIR)/ --dep-info $@.d $(BUILDDIR)/gen/uutils.rs -o $@
+	$(if $(ENABLE_STRIP),strip $@)
 
 # Dependencies
--include build/rust-crypto.d
-build/.rust-crypto: | build
-	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info build/rust-crypto.d deps/rust-crypto/src/rust-crypto/lib.rs --out-dir build/
+-include $(BUILDDIR)/rust-crypto.d
+$(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
+	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info $(BUILDDIR)/rust-crypto.d $(BASEDIR)/deps/rust-crypto/src/rust-crypto/lib.rs --out-dir $(BUILDDIR)/
 	@touch $@
 
-build/mkmain: mkmain.rs | build
-	$(RUSTC) $(RUSTCFLAGS) -L build mkmain.rs -o $@
+$(BUILDDIR)/mkmain: mkmain.rs | $(BUILDDIR)
+	$(RUSTC) $(RUSTCFLAGS) -L $(BUILDDIR) $< -o $@
 
-build/mkuutils: mkuutils.rs | build
-	$(RUSTC) $(RUSTCFLAGS) -L build mkuutils.rs -o $@
+$(BUILDDIR)/mkuutils: mkuutils.rs | $(BUILDDIR)
+	$(RUSTC) $(RUSTCFLAGS) -L $(BUILDDIR) $< -o $@
 
-cksum/crc_table.rs: cksum/gen_table.rs
-	cd cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
+$(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
+	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
-deps: build/.rust-crypto cksum/crc_table.rs
+deps: $(BUILDDIR)/.rust-crypto $(SRCDIR)/cksum/crc_table.rs
 
 crates:
 	echo $(EXES)
@@ -222,25 +224,25 @@ test: tmp $(addprefix test_,$(TESTS))
 	$(RM) -rf tmp
 
 clean:
-	$(RM) -rf build tmp
+	$(RM) -rf $(BUILDDIR) tmp
 
-build:
+$(BUILDDIR):
 	git submodule update --init
-	mkdir -p build/gen
+	mkdir -p $(BUILDDIR)/gen
 
 tmp:
 	mkdir tmp
 
-install: $(addprefix build/,$(INSTALLEES))
+install: $(addprefix $(BUILDDIR)/,$(INSTALLEES))
 	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
 	for prog in $(INSTALLEES); do \
-		install build/$$prog $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)$$prog; \
+		install $(BUILDDIR)/$$prog $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)$$prog; \
 	done
 
 # TODO: figure out if there is way for prefixes to work with the symlinks
-install-multicall: build/uutils
+install-multicall: $(BUILDDIR)/uutils
 	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
-	install build/uutils $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)uutils
+	install $(BUILDDIR)/uutils $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)uutils
 	cd $(DESTDIR)$(PREFIX)$(BINDIR)
 	for prog in $(INSTALLEES); do \
 		ln -s $(PROG_PREFIX)uutils $$prog; \
@@ -253,13 +255,13 @@ uninstall-multicall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)
 
 # Test under the busybox testsuite
-build/busybox: build/uutils
-	rm -f build/busybox
-	ln -s $(SRC_DIR)/build/uutils build/busybox
+$(BUILDDIR)/busybox: $(BUILDDIR)/uutils
+	rm -f $(BUILDDIR)/busybox
+	ln -s $(BUILDDIR)/uutils $(BUILDDIR)/busybox
 
 # This is a busybox-specific config file their test suite wants to parse.
 # For now it's blank.
-build/.config: build/uutils
+$(BUILDDIR)/.config: $(BUILDDIR)/uutils
 	touch $@
 
 ifeq ($(BUSYBOX_SRC),)
@@ -270,8 +272,8 @@ busytest:
 	@echo
 	@false
 else
-busytest: build/busybox build/.config
-	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(SRC_DIR)/build ./runtest $(RUNTEST_ARGS))
+busytest: $(BUILDDIR)/busybox $(BUILDDIR)/.config
+	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS))
 endif
 
 .PHONY: all deps test clean busytest install uninstall

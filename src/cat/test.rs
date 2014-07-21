@@ -4,8 +4,8 @@ use std::str;
 #[test]
 fn test_output_multi_files_print_all_chars() {
     let po = match Command::new("build/cat")
-                                .arg("cat/fixtures/alpha.txt")
-                                .arg("cat/fixtures/256.txt")
+                                .arg("src/cat/fixtures/alpha.txt")
+                                .arg("src/cat/fixtures/256.txt")
                                 .arg("-A")
                                 .arg("-n").output() {
 
