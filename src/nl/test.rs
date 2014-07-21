@@ -27,7 +27,7 @@ fn test_stdin_newline() {
 #[test]
 fn test_padding_without_overflow() {
     let po = Command::new("build/nl").arg("-i").arg("1000").arg("-s").arg("x")
-        .arg("-n").arg("rz").arg("nl/fixtures/simple.txt").output().unwrap();
+        .arg("-n").arg("rz").arg("src/nl/fixtures/simple.txt").output().unwrap();
 
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
     assert_eq!(out, "000001xL1\n001001xL2\n002001xL3\n003001xL4\n004001xL5\n005001xL6\n006001xL7\n007001xL8\n008001xL9\n009001xL10\n010001xL11\n011001xL12\n012001xL13\n013001xL14\n014001xL15\n");
@@ -37,7 +37,7 @@ fn test_padding_without_overflow() {
 fn test_padding_with_overflow() {
     let po = Command::new("build/nl").arg("-i").arg("1000").arg("-s").arg("x")
         .arg("-n").arg("rz").arg("-w").arg("4")
-        .arg("nl/fixtures/simple.txt").output().unwrap();
+        .arg("src/nl/fixtures/simple.txt").output().unwrap();
 
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
     assert_eq!(out, "0001xL1\n1001xL2\n2001xL3\n3001xL4\n4001xL5\n5001xL6\n6001xL7\n7001xL8\n8001xL9\n9001xL10\n10001xL11\n11001xL12\n12001xL13\n13001xL14\n14001xL15\n");
@@ -47,11 +47,11 @@ fn test_padding_with_overflow() {
 fn test_sections_and_styles() {
     for &(fixture, output) in [
         (
-            "nl/fixtures/section.txt", 
+            "src/nl/fixtures/section.txt", 
             "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  |BODY2\n\nFOOTER1\nFOOTER2\n\nNEXTHEADER1\nNEXTHEADER2\n\n1  |NEXTBODY1\n2  |NEXTBODY2\n\nNEXTFOOTER1\nNEXTFOOTER2\n"
         ),
         (
-            "nl/fixtures/joinblanklines.txt",
+            "src/nl/fixtures/joinblanklines.txt",
             "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n\n\n\n\n4  |\n\n\n\n\n5  |\n6  |Followed by 5x empty\n\n\n\n\n7  |\n8  |Followed by 4x empty\n\n\n\n\n9  |Nonempty\n10 |Nonempty\n11 |Nonempty.\n"
         ),
     ].iter() {
