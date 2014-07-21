@@ -1,12 +1,12 @@
 use std::io::process::Command;
 use std::io::fs::rmdir;
 
-static exe: &'static str = "build/mkdir";
-static test_dir1: &'static str = "tmp/mkdir_test1";
-static test_dir2: &'static str = "tmp/mkdir_test2";
-static test_dir3: &'static str = "tmp/mkdir_test3";
-static test_dir4: &'static str = "tmp/mkdir_test4/mkdir_test4_1";
-static test_dir5: &'static str = "tmp/mkdir_test5/mkdir_test5_1";
+static exe: &'static str = "./mkdir";
+static test_dir1: &'static str = "mkdir_test1";
+static test_dir2: &'static str = "mkdir_test2";
+static test_dir3: &'static str = "mkdir_test3";
+static test_dir4: &'static str = "mkdir_test4/mkdir_test4_1";
+static test_dir5: &'static str = "mkdir_test5/mkdir_test5_1";
 
 fn cleanup(dir: &'static str) {
     let d = dir.into_string();

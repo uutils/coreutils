@@ -22,12 +22,16 @@ ENABLE_STRIP :=
 endif
 
 # Install directories
-PREFIX  ?= /usr/local
-BINDIR  ?= /bin
+PREFIX   ?= /usr/local
+BINDIR   ?= /bin
 
-BASEDIR  ?= .
+# This won't support any directory with spaces in its name, but you can just
+# make a symlink without spaces that points to the directory.
+BASEDIR  ?= $(shell pwd)
 SRCDIR   := $(BASEDIR)/src
 BUILDDIR := $(BASEDIR)/build
+TESTDIR  := $(BASEDIR)/test
+TEMPDIR  := $(BASEDIR)/tmp
 
 # Possible programs
 PROGS       := \
@@ -178,11 +182,14 @@ endef
 
 # Test exe built rules
 define TEST_BUILD
-test_$(1): tmp/$(1)_test $(BUILDDIR)/$(1)
-	$(call command,$$<)
+test_$(1): $(TEMPDIR)/$(1)/$(1)_test $(BUILDDIR)/$(1)
+	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $$<)
 
-tmp/$(1)_test: $(SRCDIR)/$(1)/test.rs
+$(TEMPDIR)/$(1)/$(1)_test: $(TESTDIR)/$(1).rs | $(TEMPDIR)/$(1)
 	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o $$@ $$<)
+
+$(TEMPDIR)/$(1): | $(TEMPDIR)
+	$(call command,cp -r $(TESTDIR)/fixtures/$(1) $$@ || mkdir $$@)
 endef
 
 # Main rules
@@ -220,18 +227,18 @@ deps: $(BUILDDIR)/.rust-crypto $(SRCDIR)/cksum/crc_table.rs
 crates:
 	echo $(EXES)
 
-test: tmp $(addprefix test_,$(TESTS))
-	$(RM) -rf tmp
+test: $(TEMPDIR) $(addprefix test_,$(TESTS))
+	$(RM) -rf $(TEMPDIR)
 
 clean:
-	$(RM) -rf $(BUILDDIR) tmp
+	$(RM) -rf $(BUILDDIR) $(TEMPDIR)
 
 $(BUILDDIR):
 	git submodule update --init
 	mkdir -p $(BUILDDIR)/gen
 
-tmp:
-	mkdir tmp
+$(TEMPDIR):
+	mkdir $(TEMPDIR)
 
 install: $(addprefix $(BUILDDIR)/,$(INSTALLEES))
 	mkdir -p $(DESTDIR)$(PREFIX)$(BINDIR)
