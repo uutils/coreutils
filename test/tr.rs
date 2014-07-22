@@ -1,7 +1,9 @@
 use std::io::process::Command;
 
+static PROGNAME: &'static str = "./tr";
+
 fn run(input: &str, args: &[&'static str]) -> Vec<u8> {
-    let mut process = Command::new("build/tr").args(args).spawn().unwrap();
+    let mut process = Command::new(PROGNAME).args(args).spawn().unwrap();
 
     process.stdin.take_unwrap().write_str(input).unwrap();
 

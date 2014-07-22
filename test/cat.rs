@@ -1,11 +1,13 @@
 use std::io::process::Command;
 use std::str;
 
+static PROGNAME: &'static str = "./cat";
+
 #[test]
 fn test_output_multi_files_print_all_chars() {
-    let po = match Command::new("build/cat")
-                                .arg("src/cat/fixtures/alpha.txt")
-                                .arg("src/cat/fixtures/256.txt")
+    let po = match Command::new(PROGNAME)
+                                .arg("alpha.txt")
+                                .arg("256.txt")
                                 .arg("-A")
                                 .arg("-n").output() {
 
@@ -20,7 +22,7 @@ fn test_output_multi_files_print_all_chars() {
 
 #[test]
 fn test_stdin_squeeze() {
-    let mut process= Command::new("build/cat").arg("-A").spawn().unwrap();
+    let mut process= Command::new(PROGNAME).arg("-A").spawn().unwrap();
 
     process.stdin.take_unwrap().write(b"\x00\x01\x02").unwrap();
     let po = process.wait_with_output().unwrap();
@@ -31,7 +33,7 @@ fn test_stdin_squeeze() {
 
 #[test]
 fn test_stdin_number_non_blank() {
-    let mut process = Command::new("build/cat").arg("-b").arg("-").spawn().unwrap();
+    let mut process = Command::new(PROGNAME).arg("-b").arg("-").spawn().unwrap();
 
     process.stdin.take_unwrap().write(b"\na\nb\n\n\nc").unwrap();
     let po = process.wait_with_output().unwrap();
