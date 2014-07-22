@@ -72,6 +72,19 @@ macro_rules! crash_if_err(
 )
 
 #[macro_export]
+macro_rules! return_if_err(
+    ($exitcode:expr, $exp:expr) => (
+        match $exp {
+            Ok(m) => m,
+            Err(f) => {
+                show_error!("{}", f);
+                return $exitcode;
+            }
+        }
+    )
+)
+
+#[macro_export]
 macro_rules! safe_write(
     ($fd:expr, $($args:expr),+) => (
         match write!($fd, $($args),+) {

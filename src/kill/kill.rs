@@ -32,10 +32,11 @@ use getopts::{
 
 use signals::ALL_SIGNALS;
 
-mod signals;
-
 #[path = "../common/util.rs"]
 mod util;
+
+#[path = "../common/signals.rs"]
+mod signals;
 
 static NAME: &'static str = "kill";
 static VERSION:  &'static str = "0.0.1";
@@ -183,22 +184,9 @@ fn help(progname: &str, usage: &str) {
     println!("{}", get_help_text(progname, usage));
 }
 
-fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<uint> {
-    if signal_name_or_value == "0" {
-        return Some(0);
-    }
-    for signal in ALL_SIGNALS.iter() {
-        let long_name = format!("SIG{}", signal.name);
-        if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_string().as_slice()) || (long_name.as_slice() == signal_name_or_value) {
-            return Some(signal.value);
-        }
-    }
-    None
-}
-
 fn kill(signalname: &str, pids: std::vec::Vec<String>) -> int {
     let mut status = 0;
-    let optional_signal_value = signal_by_name_or_value(signalname);
+    let optional_signal_value = signals::signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)

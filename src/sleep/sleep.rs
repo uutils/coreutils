@@ -21,6 +21,9 @@ use std::u64;
 #[path = "../common/util.rs"]
 mod util;
 
+#[path = "../common/time.rs"]
+mod time;
+
 static NAME: &'static str = "sleep";
 
 pub fn uumain(args: Vec<String>) -> int {
@@ -66,43 +69,13 @@ specified by the sum of their values.", opts).as_slice());
 
 fn sleep(args: Vec<String>) {
     let sleep_time = args.iter().fold(0.0, |result, arg| {
-        let (arg, suffix_time) = match match_suffix(arg.as_slice()) {
+        let num = match time::from_str(arg.as_slice()) {
             Ok(m) => m,
             Err(f) => {
-                crash!(1, "{}", f.to_string())
+                crash!(1, "{}", f)
             }
         };
-        let num =
-            if suffix_time == 0 {
-                0.0
-            } else {
-                match from_str::<f64>(arg.as_slice()) {
-                    Some(m) => m,
-                    None => {
-                        crash!(1, "Invalid time interval '{}'", arg.to_string())
-                    }
-                }
-            };
-        result + num * suffix_time as f64
+        result + num
     });
     timer::sleep(if sleep_time == f64::INFINITY { u64::MAX } else { (sleep_time * 1000.0) as u64 });
-}
-
-fn match_suffix(arg: &str) -> Result<(String, int), String> {
-    let result = match (arg).char_at_reverse(0) {
-        's' | 'S' => 1,
-        'm' | 'M' => 60,
-        'h' | 'H' => 60 * 60,
-        'd' | 'D' => 60 * 60 * 24,
-        val => {
-            if !val.is_alphabetic() {
-                return Ok((arg.to_string(), 1))
-            } else if arg == "inf" || arg == "infinity" {
-                return Ok(("inf".to_string(), 1))
-            } else {
-                return Err(format!("Invalid time interval '{}'", arg))
-            }
-        }
-    };
-    Ok(((arg).slice_to((arg).len() - 1).to_string(), result))
 }

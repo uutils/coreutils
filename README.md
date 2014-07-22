@@ -165,7 +165,6 @@ To do
 - stty
 - tail (not all features implemented)
 - test (not all features implemented)
-- timeout
 - unexpand
 - uniq (in progress)
 - who
