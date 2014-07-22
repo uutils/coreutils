@@ -93,6 +93,7 @@ UNIX_PROGS := \
   logname \
   mkfifo \
   nohup \
+  timeout \
   tty \
   uname \
   uptime \

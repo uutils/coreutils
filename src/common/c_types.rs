@@ -193,7 +193,6 @@ pub fn get_groups() -> Result<Vec<gid_t>, int> {
 }
 
 pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
-
     let groups = match possible_pw {
         Some(pw) => Ok(get_group_list(pw.pw_name, pw.pw_gid)),
         None => get_groups(),
