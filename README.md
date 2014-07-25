@@ -133,7 +133,6 @@ To do
 - dd
 - df
 - dircolors
-- expand (in progress)
 - expr
 - getlimits
 - install

@@ -52,6 +52,10 @@ name = "env"
 path = "env/env.rs"
 
 [[bin]]
+name = "expand"
+path = "expand/expand.rs"
+
+[[bin]]
 name = "factor"
 path = "factor/factor.rs"
 

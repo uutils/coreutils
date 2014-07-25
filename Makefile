@@ -46,6 +46,7 @@ PROGS       := \
   echo \
   env \
   du \
+  expand \
   factor \
   false \
   fmt \
