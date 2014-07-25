@@ -14,42 +14,41 @@ extern crate libc;
 #[macro_export]
 macro_rules! show_error(
     ($($args:expr),+) => ({
-        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
-        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+        pipe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
 )
 
 #[macro_export]
 macro_rules! show_warning(
     ($($args:expr),+) => ({
-        safe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
-        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+        pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
 )
 
 #[macro_export]
 macro_rules! show_info(
     ($($args:expr),+) => ({
-        safe_write!(&mut ::std::io::stderr(), "{}: ", ::NAME);
-        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+        pipe_write!(&mut ::std::io::stderr(), "{}: ", ::NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
 )
 
 #[macro_export]
 macro_rules! eprint(
-    ($($args:expr),+) => (safe_write!(&mut ::std::io::stderr(), $($args),+))
+    ($($args:expr),+) => (pipe_write!(&mut ::std::io::stderr(), $($args),+))
 )
 
 #[macro_export]
 macro_rules! eprintln(
-    ($($args:expr),+) => (safe_writeln!(&mut ::std::io::stderr(), $($args),+))
+    ($($args:expr),+) => (pipe_writeln!(&mut ::std::io::stderr(), $($args),+))
 )
 
 #[macro_export]
 macro_rules! crash(
     ($exitcode:expr, $($args:expr),+) => ({
-        safe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
-        safe_writeln!(&mut ::std::io::stderr(), $($args),+);
+        show_error!($($args),+);
         unsafe { ::util::libc::exit($exitcode as ::util::libc::c_int); }
     })
 )
@@ -84,12 +83,78 @@ macro_rules! return_if_err(
     )
 )
 
+// XXX: should the pipe_* macros return an Err just to show the write failed?
+
+#[macro_export]
+macro_rules! pipe_print(
+    ($($args:expr),+) => (
+        match write!(&mut ::std::io::stdout() as &mut Writer, $($args),+) {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind == ::std::io::BrokenPipe {
+                    false
+                } else {
+                    fail!("{}", f)
+                }
+            }
+        }
+    )
+)
+
+#[macro_export]
+macro_rules! pipe_println(
+    ($($args:expr),+) => (
+        match writeln!(&mut ::std::io::stdout() as &mut Writer, $($args),+) {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind == ::std::io::BrokenPipe {
+                    false
+                } else {
+                    fail!("{}", f)
+                }
+            }
+        }
+    )
+)
+
+#[macro_export]
+macro_rules! pipe_write(
+    ($fd:expr, $($args:expr),+) => (
+        match write!($fd, $($args),+) {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind == ::std::io::BrokenPipe {
+                    false
+                } else {
+                    fail!("{}", f)
+                }
+            }
+        }
+    )
+)
+
+#[macro_export]
+macro_rules! pipe_writeln(
+    ($fd:expr, $($args:expr),+) => (
+        match write!($fd, $($args),+) {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind == ::std::io::BrokenPipe {
+                    false
+                } else {
+                    fail!("{}", f)
+                }
+            }
+        }
+    )
+)
+
 #[macro_export]
 macro_rules! safe_write(
     ($fd:expr, $($args:expr),+) => (
         match write!($fd, $($args),+) {
             Ok(_) => {}
-            Err(f) => { fail!(f.to_string()); }
+            Err(f) => fail!(f.to_string())
         }
     )
 )
@@ -99,7 +164,7 @@ macro_rules! safe_writeln(
     ($fd:expr, $($args:expr),+) => (
         match writeln!($fd, $($args),+) {
             Ok(_) => {}
-            Err(f) => { fail!(f.to_string()); }
+            Err(f) => fail!(f.to_string())
         }
     )
 )

@@ -26,7 +26,6 @@ static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> int {
-
     let (args, obs_width) = handle_obsolete(args.as_slice());
     let program = args[0].clone();
 
@@ -98,11 +97,15 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
     for filename in filenames.iter() {
         let filename: &str = filename.as_slice();
+        let mut stdin_buf;
+        let mut file_buf;
         let buffer = BufferedReader::new(
             if filename == "-" {
-                box io::stdio::stdin_raw() as Box<Reader>
+                stdin_buf = io::stdio::stdin_raw();
+                &mut stdin_buf as &mut Reader
             } else {
-                box safe_unwrap!(File::open(&Path::new(filename))) as Box<Reader>
+                file_buf = safe_unwrap!(File::open(&Path::new(filename)));
+                &mut file_buf as &mut Reader
             }
         );
         fold_file(buffer, bytes, spaces, width);
@@ -112,19 +115,24 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
 fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, width: uint) {
     let mut file = file;
     for line in file.lines() {
-        let line = safe_unwrap!(line);
-        if line.len() == 1 {
-            println!("");
-            continue;
+        let line_string = safe_unwrap!(line);
+        let mut line = line_string.as_slice();
+        let len = line.len();
+        if line.char_at(len - 1) == '\n' {
+            if len == 1 {
+                println!("");
+                continue;
+            } else {
+                line = line.slice_to(len - 1);
+            }
         }
-        let line = line.as_slice().slice_to(line.len() - 1);
         if bytes {
             let mut i = 0;
             while i < line.len() {
                 let width = if line.len() - i >= width { width } else { line.len() - i };
                 let slice = {
                     let slice = line.slice(i, i + width);
-                    if spaces && i + width != line.len() {
+                    if spaces && i + width < line.len() {
                         match slice.rfind(|ch: char| ch.is_whitespace()) {
                             Some(m) => slice.slice_to(m + 1),
                             None => slice
@@ -140,11 +148,40 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
             let mut output = String::new();
             let mut count = 0;
             for (i, ch) in line.chars().enumerate() {
+                if count >= width {
+                    let (val, ncount) = {
+                        let slice = output.as_slice();
+                        let (out, val, ncount) =
+                            if spaces && i + 1 < line.len() {
+                                match slice.rfind(|ch: char| ch.is_whitespace()) {
+                                    Some(m) => {
+                                        let routput = slice.slice_from(m + 1).to_string();
+                                        let ncount = routput.as_slice().chars().fold(0u, |out, ch: char| {
+                                            out + match ch {
+                                                '\t' => 8,
+                                                '\x08' => if out > 0 { -1 } else { 0 },
+                                                '\r' => return 0,
+                                                _ => 1
+                                            }
+                                        });
+                                        (slice.slice_to(m + 1), routput, ncount)
+                                    },
+                                    None => (slice, "".to_string(), 0)
+                                }
+                            } else {
+                                (slice, "".to_string(), 0)
+                            };
+                        println!("{}", out);
+                        (val, ncount)
+                    };
+                    output = val.into_string();
+                    count = ncount;
+                }
                 match ch {
                     '\t' => {
                         count += 8;
                         if count > width {
-                            println!("{}", output.as_slice());
+                            println!("{}", output);
                             output.truncate(0);
                             count = 8;
                         }
@@ -165,31 +202,9 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                     _ => count += 1
                 };
                 output.push_char(ch);
-                if count == width {
-                    let (val, ncount) = {
-                        let slice = output.as_slice();
-                        let (out, val, ncount) =
-                            if spaces && i + 1 != line.len() {
-                                match slice.rfind(|ch: char| ch.is_whitespace()) {
-                                    Some(m) => {
-                                        let routput = slice.slice_from(m + 1).to_string();
-                                        let ncount = routput.as_slice().chars().fold(0, |out, ch: char| out + if ch == '\t' { 8 } else { 1 });
-                                        (slice.slice_to(m + 1), routput, ncount)
-                                    },
-                                    None => (slice, "".to_string(), 0)
-                                }
-                            } else {
-                                (slice, "".to_string(), 0)
-                            };
-                        println!("{}", out);
-                        (val, ncount)
-                    };
-                    output = val.into_string();
-                    count = ncount;
-                }
             }
             if count > 0 {
-                println!("{}", output);
+                print!("{}", output);
             }
         }
     }
