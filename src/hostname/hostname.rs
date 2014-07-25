@@ -12,11 +12,20 @@
  * https://www.opensource.apple.com/source/shell_cmds/shell_cmds-170/hostname/hostname.c?txt
  */
 
+#![feature(macro_rules)]
+
 extern crate getopts;
 extern crate libc;
 
+use std::collections::hashmap::HashSet;
+use std::io::net::addrinfo;
 use std::str;
 use getopts::{optflag, getopts, usage};
+
+#[path = "../common/util.rs"]
+mod util;
+
+static NAME: &'static str = "hostname";
 
 extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
@@ -36,8 +45,10 @@ pub fn uumain(args: Vec<String>) -> int {
     let program = &args[0];
 
     let options = [
-        optflag("f", "full", "Default option to show full name"),
-        optflag("s", "slice subdomain", "Cuts the subdomain off if any"),
+        optflag("d", "domain", "Display the name of the DNS domain if possible"),
+        optflag("i", "ip-address", "Display the network address(es) of the host"),
+        optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)"),   // TODO: support --long
+        optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible"),
         optflag("h", "help", "Show help"),
         optflag("V", "version", "Show program's version")
     ];
@@ -57,18 +68,49 @@ pub fn uumain(args: Vec<String>) -> int {
         0 => {
             let hostname = xgethostname();
 
-            if matches.opt_present("s") {
-                let pos = hostname.as_slice().find_str(".");
-                if pos.is_some() {
-                    println!("{:s}", hostname.as_slice().slice_to(pos.unwrap()));
-                    return 0;
+            if matches.opt_present("i") {
+                match addrinfo::get_host_addresses(hostname.as_slice()) {
+                    Ok(addresses) => {
+                        let mut hashset = HashSet::new();
+                        let mut output = String::new();
+                        for addr in addresses.iter() {
+                            // XXX: not sure why this is necessary...
+                            if !hashset.contains(addr) {
+                                output.push_str(addr.to_string().as_slice());
+                                output.push_str(" ");
+                                hashset.insert(addr.clone());
+                            }
+                        }
+                        let len = output.len();
+                        if len > 0 {
+                            println!("{}", output.as_slice().slice_to(len - 1));
+                        }
+                    }
+                    Err(f) => {
+                        show_error!("{}", f);
+                        return 1;
+                    }
                 }
-            }
+            } else {
+                if matches.opt_present("s") {
+                    let pos = hostname.as_slice().find_str(".");
+                    if pos.is_some() {
+                        println!("{:s}", hostname.as_slice().slice_to(pos.unwrap()));
+                        return 0;
+                    }
+                } else if matches.opt_present("d") {
+                    let pos = hostname.as_slice().find_str(".");
+                    if pos.is_some() {
+                        println!("{}", hostname.as_slice().slice_from(pos.unwrap() + 1));
+                        return 0;
+                    }
+                }
 
-            println!("{:s}", hostname.as_slice());
+                println!("{:s}", hostname);
+            }
         }
-        1 => { xsethostname( matches.free.last().unwrap().as_slice() ) }
-        _ => { help_menu(program.as_slice(), options); }
+        1 => xsethostname(matches.free.last().unwrap().as_slice()),
+        _ => help_menu(program.as_slice(), options)
     };
 
     0

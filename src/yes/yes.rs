@@ -16,7 +16,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{print, println};
+use std::io::print;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -60,6 +60,8 @@ pub fn uumain(args: Vec<String>) -> int {
 
 pub fn exec(string: &str) {
     loop {
-        println(string);
+        if !pipe_println!("{}", string) {
+            break;
+        }
     }
 }

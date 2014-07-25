@@ -268,9 +268,8 @@ $(BUILDDIR)/busybox: $(BUILDDIR)/uutils
 	ln -s $(BUILDDIR)/uutils $(BUILDDIR)/busybox
 
 # This is a busybox-specific config file their test suite wants to parse.
-# For now it's blank.
-$(BUILDDIR)/.config: $(BUILDDIR)/uutils
-	touch $@
+$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config $(BUILDDIR)/uutils
+	cp $< $@
 
 ifeq ($(BUSYBOX_SRC),)
 busytest:

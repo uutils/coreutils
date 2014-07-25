@@ -151,20 +151,20 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn version() {
-    println!("{} v{}", NAME, VERSION);
+    pipe_println!("{} v{}", NAME, VERSION);
 }
 
 fn usage(program: &str, binary_name: &str, opts: &[getopts::OptGroup]) {
     version();
-    println!("");
-    println!("Usage:");
+    pipe_println!("");
+    pipe_println!("Usage:");
     if is_custom_binary(binary_name) {
-        println!("  {} [OPTION]... [FILE]...", program);
+        pipe_println!("  {} [OPTION]... [FILE]...", program);
     } else {
-        println!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program);
+        pipe_println!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program);
     }
-    println!("");
-    print!("{}", getopts::usage("Compute and check message digests.", opts));
+    pipe_println!("");
+    pipe_print!("{}", getopts::usage("Compute and check message digests.", opts));
 }
 
 fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), int> {
@@ -177,15 +177,18 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
     };
     for filename in files.iter() {
         let filename: &str = filename.as_slice();
+        let mut stdin_buf;
+        let mut file_buf;
         let mut file = BufferedReader::new(
             if filename == "-" {
-                box stdin_raw() as Box<Reader>
+                stdin_buf = stdin_raw();
+                &mut stdin_buf as &mut Reader
             } else {
-                box safe_unwrap!(File::open(&Path::new(filename))) as Box<Reader>
+                file_buf = safe_unwrap!(File::open(&Path::new(filename)));
+                &mut file_buf as &mut Reader
             }
         );
         if check {
-
             // Set up Regexes for line validation and parsing
             let bytes = digest.output_bits() / 4;
             let gnu_re = safe_unwrap!(
@@ -229,11 +232,11 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                     .as_slice().to_ascii().to_lower();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
-                        println!("{}: OK", ck_filename);
+                        pipe_println!("{}: OK", ck_filename);
                     }
                 } else {
                     if !status {
-                        println!("{}: FAILED", ck_filename);
+                        pipe_println!("{}: FAILED", ck_filename);
                     }
                     failed += 1;
                 }
@@ -241,9 +244,9 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
         } else {
             let sum = safe_unwrap!(digest_reader(&mut digest, &mut file, binary));
             if tag {
-                println!("{} ({}) = {}", algoname, filename, sum);
+                pipe_println!("{} ({}) = {}", algoname, filename, sum);
             } else {
-                println!("{} {}{}", sum, binary_marker, filename);
+                pipe_println!("{} {}{}", sum, binary_marker, filename);
             }
         }
     }

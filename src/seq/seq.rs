@@ -9,26 +9,11 @@ extern crate getopts;
 extern crate libc;
 
 use std::cmp;
-use std::io;
 
 #[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "seq";
-
-macro_rules! pipe_write(
-    ($($args:expr),+) => (
-        match write!(&mut io::stdout() as &mut Writer, $($args),+) {
-            Ok(_) => {}
-            Err(f) =>
-                if f.kind == io::BrokenPipe {
-                    return
-                } else {
-                    fail!("{}", f.to_string())
-                }
-        }
-    )
-)
 
 #[deriving(Clone)]
 struct SeqOptions {
@@ -237,27 +222,35 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: uint, separator: Str
         let before_dec = istr.as_slice().find('.').unwrap_or(ilen);
         if pad && before_dec < padding {
             for _ in range(0, padding - before_dec) {
-                pipe_write!("0");
+                if !pipe_print!("0") {
+                    return;
+                }
             }
         }
-        pipe_write!("{}", istr);
+        pipe_print!("{}", istr);
         let mut idec = ilen - before_dec;
         if idec < largest_dec {
             if idec == 0 {
-                pipe_write!(".");
+                if !pipe_print!(".") {
+                    return;
+                }
                 idec += 1;
             }
             for _ in range(idec, largest_dec) {
-                pipe_write!("0")
+                if !pipe_print!("0") {
+                    return;
+                }
             }
         }
         i += 1;
         value = first + i as f64 * step;
         if !done_printing(value, step, last) {
-            pipe_write!("{:s}", separator);
+            if !pipe_print!("{:s}", separator) {
+                return;
+            }
         }
     }
     if (first >= last && step < 0f64) || (first <= last && step > 0f64) {
-        pipe_write!("{:s}", terminator);
+        pipe_print!("{:s}", terminator);
     }
 }
