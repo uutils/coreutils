@@ -76,6 +76,7 @@ PROGS       := \
   true \
   truncate \
   tsort \
+  unexpand \
   unlink \
   uniq \
   wc \
@@ -133,6 +134,7 @@ TEST_PROGS  := \
   seq \
   tr \
   truncate \
+  unexpand
 
 TEST        ?= $(TEST_PROGS)
 
