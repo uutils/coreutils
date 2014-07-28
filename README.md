@@ -164,7 +164,6 @@ To do
 - stty
 - tail (not all features implemented)
 - test (not all features implemented)
-- unexpand
 - uniq (in progress)
 - who
 

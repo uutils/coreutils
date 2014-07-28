@@ -224,6 +224,10 @@ name = "uname"
 path = "uname/uname.rs"
 
 [[bin]]
+name = "unexpand"
+path = "unexpand/unexpand.rs"
+
+[[bin]]
 name = "uniq"
 path = "uniq/uniq.rs"
 
