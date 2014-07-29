@@ -15,7 +15,7 @@ use std::vec::Vec;
 
 use std::os;
 use std::ptr::{mut_null, read};
-use std::str::raw::from_c_str;
+use std::string::raw::from_buf;
 
 #[cfg(target_os = "macos")]
 pub struct c_passwd {
@@ -207,7 +207,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
                     let group = unsafe { getgrgid(g) };
                     if group.is_not_null() {
                         let name = unsafe {
-                            from_c_str(read(group).gr_name)
+                            from_buf(read(group).gr_name as *const u8)
                         };
                         print!("{:s} ", name);
                     }

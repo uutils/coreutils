@@ -19,7 +19,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::str;
+use std::string;
 use std::io::println;
 use std::io::stdio::stderr;
 use getopts::{optflag,getopts};
@@ -50,7 +50,7 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     };
 
-    let tty = unsafe { str::raw::from_c_str(ttyname(libc::STDIN_FILENO)) };
+    let tty = unsafe { string::raw::from_buf(ttyname(libc::STDIN_FILENO) as *const u8) };
 
     if !silent {
         if !tty.as_slice().is_whitespace() {

@@ -67,7 +67,7 @@ fn main() {
 
     // try first arg as util name.
     if args.len() >= 2 {
-        args.shift();
+        args.remove(0);
         let util = args[0].as_slice();
 
         match umap.find_equiv(&util) {

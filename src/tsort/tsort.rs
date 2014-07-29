@@ -160,7 +160,7 @@ impl Graph {
         }
 
         while !start_nodes.is_empty() {
-            let n = start_nodes.shift().unwrap();
+            let n = start_nodes.remove(0).unwrap();
 
             self.result.push(n.clone());
 

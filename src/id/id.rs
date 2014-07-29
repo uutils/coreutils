@@ -25,7 +25,7 @@ use libc::{
     getuid
 };
 use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
-use std::str::raw::from_c_str;
+use std::string::raw::from_buf;
 use getopts::{getopts, optflag, usage};
 use c_types::{
     c_passwd,
@@ -136,7 +136,7 @@ pub fn uumain(args: Vec<String>) -> int {
         let gr = unsafe { getgrgid(id) };
 
         if nflag && gr.is_not_null() {
-            let gr_name = unsafe { from_c_str(read(gr).gr_name) };
+            let gr_name = unsafe { from_buf(read(gr).gr_name as *const u8) };
             println!("{:s}", gr_name);
         } else {
             println!("{:u}", id);
@@ -156,7 +156,7 @@ pub fn uumain(args: Vec<String>) -> int {
         let pw = unsafe { getpwuid(id) };
         if nflag && pw.is_not_null() {
             let pw_name = unsafe {
-                from_c_str(read(pw).pw_name)
+                from_buf(read(pw).pw_name as *const u8)
             };
             println!("{:s}", pw_name);
         } else {
@@ -194,16 +194,16 @@ fn pretty(possible_pw: Option<c_passwd>) {
     if possible_pw.is_some() {
         let pw = possible_pw.unwrap();
 
-        let pw_name = unsafe { from_c_str(pw.pw_name) };
+        let pw_name = unsafe { from_buf(pw.pw_name as *const u8) };
         print!("uid\t{:s}\ngroups\t", pw_name);
         group(possible_pw, true);
     } else {
-        let login = unsafe { from_c_str(getlogin() as *const i8) };
+        let login = unsafe { from_buf(getlogin() as *const u8) };
         let rid = unsafe { getuid() };
         let pw = unsafe { getpwuid(rid) };
 
         let is_same_user = unsafe {
-            from_c_str(read(pw).pw_name) == login
+            from_buf(read(pw).pw_name as *const u8) == login
         };
 
         if pw.is_null() || is_same_user {
@@ -213,7 +213,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
         if pw.is_not_null() {
             println!(
                 "uid\t{:s}",
-                unsafe { from_c_str(read(pw).pw_name) })
+                unsafe { from_buf(read(pw).pw_name as *const u8) })
         } else {
             println!("uid\t{:u}\n", rid);
         }
@@ -224,7 +224,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
             if pw.is_not_null() {
                 println!(
                     "euid\t{:s}",
-                    unsafe { from_c_str(read(pw).pw_name) });
+                    unsafe { from_buf(read(pw).pw_name as *const u8) });
             } else {
                 println!("euid\t{:u}", eid);
             }
@@ -237,7 +237,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
             if gr.is_not_null() {
                 println!(
                     "rgid\t{:s}",
-                    unsafe { from_c_str(read(gr).gr_name) });
+                    unsafe { from_buf(read(gr).gr_name as *const u8) });
             } else {
                 println!("rgid\t{:u}", rid);
             }
@@ -285,11 +285,11 @@ fn pline(possible_pw: Option<c_passwd>) {
         possible_pw.unwrap()
     };
 
-    let pw_name     = unsafe { from_c_str(pw.pw_name)  };
-    let pw_passwd   = unsafe { from_c_str(pw.pw_passwd)};
-    let pw_gecos    = unsafe { from_c_str(pw.pw_gecos) };
-    let pw_dir      = unsafe { from_c_str(pw.pw_dir)   };
-    let pw_shell    = unsafe { from_c_str(pw.pw_shell) };
+    let pw_name     = unsafe { from_buf(pw.pw_name   as *const u8)};
+    let pw_passwd   = unsafe { from_buf(pw.pw_passwd as *const u8)};
+    let pw_gecos    = unsafe { from_buf(pw.pw_gecos  as *const u8)};
+    let pw_dir      = unsafe { from_buf(pw.pw_dir    as *const u8)};
+    let pw_shell    = unsafe { from_buf(pw.pw_shell  as *const u8)};
 
     println!(
         "{:s}:{:s}:{:u}:{:u}:{:s}:{:s}:{:s}",
@@ -349,7 +349,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         print!(
             "uid={:u}({:s})",
             uid,
-            unsafe { from_c_str(possible_pw.unwrap().pw_name) });
+            unsafe { from_buf(possible_pw.unwrap().pw_name as *const u8) });
     } else {
         print!("uid={:u}", unsafe { getuid() });
     }
@@ -359,7 +359,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     if gr.is_not_null() {
         print!(
             "({:s})",
-            unsafe { from_c_str(read(gr).gr_name) });
+            unsafe { from_buf(read(gr).gr_name as *const u8) });
     }
 
     let euid = unsafe { geteuid() };
@@ -369,7 +369,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         if pw.is_not_null() {
             print!(
                 "({:s})",
-                unsafe { from_c_str(read(pw).pw_name) });
+                unsafe { from_buf(read(pw).pw_name as *const u8) });
         }
     }
 
@@ -379,7 +379,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         unsafe {
             let grp = getgrgid(egid);
             if grp.is_not_null() {
-                print!("({:s})", from_c_str(read(grp).gr_name));
+                print!("({:s})", from_buf(read(grp).gr_name as *const u8));
             }
         }
     }
@@ -394,7 +394,7 @@ fn id_print(possible_pw: Option<c_passwd>,
             let group = unsafe { getgrgid(gr) };
             if group.is_not_null() {
                 let name = unsafe {
-                    from_c_str(read(group).gr_name)
+                    from_buf(read(group).gr_name as *const u8)
                 };
                 print!("({:s})", name);
             }
