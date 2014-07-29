@@ -25,7 +25,7 @@ use std::io::print;
 #[cfg(unix)]
 mod platform {
     use super::libc;
-    use std::str;
+    use std::string;
     use self::c_types::{c_passwd, getpwuid};
 
     #[path = "../../common/c_types.rs"] mod c_types;
@@ -38,7 +38,7 @@ mod platform {
         let passwd: *const c_passwd = getpwuid(geteuid());
 
         let pw_name: *const libc::c_char = (*passwd).pw_name;
-        let name = str::raw::from_c_str(pw_name);
+        let name = string::raw::from_buf(pw_name as *const u8);
 
         name
     }

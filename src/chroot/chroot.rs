@@ -194,7 +194,7 @@ fn set_user(user: &str) {
 fn strerror(errno: i32) -> String {
     unsafe {
         let err = libc::funcs::c95::string::strerror(errno);
-        std::str::raw::from_c_str(err as *const i8)
+        std::string::raw::from_buf(err as *const u8)
     }
 }
 

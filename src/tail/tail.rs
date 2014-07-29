@@ -158,7 +158,7 @@ fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool
                 if line_count<=ringbuf.len(){
                   ringbuf.pop_front();
                 }
-                ringbuf.push_back(line);
+                ringbuf.push(line);
             }
             Err(err) => fail!(err)
         }
