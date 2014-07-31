@@ -65,24 +65,23 @@ impl<R: Reader> BufReader<R> {
 
         loop {
             match self.maybe_fill_buf() {
-                Err(IoError { kind: std::io::EndOfFile, .. }) => (),
+                Ok(0) | Err(IoError { kind: std::io::EndOfFile, .. })
+                    if self.start == self.end => return bytes_consumed,
                 Err(err) => fail!("read error: {}", err.desc),
                 _ => ()
             }
 
-            let buffer_used = self.end - self.start;
+            let filled_buf = self.buffer.slice(self.start, self.end);
 
-            if buffer_used == 0 { return bytes_consumed; }
-
-            for idx in range(self.start, self.end) {
-                // the indices are always correct, use unsafe for speed
-                if unsafe { *self.buffer.unsafe_ref(idx) } == b'\n' {
-                    self.start = idx + 1;
+            match filled_buf.position_elem(&b'\n') {
+                Some(idx) => {
+                    self.start += idx + 1;
                     return bytes_consumed + idx + 1;
                 }
+                _ => ()
             }
 
-            bytes_consumed += buffer_used;
+            bytes_consumed += filled_buf.len();
 
             self.start = 0;
             self.end = 0;
@@ -98,41 +97,47 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
             _ => ()
         }
 
-        let buffer_used = self.end - self.start;
+        let newline_idx = match self.end - self.start {
+            0 => return Bytes::EndOfFile,
+            buf_used if bytes < buf_used => {
+                // because the output delimiter should only be placed between
+                // segments check if the byte after bytes is a newline
+                let buf_slice = self.buffer.slice(self.start,
+                                                  self.start + bytes + 1);
 
-        if buffer_used == 0 { return Bytes::EndOfFile; }
+                match buf_slice.position_elem(&b'\n') {
+                    Some(idx) => idx,
+                    None => {
+                        let segment = self.buffer.slice(self.start,
+                                                        self.start + bytes);
 
-        let (complete, max_segment_len) = {
-            if bytes < buffer_used {
-                (true, bytes + 1)
-            } else {
-                (false, buffer_used)
+                        self.start += bytes;
+
+                        return Bytes::Complete(segment);
+                    }
+                }
+            }
+            _ => {
+                let buf_filled = self.buffer.slice(self.start, self.end);
+
+                match buf_filled.position_elem(&b'\n') {
+                    Some(idx) => idx,
+                    None => {
+                        let segment = self.buffer.slice(self.start, self.end);
+
+                        self.start = 0;
+                        self.end = 0;
+
+                        return Bytes::Partial(segment);
+                    }
+                }
             }
         };
 
-        for idx in range(self.start, self.start + max_segment_len) {
-            // the indices are always correct, use unsafe for speed
-            if unsafe { *self.buffer.unsafe_ref(idx) } == b'\n' {
-                let segment = self.buffer.slice(self.start, idx + 1);
+        let new_start = self.start + newline_idx + 1;
+        let segment = self.buffer.slice(self.start, new_start);
 
-                self.start = idx + 1;
-
-                return Bytes::NewlineFound(segment);
-            }
-        }
-
-        if complete {
-            let segment = self.buffer.slice(self.start,
-                                            self.start + bytes);
-
-            self.start += bytes;
-            Bytes::Complete(segment)
-        } else {
-            let segment = self.buffer.slice(self.start, self.end);
-
-            self.start = 0;
-            self.end = 0;
-            Bytes::Partial(segment)
-        }
+        self.start = new_start;
+        Bytes::NewlineFound(segment)
     }
 }
