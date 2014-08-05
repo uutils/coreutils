@@ -136,7 +136,7 @@ macro_rules! pipe_write(
 #[macro_export]
 macro_rules! pipe_writeln(
     ($fd:expr, $($args:expr),+) => (
-        match write!($fd, $($args),+) {
+        match writeln!($fd, $($args),+) {
             Ok(_) => true,
             Err(f) => {
                 if f.kind == ::std::io::BrokenPipe {
