@@ -256,12 +256,12 @@ fn pline(possible_pw: Option<c_passwd>) {
         possible_pw.unwrap()
     };
 
-    let pw_name     = unsafe { from_c_str(pw.pw_name)  };
-    let pw_passwd   = unsafe { from_c_str(pw.pw_passwd)};
-    let pw_class    = unsafe { from_c_str(pw.pw_class) };
-    let pw_gecos    = unsafe { from_c_str(pw.pw_gecos) };
-    let pw_dir      = unsafe { from_c_str(pw.pw_dir)   };
-    let pw_shell    = unsafe { from_c_str(pw.pw_shell) };
+    let pw_name     = unsafe { from_buf(pw.pw_name   as *const u8) };
+    let pw_passwd   = unsafe { from_buf(pw.pw_passwd as *const u8) };
+    let pw_class    = unsafe { from_buf(pw.pw_class  as *const u8) };
+    let pw_gecos    = unsafe { from_buf(pw.pw_gecos  as *const u8) };
+    let pw_dir      = unsafe { from_buf(pw.pw_dir    as *const u8) };
+    let pw_shell    = unsafe { from_buf(pw.pw_shell  as *const u8) };
 
     println!(
         "{:s}:{:s}:{:u}:{:u}:{:s}:{:d}:{:d}:{:s}:{:s}:{:s}",
