@@ -16,9 +16,11 @@ extern crate getopts;
 extern crate libc;
 
 use getopts::{optflag, getopts, usage};
-#[cfg(windows)]use std::ptr::null;
 
 #[path = "../common/util.rs"] mod util;
+
+static NAME: &'static str = "sync";
+static VERSION: &'static str = "1.0.0";
 
 #[cfg(unix)]
 mod platform {
@@ -38,6 +40,7 @@ mod platform {
 mod platform {
     pub use super::libc;
     use std::{mem, str};
+    use std::ptr::null;
 
     extern "system" {
         fn CreateFileA(lpFileName: *const libc::c_char,
@@ -87,8 +90,9 @@ mod platform {
 
     #[allow(unused_unsafe)]
     unsafe fn find_first_volume() -> (String, *const libc::c_void) {
-        let name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
-        match FindFirstVolumeA(name.as_ptr(), name.len() as libc::uint32_t) {
+        let mut name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
+        match FindFirstVolumeA(name.as_mut_ptr(),
+                               name.len() as libc::uint32_t) {
             _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
                 crash!(GetLastError(), "failed to find first volume");
             }
@@ -104,8 +108,10 @@ mod platform {
             (first_volume, next_volume_handle) => {
                 let mut volumes = Vec::from_elem(1, first_volume);
                 loop {
-                    let name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
-                    match FindNextVolumeA(next_volume_handle, name.as_ptr(), name.len() as libc::uint32_t) {
+                    let mut name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
+                    match FindNextVolumeA(next_volume_handle,
+                                          name.as_mut_ptr(),
+                                          name.len() as libc::uint32_t) {
                         0 => {
                             match GetLastError() {
                                 0x12 => { // ERROR_NO_MORE_FILES
