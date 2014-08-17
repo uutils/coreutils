@@ -16,7 +16,7 @@ extern crate libc;
 
 use std::f64;
 use std::io::{print, timer};
-use std::u64;
+use std::time::duration::{mod, Duration};
 
 #[path = "../common/util.rs"]
 mod util;
@@ -77,5 +77,11 @@ fn sleep(args: Vec<String>) {
         };
         result + num
     });
-    timer::sleep(if sleep_time == f64::INFINITY { u64::MAX } else { (sleep_time * 1000.0) as u64 });
+    let sleep_dur = if sleep_time == f64::INFINITY { 
+        duration::MAX 
+    } else { 
+        let (days, secs, millis) = (sleep_time / 86400., sleep_time % 86400., (sleep_time * 1_000.) % 1_000.);
+        Duration::days(days as i32) + Duration::seconds(secs as i32) + Duration::milliseconds(millis as i32)
+    };
+    timer::sleep(sleep_dur);
 }

@@ -19,7 +19,7 @@ impl std::from_str::FromStr for Range {
     fn from_str(s: &str) -> Option<Range> {
         use std::uint::MAX;
 
-        let mut parts = s.splitn('-', 1);
+        let mut parts = s.splitn(1, '-');
 
         match (parts.next(), parts.next()) {
             (Some(nm), None) => {
