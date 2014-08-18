@@ -76,7 +76,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
         if wait_cmd {
             // we still accept NAME=VAL here but not other options
-            let mut sp = opt.as_slice().splitn('=', 1);
+            let mut sp = opt.as_slice().splitn(1, '=');
             let name = sp.next();
             let value = sp.next();
 
@@ -147,7 +147,7 @@ pub fn uumain(args: Vec<String>) -> int {
             }
         } else {
             // is it a NAME=VALUE like opt ?
-            let mut sp = opt.as_slice().splitn('=', 1);
+            let mut sp = opt.as_slice().splitn(1, '=');
             let name = sp.next();
             let value = sp.next();
 

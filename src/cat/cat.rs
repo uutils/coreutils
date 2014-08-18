@@ -137,7 +137,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
                     line_counter += 1;
                 }
-                match in_buf.tailn(pos).iter().position(|c| *c == '\n' as u8) {
+                match in_buf.slice_from(pos).iter().position(|c| *c == '\n' as u8) {
                     Some(p) => {
                         writer.write(in_buf.slice(pos, pos + p)).unwrap();
                         if show_ends {
@@ -151,7 +151,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                         at_line_start = true;
                     },
                     None => {
-                        writer.write(in_buf.tailn(pos)).unwrap();
+                        writer.write(in_buf.slice_from(pos)).unwrap();
                         at_line_start = false;
                         break;
                     }

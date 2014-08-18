@@ -21,12 +21,13 @@ use getopts::{optopt, optflag, getopts, usage};
 use std::collections::Deque;
 use std::collections::ringbuf::RingBuf;
 use std::io::timer::sleep;
+use std::time::duration::Duration;
 
 static PROGRAM: &'static str = "tail";
 
 pub fn uumain(args: Vec<String>) -> int {
     let mut line_count = 10u;
-    let mut sleep_sec = 1000u64;
+    let mut sleep_msec = 1000u64;
 
     // handle obsolete -number syntax
     let options = match obsolete(args.tail()) {
@@ -64,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> int {
             Some(n) => {
                 let parsed : Option<u64> = from_str(n.as_slice());
                 match parsed {
-                    Some(m) => { sleep_sec = m*1000 }
+                    Some(m) => { sleep_msec = m*1000 }
                     None => {}
                 }
             }
@@ -86,7 +87,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if files.is_empty() {
         let mut buffer = BufferedReader::new(stdin());
-        tail(&mut buffer, line_count, follow, sleep_sec);
+        tail(&mut buffer, line_count, follow, sleep_msec);
     } else {
         let mut multiple = false;
         let mut firstime = true;
@@ -106,7 +107,7 @@ pub fn uumain(args: Vec<String>) -> int {
             let path = Path::new(file.as_slice());
             let reader = File::open(&path).unwrap();
             let mut buffer = BufferedReader::new(reader);
-            tail(&mut buffer, line_count, follow, sleep_sec);
+            tail(&mut buffer, line_count, follow, sleep_msec);
         }
     }
 
@@ -147,7 +148,7 @@ fn obsolete (options: &[String]) -> (Vec<String>, Option<uint>) {
     (options, None)
 }
 
-fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool, sleep_sec:u64) {
+fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool, sleep_msec:u64) {
     // read through each line and store them in a ringbuffer that always contains
     // line_count lines. When reaching the end of file, output the lines in the
     // ringbuf.
@@ -169,7 +170,8 @@ fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
     while follow {
-        sleep(sleep_sec);
+        let (days, secs, millis) = ((sleep_msec / 1000) / 86400, (sleep_msec / 1000) % 86400, sleep_msec % 1000);
+        sleep(Duration::days(days as i32) + Duration::seconds(secs as i32) + Duration::milliseconds(millis as i32));
         for io_line in reader.lines() {
             match io_line {
                 Ok(line) => print!("{}", line),
