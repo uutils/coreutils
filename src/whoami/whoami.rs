@@ -56,8 +56,8 @@ mod platform {
 
     #[allow(unused_unsafe)]
     pub unsafe fn getusername() -> String {
-        let buffer: [libc::c_char, ..2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
-        if !GetUserNameA(buffer.as_ptr(), &(buffer.len() as libc::uint32_t)) == 0 {
+        let mut buffer: [libc::c_char, ..2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
+        if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }
         str::raw::from_c_str(buffer.as_ptr())
