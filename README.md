@@ -1,4 +1,4 @@
-uutils coreutils [![Build Status](https://travis-ci.org/uutils/coreutils.png?branch=master)](https://travis-ci.org/uutils/coreutils)
+uutils coreutils [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 ================
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
@@ -34,6 +34,57 @@ To build only a few of the available utilities:
 make BUILD='UTILITY_1 UTILITY_2'
 ```
 
+To build with LTO and stripping:
+```
+make ENABLE_LTO=y ENABLE_STRIP=y
+```
+
+Installation Instructions
+-------------------------
+
+To install all available utilities:
+```
+make install
+```
+
+To install all but a few of the available utilities:
+```
+make DONT_INSTALL='UTILITY_1 UTILITY_2' install
+```
+
+To install only a few of the available utilities:
+```
+make INSTALL='UTILITY_1 UTILITY_2' install
+```
+
+To install every program with a prefix:
+```
+make PROG_PREFIX=PREFIX_GOES_HERE install
+```
+
+To install the multicall binary:
+```
+make install-multicall
+```
+
+Uninstallation Instructions
+---------------------------
+
+To uninstall all utilities:
+```
+make uninstall
+```
+
+To uninstall every program with a set prefix:
+```
+make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+```
+
+To uninstall the multicall binary:
+```
+make uninstall-multicall
+```
+
 Test Instructions
 -----------------
 
@@ -62,7 +113,9 @@ these steps:
 1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement ls"
 2. State that you are working on this utility.
 3. Develop the utility.
-4. Submit a pull request and close the issue.  Your pull request should include deleting the utility from the to-do list on this README.
+4. Add the reference to your utility into uutils/uutils.rs (required for multibinary).
+5. Remove utility from the to-do list on this README.
+6. Submit a pull request and close the issue.
 
 The steps above imply that, before starting to work on a utility, you should search the issues to make sure no one else is working on it.
 
@@ -72,73 +125,45 @@ To do
 - chcon
 - chgrp
 - chmod
-- chown-core
 - chown
-- chroot
 - copy
-- cp-hash
+- cp (not much done)
 - csplit
-- cut
 - date
 - dd
 - df
 - dircolors
-- expand (in progress)
 - expr
-- extent-scan
-- find-mount-point
-- fmt
 - getlimits
-- group-list
 - install
 - join
-- lbracket
 - libstdbuf
-- link
 - ln
-- ls-dir
-- ls-ls
-- ls-vdir
 - ls
-- mkfifo
 - mknod
 - mktemp
 - mv
 - nice
-- nl
-- nohup
 - nproc
 - numfmt
 - od
-- operand2sig
 - pathchk
 - pinky
 - pr
 - printf
-- prog-fprintf
 - ptx
 - readlink
-- realpath
-- relpath
 - remove
 - runcon
 - setuidgid
 - shred
-- shuf
 - sort
 - split
 - stat
 - stdbuf
-- stty (in progress)
-- sync
-- tac-pipe
-- tail
-- test
-- timeout
-- tsort
-- uname-arch
-- uname-uname
-- unexpand
+- stty
+- tail (not all features implemented)
+- test (not all features implemented)
 - uniq (in progress)
 - who
 

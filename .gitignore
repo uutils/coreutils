@@ -1,1 +1,6 @@
 /build/
+/target/
+/busybox/
+*~
+.*.swp
+.*.swo
