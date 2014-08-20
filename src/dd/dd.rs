@@ -31,6 +31,8 @@ mod ddopts;
 mod ddio;
 #[path = "../common/util.rs"]
 mod util;
+#[path = "../common/bytes.rs"]
+mod bytes;
 
 static NAME: &'static str = "dd";
 
@@ -53,6 +55,8 @@ impl ActionSinkFlags {
 struct ActionConvFlags {
     fdatasync: bool,
     fsync: bool,
+    noerror: bool,
+    nocreat: bool,
 }
 
 impl ActionConvFlags {
@@ -60,6 +64,8 @@ impl ActionConvFlags {
         ActionConvFlags {
             fdatasync: flags.contains(&"fdatasync".to_string()),
             fsync: flags.contains(&"fsync".to_string()),
+            noerror: flags.contains(&"noerror".to_string()),
+            nocreat: flags.contains(&"nocreat".to_string())
         }
     }
 }
@@ -86,7 +92,7 @@ macro_rules! opt_bytes(
     ($opts:ident, $inp:expr, $def:expr) => (
         match $opts.get($inp) {
             Some(s) => {
-                match ActionOptions::parse_human_bytes(s.as_slice()) {
+                match bytes::from_human(s.as_slice()) {
                     Ok(n) => n,
                     Err(e) => crash!(1, "invalid opt {}={}: {}", $inp, s, e)
                 }
@@ -214,8 +220,8 @@ impl ActionOptions {
             sink: &mut self.ofile,
 
             // Skip/seek
-            skip: self.skip,
-            seek: self.seek,
+            skip: self.skip * self.ibs,
+            seek: self.seek * self.obs,
 
             // Count
             count: self.count,
@@ -225,85 +231,6 @@ impl ActionOptions {
             sink_flags: ActionSinkFlags::from_vec(&self.oflag),
             conv_flags: ActionConvFlags::from_vec(&self.conv),
         }
-    }
-
-    /// Parse strings in the form XXXMB
-    /// Supported suffixes:
-    ///   * c  (?)         = 1
-    ///   * w  (x86 word)  = 2
-    ///   * b  (block)     = 512
-    ///   * kB (kilobyte)  = 1000
-    ///   * K  (kibibyte)  = 1024
-    ///   * MB (megabyte)  = kB * 1000
-    ///   * M  (mebibyte)  = K  * 1024
-    ///   * xM (mebibyte)  = M
-    ///   * GB (gigabyte)  = MB * 1000
-    ///   * G  (gibibyte)  = M  * 1024
-    ///   * TB (terabyte)  = GB * 1000
-    ///   * T  (tebibyte)  = G  * 1024
-    ///   * PB (petabyte)  = TB * 1000
-    ///   * P  (pebibyte)  = T  * 1024
-    ///   * EB (exabyte)   = PB * 1000
-    ///   * E  (exbibyte)  = P  * 1024
-    ///   * ZB (zettabyte) = EB * 1000
-    ///   * Z  (zebibyte)  = E  * 1024
-    ///   * YB (yottabyte) = ZB * 1000
-    ///   * Y  (yobibyte)  = Z  * 1024
-    fn parse_human_bytes(bytes: &str) -> Result<u64, String> {
-        let num_str = bytes.chars().take_while(|c| c.is_digit()).collect::<String>();
-        let suffix = bytes.chars().skip(num_str.len()).collect::<String>();
-
-        if num_str.len() == 0 {
-            return Err("invalid bytes".to_string());
-        }
-
-        let multiplier = match suffix.as_slice() {
-            "" => 1,
-            "c" => 1,
-            "w" => 2,
-            "b" => 512,
-            "kB" => 1000,
-            "K" => 1024,
-            "MB" => 1000 * 1000,
-            "M" => 1024 * 1024,
-            "xM" => 1024 * 1024,
-            "GB" => 1000 * 1000 * 1000,
-            "G" => 1024 * 1024 * 1024,
-            "TB" => 1000 * 1000 * 1000 * 1000,
-            "T" => 1024 * 1024 * 1024 * 1024,
-            "PB" => 1000 * 1000 * 1000 * 1000 * 1000,
-            "P" => 1024 * 1024 * 1024 * 1024 * 1024,
-            "EB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-            "E" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-            "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-            "Z" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-            "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-            "Y" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-            _ => return Err("invalid byte multiple".to_string())
-        };
-
-        match from_str(num_str.as_slice()).and_then(|num: u64| Some(num * multiplier)) {
-            Some(n) => Ok(n),
-            None => fail!("BUG: failed to parse number. Please file a bug report with the command line.")
-        }
-    }
-
-    pub fn to_human_bytes(bytes: u64) -> String {
-        let mut s = String::new();
-
-        let possible_suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
-        let mut i = 0;
-        let mut human_bytes = bytes as f64;
-        while human_bytes > 1000.0 && i < possible_suffixes.len() {
-            i += 1;
-            human_bytes /= 1000.0;
-        }
-
-        s = s.append(human_bytes.to_str().as_slice());
-        s = s.append(" ");
-        s = s.append(possible_suffixes[i]);
-
-        s
     }
 }
 
@@ -357,7 +284,14 @@ impl<'a> Action<'a> {
             let read = match self.source.read(buf.as_mut_slice()) {
                 Ok(r) => r,
                 Err(io::IoError { kind: io::EndOfFile, .. }) => return Ok(transferred),
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // noerror - ignore read errors
+                    if !self.conv_flags.noerror {
+                        return Err(e);
+                    } else {
+                        continue;
+                    }
+                }
             };
 
             try!(self.sink.write(buf.slice_to(read as uint)));
@@ -382,18 +316,18 @@ impl<'a> Action<'a> {
     }
 }
 
-fn main() {
-    let args: Vec<String> = os::args();
-    let program = args.get(0).clone();
-    let opts = ~[
+pub fn uumain(args: Vec<String>) -> int {
+    let program = args[0].clone();
+    let opts = vec!(
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    );
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), opts.as_slice()) {
         Ok(m) => m,
         Err(f) => {
-            crash!(1, "invalid options\n{}", f.to_err_msg())
+            println!("invalid options\n{}", f.to_err_msg());
+            return 1;
         }
     };
 
@@ -403,13 +337,13 @@ fn main() {
         println!("Usage:");
         println!("  {0:s} [OPTIONS]...", program);
         println!("");
-        print(getopts::usage(" [FILE].", opts).as_slice());
-        return;
+        print(getopts::usage(" [FILE].", opts.as_slice()).as_slice());
+        return 0;
     }
 
     if matches.opt_present("version") {
         println!("dd 1.0.0");
-        return;
+        return 0;
     }
 
     let mut action_opts = ActionOptions::from_args(matches.free);
@@ -424,13 +358,18 @@ fn main() {
     match result {
         Ok(t) => {
             let s = (ns as f64)/1000000000.0;
-            let th = ActionOptions::to_human_bytes(t);
-            let ps = ActionOptions::to_human_bytes((t as f64 / s) as u64);
+            let th = bytes::to_human(t);
+            let ps = bytes::to_human((t as f64 / s) as u64);
 
             println!("{}+0 records in", t/action.buffer_size);
             println!("{}+0 records out", t/action.buffer_size);
             println!("{} ({}) bytes copied, {} s, {}/s", t, th, s, ps);
         },
-        Err(e) => crash!(1, "I/O error: {}", e.desc)
+        Err(e) => {
+            println!("I/O error: {}", e.desc);
+            return 1;
+        }
     };
+
+    return 0;
 }

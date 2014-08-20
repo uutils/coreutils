@@ -44,6 +44,10 @@ name = "du"
 path = "du/du.rs"
 
 [[bin]]
+name = "dd"
+path = "dd/dd.rs"
+
+[[bin]]
 name = "echo"
 path = "echo/echo.rs"
 
