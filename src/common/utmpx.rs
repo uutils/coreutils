@@ -26,11 +26,13 @@ mod utmpx {
     pub static DEAD_PROCESS: libc::c_short = 8;
     pub static ACCOUNTING: libc::c_short = 9;
 
+    #[repr(C)]
     pub struct c_exit_status {
         pub e_termination: libc::c_short,
         pub e_exit: libc::c_short,
     }
 
+    #[repr(C)]
     pub struct c_utmp {
         pub ut_type: libc::c_short,
         pub ut_pid: libc::pid_t,
@@ -70,11 +72,13 @@ mod utmpx {
     pub static DEAD_PROCESS: libc::c_short = 8;
     pub static ACCOUNTING: libc::c_short = 9;
 
+    #[repr(C)]
     pub struct c_exit_status {
         pub e_termination: libc::c_short,
         pub e_exit: libc::c_short,
     }
 
+    #[repr(C)]
     pub struct c_utmp {
         pub ut_user: [libc::c_char, ..UT_NAMESIZE],
         pub ut_id: [libc::c_char, ..UT_IDSIZE],
