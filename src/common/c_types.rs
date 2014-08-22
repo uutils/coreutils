@@ -18,6 +18,7 @@ use std::ptr::{mut_null, read};
 use std::string::raw::from_buf;
 
 #[cfg(target_os = "macos")]
+#[repr(C)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
     pub pw_passwd:  *const c_char,    /* user name */
@@ -32,6 +33,7 @@ pub struct c_passwd {
 }
 
 #[cfg(target_os = "linux")]
+#[repr(C)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
     pub pw_passwd:  *const c_char,    /* user name */
@@ -43,6 +45,7 @@ pub struct c_passwd {
 }
 
 #[cfg(target_os = "macos")]
+#[repr(C)]
 pub struct utsname {
     pub sysname: [c_char, ..256],
     pub nodename: [c_char, ..256],
@@ -52,6 +55,7 @@ pub struct utsname {
 }
 
 #[cfg(target_os = "linux")]
+#[repr(C)]
 pub struct utsname {
     pub sysname: [c_char, ..65],
     pub nodename: [c_char, ..65],
@@ -61,6 +65,7 @@ pub struct utsname {
     pub domainame: [c_char, ..65]
 }
 
+#[repr(C)]
 pub struct c_group {
     pub gr_name:   *const c_char,  // group name
     pub gr_passwd: *const c_char,  // password
@@ -68,6 +73,7 @@ pub struct c_group {
     pub gr_mem:    *const *const c_char, // member list
 }
 
+#[repr(C)]
 pub struct c_tm {
     pub tm_sec: c_int,         /* seconds */
     pub tm_min: c_int,         /* minutes */
