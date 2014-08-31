@@ -170,8 +170,7 @@ fn tail<T: Reader> (reader: &mut BufferedReader<T>, line_count:uint, follow:bool
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
     while follow {
-        let (days, secs, millis) = ((sleep_msec / 1000) / 86400, (sleep_msec / 1000) % 86400, sleep_msec % 1000);
-        sleep(Duration::days(days as i32) + Duration::seconds(secs as i32) + Duration::milliseconds(millis as i32));
+        sleep(Duration::milliseconds(sleep_msec as i64));
         for io_line in reader.lines() {
             match io_line {
                 Ok(line) => print!("{}", line),
