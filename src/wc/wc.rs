@@ -230,7 +230,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
     }
 }
 
-fn open(path: String) -> StdResult<BufferedReader<Box<Reader>>, int> {
+fn open(path: String) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
     if "-" == path.as_slice() {
         let reader = box stdin_raw() as Box<Reader>;
         return Ok(BufferedReader::new(reader));

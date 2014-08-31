@@ -59,7 +59,7 @@ fn get_algo_opts(program: &str) -> Vec<getopts::OptGroup> {
     }
 }
 
-fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<Digest>) {
+fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<Digest+'static>) {
     let mut alg: Option<Box<Digest>> = None;
     let mut name: &'static str = "";
     match program {
@@ -71,7 +71,7 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
         "sha512sum" => ("SHA512", box Sha512::new() as Box<Digest>),
         _ => {
             {
-                let set_or_crash = |n: &'static str, val: Box<Digest>| -> () {
+                let set_or_crash = |n, val| -> () {
                     if alg.is_some() { crash!(1, "You cannot combine multiple hash algorithms!") };
                     name = n;
                     alg = Some(val);

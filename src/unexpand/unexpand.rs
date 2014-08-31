@@ -107,7 +107,7 @@ pub fn uumain(args: Vec<String>) -> int {
     return 0;
 }
 
-fn open(path: String) -> io::BufferedReader<Box<Reader>> {
+fn open(path: String) -> io::BufferedReader<Box<Reader+'static>> {
     let mut file_buf;
     if path.as_slice() == "-" {
         io::BufferedReader::new(box io::stdio::stdin_raw() as Box<Reader>)

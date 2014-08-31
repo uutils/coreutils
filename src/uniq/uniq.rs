@@ -190,7 +190,7 @@ pub fn uumain(args: Vec<String>) -> int {
     0
 }
 
-fn open_input_file(in_file_name: String) -> io::BufferedReader<Box<Reader>> {
+fn open_input_file(in_file_name: String) -> io::BufferedReader<Box<Reader+'static>> {
     let in_file = if in_file_name.as_slice() == "-" {
         box io::stdio::stdin_raw() as Box<Reader>
     } else {
@@ -201,7 +201,7 @@ fn open_input_file(in_file_name: String) -> io::BufferedReader<Box<Reader>> {
     io::BufferedReader::new(in_file)
 }
 
-fn open_output_file(out_file_name: String) -> io::BufferedWriter<Box<Writer>> {
+fn open_output_file(out_file_name: String) -> io::BufferedWriter<Box<Writer+'static>> {
     let out_file = if out_file_name.as_slice() == "-" {
         box io::stdio::stdout_raw() as Box<Writer>
     } else {
