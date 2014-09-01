@@ -80,8 +80,7 @@ fn sleep(args: Vec<String>) {
     let sleep_dur = if sleep_time == f64::INFINITY { 
         duration::MAX 
     } else { 
-        let (days, secs, millis) = (sleep_time / 86400., sleep_time % 86400., (sleep_time * 1_000.) % 1_000.);
-        Duration::days(days as i32) + Duration::seconds(secs as i32) + Duration::milliseconds(millis as i32)
+        Duration::seconds(sleep_time as i64)
     };
     timer::sleep(sleep_dur);
 }
