@@ -68,9 +68,9 @@ pub fn uumain(args: Vec<String>) -> int {
         return 1
     }
 
-    let defaultShell: &'static str = "/bin/sh";
-    let defaultOption: &'static str = "-i";
-    let userShell = std::os::getenv("SHELL");
+    let default_shell: &'static str = "/bin/sh";
+    let default_option: &'static str = "-i";
+    let user_shell = std::os::getenv("SHELL");
 
     let newroot = Path::new(opts.free[0].as_slice());
     if !newroot.is_dir() {
@@ -79,11 +79,11 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let command: Vec<&str> = match opts.free.len() {
         1 => {
-            let shell: &str = match userShell {
-                None => defaultShell,
+            let shell: &str = match user_shell {
+                None => default_shell,
                 Some(ref s) => s.as_slice()
             };
-            vec!(shell, defaultOption)
+            vec!(shell, default_option)
         }
         _ => opts.free.slice(1, opts.free.len()).iter().map(|x| x.as_slice()).collect()
     };
@@ -92,18 +92,18 @@ pub fn uumain(args: Vec<String>) -> int {
 
     unsafe {
         let executable = command[0].as_slice().to_c_str().unwrap();
-        let mut commandParts: Vec<*const i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
-        commandParts.push(std::ptr::null());
-        execvp(executable as *const libc::c_char, commandParts.as_ptr() as *mut *const libc::c_char) as int
+        let mut command_parts: Vec<*const i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
+        command_parts.push(std::ptr::null());
+        execvp(executable as *const libc::c_char, command_parts.as_ptr() as *mut *const libc::c_char) as int
     }
 }
 
 fn set_context(root: &Path, options: &getopts::Matches) {
-    let userspecStr = options.opt_str("userspec");
-    let userStr = options.opt_str("user").unwrap_or_default();
-    let groupStr = options.opt_str("group").unwrap_or_default();
-    let groupsStr = options.opt_str("groups").unwrap_or_default();
-    let userspec = match userspecStr {
+    let userspec_str = options.opt_str("userspec");
+    let user_str = options.opt_str("user").unwrap_or_default();
+    let group_str = options.opt_str("group").unwrap_or_default();
+    let groups_str = options.opt_str("groups").unwrap_or_default();
+    let userspec = match userspec_str {
         Some(ref u) => {
             let s: Vec<&str> = u.as_slice().split(':').collect();
             if s.len() != 2 {
@@ -113,26 +113,26 @@ fn set_context(root: &Path, options: &getopts::Matches) {
         }
         None => Vec::new()
     };
-    let user = if userspec.is_empty() { userStr.as_slice() } else { userspec[0].as_slice() };
-    let group = if userspec.is_empty() { groupStr.as_slice() } else { userspec[1].as_slice() };
+    let user = if userspec.is_empty() { user_str.as_slice() } else { userspec[0].as_slice() };
+    let group = if userspec.is_empty() { group_str.as_slice() } else { userspec[1].as_slice() };
 
     enter_chroot(root);
 
-    set_groups_from_str(groupsStr.as_slice());
+    set_groups_from_str(groups_str.as_slice());
     set_main_group(group);
     set_user(user);
 }
 
 fn enter_chroot(root: &Path) {
-    let rootStr = root.display();
+    let root_str = root.display();
     if !std::os::change_dir(root) {
-        crash!(1, "cannot chdir to {}", rootStr)
+        crash!(1, "cannot chdir to {}", root_str)
     };
     let err = unsafe {
         chroot(".".to_c_str().unwrap() as *const libc::c_char)
     };
     if err != 0 {
-        crash!(1, "cannot chroot to {}: {:s}", rootStr, strerror(err).as_slice())
+        crash!(1, "cannot chroot to {}: {:s}", root_str, strerror(err).as_slice())
     };
 }
 
@@ -167,14 +167,14 @@ fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
 
 fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
-        let groupsVec: Vec<libc::gid_t> = FromIterator::from_iter(
+        let groups_vec: Vec<libc::gid_t> = FromIterator::from_iter(
             groups.split(',').map(
                 |x| match get_group(x) {
                     None => crash!(1, "no such group: {}", x),
                     Some(g) => g.gr_gid
                 })
             );
-        let err = set_groups(groupsVec);
+        let err = set_groups(groups_vec);
         if err != 0 {
             crash!(1, "cannot set groups: {:s}", strerror(err).as_slice())
         }
