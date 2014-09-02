@@ -8,6 +8,7 @@ pub struct BufReader<R> {
     end: uint,  // exclusive
 }
 
+#[allow(non_snake_case)]
 pub mod Bytes {
     pub trait Select {
         fn select<'a>(&'a mut self, bytes: uint) -> Selected<'a>;

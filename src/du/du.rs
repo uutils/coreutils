@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#![allow(uppercase_variables)]
+#![allow(non_snake_case)]
 #![feature(macro_rules)]
 
 extern crate getopts;
