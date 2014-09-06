@@ -133,7 +133,7 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
 
 
 // from cat.rs
-fn open(path: &str) -> Option<(Box<Reader>, bool)> {
+fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
     if path == "-" {
         let stdin = stdin_raw();
         let interactive = stdin.isatty();
