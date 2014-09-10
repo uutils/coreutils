@@ -46,11 +46,11 @@ fn unescape(v: Vec<char>) -> Vec<char> {
     let mut input = v.as_slice();
     loop {
         input = match input {
-            ['\\', e, ..rest] => {
+            ['\\', e, rest..] => {
                 out.push(unescape_char(e));
                 rest
             }
-            [c, ..rest] => {
+            [c, rest..] => {
                 out.push(c);
                 rest
             }
@@ -71,11 +71,11 @@ fn expand_set(s: &str) -> Vec<char> {
 
     loop {
         input = match input {
-            [f, '-', t, ..rest] => {
+            [f, '-', t, rest..] => {
                 set.push_all(expand_range(f, t).as_slice());
                 rest
             }
-            [c, ..rest] => {
+            [c, rest..] => {
                 set.push(c);
                 rest
             }

@@ -15,7 +15,7 @@
 
 extern crate regex;
 
-extern crate crypto = "rust-crypto";
+extern crate "rust-crypto" as crypto;
 extern crate getopts;
 
 use std::io::fs::File;

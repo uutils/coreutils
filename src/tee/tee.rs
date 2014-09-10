@@ -91,7 +91,7 @@ fn tee(options: Options) -> Result<(), ()> {
     }
 }
 
-fn open(path: &Path, append: bool) -> Box<Writer> {
+fn open(path: &Path, append: bool) -> Box<Writer+'static> {
     let inner = if *path == Path::new("-") {
         box stdout() as Box<Writer>
     } else {
@@ -105,7 +105,7 @@ fn open(path: &Path, append: bool) -> Box<Writer> {
 }
 
 struct NamedWriter {
-    inner: Box<Writer>,
+    inner: Box<Writer+'static>,
     path: Box<Path>
 }
 
@@ -132,7 +132,7 @@ impl Writer for NamedWriter {
 }
 
 struct NamedReader {
-    inner: Box<Reader>
+    inner: Box<Reader+'static>
 }
 
 impl Reader for NamedReader {

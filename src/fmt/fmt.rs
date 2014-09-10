@@ -221,7 +221,7 @@ fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
 
 // uniform interface for opening files
 // since we don't need seeking
-type FileOrStdReader = BufferedReader<Box<Reader>>;
+type FileOrStdReader = BufferedReader<Box<Reader+'static>>;
 
 fn open_file(filename: &str) -> IoResult<FileOrStdReader> {
     if filename == "-" {

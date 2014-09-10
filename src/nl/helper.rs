@@ -7,7 +7,7 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
         ['a'] => { Ok(::NumberForAll) },
         ['t'] => { Ok(::NumberForNonEmpty) },
         ['n'] => { Ok(::NumberForNone) },
-        ['p', ..rest] => {
+        ['p', rest..] => {
             match regex::Regex::new(String::from_chars(rest).as_slice()) {
                 Ok(re) => Ok(::NumberForRegularExpression(re)),
                 Err(_) => Err(String::from_str("Illegal regular expression")),
