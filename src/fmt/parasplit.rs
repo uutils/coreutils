@@ -230,20 +230,20 @@ impl<'a> ParagraphStream<'a> {
         if line.indent_end > 0 {
             false
         } else {
-            let lSlice = line.line.as_slice();
-            if lSlice.starts_with("From ") {
+            let l_slice = line.line.as_slice();
+            if l_slice.starts_with("From ") {
                 true
             } else {
-                let colonPosn =
-                    match lSlice.find(':') {
+                let colon_posn =
+                    match l_slice.find(':') {
                         Some(n) => n,
                         None => return false
                     };
 
                 // header field must be nonzero length
-                if colonPosn == 0 { return false; }
+                if colon_posn == 0 { return false; }
 
-                return lSlice.slice_to(colonPosn).chars().all(|x| match x as uint {
+                return l_slice.slice_to(colon_posn).chars().all(|x| match x as uint {
                     y if y < 33 || y > 126 => false,
                     _ => true
                 });
@@ -280,7 +280,7 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
         let mut indent_len = 0;
         let mut prefix_len = 0;
         let mut pfxind_end = 0;
-        let mut pLines = Vec::new();
+        let mut p_lines = Vec::new();
 
         let mut in_mail = false;
         let mut second_done = false;    // for when we use crown or tagged mode
@@ -298,7 +298,7 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
                         }
                     };
 
-                if pLines.len() == 0 {
+                if p_lines.len() == 0 {
                     // first time through the loop, get things set up
                     // detect mail header
                     if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
@@ -366,7 +366,7 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
                 }
             }
 
-            pLines.push(self.lines.next().unwrap().get_formatline().line);
+            p_lines.push(self.lines.next().unwrap().get_formatline().line);
 
             // when we're in split-only mode, we never join lines, so stop here
             if self.opts.split_only {
@@ -380,7 +380,7 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
         self.next_mail = in_mail;
 
         Some(Ok(Paragraph {
-            lines       : pLines,
+            lines       : p_lines,
             init_str    : init_str,
             init_len    : init_len,
             init_end    : init_end,

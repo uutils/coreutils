@@ -15,6 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{File, Open, ReadWrite, fs};
+use std::io::fs::PathExtensions;
 use std::u64;
 
 #[path = "../common/util.rs"]

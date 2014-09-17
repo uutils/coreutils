@@ -14,6 +14,7 @@ extern crate getopts;
 extern crate time;
 
 use std::io::File;
+use std::io::fs::PathExtensions;
 
 #[path = "../common/util.rs"]
 mod util;

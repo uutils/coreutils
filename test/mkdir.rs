@@ -1,5 +1,5 @@
 use std::io::process::Command;
-use std::io::fs::rmdir;
+use std::io::fs::{rmdir, PathExtensions};
 
 static exe: &'static str = "./mkdir";
 static test_dir1: &'static str = "mkdir_test1";

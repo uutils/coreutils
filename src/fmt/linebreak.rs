@@ -40,16 +40,16 @@ impl<'a> BreakArgs<'a> {
 
 pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer+'static>) {
     // indent
-    let pIndent = para.indent_str.as_slice();
-    let pIndentLen = para.indent_len;
+    let p_indent = para.indent_str.as_slice();
+    let p_indent_len = para.indent_len;
 
     // words
-    let pWords = ParaWords::new(opts, para);
-    let mut pWords_words = pWords.words();
+    let p_words = ParaWords::new(opts, para);
+    let mut p_words_words = p_words.words();
 
     // the first word will *always* appear on the first line
     // make sure of this here
-    let (w, w_len) = match pWords_words.next() {
+    let (w, w_len) = match p_words_words.next() {
         Some(winfo) => (winfo.word, winfo.word_nchars),
         None => {
             silent_unwrap!(ostream.write_char('\n'));
@@ -57,15 +57,15 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
         }
     };
     // print the init, if it exists, and get its length
-    let pInitLen = w_len +
+    let p_init_len = w_len +
         if opts.crown || opts.tagged {
             // handle "init" portion
             silent_unwrap!(ostream.write(para.init_str.as_bytes()));
             para.init_len
         } else if !para.mail_header {
             // for non-(crown, tagged) that's the same as a normal indent
-            silent_unwrap!(ostream.write(pIndent.as_bytes()));
-            pIndentLen
+            silent_unwrap!(ostream.write(p_indent.as_bytes()));
+            p_indent_len
         } else {
             // except that mail headers get no indent at all
             0
@@ -78,17 +78,17 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
 
     let mut break_args = BreakArgs {
         opts       : opts,
-        init_len   : pInitLen,
-        indent_str : pIndent,
-        indent_len : pIndentLen,
+        init_len   : p_init_len,
+        indent_str : p_indent,
+        indent_len : p_indent_len,
         uniform    : uniform,
         ostream    : ostream
     };
 
     if opts.quick || para.mail_header {
-        break_simple(pWords_words, &mut break_args);
+        break_simple(p_words_words, &mut break_args);
     } else {
-        break_knuth_plass(pWords_words, &mut break_args);
+        break_knuth_plass(p_words_words, &mut break_args);
     }
 }
 
@@ -139,7 +139,9 @@ fn break_knuth_plass<'a, T: Clone + Iterator<&'a WordInfo<'a>>>(mut iter: T, arg
 
                 // We find identical breakpoints here by comparing addresses of the references.
                 // This is OK because the backing vector is not mutating once we are linebreaking.
-                if winfo as *const _ == next_break as *const _ {
+                let winfo_ptr = winfo as *const _;
+                let next_break_ptr = next_break as *const _;
+                if winfo_ptr == next_break_ptr {
                     // OK, we found the matching word
                     if break_before {
                         write_newline(args.indent_str, args.ostream);
@@ -368,9 +370,9 @@ fn compute_demerits(delta_len: int, stretch: int, wlen: int, prev_rat: f32) -> (
         };
 
     // we penalize lines that have very different ratios from previous lines
-    let bad_deltaR = (DR_MULT * num::abs(num::pow((ratio - prev_rat) / 2.0, 3))) as i64;
+    let bad_delta_r = (DR_MULT * num::abs(num::pow((ratio - prev_rat) / 2.0, 3))) as i64;
 
-    let demerits = num::pow(1 + bad_linelen + bad_wordlen + bad_deltaR, 2);
+    let demerits = num::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
     (demerits, ratio)
 }

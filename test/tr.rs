@@ -5,7 +5,7 @@ static PROGNAME: &'static str = "./tr";
 fn run(input: &str, args: &[&'static str]) -> Vec<u8> {
     let mut process = Command::new(PROGNAME).args(args).spawn().unwrap();
 
-    process.stdin.take_unwrap().write_str(input).unwrap();
+    process.stdin.take().unwrap().write_str(input).unwrap();
 
     let po = match process.wait_with_output() {
         Ok(p) => p,

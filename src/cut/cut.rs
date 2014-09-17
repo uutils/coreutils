@@ -15,6 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{stdio, File, BufferedWriter, BufferedReader, print};
+use std::io::fs::PathExtensions;
 use getopts::{optopt, optflag, getopts, usage};
 
 use ranges::Range;
