@@ -38,7 +38,7 @@ impl<R: Reader> BufReader<R> {
 
     #[inline]
     fn read(&mut self) -> IoResult<uint> {
-        let buffer_fill = self.buffer.mut_slice_from(self.end);
+        let buffer_fill = self.buffer.slice_from_mut(self.end);
 
         match self.reader.read(buffer_fill) {
             Ok(nread) => {

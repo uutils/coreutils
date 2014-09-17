@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> int {
 pub fn exec(args: Vec<String>, separator: &str) {
     if args.is_empty() {
         let vars = os::env();
-        for (env_var, value) in vars.move_iter() {
+        for (env_var, value) in vars.into_iter() {
             print!("{0:s}={1:s}", env_var, value);
             print(separator);
         }

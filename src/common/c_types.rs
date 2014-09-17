@@ -14,7 +14,7 @@ use self::libc::funcs::posix88::unistd::getgroups;
 use std::vec::Vec;
 
 use std::os;
-use std::ptr::{mut_null, read};
+use std::ptr::{null_mut, read};
 use std::string::raw::from_buf;
 
 #[cfg(target_os = "macos")]
@@ -183,7 +183,7 @@ unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut 
 }
 
 pub fn get_groups() -> Result<Vec<gid_t>, int> {
-    let ngroups = unsafe { getgroups(0, mut_null()) };
+    let ngroups = unsafe { getgroups(0, null_mut()) };
     if ngroups == -1 {
         return Err(os::errno());
     }
