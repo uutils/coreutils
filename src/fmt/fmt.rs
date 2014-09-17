@@ -200,9 +200,9 @@ pub fn uumain(args: Vec<String>) -> int {
                 }
                 Ok(f) => f
             };
-        let mut pStream = ParagraphStream::new(&fmt_opts, &mut fp);
-        for paraResult in pStream {
-            match paraResult {
+        let mut p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
+        for para_result in p_stream {
+            match para_result {
                 Err(s) => silent_unwrap!(ostream.write(s.as_bytes())),
                 Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
             }

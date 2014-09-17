@@ -6,7 +6,7 @@ static PROGNAME: &'static str = "./nl";
 #[test]
 fn test_stdin_nonewline() {
     let mut process = Command::new(PROGNAME).spawn().unwrap();
-    process.stdin.take_unwrap().write(b"No Newline").unwrap();
+    process.stdin.take().unwrap().write(b"No Newline").unwrap();
     let po = process.wait_with_output().unwrap();
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
 
@@ -17,7 +17,7 @@ fn test_stdin_newline() {
     let mut process = Command::new(PROGNAME).arg("-s").arg("-")
         .arg("-w").arg("1").spawn().unwrap();
 
-    process.stdin.take_unwrap().write(b"Line One\nLine Two\n").unwrap();
+    process.stdin.take().unwrap().write(b"Line One\nLine Two\n").unwrap();
     let po = process.wait_with_output().unwrap();
     let out =  str::from_utf8(po.output.as_slice()).unwrap();
 

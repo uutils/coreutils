@@ -43,7 +43,7 @@ fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(s: &mut T) {
 
 #[cfg(target_os = "linux")]
 #[cfg(target_os = "freebsd")]
-fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
+unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
 #[cfg(target_os = "linux")]
 #[cfg(target_os = "freebsd")]
