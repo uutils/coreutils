@@ -16,6 +16,7 @@ extern crate libc;
 
 use std::str::from_utf8;
 use std::io::{print, File, BufferedReader};
+use std::io::fs::PathExtensions;
 use std::io::stdio::stdin_raw;
 use std::result::Result as StdResult;
 use getopts::Matches;

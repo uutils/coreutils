@@ -15,6 +15,7 @@ extern crate libc;
 use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
 use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
+use std::io::fs::PathExtensions;
 
 #[path = "../common/util.rs"] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
