@@ -70,7 +70,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
-    for filename in filenames.move_iter() {
+    for filename in filenames.into_iter() {
         let mut file = io::BufferedReader::new(
             if filename.as_slice() == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>

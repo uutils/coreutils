@@ -28,7 +28,7 @@ static DEFAULT_TABSTOP: uint = 8;
 fn tabstops_parse(s: String) -> Vec<uint> {
     let words = s.as_slice().split(',').collect::<Vec<&str>>();
 
-    let nums = words.move_iter()
+    let nums = words.into_iter()
         .map(|sn| from_str::from_str::<uint>(sn)
             .unwrap_or_else(
                 || crash!(1, "{}\n", "tab size contains invalid character(s)"))
@@ -131,7 +131,7 @@ fn to_next_stop(tabstops: &[uint], col: uint) -> uint {
 fn expand(options: Options) {
     let mut output = io::stdout();
 
-    for file in options.files.move_iter() {
+    for file in options.files.into_iter() {
         let mut col = 0;
         let mut init = true;
         for c in open(file).chars() {

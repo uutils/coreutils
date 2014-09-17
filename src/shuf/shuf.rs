@@ -125,7 +125,7 @@ fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, o
         Echo => shuf_lines(input, repeat, zero, count, output, random),
         InputRange(range) => shuf_lines(range.map(|num| num.to_string()).collect(), repeat, zero, count, output, random),
         Default => {
-            let lines: Vec<String> = input.move_iter().flat_map(|filename| {
+            let lines: Vec<String> = input.into_iter().flat_map(|filename| {
                 let slice = filename.as_slice();
                 let mut file_buf;
                 let mut stdin_buf;
@@ -144,7 +144,7 @@ fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, o
                     line.pop_char();
                     lines.push(line);
                 }
-                lines.move_iter()
+                lines.into_iter()
             }).collect();
             shuf_lines(lines, repeat, zero, count, output, random)
         }

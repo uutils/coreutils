@@ -333,7 +333,7 @@ fn fail() -> ! {
 
 impl<'a, W: Writer> Writer for UnsafeWriter<'a, W> {
     fn write(&mut self, buf: &[u8]) -> IoResult<()> {
-        let dst = self.buf.mut_slice_from(self.pos);
+        let dst = self.buf.slice_from_mut(self.pos);
         if buf.len() > dst.len() {
             fail();
         }
