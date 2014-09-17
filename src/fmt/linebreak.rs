@@ -20,7 +20,7 @@ struct BreakArgs<'a> {
     indent_str : &'a str,
     indent_len : uint,
     uniform    : bool,
-    ostream    : &'a mut Box<Writer>
+    ostream    : &'a mut Box<Writer+'static>
 }
 
 impl<'a> BreakArgs<'a> {
@@ -38,7 +38,7 @@ impl<'a> BreakArgs<'a> {
     }
 }
 
-pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer>) {
+pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer+'static>) {
     // indent
     let pIndent = para.indent_str.as_slice();
     let pIndentLen = para.indent_len;
