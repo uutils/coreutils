@@ -1,0 +1,8 @@
+[project]
+name = "fold"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "fold"
+path = "fold.rs"

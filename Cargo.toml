@@ -2,270 +2,201 @@
 name = "uutils-coreutils"
 version = "0.0.1"
 authors = []
+build = [
+	"mkdir -p build",
+	"rustc mkuutils.rs -o build/mkuutils",
+	"build/mkuutils build/uutils.rs base64 basename cat cksum comm cp cut dirname echo env du expand factor false fmt fold link hashsum mkdir nl paste printenv pwd realpath relpath rm rmdir sleep split seq shuf sort sum sync tac tee test touch tr true truncate tsort unexpand unlink uniq wc yes head tail whoami chroot groups hostid hostname id kill logname mkfifo nohup timeout tty uname uptime users",
+]
 
 [[bin]]
-name = "base64"
-path = "base64/base64.rs"
+name = "uutils"
+path = "build/uutils.rs"
 
-[[bin]]
-name = "basename"
-path = "basename/basename.rs"
-
-[[bin]]
-name = "cat"
-path = "cat/cat.rs"
-
-[[bin]]
-name = "chmod"
-path = "chmod/chmod.rs"
+[dependencies.base64]
+path = "src/base64"
 
-[[bin]]
-name = "chroot"
-path = "chroot/chroot.rs"
+[dependencies.basename]
+path = "src/basename"
 
-[[bin]]
-name = "cksum"
-path = "cksum/cksum.rs"
+[dependencies.cat]
+path = "src/cat"
 
-[[bin]]
-name = "comm"
-path = "comm/comm.rs"
+[dependencies.chroot]
+path = "src/chroot"
 
-[[bin]]
-name = "cp"
-path = "cp/cp.rs"
+[dependencies.cksum]
+path = "src/cksum"
 
-[[bin]]
-name = "cut"
-path = "cut/cut.rs"
+[dependencies.comm]
+path = "src/comm"
 
-[[bin]]
-name = "dirname"
-path = "dirname/dirname.rs"
+[dependencies.cp]
+path = "src/cp"
 
-[[bin]]
-name = "du"
-path = "du/du.rs"
+[dependencies.cut]
+path = "src/cut"
 
-[[bin]]
-name = "echo"
-path = "echo/echo.rs"
+[dependencies.dirname]
+path = "src/dirname"
 
-[[bin]]
-name = "env"
-path = "env/env.rs"
+[dependencies.du]
+path = "src/du"
 
-[[bin]]
-name = "expand"
-path = "expand/expand.rs"
+[dependencies.echo]
+path = "src/echo"
 
-[[bin]]
-name = "factor"
-path = "factor/factor.rs"
+[dependencies.env]
+path = "src/env"
 
-[[bin]]
-name = "false"
-path = "false/false.rs"
+[dependencies.expand]
+path = "src/expand"
 
-[[bin]]
-name = "fmt"
-path = "fmt/fmt.rs"
+[dependencies.factor]
+path = "src/factor"
 
-[[bin]]
-name = "fold"
-path = "fold/fold.rs"
+[dependencies.false]
+path = "src/false"
 
-[[bin]]
-name = "groups"
-path = "groups/groups.rs"
+[dependencies.fmt]
+path = "src/fmt"
 
-[[bin]]
-name = "hashsum"
-path = "hashsum/hashsum.rs"
+[dependencies.fold]
+path = "src/fold"
 
-[[bin]]
-name = "head"
-path = "head/head.rs"
+[dependencies.groups]
+path = "src/groups"
 
-[[bin]]
-name = "hostid"
-path = "hostid/hostid.rs"
+[dependencies.hashsum]
+path = "src/hashsum"
 
-[[bin]]
-name = "hostname"
-path = "hostname/hostname.rs"
+[dependencies.head]
+path = "src/head"
 
-[[bin]]
-name = "id"
-path = "id/id.rs"
+[dependencies.hostid]
+path = "src/hostid"
 
-[[bin]]
-name = "kill"
-path = "kill/kill.rs"
+[dependencies.hostname]
+path = "src/hostname"
 
-[[bin]]
-name = "link"
-path = "link/link.rs"
+[dependencies.id]
+path = "src/id"
 
-[[bin]]
-name = "logname"
-path = "logname/logname.rs"
+[dependencies.kill]
+path = "src/kill"
 
-[[bin]]
-name = "mkdir"
-path = "mkdir/mkdir.rs"
+[dependencies.link]
+path = "src/link"
 
-[[bin]]
-name = "mv"
-path = "mv/mv.rs"
+[dependencies.logname]
+path = "src/logname"
 
-[[bin]]
-name = "mkfifo"
-path = "mkfifo/mkfifo.rs"
+[dependencies.mkdir]
+path = "src/mkdir"
 
-[[bin]]
-name = "nl"
-path = "nl/nl.rs"
+[dependencies.mkfifo]
+path = "src/mkfifo"
 
-[[bin]]
-name = "nohup"
-path = "nohup/nohup.rs"
+[dependencies.nl]
+path = "src/nl"
 
-[[bin]]
-name = "paste"
-path = "paste/paste.rs"
+[dependencies.nohup]
+path = "src/nohup"
 
-[[bin]]
-name = "printenv"
-path = "printenv/printenv.rs"
+[dependencies.paste]
+path = "src/paste"
 
-[[bin]]
-name = "pwd"
-path = "pwd/pwd.rs"
+[dependencies.printenv]
+path = "src/printenv"
 
-[[bin]]
-name = "realpath"
-path = "realpath/realpath.rs"
+[dependencies.pwd]
+path = "src/pwd"
 
-[[bin]]
-name = "relpath"
-path = "relpath/relpath.rs"
+[dependencies.realpath]
+path = "src/realpath"
 
-[[bin]]
-name = "rm"
-path = "rm/rm.rs"
+[dependencies.relpath]
+path = "src/relpath"
 
-[[bin]]
-name = "rmdir"
-path = "rmdir/rmdir.rs"
+[dependencies.rm]
+path = "src/rm"
 
-[[bin]]
-name = "seq"
-path = "seq/seq.rs"
+[dependencies.rmdir]
+path = "src/rmdir"
 
-[[bin]]
-name = "shuf"
-path = "shuf/shuf.rs"
+[dependencies.seq]
+path = "src/seq"
 
-[[bin]]
-name = "sleep"
-path = "sleep/sleep.rs"
+[dependencies.shuf]
+path = "src/shuf"
 
-[[bin]]
-name = "sort"
-path = "sort/sort.rs"
+[dependencies.sleep]
+path = "src/sleep"
 
-[[bin]]
-name = "split"
-path = "split/split.rs"
+[dependencies.split]
+path = "src/split"
 
-[[bin]]
-name = "sum"
-path = "sum/sum.rs"
+[dependencies.sum]
+path = "src/sum"
 
-[[bin]]
-name = "sync"
-path = "sync/sync.rs"
+[dependencies.sync]
+path = "src/sync"
 
-[[bin]]
-name = "tac"
-path = "tac/tac.rs"
+[dependencies.tac]
+path = "src/tac"
 
-[[bin]]
-name = "tail"
-path = "tail/tail.rs"
+[dependencies.tail]
+path = "src/tail"
 
-[[bin]]
-name = "tee"
-path = "tee/tee.rs"
+[dependencies.tee]
+path = "src/tee"
 
-[[bin]]
-name = "test"
-path = "test/test.rs"
+[dependencies.test]
+path = "src/test"
 
-[[bin]]
-name = "timeout"
-path = "timeout/timeout.rs"
+[dependencies.timeout]
+path = "src/timeout"
 
-[[bin]]
-name = "touch"
-path = "touch/touch.rs"
+[dependencies.touch]
+path = "src/touch"
 
-[[bin]]
-name = "tr"
-path = "tr/tr.rs"
+[dependencies.tr]
+path = "src/tr"
 
-[[bin]]
-name = "true"
-path = "true/true.rs"
+[dependencies.true]
+path = "src/true"
 
-[[bin]]
-name = "truncate"
-path = "truncate/truncate.rs"
+[dependencies.truncate]
+path = "src/truncate"
 
-[[bin]]
-name = "tsort"
-path = "tsort/tsort.rs"
+[dependencies.tsort]
+path = "src/tsort"
 
-[[bin]]
-name = "tty"
-path = "tty/tty.rs"
+[dependencies.tty]
+path = "src/tty"
 
-[[bin]]
-name = "uname"
-path = "uname/uname.rs"
+[dependencies.uname]
+path = "src/uname"
 
-[[bin]]
-name = "unexpand"
-path = "unexpand/unexpand.rs"
+[dependencies.unexpand]
+path = "src/unexpand"
 
-[[bin]]
-name = "uniq"
-path = "uniq/uniq.rs"
+[dependencies.uniq]
+path = "src/uniq"
 
-[[bin]]
-name = "unlink"
-path = "unlink/unlink.rs"
+[dependencies.unlink]
+path = "src/unlink"
 
-[[bin]]
-name = "uptime"
-path = "uptime/uptime.rs"
+[dependencies.uptime]
+path = "src/uptime"
 
-[[bin]]
-name = "users"
-path = "users/users.rs"
+[dependencies.users]
+path = "src/users"
 
-[[bin]]
-name = "wc"
-path = "wc/wc.rs"
+[dependencies.wc]
+path = "src/wc"
 
-[[bin]]
-name = "whoami"
-path = "whoami/whoami.rs"
+[dependencies.whoami]
+path = "src/whoami"
 
-[[bin]]
-name = "yes"
-path = "yes/yes.rs"
-
-[dependencies.rust-crypto]
-git = "https://github.com/dagenix/rust-crypto"
+[dependencies.yes]
+path = "src/yes"

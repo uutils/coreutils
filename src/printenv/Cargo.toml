@@ -1,0 +1,8 @@
+[project]
+name = "printenv"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "printenv"
+path = "printenv.rs"

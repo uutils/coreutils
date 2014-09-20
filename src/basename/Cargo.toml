@@ -1,0 +1,8 @@
+[project]
+name = "basename"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "basename"
+path = "basename.rs"

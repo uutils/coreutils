@@ -1,0 +1,8 @@
+[project]
+name = "sum"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "sum"
+path = "sum.rs"

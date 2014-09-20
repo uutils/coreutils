@@ -1,0 +1,8 @@
+[project]
+name = "hostname"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "hostname"
+path = "hostname.rs"

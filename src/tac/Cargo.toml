@@ -1,0 +1,8 @@
+[project]
+name = "tac"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "tac"
+path = "tac.rs"

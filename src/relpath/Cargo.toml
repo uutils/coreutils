@@ -1,0 +1,8 @@
+[project]
+name = "relpath"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "relpath"
+path = "relpath.rs"

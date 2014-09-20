@@ -1,0 +1,8 @@
+[project]
+name = "cp"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "cp"
+path = "cp.rs"

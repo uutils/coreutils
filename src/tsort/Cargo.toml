@@ -1,0 +1,8 @@
+[project]
+name = "tsort"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "tsort"
+path = "tsort.rs"
