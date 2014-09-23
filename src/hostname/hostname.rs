@@ -32,6 +32,7 @@ extern {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg(target_os = "freebsd")]
 extern {
     fn sethostname(name: *const libc::c_char, namelen: libc::c_int) -> libc::c_int;
 }
@@ -148,6 +149,7 @@ fn xgethostname() -> String {
 }
 
 #[cfg(target_os = "macos")]
+#[cfg(target_os = "freebsd")]
 fn xsethostname(name: &str) {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
