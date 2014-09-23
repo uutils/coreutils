@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
-    let mut args = Vec::<String>::from_slice(args);
+    let mut args = args.to_vec();
     let mut i = 0;
     while i < args.len() {
         if args[i].as_slice().char_at(0) == '-' && args[i].len() > 1 && args[i].as_slice().char_at(1).is_digit() {

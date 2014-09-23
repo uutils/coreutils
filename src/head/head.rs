@@ -133,7 +133,7 @@ pub fn uumain(args: Vec<String>) -> int {
 // In case is found, the options vector will get rid of that object so that
 // getopts works correctly.
 fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
-    let mut options: Vec<String> = Vec::from_slice(options);
+    let mut options: Vec<String> = options.to_vec();
     let mut a = 0;
     let b = options.len();
 

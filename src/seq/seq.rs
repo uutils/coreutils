@@ -65,7 +65,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                 },
                 "-w" | "--widths" => options.widths = true,
                 "--" => {
-                    seq_args.push_all_move(iter.collect());
+                    seq_args.extend(iter);
                     break;
                 },
                 _ => {

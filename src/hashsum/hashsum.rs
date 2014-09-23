@@ -110,7 +110,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     );
 
-    opts.push_all_move(get_algo_opts(binary_name.as_slice()));
+    opts.extend(get_algo_opts(binary_name.as_slice()).into_iter());
 
     let matches = match getopts::getopts(args.tail(), opts.as_slice()) {
         Ok(m) => m,
