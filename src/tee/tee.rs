@@ -59,7 +59,8 @@ fn options(args: &[String]) -> Result<Options, ()> {
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                            version, program, arguments, usage(brief, opts),
                            comment);
-        let names = m.free.clone().into_iter().collect::<Vec<String>>().append_one("-".to_string());
+        let mut names = m.free.clone().into_iter().collect::<Vec<String>>();
+        names.push("-".to_string());
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };
