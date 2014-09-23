@@ -31,7 +31,7 @@ fn char_width(c: char) -> uint {
 // lines with PSKIP, lacking PREFIX, or which are entirely blank are
 // NoFormatLines; otherwise, they are FormatLines
 #[deriving(Show)]
-enum Line {
+pub enum Line {
     FormatLine(FileLine),
     NoFormatLine(String, bool)
 }
