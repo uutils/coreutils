@@ -43,7 +43,14 @@ extern {
     fn setutxent();
     fn endutxent();
 
+    #[cfg(target_os = "linux")]
+    #[cfg(target_os = "macs")]
     fn utmpxname(file: *const c_char) -> c_int;
+}
+
+#[cfg(target_os = "freebsd")]
+unsafe extern fn utmpxname(_file: *const c_char) -> c_int {
+    0
 }
 
 pub fn uumain(args: Vec<String>) -> int {

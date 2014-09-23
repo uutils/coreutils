@@ -105,6 +105,7 @@ No    Name         Default Action       Description
 */
 
 #[cfg(target_os = "macos")]
+#[cfg(target_os = "freebsd")]
 pub static ALL_SIGNALS:[Signal<'static>, ..31] = [
     Signal{ name: "HUP",    value:1  },
     Signal{ name: "INT",    value:2  },
