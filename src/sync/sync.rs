@@ -39,7 +39,7 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     pub use super::libc;
-    use std::{mem, str};
+    use std::{mem, string};
     use std::ptr::null;
 
     extern "system" {
@@ -63,29 +63,27 @@ mod platform {
 
     #[allow(unused_unsafe)]
     unsafe fn flush_volume(name: &str) {
-        name.to_c_str().with_ref(|name_buffer| {
-            if 0x00000003 == GetDriveTypeA(name_buffer) { // DRIVE_FIXED
-                let sliced_name = name.slice_to(name.len() - 1); // eliminate trailing backslash
-                sliced_name.to_c_str().with_ref(|sliced_name_buffer| {
-                    match CreateFileA(sliced_name_buffer,
-                                      0xC0000000, // GENERIC_WRITE
-                                      0x00000003, // FILE_SHARE_WRITE,
-                                      null(),
-                                      0x00000003, // OPEN_EXISTING
-                                      0,
-                                      null()) {
-                        _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
-                            crash!(GetLastError(), "failed to create volume handle");
-                        }
-                        handle @ _ => {
-                            if FlushFileBuffers(handle) == 0 {
-                                crash!(GetLastError(), "failed to flush file buffer");
-                            }
-                        }
+        let name_buffer = name.to_c_str().as_ptr();
+        if 0x00000003 == GetDriveTypeA(name_buffer) { // DRIVE_FIXED
+            let sliced_name = name.slice_to(name.len() - 1); // eliminate trailing backslash
+            let sliced_name_buffer = sliced_name.to_c_str().as_ptr();
+            match CreateFileA(sliced_name_buffer,
+                              0xC0000000, // GENERIC_WRITE
+                              0x00000003, // FILE_SHARE_WRITE,
+                              null(),
+                              0x00000003, // OPEN_EXISTING
+                              0,
+                              null()) {
+                _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
+                    crash!(GetLastError(), "failed to create volume handle");
+                }
+                handle @ _ => {
+                    if FlushFileBuffers(handle) == 0 {
+                        crash!(GetLastError(), "failed to flush file buffer");
                     }
-                });
+                }
             }
-        });
+        }
     }
 
     #[allow(unused_unsafe)]
@@ -97,7 +95,7 @@ mod platform {
                 crash!(GetLastError(), "failed to find first volume");
             }
             handle @ _ => {
-                (str::raw::from_c_str(name.as_ptr()), handle)
+                (string::raw::from_buf(name.as_ptr() as *const u8), handle)
             }
         }
     }
@@ -124,7 +122,7 @@ mod platform {
                             }
                         }
                         _ => {
-                            volumes.push(str::raw::from_c_str(name.as_ptr()));
+                            volumes.push(string::raw::from_buf(name.as_ptr() as *const u8));
                         }
                     }
                 }
