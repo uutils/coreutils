@@ -44,7 +44,7 @@ extern {
     fn endutxent();
 
     #[cfg(target_os = "linux")]
-    #[cfg(target_os = "macs")]
+    #[cfg(target_os = "macos")]
     fn utmpxname(file: *const c_char) -> c_int;
 }
 
