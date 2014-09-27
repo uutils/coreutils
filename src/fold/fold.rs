@@ -201,7 +201,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                     }
                     _ => count += 1
                 };
-                output.push_char(ch);
+                output.push(ch);
             }
             if count > 0 {
                 print!("{}", output);
