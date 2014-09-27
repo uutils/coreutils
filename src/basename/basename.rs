@@ -92,7 +92,7 @@ fn strip_dir(fullname: &str) -> String {
         if c == '/' || c == '\\' {
             break;
         }
-        name.push_char(c);
+        name.push(c);
     }
 
     name.as_slice().chars().rev().collect()

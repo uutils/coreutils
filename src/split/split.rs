@@ -196,7 +196,7 @@ fn str_prefix(i: uint, width: uint) -> String {
         let div = num::pow(26 as uint, w);
         let r = n / div;
         n -= r * div;
-        c.push_char(char::from_u32((r as u32) + 97).unwrap());
+        c.push(char::from_u32((r as u32) + 97).unwrap());
     }
     c
 }
@@ -211,7 +211,7 @@ fn num_prefix(i: uint, width: uint) -> String {
         let div = num::pow(10 as uint, w);
         let r = n / div;
         n -= r * div;
-        c.push_char(char::from_digit(r, 10).unwrap());
+        c.push(char::from_digit(r, 10).unwrap());
     }
     c
 }

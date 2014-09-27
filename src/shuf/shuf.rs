@@ -141,7 +141,7 @@ fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, o
                 let mut lines = vec!();
                 for line in file.lines() {
                     let mut line = crash_if_err!(1, line);
-                    line.pop_char();
+                    line.pop();
                     lines.push(line);
                 }
                 lines.into_iter()
