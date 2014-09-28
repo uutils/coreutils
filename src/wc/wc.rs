@@ -203,7 +203,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
         print!("{:1$}", word_count, max_str_len);
     }
     if matches.opt_present("bytes") {
-        print!("{:1$}", byte_count, max_str_len + 1);
+        print!("{:1$}", byte_count, max_str_len);
     }
     if matches.opt_present("chars") {
         print!("{:1$}", char_count, max_str_len);
