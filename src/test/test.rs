@@ -16,16 +16,24 @@ use std::os::{args_as_bytes};
 use std::str::{from_utf8};
 use num::bigint::{BigInt};
 
+static NAME: &'static str = "test";
+
+// TODO: decide how to handle non-UTF8 input for all the utils
 pub fn uumain(_: Vec<String>) -> int {
     let args = args_as_bytes();
     let args: Vec<&[u8]> = args.iter().map(|a| a.as_slice()).collect();
-    let args = args.as_slice();
     if args.len() == 0 {
         return 2;
     }
+    let args =
+        if !args[0].ends_with(NAME.as_bytes()) {
+            args.slice_from(1)
+        } else {
+            args.as_slice()
+        };
     let args = match args[0] {
-        b"[" => match args[args.len()-1] {
-            b"]" => args.slice(1, args.len()-1),
+        b"[" => match args[args.len() - 1] {
+            b"]" => args.slice(1, args.len() - 1),
             _ => return 2,
         },
         _ => args.slice(1, args.len()),
@@ -228,7 +236,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         FIFO             => stat.kind == TypeNamedPipe,
         Readable         => false, // TODO
         Socket           => false, // TODO?
-        NonEmpty         => stat.size >  0,
+        NonEmpty         => stat.size > 0,
         UserIDFlag       => false,
         Writable         => false, // TODO
         Executable       => false, // TODO
