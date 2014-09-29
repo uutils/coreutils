@@ -140,19 +140,11 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
             }
         } else {
             let mut len = line.char_len();
-            let newline =
-                if len == 0 {
-                    continue;
-                } else if len == 1 && line.char_at(len - 1) == '\n' {
-                    println!("");
-                    continue;
-                } else if line.char_at(len - 1) == '\n' {
-                    line = line.slice_to(line.len() - 1);
-                    len -= 1;
-                    true
-                } else {
-                    false
-                };
+            let newline = line.ends_with("\n");
+            if newline {
+                line = line.slice_to(line.len() - 1);
+                len -= 1;
+            }
             let mut output = String::new();
             let mut count = 0;
             for (i, ch) in line.chars().enumerate() {
