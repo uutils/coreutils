@@ -24,8 +24,7 @@ extern {
     fn chroot(path: *const libc::c_char) -> libc::c_int;
 }
 
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 extern {
     fn setgroups(size: libc::c_int, list: *const libc::gid_t) -> libc::c_int;
 }
@@ -151,8 +150,7 @@ fn set_main_group(group: &str) {
     }
 }
 
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
     unsafe {
         setgroups(groups.len() as libc::c_int,

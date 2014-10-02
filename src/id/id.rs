@@ -251,8 +251,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
     }
 }
 
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
         unsafe { read(getpwuid(getuid())) }
