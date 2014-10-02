@@ -41,8 +41,7 @@ extern {
     fn setutxent();
     fn endutxent();
 
-    #[cfg(target_os = "linux")]
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn utmpxname(file: *const libc::c_char) -> libc::c_int;
 }
 

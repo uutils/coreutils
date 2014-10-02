@@ -8,8 +8,7 @@ use self::libc::{
     uid_t,
     gid_t,
 };
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use self::libc::time_t;
 #[cfg(target_os = "macos")]
 use self::libc::int32_t;
@@ -22,8 +21,7 @@ use std::os;
 use std::ptr::{null_mut, read};
 use std::string::raw::from_buf;
 
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
@@ -50,8 +48,7 @@ pub struct c_passwd {
     pub pw_shell:   *const c_char,
 }
 
-#[cfg(target_os = "macos")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
 pub struct utsname {
     pub sysname: [c_char, ..256],
@@ -170,8 +167,7 @@ pub fn get_group_list(name: *const c_char, gid: gid_t) -> Vec<gid_t> {
     groups
 }
 
-#[cfg(target_os = "linux")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 #[inline(always)]
 unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut gid_t, grcnt: *mut c_int) -> c_int {
     getgrouplist(name, gid, groups, grcnt)
