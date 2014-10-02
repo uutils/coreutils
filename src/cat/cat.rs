@@ -221,16 +221,16 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     }
                 } else if show_nonprint {
                     let byte = match byte {
-                        128 .. 255 => {
+                        128 ... 255 => {
                             writer.write_str("M-").unwrap();
                             byte - 128
                         },
                         _ => byte,
                     };
                     match byte {
-                        0 .. 31 => writer.write(['^' as u8, byte + 64]),
-                        127     => writer.write(['^' as u8, byte - 64]),
-                        _       => writer.write_u8(byte),
+                        0 ... 31 => writer.write(['^' as u8, byte + 64]),
+                        127      => writer.write(['^' as u8, byte - 64]),
+                        _        => writer.write_u8(byte),
                     }
                 } else {
                     writer.write_u8(byte)
