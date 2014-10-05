@@ -66,13 +66,13 @@ fn sysv_sum(mut reader: Box<Reader>) -> (uint, u16) {
 }
 
 fn open(name: &str) -> IoResult<Box<Reader>> {
-	match name {
-		"-" => Ok(box stdin_raw() as Box<Reader>),
-		_ => {
-			let f = try!(File::open(&Path::new(name)));
-			Ok(box f as Box<Reader>)
-		}
-	}
+    match name {
+        "-" => Ok(box stdin_raw() as Box<Reader>),
+        _ => {
+            let f = try!(File::open(&Path::new(name)));
+            Ok(box f as Box<Reader>)
+        }
+    }
 }
 
 pub fn uumain(args: Vec<String>) -> int {

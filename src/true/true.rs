@@ -10,5 +10,5 @@
  */
 
 pub fn uumain(_: Vec<String>) -> int {
-	0
+    0
 }
