@@ -85,77 +85,86 @@ static VERSION: &'static str = "1.0.0";
 fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
     let mut map = HashMap::new();
 
-    match true { #[cfg(feature="base64")]   _ => { map.insert("base64", base64::uumain); } #[cfg(not(feature="base64"))] _ => () };
-    match true { #[cfg(feature="basename")] _ => { map.insert("basename", basename::uumain); } #[cfg(not(feature="basename"))] _ => () };
-    match true { #[cfg(feature="cat")]	    _ => { map.insert("cat", cat::uumain); } #[cfg(not(feature="cat"))] _ => () };
-    match true { #[cfg(feature="chroot")]	_ => { map.insert("chroot", chroot::uumain); } #[cfg(not(feature="chroot"))] _ => () };
-    match true { #[cfg(feature="cksum")]	_ => { map.insert("cksum", cksum::uumain); } #[cfg(not(feature="cksum"))] _ => () };
-    match true { #[cfg(feature="comm")]	    _ => { map.insert("comm", comm::uumain); } #[cfg(not(feature="comm"))] _ => () };
-    match true { #[cfg(feature="cp")]	    _ => { map.insert("cp", cp::uumain); } #[cfg(not(feature="cp"))] _ => () };
-    match true { #[cfg(feature="cut")]	    _ => { map.insert("cut", cut::uumain); } #[cfg(not(feature="cut"))] _ => () };
-    match true { #[cfg(feature="dirname")]	_ => { map.insert("dirname", dirname::uumain); } #[cfg(not(feature="dirname"))] _ => () };
-    match true { #[cfg(feature="du")]	    _ => { map.insert("du", du::uumain); } #[cfg(not(feature="du"))] _ => () };
-    match true { #[cfg(feature="echo")]	    _ => { map.insert("echo", echo::uumain); } #[cfg(not(feature="echo"))] _ => () };
-    match true { #[cfg(feature="env")]	    _ => { map.insert("env", env::uumain); } #[cfg(not(feature="env"))] _ => () };
-    match true { #[cfg(feature="expand")]	_ => { map.insert("expand", expand::uumain); } #[cfg(not(feature="expand"))] _ => () };
-    match true { #[cfg(feature="factor")]	_ => { map.insert("factor", factor::uumain); } #[cfg(not(feature="factor"))] _ => () };
-    match true { #[cfg(feature="false")]	_ => { map.insert("false", uufalse::uumain); } #[cfg(not(feature="false"))] _ => () };
-    match true { #[cfg(feature="fmt")]	    _ => { map.insert("fmt", fmt::uumain); } #[cfg(not(feature="fmt"))] _ => () };
-    match true { #[cfg(feature="fold")]	    _ => { map.insert("fold", fold::uumain); } #[cfg(not(feature="fold"))] _ => () };
-    match true { #[cfg(feature="groups")]	_ => { map.insert("groups", groups::uumain); } #[cfg(not(feature="groups"))] _ => () };
-    match true { #[cfg(feature="hashsum")]	_ => {
-        map.insert("hashsum", hashsum::uumain);
-        map.insert("md5sum", hashsum::uumain);
-        map.insert("sha1sum", hashsum::uumain);
-        map.insert("sha224sum", hashsum::uumain);
-        map.insert("sha256sum", hashsum::uumain);
-        map.insert("sha384sum", hashsum::uumain);
-        map.insert("sha512sum", hashsum::uumain);
-    } #[cfg(not(feature="hashsum"))] _ => ()};
-    match true { #[cfg(feature="head")]	    _ => { map.insert("head", head::uumain); } #[cfg(not(feature="head"))] _ => () };
-    match true { #[cfg(feature="hostid")]	_ => { map.insert("hostid", hostid::uumain); } #[cfg(not(feature="hostid"))] _ => () };
-    match true { #[cfg(feature="hostname")]	_ => { map.insert("hostname", hostname::uumain); } #[cfg(not(feature="hostname"))] _ => () };
-    match true { #[cfg(feature="id")]	    _ => { map.insert("id", id::uumain); } #[cfg(not(feature="id"))] _ => () };
-    match true { #[cfg(feature="kill")]	    _ => { map.insert("kill", kill::uumain); } #[cfg(not(feature="kill"))] _ => () };
-    match true { #[cfg(feature="link")]	    _ => { map.insert("link", link::uumain); } #[cfg(not(feature="link"))] _ => () };
-    match true { #[cfg(feature="logname")]	_ => { map.insert("logname", logname::uumain); } #[cfg(not(feature="logname"))] _ => () };
-    match true { #[cfg(feature="mkdir")]	_ => { map.insert("mkdir", mkdir::uumain); } #[cfg(not(feature="mkdir"))] _ => () };
-    match true { #[cfg(feature="mkfifo")]	_ => { map.insert("mkfifo", mkfifo::uumain); } #[cfg(not(feature="mkfifo"))] _ => () };
-    match true { #[cfg(feature="nl")]	    _ => { map.insert("nl", nl::uumain); } #[cfg(not(feature="nl"))] _ => () };
-    match true { #[cfg(feature="nohup")]	_ => { map.insert("nohup", nohup::uumain); } #[cfg(not(feature="nohup"))] _ => () };
-    match true { #[cfg(feature="paste")]	_ => { map.insert("paste", paste::uumain); } #[cfg(not(feature="paste"))] _ => () };
-    match true { #[cfg(feature="printenv")]	_ => { map.insert("printenv", printenv::uumain); } #[cfg(not(feature="printenv"))] _ => () };
-    match true { #[cfg(feature="pwd")]	    _ => { map.insert("pwd", pwd::uumain); } #[cfg(not(feature="pwd"))] _ => () };
-    match true { #[cfg(feature="realpath")]	_ => { map.insert("realpath", realpath::uumain); } #[cfg(not(feature="realpath"))] _ => () };
-    match true { #[cfg(feature="relpath")]	_ => { map.insert("relpath", relpath::uumain); } #[cfg(not(feature="relpath"))] _ => () };
-    match true { #[cfg(feature="rm")]	    _ => { map.insert("rm", rm::uumain); } #[cfg(not(feature="rm"))] _ => () };
-    match true { #[cfg(feature="rmdir")]	_ => { map.insert("rmdir", rmdir::uumain); } #[cfg(not(feature="rmdir"))] _ => () };
-    match true { #[cfg(feature="seq")]	    _ => { map.insert("seq", seq::uumain); } #[cfg(not(feature="seq"))] _ => () };
-    match true { #[cfg(feature="shuf")]	    _ => { map.insert("shuf", shuf::uumain); } #[cfg(not(feature="shuf"))] _ => () };
-    match true { #[cfg(feature="sleep")]	_ => { map.insert("sleep", sleep::uumain); } #[cfg(not(feature="sleep"))] _ => () };
-    match true { #[cfg(feature="split")]	_ => { map.insert("split", split::uumain); } #[cfg(not(feature="split"))] _ => () };
-    match true { #[cfg(feature="sum")]	    _ => { map.insert("sum", sum::uumain); } #[cfg(not(feature="sum"))] _ => () };
-    match true { #[cfg(feature="sync")]	    _ => { map.insert("sync", uusync::uumain); } #[cfg(not(feature="sync"))] _ => () };
-    match true { #[cfg(feature="tac")]	    _ => { map.insert("tac", tac::uumain); } #[cfg(not(feature="tac"))] _ => () };
-    match true { #[cfg(feature="tail")]	    _ => { map.insert("tail", tail::uumain); } #[cfg(not(feature="tail"))] _ => () };
-    match true { #[cfg(feature="tee")]	    _ => { map.insert("tee", tee::uumain); } #[cfg(not(feature="tee"))] _ => () };
-    match true { #[cfg(feature="test")]	    _ => { map.insert("test", uutest::uumain); } #[cfg(not(feature="test"))] _ => () };
-    match true { #[cfg(feature="timeout")]	_ => { map.insert("timeout", timeout::uumain); } #[cfg(not(feature="timeout"))] _ => () };
-    match true { #[cfg(feature="touch")]	_ => { map.insert("touch", touch::uumain); } #[cfg(not(feature="touch"))] _ => () };
-    match true { #[cfg(feature="tr")]	    _ => { map.insert("tr", tr::uumain); } #[cfg(not(feature="tr"))] _ => () };
-    match true { #[cfg(feature="true")]	    _ => { map.insert("true", uutrue::uumain); } #[cfg(not(feature="true"))] _ => () };
-    match true { #[cfg(feature="truncate")]	_ => { map.insert("truncate", truncate::uumain); } #[cfg(not(feature="truncate"))] _ => () };
-    match true { #[cfg(feature="tsort")]	_ => { map.insert("tsort", tsort::uumain); } #[cfg(not(feature="tsort"))] _ => () };
-    match true { #[cfg(feature="tty")]	    _ => { map.insert("tty", tty::uumain); } #[cfg(not(feature="tty"))] _ => () };
-    match true { #[cfg(feature="uname")]	_ => { map.insert("uname", uname::uumain); } #[cfg(not(feature="uname"))] _ => () };
-    match true { #[cfg(feature="unexpand")]	_ => { map.insert("unexpand", unexpand::uumain); } #[cfg(not(feature="unexpand"))] _ => () };
-    match true { #[cfg(feature="uniq")]	    _ => { map.insert("uniq", uniq::uumain); } #[cfg(not(feature="uniq"))] _ => () };
-    match true { #[cfg(feature="unlink")]	_ => { map.insert("unlink", unlink::uumain); } #[cfg(not(feature="unlink"))] _ => () };
-    match true { #[cfg(feature="uptime")]	_ => { map.insert("uptime", uptime::uumain); } #[cfg(not(feature="uptime"))] _ => () };
-    match true { #[cfg(feature="users")]	_ => { map.insert("users", users::uumain); } #[cfg(not(feature="users"))] _ => () };
-    match true { #[cfg(feature="wc")]	    _ => { map.insert("wc", wc::uumain); } #[cfg(not(feature="wc"))] _ => () };
-    match true { #[cfg(feature="whoami")]	_ => { map.insert("whoami", whoami::uumain); } #[cfg(not(feature="whoami"))] _ => () };
-    match true { #[cfg(feature="yes")]	    _ => { map.insert("yes", yes::uumain); } #[cfg(not(feature="yes"))] _ => () };
+    macro_rules! add_util(
+        ($guard:meta, $util:expr, $crte:ident) => ( 
+            match true {
+                #[cfg($guard)]
+                _ => { map.insert($util, $crte::uumain);} 
+                #[cfg(not($guard))]
+                _ => ()
+            }
+        )
+    )
+
+    add_util!(feature="base64", "base64", base64);
+    add_util!(feature="basename", "basename", basename);
+    add_util!(feature="cat", "cat", cat);
+    add_util!(feature="chroot", "chroot", chroot);
+    add_util!(feature="cksum", "cksum", cksum);
+    add_util!(feature="comm", "comm", comm);
+    add_util!(feature="cp", "cp", cp);
+    add_util!(feature="cut", "cut", cut);
+    add_util!(feature="dirname", "dirname", dirname);
+    add_util!(feature="du", "du", du);
+    add_util!(feature="echo", "echo", echo);
+    add_util!(feature="env", "env", env);
+    add_util!(feature="expand", "expand", expand);
+    add_util!(feature="factor", "factor", factor);
+    add_util!(feature="false", "false", uufalse);
+    add_util!(feature="fmt", "fmt", fmt);
+    add_util!(feature="fold", "fold", fold);
+    add_util!(feature="groups", "groups", groups);
+    add_util!(feature="hashsum", "hashsum", hashsum);
+    add_util!(feature="hashsum", "md5sum", hashsum);
+    add_util!(feature="hashsum", "sha1sum", hashsum);
+    add_util!(feature="hashsum", "sha224sum", hashsum);
+    add_util!(feature="hashsum", "sha256sum", hashsum);
+    add_util!(feature="hashsum", "sha384sum", hashsum);
+    add_util!(feature="hashsum", "sha512sum", hashsum);
+    add_util!(feature="head", "head", head);
+    add_util!(feature="hostid", "hostid", hostid);
+    add_util!(feature="hostname", "hostname", hostname);
+    add_util!(feature="id", "id", id);
+    add_util!(feature="kill", "kill", kill);
+    add_util!(feature="link", "link", link);
+    add_util!(feature="logname", "logname", logname);
+    add_util!(feature="mkdir", "mkdir", mkdir);
+    add_util!(feature="mkfifo", "mkfifo", mkfifo);
+    add_util!(feature="nl", "nl", nl);
+    add_util!(feature="nohup", "nohup", nohup);
+    add_util!(feature="paste", "paste", paste);
+    add_util!(feature="printenv", "printenv", printenv);
+    add_util!(feature="pwd", "pwd", pwd);
+    add_util!(feature="realpath", "realpath", realpath);
+    add_util!(feature="relpath", "relpath", relpath);
+    add_util!(feature="rm", "rm", rm);
+    add_util!(feature="rmdir", "rmdir", rmdir);
+    add_util!(feature="seq", "seq", seq);
+    add_util!(feature="shuf", "shuf", shuf);
+    add_util!(feature="sleep", "sleep", sleep);
+    add_util!(feature="split", "split", split);
+    add_util!(feature="sum", "sum", sum);
+    add_util!(feature="sync", "sync", uusync);
+    add_util!(feature="tac", "tac", tac);
+    add_util!(feature="tail", "tail", tail);
+    add_util!(feature="tee", "tee", tee);
+    add_util!(feature="test", "test", uutest);
+    add_util!(feature="timeout", "timeout", timeout);
+    add_util!(feature="touch", "touch", touch);
+    add_util!(feature="tr", "tr", tr);
+    add_util!(feature="true", "true", uutrue);
+    add_util!(feature="truncate", "truncate", truncate);
+    add_util!(feature="tsort", "tsort", tsort);
+    add_util!(feature="tty", "tty", tty);
+    add_util!(feature="uname", "uname", uname);
+    add_util!(feature="unexpand", "unexpand", unexpand);
+    add_util!(feature="uniq", "uniq", uniq);
+    add_util!(feature="unlink", "unlink", unlink);
+    add_util!(feature="uptime", "uptime", uptime);
+    add_util!(feature="users", "users", users);
+    add_util!(feature="wc", "wc", wc);
+    add_util!(feature="whoami", "whoami", whoami);
+    add_util!(feature="yes", "yes", yes);
 
     map
 }
