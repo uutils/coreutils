@@ -38,7 +38,15 @@ pub fn uumain(_: Vec<String>) -> int {
         },
         _ => args.slice(1, args.len()),
     };
-    1 - dispatch(args) as int
+    let rv = match args.len() {
+        0 => false,
+        1 => one(args),
+        2 => two(args),
+        3 => three(args),
+        4 => four(args),
+        _ => return 2,
+    };
+    1 - rv as int
 }
 
 fn one(args: &[&[u8]]) -> bool {
@@ -80,8 +88,6 @@ fn three(args: &[&[u8]]) -> bool {
         b"-ge" => integers(args[0], args[2], GreaterEqual),
         b"-lt" => integers(args[0], args[2], Less),
         b"-le" => integers(args[0], args[2], LessEqual),
-        b"-a" => one(args.slice_to(1)) && one(args.slice_from(2)),
-        b"-o" => one(args.slice_to(1)) || one(args.slice_from(2)),
         _ => match args[0] {
             b"!" => !two(args.slice_from(1)),
             _ => false,
@@ -90,18 +96,9 @@ fn three(args: &[&[u8]]) -> bool {
 }
 
 fn four(args: &[&[u8]]) -> bool {
-    let (val, len) = match args[0] {
-        b"!" => (!three(args.slice_from(1)), 4),
-        _ => (three(args), 3)
-    };
-    if len < args.len() {
-        match args[len] {
-            b"-a" => val && dispatch(args.slice_from(len + 1)),
-            b"-o" => val || dispatch(args.slice_from(len + 1)),
-            _ => false
-        }
-    } else {
-        val
+    match args[0] {
+        b"!" => !three(args.slice_from(1)),
+        _ => false,
     }
 }
 
@@ -137,16 +134,6 @@ fn isatty(fd: &[u8]) -> bool {
     use libc::{isatty};
     from_utf8(fd).and_then(|s| from_str(s))
             .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
-}
-
-fn dispatch(args: &[&[u8]]) -> bool {
-    match args.len() {
-        0 => false,
-        1 => one(args),
-        2 => two(args),
-        3 => three(args),
-        _ => four(args)
-    }
 }
 
 #[deriving(Eq, PartialEq)]
@@ -255,3 +242,4 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         Executable       => false, // TODO
     }
 }
+
