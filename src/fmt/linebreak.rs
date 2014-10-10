@@ -334,14 +334,14 @@ fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<uint>) -> Vec<(&
 }
 
 // "infinite" badness is more like (1+BAD_INFTY)^2 because of how demerits are computed
-static BAD_INFTY: i64 = 10000000;
-static BAD_INFTY_SQ: i64 = BAD_INFTY * BAD_INFTY;
+const BAD_INFTY: i64 = 10000000;
+const BAD_INFTY_SQ: i64 = BAD_INFTY * BAD_INFTY;
 // badness = BAD_MULT * abs(r) ^ 3
-static BAD_MULT: f32 = 100.0;
+const BAD_MULT: f32 = 100.0;
 // DR_MULT is multiplier for delta-R between lines
-static DR_MULT: f32 = 600.0;
+const DR_MULT: f32 = 600.0;
 // DL_MULT is penalty multiplier for short words at end of line
-static DL_MULT: f32 = 300.0;
+const DL_MULT: f32 = 300.0;
 
 #[inline(always)]
 fn compute_demerits(delta_len: int, stretch: int, wlen: int, prev_rat: f32) -> (i64, f32) {

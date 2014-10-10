@@ -159,9 +159,9 @@ fn encode(input: &mut Reader, line_wrap: uint) {
     // However, since GNU base64 outputs only LF (presumably because that is
     // the standard UNIX line ending), we strip CRs from the output to maintain
     // compatibility.
-    let final = encoded.replace("\r", "");
+    let output = encoded.replace("\r", "");
 
-    println(final.as_slice());
+    println(output.as_slice());
 }
 
 fn help(progname: &str, usage: &str) {
