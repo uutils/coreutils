@@ -129,6 +129,7 @@ INSTALLEES  := \
 # Programs with usable tests
 TEST_PROGS  := \
   cat \
+  cp \
   mkdir \
   nl \
   seq \
