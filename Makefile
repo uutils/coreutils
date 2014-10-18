@@ -130,6 +130,7 @@ INSTALLEES  := \
 # Programs with usable tests
 TEST_PROGS  := \
   cat \
+  cp \
   mkdir \
   nl \
   seq \
@@ -209,7 +210,7 @@ $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 
 -include $(BUILDDIR)/uutils.d
 $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS)
-	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(BUILD)
+	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
 	$(RUSTC) $(RUSTCBINFLAGS) -L $(BUILDDIR)/ --dep-info $@.d $(BUILDDIR)/gen/uutils.rs -o $@
 	$(if $(ENABLE_STRIP),strip $@)
 

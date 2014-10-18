@@ -48,7 +48,7 @@ mod platform {
 mod platform {
     pub use super::libc;
     use std::mem;
-    use std::str;
+    use std::string;
 
     extern "system" {
         pub fn GetUserNameA(out: *mut libc::c_char, len: *mut libc::uint32_t) -> libc::uint8_t;
@@ -60,7 +60,7 @@ mod platform {
         if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }
-        str::raw::from_c_str(buffer.as_ptr())
+        string::raw::from_buf(buffer.as_ptr() as *const u8)
     }
 }
 

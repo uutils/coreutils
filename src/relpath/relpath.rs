@@ -64,19 +64,19 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    let mut suffixPos = 0;
+    let mut suffix_pos = 0;
     absfrom.components()
         .zip(absto.components())
         .take_while(
             |&(f, t)| if f == t {
-                suffixPos += 1; true
+                suffix_pos += 1; true
             } else {
                 false
             }).last();
 
     let mut result = Path::new("");
-    absfrom.components().skip(suffixPos).map(|_| result.push("..")).last();
-    absto.components().skip(suffixPos).map(|x| result.push(x)).last();
+    absfrom.components().skip(suffix_pos).map(|_| result.push("..")).last();
+    absto.components().skip(suffix_pos).map(|x| result.push(x)).last();
 
     println!("{}", result.display());
     0

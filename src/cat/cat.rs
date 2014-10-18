@@ -221,16 +221,16 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     }
                 } else if show_nonprint {
                     let byte = match byte {
-                        128 .. 255 => {
+                        128 ... 255 => {
                             writer.write_str("M-").unwrap();
                             byte - 128
                         },
                         _ => byte,
                     };
                     match byte {
-                        0 .. 31 => writer.write(['^' as u8, byte + 64]),
-                        127     => writer.write(['^' as u8, byte - 64]),
-                        _       => writer.write_u8(byte),
+                        0 ... 31 => writer.write(['^' as u8, byte + 64]),
+                        127      => writer.write(['^' as u8, byte - 64]),
+                        _        => writer.write_u8(byte),
                     }
                 } else {
                     writer.write_u8(byte)
@@ -333,7 +333,7 @@ fn fail() -> ! {
 
 impl<'a, W: Writer> Writer for UnsafeWriter<'a, W> {
     fn write(&mut self, buf: &[u8]) -> IoResult<()> {
-        let dst = self.buf.mut_slice_from(self.pos);
+        let dst = self.buf.slice_from_mut(self.pos);
         if buf.len() > dst.len() {
             fail();
         }

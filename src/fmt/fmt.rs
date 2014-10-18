@@ -200,9 +200,9 @@ pub fn uumain(args: Vec<String>) -> int {
                 }
                 Ok(f) => f
             };
-        let mut pStream = ParagraphStream::new(&fmt_opts, &mut fp);
-        for paraResult in pStream {
-            match paraResult {
+        let mut p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
+        for para_result in p_stream {
+            match para_result {
                 Err(s) => silent_unwrap!(ostream.write(s.as_bytes())),
                 Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
             }
@@ -221,7 +221,7 @@ fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
 
 // uniform interface for opening files
 // since we don't need seeking
-type FileOrStdReader = BufferedReader<Box<Reader>>;
+type FileOrStdReader = BufferedReader<Box<Reader+'static>>;
 
 fn open_file(filename: &str) -> IoResult<FileOrStdReader> {
     if filename == "-" {

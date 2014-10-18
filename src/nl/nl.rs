@@ -179,7 +179,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
         if l.as_slice().chars().rev().next().unwrap() == '\n' {
-            l.pop_char();
+            l.pop();
         }
         // Next we iterate through the individual chars to see if this
         // is one of the special lines starting a new "section" in the

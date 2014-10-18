@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#![allow(uppercase_variables)]
+#![allow(non_snake_case)]
 #![feature(macro_rules)]
 
 extern crate getopts;
@@ -56,7 +56,7 @@ fn du(path: &Path, mut my_stat: Stat,
             }
         };
 
-        for f in read.move_iter() {
+        for f in read.into_iter() {
             let this_stat = Stat{path: f.clone(), fstat: safe_unwrap!(fs::lstat(&f))};
             if this_stat.fstat.kind == TypeDirectory {
                 let oa_clone = options.clone();
@@ -71,8 +71,8 @@ fn du(path: &Path, mut my_stat: Stat,
         }
     }
 
-    for future in futures.mut_iter() {
-        for stat in future.get().move_iter().rev() {
+    for future in futures.iter_mut() {
+        for stat in future.get().into_iter().rev() {
             if !options.separate_dirs && stat.path.dir_path() == my_stat.path {
                 my_stat.fstat.size += stat.fstat.size;
                 my_stat.fstat.unstable.blocks += stat.fstat.unstable.blocks;
@@ -310,10 +310,10 @@ Try '{} --help' for more information.", s, program);
     };
 
     let mut grand_total = 0;
-    for path_str in strs.move_iter() {
+    for path_str in strs.into_iter() {
         let path = Path::new(path_str);
         let stat = safe_unwrap!(fs::lstat(&path));
-        let iter = du(&path, Stat{path: path.clone(), fstat: stat}, options_arc.clone(), 0).move_iter();
+        let iter = du(&path, Stat{path: path.clone(), fstat: stat}, options_arc.clone(), 0).into_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat) in iter.enumerate() {

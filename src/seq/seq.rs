@@ -37,7 +37,7 @@ fn escape_sequences(s: &str) -> String {
 fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, int> {
     let mut seq_args = vec!();
     let program = args[0].clone();
-    let mut iter = args.move_iter().skip(1);
+    let mut iter = args.into_iter().skip(1);
     loop {
         match iter.next() {
             Some(arg) => match arg.as_slice() {
@@ -65,7 +65,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                 },
                 "-w" | "--widths" => options.widths = true,
                 "--" => {
-                    seq_args.push_all_move(iter.collect());
+                    seq_args.extend(iter);
                     break;
                 },
                 _ => {

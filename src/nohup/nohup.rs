@@ -41,12 +41,10 @@ fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(s: &mut T) {
     }
 }
 
-#[cfg(target_os = "linux")]
-#[cfg(target_os = "freebsd")]
-fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
-#[cfg(target_os = "linux")]
-#[cfg(target_os = "freebsd")]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(_: &mut T) {}
 
 pub fn uumain(args: Vec<String>) -> int {

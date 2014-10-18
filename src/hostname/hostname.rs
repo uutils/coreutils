@@ -31,7 +31,7 @@ extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 extern {
     fn sethostname(name: *const libc::c_char, namelen: libc::c_int) -> libc::c_int;
 }
@@ -147,7 +147,7 @@ fn xgethostname() -> String {
     str::from_utf8(name.slice_to(last_char)).unwrap().to_string()
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn xsethostname(name: &str) {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 

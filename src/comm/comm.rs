@@ -40,7 +40,7 @@ fn mkdelim(col: uint, opts: &getopts::Matches) -> String {
 fn ensure_nl(line: String) -> String {
     match line.as_slice().chars().last() {
         Some('\n') => line,
-        _ => line.append("\n"),
+        _ => line + "\n",
     }
 }
 

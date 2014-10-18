@@ -15,6 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{File, Open, ReadWrite, fs};
+use std::io::fs::PathExtensions;
 use std::u64;
 
 #[path = "../common/util.rs"]
@@ -61,20 +62,20 @@ pub fn uumain(args: Vec<String>) -> int {
         print!("
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
-	'KB' =>           1000 (kilobytes)
-	'K'  =>           1024 (kibibytes)
-	'MB' =>      1000*1000 (megabytes)
-	'M'  =>      1024*1024 (mebibytes)
-	'GB' => 1000*1000*1000 (gigabytes)
-	'G'  => 1024*1024*1024 (gibibytes)
+    'KB' =>           1000 (kilobytes)
+    'K'  =>           1024 (kibibytes)
+    'MB' =>      1000*1000 (megabytes)
+    'M'  =>      1024*1024 (mebibytes)
+    'GB' => 1000*1000*1000 (gigabytes)
+    'G'  => 1024*1024*1024 (gibibytes)
 SIZE may also be prefixed by one of the following to adjust the size of each
 file based on its current size:
-	'+'  => extend by
-	'-'  => reduce by
-	'<'  => at most
-	'>'  => at least
-	'/'  => round down to multiple of
-	'%'  => round up to multiple of
+    '+'  => extend by
+    '-'  => reduce by
+    '<'  => at most
+    '>'  => at least
+    '/'  => round down to multiple of
+    '%'  => round up to multiple of
 ");
     } else if matches.opt_present("version") {
         println!("truncate 1.0.0");

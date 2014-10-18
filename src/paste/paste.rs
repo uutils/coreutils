@@ -57,7 +57,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
-    let mut files: Vec<io::BufferedReader<Box<Reader>>> = filenames.move_iter().map(|name|
+    let mut files: Vec<io::BufferedReader<Box<Reader>>> = filenames.into_iter().map(|name|
         io::BufferedReader::new(
             if name.as_slice() == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>
@@ -69,7 +69,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
     let delimiters: Vec<String> = delimiters.chars().map(|x| x.to_string()).collect();
     let mut delim_count = 0;
     if serial {
-        for file in files.mut_iter() {
+        for file in files.iter_mut() {
             let mut output = String::new();
             loop {
                 match file.read_line() {
@@ -92,7 +92,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
         loop {
             let mut output = "".to_string();
             let mut eof_count = 0;
-            for (i, file) in files.mut_iter().enumerate() {
+            for (i, file) in files.iter_mut().enumerate() {
                 if eof[i] {
                     eof_count += 1;
                 } else {

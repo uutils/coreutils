@@ -51,17 +51,20 @@ mod audit {
     pub type au_emod_t  = c_uint;
     pub type au_class_t = c_int;
 
+    #[repr(C)]
     pub struct au_mask {
         pub am_success: c_uint,
         pub am_failure: c_uint
     }
     pub type au_mask_t = au_mask;
 
+    #[repr(C)]
     pub struct au_tid_addr {
         pub port: dev_t,
     }
     pub type au_tid_addr_t = au_tid_addr;
 
+    #[repr(C)]
     pub struct c_auditinfo_addr {
         pub ai_auid: au_id_t,           /* Audit user ID */
         pub ai_mask: au_mask_t,         /* Audit masks. */
@@ -248,7 +251,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn pline(possible_pw: Option<c_passwd>) {
     let pw = if possible_pw.is_none() {
         unsafe { read(getpwuid(getuid())) }

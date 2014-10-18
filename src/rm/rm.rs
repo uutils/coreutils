@@ -15,6 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{print, stdin, stdio, fs, BufferedReader};
+use std::io::fs::PathExtensions;
 
 #[path = "../common/util.rs"]
 mod util;

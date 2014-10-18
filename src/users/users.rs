@@ -41,7 +41,13 @@ extern {
     fn setutxent();
     fn endutxent();
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn utmpxname(file: *const libc::c_char) -> libc::c_int;
+}
+
+#[cfg(target_os = "freebsd")]
+unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
+    0
 }
 
 static NAME: &'static str = "users";
