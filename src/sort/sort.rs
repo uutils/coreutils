@@ -15,6 +15,9 @@ use std::io::{print, File, BufferedReader};
 use std::io::stdio::{stdin_raw, stderr};
 use std::str::Chars;
 
+#[path = "../common/util.rs"]
+mod util;
+
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
@@ -28,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => fail!("Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
         println!("Usage: {0:s} [OPTION]... [FILE]...", program);
@@ -143,7 +146,7 @@ fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
     match File::open(&std::path::Path::new(path)) {
         Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
-            (writeln!(stderr(), "sort: {0:s}: {1:s}", path, e.to_string())).unwrap();
+            show_error!("sort: {0:s}: {1:s}", path, e.to_string());
             None
         },
     }
