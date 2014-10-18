@@ -1,4 +1,5 @@
 #![crate_name = "sort"]
+#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,6 +18,9 @@ use std::str::Chars;
 
 #[path = "../common/util.rs"]
 mod util;
+
+static NAME: &'static str = "sort";
+static VERSION:  &'static str = "0.0.1";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
