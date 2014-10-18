@@ -12,6 +12,7 @@
 extern crate libc;
 extern crate num;
 
+use std::collections::HashMap;
 use std::os::{args_as_bytes};
 use std::str::{from_utf8};
 use num::bigint::{BigInt};
@@ -38,14 +39,20 @@ pub fn uumain(_: Vec<String>) -> int {
         },
         _ => args.slice(1, args.len()),
     };
-    1 - dispatch(args) as int
+    let mut error = false;
+    let retval = 1 - parse_expr(args, &mut error) as int;
+    if error {
+        2
+    } else {
+        retval
+    }
 }
 
 fn one(args: &[&[u8]]) -> bool {
     args[0].len() > 0
 }
 
-fn two(args: &[&[u8]]) -> bool {
+fn two(args: &[&[u8]], error: &mut bool) -> bool {
     match args[0] {
         b"!" => !one(args.slice_from(1)),
         b"-b" => path(args[1], BlockSpecial),
@@ -66,11 +73,14 @@ fn two(args: &[&[u8]]) -> bool {
         b"-w" => path(args[1], Writable),
         b"-x" => path(args[1], Executable),
         b"-z" => !one(args.slice_from(1)),
-        _ => false,
+        _ => {
+            *error = true;
+            false
+        }
     }
 }
 
-fn three(args: &[&[u8]]) -> bool {
+fn three(args: &[&[u8]], error: &mut bool) -> bool {
     match args[1] {
         b"=" => args[0] == args[2],
         b"!=" => args[0] != args[2],
@@ -80,28 +90,25 @@ fn three(args: &[&[u8]]) -> bool {
         b"-ge" => integers(args[0], args[2], GreaterEqual),
         b"-lt" => integers(args[0], args[2], Less),
         b"-le" => integers(args[0], args[2], LessEqual),
-        b"-a" => one(args.slice_to(1)) && one(args.slice_from(2)),
-        b"-o" => one(args.slice_to(1)) || one(args.slice_from(2)),
         _ => match args[0] {
-            b"!" => !two(args.slice_from(1)),
-            _ => false,
+            b"!" => !two(args.slice_from(1), error),
+            _ => {
+                *error = true;
+                false
+            }
         }
     }
 }
 
-fn four(args: &[&[u8]]) -> bool {
-    let (val, len) = match args[0] {
-        b"!" => (!three(args.slice_from(1)), 4),
-        _ => (three(args), 3)
-    };
-    if len < args.len() {
-        match args[len] {
-            b"-a" => val && dispatch(args.slice_from(len + 1)),
-            b"-o" => val || dispatch(args.slice_from(len + 1)),
-            _ => false
+fn four(args: &[&[u8]], error: &mut bool) -> bool {
+    match args[0] {
+        b"!" => {
+            !three(args.slice_from(1), error)
         }
-    } else {
-        val
+        _ => {
+            *error = true;
+            false
+        }
     }
 }
 
@@ -139,14 +146,161 @@ fn isatty(fd: &[u8]) -> bool {
             .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
 }
 
-fn dispatch(args: &[&[u8]]) -> bool {
-    match args.len() {
-        0 => false,
-        1 => one(args),
-        2 => two(args),
-        3 => three(args),
-        _ => four(args)
+fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
+    let (val, idx) = match args.len() {
+        0 => {
+            *error = true;
+            (false, 0)
+        }
+        1 => (one(*args), 1),
+        2 => dispatch_two(args, error),
+        3 => dispatch_three(args, error),
+        _ => dispatch_four(args, error)
+    };
+    *args = (*args).slice_from(idx);
+    val
+}
+
+fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+    let val = two(*args, error);
+    if *error {
+        *error = false;
+        (one(*args), 1)
+    } else {
+        (val, 2)
     }
+}
+
+fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+    let val = three(*args, error);
+    if *error {
+        *error = false;
+        dispatch_two(args, error)
+    } else {
+        (val, 3)
+    }
+}
+
+fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+    let val = four(*args, error);
+    if *error {
+        *error = false;
+        dispatch_three(args, error)
+    } else {
+        (val, 4)
+    }
+}
+
+enum Precedence {
+    Unknown = 0,
+    Paren,     // FIXME: this is useless (parentheses have not been implemented)
+    Or,
+    And,
+    BUnOp,
+    BinOp,
+    UnOp
+}
+
+fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
+    if args.len() == 0 {
+        false
+    } else {
+        let hashmap = setup_hashmap();
+        let lhs = dispatch(&mut args, error);
+
+        if args.len() > 0 {
+            parse_expr_helper(&hashmap, &mut args, lhs, Unknown, error)
+        } else {
+            lhs
+        }
+    }
+}
+
+fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
+                         args: &mut &[&'a [u8]],
+                         mut lhs: bool,
+                         min_prec: Precedence,
+                         error: &mut bool) -> bool {
+    let mut prec = *hashmap.find(&args[0]).unwrap_or_else(|| {
+        *error = true;
+        &min_prec
+    });
+    while !*error && args.len() > 0 && prec as uint >= min_prec as uint {
+        let op = args[0];
+        *args = (*args).slice_from(1);
+        let mut rhs = dispatch(args, error);
+        while args.len() > 0 {
+            let subprec = *hashmap.find(&args[0]).unwrap_or_else(|| {
+                *error = true;
+                &min_prec
+            });
+            if subprec as uint <= prec as uint || *error {
+                break;
+            }
+            rhs = parse_expr_helper(hashmap, args, rhs, subprec, error);
+        }
+        lhs = match prec {
+            UnOp | BUnOp => {
+                *error = true;
+                false
+            }
+            And => lhs && rhs,
+            Or => lhs || rhs,
+            BinOp => three(&[if lhs { b" " } else { b"" }, op, if rhs { b" " } else { b"" }], error),
+            Paren => unimplemented!(),  // TODO: implement parentheses
+            _ => unreachable!()
+        };
+        if args.len() > 0 {
+            prec = *hashmap.find(&args[0]).unwrap_or_else(|| {
+                *error = true;
+                &min_prec
+            });
+        }
+    }
+    lhs
+}
+
+#[inline]
+fn setup_hashmap<'a>() -> HashMap<&'a [u8], Precedence> {
+    let mut hashmap = HashMap::<&'a [u8], Precedence>::new();
+
+    hashmap.insert(b"-b", UnOp);
+    hashmap.insert(b"-c", UnOp);
+    hashmap.insert(b"-d", UnOp);
+    hashmap.insert(b"-e", UnOp);
+    hashmap.insert(b"-f", UnOp);
+    hashmap.insert(b"-g", UnOp);
+    hashmap.insert(b"-h", UnOp);
+    hashmap.insert(b"-L", UnOp);
+    hashmap.insert(b"-n", UnOp);
+    hashmap.insert(b"-p", UnOp);
+    hashmap.insert(b"-r", UnOp);
+    hashmap.insert(b"-S", UnOp);
+    hashmap.insert(b"-s", UnOp);
+    hashmap.insert(b"-t", UnOp);
+    hashmap.insert(b"-u", UnOp);
+    hashmap.insert(b"-w", UnOp);
+    hashmap.insert(b"-x", UnOp);
+    hashmap.insert(b"-z", UnOp);
+
+    hashmap.insert(b"=", BinOp);
+    hashmap.insert(b"!=", BinOp);
+    hashmap.insert(b"-eq", BinOp);
+    hashmap.insert(b"-ne", BinOp);
+    hashmap.insert(b"-gt", BinOp);
+    hashmap.insert(b"-ge", BinOp);
+    hashmap.insert(b"-lt", BinOp);
+    hashmap.insert(b"-le", BinOp);
+
+    hashmap.insert(b"!", BUnOp);
+
+    hashmap.insert(b"-a", And);
+    hashmap.insert(b"-o", Or);
+
+    hashmap.insert(b"(", Paren);
+    hashmap.insert(b")", Paren);
+
+    hashmap
 }
 
 #[deriving(Eq, PartialEq)]
