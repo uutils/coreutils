@@ -54,6 +54,7 @@ PROGS       := \
   link \
   hashsum \
   mkdir \
+  mv \
   nl \
   paste \
   printenv \
@@ -132,6 +133,7 @@ TEST_PROGS  := \
   cat \
   cp \
   mkdir \
+  mv \
   nl \
   seq \
   sort \

@@ -112,6 +112,10 @@ name = "mkdir"
 path = "mkdir/mkdir.rs"
 
 [[bin]]
+name = "mv"
+path = "mv/mv.rs"
+
+[[bin]]
 name = "mkfifo"
 path = "mkfifo/mkfifo.rs"
 
