@@ -213,9 +213,9 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(line.as_slice()) {
-                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lower(), caps.name("binary") == "*"),
+                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lowercase(), caps.name("binary") == "*"),
                     None => match bsd_re.captures(line.as_slice()) {
-                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lower(), true),
+                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lowercase(), true),
                         None => {
                             bad_format += 1;
                             if strict {
@@ -229,7 +229,7 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                     }
                 };
                 let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
-                    .as_slice().to_ascii().to_lower();
+                    .as_slice().to_ascii().to_lowercase();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
                         pipe_println!("{}: OK", ck_filename);

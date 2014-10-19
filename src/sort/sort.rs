@@ -10,10 +10,12 @@
  * file that was distributed with this source code.
  */
 
+#![allow(dead_code)]
+
 extern crate getopts;
 
 use std::io::{print, File, BufferedReader};
-use std::io::stdio::{stdin_raw, stderr};
+use std::io::stdio::stdin_raw;
 use std::str::Chars;
 
 #[path = "../common/util.rs"]
