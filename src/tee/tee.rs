@@ -152,5 +152,5 @@ fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
 }
 
 fn warn(message: &str) {
-    error!("{}: {}", os::args().get(0), message);
+    error!("{}: {}", os::args()[0], message);
 }
