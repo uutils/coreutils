@@ -137,6 +137,7 @@ TEST_PROGS  := \
   nl \
   seq \
   sort \
+  test \
   tr \
   truncate \
   unexpand
