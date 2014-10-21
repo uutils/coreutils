@@ -10,12 +10,10 @@
  */
 
 extern crate libc;
-extern crate num;
 
 use std::collections::HashMap;
 use std::os::{args_as_bytes};
 use std::str::{from_utf8};
-use num::bigint::{BigInt};
 
 static NAME: &'static str = "test";
 
@@ -126,7 +124,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
         (Some(a), Some(b)) => (a, b),
         _ => return false,
     };
-    let (a, b): (BigInt, BigInt) = match (from_str(a), from_str(b)) {
+    let (a, b): (i64, i64) = match (from_str(a), from_str(b)) {
         (Some(a), Some(b)) => (a, b),
         _ => return false,
     };
