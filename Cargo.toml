@@ -25,6 +25,7 @@ utils = [
 	"link",
 	"hashsum",
 	"mkdir",
+	"mv",
 	"nl",
 	"paste",
 	"printenv",
@@ -37,6 +38,7 @@ utils = [
 	"split",
 	"seq",
 	"shuf",
+	"sort",
 	"sum",
 	"sync",
 	"tac",
@@ -191,6 +193,10 @@ optional = true
 path = "src/mkfifo"
 optional = true
 
+[dependencies.mv]
+path = "src/mv"
+optional = true
+
 [dependencies.nl]
 path = "src/nl"
 optional = true
@@ -237,6 +243,10 @@ optional = true
 
 [dependencies.sleep]
 path = "src/sleep"
+optional = true
+
+[dependencies.sort]
+path = "src/sort"
 optional = true
 
 [dependencies.split]
