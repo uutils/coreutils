@@ -13,7 +13,7 @@
 
 extern crate getopts;
 
-use std::ascii::OwnedStrAsciiExt;
+use std::ascii::OwnedAsciiExt;
 use std::cmp::min;
 use std::from_str::FromStr;
 use std::io;
