@@ -3,87 +3,347 @@
 /*
  * This file is part of the uutils coreutils package.
  *
+ * (c) Orvar Segerström <orvarsegerstrom@gmail.com>
  * (c) Sokovikov Evgeniy  <skv-headless@yandex.ru>
  *
  * For the full copyright and license information, please view the LICENSE file
  * that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
+#![feature(macro_rules, if_let)]
 
 extern crate getopts;
 
-use std::io::fs;
-
+use std::io::{BufferedReader, IoResult, fs};
+use std::io::stdio::stdin_raw;
+use std::io::fs::PathExtensions;
+use std::path::GenericPath;
 use getopts::{
     getopts,
     optflag,
+    optflagopt,
+    optopt,
     usage,
 };
-
-static NAME: &'static str = "mv";
-static VERSION:  &'static str = "0.0.1";
 
 #[path = "../common/util.rs"]
 mod util;
 
-pub fn uumain(args: Vec<String>) -> int {
-    let opts = [
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit"),
-        ];
-    let matches = match getopts(args.tail(), opts) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
-    };
+static NAME: &'static str = "mv";
+static VERSION:  &'static str = "0.0.1";
 
-    let progname = &args[0];
-    let usage = usage("Move SOURCE to DEST", opts);
-
-    if matches.opt_present("version") {
-        println!("{}", VERSION);
-        return 0;
-    }
-
-    if matches.opt_present("help") {
-        help(progname.as_slice(), usage.as_slice());
-        return 0;
-    }
-
-    let source = if matches.free.len() < 1 {
-        println!("error: Missing SOURCE argument. Try --help.");
-        return 1;
-    } else {
-        Path::new(matches.free[0].as_slice())
-    };
-
-    let dest = if matches.free.len() < 2 {
-        println!("error: Missing DEST argument. Try --help.");
-        return 1;
-    } else {
-        Path::new(matches.free[1].as_slice())
-    };
-
-    mv(source, dest)
+pub struct Behaviour {
+    overwrite: OverwriteMode,
+    backup: BackupMode,
+    suffix: String,
+    update: bool,
+    target_dir: Option<String>,
+    no_target_dir: bool,
+    verbose: bool,
 }
 
-fn mv(source: Path, dest: Path) -> int {
-    let io_result = fs::rename(&source, &dest);
+#[deriving(Eq, PartialEq)]
+pub enum OverwriteMode {
+    NoClobber,
+    Interactive,
+    Force,
+}
 
-    if io_result.is_err() {
-        let err = io_result.unwrap_err();
-        println!("error: {:s}", err.to_string());
-        1
+#[deriving(Eq, PartialEq)]
+pub enum BackupMode {
+    NoBackup,
+    SimpleBackup,
+    NumberedBackup,
+    ExistingBackup,
+}
+
+pub fn uumain(args: Vec<String>) -> int {
+    let program = args[0].as_slice();
+    let opts = [
+        optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL"),
+        optflag("b", "", "like --backup but does not accept an argument"),
+        optflag("f", "force", "do not prompt before overwriting"),
+        optflag("i", "interactive", "prompt before override"),
+        optflag("n", "no-clobber", "do not overwrite an existing file"),
+        // I have yet to find a use-case (and thereby write a test) where this option is useful.
+        //optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
+        //                                        argument"),
+        optopt("S", "suffix", "override the usual backup suffix", "SUFFIX"),
+        optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY"),
+        optflag("T", "no-target-directory", "treat DEST as a normal file"),
+        optflag("u", "update", "move only when the SOURCE file is newer\n \
+                                  than the destination file or when the\n \
+                                  destination file is missing"),
+        optflag("v", "verbose", "explain what is being done"),
+        optflag("h", "help", "display this help and exit"),
+        optflag("V", "version", "output version information and exit"),
+    ];
+
+    let matches = match getopts(args.tail(), opts) {
+        Ok(m) => m,
+        Err(f) => {
+            show_error!("Invalid options\n{}", f);
+            return 1;
+        }
+    };
+    let usage = usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
+
+    /* This does not exactly match the GNU implementation:
+     * The GNU mv defaults to Force, but if more than one of the
+     * overwrite options are supplied, only the last takes effect.
+     * To default to no-clobber in that situation seems safer:
+     */
+    let overwrite_mode = if matches.opt_present("no-clobber") {
+        NoClobber
+    } else if matches.opt_present("interactive") {
+        Interactive
     } else {
-        0
+        Force
+    };
+
+    let backup_mode = if matches.opt_present("b") {
+        SimpleBackup
+    } else if matches.opt_present("backup") {
+        match matches.opt_str("backup") {
+            None => SimpleBackup,
+            Some(mode) => match mode.as_slice() {
+                "simple" | "never" => SimpleBackup,
+                "numbered" | "t"   => NumberedBackup,
+                "existing" | "nil" => ExistingBackup,
+                "none" | "off"     => NoBackup,
+                x => {
+                    show_error!("invalid argument ‘{}’ for ‘backup type’\n\
+                                Try 'mv --help' for more information.", x);
+                    return 1;
+                }
+            }
+        }
+    } else {
+        NoBackup
+    };
+
+    if overwrite_mode == NoClobber && backup_mode != NoBackup {
+        show_error!("options --backup and --no-clobber are mutually exclusive\n\
+                    Try 'mv --help' for more information.");
+        return 1;
     }
+
+    let backup_suffix = if matches.opt_present("suffix") {
+        match matches.opt_str("suffix") {
+            Some(x) => x,
+            None => {
+                show_error!("option '--suffix' requires an argument\n\
+                            Try 'mv --help' for more information.");
+                return 1;
+            }
+        }
+    } else {
+        "~".into_string()
+    };
+
+    if matches.opt_present("T") && matches.opt_present("t") {
+        show_error!("cannot combine --target-directory (-t) and --no-target-directory (-T)");
+        return 1;
+    }
+
+    let behaviour = Behaviour {
+        overwrite: overwrite_mode,
+        backup: backup_mode,
+        suffix: backup_suffix,
+        update: matches.opt_present("u"),
+        target_dir: matches.opt_str("t"),
+        no_target_dir: matches.opt_present("T"),
+        verbose: matches.opt_present("v"),
+    };
+
+    let string_to_path = |s: &String| { Path::new(s.as_slice()) };
+    let paths: Vec<Path> = matches.free.iter().map(string_to_path).collect();
+
+    if matches.opt_present("version") {
+        version();
+        0
+    } else if matches.opt_present("help") {
+        help(program.as_slice(), usage.as_slice());
+        0
+    } else {
+        exec(paths.as_slice(), behaviour)
+    }
+}
+
+fn version() {
+    println!("{} {}", NAME, VERSION);
 }
 
 fn help(progname: &str, usage: &str) {
     let msg = format!("Usage: {0} SOURCE DEST\n  \
-                         or:  {0} SOURCE... DIRECTORY\n  \
+                         or:  {0} SOURCE... DIRECTORY \
                        \n\
                        {1}", progname, usage);
     println!("{}", msg);
 }
 
+fn exec(files: &[Path], b: Behaviour) -> int {
+    match b.target_dir {
+        Some(ref name) => return move_files_into_dir(files, &Path::new(name.as_slice()), &b),
+        None => {}
+    }
+    match files {
+        [] | [_] => {
+            show_error!("missing file operand\n\
+                        Try 'mv --help' for more information.");
+            return 1;
+        },
+        [ref source, ref target] => {
+            if !source.exists() {
+                show_error!("cannot stat ‘{}’: No such file or directory", source.display());
+                return 1;
+            }
+
+            if target.is_dir() {
+                if b.no_target_dir {
+                    if !source.is_dir() {
+                        show_error!("cannot overwrite directory ‘{}’ with non-directory",
+                            target.display());
+                        return 1;
+                    }
+
+                    return match rename(source, target, &b) {
+                        Err(e) => {
+                            show_error!("{}", e);
+                            1
+                        },
+                        _ => 0
+                    }
+                }
+
+                return move_files_into_dir(&[source.clone()], target, &b);
+            }
+
+            match rename(source, target, &b) {
+                Err(e) => {
+                    show_error!("{}", e);
+                    return 1;
+                },
+                _ => {}
+            }
+        }
+        fs => {
+            if b.no_target_dir {
+                show_error!("mv: extra operand ‘{}’\n\
+                            Try 'mv --help' for more information.", fs[2].display());
+                return 1;
+            }
+            let target_dir = fs.last().unwrap();
+            move_files_into_dir(fs.init(), target_dir, &b);
+        }
+    }
+    0
+}
+
+fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> int {
+    if !target_dir.is_dir() {
+        show_error!("target ‘{}’ is not a directory", target_dir.display());
+        return 1;
+    }
+
+    let mut all_successful = true;
+    for sourcepath in files.iter() {
+        let targetpath = match sourcepath.filename_str() {
+            Some(name) => target_dir.join(name),
+            None => {
+                show_error!("cannot stat ‘{}’: No such file or directory",
+                            sourcepath.display());
+
+                all_successful = false;
+                continue;
+            }
+        };
+
+        match rename(sourcepath, &targetpath, b) {
+            Err(e) => {
+                show_error!("mv: cannot move ‘{}’ to ‘{}’: {}",
+                            sourcepath.display(), targetpath.display(), e);
+                all_successful = false;
+            },
+            _ => {}
+        }
+    };
+    if all_successful { 0 } else { 1 }
+}
+
+fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
+    let mut backup_path = None;
+
+    if to.is_file() {
+        match b.overwrite {
+            NoClobber => return Ok(()),
+            Interactive => {
+                print!("{}: overwrite ‘{}’? ", NAME, to.display());
+                if !read_yes() {
+                    return Ok(());
+                }
+            },
+            Force => {}
+        };
+
+        backup_path = match b.backup {
+            NoBackup => None,
+            SimpleBackup => Some(simple_backup_path(to, &b.suffix)),
+            NumberedBackup => Some(numbered_backup_path(to)),
+            ExistingBackup => Some(existing_backup_path(to, &b.suffix))
+        };
+        if let Some(ref p) = backup_path {
+            try!(fs::rename(to, p));
+        }
+
+        if b.update {
+            if try!(from.stat()).modified <= try!(to.stat()).modified {
+                return Ok(());
+            }
+        }
+    }
+
+    if b.verbose {
+        print!("‘{}’ -> ‘{}’", from.display(), to.display());
+        match backup_path {
+            Some(path) => println!(" (backup: ‘{}’)", path.display()),
+            None => println!("")
+        }
+    }
+    fs::rename(from, to)
+}
+
+fn read_yes() -> bool {
+    match BufferedReader::new(stdin_raw()).read_line() {
+        Ok(s) => match s.as_slice().slice_shift_char() {
+            (Some(x), _) => x == 'y' || x == 'Y',
+            _ => false
+        },
+        _ => false
+    }
+}
+
+fn simple_backup_path(path: &Path, suffix: &String) -> Path {
+    let mut p = path.clone().into_vec();
+    p.push_all(suffix.as_slice().as_bytes());
+    return Path::new(p);
+}
+
+fn numbered_backup_path(path: &Path) -> Path {
+    let mut i: u64 = 1;
+    loop {
+        let new_path = simple_backup_path(path, &format!(".~{}~", i));
+        if !new_path.exists() {
+            return new_path;
+        }
+        i = i + 1;
+    }
+}
+
+fn existing_backup_path(path: &Path, suffix: &String) -> Path {
+    let test_path = simple_backup_path(path, &".~1~".into_string());
+    if test_path.exists() {
+        return numbered_backup_path(path);
+    }
+    return simple_backup_path(path, suffix);
+}
