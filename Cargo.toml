@@ -27,6 +27,7 @@ utils = [
 	"mkdir",
 	"mv",
 	"nl",
+	"nproc",
 	"paste",
 	"printenv",
 	"pwd",
@@ -203,6 +204,10 @@ optional = true
 
 [dependencies.nohup]
 path = "src/nohup"
+optional = true
+
+[dependencies.nproc]
+path = "src/nproc"
 optional = true
 
 [dependencies.paste]

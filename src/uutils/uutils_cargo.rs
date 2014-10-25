@@ -42,6 +42,7 @@ extern crate getopts;
 #[cfg(feature="mkfifo")]    extern crate mkfifo;
 #[cfg(feature="mv")]        extern crate mv;
 #[cfg(feature="nl")]        extern crate nl;
+#[cfg(feature="nproc")]     extern crate nproc;
 #[cfg(feature="nohup")]     extern crate nohup;
 #[cfg(feature="paste")]     extern crate paste;
 #[cfg(feature="printenv")]  extern crate printenv;
@@ -134,6 +135,7 @@ fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
     add_util!(feature="mkfifo", "mkfifo", mkfifo);
     add_util!(feature="mv", "mv", mv);
     add_util!(feature="nl", "nl", nl);
+    add_util!(feature="nproc", "nproc", nproc);
     add_util!(feature="nohup", "nohup", nohup);
     add_util!(feature="paste", "paste", paste);
     add_util!(feature="printenv", "printenv", printenv);
