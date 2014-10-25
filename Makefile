@@ -56,6 +56,7 @@ PROGS       := \
   mkdir \
   mv \
   nl \
+  nproc \
   paste \
   printenv \
   pwd \
