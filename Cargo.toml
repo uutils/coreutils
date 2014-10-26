@@ -16,6 +16,10 @@ name = "cat"
 path = "cat/cat.rs"
 
 [[bin]]
+name = "chmod"
+path = "chmod/chmod.rs"
+
+[[bin]]
 name = "chroot"
 path = "chroot/chroot.rs"
 

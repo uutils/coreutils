@@ -38,6 +38,7 @@ PROGS       := \
   base64 \
   basename \
   cat \
+  chmod \
   cksum \
   comm \
   cp \
