@@ -24,6 +24,8 @@ To simply build all available utilities:
 make
 ```
 
+(on Windows use [MinGW/MSYS](http://www.mingw.org/wiki/MSYS) or `Cygwin` make and make sure you have `rustc` in `PATH`)
+
 To build all but a few of the available utilities:
 ```
 make DONT_BUILD='UTILITY_1 UTILITY_2'
