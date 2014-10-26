@@ -64,7 +64,7 @@ fn cut_bytes<R: Reader>(reader: R,
         let mut cur_pos = 1;
         let mut print_delim = false;
 
-        for &Range { low: low, high: high } in ranges.iter() {
+        for &Range { low, high } in ranges.iter() {
             // skip upto low
             let orig_pos = cur_pos;
             loop {
@@ -149,7 +149,7 @@ fn cut_characters<R: Reader>(reader: R,
         let mut char_indices = line.as_slice().char_indices();
         let mut print_delim = false;
 
-        for &Range { low: low, high: high } in ranges.iter() {
+        for &Range { low, high } in ranges.iter() {
             let low_idx = match char_indices.nth(low - char_pos - 1) {
                 Some((low_idx, _)) => low_idx,
                 None => break
@@ -268,7 +268,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
             continue
         }
 
-        for &Range { low: low, high: high } in ranges.iter() {
+        for &Range { low, high } in ranges.iter() {
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
                     Some((_, beyond_delim)) => beyond_delim,
@@ -350,7 +350,7 @@ fn cut_fields<R: Reader>(reader: R,
             continue
         }
 
-        for &Range { low: low, high: high } in ranges.iter() {
+        for &Range { low, high } in ranges.iter() {
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
                     Some((_, beyond_delim)) => beyond_delim,
