@@ -274,7 +274,7 @@ fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> int 
 fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
     let mut backup_path = None;
 
-    if to.is_file() {
+    if to.exists() {
         match b.overwrite {
             NoClobber => return Ok(()),
             Interactive => {
@@ -303,6 +303,8 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
         }
     }
 
+    try!(fs::rename(from, to));
+
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
         match backup_path {
@@ -310,7 +312,7 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
             None => println!("")
         }
     }
-    fs::rename(from, to)
+    Ok(())
 }
 
 fn read_yes() -> bool {
