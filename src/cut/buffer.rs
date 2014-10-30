@@ -68,7 +68,7 @@ impl<R: Reader> BufReader<R> {
             match self.maybe_fill_buf() {
                 Ok(0) | Err(IoError { kind: std::io::EndOfFile, .. })
                     if self.start == self.end => return bytes_consumed,
-                Err(err) => fail!("read error: {}", err.desc),
+                Err(err) => panic!("read error: {}", err.desc),
                 _ => ()
             }
 
@@ -94,7 +94,7 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
     fn select<'a>(&'a mut self, bytes: uint) -> Bytes::Selected<'a> {
         match self.maybe_fill_buf() {
             Err(IoError { kind: std::io::EndOfFile, .. }) => (),
-            Err(err) => fail!("read error: {}", err.desc),
+            Err(err) => panic!("read error: {}", err.desc),
             _ => ()
         }
 

@@ -61,7 +61,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(f) => fail!("{}", f),
+        Err(f) => panic!("{}", f),
     };
 
     if matches.opt_present("help") {

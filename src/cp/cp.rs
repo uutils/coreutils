@@ -40,7 +40,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Ok(m) => m,
         Err(e) => {
             error!("error: {}", e);
-            fail!()
+            panic!()
         },
     };
 
@@ -79,7 +79,7 @@ fn help(progname: &str, usage: &str) {
 fn copy(matches: getopts::Matches) {
     let sources : Vec<Path> = if matches.free.len() < 1 {
         error!("error: Missing SOURCE argument. Try --help.");
-        fail!()
+        panic!()
     } else {
         // All but the last argument:
         matches.free.slice(0, matches.free.len() - 1).iter()
@@ -87,7 +87,7 @@ fn copy(matches: getopts::Matches) {
     };
     let dest = if matches.free.len() < 2 {
         error!("error: Missing DEST argument. Try --help.");
-        fail!()
+        panic!()
     } else {
         // Only the last argument:
         Path::new(matches.free[matches.free.len() - 1].as_slice())
@@ -103,7 +103,7 @@ fn copy(matches: getopts::Matches) {
                 false
             } else {
                 error!("error: {:s}", e.to_string());
-                fail!()
+                panic!()
             }
         };
 
@@ -111,7 +111,7 @@ fn copy(matches: getopts::Matches) {
             error!("error: \"{:s}\" and \"{:s}\" are the same file",
                 source.display().to_string(),
                 dest.display().to_string());
-            fail!();
+            panic!();
         }
 
         let io_result = fs::copy(source, &dest);
@@ -119,12 +119,12 @@ fn copy(matches: getopts::Matches) {
         if io_result.is_err() {
             let err = io_result.unwrap_err();
             error!("error: {:s}", err.to_string());
-            fail!();
+            panic!();
         }
     } else {
         if fs::stat(&dest).unwrap().kind != io::TypeDirectory {
             error!("error: TARGET must be a directory");
-            fail!();
+            panic!();
         }
 
         for source in sources.iter() {
@@ -144,7 +144,7 @@ fn copy(matches: getopts::Matches) {
             if io_result.is_err() {
                 let err = io_result.unwrap_err();
                 error!("error: {:s}", err.to_string());
-                fail!()
+                panic!()
             }
         }
     }

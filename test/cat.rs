@@ -12,7 +12,7 @@ fn test_output_multi_files_print_all_chars() {
                                 .arg("-n").output() {
 
         Ok(p) => p,
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
     };
 
     let out = str::from_utf8(po.output.as_slice()).unwrap();

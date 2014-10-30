@@ -196,7 +196,7 @@ fn tail<T: Reader>(reader: &mut BufferedReader<T>, line_count: uint, byte_count:
         for io_line in reader.lines() {
             match io_line {
                 Ok(line) => print!("{}", line),
-                Err(err) => fail!(err)
+                Err(err) => panic!(err)
             }
         }
     }
@@ -225,7 +225,7 @@ fn tail_lines<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: uint, b
                 }
                 ringbuf.push(line);
             }
-            Err(err) => fail!(err)
+            Err(err) => panic!(err)
         }
     }
     for line in ringbuf.iter() {
@@ -253,7 +253,7 @@ fn tail_bytes<T: Reader>(reader: &mut BufferedReader<T>, mut byte_count: uint, b
                 }
                 ringbuf.push(byte);
             }
-            Err(err) => fail!(err)
+            Err(err) => panic!(err)
         }
     }
     for byte in ringbuf.iter() {

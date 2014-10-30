@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Ok(m) => m,
         Err(e) => {
             error!("error: {}", e);
-            fail!()
+            panic!()
         }
     };
 
@@ -69,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> int {
             Some(s) => s,
             None => {
                 error!("error: {:s}", "Argument to option 'wrap' improperly formatted.");
-                fail!()
+                panic!()
             }
         },
         None => 76
@@ -98,7 +98,7 @@ pub fn uumain(args: Vec<String>) -> int {
 fn decode(input: &mut Reader, ignore_garbage: bool) {
     let mut to_decode = match input.read_to_string() {
         Ok(m) => m,
-        Err(f) => fail!(f)
+        Err(f) => panic!(f)
     };
 
     let slice =
@@ -134,7 +134,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         }
         Err(s) => {
             error!("error: {}", s);
-            fail!()
+            panic!()
         }
     }
 }

@@ -9,7 +9,7 @@ fn run(input: &str, args: &[&'static str]) -> Vec<u8> {
 
     let po = match process.wait_with_output() {
         Ok(p) => p,
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
     };
     po.output
 }

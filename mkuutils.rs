@@ -52,7 +52,7 @@ fn main() {
     let main = input.read_to_string().unwrap().replace("@CRATES@", crates.as_slice()).replace("@UTIL_MAP@", util_map.as_slice());
 
     match out.write(main.as_bytes()) {
-        Err(e) => fail!("{}", e),
+        Err(e) => panic!("{}", e),
         _ => (),
     }
 }

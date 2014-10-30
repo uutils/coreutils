@@ -139,7 +139,7 @@ fn xgethostname() -> String {
     };
 
     if err != 0 {
-        fail!("Cannot determine hostname");
+        panic!("Cannot determine hostname");
     }
 
     let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);

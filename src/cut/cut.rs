@@ -142,7 +142,7 @@ fn cut_characters<R: Reader>(reader: R,
         let line = match buf_in.read_line() {
             Ok(line) => line,
             Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
-            _ => fail!(),
+            _ => panic!(),
         };
 
         let mut char_pos = 0;
@@ -248,7 +248,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
         let line = match buf_in.read_until(b'\n') {
             Ok(line) => line,
             Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
-            _ => fail!(),
+            _ => panic!(),
         };
 
         let mut fields_pos = 1;
@@ -330,7 +330,7 @@ fn cut_fields<R: Reader>(reader: R,
         let line = match buf_in.read_until(b'\n') {
             Ok(line) => line,
             Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
-            _ => fail!(),
+            _ => panic!(),
         };
 
         let mut fields_pos = 1;

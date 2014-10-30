@@ -94,7 +94,7 @@ macro_rules! pipe_print(
                 if f.kind == ::std::io::BrokenPipe {
                     false
                 } else {
-                    fail!("{}", f)
+                    panic!("{}", f)
                 }
             }
         }
@@ -110,7 +110,7 @@ macro_rules! pipe_println(
                 if f.kind == ::std::io::BrokenPipe {
                     false
                 } else {
-                    fail!("{}", f)
+                    panic!("{}", f)
                 }
             }
         }
@@ -126,7 +126,7 @@ macro_rules! pipe_write(
                 if f.kind == ::std::io::BrokenPipe {
                     false
                 } else {
-                    fail!("{}", f)
+                    panic!("{}", f)
                 }
             }
         }
@@ -142,7 +142,7 @@ macro_rules! pipe_writeln(
                 if f.kind == ::std::io::BrokenPipe {
                     false
                 } else {
-                    fail!("{}", f)
+                    panic!("{}", f)
                 }
             }
         }
@@ -154,7 +154,7 @@ macro_rules! safe_write(
     ($fd:expr, $($args:expr),+) => (
         match write!($fd, $($args),+) {
             Ok(_) => {}
-            Err(f) => fail!(f.to_string())
+            Err(f) => panic!(f.to_string())
         }
     )
 )
@@ -164,7 +164,7 @@ macro_rules! safe_writeln(
     ($fd:expr, $($args:expr),+) => (
         match writeln!($fd, $($args),+) {
             Ok(_) => {}
-            Err(f) => fail!(f.to_string())
+            Err(f) => panic!(f.to_string())
         }
     )
 )

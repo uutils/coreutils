@@ -41,7 +41,7 @@ impl Line {
     fn get_formatline(self) -> FileLine {
         match self {
             FormatLine(fl) => fl,
-            NoFormatLine(..) => fail!("Found NoFormatLine when expecting FormatLine")
+            NoFormatLine(..) => panic!("Found NoFormatLine when expecting FormatLine")
         }
     }
 
@@ -49,7 +49,7 @@ impl Line {
     fn get_noformatline(self) -> (String, bool) {
         match self {
             NoFormatLine(s, b) => (s, b),
-            FormatLine(..) => fail!("Found FormatLine when expecting NoFormatLine")
+            FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine")
         }
     }
 }
