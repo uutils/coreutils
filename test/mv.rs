@@ -353,6 +353,50 @@ fn test_mv_overwrite_dir() {
 }
 
 #[test]
+fn test_mv_overwrite_nonempty_dir() {
+    let dir_a = "test_mv_overwrite_nonempty_dir_a";
+    let dir_b = "test_mv_overwrite_nonempty_dir_b";
+    let dummy = "test_mv_overwrite_nonempty_dir_b/file";
+
+    mkdir(dir_a);
+    mkdir(dir_b);
+    touch(dummy);
+    let result = run(Command::new(EXE).arg("-vT").arg(dir_a).arg(dir_b));
+
+    // Not same error as GNU; the error message is a rust builtin
+    // TODO: test (and implement) correct error message (or at least decide whether to do so)
+    // Current: "mv: error: couldn't rename path (Directory not empty; from=a; to=b)"
+    // GNU:     "mv: cannot move ‘a’ to ‘b’: Directory not empty"
+    assert!(result.stderr.len() > 0);
+
+    // Verbose output for the move should not be shown on failure
+    assert!(result.stdout.len() == 0);
+
+    assert!(!result.success);
+    assert!(Path::new(dir_a).is_dir());
+    assert!(Path::new(dir_b).is_dir());
+}
+
+#[test]
+fn test_mv_backup_dir() {
+    let dir_a = "test_mv_backup_dir_dir_a";
+    let dir_b = "test_mv_backup_dir_dir_b";
+
+    mkdir(dir_a);
+    mkdir(dir_b);
+    let result = run(Command::new(EXE).arg("-vbT").arg(dir_a).arg(dir_b));
+
+    assert_empty_stderr!(result);
+    assert_eq!(result.stdout.as_slice(),
+        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b).as_slice())
+    assert!(result.success);
+
+    assert!(!Path::new(dir_a).is_dir());
+    assert!(Path::new(dir_b).is_dir());
+    assert!(Path::new(format!("{}~", dir_b)).is_dir());
+}
+
+#[test]
 fn test_mv_errors() {
     let dir = "test_mv_errors_dir";
     let file_a = "test_mv_errors_file_a";
