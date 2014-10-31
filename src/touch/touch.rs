@@ -41,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m)  => m,
-        Err(e) => fail!("Invalid options\n{}", e)
+        Err(e) => panic!("Invalid options\n{}", e)
     };
 
     if matches.opt_present("version") {
@@ -65,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> int {
     if matches.opt_present("date") && matches.opts_present(["reference".to_string(), "t".to_string()]) ||
        matches.opt_present("reference") && matches.opts_present(["date".to_string(), "t".to_string()]) ||
        matches.opt_present("t") && matches.opts_present(["date".to_string(), "reference".to_string()]) {
-        fail!("Invalid options: cannot specify reference time from more than one source");
+        panic!("Invalid options: cannot specify reference time from more than one source");
     }
 
     let (mut atime, mut mtime) =
@@ -97,7 +97,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
             match File::create(&path) {
                 Ok(fd) => fd,
-                Err(e) => fail!("Unable to create file: {}\n{}", filename, e.desc)
+                Err(e) => panic!("Unable to create file: {}\n{}", filename, e.desc)
             };
 
             // Minor optimization: if no reference time was specified, we're done.
@@ -128,7 +128,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
         match std::io::fs::change_file_times(&path, atime, mtime) {
             Ok(t) => t,
-            Err(e) => fail!("Unable to modify times\n{}", e.desc)
+            Err(e) => panic!("Unable to modify times\n{}", e.desc)
         }
     }
 
@@ -139,12 +139,12 @@ fn stat(path: &Path, follow: bool) -> std::io::FileStat {
     if follow {
         match std::io::fs::stat(path) {
             Ok(stat) => stat,
-            Err(e)   => fail!("Unable to open file\n{}", e.desc)
+            Err(e)   => panic!("Unable to open file\n{}", e.desc)
         }
     } else {
         match std::io::fs::lstat(path) {
             Ok(stat) => stat,
-            Err(e)   => fail!("Unable to open file\n{}", e.desc)
+            Err(e)   => panic!("Unable to open file\n{}", e.desc)
         }
     }
 }
@@ -156,7 +156,7 @@ fn parse_date(str: &str) -> u64 {
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
     match time::strptime(str, "%c") {
         Ok(tm) => (tm.to_timespec().sec * 1000) as u64,
-        Err(e) => fail!("Unable to parse date\n{}", e)
+        Err(e) => panic!("Unable to parse date\n{}", e)
     }
 }
 
@@ -168,12 +168,12 @@ fn parse_timestamp(str: &str) -> u64 {
         10 => "%y%m%d%H%M",
         11 => "%m%d%H%M.%S",
          8 => "%m%d%H%M",
-         _ => fail!("Unknown timestamp format")
+         _ => panic!("Unknown timestamp format")
     };
 
     match time::strptime(str, format) {
         Ok(tm) => (tm.to_timespec().sec * 1000) as u64,
-        Err(e) => fail!("Unable to parse timestamp\n{}", e)
+        Err(e) => panic!("Unable to parse timestamp\n{}", e)
     }
 }
 

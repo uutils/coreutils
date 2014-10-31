@@ -14,7 +14,7 @@ static EXE: &'static str = "./mv";
 macro_rules! assert_empty_stderr(
     ($cond:expr) => (
         if $cond.stderr.len() > 0 {
-            fail!(format!("stderr: {}", $cond.stderr))
+            panic!(format!("stderr: {}", $cond.stderr))
         }
     );
 )

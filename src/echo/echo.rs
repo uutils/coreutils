@@ -55,7 +55,7 @@ fn convert_str(string: &[u8], index: uint, base: uint) -> (char, uint) {
     let (max_digits, is_legal_digit) = match base {
         8u => (3, isodigit),
         16u => (2, isxdigit),
-        _ => fail!(),
+        _ => panic!(),
     };
 
     let mut bytes = vec!();

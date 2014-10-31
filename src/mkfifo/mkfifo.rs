@@ -32,7 +32,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => m,
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
     };
 
     if matches.opt_present("version") {

@@ -32,7 +32,7 @@ fn test_mkdir_dup_dir() {
     let exit_success = prog.unwrap().success();
     if !exit_success {
         cleanup(TEST_DIR2);
-        fail!();
+        panic!();
     }
     let prog2 = Command::new(EXE).arg(TEST_DIR2).status();
     let exit_success2 = prog2.unwrap().success();

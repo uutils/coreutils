@@ -35,7 +35,7 @@ fn main() {
     let mut out = File::open_mode(&Path::new(outfile), Truncate, ReadWrite);
 
     match out.write(main.as_bytes()) {
-        Err(e) => fail!("{}", e),
+        Err(e) => panic!("{}", e),
         _ => (),
     }
 }

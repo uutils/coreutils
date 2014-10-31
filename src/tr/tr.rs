@@ -103,7 +103,7 @@ fn delete(set: Vec<char>, complement: bool) {
         match c {
             Ok(c) if is_allowed(c) => out.write_char(c).unwrap(),
             Ok(_) => (),
-            Err(err) => fail!("{}", err),
+            Err(err) => panic!("{}", err),
         };
     }
 }
@@ -130,7 +130,7 @@ fn tr(set1: &[char], set2: &[char]) {
                 out.write_char(trc).unwrap();
             }
             Err(err) => {
-                fail!("{}", err);
+                panic!("{}", err);
             }
         }
     }

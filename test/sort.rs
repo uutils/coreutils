@@ -34,13 +34,13 @@ fn numeric_helper(test_num: int) {
     cmd.arg("-n");
     let po = match cmd.clone().arg(format!("{}{}{}", "numeric", test_num, ".txt")).output() {
         Ok(p) => p,
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
     };
 
     let answer = match File::open(&Path::new(format!("{}{}{}", "numeric", test_num, ".ans")))
             .read_to_end() {
         Ok(answer) => answer,
-        Err(err) => fail!("{}", err),
+        Err(err) => panic!("{}", err),
     };
     assert_eq!(String::from_utf8(po.output), String::from_utf8(answer));
 }
