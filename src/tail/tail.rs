@@ -15,12 +15,11 @@ extern crate getopts;
 
 use std::char;
 use std::io::{stdin};
-use std::io::BufferedReader;
+use std::io::{BufferedReader, BytesReader};
 use std::io::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
-use std::collections::Deque;
 use std::collections::ringbuf::RingBuf;
 use std::io::timer::sleep;
 use std::time::duration::Duration;
