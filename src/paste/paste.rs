@@ -99,7 +99,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
                     match file.read_line() {
                         Ok(line) => output.push_str(line.as_slice().slice_to(line.len() - 1)),
                         Err(f) => if f.kind == io::EndOfFile {
-                            *eof.get_mut(i) = true;
+                            eof[i] = true;
                             eof_count += 1;
                         } else {
                             crash!(1, "{}", f.to_string());

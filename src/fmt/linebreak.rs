@@ -229,7 +229,7 @@ fn find_kp_breakpoints<'a, T: Iterator<&'a WordInfo<'a>>>(iter: T, args: &BreakA
         // go through each active break, extending it and possibly adding a new active
         // break if we are above the minimum required length
         for &i in active_breaks.iter() {
-            let active = linebreaks.get_mut(i);
+            let active = &mut linebreaks[i];
             // normalize demerits to avoid overflow, and record if this is the least
             active.demerits -= least_demerits;
             if active.demerits < ld_next {
