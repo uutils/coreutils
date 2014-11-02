@@ -16,7 +16,7 @@ extern crate getopts;
 
 use std::char;
 use std::io::{stdin};
-use std::io::BufferedReader;
+use std::io::{BufferedReader, BytesReader};
 use std::io::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
