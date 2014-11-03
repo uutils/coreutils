@@ -14,7 +14,7 @@ extern crate getopts;
 use std::cmp::Ord;
 use std::io::{BufferedReader, IoResult, print};
 use std::io::fs::File;
-use std::io::stdio::stdin;
+use std::io::stdio::{stdin, StdReader};
 use std::path::Path;
 
 static NAME : &'static str = "comm";
@@ -44,7 +44,21 @@ fn ensure_nl(line: String) -> String {
     }
 }
 
-fn comm(a: &mut Box<Buffer>, b: &mut Box<Buffer>, opts: &getopts::Matches) {
+enum LineReader {
+    Stdin(BufferedReader<StdReader>),
+    FileIn(BufferedReader<File>)
+}
+
+impl LineReader {
+    fn read_line(&mut self) -> IoResult<String> {
+        match self {
+            &Stdin(ref mut r)  => r.read_line(),
+            &FileIn(ref mut r) => r.read_line(),
+        }
+    }
+}
+
+fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 
     let delim = Vec::from_fn(4, |col| mkdelim(col, opts));
 
@@ -83,12 +97,12 @@ fn comm(a: &mut Box<Buffer>, b: &mut Box<Buffer>, opts: &getopts::Matches) {
     }
 }
 
-fn open_file(name: &str) -> IoResult<Box<Buffer>> {
+fn open_file(name: &str) -> IoResult<LineReader> {
     match name {
-        "-" => Ok(box stdin() as Box<Buffer>),
+        "-" => Ok(LineReader::Stdin(stdin())),
         _   => {
-            let f = try!(File::open(&Path::new(name)));
-            Ok(box BufferedReader::new(f) as Box<Buffer>)
+            let f = try!(std::io::File::open(&Path::new(name)));
+            Ok(LineReader::FileIn(BufferedReader::new(f)))
         }
     }
 }
