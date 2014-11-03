@@ -19,7 +19,7 @@ use std::from_str::from_str;
 use std::io;
 use std::io::IoResult;
 use std::iter::{range_inclusive, RangeInclusive};
-use std::rand;
+use std::rand::{mod, Rng};
 use std::uint;
 
 #[path = "../common/util.rs"]
@@ -151,14 +151,28 @@ fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, o
     }
 }
 
+enum WrappedRng {
+    RngFile(rand::reader::ReaderRng<io::File>),
+    RngDefault(rand::TaskRng),
+}
+
+impl WrappedRng {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            &RngFile(ref mut r) => r.next_u32(),
+            &RngDefault(ref mut r) => r.next_u32(),
+        }
+    }
+}
+
 fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, outname: Option<String>, random: Option<String>) -> IoResult<()> {
     let mut output = match outname {
         Some(name) => box io::BufferedWriter::new(try!(io::File::create(&Path::new(name)))) as Box<Writer>,
         None => box io::stdout() as Box<Writer>
     };
     let mut rng = match random {
-        Some(name) => box rand::reader::ReaderRng::new(try!(io::File::open(&Path::new(name)))) as Box<rand::Rng>,
-        None => box rand::task_rng() as Box<rand::Rng>
+        Some(name) => RngFile(rand::reader::ReaderRng::new(try!(io::File::open(&Path::new(name))))),
+        None => RngDefault(rand::task_rng()),
     };
     let mut len = lines.len();
     let max = if repeat { count } else { cmp::min(count, len) };
