@@ -14,7 +14,7 @@ extern crate getopts;
 @CRATES@
 
 use std::os;
-use std::collections::hashmap::HashMap;
+use std::collections::hash_map::HashMap;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
