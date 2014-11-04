@@ -13,8 +13,8 @@
 extern crate collections;
 extern crate getopts;
 
-use collections::bitv::BitvSet;
-use collections::smallintmap::SmallIntMap;
+use collections::bitv_set::BitvSet;
+use collections::vec_map::VecMap;
 use getopts::OptGroup;
 use std::char::from_u32;
 use std::io::print;
@@ -109,7 +109,7 @@ fn delete(set: Vec<char>, complement: bool) {
 }
 
 fn tr(set1: &[char], set2: &[char]) {
-    let mut map = SmallIntMap::<char>::new();
+    let mut map = VecMap::<char>::new();
     let mut out = stdout();
 
     for i in range(0, set1.len()) {

@@ -17,7 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::collections::hashmap::HashSet;
+use std::collections::hash_set::HashSet;
 use std::io::net::addrinfo;
 use std::str;
 use getopts::{optflag, getopts, usage};

@@ -20,7 +20,7 @@ use std::io::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
-use std::collections::ringbuf::RingBuf;
+use std::collections::ring_buf::RingBuf;
 use std::io::timer::sleep;
 use std::time::duration::Duration;
 
