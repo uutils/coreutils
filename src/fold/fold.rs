@@ -17,7 +17,6 @@ extern crate libc;
 use std::io;
 use std::io::fs::File;
 use std::io::BufferedReader;
-use std::uint;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -64,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 }
             };
         let width = match poss_width {
-            Some(inp_width) => match uint::parse_bytes(inp_width.as_bytes(), 10) {
+            Some(inp_width) => match from_str(inp_width.as_slice()) {
                 Some(width) => width,
                 None => crash!(1, "illegal width value (\"{}\")", inp_width)
             },

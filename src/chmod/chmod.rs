@@ -21,7 +21,7 @@ extern crate regex;
 
 use std::io::fs;
 use std::io::fs::PathExtensions;
-use std::u64;
+use std::num::from_str_radix;
 use regex::Regex;
 
 #[path = "../common/util.rs"]
@@ -273,7 +273,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                         '+' | '-' | '=' => (ch, change.slice_from(1)),
                         _ => ('=', change)
                     };
-                    let mode = u64::parse_bytes(slice.as_bytes(), 8).unwrap();  // already verified
+                    let mode = from_str_radix::<u64>(slice, 8).unwrap();  // already verified
                     match action {
                         '+' => fperm |= mode,
                         '-' => fperm &= !mode,

@@ -13,7 +13,6 @@
 extern crate getopts;
 extern crate libc;
 
-use std::u64;
 use std::vec::{Vec};
 use std::io::{stdin};
 
@@ -56,7 +55,7 @@ fn print_factors(num: u64) {
 }
 
 fn print_factors_str(num_str: &str) {
-    let num = match u64::parse_bytes(num_str.as_bytes(), 10) {
+    let num = match from_str(num_str) {
         Some(x) => x,
         None => { crash!(1, "{} not a number", num_str); }
     };
