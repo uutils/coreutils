@@ -20,6 +20,7 @@ use std::io::{stderr, fs, FileStat, TypeDirectory};
 use std::option::Option;
 use std::path::Path;
 use std::sync::{Arc, Future};
+use std::str::from_utf8;
 use time::Timespec;
 
 #[path = "../common/util.rs"]
@@ -244,7 +245,7 @@ ers of 1000).",
                     letters.push(c);
                 }
             }
-            let number = std::uint::parse_bytes(numbers.as_slice(), 10).unwrap();
+            let number = from_utf8(numbers.as_slice()).and_then(from_str::<uint>).unwrap();
             let multiple = match String::from_chars(letters.as_slice()).as_slice() {
                 "K" => 1024, "M" => 1024 * 1024, "G" => 1024 * 1024 * 1024,
                 "T" => 1024 * 1024 * 1024 * 1024, "P" => 1024 * 1024 * 1024 * 1024 * 1024,

@@ -16,7 +16,7 @@ extern crate libc;
 
 use std::io::fs::{mod, PathExtensions};
 use std::io::FilePermission;
-use std::num::strconv;
+use std::num::from_str_radix;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -64,9 +64,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let mode_match = matches.opts_str(&["mode".to_string()]);
     let mode: FilePermission = if mode_match.is_some() {
         let m = mode_match.unwrap();
-        let res: Option<u32> = strconv::from_str_common(m.as_slice(), 8, false, false, false,
-                                                        strconv::ExpNone,
-                                                        false, false);
+        let res: Option<u32> = from_str_radix(m.as_slice(), 8);
         if res.is_some() {
             unsafe { std::mem::transmute(res.unwrap()) }
         } else {

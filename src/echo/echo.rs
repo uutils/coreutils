@@ -14,7 +14,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{print, println};
-use std::uint;
+use std::num::from_str_radix;
+use std::str::from_utf8;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -31,7 +32,7 @@ struct EchoOptions {
 
 #[inline(always)]
 fn to_char(bytes: &Vec<u8>, base: uint) -> char {
-    uint::parse_bytes(bytes.as_slice(), base).unwrap() as u8 as char
+    from_str_radix::<uint>(from_utf8(bytes.as_slice()).unwrap(), base).unwrap() as u8 as char
 }
 
 #[inline(always)]
