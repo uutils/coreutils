@@ -14,7 +14,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::{print, println};
-use std::str::StrSlice;
 
 #[path = "../common/util.rs"]
 mod util;
