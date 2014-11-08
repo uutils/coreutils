@@ -123,7 +123,7 @@ fn tr(set1: &[char], set2: &[char]) {
     for c in stdin().chars() {
         match c {
             Ok(inc) => {
-                let trc = match map.find(&(inc as uint)) {
+                let trc = match map.get(&(inc as uint)) {
                     Some(t) => *t,
                     None => inc,
                 };

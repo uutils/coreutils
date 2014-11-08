@@ -126,7 +126,7 @@ impl Graph {
     }
 
     fn has_edge(&self, from: &String, to: &String) -> bool {
-        self.in_edges.find(to).unwrap().contains(from)
+        self.in_edges.get(to).unwrap().contains(from)
     }
 
     fn init_node(&mut self, n: &String) {
@@ -144,8 +144,8 @@ impl Graph {
         }
 
         if !self.has_edge(from, to) {
-            self.in_edges.find_mut(to).unwrap().insert(from.clone());
-            self.out_edges.find_mut(from).unwrap().push(to.clone());
+            self.in_edges.get_mut(to).unwrap().insert(from.clone());
+            self.out_edges.get_mut(from).unwrap().push(to.clone());
         }
     }
 
@@ -164,9 +164,9 @@ impl Graph {
 
             self.result.push(n.clone());
 
-            let n_out_edges = self.out_edges.find_mut(&n).unwrap();
+            let n_out_edges = self.out_edges.get_mut(&n).unwrap();
             for m in n_out_edges.iter() {
-                let m_in_edges = self.in_edges.find_mut(m).unwrap();
+                let m_in_edges = self.in_edges.get_mut(m).unwrap();
                 m_in_edges.remove(&n);
 
                 // If m doesn't have other in-coming edges add it to start_nodes
