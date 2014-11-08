@@ -219,7 +219,7 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
                          mut lhs: bool,
                          min_prec: Precedence,
                          error: &mut bool) -> bool {
-    let mut prec = *hashmap.find(&args[0]).unwrap_or_else(|| {
+    let mut prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
         *error = true;
         &min_prec
     });
@@ -228,7 +228,7 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
         *args = (*args).slice_from(1);
         let mut rhs = dispatch(args, error);
         while args.len() > 0 {
-            let subprec = *hashmap.find(&args[0]).unwrap_or_else(|| {
+            let subprec = *hashmap.get(&args[0]).unwrap_or_else(|| {
                 *error = true;
                 &min_prec
             });
@@ -249,7 +249,7 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
             _ => unreachable!()
         };
         if args.len() > 0 {
-            prec = *hashmap.find(&args[0]).unwrap_or_else(|| {
+            prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
                 *error = true;
                 &min_prec
             });
