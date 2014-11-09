@@ -325,7 +325,7 @@ Try '{} --help' for more information.", s, program);
                 false => stat.fstat.unstable.blocks * 512,
             };
             if matches.opt_present("time") {
-                let time_str = {
+                let tm = {
                     let (secs, nsecs) = {
                         let time = match matches.opt_str("time") {
                             Some(s) => match s.as_slice() {
@@ -344,10 +344,10 @@ Try '{} --help' for more information.", s, program);
                         };
                         ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
-                    let time_spec = Timespec::new(secs, nsecs);
-                    time::at(time_spec).strftime(time_format_str)
+                    time::at(Timespec::new(secs, nsecs))
                 };
                 if !summarize || (summarize && index == len-1) {
+                    let time_str = tm.strftime(time_format_str).unwrap();
                     print!("{}\t{}\t{}{}", convert_size(size), time_str, stat.path.display(), line_separator);
                 }
             } else {
