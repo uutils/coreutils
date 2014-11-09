@@ -69,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> int {
         f.with_c_str(|name| {
             let err = unsafe { mkfifo(name, mode) };
             if err == -1 {
-                show_error!("creating '{}': {}", f, os::error_string(os::errno() as uint));
+                show_error!("creating '{}': {}", f, os::error_string(os::errno()));
                 exit_status = 1;
             }
         });

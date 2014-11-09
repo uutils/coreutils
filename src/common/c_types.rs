@@ -186,7 +186,7 @@ unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut 
     }
 }
 
-pub fn get_groups() -> Result<Vec<gid_t>, int> {
+pub fn get_groups() -> Result<Vec<gid_t>, uint> {
     let ngroups = unsafe { getgroups(0, null_mut()) };
     if ngroups == -1 {
         return Err(os::errno());
@@ -210,7 +210,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
 
     match groups {
         Err(errno) =>
-            crash!(1, "failed to get group list (errno={:d})", errno),
+            crash!(1, "failed to get group list (errno={:u})", errno),
         Ok(groups) => {
             for &g in groups.iter() {
                 if nflag {
