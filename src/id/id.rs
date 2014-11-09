@@ -345,7 +345,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     };
 
     let groups = groups.unwrap_or_else(|errno| {
-        crash!(1, "failed to get group list (errno={:d})", errno);
+        crash!(1, "failed to get group list (errno={:u})", errno);
     });
 
     if possible_pw.is_some() {
