@@ -9,6 +9,7 @@ utils = [
 	"base64",
 	"basename",
 	"cat",
+	"chmod",
 	"cksum",
 	"comm",
 	"cp",
@@ -92,6 +93,10 @@ optional = true
 
 [dependencies.cat]
 path = "src/cat"
+optional = true
+
+[dependencies.chmod]
+path = "src/chmod"
 optional = true
 
 [dependencies.chroot]

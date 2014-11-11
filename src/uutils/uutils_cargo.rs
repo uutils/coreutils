@@ -15,6 +15,7 @@ extern crate getopts;
 #[cfg(feature="base64")]    extern crate base64;
 #[cfg(feature="basename")]  extern crate basename;
 #[cfg(feature="cat")]       extern crate cat;
+#[cfg(feature="chmod")]     extern crate chmod;
 #[cfg(feature="chroot")]    extern crate chroot;
 #[cfg(feature="cksum")]     extern crate cksum;
 #[cfg(feature="comm")]      extern crate comm;
@@ -102,6 +103,7 @@ fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
     add_util!(feature="base64", "base64", base64);
     add_util!(feature="basename", "basename", basename);
     add_util!(feature="cat", "cat", cat);
+    add_util!(feature="chmod", "chmod", chmod);
     add_util!(feature="chroot", "chroot", chroot);
     add_util!(feature="cksum", "cksum", cksum);
     add_util!(feature="comm", "comm", comm);
