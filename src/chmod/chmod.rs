@@ -21,6 +21,8 @@ extern crate regex;
 
 use std::io::fs;
 use std::io::fs::PathExtensions;
+use std::io::IoError;
+use std::mem;
 use std::num::from_str_radix;
 use regex::Regex;
 
@@ -78,9 +80,12 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         let preserve_root = matches.opt_present("preserve-root");
         let recursive = matches.opt_present("recursive");
         let fmode = matches.opt_str("reference").and_then(|fref| {
-            match native::io::file::stat(&fref.to_c_str()) {
-                Ok(stat) => Some(stat.perm),
-                Err(f) => crash!(1, "{}", f)
+            let mut stat = unsafe { mem::uninitialized() };
+            let statres = unsafe { libc::stat(fref.as_slice().as_ptr() as *const i8, &mut stat as *mut libc::stat) };
+            if statres == 0 {
+                Some(stat.st_mode)
+            } else {
+                crash!(1, "{}", IoError::last_error())
             }
         });
         let cmode =
@@ -140,7 +145,7 @@ fn verify_mode(mode: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<u64>, cmode: Option<&String>) -> Result<(), int> {
+fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), int> {
     let mut r = Ok(());
 
     for filename in files.iter() {
@@ -176,28 +181,29 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     r
 }
 
-fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<u64>, cmode: Option<&String>) -> Result<(), int> {
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), int> {
     let path = name.to_c_str();
     match fmode {
         Some(mode) => {
-            match native::io::file::chmod(&path, mode as uint) {
-                Ok(_) => { /* TODO: handle changes, quiet, and verbose */ }
-                Err(f) => {
-                    show_error!("{}", f);
-                    return Err(1);
-                }
+            if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
+                // TODO: handle changes, quiet, and verbose
+            } else {
+                show_error!("{}", IoError::last_error());
+                return Err(1);
             }
         }
         None => {
             // TODO: make the regex processing occur earlier (i.e. once in the main function)
             static REGEXP: regex::Regex = regex!(r"^(([ugoa]*)((?:[-+=](?:[rwxXst]*|[ugo]))+))|([-+=]?[0-7]+)$");
-            let mut fperm = match native::io::file::stat(&path) {
-                Ok(stat) => stat.perm,
-                Err(f) => {
-                    show_error!("{}", f);
+            let mut stat = unsafe { mem::uninitialized() };
+            let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
+            let mut fperm =
+                if statres == 0 {
+                    stat.st_mode
+                } else {
+                    show_error!("{}", IoError::last_error());
                     return Err(1);
-                }
-            };
+                };
             for mode in cmode.unwrap().as_slice().split(',') {  // cmode is guaranteed to be Some in this case
                 let cap = REGEXP.captures(mode).unwrap();  // mode was verified earlier, so this is safe
                 if cap.at(1) != "" {
@@ -273,7 +279,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                         '+' | '-' | '=' => (ch, change.slice_from(1)),
                         _ => ('=', change)
                     };
-                    let mode = from_str_radix::<u64>(slice, 8).unwrap();  // already verified
+                    let mode = from_str_radix::<u32>(slice, 8).unwrap();  // already verified
                     match action {
                         '+' => fperm |= mode,
                         '-' => fperm &= !mode,
@@ -281,12 +287,11 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                         _ => unreachable!()
                     }
                 }
-                match native::io::file::chmod(&path, fperm as uint) {
-                    Ok(_) => { /* TODO: see above */ }
-                    Err(f) => {
-                        show_error!("{}", f);
-                        return Err(1);
-                    }
+                if unsafe { libc::chmod(path.as_ptr(), fperm) } == 0 {
+                    // TODO: see above
+                } else {
+                    show_error!("{}", IoError::last_error());
+                    return Err(1);
                 }
             }
         }
