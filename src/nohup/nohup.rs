@@ -16,7 +16,7 @@ extern crate native;
 
 use getopts::{optflag, getopts, usage};
 use std::io::stdio::{stdin_raw, stdout_raw, stderr_raw};
-use std::rt::rtio::{Open, Read, Append, Write};
+use std::io::{File, Open, Read, Append, Write};
 use libc::funcs::posix88::unistd::{dup2, execvp};
 use libc::consts::os::posix88::SIGHUP;
 use libc::funcs::posix01::signal::signal;
@@ -33,9 +33,33 @@ extern {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
+// BEGIN CODE TO DELETE AFTER https://github.com/rust-lang/rust/issues/18897 is fixed
+struct HackyFile {
+    pub fd: FileDesc,
+    path: Path,
+    last_nread: int
+}
+
+struct FileDesc {
+    fd: libc::c_int,
+    close_on_drop: bool
+}
+
+trait AsFileDesc {
+    fn as_fd(&self) -> FileDesc;
+}
+
+impl AsFileDesc for File {
+    fn as_fd(&self) -> FileDesc {
+        let hack: HackyFile = unsafe { std::mem::transmute_copy(self) };
+        hack.fd
+    }
+}
+// END CODE TO DELETE
+
 #[cfg(target_os = "macos")]
-fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(s: &mut T) {
-    match s.seek(0, std::rt::rtio::SeekEnd) {
+fn rewind_stdout(s: &mut FileDesc) {
+    match s.seek(0, io::SeekEnd) {
         Ok(_) => {}
         Err(f) => crash!(1, "{}", f.detail.unwrap())
     }
@@ -45,7 +69,7 @@ fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(s: &mut T) {
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-fn rewind_stdout<T: std::rt::rtio::RtioFileStream>(_: &mut T) {}
+fn rewind_stdout(_: &mut FileDesc) {}
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = &args[0];
@@ -93,25 +117,24 @@ fn replace_fds() {
     let replace_stderr = stderr_raw().isatty();
 
     if replace_stdin {
-        let devnull = "/dev/null".to_c_str();
-        let new_stdin = match native::io::file::open(&devnull, Open, Read) {
+        let new_stdin = match File::open_mode(&Path::new("/dev/null"), Open, Read) {
             Ok(t) => t,
-            Err(_) => {
-                let e = std::io::IoError::last_error();
+            Err(e) => {
                 crash!(2, "Cannot replace STDIN: {}", e)
             }
         };
-        if unsafe { dup2(new_stdin.fd(), 0) } != 0 {
+        if unsafe { dup2(new_stdin.as_fd().fd, 0) } != 0 {
             crash!(2, "Cannot replace STDIN: {}", std::io::IoError::last_error())
         }
     }
 
     if replace_stdout {
-        let mut new_stdout = find_stdout();
+        let new_stdout = find_stdout();
+        let mut fd = new_stdout.as_fd();
 
-        rewind_stdout(&mut new_stdout);
+        rewind_stdout(&mut fd);
 
-        if unsafe { dup2(new_stdout.fd(), 1) } != 1 {
+        if unsafe { dup2(fd.fd, 1) } != 1 {
             crash!(2, "Cannot replace STDOUT: {}", std::io::IoError::last_error())
         }
     }
@@ -123,29 +146,25 @@ fn replace_fds() {
     }
 }
 
-fn find_stdout() -> native::io::file::FileDesc {
-    let localout = "nohup.out".to_c_str();
-    match native::io::file::open(&localout, Append, Write) {
+fn find_stdout() -> File {
+    match File::open_mode(&Path::new("nohup.out"), Append, Write) {
         Ok(t) => {
             show_warning!("Output is redirected to: nohup.out");
             t
         },
-        Err(_) => {
-            let e = std::io::IoError::last_error();
+        Err(e) => {
             let home = match std::os::getenv("HOME") {
                 None => crash!(2, "Cannot replace STDOUT: {}", e),
                 Some(h) => h
             };
-            let mut homeoutpath = Path::new(home);
-            homeoutpath.push("nohup.out");
-            let homeout = homeoutpath.to_c_str();
-            match native::io::file::open(&homeout, Append, Write) {
+            let mut homeout = Path::new(home);
+            homeout.push("nohup.out");
+            match File::open_mode(&homeout, Append, Write) {
                 Ok(t) => {
-                    show_warning!("Output is redirected to: {}", homeoutpath.display());
+                    show_warning!("Output is redirected to: {}", homeout.display());
                     t
                 },
-                Err(_) => {
-                    let e = std::io::IoError::last_error();
+                Err(e) => {
                     crash!(2, "Cannot replace STDOUT: {}", e)
                 }
             }
