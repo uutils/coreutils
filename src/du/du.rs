@@ -17,6 +17,7 @@ extern crate libc;
 extern crate time;
 
 use std::io::{stderr, fs, FileStat, TypeDirectory};
+use std::num::Float;
 use std::option::Option;
 use std::path::Path;
 use std::sync::{Arc, Future};

@@ -9,6 +9,7 @@
 
 use FmtOptions;
 use parasplit::{Paragraph, ParaWords, WordInfo};
+use std::num::{Float, SignedInt};
 use std::i64;
 use std::cmp;
 use std::mem;
@@ -262,7 +263,7 @@ fn find_kp_breakpoints<'a, T: Iterator<&'a WordInfo<'a>>>(iter: T, args: &BreakA
                     // do not even consider adding a line that has too many demerits
                     // also, try to detect overflow by checking signum
                     let total_demerits = new_demerits + active.demerits;
-                    if new_demerits < BAD_INFTY_SQ && total_demerits < ld_new && num::signum(active.demerits) <= num::signum(new_demerits) {
+                    if new_demerits < BAD_INFTY_SQ && total_demerits < ld_new && active.demerits.signum() <= new_demerits.signum() {
                         ld_new = total_demerits;
                         new_linebreaks.push(LineBreak {
                             prev         : i,
@@ -355,10 +356,10 @@ fn compute_demerits(delta_len: int, stretch: int, wlen: int, prev_rat: f32) -> (
 
     // compute badness given the stretch ratio
     let bad_linelen =
-        if num::abs(ratio) > 1.0f32 {
+        if ratio.abs() > 1.0f32 {
             BAD_INFTY
         } else {
-            (BAD_MULT * num::abs(num::pow(ratio, 3))) as i64
+            (BAD_MULT * ratio.powf(3f32).abs()) as i64
         };
 
     // we penalize lines ending in really short words
@@ -366,11 +367,11 @@ fn compute_demerits(delta_len: int, stretch: int, wlen: int, prev_rat: f32) -> (
         if wlen >= stretch {
             0
         } else {
-            (DL_MULT * num::abs(num::pow((stretch - wlen) as f32 / (stretch - 1) as f32, 3))) as i64
+            (DL_MULT * ((stretch - wlen) as f32 / (stretch - 1) as f32).powf(3f32).abs()) as i64
         };
 
     // we penalize lines that have very different ratios from previous lines
-    let bad_delta_r = (DR_MULT * num::abs(num::pow((ratio - prev_rat) / 2.0, 3))) as i64;
+    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powf(3f32)).abs()) as i64;
 
     let demerits = num::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
