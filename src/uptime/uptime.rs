@@ -20,7 +20,7 @@ extern crate libc;
 use std::mem::transmute;
 use std::io::{print, File};
 use std::ptr::{null_mut, null};
-use std::from_str::from_str;
+use std::str::from_str;
 use libc::{time_t, c_double, c_int, c_char};
 use c_types::c_tm;
 use utmpx::*;

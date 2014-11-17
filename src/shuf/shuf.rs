@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::cmp;
-use std::from_str::from_str;
+use std::str::from_str;
 use std::io;
 use std::io::IoResult;
 use std::iter::{range_inclusive, RangeInclusive};

@@ -19,7 +19,7 @@ extern crate serialize;
 
 #[phase(plugin, link)] extern crate log;
 
-use std::from_str::from_str;
+use std::str::from_str;
 use std::io::process::Process;
 
 use getopts::{
