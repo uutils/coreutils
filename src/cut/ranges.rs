@@ -15,7 +15,7 @@ pub struct Range {
     pub high: uint,
 }
 
-impl std::from_str::FromStr for Range {
+impl std::str::FromStr for Range {
     fn from_str(s: &str) -> Option<Range> {
         use std::uint::MAX;
 
