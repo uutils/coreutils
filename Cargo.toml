@@ -83,9 +83,6 @@ unix = [
 name = "uutils"
 path = "src/uutils/uutils_cargo.rs"
 
-[dependencies.time]
-git = "https://github.com/rust-lang/time"
-
 [dependencies.base64]
 path = "src/base64"
 optional = true

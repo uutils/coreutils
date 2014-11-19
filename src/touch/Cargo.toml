@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "touch"
 path = "touch.rs"
+
+[dependencies.time]
+git = "https://github.com/rust-lang/time"
