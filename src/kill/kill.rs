@@ -61,11 +61,11 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("L", "table", "list all signal names in a nice table"),
     ];
 
-    let usage = usage("[options] <pid> [...]", opts);
+    let usage = usage("[options] <pid> [...]", &opts);
 
     let (args, obs_signal) = handle_obsolete(args);
 
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));

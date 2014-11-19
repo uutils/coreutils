@@ -127,7 +127,7 @@ fn cut_bytes<R: Reader>(reader: R,
         }
 
         buf_read.consume_line();
-        out.write([b'\n']).unwrap();
+        out.write(&[b'\n']).unwrap();
     }
 
     0
@@ -262,7 +262,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
             if ! only_delimited {
                 out.write(line.as_slice()).unwrap();
                 if line[line.len() - 1] != b'\n' {
-                    out.write([b'\n']).unwrap();
+                    out.write(&[b'\n']).unwrap();
                 }
             }
 
@@ -344,7 +344,7 @@ fn cut_fields<R: Reader>(reader: R,
             if ! opts.only_delimited {
                 out.write(line.as_slice()).unwrap();
                 if line[line.len() - 1] != b'\n' {
-                    out.write([b'\n']).unwrap();
+                    out.write(&[b'\n']).unwrap();
                 }
             }
 
@@ -460,7 +460,7 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f)
@@ -472,7 +472,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0} OPTION... [FILE]...", args[0]);
         println!("");
-        print(usage("Print selected parts of lines from each FILE to standard output.", opts).as_slice());
+        print(usage("Print selected parts of lines from each FILE to standard output.", &opts).as_slice());
         println!("");
         println!("Use one, and only one of -b, -c or -f.  Each LIST is made up of one");
         println!("range, or many ranges separated by commas.  Selected input is written");

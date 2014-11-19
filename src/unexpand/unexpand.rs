@@ -84,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -93,7 +93,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage: {:s} [OPTION]... [FILE]...", NAME);
         io::print(getopts::usage(
             "Convert blanks in each FILE to tabs, writing to standard output.\n\
-            With no FILE, or when FILE is -, read standard input.", opts).as_slice());
+            With no FILE, or when FILE is -, read standard input.", &opts).as_slice());
         return 0;
     }
 

@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("h", "help", "display this help text and exit"),
         optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             error!("error: {}", e);
@@ -53,7 +53,7 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     let progname = args[0].clone();
-    let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", opts);
+    let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", &opts);
     let mode = if matches.opt_present("help") {
         Mode::Help
     } else if matches.opt_present("version") {

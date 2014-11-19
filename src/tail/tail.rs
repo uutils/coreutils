@@ -54,16 +54,16 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "version"),
     ];
 
-    let given_options = match getopts(args.as_slice(), possible_options) {
+    let given_options = match getopts(args.as_slice(), &possible_options) {
         Ok (m) => { m }
         Err(_) => {
-            println!("{:s}", usage(NAME, possible_options));
+            println!("{:s}", usage(NAME, &possible_options));
             return 1;
         }
     };
 
     if given_options.opt_present("h") {
-        println!("{:s}", usage(NAME, possible_options));
+        println!("{:s}", usage(NAME, &possible_options));
         return 0;
     }
     if given_options.opt_present("V") { version(); return 0 }

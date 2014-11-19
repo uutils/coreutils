@@ -142,7 +142,7 @@ fn print_help(program: &String) {
     println!("  {0:s} [SHORT-OPTION]... [STRING]...", *program);
     println!("  {0:s} LONG-OPTION", *program);
     println!("");
-    println(getopts::usage("Echo the STRING(s) to standard output.", opts).as_slice());
+    println(getopts::usage("Echo the STRING(s) to standard output.", &opts).as_slice());
     println("If -e is in effect, the following sequences are recognized:
 
 \\\\      backslash

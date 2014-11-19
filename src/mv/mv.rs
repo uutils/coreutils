@@ -79,14 +79,14 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
             return 1;
         }
     };
-    let usage = usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
+    let usage = usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", &opts);
 
     /* This does not exactly match the GNU implementation:
      * The GNU mv defaults to Force, but if more than one of the

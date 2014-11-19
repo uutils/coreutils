@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
         print(getopts::usage("Concatenate FILE(s), or standard input, to \
-                             standard output.", opts).as_slice());
+                             standard output.", &opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
@@ -64,11 +64,11 @@ pub fn uumain(args: Vec<String>) -> int {
     if matches.opt_present("b") {
         number_mode = NumberingMode::NumberNonEmpty;
     }
-    let show_nonprint = matches.opts_present(["A".to_string(), "e".to_string(),
+    let show_nonprint = matches.opts_present(&["A".to_string(), "e".to_string(),
                                               "t".to_string(), "v".to_string()]);
-    let show_ends = matches.opts_present(["E".to_string(), "A".to_string(),
+    let show_ends = matches.opts_present(&["E".to_string(), "A".to_string(),
                                           "e".to_string()]);
-    let show_tabs = matches.opts_present(["A".to_string(), "T".to_string(),
+    let show_tabs = matches.opts_present(&["A".to_string(), "T".to_string(),
                                           "t".to_string()]);
     let squeeze_blank = matches.opt_present("s");
     let mut files = matches.free;
@@ -104,7 +104,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
         let mut at_line_start = true;
         loop {
-            let n = match reader.read(in_buf) {
+            let n = match reader.read(&mut in_buf) {
                 Ok(n) if n != 0 => n,
                 _ => break,
             };
@@ -180,7 +180,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
         let mut at_line_start = true;
         loop {
-            let n = match reader.read(in_buf) {
+            let n = match reader.read(&mut in_buf) {
                 Ok(n) if n != 0 => n,
                 _ => break,
             };
@@ -228,8 +228,8 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                         _ => byte,
                     };
                     match byte {
-                        0 ... 31 => writer.write(['^' as u8, byte + 64]),
-                        127      => writer.write(['^' as u8, byte - 64]),
+                        0 ... 31 => writer.write(&['^' as u8, byte + 64]),
+                        127      => writer.write(&['^' as u8, byte - 64]),
                         _        => writer.write_u8(byte),
                     }
                 } else {
@@ -251,7 +251,7 @@ fn write_fast(files: Vec<String>) {
         };
 
         loop {
-            match reader.read(in_buf) {
+            match reader.read(&mut in_buf) {
                 Ok(n) if n != 0 => {
                     // This interface is completely broken.
                     writer.write(in_buf.slice_to(n)).unwrap();

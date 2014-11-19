@@ -54,10 +54,10 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("", "version", "output version information and exit"),
     ];
 
-    let usage = usage("[options]", opts);
+    let usage = usage("[options]", &opts);
 
 
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));

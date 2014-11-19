@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version",        "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m)  => m,
         Err(e) => panic!("Invalid options\n{}", e)
     };
@@ -55,16 +55,16 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage: {:s} [OPTION]... FILE...", NAME);
         println!("");
         println!("{:s}", getopts::usage("Update the access and modification times of \
-                                         each FILE to the current time.", opts));
+                                         each FILE to the current time.", &opts));
         if matches.free.is_empty() {
             return 1;
         }
         return 0;
     }
 
-    if matches.opt_present("date") && matches.opts_present(["reference".to_string(), "t".to_string()]) ||
-       matches.opt_present("reference") && matches.opts_present(["date".to_string(), "t".to_string()]) ||
-       matches.opt_present("t") && matches.opts_present(["date".to_string(), "reference".to_string()]) {
+    if matches.opt_present("date") && matches.opts_present(&["reference".to_string(), "t".to_string()]) ||
+       matches.opt_present("reference") && matches.opts_present(&["date".to_string(), "t".to_string()]) ||
+       matches.opt_present("t") && matches.opts_present(&["date".to_string(), "reference".to_string()]) {
         panic!("Invalid options: cannot specify reference time from more than one source");
     }
 
@@ -73,7 +73,7 @@ pub fn uumain(args: Vec<String>) -> int {
             let path = Path::new(matches.opt_str("reference").unwrap().to_string());
             let stat = stat(&path, !matches.opt_present("no-dereference"));
             (stat.accessed, stat.modified)
-        } else if matches.opts_present(["date".to_string(), "t".to_string()]) {
+        } else if matches.opts_present(&["date".to_string(), "t".to_string()]) {
             let timestamp = if matches.opt_present("date") {
                 parse_date(matches.opt_str("date").unwrap().as_slice())
             } else {
@@ -91,7 +91,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
         if !path.exists() {
             // no-dereference included here for compatibility
-            if matches.opts_present(["no-create".to_string(), "no-dereference".to_string()]) {
+            if matches.opts_present(&["no-create".to_string(), "no-dereference".to_string()]) {
                 continue;
             }
 
@@ -101,14 +101,14 @@ pub fn uumain(args: Vec<String>) -> int {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.opts_present(["date".to_string(), "reference".to_string(), "t".to_string()]) {
+            if !matches.opts_present(&["date".to_string(), "reference".to_string(), "t".to_string()]) {
                 continue;
             }
         }
 
         // If changing "only" atime or mtime, grab the existing value of the other.
         // Note that "-a" and "-m" may be passed together; this is not an xor.
-        if matches.opts_present(["a".to_string(), "m".to_string(), "time".to_string()]) {
+        if matches.opts_present(&["a".to_string(), "m".to_string(), "time".to_string()]) {
             let stat = stat(&path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 

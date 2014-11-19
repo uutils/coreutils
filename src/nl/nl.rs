@@ -106,17 +106,17 @@ pub fn uumain(args: Vec<String>) -> int {
         number_separator: String::from_str("\t"),
     };
 
-    let given_options = match getopts(args.tail(), possible_options) {
+    let given_options = match getopts(args.tail(), &possible_options) {
         Ok (m) => { m }
         Err(f) => {
             show_error!("{}", f);
-            print_usage(possible_options);
+            print_usage(&possible_options);
             return 1
         }
     };
 
     if given_options.opt_present("help") {
-        print_usage(possible_options);
+        print_usage(&possible_options);
         return 0;
     }
     if given_options.opt_present("version") { version(); return 0; }

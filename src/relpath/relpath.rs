@@ -28,17 +28,17 @@ pub fn uumain(args: Vec<String>) -> int {
         optopt("d", "", "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative", "DIR"),
     ];
 
-    let opts = match getopts(args.tail(), options) {
+    let opts = match getopts(args.tail(), &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            show_usage(program.as_slice(), options);
+            show_usage(program.as_slice(), &options);
             return 1
         }
     };
 
     if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { show_usage(program.as_slice(), options); return 0 }
+    if opts.opt_present("h") { show_usage(program.as_slice(), &options); return 0 }
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: TO");

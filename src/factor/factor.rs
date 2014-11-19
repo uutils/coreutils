@@ -69,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("v", "version", "print the version and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 \t{program} [OPTION]\n\
                 \n\
                 {usage}", program = program, version = VERSION, usage = getopts::usage("Print the prime factors of the given number(s). \
-                                        If none are specified, read from standard input.", opts));
+                                        If none are specified, read from standard input.", &opts));
         return 1;
     }
     if matches.opt_present("version") {

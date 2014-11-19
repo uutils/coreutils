@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let mut matches = match getopts::getopts(args.tail(), opts) {
+    let mut matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "{}", f)
@@ -64,7 +64,7 @@ Usage:
 {usage}
 With no FILE, or when FILE is -, read standard input.",
                  name = NAME, version = VERSION, prog = program,
-                 usage = getopts::usage("Write a random permutation of the input lines to standard output.", opts));
+                 usage = getopts::usage("Write a random permutation of the input lines to standard output.", &opts));
     } else if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
     } else {

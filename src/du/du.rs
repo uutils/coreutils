@@ -157,7 +157,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
@@ -184,7 +184,7 @@ Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
 ers of 1000).",
                  program = program,
                  version = VERSION,
-                 usage = getopts::usage("Summarize disk usage of each FILE, recursively for directories.", opts));
+                 usage = getopts::usage("Summarize disk usage of each FILE, recursively for directories.", &opts));
         return 0;
     } else if matches.opt_present("version") {
         println!("{} version: {}", program, VERSION);

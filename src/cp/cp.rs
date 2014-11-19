@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),
     ];
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             error!("error: {}", e);
@@ -45,7 +45,7 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     let progname = &args[0];
-    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
+    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", &opts);
     let mode = if matches.opt_present("version") {
         Mode::Version
     } else if matches.opt_present("help") {

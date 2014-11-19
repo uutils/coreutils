@@ -72,7 +72,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {:s}", program);
         println!("");
-        print(getopts::usage("print effective userid", opts).as_slice());
+        print(getopts::usage("print effective userid", &opts).as_slice());
         return 0;
     }
     if matches.opt_present("version") {

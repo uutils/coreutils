@@ -33,7 +33,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
@@ -53,7 +53,7 @@ pub fn uumain(args: Vec<String>) -> int {
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.", opts).as_slice());
+specified by the sum of their values.", &opts).as_slice());
     } else if matches.opt_present("version") {
         println!("sleep 1.0.0");
     } else if matches.free.is_empty() {

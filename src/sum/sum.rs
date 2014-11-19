@@ -27,7 +27,7 @@ fn bsd_sum(mut reader: Box<Reader>) -> (uint, u16) {
     let mut blocks_read = 0;
     let mut checksum: u16 = 0;
     loop {
-        match reader.read(buf) {
+        match reader.read(&mut buf) {
             Ok(n) if n != 0 => {
                 blocks_read += 1;
                 for &byte in buf.slice_to(n).iter() {
@@ -48,7 +48,7 @@ fn sysv_sum(mut reader: Box<Reader>) -> (uint, u16) {
     let mut ret = 0;
 
     loop {
-        match reader.read(buf) {
+        match reader.read(&mut buf) {
             Ok(n) if n != 0 => {
                 blocks_read += 1;
                 for &byte in buf.slice_to(n).iter() {
@@ -84,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("v", "version", "print the version and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -95,7 +95,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("checksum and count the blocks in a file", opts).as_slice());
+        print(getopts::usage("checksum and count the blocks in a file", &opts).as_slice());
         println!("");
         println!("With no FILE, or when  FILE is -, read standard input.");
         return 0;

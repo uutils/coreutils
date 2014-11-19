@@ -59,7 +59,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => panic!("{}", f),
     };
@@ -70,7 +70,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {:s} [OPTION]... [FILE]", program);
         println!("");
-        print(getopts::usage("Output who is currently logged in according to FILE.", opts).as_slice());
+        print(getopts::usage("Output who is currently logged in according to FILE.", &opts).as_slice());
         return 0;
     }
 

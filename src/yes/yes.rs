@@ -29,7 +29,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "invalid options\n{}", f)
@@ -41,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [STRING]... [OPTION]...", program);
         println!("");
-        print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", opts).as_slice());
+        print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts).as_slice());
         return 0;
     }
     if matches.opt_present("version") {

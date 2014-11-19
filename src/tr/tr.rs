@@ -154,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(err) => {
             show_error!("{}", err);
@@ -163,7 +163,7 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     if matches.opt_present("help") {
-        usage(opts);
+        usage(&opts);
         return 0;
     }
 
@@ -173,12 +173,12 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if matches.free.len() == 0 {
-        usage(opts);
+        usage(&opts);
         return 1;
     }
 
     let dflag = matches.opt_present("d");
-    let cflag = matches.opts_present(["c".to_string(), "C".to_string()]);
+    let cflag = matches.opts_present(&["c".to_string(), "C".to_string()]);
     let sets = matches.free;
 
     if cflag && !dflag {

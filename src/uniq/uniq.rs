@@ -138,7 +138,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -150,7 +150,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
         print!("{}", getopts::usage("Filter adjacent matching lines from INPUT (or standard input),\n\
-                                    writing to OUTPUT (or standard output).", opts));
+                                    writing to OUTPUT (or standard output).", &opts));
         println!("");
         println!("Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
                   You may want to sort the input first, or use 'sort -u' without '{0}'.\n", program);

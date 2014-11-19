@@ -64,7 +64,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("s", "sysname", "print the operating system name."),
         getopts::optflag("v", "version", "print the operating system version."),
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
@@ -74,13 +74,13 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {:s}", program);
         println!("");
-        print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", opts).as_slice());
+        print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", &opts).as_slice());
         return 0;
     }
     let uname = unsafe { getuname() };
     let mut output = String::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
-        || !matches.opts_present(["nodename".to_string(), "release".to_string(), "version".to_string(), "machine".to_string()]) {
+        || !matches.opts_present(&["nodename".to_string(), "release".to_string(), "version".to_string(), "machine".to_string()]) {
             output.push_str(uname.sysname.as_slice());
             output.push_str(" ");
     }

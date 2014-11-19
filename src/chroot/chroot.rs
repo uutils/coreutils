@@ -51,17 +51,17 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "Show program's version")
     ];
 
-    let opts = match getopts(args.tail(), options) {
+    let opts = match getopts(args.tail(), &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            help_menu(program.as_slice(), options);
+            help_menu(program.as_slice(), &options);
             return 1
         }
     };
 
     if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { help_menu(program.as_slice(), options); return 0 }
+    if opts.opt_present("h") { help_menu(program.as_slice(), &options); return 0 }
 
     if opts.free.len() == 0 {
         println!("Missing operand: NEWROOT");

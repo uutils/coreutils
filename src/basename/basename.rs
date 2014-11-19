@@ -32,7 +32,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m)  => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -43,7 +43,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Print NAME with any leading directory components removed.");
         println!("If specified, also remove a trailing SUFFIX.");
 
-        print(getopts::usage("", opts).as_slice());
+        print(getopts::usage("", &opts).as_slice());
 
         return 0;
     }

@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit")
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {} [OPTION]... [FILE]...", program);
         println!("");
-        print!("{}", getopts::usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines", opts));
+        print!("{}", getopts::usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines", &opts));
     } else if matches.opt_present("V") {
         println!("{} v{}", NAME, VERSION);
     } else {
