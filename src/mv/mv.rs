@@ -318,7 +318,7 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
 fn read_yes() -> bool {
     match BufferedReader::new(stdin_raw()).read_line() {
         Ok(s) => match s.as_slice().slice_shift_char() {
-            (Some(x), _) => x == 'y' || x == 'Y',
+            Some((x, _)) => x == 'y' || x == 'Y',
             _ => false
         },
         _ => false

@@ -168,12 +168,12 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::IoResult<bool> {
     if p1_lstat.kind == io::TypeSymlink {
         raw_p1 = fs::readlink(&raw_p1).unwrap();
     }
-    raw_p1 = os::make_absolute(&raw_p1);
+    raw_p1 = os::make_absolute(&raw_p1).unwrap();
 
     if p2_lstat.kind == io::TypeSymlink {
         raw_p2 = fs::readlink(&raw_p2).unwrap();
     }
-    raw_p2 = os::make_absolute(&raw_p2);
+    raw_p2 = os::make_absolute(&raw_p2).unwrap();
 
     Ok(raw_p1 == raw_p2)
 }

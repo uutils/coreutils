@@ -126,9 +126,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
 
 fn enter_chroot(root: &Path) {
     let root_str = root.display();
-    if !std::os::change_dir(root) {
-        crash!(1, "cannot chdir to {}", root_str)
-    };
+    std::os::change_dir(root).unwrap();
     let err = unsafe {
         chroot(".".to_c_str().unwrap() as *const libc::c_char)
     };

@@ -50,14 +50,14 @@ pub fn uumain(args: Vec<String>) -> int {
     let from = if opts.free.len() > 1 {
         Path::new(opts.free[1].as_slice())
     } else {
-        std::os::getcwd()
+        std::os::getcwd().unwrap()
     };
-    let absto = std::os::make_absolute(&to);
-    let absfrom = std::os::make_absolute(&from);
+    let absto = std::os::make_absolute(&to).unwrap();
+    let absfrom = std::os::make_absolute(&from).unwrap();
 
     if opts.opt_present("d") {
         let base = Path::new(opts.opt_str("d").unwrap());
-        let absbase = std::os::make_absolute(&base);
+        let absbase = std::os::make_absolute(&base).unwrap();
         if !absbase.is_ancestor_of(&absto) || !absbase.is_ancestor_of(&absfrom) {
             println!("{}", absto.display());
             return 0
