@@ -53,23 +53,23 @@ fn one(args: &[&[u8]]) -> bool {
 fn two(args: &[&[u8]], error: &mut bool) -> bool {
     match args[0] {
         b"!" => !one(args.slice_from(1)),
-        b"-b" => path(args[1], BlockSpecial),
-        b"-c" => path(args[1], CharacterSpecial),
-        b"-d" => path(args[1], Directory),
-        b"-e" => path(args[1], Exists),
-        b"-f" => path(args[1], Regular),
-        b"-g" => path(args[1], GroupIDFlag),
-        b"-h" => path(args[1], SymLink),
-        b"-L" => path(args[1], SymLink),
+        b"-b" => path(args[1], PathCondition::BlockSpecial),
+        b"-c" => path(args[1], PathCondition::CharacterSpecial),
+        b"-d" => path(args[1], PathCondition::Directory),
+        b"-e" => path(args[1], PathCondition::Exists),
+        b"-f" => path(args[1], PathCondition::Regular),
+        b"-g" => path(args[1], PathCondition::GroupIDFlag),
+        b"-h" => path(args[1], PathCondition::SymLink),
+        b"-L" => path(args[1], PathCondition::SymLink),
         b"-n" => one(args.slice_from(1)),
-        b"-p" => path(args[1], FIFO),
-        b"-r" => path(args[1], Readable),
-        b"-S" => path(args[1], Socket),
-        b"-s" => path(args[1], NonEmpty),
+        b"-p" => path(args[1], PathCondition::FIFO),
+        b"-r" => path(args[1], PathCondition::Readable),
+        b"-S" => path(args[1], PathCondition::Socket),
+        b"-s" => path(args[1], PathCondition::NonEmpty),
         b"-t" => isatty(args[1]),
-        b"-u" => path(args[1], UserIDFlag),
-        b"-w" => path(args[1], Writable),
-        b"-x" => path(args[1], Executable),
+        b"-u" => path(args[1], PathCondition::UserIDFlag),
+        b"-w" => path(args[1], PathCondition::Writable),
+        b"-x" => path(args[1], PathCondition::Executable),
         b"-z" => !one(args.slice_from(1)),
         _ => {
             *error = true;
@@ -82,12 +82,12 @@ fn three(args: &[&[u8]], error: &mut bool) -> bool {
     match args[1] {
         b"=" => args[0] == args[2],
         b"!=" => args[0] != args[2],
-        b"-eq" => integers(args[0], args[2], Equal),
-        b"-ne" => integers(args[0], args[2], Unequal),
-        b"-gt" => integers(args[0], args[2], Greater),
-        b"-ge" => integers(args[0], args[2], GreaterEqual),
-        b"-lt" => integers(args[0], args[2], Less),
-        b"-le" => integers(args[0], args[2], LessEqual),
+        b"-eq" => integers(args[0], args[2], IntegerCondition::Equal),
+        b"-ne" => integers(args[0], args[2], IntegerCondition::Unequal),
+        b"-gt" => integers(args[0], args[2], IntegerCondition::Greater),
+        b"-ge" => integers(args[0], args[2], IntegerCondition::GreaterEqual),
+        b"-lt" => integers(args[0], args[2], IntegerCondition::Less),
+        b"-le" => integers(args[0], args[2], IntegerCondition::LessEqual),
         _ => match args[0] {
             b"!" => !two(args.slice_from(1), error),
             _ => {
@@ -129,12 +129,12 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
         _ => return false,
     };
     match cond {
-        Equal        => a == b,
-        Unequal      => a != b,
-        Greater      => a >  b,
-        GreaterEqual => a >= b,
-        Less         => a <  b,
-        LessEqual    => a <= b,
+        IntegerCondition::Equal        => a == b,
+        IntegerCondition::Unequal      => a != b,
+        IntegerCondition::Greater      => a >  b,
+        IntegerCondition::GreaterEqual => a >= b,
+        IntegerCondition::Less         => a <  b,
+        IntegerCondition::LessEqual    => a <= b,
     }
 }
 
@@ -207,7 +207,7 @@ fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
         let lhs = dispatch(&mut args, error);
 
         if args.len() > 0 {
-            parse_expr_helper(&hashmap, &mut args, lhs, Unknown, error)
+            parse_expr_helper(&hashmap, &mut args, lhs, Precedence::Unknown, error)
         } else {
             lhs
         }
@@ -238,14 +238,14 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
             rhs = parse_expr_helper(hashmap, args, rhs, subprec, error);
         }
         lhs = match prec {
-            UnOp | BUnOp => {
+            Precedence::UnOp | Precedence::BUnOp => {
                 *error = true;
                 false
             }
-            And => lhs && rhs,
-            Or => lhs || rhs,
-            BinOp => three(&[if lhs { b" " } else { b"" }, op, if rhs { b" " } else { b"" }], error),
-            Paren => unimplemented!(),  // TODO: implement parentheses
+            Precedence::And => lhs && rhs,
+            Precedence::Or => lhs || rhs,
+            Precedence::BinOp => three(&[if lhs { b" " } else { b"" }, op, if rhs { b" " } else { b"" }], error),
+            Precedence::Paren => unimplemented!(),  // TODO: implement parentheses
             _ => unreachable!()
         };
         if args.len() > 0 {
@@ -262,41 +262,41 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
 fn setup_hashmap<'a>() -> HashMap<&'a [u8], Precedence> {
     let mut hashmap = HashMap::<&'a [u8], Precedence>::new();
 
-    hashmap.insert(b"-b", UnOp);
-    hashmap.insert(b"-c", UnOp);
-    hashmap.insert(b"-d", UnOp);
-    hashmap.insert(b"-e", UnOp);
-    hashmap.insert(b"-f", UnOp);
-    hashmap.insert(b"-g", UnOp);
-    hashmap.insert(b"-h", UnOp);
-    hashmap.insert(b"-L", UnOp);
-    hashmap.insert(b"-n", UnOp);
-    hashmap.insert(b"-p", UnOp);
-    hashmap.insert(b"-r", UnOp);
-    hashmap.insert(b"-S", UnOp);
-    hashmap.insert(b"-s", UnOp);
-    hashmap.insert(b"-t", UnOp);
-    hashmap.insert(b"-u", UnOp);
-    hashmap.insert(b"-w", UnOp);
-    hashmap.insert(b"-x", UnOp);
-    hashmap.insert(b"-z", UnOp);
+    hashmap.insert(b"-b", Precedence::UnOp);
+    hashmap.insert(b"-c", Precedence::UnOp);
+    hashmap.insert(b"-d", Precedence::UnOp);
+    hashmap.insert(b"-e", Precedence::UnOp);
+    hashmap.insert(b"-f", Precedence::UnOp);
+    hashmap.insert(b"-g", Precedence::UnOp);
+    hashmap.insert(b"-h", Precedence::UnOp);
+    hashmap.insert(b"-L", Precedence::UnOp);
+    hashmap.insert(b"-n", Precedence::UnOp);
+    hashmap.insert(b"-p", Precedence::UnOp);
+    hashmap.insert(b"-r", Precedence::UnOp);
+    hashmap.insert(b"-S", Precedence::UnOp);
+    hashmap.insert(b"-s", Precedence::UnOp);
+    hashmap.insert(b"-t", Precedence::UnOp);
+    hashmap.insert(b"-u", Precedence::UnOp);
+    hashmap.insert(b"-w", Precedence::UnOp);
+    hashmap.insert(b"-x", Precedence::UnOp);
+    hashmap.insert(b"-z", Precedence::UnOp);
 
-    hashmap.insert(b"=", BinOp);
-    hashmap.insert(b"!=", BinOp);
-    hashmap.insert(b"-eq", BinOp);
-    hashmap.insert(b"-ne", BinOp);
-    hashmap.insert(b"-gt", BinOp);
-    hashmap.insert(b"-ge", BinOp);
-    hashmap.insert(b"-lt", BinOp);
-    hashmap.insert(b"-le", BinOp);
+    hashmap.insert(b"=", Precedence::BinOp);
+    hashmap.insert(b"!=", Precedence::BinOp);
+    hashmap.insert(b"-eq", Precedence::BinOp);
+    hashmap.insert(b"-ne", Precedence::BinOp);
+    hashmap.insert(b"-gt", Precedence::BinOp);
+    hashmap.insert(b"-ge", Precedence::BinOp);
+    hashmap.insert(b"-lt", Precedence::BinOp);
+    hashmap.insert(b"-le", Precedence::BinOp);
 
-    hashmap.insert(b"!", BUnOp);
+    hashmap.insert(b"!", Precedence::BUnOp);
 
-    hashmap.insert(b"-a", And);
-    hashmap.insert(b"-o", Or);
+    hashmap.insert(b"-a", Precedence::And);
+    hashmap.insert(b"-o", Precedence::Or);
 
-    hashmap.insert(b"(", Paren);
-    hashmap.insert(b")", Paren);
+    hashmap.insert(b"(", Precedence::Paren);
+    hashmap.insert(b")", Precedence::Paren);
 
     hashmap
 }
@@ -346,7 +346,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 
     let path = unsafe { path.to_c_str_unchecked() };
     let mut stat = unsafe { std::mem::zeroed() };
-    if cond == SymLink {
+    if cond == PathCondition::SymLink {
         if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {
             if stat.st_mode & S_IFMT == S_IFLNK {
                 return true;
@@ -359,20 +359,20 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
     }
     let file_type = stat.st_mode & S_IFMT;
     match cond {
-        BlockSpecial     => file_type == S_IFBLK,
-        CharacterSpecial => file_type == S_IFCHR,
-        Directory        => file_type == S_IFDIR,
-        Exists           => true,
-        Regular          => file_type == S_IFREG,
-        GroupIDFlag      => stat.st_mode & S_ISGID != 0,
-        SymLink          => true,
-        FIFO             => file_type == S_IFIFO,
-        Readable         => perm(stat, Read),
-        Socket           => file_type == S_IFSOCK,
-        NonEmpty         => stat.st_size > 0,
-        UserIDFlag       => stat.st_mode & S_ISUID != 0,
-        Writable         => perm(stat, Write),
-        Executable       => perm(stat, Execute),
+        PathCondition::BlockSpecial     => file_type == S_IFBLK,
+        PathCondition::CharacterSpecial => file_type == S_IFCHR,
+        PathCondition::Directory        => file_type == S_IFDIR,
+        PathCondition::Exists           => true,
+        PathCondition::Regular          => file_type == S_IFREG,
+        PathCondition::GroupIDFlag      => stat.st_mode & S_ISGID != 0,
+        PathCondition::SymLink          => true,
+        PathCondition::FIFO             => file_type == S_IFIFO,
+        PathCondition::Readable         => perm(stat, Permission::Read),
+        PathCondition::Socket           => file_type == S_IFSOCK,
+        PathCondition::NonEmpty         => stat.st_size > 0,
+        PathCondition::UserIDFlag       => stat.st_mode & S_ISUID != 0,
+        PathCondition::Writable         => perm(stat, Permission::Write),
+        PathCondition::Executable       => perm(stat, Permission::Execute),
     }
 }
 

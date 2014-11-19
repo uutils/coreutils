@@ -76,7 +76,7 @@ With no FILE, or when FILE is -, read standard input.",
                     return 1;
                 }
                 match parse_range(range) {
-                    Ok(m) => InputRange(m),
+                    Ok(m) => Mode::InputRange(m),
                     Err((msg, code)) => {
                         show_error!("{}", msg);
                         return code;
@@ -85,12 +85,12 @@ With no FILE, or when FILE is -, read standard input.",
             }
             None => {
                 if echo {
-                    Echo
+                    Mode::Echo
                 } else {
                     if matches.free.len() == 0 {
                         matches.free.push("-".to_string());
                     }
-                    Default
+                    Mode::Default
                 }
             }
         };
@@ -122,9 +122,9 @@ With no FILE, or when FILE is -, read standard input.",
 
 fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, output: Option<String>, random: Option<String>) -> IoResult<()> {
     match mode {
-        Echo => shuf_lines(input, repeat, zero, count, output, random),
-        InputRange(range) => shuf_lines(range.map(|num| num.to_string()).collect(), repeat, zero, count, output, random),
-        Default => {
+        Mode::Echo => shuf_lines(input, repeat, zero, count, output, random),
+        Mode::InputRange(range) => shuf_lines(range.map(|num| num.to_string()).collect(), repeat, zero, count, output, random),
+        Mode::Default => {
             let lines: Vec<String> = input.into_iter().flat_map(|filename| {
                 let slice = filename.as_slice();
                 let mut file_buf;
@@ -159,8 +159,8 @@ enum WrappedRng {
 impl WrappedRng {
     fn next_u32(&mut self) -> u32 {
         match self {
-            &RngFile(ref mut r) => r.next_u32(),
-            &RngDefault(ref mut r) => r.next_u32(),
+            &WrappedRng::RngFile(ref mut r) => r.next_u32(),
+            &WrappedRng::RngDefault(ref mut r) => r.next_u32(),
         }
     }
 }
@@ -171,8 +171,8 @@ fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, out
         None => box io::stdout() as Box<Writer>
     };
     let mut rng = match random {
-        Some(name) => RngFile(rand::reader::ReaderRng::new(try!(io::File::open(&Path::new(name))))),
-        None => RngDefault(rand::task_rng()),
+        Some(name) => WrappedRng::RngFile(rand::reader::ReaderRng::new(try!(io::File::open(&Path::new(name))))),
+        None => WrappedRng::RngDefault(rand::task_rng()),
     };
     let mut len = lines.len();
     let max = if repeat { count } else { cmp::min(count, len) };

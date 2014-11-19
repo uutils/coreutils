@@ -52,8 +52,8 @@ enum LineReader {
 impl LineReader {
     fn read_line(&mut self) -> IoResult<String> {
         match self {
-            &Stdin(ref mut r)  => r.read_line(),
-            &FileIn(ref mut r) => r.read_line(),
+            &LineReader::Stdin(ref mut r)  => r.read_line(),
+            &LineReader::FileIn(ref mut r) => r.read_line(),
         }
     }
 }

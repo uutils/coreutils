@@ -109,7 +109,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                 }
             };
             match fs::stat(rfile.path()) {
-                Ok(stat) => (stat.size, Reference),
+                Ok(stat) => (stat.size, TruncateMode::Reference),
                 Err(f) => {
                     show_error!("{}", f.to_string());
                     return Err(1);
@@ -132,13 +132,13 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                         }
                     };
                     let tsize = match mode {
-                        Reference => refsize,
-                        Extend => fsize + refsize,
-                        Reduce => fsize - refsize,
-                        AtMost => if fsize > refsize { refsize } else { fsize },
-                        AtLeast => if fsize < refsize { refsize } else { fsize },
-                        RoundDown => fsize - fsize % refsize,
-                        RoundUp => fsize + fsize % refsize
+                        TruncateMode::Reference => refsize,
+                        TruncateMode::Extend => fsize + refsize,
+                        TruncateMode::Reduce => fsize - refsize,
+                        TruncateMode::AtMost => if fsize > refsize { refsize } else { fsize },
+                        TruncateMode::AtLeast => if fsize < refsize { refsize } else { fsize },
+                        TruncateMode::RoundDown => fsize - fsize % refsize,
+                        TruncateMode::RoundUp => fsize + fsize % refsize
                     };
                     match file.truncate(tsize as i64) {
                         Ok(_) => {}
@@ -160,17 +160,17 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {
     let mode = match size.char_at(0) {
-        '+' => Extend,
-        '-' => Reduce,
-        '<' => AtMost,
-        '>' => AtLeast,
-        '/' => RoundDown,
-        '*' => RoundUp,
-        _ => Reference /* assume that the size is just a number */
+        '+' => TruncateMode::Extend,
+        '-' => TruncateMode::Reduce,
+        '<' => TruncateMode::AtMost,
+        '>' => TruncateMode::AtLeast,
+        '/' => TruncateMode::RoundDown,
+        '*' => TruncateMode::RoundUp,
+        _ => TruncateMode::Reference /* assume that the size is just a number */
     };
     let bytes = {
         let mut slice =
-            if mode == Reference {
+            if mode == TruncateMode::Reference {
                 let size: &str = size;
                 size
             } else {

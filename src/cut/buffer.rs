@@ -99,7 +99,7 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
         }
 
         let newline_idx = match self.end - self.start {
-            0 => return Bytes::EndOfFile,
+            0 => return Bytes::Selected::EndOfFile,
             buf_used if bytes < buf_used => {
                 // because the output delimiter should only be placed between
                 // segments check if the byte after bytes is a newline
@@ -114,7 +114,7 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
 
                         self.start += bytes;
 
-                        return Bytes::Complete(segment);
+                        return Bytes::Selected::Complete(segment);
                     }
                 }
             }
@@ -129,7 +129,7 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
                         self.start = 0;
                         self.end = 0;
 
-                        return Bytes::Partial(segment);
+                        return Bytes::Selected::Partial(segment);
                     }
                 }
             }
@@ -139,6 +139,6 @@ impl<R: Reader> Bytes::Select for BufReader<R> {
         let segment = self.buffer.slice(self.start, new_start);
 
         self.start = new_start;
-        Bytes::NewlineFound(segment)
+        Bytes::Selected::NewlineFound(segment)
     }
 }

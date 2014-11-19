@@ -94,23 +94,23 @@ pub fn uumain(args: Vec<String>) -> int {
      * To default to no-clobber in that situation seems safer:
      */
     let overwrite_mode = if matches.opt_present("no-clobber") {
-        NoClobber
+        OverwriteMode::NoClobber
     } else if matches.opt_present("interactive") {
-        Interactive
+        OverwriteMode::Interactive
     } else {
-        Force
+        OverwriteMode::Force
     };
 
     let backup_mode = if matches.opt_present("b") {
-        SimpleBackup
+        BackupMode::SimpleBackup
     } else if matches.opt_present("backup") {
         match matches.opt_str("backup") {
-            None => SimpleBackup,
+            None => BackupMode::SimpleBackup,
             Some(mode) => match mode.as_slice() {
-                "simple" | "never" => SimpleBackup,
-                "numbered" | "t"   => NumberedBackup,
-                "existing" | "nil" => ExistingBackup,
-                "none" | "off"     => NoBackup,
+                "simple" | "never" => BackupMode::SimpleBackup,
+                "numbered" | "t"   => BackupMode::NumberedBackup,
+                "existing" | "nil" => BackupMode::ExistingBackup,
+                "none" | "off"     => BackupMode::NoBackup,
                 x => {
                     show_error!("invalid argument ‘{}’ for ‘backup type’\n\
                                 Try 'mv --help' for more information.", x);
@@ -119,10 +119,10 @@ pub fn uumain(args: Vec<String>) -> int {
             }
         }
     } else {
-        NoBackup
+        BackupMode::NoBackup
     };
 
-    if overwrite_mode == NoClobber && backup_mode != NoBackup {
+    if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
         show_error!("options --backup and --no-clobber are mutually exclusive\n\
                     Try 'mv --help' for more information.");
         return 1;
@@ -276,21 +276,21 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
 
     if to.exists() {
         match b.overwrite {
-            NoClobber => return Ok(()),
-            Interactive => {
+            OverwriteMode::NoClobber => return Ok(()),
+            OverwriteMode::Interactive => {
                 print!("{}: overwrite ‘{}’? ", NAME, to.display());
                 if !read_yes() {
                     return Ok(());
                 }
             },
-            Force => {}
+            OverwriteMode::Force => {}
         };
 
         backup_path = match b.backup {
-            NoBackup => None,
-            SimpleBackup => Some(simple_backup_path(to, &b.suffix)),
-            NumberedBackup => Some(numbered_backup_path(to)),
-            ExistingBackup => Some(existing_backup_path(to, &b.suffix))
+            BackupMode::NoBackup => None,
+            BackupMode::SimpleBackup => Some(simple_backup_path(to, &b.suffix)),
+            BackupMode::NumberedBackup => Some(numbered_backup_path(to)),
+            BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix))
         };
         if let Some(ref p) = backup_path {
             try!(fs::rename(to, p));

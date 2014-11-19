@@ -55,13 +55,13 @@ pub fn uumain(args: Vec<String>) -> int {
     let progname = args[0].clone();
     let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", opts);
     let mode = if matches.opt_present("help") {
-        Help
+        Mode::Help
     } else if matches.opt_present("version") {
-        Version
+        Mode::Version
     } else if matches.opt_present("decode") {
-        Decode
+        Mode::Decode
     } else {
-        Encode
+        Mode::Encode
     };
     let ignore_garbage = matches.opt_present("ignore-garbage");
     let line_wrap = match matches.opt_str("wrap") {
@@ -86,10 +86,10 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     match mode {
-        Decode  => decode(input, ignore_garbage),
-        Encode  => encode(input, line_wrap),
-        Help    => help(progname.as_slice(), usage.as_slice()),
-        Version => version()
+        Mode::Decode  => decode(input, ignore_garbage),
+        Mode::Encode  => encode(input, line_wrap),
+        Mode::Help    => help(progname.as_slice(), usage.as_slice()),
+        Mode::Version => version()
     }
 
     0

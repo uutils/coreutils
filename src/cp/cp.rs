@@ -47,17 +47,17 @@ pub fn uumain(args: Vec<String>) -> int {
     let progname = &args[0];
     let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
     let mode = if matches.opt_present("version") {
-        Version
+        Mode::Version
     } else if matches.opt_present("help") {
-        Help
+        Mode::Help
     } else {
-        Copy
+        Mode::Copy
     };
 
     match mode {
-        Copy    => copy(matches),
-        Help    => help(progname.as_slice(), usage.as_slice()),
-        Version => version(),
+        Mode::Copy    => copy(matches),
+        Mode::Help    => help(progname.as_slice(), usage.as_slice()),
+        Mode::Version => version(),
     }
 
     0

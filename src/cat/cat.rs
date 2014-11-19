@@ -57,12 +57,12 @@ pub fn uumain(args: Vec<String>) -> int {
         return 0;
     }
 
-    let mut number_mode = NumberNone;
+    let mut number_mode = NumberingMode::NumberNone;
     if matches.opt_present("n") {
-        number_mode = NumberAll;
+        number_mode = NumberingMode::NumberAll;
     }
     if matches.opt_present("b") {
-        number_mode = NumberNonEmpty;
+        number_mode = NumberingMode::NumberNonEmpty;
     }
     let show_nonprint = matches.opts_present(["A".to_string(), "e".to_string(),
                                               "t".to_string(), "v".to_string()]);
@@ -118,7 +118,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 };
                 if in_buf[pos] == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
-                        if at_line_start && number == NumberAll {
+                        if at_line_start && number == NumberingMode::NumberAll {
                             (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
                             line_counter += 1;
                         }
@@ -133,7 +133,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     at_line_start = true;
                     continue;
                 }
-                if at_line_start && number != NumberNone {
+                if at_line_start && number != NumberingMode::NumberNone {
                     (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
                     line_counter += 1;
                 }
@@ -191,7 +191,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 }
                 if byte == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
-                        if at_line_start && number == NumberAll {
+                        if at_line_start && number == NumberingMode::NumberAll {
                             (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
                             line_counter += 1;
                         }
@@ -206,7 +206,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     at_line_start = true;
                     continue;
                 }
-                if at_line_start && number != NumberNone {
+                if at_line_start && number != NumberingMode::NumberNone {
                     (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
                     line_counter += 1;
                     at_line_start = false;
@@ -267,7 +267,7 @@ fn exec(files: Vec<String>, number: NumberingMode, show_nonprint: bool,
 
     if show_nonprint || show_tabs {
         write_bytes(files, number, squeeze_blank, show_ends, show_nonprint, show_tabs);
-    } else if number != NumberNone || squeeze_blank || show_ends {
+    } else if number != NumberingMode::NumberNone || squeeze_blank || show_ends {
         write_lines(files, number, squeeze_blank, show_ends);
     } else {
         write_fast(files);

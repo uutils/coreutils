@@ -93,15 +93,15 @@ pub fn uumain(args: Vec<String>) -> int {
 
     // A mutable settings object, initialized with the defaults.
     let mut settings = Settings {
-        header_numbering: NumberForNone,
-        body_numbering: NumberForAll,
-        footer_numbering: NumberForNone,
+        header_numbering: NumberingStyle::NumberForNone,
+        body_numbering: NumberingStyle::NumberForAll,
+        footer_numbering: NumberingStyle::NumberForNone,
         section_delimiter: ['\\', ':'],
         starting_line_number: 1,
         line_increment: 1,
         join_blank_lines: 1,
         number_width: 6,
-        number_format: Right,
+        number_format: NumberFormat::Right,
         renumber: true,
         number_separator: String::from_str("\t"),
     };
@@ -167,12 +167,12 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let mut line_no_threshold = std::num::pow(10u64, line_no_width);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
-        RightZero => '0',
+        NumberFormat::RightZero => '0',
         _ => ' '
     };
     // Initially, we use the body's line counting settings
     let mut regex_filter = match settings.body_numbering {
-        NumberForRegularExpression(ref re) => re,
+        NumberingStyle::NumberForRegularExpression(ref re) => re,
         _ => REGEX_DUMMY,
     };
     let mut line_filter = pass_regex;
@@ -239,16 +239,16 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
                     &settings.body_numbering
                 }
             } {
-                NumberForAll => {
+                NumberingStyle::NumberForAll => {
                     line_filter = pass_all;
                 },
-                NumberForNonEmpty => {
+                NumberingStyle::NumberForNonEmpty => {
                     line_filter = pass_nonempty;
                 },
-                NumberForNone => {
+                NumberingStyle::NumberForNone => {
                     line_filter = pass_none;
                 }
-                NumberForRegularExpression(ref re) => {
+                NumberingStyle::NumberForRegularExpression(ref re) => {
                     line_filter = pass_regex;
                     regex_filter = re;
                 }
@@ -285,7 +285,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
         }
         let fill = String::from_char(w, fill_char);
         match settings.number_format {
-            Left => {
+            NumberFormat::Left => {
                 println!("{1}{0}{2}{3}", fill, line_no, settings.number_separator, line)
             },
             _ => {

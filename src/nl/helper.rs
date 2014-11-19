@@ -4,12 +4,12 @@ extern crate regex;
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
     match chars {
-        ['a'] => { Ok(::NumberForAll) },
-        ['t'] => { Ok(::NumberForNonEmpty) },
-        ['n'] => { Ok(::NumberForNone) },
+        ['a'] => { Ok(::NumberingStyle::NumberForAll) },
+        ['t'] => { Ok(::NumberingStyle::NumberForNonEmpty) },
+        ['n'] => { Ok(::NumberingStyle::NumberForNone) },
         ['p', rest..] => {
             match regex::Regex::new(String::from_chars(rest).as_slice()) {
-                Ok(re) => Ok(::NumberForRegularExpression(re)),
+                Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
                 Err(_) => Err(String::from_str("Illegal regular expression")),
             }
         }
@@ -32,9 +32,9 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("n") {
         None => {},
         Some(val) => match val.as_slice() {
-            "ln" => { settings.number_format = ::Left; },
-            "rn" => { settings.number_format = ::Right; },
-            "rz" => { settings.number_format = ::RightZero; },
+            "ln" => { settings.number_format = ::NumberFormat::Left; },
+            "rn" => { settings.number_format = ::NumberFormat::Right; },
+            "rz" => { settings.number_format = ::NumberFormat::RightZero; },
             _ => { errs.push(String::from_str("Illegal value for -n")); },
         }
     }

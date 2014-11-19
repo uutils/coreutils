@@ -55,7 +55,8 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 fn cut_bytes<R: Reader>(reader: R,
                         ranges: &Vec<Range>,
                         opts: &Options) -> int {
-    use buffer::Bytes::{Select, NewlineFound, Complete, Partial, EndOfFile};
+    use buffer::Bytes::Select;
+    use buffer::Bytes::Selected::{NewlineFound, Complete, Partial, EndOfFile};
 
     let mut buf_read = buffer::BufReader::new(reader);
     let mut out = BufferedWriter::new(stdio::stdout_raw());
@@ -404,13 +405,13 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
             if stdin_read { continue }
 
             exit_code |= match mode {
-                Bytes(ref ranges, ref opts) => {
+                Mode::Bytes(ref ranges, ref opts) => {
                     cut_bytes(stdio::stdin_raw(), ranges, opts)
                 }
-                Characters(ref ranges, ref opts) => {
+                Mode::Characters(ref ranges, ref opts) => {
                     cut_characters(stdio::stdin_raw(), ranges, opts)
                 }
-                Fields(ref ranges, ref opts) => {
+                Mode::Fields(ref ranges, ref opts) => {
                     cut_fields(stdio::stdin_raw(), ranges, opts)
                 }
             };
@@ -433,11 +434,11 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
             };
 
             exit_code |= match mode {
-                Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                Characters(ref ranges, ref opts) => {
+                Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
+                Mode::Characters(ref ranges, ref opts) => {
                     cut_characters(file, ranges, opts)
                 }
-                Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts)
+                Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts)
             };
         }
     }
@@ -499,13 +500,13 @@ pub fn uumain(args: Vec<String>) -> int {
                             matches.opt_str("fields")) {
         (Some(byte_ranges), None, None) => {
             list_to_ranges(byte_ranges.as_slice(), complement).map(|ranges|
-                Bytes(ranges,
+                Mode::Bytes(ranges,
                       Options { out_delim: matches.opt_str("output-delimiter") })
             )
         }
         (None, Some(char_ranges), None) => {
             list_to_ranges(char_ranges.as_slice(), complement).map(|ranges|
-                Characters(ranges,
+                Mode::Characters(ranges,
                            Options { out_delim: matches.opt_str("output-delimiter") })
             )
         }
@@ -520,7 +521,7 @@ pub fn uumain(args: Vec<String>) -> int {
                             if delim.as_slice().char_len() != 1 {
                                 Err("the delimiter must be a single character".to_string())
                             } else {
-                                Ok(Fields(ranges,
+                                Ok(Mode::Fields(ranges,
                                           FieldOptions {
                                               delimiter: delim,
                                               out_delimeter: out_delim,
@@ -528,7 +529,7 @@ pub fn uumain(args: Vec<String>) -> int {
                                           }))
                             }
                         }
-                        None => Ok(Fields(ranges,
+                        None => Ok(Mode::Fields(ranges,
                                           FieldOptions {
                                               delimiter: "\t".to_string(),
                                               out_delimeter: out_delim,
