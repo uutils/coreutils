@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io;
-use std::num;
+use std::num::Int;
 use std::char;
 
 #[path = "../common/util.rs"]
@@ -193,7 +193,7 @@ fn str_prefix(i: uint, width: uint) -> String {
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = num::pow(26 as uint, w);
+        let div = Int::pow(26 as uint, w);
         let r = n / div;
         n -= r * div;
         c.push(char::from_u32((r as u32) + 97).unwrap());
@@ -208,7 +208,7 @@ fn num_prefix(i: uint, width: uint) -> String {
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = num::pow(10 as uint, w);
+        let div = Int::pow(10 as uint, w);
         let r = n / div;
         n -= r * div;
         c.push(char::from_digit(r, 10).unwrap());

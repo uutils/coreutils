@@ -19,6 +19,7 @@ extern crate getopts;
 use std::io::{stdin};
 use std::io::BufferedReader;
 use std::io::fs::File;
+use std::num::Int;
 use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
 
@@ -164,7 +165,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let line_no_width_initial = line_no_width;
     // Stores the smallest integer with one more digit than line_no, so that
     // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = std::num::pow(10u64, line_no_width);
+    let mut line_no_threshold = Int::pow(10u64, line_no_width);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
         NumberFormat::RightZero => '0',
@@ -226,7 +227,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
                     if settings.renumber {
                         line_no = settings.starting_line_number;
                         line_no_width = line_no_width_initial;
-                        line_no_threshold = std::num::pow(10u64, line_no_width);
+                        line_no_threshold = Int::pow(10u64, line_no_width);
                     }
                     &settings.header_numbering
                 },
