@@ -30,7 +30,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -41,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {} [OPTIONS] FILE", NAME);
         println!("");
-        io::print(getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", opts).as_slice());
+        io::print(getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", &opts).as_slice());
         return 0;
     }
 

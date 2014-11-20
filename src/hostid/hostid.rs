@@ -54,10 +54,10 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("", "version", "output version information and exit"),
     ];
 
-    let usage = usage("[options]", opts);
+    let usage = usage("[options]", &opts);
 
 
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));
@@ -66,17 +66,17 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     let mode = if matches.opt_present("version") {
-        Version
+        Mode::Version
     } else if matches.opt_present("help") {
-        Help
+        Mode::Help
     } else {
-        HostId
+        Mode::HostId
     };
 
     match mode {
-        HostId  => hostid(),
-        Help    => help(NAME, usage.as_slice()),
-        Version => version(),
+        Mode::HostId  => hostid(),
+        Mode::Help    => help(NAME, usage.as_slice()),
+        Mode::Version => version(),
     }
 
     0

@@ -40,16 +40,16 @@ impl Line {
     // when we know that it's a FormatLine, as in the ParagraphStream iterator
     fn get_formatline(self) -> FileLine {
         match self {
-            FormatLine(fl) => fl,
-            NoFormatLine(..) => panic!("Found NoFormatLine when expecting FormatLine")
+            Line::FormatLine(fl) => fl,
+            Line::NoFormatLine(..) => panic!("Found NoFormatLine when expecting FormatLine")
         }
     }
 
     // when we know that it's a NoFormatLine, as in the ParagraphStream iterator
     fn get_noformatline(self) -> (String, bool) {
         match self {
-            NoFormatLine(s, b) => (s, b),
-            FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine")
+            Line::NoFormatLine(s, b) => (s, b),
+            Line::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine")
         }
     }
 }
@@ -154,34 +154,34 @@ impl<'a> Iterator<Line> for FileLines<'a> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.as_slice().is_whitespace() {
-            return Some(NoFormatLine("\n".to_string(), true));
+            return Some(Line::NoFormatLine("\n".to_string(), true));
         }
 
         // if this line does not match the prefix,
         // emit the line unprocessed and iterate again
         let (pmatch, poffset) = self.match_prefix(n.as_slice());
         if !pmatch {
-            return Some(NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(n, false));
         } else if n.as_slice().slice_from(poffset + self.opts.prefix.len()).is_whitespace() {
             // if the line matches the prefix, but is blank after,
             // don't allow lines to be combined through it (that is,
             // treat it like a blank line, except that since it's
             // not truly blank we will not allow mail headers on the
             // following line)
-            return Some(NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(n, false));
         }
 
         // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(n.as_slice()) {
-            return Some(NoFormatLine(n, false));
+            return Some(Line::NoFormatLine(n, false));
         }
 
         // figure out the indent, prefix, and prefixindent ending points
         let prefix_end = poffset + self.opts.prefix.len();
         let (indent_end, prefix_len, indent_len) = self.compute_indent(n.as_slice(), prefix_end);
 
-        Some(FormatLine(FileLine {
+        Some(Line::FormatLine(FileLine {
             line       : n,
             indent_end : indent_end,
             pfxind_end : poffset,
@@ -259,8 +259,8 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
             match self.lines.peek() {
                 None => return None,
                 Some(l) => match l {
-                    &FormatLine(_) => false,
-                    &NoFormatLine(_, _) => true
+                    &Line::FormatLine(_) => false,
+                    &Line::NoFormatLine(_, _) => true
                 }
             };
 
@@ -292,8 +292,8 @@ impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
                         None => break,
                         Some(l) => {
                             match l {
-                                &FormatLine(ref x) => x,
-                                &NoFormatLine(..) => break
+                                &Line::FormatLine(ref x) => x,
+                                &Line::NoFormatLine(..) => break
                             }
                         }
                     };

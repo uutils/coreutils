@@ -273,7 +273,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
     let mut vec = Vec::with_capacity(524288);
     let mut looking_for_newline = false;
     loop {
-        match reader.read(buffer) {
+        match reader.read(&mut buffer) {
             Ok(0) => {},
             Ok(nread) => {
                 if windows && !binary {

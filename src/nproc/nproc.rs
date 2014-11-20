@@ -29,7 +29,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(err) => {
             show_error!("{}", err);
@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {} [OPTIONS] NAME...", NAME);
         println!("");
-        print!("{}", getopts::usage("Print the number of cores available to the current process.", opts));
+        print!("{}", getopts::usage("Print the number of cores available to the current process.", &opts));
         return 0;
     }
 

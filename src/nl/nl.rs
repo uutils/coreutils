@@ -19,6 +19,7 @@ extern crate getopts;
 use std::io::{stdin};
 use std::io::BufferedReader;
 use std::io::fs::File;
+use std::num::Int;
 use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
 
@@ -93,30 +94,30 @@ pub fn uumain(args: Vec<String>) -> int {
 
     // A mutable settings object, initialized with the defaults.
     let mut settings = Settings {
-        header_numbering: NumberForNone,
-        body_numbering: NumberForAll,
-        footer_numbering: NumberForNone,
+        header_numbering: NumberingStyle::NumberForNone,
+        body_numbering: NumberingStyle::NumberForAll,
+        footer_numbering: NumberingStyle::NumberForNone,
         section_delimiter: ['\\', ':'],
         starting_line_number: 1,
         line_increment: 1,
         join_blank_lines: 1,
         number_width: 6,
-        number_format: Right,
+        number_format: NumberFormat::Right,
         renumber: true,
         number_separator: String::from_str("\t"),
     };
 
-    let given_options = match getopts(args.tail(), possible_options) {
+    let given_options = match getopts(args.tail(), &possible_options) {
         Ok (m) => { m }
         Err(f) => {
             show_error!("{}", f);
-            print_usage(possible_options);
+            print_usage(&possible_options);
             return 1
         }
     };
 
     if given_options.opt_present("help") {
-        print_usage(possible_options);
+        print_usage(&possible_options);
         return 0;
     }
     if given_options.opt_present("version") { version(); return 0; }
@@ -164,15 +165,15 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let line_no_width_initial = line_no_width;
     // Stores the smallest integer with one more digit than line_no, so that
     // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = std::num::pow(10u64, line_no_width);
+    let mut line_no_threshold = Int::pow(10u64, line_no_width);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
-        RightZero => '0',
+        NumberFormat::RightZero => '0',
         _ => ' '
     };
     // Initially, we use the body's line counting settings
     let mut regex_filter = match settings.body_numbering {
-        NumberForRegularExpression(ref re) => re,
+        NumberingStyle::NumberForRegularExpression(ref re) => re,
         _ => REGEX_DUMMY,
     };
     let mut line_filter = pass_regex;
@@ -226,7 +227,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
                     if settings.renumber {
                         line_no = settings.starting_line_number;
                         line_no_width = line_no_width_initial;
-                        line_no_threshold = std::num::pow(10u64, line_no_width);
+                        line_no_threshold = Int::pow(10u64, line_no_width);
                     }
                     &settings.header_numbering
                 },
@@ -239,16 +240,16 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
                     &settings.body_numbering
                 }
             } {
-                NumberForAll => {
+                NumberingStyle::NumberForAll => {
                     line_filter = pass_all;
                 },
-                NumberForNonEmpty => {
+                NumberingStyle::NumberForNonEmpty => {
                     line_filter = pass_nonempty;
                 },
-                NumberForNone => {
+                NumberingStyle::NumberForNone => {
                     line_filter = pass_none;
                 }
-                NumberForRegularExpression(ref re) => {
+                NumberingStyle::NumberForRegularExpression(ref re) => {
                     line_filter = pass_regex;
                     regex_filter = re;
                 }
@@ -285,7 +286,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
         }
         let fill = String::from_char(w, fill_char);
         match settings.number_format {
-            Left => {
+            NumberFormat::Left => {
                 println!("{1}{0}{2}{3}", fill, line_no, settings.number_separator, line)
             },
             _ => {

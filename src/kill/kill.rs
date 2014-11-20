@@ -61,11 +61,11 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("L", "table", "list all signal names in a nice table"),
     ];
 
-    let usage = usage("[options] <pid> [...]", opts);
+    let usage = usage("[options] <pid> [...]", &opts);
 
     let (args, obs_signal) = handle_obsolete(args);
 
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));
@@ -74,23 +74,23 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     let mode = if matches.opt_present("version") {
-        Version
+        Mode::Version
     } else if matches.opt_present("help") {
-        Help
+        Mode::Help
     } else if matches.opt_present("table") {
-        Table
+        Mode::Table
     } else if matches.opt_present("list") {
-        List
+        Mode::List
     } else {
-        Kill
+        Mode::Kill
     };
 
     match mode {
-        Kill    => return kill(matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())).as_slice(), matches.free),
-        Table   => table(),
-        List    => list(matches.opt_str("list")),
-        Help    => help(NAME, usage.as_slice()),
-        Version => version(),
+        Mode::Kill    => return kill(matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())).as_slice(), matches.free),
+        Mode::Table   => table(),
+        Mode::List    => list(matches.opt_str("list")),
+        Mode::Help    => help(NAME, usage.as_slice()),
+        Mode::Version => version(),
     }
 
     0

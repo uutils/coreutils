@@ -33,7 +33,7 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "display version information and exit")
     ];
 
-    let matches = match getopts(args.tail(), options) {
+    let matches = match getopts(args.tail(), &options) {
         Ok(m) => { m },
         Err(f) => {
             show_error!("{}", f);
@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         print!("{} v{}\n\n\
                 Usage:\n  \
                   {} [OPTION]... [USER]...\n\n\
-                {}", NAME, VERSION, program, usage("Prints the groups a user is in to standard output.", options));
+                {}", NAME, VERSION, program, usage("Prints the groups a user is in to standard output.", &options));
     } else {
         group(get_pw_from_args(&matches.free), true);
     }

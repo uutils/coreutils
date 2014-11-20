@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),
     ];
-    let matches = match getopts(args.tail(), opts) {
+    let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
             error!("error: {}", e);
@@ -45,19 +45,19 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     let progname = &args[0];
-    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", opts);
+    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", &opts);
     let mode = if matches.opt_present("version") {
-        Version
+        Mode::Version
     } else if matches.opt_present("help") {
-        Help
+        Mode::Help
     } else {
-        Copy
+        Mode::Copy
     };
 
     match mode {
-        Copy    => copy(matches),
-        Help    => help(progname.as_slice(), usage.as_slice()),
-        Version => version(),
+        Mode::Copy    => copy(matches),
+        Mode::Help    => help(progname.as_slice(), usage.as_slice()),
+        Mode::Version => version(),
     }
 
     0
@@ -168,12 +168,12 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::IoResult<bool> {
     if p1_lstat.kind == io::TypeSymlink {
         raw_p1 = fs::readlink(&raw_p1).unwrap();
     }
-    raw_p1 = os::make_absolute(&raw_p1);
+    raw_p1 = os::make_absolute(&raw_p1).unwrap();
 
     if p2_lstat.kind == io::TypeSymlink {
         raw_p2 = fs::readlink(&raw_p2).unwrap();
     }
-    raw_p2 = os::make_absolute(&raw_p2);
+    raw_p2 = os::make_absolute(&raw_p2).unwrap();
 
     Ok(raw_p1 == raw_p2)
 }

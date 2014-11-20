@@ -9,11 +9,10 @@
 
 use FmtOptions;
 use parasplit::{Paragraph, ParaWords, WordInfo};
-use std::num::{Float, SignedInt};
+use std::num::{Float, Int, SignedInt};
 use std::i64;
 use std::cmp;
 use std::mem;
-use std::num;
 
 struct BreakArgs<'a> {
     opts       : &'a FmtOptions,
@@ -373,7 +372,7 @@ fn compute_demerits(delta_len: int, stretch: int, wlen: int, prev_rat: f32) -> (
     // we penalize lines that have very different ratios from previous lines
     let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powf(3f32)).abs()) as i64;
 
-    let demerits = num::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
+    let demerits = Int::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
     (demerits, ratio)
 }

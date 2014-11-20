@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io;
-use std::num;
+use std::num::Int;
 use std::char;
 
 #[path = "../common/util.rs"]
@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [INPUT [PREFIX]]", NAME);
         println!("");
-        io::print(getopts::usage("Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is -, read standard input." , opts).as_slice());
+        io::print(getopts::usage("Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is -, read standard input." , &opts).as_slice());
         return 0;
     }
 
@@ -193,7 +193,7 @@ fn str_prefix(i: uint, width: uint) -> String {
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = num::pow(26 as uint, w);
+        let div = Int::pow(26 as uint, w);
         let r = n / div;
         n -= r * div;
         c.push(char::from_u32((r as u32) + 97).unwrap());
@@ -208,7 +208,7 @@ fn num_prefix(i: uint, width: uint) -> String {
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = num::pow(10 as uint, w);
+        let div = Int::pow(10 as uint, w);
         let r = n / div;
         n -= r * div;
         c.push(char::from_digit(r, 10).unwrap());

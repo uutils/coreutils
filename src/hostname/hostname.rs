@@ -53,13 +53,13 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "Show program's version")
     ];
 
-    let matches = match getopts(args.tail(), options) {
+    let matches = match getopts(args.tail(), &options) {
         Ok(m) => { m }
-        _ => { help_menu(program.as_slice(), options); return 0; }
+        _ => { help_menu(program.as_slice(), &options); return 0; }
     };
 
     if matches.opt_present("h") {
-        help_menu(program.as_slice(), options);
+        help_menu(program.as_slice(), &options);
         return 0
     }
     if matches.opt_present("V") { version(); return 0 }
@@ -110,7 +110,7 @@ pub fn uumain(args: Vec<String>) -> int {
             }
         }
         1 => xsethostname(matches.free.last().unwrap().as_slice()),
-        _ => help_menu(program.as_slice(), options)
+        _ => help_menu(program.as_slice(), &options)
     };
 
     0

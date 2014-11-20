@@ -23,7 +23,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("");
         print(getopts::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
-directory).", opts).as_slice());
+directory).", &opts).as_slice());
         return 0;
     }
 

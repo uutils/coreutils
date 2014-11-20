@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("v", "version", "output version information and exit"),
         getopts::optflag("h", "help", "display this help and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -72,7 +72,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("");
         print(getopts::usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes.", opts).as_slice());
+                              in the run queue over the last 1, 5 and 15 minutes.", &opts).as_slice());
         return 0;
     }
 

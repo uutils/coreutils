@@ -61,7 +61,7 @@ fn cksum(fname: &str) -> IoResult<(u32, uint)> {
 
     let mut bytes: [u8, ..1024 * 1024] = unsafe { mem::uninitialized() };
     loop {
-        match rd.read(bytes) {
+        match rd.read(&mut bytes) {
             Ok(num_bytes) => {
                 for &b in bytes.slice_to(num_bytes).iter() {
                     crc = crc_update(crc, b);
@@ -80,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };

@@ -100,16 +100,16 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("u", "", "Display the effective user ID as a number")
     ];
 
-    let matches = match getopts(args_t, options) {
+    let matches = match getopts(args_t, &options) {
         Ok(m) => { m },
         Err(_) => {
-            println!("{:s}", usage(NAME, options));
+            println!("{:s}", usage(NAME, &options));
             return 1;
         }
     };
 
     if matches.opt_present("h") {
-        println!("{:s}", usage(NAME, options));
+        println!("{:s}", usage(NAME, &options));
         return 0;
     }
 

@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit")
     ];
     // TODO: sanitize input for - at beginning (e.g. chmod -x testfile).  Solution is to add a to -x, making a-x
-    let mut matches = match getopts::getopts(args.tail(), opts) {
+    let mut matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "{}", f)
@@ -66,7 +66,7 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
                name = NAME, version = VERSION, program = program,
                usage = getopts::usage("Change the mode of each FILE to MODE. \
                                        With --reference, change the mode of \
-                                       each FILE to that of RFILE.", opts));
+                                       each FILE to that of RFILE.", &opts));
     } else if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
     } else if matches.free.is_empty() && matches.opt_present("reference") || matches.free.len() < 2 {

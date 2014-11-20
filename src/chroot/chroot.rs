@@ -51,17 +51,17 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "Show program's version")
     ];
 
-    let opts = match getopts(args.tail(), options) {
+    let opts = match getopts(args.tail(), &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            help_menu(program.as_slice(), options);
+            help_menu(program.as_slice(), &options);
             return 1
         }
     };
 
     if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { help_menu(program.as_slice(), options); return 0 }
+    if opts.opt_present("h") { help_menu(program.as_slice(), &options); return 0 }
 
     if opts.free.len() == 0 {
         println!("Missing operand: NEWROOT");
@@ -126,9 +126,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
 
 fn enter_chroot(root: &Path) {
     let root_str = root.display();
-    if !std::os::change_dir(root) {
-        crash!(1, "cannot chdir to {}", root_str)
-    };
+    std::os::change_dir(root).unwrap();
     let err = unsafe {
         chroot(".".to_c_str().unwrap() as *const libc::c_char)
     };

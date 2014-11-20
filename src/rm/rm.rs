@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "{}", f)
@@ -59,7 +59,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Remove (unlink) the FILE(s).", opts).as_slice());
+        print(getopts::usage("Remove (unlink) the FILE(s).", &opts).as_slice());
         println!("");
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
@@ -83,27 +83,27 @@ pub fn uumain(args: Vec<String>) -> int {
         let force = matches.opt_present("force");
         let interactive =
             if matches.opt_present("i") {
-                InteractiveAlways
+                InteractiveMode::InteractiveAlways
             } else if matches.opt_present("I") {
-                InteractiveOnce
+                InteractiveMode::InteractiveOnce
             } else if matches.opt_present("interactive") {
                 match matches.opt_str("interactive").unwrap().as_slice() {
-                    "none" => InteractiveNone,
-                    "once" => InteractiveOnce,
-                    "always" => InteractiveAlways,
+                    "none" => InteractiveMode::InteractiveNone,
+                    "once" => InteractiveMode::InteractiveOnce,
+                    "always" => InteractiveMode::InteractiveAlways,
                     val => {
                         crash!(1, "Invalid argument to interactive ({})", val)
                     }
                 }
             } else {
-                InteractiveNone
+                InteractiveMode::InteractiveNone
             };
         let one_fs = matches.opt_present("one-file-system");
         let preserve_root = !matches.opt_present("no-preserve-root");
         let recursive = matches.opt_present("recursive");
         let dir = matches.opt_present("dir");
         let verbose = matches.opt_present("verbose");
-        if interactive == InteractiveOnce && (recursive || matches.free.len() > 3) {
+        if interactive == InteractiveMode::InteractiveOnce && (recursive || matches.free.len() > 3) {
             let msg =
                 if recursive {
                     "Remove all arguments recursively? "
@@ -169,7 +169,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
 
 fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {
     let response =
-        if interactive == InteractiveAlways {
+        if interactive == InteractiveMode::InteractiveAlways {
             prompt_file(path, name)
         } else {
             true
@@ -189,7 +189,7 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
 
 fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {
     let response =
-        if interactive == InteractiveAlways {
+        if interactive == InteractiveMode::InteractiveAlways {
             prompt_file(path, name)
         } else {
             true

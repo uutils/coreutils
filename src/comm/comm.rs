@@ -52,8 +52,8 @@ enum LineReader {
 impl LineReader {
     fn read_line(&mut self) -> IoResult<String> {
         match self {
-            &Stdin(ref mut r)  => r.read_line(),
-            &FileIn(ref mut r) => r.read_line(),
+            &LineReader::Stdin(ref mut r)  => r.read_line(),
+            &LineReader::FileIn(ref mut r) => r.read_line(),
         }
     }
 }
@@ -117,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };

@@ -28,17 +28,17 @@ pub fn uumain(args: Vec<String>) -> int {
         optopt("d", "", "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative", "DIR"),
     ];
 
-    let opts = match getopts(args.tail(), options) {
+    let opts = match getopts(args.tail(), &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            show_usage(program.as_slice(), options);
+            show_usage(program.as_slice(), &options);
             return 1
         }
     };
 
     if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { show_usage(program.as_slice(), options); return 0 }
+    if opts.opt_present("h") { show_usage(program.as_slice(), &options); return 0 }
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: TO");
@@ -50,14 +50,14 @@ pub fn uumain(args: Vec<String>) -> int {
     let from = if opts.free.len() > 1 {
         Path::new(opts.free[1].as_slice())
     } else {
-        std::os::getcwd()
+        std::os::getcwd().unwrap()
     };
-    let absto = std::os::make_absolute(&to);
-    let absfrom = std::os::make_absolute(&from);
+    let absto = std::os::make_absolute(&to).unwrap();
+    let absfrom = std::os::make_absolute(&from).unwrap();
 
     if opts.opt_present("d") {
         let base = Path::new(opts.opt_str("d").unwrap());
-        let absbase = std::os::make_absolute(&base);
+        let absbase = std::os::make_absolute(&base).unwrap();
         if !absbase.is_ancestor_of(&absto) || !absbase.is_ancestor_of(&absfrom) {
             println!("{}", absto.display());
             return 0

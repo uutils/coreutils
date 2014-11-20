@@ -32,7 +32,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "print this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
@@ -46,7 +46,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION]... DIRECTORY...", program);
         println!("");
-        print(getopts::usage("Remove the DIRECTORY(ies), if they are empty.", opts).as_slice());
+        print(getopts::usage("Remove the DIRECTORY(ies), if they are empty.", &opts).as_slice());
     } else if matches.opt_present("version") {
         println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {

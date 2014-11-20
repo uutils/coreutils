@@ -41,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "display this version")
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f);
@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     if args.len() == 1 || matches.opt_present("help") {
-        print_help(opts);
+        print_help(&opts);
         return 0;
     }
     if matches.opt_present("version") {

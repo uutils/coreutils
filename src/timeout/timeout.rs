@@ -46,7 +46,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(ERR_EXIT_STATUS, "{}", f)
@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> int {
 Usage:
   {} [OPTION] DURATION COMMAND [ARG]...
 
-{}", NAME, VERSION, program, getopts::usage("Start COMMAND, and kill it if still running after DURATION.", opts));
+{}", NAME, VERSION, program, getopts::usage("Start COMMAND, and kill it if still running after DURATION.", &opts));
     } else if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
     } else if matches.free.len() < 2 {

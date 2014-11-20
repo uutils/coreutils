@@ -136,7 +136,7 @@ fn print_help(program: &String) {
     ];
     println!("seq 1.0.0\n");
     println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n", *program);
-    println!("{:s}", getopts::usage("Print sequences of numbers", opts));
+    println!("{:s}", getopts::usage("Print sequences of numbers", &opts));
 }
 
 fn print_version() {

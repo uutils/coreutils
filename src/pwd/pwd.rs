@@ -29,7 +29,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f)
@@ -42,14 +42,14 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION] NAME...", program);
         println!("");
-        print(getopts::usage("Print the full filename of the current working directory.", opts).as_slice());
+        print(getopts::usage("Print the full filename of the current working directory.", &opts).as_slice());
     } else if matches.opt_present("version") {
         println!("pwd version: {}", VERSION);
 
         return 0;
     } else {
         let cwd = std::os::getcwd();
-        println!("{}", cwd.display());
+        println!("{}", cwd.unwrap().display());
 
         return 0;
     }

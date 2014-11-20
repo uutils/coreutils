@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f)
@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Print newline, word and byte counts for each FILE", opts).as_slice());
+        print(getopts::usage("Print newline, word and byte counts for each FILE", &opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;

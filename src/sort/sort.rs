@@ -35,7 +35,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -43,7 +43,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage: {0:s} [OPTION]... [FILE]...", program);
         println!("Write the sorted concatenation of all FILE(s) to standard output.");
         println!("");
-        print(getopts::usage("Mandatory arguments for long options are mandatory for short options too.", opts).as_slice());
+        print(getopts::usage("Mandatory arguments for long options are mandatory for short options too.", &opts).as_slice());
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;

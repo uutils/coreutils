@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("s", "silent", "print nothing, only return an exit status")
     ];
 
-    let silent = match getopts(args.tail(), options) {
+    let silent = match getopts(args.tail(), &options) {
         Ok(m) => {
             m.opt_present("s")
         },

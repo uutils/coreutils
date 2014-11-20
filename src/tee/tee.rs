@@ -50,14 +50,14 @@ fn options(args: &[String]) -> Result<Options, ()> {
 
     let args: Vec<String> = args.iter().map(|x| x.to_string()).collect();
 
-    getopts(args.tail(), opts).map_err(|e| format!("{}", e)).and_then(|m| {
+    getopts(args.tail(), &opts).map_err(|e| format!("{}", e)).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
         let program = args[0].as_slice();
         let arguments = "[OPTION]... [FILE]...";
         let brief = "Copy standard input to each FILE, and also to standard output.";
         let comment = "If a FILE is -, copy again to standard output.";
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
-                           version, program, arguments, usage(brief, opts),
+                           version, program, arguments, usage(brief, &opts),
                            comment);
         let mut names = m.free.clone().into_iter().collect::<Vec<String>>();
         names.push("-".to_string());

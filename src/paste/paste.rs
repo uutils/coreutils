@@ -31,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> int {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), opts) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -41,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("Usage:");
         println!("  {0:s} [OPTION]... [FILE]...", program);
         println!("");
-        print!("{}", getopts::usage("Write lines consisting of the sequentially corresponding lines from each FILE, separated by TABs, to standard output.", opts));
+        print!("{}", getopts::usage("Write lines consisting of the sequentially corresponding lines from each FILE, separated by TABs, to standard output.", &opts));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {

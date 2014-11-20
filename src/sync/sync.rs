@@ -148,13 +148,13 @@ pub fn uumain(args: Vec<String>) -> int {
         optflag("V", "version", "output version information and exit")
     ];
 
-    let matches = match getopts(args.tail(), options) {
+    let matches = match getopts(args.tail(), &options) {
         Ok(m) => { m }
-        _ => { help(program.as_slice(), options); return 1 }
+        _ => { help(program.as_slice(), &options); return 1 }
     };
 
     if matches.opt_present("h") {
-        help(program.as_slice(), options);
+        help(program.as_slice(), &options);
         return 0
     }
 
