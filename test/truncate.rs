@@ -15,7 +15,7 @@ fn make_file(name: &str) -> io::File {
 #[test]
 fn test_increase_file_size() {
     let mut file = make_file(TFILE1);
-    if !Command::new(PROGNAME).args(["-s", "+5K", TFILE1]).status().unwrap().success() {
+    if !Command::new(PROGNAME).args(&["-s", "+5K", TFILE1]).status().unwrap().success() {
         panic!();
     }
     file.seek(0, io::SeekEnd).unwrap();
@@ -29,7 +29,7 @@ fn test_increase_file_size() {
 fn test_decrease_file_size() {
     let mut file = make_file(TFILE2);
     file.write(b"1234567890").unwrap();
-    if !Command::new(PROGNAME).args(["--size=-4", TFILE2]).status().unwrap().success() {
+    if !Command::new(PROGNAME).args(&["--size=-4", TFILE2]).status().unwrap().success() {
         panic!();
     }
     file.seek(0, io::SeekEnd).unwrap();
