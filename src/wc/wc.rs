@@ -56,7 +56,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if matches.opt_present("help") {
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print(getopts::usage("Print newline, word and byte counts for each FILE", &opts).as_slice());
         println!("");

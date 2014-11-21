@@ -43,7 +43,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("unlink 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} [FILE]... [OPTION]...", program);
+        println!("  {0} [FILE]... [OPTION]...", program);
         println!("");
         print(getopts::usage("Unlink the file at [FILE].", &opts).as_slice());
         return 0;
@@ -55,9 +55,9 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if matches.free.len() == 0 {
-        crash!(1, "missing operand\nTry '{0:s} --help' for more information.", program);
+        crash!(1, "missing operand\nTry '{0} --help' for more information.", program);
     } else if matches.free.len() > 1 {
-        crash!(1, "extra operand: '{1}'\nTry '{0:s} --help' for more information.", program, matches.free[1]);
+        crash!(1, "extra operand: '{1}'\nTry '{0} --help' for more information.", program, matches.free[1]);
     }
 
     let path = Path::new(matches.free[0].clone());

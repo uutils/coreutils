@@ -41,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("printenv 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} [VARIABLE]... [OPTION]...", program);
+        println!("  {0} [VARIABLE]... [OPTION]...", program);
         println!("");
         print(getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", &opts).as_slice());
         return 0;
@@ -64,7 +64,7 @@ pub fn exec(args: Vec<String>, separator: &str) {
     if args.is_empty() {
         let vars = os::env();
         for (env_var, value) in vars.into_iter() {
-            print!("{0:s}={1:s}", env_var, value);
+            print!("{0}={1}", env_var, value);
             print(separator);
         }
         return;

@@ -136,11 +136,11 @@ fn print_help(program: &String) {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    println!("echo {:s} - display a line of text", VERSION);
+    println!("echo {} - display a line of text", VERSION);
     println!("");
     println!("Usage:");
-    println!("  {0:s} [SHORT-OPTION]... [STRING]...", *program);
-    println!("  {0:s} LONG-OPTION", *program);
+    println!("  {0} [SHORT-OPTION]... [STRING]...", *program);
+    println!("  {0} LONG-OPTION", *program);
     println!("");
     println(getopts::usage("Echo the STRING(s) to standard output.", &opts).as_slice());
     println("If -e is in effect, the following sequences are recognized:
@@ -160,7 +160,7 @@ fn print_help(program: &String) {
 }
 
 fn print_version() {
-    println!("echo version: {:s}", VERSION);
+    println!("echo version: {}", VERSION);
 }
 
 pub fn uumain(args: Vec<String>) -> int {

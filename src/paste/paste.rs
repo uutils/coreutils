@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print!("{}", getopts::usage("Write lines consisting of the sequentially corresponding lines from each FILE, separated by TABs, to standard output.", &opts));
     } else if matches.opt_present("version") {

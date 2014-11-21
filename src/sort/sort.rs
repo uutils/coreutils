@@ -40,7 +40,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("Usage: {0:s} [OPTION]... [FILE]...", program);
+        println!("Usage: {0} [OPTION]... [FILE]...", program);
         println!("Write the sorted concatenation of all FILE(s) to standard output.");
         println!("");
         print(getopts::usage("Mandatory arguments for long options are mandatory for short options too.", &opts).as_slice());
@@ -152,7 +152,7 @@ fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
     match File::open(&std::path::Path::new(path)) {
         Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
-            show_error!("sort: {0:s}: {1:s}", path, e.to_string());
+            show_error!("sort: {0}: {1}", path, e.to_string());
             None
         },
     }

@@ -22,7 +22,7 @@ struct options {
 }
 
 fn usage(prog: &str) {
-    println!("Usage: {:s} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", prog);
+    println!("Usage: {} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", prog);
     println!("Set each NAME to VALUE in the environment and run COMMAND\n");
     println!("Possible options are:");
     println!("  -i --ignore-environment\t start with an empty environment");
@@ -43,7 +43,7 @@ fn print_env(null: bool) {
     let env = std::os::env();
 
     for &(ref n, ref v) in env.iter() {
-        print!("{:s}={:s}{:c}",
+        print!("{}={}{}",
             n.as_slice(),
             v.as_slice(),
             if null { '\0' } else { '\n' }
@@ -101,14 +101,14 @@ pub fn uumain(args: Vec<String>) -> int {
                     let var = iter.next();
 
                     match var {
-                        None => println!("{:s}: this option requires an argument: {:s}", prog, opt.as_slice()),
+                        None => println!("{}: this option requires an argument: {}", prog, opt.as_slice()),
                         Some(s) => opts.unsets.push(s.to_string())
                     }
                 }
 
                 _ => {
-                    println!("{:s}: invalid option \"{:s}\"", prog, *opt);
-                    println!("Type \"{:s} --help\" for detailed informations", prog);
+                    println!("{}: invalid option \"{}\"", prog, *opt);
+                    println!("Type \"{} --help\" for detailed informations", prog);
                     return 1;
                 }
             }
@@ -134,13 +134,13 @@ pub fn uumain(args: Vec<String>) -> int {
                         let var = iter.next();
 
                         match var {
-                            None => println!("{:s}: this option requires an argument: {:s}", prog, opt.as_slice()),
+                            None => println!("{}: this option requires an argument: {}", prog, opt.as_slice()),
                             Some(s) => opts.unsets.push(s.to_string())
                         }
                     }
                     _ => {
-                        println!("{:s}: illegal option -- {:c}", prog, c);
-                        println!("Type \"{:s} --help\" for detailed informations", prog);
+                        println!("{}: illegal option -- {}", prog, c);
+                        println!("Type \"{} --help\" for detailed informations", prog);
                         return 1;
                     }
                 }

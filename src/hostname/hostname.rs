@@ -95,7 +95,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 if matches.opt_present("s") {
                     let pos = hostname.as_slice().find_str(".");
                     if pos.is_some() {
-                        println!("{:s}", hostname.as_slice().slice_to(pos.unwrap()));
+                        println!("{}", hostname.as_slice().slice_to(pos.unwrap()));
                         return 0;
                     }
                 } else if matches.opt_present("d") {
@@ -106,7 +106,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     }
                 }
 
-                println!("{:s}", hostname);
+                println!("{}", hostname);
             }
         }
         1 => xsethostname(matches.free.last().unwrap().as_slice()),
@@ -124,9 +124,9 @@ fn help_menu(program: &str, options: &[getopts::OptGroup]) {
     version();
     println!("");
     println!("Usage:");
-    println!("  {:s} [OPTION]... [HOSTNAME]", program);
+    println!("  {} [OPTION]... [HOSTNAME]", program);
     println!("");
-    print!("{:s}", usage("Print or set the system's host name.", options));
+    print!("{}", usage("Print or set the system's host name.", options));
 }
 
 fn xgethostname() -> String {
@@ -156,7 +156,7 @@ fn xsethostname(name: &str) {
     };
 
     if err != 0 {
-        println!("Cannot set hostname to {:s}", name);
+        println!("Cannot set hostname to {}", name);
     }
 }
 
@@ -169,6 +169,6 @@ fn xsethostname(name: &str) {
     };
 
     if err != 0 {
-        println!("Cannot set hostname to {:s}", name);
+        println!("Cannot set hostname to {}", name);
     }
 }

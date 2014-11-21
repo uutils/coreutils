@@ -65,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if opts.free.len() == 0 {
         println!("Missing operand: NEWROOT");
-        println!("Try `{:s} --help` for more information.", program.as_slice());
+        println!("Try `{} --help` for more information.", program.as_slice());
         return 1
     }
 
@@ -108,7 +108,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
         Some(ref u) => {
             let s: Vec<&str> = u.as_slice().split(':').collect();
             if s.len() != 2 {
-                crash!(1, "invalid userspec: `{:s}`", u.as_slice())
+                crash!(1, "invalid userspec: `{}`", u.as_slice())
             };
             s
         }
@@ -131,7 +131,7 @@ fn enter_chroot(root: &Path) {
         chroot(".".to_c_str().unwrap() as *const libc::c_char)
     };
     if err != 0 {
-        crash!(1, "cannot chroot to {}: {:s}", root_str, strerror(err).as_slice())
+        crash!(1, "cannot chroot to {}: {}", root_str, strerror(err).as_slice())
     };
 }
 
@@ -143,7 +143,7 @@ fn set_main_group(group: &str) {
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
-            crash!(1, "cannot set gid to {:u}: {:s}", group_id, strerror(err).as_slice())
+            crash!(1, "cannot set gid to {}: {}", group_id, strerror(err).as_slice())
         }
     }
 }
@@ -175,7 +175,7 @@ fn set_groups_from_str(groups: &str) {
             );
         let err = set_groups(groups_vec);
         if err != 0 {
-            crash!(1, "cannot set groups: {:s}", strerror(err).as_slice())
+            crash!(1, "cannot set groups: {}", strerror(err).as_slice())
         }
     }
 }
@@ -185,7 +185,7 @@ fn set_user(user: &str) {
         let user_id = get_pw_from_args(&vec!(String::from_str(user))).unwrap().pw_uid;
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
-            crash!(1, "cannot set user to {:s}: {:s}", user, strerror(err).as_slice())
+            crash!(1, "cannot set user to {}: {}", user, strerror(err).as_slice())
         }
     }
 }
@@ -204,9 +204,9 @@ fn version() {
 fn help_menu(program: &str, options: &[getopts::OptGroup]) {
     version();
     println!("Usage:");
-    println!("  {:s} [OPTION]… NEWROOT [COMMAND [ARG]…]", program);
+    println!("  {} [OPTION]… NEWROOT [COMMAND [ARG]…]", program);
     println!("");
-    print!("{:s}", usage(
+    print!("{}", usage(
             "Run COMMAND with root directory set to NEWROOT.\n\
              If COMMAND is not specified, it defaults to '${SHELL} -i'. \
              If ${SHELL} is not set, /bin/sh is used.", options))

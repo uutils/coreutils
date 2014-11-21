@@ -40,7 +40,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("pwd {}", VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION] NAME...", program);
+        println!("  {0} [OPTION] NAME...", program);
         println!("");
         print(getopts::usage("Print the full filename of the current working directory.", &opts).as_slice());
     } else if matches.opt_present("version") {

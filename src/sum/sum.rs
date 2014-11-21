@@ -93,7 +93,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} {}", program, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print(getopts::usage("checksum and count the blocks in a file", &opts).as_slice());
         println!("");

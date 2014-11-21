@@ -29,10 +29,10 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     if matches.opt_present("help") {
-        println!("dirname {:s} - strip last component from file name", VERSION);
+        println!("dirname {} - strip last component from file name", VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION] NAME...", program);
+        println!("  {0} [OPTION] NAME...", program);
         println!("");
         print(getopts::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
@@ -41,7 +41,7 @@ directory).", &opts).as_slice());
     }
 
     if matches.opt_present("version") {
-        println!("dirname version: {:s}", VERSION);
+        println!("dirname version: {}", VERSION);
         return 0;
     }
 
@@ -60,8 +60,8 @@ directory).", &opts).as_slice());
             print(separator);
         }
     } else {
-        println!("{0:s}: missing operand", program);
-        println!("Try '{0:s} --help' for more information.", program);
+        println!("{0}: missing operand", program);
+        println!("Try '{0} --help' for more information.", program);
         return 1;
     }
 

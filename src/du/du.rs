@@ -197,11 +197,11 @@ ers of 1000).",
     let max_depth = max_depth_str.as_ref().and_then(|s| from_str::<uint>(s.as_slice()));
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={:s}", *s);
+            show_error!("summarizing conflicts with --max-depth={}", *s);
             return 1;
         }
         (Some(ref s), None) => {
-            show_error!("invalid maximum depth '{:s}'", *s);
+            show_error!("invalid maximum depth '{}'", *s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
@@ -271,9 +271,9 @@ ers of 1000).",
     let convert_size = |size: u64| -> String {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
             if size >= MB {
-                format!("{:.1f}M", (size as f64) / (MB as f64))
+                format!("{:.1}M", (size as f64) / (MB as f64))
             } else if size >= KB {
-                format!("{:.1f}K", (size as f64) / (KB as f64))
+                format!("{:.1}K", (size as f64) / (KB as f64))
             } else {
                 format!("{}B", size)
             }

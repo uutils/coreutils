@@ -63,7 +63,7 @@ Usage:
         println!("{} v{}", NAME, VERSION);
     } else if matches.free.len() < 2 {
         show_error!("missing an argument");
-        show_error!("for help, try '{0:s} --help'", program);
+        show_error!("for help, try '{0} --help'", program);
         return ERR_EXIT_STATUS;
     } else {
         let status = matches.opt_present("preserve-status");

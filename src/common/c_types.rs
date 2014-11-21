@@ -118,7 +118,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
             if pw_pointer.is_not_null() {
                 Some(unsafe { read(pw_pointer) })
             } else {
-                crash!(1, "{:s}: no such user", username);
+                crash!(1, "{}: no such user", username);
             }
 
         // Passed the username as a string
@@ -129,7 +129,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
             if pw_pointer.is_not_null() {
                 Some(unsafe { read(pw_pointer) })
             } else {
-                crash!(1, "{:s}: no such user", username);
+                crash!(1, "{}: no such user", username);
             }
         }
     } else {
@@ -210,7 +210,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
 
     match groups {
         Err(errno) =>
-            crash!(1, "failed to get group list (errno={:u})", errno),
+            crash!(1, "failed to get group list (errno={})", errno),
         Ok(groups) => {
             for &g in groups.iter() {
                 if nflag {
@@ -219,10 +219,10 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
                         let name = unsafe {
                             from_buf(read(group).gr_name as *const u8)
                         };
-                        print!("{:s} ", name);
+                        print!("{} ", name);
                     }
                 } else {
-                    print!("{:u} ", g);
+                    print!("{} ", g);
                 }
             }
             println!("");

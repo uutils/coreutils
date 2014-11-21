@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Some(s) => match from_str(s.as_slice()) {
             Some(s) => s,
             None => {
-                error!("error: {:s}", "Argument to option 'wrap' improperly formatted.");
+                error!("error: {}", "Argument to option 'wrap' improperly formatted.");
                 panic!()
             }
         },
@@ -165,7 +165,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
 }
 
 fn help(progname: &str, usage: &str) {
-    println!("Usage: {:s} [OPTION]... [FILE]", progname);
+    println!("Usage: {} [OPTION]... [FILE]", progname);
     println!("");
     println(usage);
 

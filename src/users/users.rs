@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("users 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {:s} [OPTION]... [FILE]", program);
+        println!("  {} [OPTION]... [FILE]", program);
         println!("");
         print(getopts::usage("Output who is currently logged in according to FILE.", &opts).as_slice());
         return 0;

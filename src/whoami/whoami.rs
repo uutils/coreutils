@@ -80,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("whoami 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {:s}", program);
+        println!("  {}", program);
         println!("");
         print(getopts::usage("print effective userid", &opts).as_slice());
         return 0;
@@ -98,6 +98,6 @@ pub fn uumain(args: Vec<String>) -> int {
 pub fn exec() {
     unsafe {
         let username = platform::getusername();
-        println!("{:s}", username);
+        println!("{}", username);
     }
 }
