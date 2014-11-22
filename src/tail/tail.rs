@@ -89,7 +89,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 beginning = true;
                 slice = slice.slice_from(1);
             }
-            line_count = match from_str(slice) {
+            line_count = match parse_size(slice) {
                 Some(m) => m,
                 None => {
                     show_error!("invalid number of lines ({})", slice);
@@ -104,7 +104,7 @@ pub fn uumain(args: Vec<String>) -> int {
                     beginning = true;
                     slice = slice.slice_from(1);
                 }
-                byte_count = match from_str(slice) {
+                byte_count = match parse_size(slice) {
                     Some(m) => m,
                     None => {
                         show_error!("invalid number of bytes ({})", slice);
@@ -146,6 +146,59 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     0
+}
+
+fn parse_size(mut size_slice: &str) -> Option<uint> {
+    let mut base =
+        if size_slice.len() > 0 && size_slice.char_at(size_slice.len() - 1) == 'B' {
+            size_slice = size_slice.slice_to(size_slice.len() - 1);
+            1000u
+        } else {
+            1024u
+        };
+    let exponent = 
+        if size_slice.len() > 0 {
+            let mut has_suffix = true;
+            let exp = match size_slice.char_at(size_slice.len() - 1) {
+                'K' => 1u,
+                'M' => 2u,
+                'G' => 3u,
+                'T' => 4u,
+                'P' => 5u,
+                'E' => 6u,
+                'Z' => 7u,
+                'Y' => 8u,
+                'b' => {
+                    base = 512u;
+                    1u
+                }
+                _ => {
+                    has_suffix = false;
+                    0u
+                }
+            };
+            if has_suffix {
+                size_slice = size_slice.slice_to(size_slice.len() - 1);
+            }
+            exp
+        } else {
+            0u
+        };
+
+    let mut multiplier = 1u;
+    for _ in range(0u, exponent) {
+        multiplier *= base;
+    }
+    if base == 1000u && exponent == 0u {
+        // sole B is not a valid suffix
+        None
+    } else {
+        let value = from_str(size_slice);
+        match value {
+            Some(v) => Some(multiplier * v),
+            None => None
+        }
+    }
 }
 
 // It searches for an option in the form of -123123
