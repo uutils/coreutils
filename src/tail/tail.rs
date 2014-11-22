@@ -13,7 +13,7 @@
 
 extern crate getopts;
 
-use std::char;
+use std::char::UnicodeChar;
 use std::io::{stdin};
 use std::io::{BufferedReader, BytesReader};
 use std::io::fs::File;
@@ -165,7 +165,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
             let len = current.len();
             for pos in range(1, len) {
                 // Ensure that the argument is only made out of digits
-                if !char::is_digit(current[pos] as char) { break; }
+                if !UnicodeChar::is_numeric(current[pos] as char) { break; }
 
                 // If this is the last number
                 if pos == len - 1 {

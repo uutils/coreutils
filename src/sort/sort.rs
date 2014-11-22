@@ -105,7 +105,7 @@ fn skip_zeros(mut char_a: char, char_iter: &mut Chars, ret: Ordering) -> Orderin
     while char_a == '0' {
         char_a = match char_iter.next() { None => return Equal, Some(t) => t };
     }
-    if char_a.is_digit() { ret } else { Equal }
+    if char_a.is_digit(10) { ret } else { Equal }
 }
 
 /// Compares two decimal fractions as strings (n < 1)
@@ -122,15 +122,15 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
             char_a = match a_chars.next() { None => 0 as char, Some(t) => t };
             char_b = match b_chars.next() { None => 0 as char, Some(t) => t };
             // hit the end at the same time, they are equal
-            if !char_a.is_digit() {
+            if !char_a.is_digit(10) {
                 return Equal;
             }
         }
-        if char_a.is_digit() && char_b.is_digit() {
+        if char_a.is_digit(10) && char_b.is_digit(10) {
             (char_a as int).cmp(&(char_b as int))
-        } else if char_a.is_digit() {
+        } else if char_a.is_digit(10) {
             skip_zeros(char_a, a_chars, Greater)
-        } else if char_b.is_digit() {
+        } else if char_b.is_digit(10) {
             skip_zeros(char_b, b_chars, Less)
         } else { Equal }
     } else if char_a == DECIMAL_PT {
