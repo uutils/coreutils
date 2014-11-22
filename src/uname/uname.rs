@@ -72,7 +72,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("uname 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {:s}", program);
+        println!("  {}", program);
         println!("");
         print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", &opts).as_slice());
         return 0;

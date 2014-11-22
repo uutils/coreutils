@@ -12,7 +12,6 @@
 #![feature(macro_rules)]
 extern crate getopts;
 extern crate libc;
-extern crate native;
 
 use getopts::{optflag, getopts, usage};
 use std::io::stdio::{stdin_raw, stdout_raw, stderr_raw};
@@ -93,7 +92,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: COMMAND");
-        println!("Try `{:s} --help` for more information.", program.as_slice());
+        println!("Try `{} --help` for more information.", program.as_slice());
         return 1
     }
     replace_fds();
@@ -179,10 +178,10 @@ fn version() {
 fn show_usage(program: &str, options: &[getopts::OptGroup]) {
     version();
     println!("Usage:");
-    println!("  {:s} COMMAND [ARG]…", program);
-    println!("  {:s} OPTION", program);
+    println!("  {} COMMAND [ARG]…", program);
+    println!("  {} OPTION", program);
     println!("");
-    print!("{:s}", usage(
+    print!("{}", usage(
             "Run COMMAND ignoring hangup signals.\n\
             If standard input is terminal, it'll be replaced with /dev/null.\n\
             If standard output is terminal, it'll be appended to nohup.out instead, \

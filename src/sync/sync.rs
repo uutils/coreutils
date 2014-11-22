@@ -175,8 +175,8 @@ fn version() {
 }
 
 fn help(program: &str, options: &[getopts::OptGroup]) {
-    println!("Usage: {:s} [OPTION]", program);
-    print!("{:s}", usage("Force changed blocks to disk, update the super block.", options));
+    println!("Usage: {} [OPTION]", program);
+    print!("{}", usage("Force changed blocks to disk, update the super block.", options));
 }
 
 fn uusync() -> int {

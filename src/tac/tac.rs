@@ -40,7 +40,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("tac {}", VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print!("{}", getopts::usage("Write each file to standard output, last line first.", &opts));
     } else if matches.opt_present("version") {

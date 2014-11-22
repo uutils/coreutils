@@ -25,7 +25,7 @@ struct SeqOptions {
 fn parse_float(s: &str) -> Result<f64, String>{
     match from_str(s) {
         Some(n) => Ok(n),
-        None => Err(format!("seq: invalid floating point argument: {:s}", s))
+        None => Err(format!("seq: invalid floating point argument: {}", s))
     }
 }
 
@@ -136,7 +136,7 @@ fn print_help(program: &String) {
     ];
     println!("seq 1.0.0\n");
     println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n", *program);
-    println!("{:s}", getopts::usage("Print sequences of numbers", &opts));
+    println!("{}", getopts::usage("Print sequences of numbers", &opts));
 }
 
 fn print_version() {
@@ -168,7 +168,7 @@ pub fn uumain(args: Vec<String>) -> int {
         padding = dec;
         match parse_float(slice) {
             Ok(n) => n,
-            Err(s) => { show_error!("{:s}", s); return 1; }
+            Err(s) => { show_error!("{}", s); return 1; }
         }
     } else {
         1.0
@@ -181,7 +181,7 @@ pub fn uumain(args: Vec<String>) -> int {
         padding = cmp::max(padding, dec);
         match parse_float(free[1].as_slice()) {
             Ok(n) => n,
-            Err(s) => { show_error!("{:s}", s); return 1; }
+            Err(s) => { show_error!("{}", s); return 1; }
         }
     } else {
         1.0
@@ -191,7 +191,7 @@ pub fn uumain(args: Vec<String>) -> int {
         padding = cmp::max(padding, slice.find('.').unwrap_or(slice.len()));
         match parse_float(slice) {
             Ok(n) => n,
-            Err(s) => { show_error!("{:s}", s); return 1; }
+            Err(s) => { show_error!("{}", s); return 1; }
         }
     };
     let separator = escape_sequences(options.separator.as_slice());
@@ -245,12 +245,12 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: uint, separator: Str
         i += 1;
         value = first + i as f64 * step;
         if !done_printing(value, step, last) {
-            if !pipe_print!("{:s}", separator) {
+            if !pipe_print!("{}", separator) {
                 return;
             }
         }
     }
     if (first >= last && step < 0f64) || (first <= last && step > 0f64) {
-        pipe_print!("{:s}", terminator);
+        pipe_print!("{}", terminator);
     }
 }

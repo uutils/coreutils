@@ -88,7 +88,7 @@ macro_rules! return_if_err(
 #[macro_export]
 macro_rules! pipe_print(
     ($($args:expr),+) => (
-        match write!(&mut ::std::io::stdout() as &mut Writer, $($args),+) {
+        match write!(&mut ::std::io::stdout(), $($args),+) {
             Ok(_) => true,
             Err(f) => {
                 if f.kind == ::std::io::BrokenPipe {
@@ -104,7 +104,7 @@ macro_rules! pipe_print(
 #[macro_export]
 macro_rules! pipe_println(
     ($($args:expr),+) => (
-        match writeln!(&mut ::std::io::stdout() as &mut Writer, $($args),+) {
+        match writeln!(&mut ::std::io::stdout(), $($args),+) {
             Ok(_) => true,
             Err(f) => {
                 if f.kind == ::std::io::BrokenPipe {

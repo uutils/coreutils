@@ -44,14 +44,14 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("rmdir 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... DIRECTORY...", program);
+        println!("  {0} [OPTION]... DIRECTORY...", program);
         println!("");
         print(getopts::usage("Remove the DIRECTORY(ies), if they are empty.", &opts).as_slice());
     } else if matches.opt_present("version") {
         println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0:s} --help'", program);
+        show_error!("for help, try '{0} --help'", program);
         return 1;
     } else {
         let ignore = matches.opt_present("ignore-fail-on-non-empty");

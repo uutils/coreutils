@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("yes 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} [STRING]... [OPTION]...", program);
+        println!("  {0} [STRING]... [OPTION]...", program);
         println!("");
         print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts).as_slice());
         return 0;

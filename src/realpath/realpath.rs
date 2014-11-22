@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: FILENAME, at least one is required");
-        println!("Try `{:s} --help` for more information.", program.as_slice());
+        println!("Try `{} --help` for more information.", program.as_slice());
         return 1
     }
 
@@ -125,11 +125,11 @@ fn version() {
 fn show_usage(program: &str, options: &[getopts::OptGroup]) {
     version();
     println!("Usage:");
-    println!("  {:s} [-s|--strip] [-z|--zero] FILENAME…", program);
-    println!("  {:s} -V|--version", program);
-    println!("  {:s} -h|--help", program);
+    println!("  {} [-s|--strip] [-z|--zero] FILENAME…", program);
+    println!("  {} -V|--version", program);
+    println!("  {} -h|--help", program);
     println!("");
-    print!("{:s}", usage(
+    print!("{}", usage(
             "Convert each FILENAME to the absolute path.\n\
             All the symbolic links will be resolved, resulting path will contain no special components like '.' or '..'.\n\
             Each path component must exist or resolution will fail and non-zero exit status returned.\n\

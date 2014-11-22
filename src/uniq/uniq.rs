@@ -147,7 +147,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print!("{}", getopts::usage("Filter adjacent matching lines from INPUT (or standard input),\n\
                                     writing to OUTPUT (or standard output).", &opts));

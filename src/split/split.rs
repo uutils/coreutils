@@ -45,7 +45,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} v{}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [INPUT [PREFIX]]", NAME);
+        println!("  {0} [OPTION]... [INPUT [PREFIX]]", NAME);
         println!("");
         io::print(getopts::usage("Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is -, read standard input." , &opts).as_slice());
         return 0;

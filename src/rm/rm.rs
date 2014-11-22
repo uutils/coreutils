@@ -57,7 +57,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("rm 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print(getopts::usage("Remove (unlink) the FILE(s).", &opts).as_slice());
         println!("");
@@ -77,7 +77,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("rm 1.0.0");
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0:s} --help'", program);
+        show_error!("for help, try '{0} --help'", program);
         return 1;
     } else {
         let force = matches.opt_present("force");

@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("cat 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print(getopts::usage("Concatenate FILE(s), or standard input, to \
                              standard output.", &opts).as_slice());
@@ -119,7 +119,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 if in_buf[pos] == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
                         if at_line_start && number == NumberingMode::NumberAll {
-                            (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
+                            (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                             line_counter += 1;
                         }
                         if show_ends {
@@ -134,7 +134,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     continue;
                 }
                 if at_line_start && number != NumberingMode::NumberNone {
-                    (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
+                    (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                     line_counter += 1;
                 }
                 match in_buf.slice_from(pos).iter().position(|c| *c == '\n' as u8) {
@@ -192,7 +192,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 if byte == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
                         if at_line_start && number == NumberingMode::NumberAll {
-                            (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
+                            (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                             line_counter += 1;
                         }
                         if show_ends {
@@ -207,7 +207,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     continue;
                 }
                 if at_line_start && number != NumberingMode::NumberNone {
-                    (write!(&mut writer, "{0:6u}\t", line_counter)).unwrap();
+                    (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                     line_counter += 1;
                     at_line_start = false;
                 }
@@ -284,7 +284,7 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
     match File::open(&std::path::Path::new(path)) {
         Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
-            (writeln!(stderr(), "cat: {0:s}: {1:s}", path, e.to_string())).unwrap();
+            (writeln!(&mut stderr(), "cat: {0}: {1}", path, e.to_string())).unwrap();
             None
         },
     }

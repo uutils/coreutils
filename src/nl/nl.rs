@@ -322,7 +322,7 @@ fn pass_all(_: &str, _: &regex::Regex) -> bool {
 }
 
 fn print_usage(opts: &[OptGroup]) {
-    println!("{:s}", usage(USAGE, opts));
+    println!("{}", usage(USAGE, opts));
 }
 
 fn version () {

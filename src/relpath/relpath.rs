@@ -42,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: TO");
-        println!("Try `{:s} --help` for more information.", program.as_slice());
+        println!("Try `{} --help` for more information.", program.as_slice());
         return 1
     }
 
@@ -89,11 +89,11 @@ fn version() {
 fn show_usage(program: &str, options: &[getopts::OptGroup]) {
     version();
     println!("Usage:");
-    println!("  {:s} [-d DIR] TO [FROM]", program);
-    println!("  {:s} -V|--version", program);
-    println!("  {:s} -h|--help", program);
+    println!("  {} [-d DIR] TO [FROM]", program);
+    println!("  {} -V|--version", program);
+    println!("  {} -h|--help", program);
     println!("");
-    print!("{:s}", usage(
+    print!("{}", usage(
             "Convert TO destination to the relative path from the FROM dir.\n\
             If FROM path is omitted, current working dir will be used.", options)
     );

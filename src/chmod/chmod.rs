@@ -15,7 +15,6 @@
 
 extern crate getopts;
 extern crate libc;
-extern crate native;
 extern crate regex;
 #[phase(plugin)] extern crate regex_macros;
 
@@ -145,7 +144,7 @@ fn verify_mode(mode: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), int> {
+fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), int> {
     let mut r = Ok(());
 
     for filename in files.iter() {
@@ -181,7 +180,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     r
 }
 
-fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), int> {
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), int> {
     let path = name.to_c_str();
     match fmode {
         Some(mode) => {
@@ -279,7 +278,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                         '+' | '-' | '=' => (ch, change.slice_from(1)),
                         _ => ('=', change)
                     };
-                    let mode = from_str_radix::<u32>(slice, 8).unwrap();  // already verified
+                    let mode = from_str_radix::<u32>(slice, 8).unwrap() as libc::mode_t;  // already verified
                     match action {
                         '+' => fperm |= mode,
                         '-' => fperm &= !mode,

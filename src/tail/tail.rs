@@ -57,13 +57,13 @@ pub fn uumain(args: Vec<String>) -> int {
     let given_options = match getopts(args.as_slice(), &possible_options) {
         Ok (m) => { m }
         Err(_) => {
-            println!("{:s}", usage(NAME, &possible_options));
+            println!("{}", usage(NAME, &possible_options));
             return 1;
         }
     };
 
     if given_options.opt_present("h") {
-        println!("{:s}", usage(NAME, &possible_options));
+        println!("{}", usage(NAME, &possible_options));
         return 0;
     }
     if given_options.opt_present("V") { version(); return 0 }
@@ -134,7 +134,7 @@ pub fn uumain(args: Vec<String>) -> int {
         for file in files.iter() {
             if multiple {
                 if !firstime { println!(""); }
-                println!("==> {:s} <==", file.as_slice());
+                println!("==> {} <==", file.as_slice());
             }
             firstime = false;
 

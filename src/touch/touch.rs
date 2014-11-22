@@ -45,16 +45,16 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     if matches.opt_present("version") {
-        println!("{:s} {:s}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
     if matches.opt_present("help") || matches.free.is_empty() {
-        println!("{:s} {:s}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         println!("");
-        println!("Usage: {:s} [OPTION]... FILE...", NAME);
+        println!("Usage: {} [OPTION]... FILE...", NAME);
         println!("");
-        println!("{:s}", getopts::usage("Update the access and modification times of \
+        println!("{}", getopts::usage("Update the access and modification times of \
                                          each FILE to the current time.", &opts));
         if matches.free.is_empty() {
             return 1;

@@ -62,7 +62,7 @@ pub fn uumain(args: Vec<String>) -> int {
         version();
         println!("");
         println!("Usage:");
-        println!("  {:s}", program);
+        println!("  {}", program);
         println!("");
         print(getopts::usage("print user's login name", &opts).as_slice());
         return 0;
@@ -80,6 +80,6 @@ pub fn uumain(args: Vec<String>) -> int {
 fn exec() {
     unsafe {
         let userlogin = get_userlogin();
-        println!("{:s}", userlogin);
+        println!("{}", userlogin);
     }
 }

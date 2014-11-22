@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> int {
     }
     if matches.opt_present("help") || matches.free.len() > 0 {
         println!("Usage:");
-        println!("  {0:s} [OPTION]", program);
+        println!("  {0} [OPTION]", program);
         println!("");
         print(getopts::usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
@@ -96,7 +96,7 @@ fn print_loadavg() {
     else {
         print!("load average: ")
         for n in range(0, loads) {
-            print!("{:.2f}{}", avg[n as uint], if n == loads - 1 { "\n" }
+            print!("{:.2}{}", avg[n as uint], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
     }
@@ -153,7 +153,7 @@ fn print_time() {
 
     if local_time.tm_hour >= 0 && local_time.tm_min >= 0 &&
        local_time.tm_sec >= 0 {
-        print!(" {:02d}:{:02d}:{:02d} ", local_time.tm_hour,
+        print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
                local_time.tm_min, local_time.tm_sec);
     }
 }
@@ -187,12 +187,12 @@ fn print_uptime(upsecs: i64) {
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
-        print!("up {:1d} day, {:2d}:{:02d},  ", updays, uphours, upmins);
+        print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins);
     }
     else if updays > 1 {
-        print!("up {:1d} days, {:2d}:{:02d},  ", updays, uphours, upmins);
+        print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
     }
     else {
-        print!("up  {:2d}:{:02d},  ", uphours, upmins);
+        print!("up  {:2}:{:02},  ", uphours, upmins);
     }
 }

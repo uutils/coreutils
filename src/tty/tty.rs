@@ -72,5 +72,5 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn usage () {
-    safe_writeln!(&mut stderr() as &mut Writer, "usage: tty [-s]");
+    safe_writeln!(&mut stderr(), "usage: tty [-s]");
 }

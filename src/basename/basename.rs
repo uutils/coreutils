@@ -38,8 +38,8 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     if matches.opt_present("help") {
-        println!("Usage: {0:s} NAME [SUFFIX]", program);
-        println!("  or: {0:s} OPTION", program);
+        println!("Usage: {0} NAME [SUFFIX]", program);
+        println!("  or: {0} OPTION", program);
         println!("Print NAME with any leading directory components removed.");
         println!("If specified, also remove a trailing SUFFIX.");
 

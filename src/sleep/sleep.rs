@@ -45,9 +45,9 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("sleep 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0:s} NUMBER[SUFFIX]", program);
+        println!("  {0} NUMBER[SUFFIX]", program);
         println!("or");
-        println!("  {0:s} OPTION", program);
+        println!("  {0} OPTION", program);
         println!("");
         print(getopts::usage("Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
@@ -58,7 +58,7 @@ specified by the sum of their values.", &opts).as_slice());
         println!("sleep 1.0.0");
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0:s} --help'", program);
+        show_error!("for help, try '{0} --help'", program);
         return 1;
     } else {
         sleep(matches.free);
