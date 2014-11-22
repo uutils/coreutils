@@ -22,7 +22,10 @@ struct SeqOptions {
     widths: bool
 }
 
-fn parse_float(s: &str) -> Result<f64, String>{
+fn parse_float(mut s: &str) -> Result<f64, String> {
+    if s.starts_with("+") {
+        s = s.slice_from(1);
+    }
     match from_str(s) {
         Some(n) => Ok(n),
         None => Err(format!("seq: invalid floating point argument: {}", s))
@@ -179,7 +182,7 @@ pub fn uumain(args: Vec<String>) -> int {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
         padding = cmp::max(padding, dec);
-        match parse_float(free[1].as_slice()) {
+        match parse_float(slice) {
             Ok(n) => n,
             Err(s) => { show_error!("{}", s); return 1; }
         }
