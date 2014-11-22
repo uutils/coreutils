@@ -181,8 +181,8 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     }
 
-    for ref name in opts.unsets.iter() {
-        std::os::unsetenv(name.as_slice())
+    for name in opts.unsets.iter() {
+        std::os::unsetenv((name).as_slice())
     }
 
     for &(ref name, ref val) in opts.sets.iter() {

@@ -139,26 +139,26 @@ fn expand(options: Options) {
                 Ok('\t') if init || !options.iflag => {
                     let nb_spaces = to_next_stop(options.tabstops.as_slice(), col);
                     col += nb_spaces;
-                    safe_write!(output, "{:1$}", "", nb_spaces);
+                    safe_write!(&mut output, "{:1$}", "", nb_spaces);
                 }
                 Ok('\x08') => {
                     if col > 0 {
                         col -= 1;
                     }
                     init = false;
-                    safe_write!(output, "{}", '\x08');
+                    safe_write!(&mut output, "{}", '\x08');
                 }
                 Ok('\n') =>  {
                     col = 0;
                     init = true;
-                    safe_write!(output, "{}", '\n');
+                    safe_write!(&mut output, "{}", '\n');
                 }
                 Ok(c) => {
                     col += 1;
                     if c != ' ' {
                         init = false;
                     }
-                    safe_write!(output, "{}", c);
+                    safe_write!(&mut output, "{}", c);
                 }
                 Err(_) => break
             }

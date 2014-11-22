@@ -135,21 +135,21 @@ fn to_next_stop(tabstops: &[uint], col: uint) -> Option<uint> {
     }
 }
 
-fn unexpandspan(output: &mut io::LineBufferedWriter<io::stdio::StdWriter>,
+fn unexpandspan(mut output: &mut io::LineBufferedWriter<io::stdio::StdWriter>,
                 tabstops: &[uint], nspaces: uint, col: uint, init: bool) {
     let mut cur = col - nspaces;
     if nspaces > 1 || init {
         loop {
             match to_next_stop(tabstops, cur) {
                 Some(to_next) if cur + to_next <= col => {
-                        safe_write!(output, "{}", '\t');
+                        safe_write!(&mut output, "{}", '\t');
                         cur += to_next;
                     }
                 _ => break
             }
         }
     }
-    safe_write!(output, "{:1$}", "", col - cur);
+    safe_write!(&mut output, "{:1$}", "", col - cur);
 }
 
 fn unexpand(options: Options) {
@@ -167,7 +167,7 @@ fn unexpand(options: Options) {
                         nspaces += 1;
                     } else {
                         nspaces = 0;
-                        safe_write!(output, "{}", ' ');
+                        safe_write!(&mut output, "{}", ' ');
                     }
                     col += 1;
                 }
@@ -175,7 +175,7 @@ fn unexpand(options: Options) {
                     if is_tabstop(ts, col) {
                         nspaces = 0;
                         col += 1;
-                        safe_write!(output, "{}", '\t');
+                        safe_write!(&mut output, "{}", '\t');
                     }
                     match to_next_stop(ts, col) {
                         Some(to_next) => {
@@ -186,7 +186,7 @@ fn unexpand(options: Options) {
                             col += 1;
                             unexpandspan(&mut output, ts, nspaces, col, init);
                             nspaces = 0;
-                            safe_write!(output, "{}", '\t');
+                            safe_write!(&mut output, "{}", '\t');
                         }
                     }
                 }
@@ -197,7 +197,7 @@ fn unexpand(options: Options) {
                     nspaces = 0;
                     if col > 0 { col -= 1; }
                     init = false;
-                    safe_write!(output, "{}", '\x08');
+                    safe_write!(&mut output, "{}", '\x08');
                 }
                 Ok('\n') => {
                     if init || options.aflag {
@@ -206,7 +206,7 @@ fn unexpand(options: Options) {
                     nspaces = 0;
                     col = 0;
                     init = true;
-                    safe_write!(output, "{}", '\n');
+                    safe_write!(&mut output, "{}", '\n');
                 }
                 Ok(c) => {
                     if init || options.aflag {
@@ -215,7 +215,7 @@ fn unexpand(options: Options) {
                     nspaces = 0;
                     col += 1;
                     init = false;
-                    safe_write!(output, "{}", c);
+                    safe_write!(&mut output, "{}", c);
                 }
                 Err(_) => break
             }
