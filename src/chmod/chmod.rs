@@ -15,7 +15,6 @@
 
 extern crate getopts;
 extern crate libc;
-extern crate native;
 extern crate regex;
 #[phase(plugin)] extern crate regex_macros;
 

@@ -12,7 +12,6 @@
 #![feature(macro_rules)]
 extern crate getopts;
 extern crate libc;
-extern crate native;
 
 use getopts::{optflag, getopts, usage};
 use std::io::stdio::{stdin_raw, stdout_raw, stderr_raw};
