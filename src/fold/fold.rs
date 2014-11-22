@@ -139,6 +139,10 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
             let mut len = line.char_len();
             let newline = line.ends_with("\n");
             if newline {
+                if len == 1 {
+                    println!("");
+                    continue;
+                }
                 line = line.slice_to(line.len() - 1);
                 len -= 1;
             }
