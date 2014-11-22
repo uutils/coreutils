@@ -14,6 +14,7 @@
 
 extern crate getopts;
 
+use std::fmt::Show;
 use std::io::{print, File, BufferedReader};
 use std::io::stdio::stdin_raw;
 use std::str::Chars;
@@ -31,6 +32,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("n", "numeric-sort", "compare according to string numerical value"),
+        getopts::optflag("r", "reverse", "reverse the output"),
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("", "version", "output version information and exit"),
     ];
@@ -54,10 +56,8 @@ pub fn uumain(args: Vec<String>) -> int {
         return 0;
     }
 
-    let mut numeric = false;
-    if matches.opt_present("numeric-sort") {
-        numeric = true;
-    }
+    let numeric = matches.opt_present("numeric-sort");
+    let reverse = matches.opt_present("reverse");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -65,12 +65,12 @@ pub fn uumain(args: Vec<String>) -> int {
         files.push("-".to_string());
     }
     
-    exec(files, numeric);
+    exec(files, numeric, reverse);
     
     0
 }
 
-fn exec(files: Vec<String>, numeric: bool) {
+fn exec(files: Vec<String>, numeric: bool, reverse: bool) {
     for path in files.iter() {
         let (reader, _) = match open(path.as_slice()) {
             Some(x) => x,
@@ -94,9 +94,13 @@ fn exec(files: Vec<String>, numeric: bool) {
         } else {
             lines.sort();
         }
-        for line in lines.iter() {
-            print!("{}", line)
-        }
+
+        let iter = lines.iter();
+        if reverse {
+            print_sorted(iter.rev());
+        } else {
+            print_sorted(iter)
+        };
     }
 }
 
@@ -140,6 +144,12 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
     } else { Equal }
 }
 
+#[inline(always)]
+fn print_sorted<T: Iterator<S>, S: Show>(mut iter: T) {
+    for line in iter {
+        print!("{}", line);
+    }
+}
 
 // from cat.rs
 fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
