@@ -198,7 +198,7 @@ fn main() {
     let binary = Path::new(args[0].as_slice());
     let binary_as_util = binary.filename_str().unwrap();
 
-    match umap.find_equiv(binary_as_util) {
+    match umap.get(binary_as_util) {
         Some(&uumain) => {
             os::set_exit_status(uumain(args));
             return
@@ -222,7 +222,7 @@ fn main() {
         args.remove(0);
         let util = args[0].as_slice();
 
-        match umap.find_equiv(util) {
+        match umap.get(util) {
             Some(&uumain) => {
                 os::set_exit_status(uumain(args.clone()));
                 return
@@ -232,7 +232,7 @@ fn main() {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
                         let util = args[1].as_slice();
-                        match umap.find_equiv(util) {
+                        match umap.get(util) {
                             Some(&uumain) => {
                                 os::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
                                 return
