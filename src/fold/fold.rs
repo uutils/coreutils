@@ -81,16 +81,14 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
-    let mut args = args.to_vec();
-    let mut i = 0;
-    while i < args.len() {
-        if args[i].as_slice().char_at(0) == '-' && args[i].len() > 1 && args[i].as_slice().char_at(1).is_digit() {
-            return (args.clone(),
-                    Some(args.remove(i).unwrap().as_slice().slice_from(1).to_string()));
+    for (i, arg) in args.iter().enumerate() {
+        let slice = arg.as_slice();
+        if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
+            return (args.slice_to(i).to_vec() + args.slice_from(i + 1),
+                    Some(slice.slice_from(1).to_string()));
         }
-        i += 1;
     }
-    (args, None)
+    (args.to_vec(), None)
 }
 
 #[inline]
@@ -141,6 +139,10 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
             let mut len = line.char_len();
             let newline = line.ends_with("\n");
             if newline {
+                if len == 1 {
+                    println!("");
+                    continue;
+                }
                 line = line.slice_to(line.len() - 1);
                 len -= 1;
             }

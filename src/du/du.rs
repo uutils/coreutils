@@ -235,10 +235,10 @@ ers of 1000).",
             let mut numbers = vec!();
             let mut letters = vec!();
             for c in s.as_slice().chars() {
-                if found_letter && c.is_digit() || !found_number && !c.is_digit() {
+                if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
                     show_error!("invalid --block-size argument '{}'", s);
                     return 1;
-                } else if c.is_digit() {
+                } else if c.is_digit(10) {
                     found_number = true;
                     numbers.push(c as u8);
                 } else if c.is_alphabetic() {

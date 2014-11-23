@@ -105,7 +105,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
         let slice: &str = unsafe { std::mem::transmute(args[i].as_slice()) };
-        if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit() {
+        if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
             let val = slice.slice_from(1);
             match from_str(val) {
                 Some(num) => {
