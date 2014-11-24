@@ -82,12 +82,12 @@ pub fn uumain(args: Vec<String>) -> int {
     0
 }
 
-static CR: u8 = '\r' as u8;
-static LF: u8 = '\n' as u8;
-static SPACE: u8 = ' ' as u8;
-static TAB: u8 = '\t' as u8;
-static SYN: u8 = 0x16 as u8;
-static FF: u8 = 0x0C as u8;
+const CR: u8 = '\r' as u8;
+const LF: u8 = '\n' as u8;
+const SPACE: u8 = ' ' as u8;
+const TAB: u8 = '\t' as u8;
+const SYN: u8 = 0x16 as u8;
+const FF: u8 = 0x0C as u8;
 
 #[inline(always)]
 fn is_word_seperator(byte: u8) -> bool {
@@ -105,10 +105,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
     let mut max_str_len: uint = 0;
 
     for path in files.iter() {
-        let mut reader = match open(path.to_string()) {
-            Ok(f) => f,
-            Err(e) => { return Err(e); }
-        };
+        let mut reader = try!(open(path.as_slice()));
 
         let mut line_count: uint = 0;
         let mut word_count: uint = 0;
@@ -123,17 +120,17 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
             match reader.read_until(LF) {
                 Ok(raw_line) => {
                     // GNU 'wc' only counts lines that end in LF as lines
-                    if raw_line.iter().last().unwrap() == &LF {
+                    if *raw_line.last().unwrap() == LF {
                         line_count += 1;
                     }
 
-                    byte_count += raw_line.iter().len();
+                    byte_count += raw_line.len();
 
                     // try and convert the bytes to UTF-8 first
                     match from_utf8(raw_line.as_slice()) {
                         Some(line) => {
                             word_count += line.words().count();
-                            current_char_count = line.chars().count();
+                            current_char_count = line.char_len();
                             char_count += current_char_count;
                         },
                         None => {
@@ -151,7 +148,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
                     }
 
                     if current_char_count > longest_line_length {
-                        // we subtract one here because `line.iter().len()` includes the LF
+                        // we subtract one here because `line.len()` includes the LF
                         // matches GNU 'wc' behaviour
                         longest_line_length = current_char_count - 1;
                     }
@@ -231,13 +228,13 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
     }
 }
 
-fn open(path: String) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
-    if "-" == path.as_slice() {
+fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
+    if "-" == path {
         let reader = box stdin_raw() as Box<Reader>;
         return Ok(BufferedReader::new(reader));
     }
 
-    let fpath = Path::new(path.as_slice());
+    let fpath = Path::new(path);
     if fpath.is_dir() {
         show_info!("{}: is a directory", path);
     }
@@ -245,7 +242,7 @@ fn open(path: String) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
         Ok(fd) => {
             let reader = box fd as Box<Reader>;
             Ok(BufferedReader::new(reader))
-        },
+        }
         Err(e) => {
             show_error!("wc: {}: {}", path, e);
             Err(1)
