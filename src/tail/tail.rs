@@ -234,7 +234,7 @@ fn tail_lines<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: uint, b
 
 #[inline]
 fn tail_bytes<T: Reader>(reader: &mut BufferedReader<T>, mut byte_count: uint, beginning: bool) {
-    let mut ringbuf: RingBuf<u8> = RingBuf::new();
+    let mut ringbuf: RingBuf<char> = RingBuf::new();
     let mut bytes = reader.bytes().skip(
         if beginning {
             let temp = byte_count;
@@ -250,7 +250,7 @@ fn tail_bytes<T: Reader>(reader: &mut BufferedReader<T>, mut byte_count: uint, b
                 if byte_count <= ringbuf.len() {
                     ringbuf.pop_front();
                 }
-                ringbuf.push_back(byte);
+                ringbuf.push_back(byte as char);
             }
             Err(err) => panic!(err)
         }
