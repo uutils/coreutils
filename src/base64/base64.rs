@@ -106,7 +106,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
             to_decode.as_slice()
                 .trim_chars(|c: char| {
                     let num = match c.to_ascii_opt() {
-                        Some(ascii) => ascii.to_byte(),
+                        Some(ascii) => ascii.as_byte(),
                         None => return false
                     };
                     !(num >= 'a' as u8 && num <= 'z' as u8 ||

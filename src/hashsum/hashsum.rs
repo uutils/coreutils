@@ -212,10 +212,10 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             let mut buffer = file;
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
-                let (ck_filename, sum, binary_check) = match gnu_re.captures(line.as_slice()) {
-                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lowercase(), caps.name("binary") == "*"),
+                let (ck_filename, sum, binary_check): (_, Vec<Ascii>, _) = match gnu_re.captures(line.as_slice()) {
+                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().iter().map(|ch| ch.to_lowercase()).collect(), caps.name("binary") == "*"),
                     None => match bsd_re.captures(line.as_slice()) {
-                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().to_lowercase(), true),
+                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().iter().map(|ch| ch.to_lowercase()).collect(), true),
                         None => {
                             bad_format += 1;
                             if strict {
@@ -228,8 +228,8 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
-                    .as_slice().to_ascii().to_lowercase();
+                let real_sum: Vec<Ascii> = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
+                    .as_slice().to_ascii().iter().map(|ch| ch.to_lowercase()).collect();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
                         pipe_println!("{}: OK", ck_filename);

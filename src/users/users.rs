@@ -22,7 +22,6 @@ extern crate libc;
 use std::io::print;
 use std::mem;
 use std::ptr;
-use std::string;
 use utmpx::*;
 
 #[path = "../common/util.rs"]
@@ -109,7 +108,7 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = string::raw::from_buf(mem::transmute(&(*line).ut_user));
+                let user = String::from_raw_buf(mem::transmute(&(*line).ut_user));
                 users.push(user);
             }
         }

@@ -92,8 +92,8 @@ pub fn uumain(args: Vec<String>) -> int {
     set_context(&newroot, &opts);
 
     unsafe {
-        let executable = command[0].as_slice().to_c_str().unwrap();
-        let mut command_parts: Vec<*const i8> = command.iter().map(|x| x.to_c_str().unwrap()).collect();
+        let executable = command[0].as_slice().to_c_str().into_inner();
+        let mut command_parts: Vec<*const i8> = command.iter().map(|x| x.to_c_str().into_inner()).collect();
         command_parts.push(std::ptr::null());
         execvp(executable as *const libc::c_char, command_parts.as_ptr() as *mut *const libc::c_char) as int
     }
@@ -128,7 +128,7 @@ fn enter_chroot(root: &Path) {
     let root_str = root.display();
     std::os::change_dir(root).unwrap();
     let err = unsafe {
-        chroot(".".to_c_str().unwrap() as *const libc::c_char)
+        chroot(".".to_c_str().into_inner() as *const libc::c_char)
     };
     if err != 0 {
         crash!(1, "cannot chroot to {}: {}", root_str, strerror(err).as_slice())
@@ -193,7 +193,7 @@ fn set_user(user: &str) {
 fn strerror(errno: i32) -> String {
     unsafe {
         let err = libc::funcs::c95::string::strerror(errno);
-        std::string::raw::from_buf(err as *const u8)
+        String::from_raw_buf(err as *const u8)
     }
 }
 

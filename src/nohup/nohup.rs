@@ -9,13 +9,14 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
+#![feature(globs, macro_rules)]
 extern crate getopts;
 extern crate libc;
 
 use getopts::{optflag, getopts, usage};
 use std::io::stdio::{stdin_raw, stdout_raw, stderr_raw};
 use std::io::{File, Open, Read, Append, Write};
+use std::os::unix::prelude::*;
 use libc::funcs::posix88::unistd::{dup2, execvp};
 use libc::consts::os::posix88::SIGHUP;
 use libc::funcs::posix01::signal::signal;
@@ -32,35 +33,11 @@ extern {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
-// BEGIN CODE TO DELETE AFTER https://github.com/rust-lang/rust/issues/18897 is fixed
-struct HackyFile {
-    pub fd: FileDesc,
-    path: Path,
-    last_nread: int
-}
-
-struct FileDesc {
-    fd: libc::c_int,
-    close_on_drop: bool
-}
-
-trait AsFileDesc {
-    fn as_fd(&self) -> FileDesc;
-}
-
-impl AsFileDesc for File {
-    fn as_fd(&self) -> FileDesc {
-        let hack: HackyFile = unsafe { std::mem::transmute_copy(self) };
-        hack.fd
-    }
-}
-// END CODE TO DELETE
-
 #[cfg(target_os = "macos")]
-fn rewind_stdout(s: &mut FileDesc) {
+fn rewind_stdout(s: Fd) {
     match s.seek(0, io::SeekEnd) {
         Ok(_) => {}
-        Err(f) => crash!(1, "{}", f.detail.unwrap())
+        Err(f) => crash!(1, "{}", f.detail.into_inner())
     }
 }
 
@@ -68,7 +45,7 @@ fn rewind_stdout(s: &mut FileDesc) {
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-fn rewind_stdout(_: &mut FileDesc) {}
+fn rewind_stdout(_: Fd) {}
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = &args[0];
@@ -103,8 +80,8 @@ pub fn uumain(args: Vec<String>) -> int {
 
     unsafe {
         // we ignore the memory leak here because it doesn't matter anymore
-        let executable = opts.free[0].as_slice().to_c_str().unwrap();
-        let mut args: Vec<*const i8> = opts.free.iter().map(|x| x.to_c_str().unwrap()).collect();
+        let executable = opts.free[0].as_slice().to_c_str().into_inner();
+        let mut args: Vec<*const i8> = opts.free.iter().map(|x| x.to_c_str().into_inner()).collect();
         args.push(std::ptr::null());
         execvp(executable as *const libc::c_char, args.as_ptr() as *mut *const libc::c_char) as int
     }
@@ -122,18 +99,18 @@ fn replace_fds() {
                 crash!(2, "Cannot replace STDIN: {}", e)
             }
         };
-        if unsafe { dup2(new_stdin.as_fd().fd, 0) } != 0 {
+        if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
             crash!(2, "Cannot replace STDIN: {}", std::io::IoError::last_error())
         }
     }
 
     if replace_stdout {
         let new_stdout = find_stdout();
-        let mut fd = new_stdout.as_fd();
+        let fd = new_stdout.as_raw_fd();
 
-        rewind_stdout(&mut fd);
+        rewind_stdout(fd);
 
-        if unsafe { dup2(fd.fd, 1) } != 1 {
+        if unsafe { dup2(fd, 1) } != 1 {
             crash!(2, "Cannot replace STDOUT: {}", std::io::IoError::last_error())
         }
     }

@@ -19,7 +19,6 @@ use std::vec::Vec;
 
 use std::os;
 use std::ptr::{null_mut, read};
-use std::string::raw::from_buf;
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
@@ -124,7 +123,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         // Passed the username as a string
         } else {
             let pw_pointer = unsafe {
-                getpwnam(username.as_slice().to_c_str().unwrap() as *const libc::c_char)
+                getpwnam(username.as_slice().to_c_str().into_inner() as *const libc::c_char)
             };
             if pw_pointer.is_not_null() {
                 Some(unsafe { read(pw_pointer) })
@@ -141,7 +140,7 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit(10)) {
         unsafe { getgrgid(from_str::<gid_t>(groupname).unwrap()) }
     } else {
-        unsafe { getgrnam(groupname.to_c_str().unwrap() as *const c_char) }
+        unsafe { getgrnam(groupname.to_c_str().into_inner() as *const c_char) }
     };
 
     if group.is_not_null() {
@@ -217,7 +216,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
                     let group = unsafe { getgrgid(g) };
                     if group.is_not_null() {
                         let name = unsafe {
-                            from_buf(read(group).gr_name as *const u8)
+                            String::from_raw_buf(read(group).gr_name as *const u8)
                         };
                         print!("{} ", name);
                     }
