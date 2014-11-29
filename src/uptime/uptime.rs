@@ -16,13 +16,13 @@
 
 extern crate getopts;
 extern crate libc;
+extern crate "time" as rtime;
 
 use std::mem::transmute;
 use std::io::{print, File};
-use std::ptr::{null_mut, null};
+use std::ptr::null;
 use std::str::from_str;
 use libc::{time_t, c_double, c_int, c_char};
-use c_types::c_tm;
 use utmpx::*;
 
 #[path = "../common/util.rs"] mod util;
@@ -33,10 +33,8 @@ use utmpx::*;
 
 static NAME: &'static str = "uptime";
 
+#[cfg(unix)]
 extern {
-    fn time(timep: *mut time_t) -> time_t;
-    fn localtime(timep: *const time_t) -> *const c_tm;
-
     fn getloadavg(loadavg: *mut c_double, nelem: c_int) -> c_int;
 
     fn getutxent() -> *const c_utmp;
@@ -45,6 +43,11 @@ extern {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn utmpxname(file: *const c_char) -> c_int;
+}
+
+#[cfg(windows)]
+extern {
+    fn GetTickCount() -> libc::uint32_t;
 }
 
 #[cfg(target_os = "freebsd")]
@@ -102,6 +105,7 @@ fn print_loadavg() {
     }
 }
 
+#[cfg(unix)]
 fn process_utmpx() -> (Option<time_t>, uint) {
     DEFAULT_FILE.with_c_str(|filename| {
         unsafe {
@@ -140,6 +144,11 @@ fn process_utmpx() -> (Option<time_t>, uint) {
     (boot_time, nusers)
 }
 
+#[cfg(windows)]
+fn process_utmpx() -> (Option<time_t>, uint) {
+    (None, 0) // TODO: change 0 to number of users
+}
+
 fn print_nusers(nusers: uint) {
     if nusers == 1 {
         print!("1 user, ");
@@ -149,15 +158,13 @@ fn print_nusers(nusers: uint) {
 }
 
 fn print_time() {
-    let local_time = unsafe { *localtime(&time(null_mut())) };
+    let local_time = rtime::now();
 
-    if local_time.tm_hour >= 0 && local_time.tm_min >= 0 &&
-       local_time.tm_sec >= 0 {
-        print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
-               local_time.tm_min, local_time.tm_sec);
-    }
+    print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
+           local_time.tm_min, local_time.tm_sec);
 }
 
+#[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
     let proc_uptime = File::open(&Path::new("/proc/uptime"))
                             .read_to_string();
@@ -166,7 +173,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         Ok(s) => s,
         _ => return match boot_time {
                 Some(t) => {
-                    let now = unsafe { time(null_mut()) };
+                    let now = rtime::get_time().sec;
                     ((now - t) * 100) as i64 // Return in ms
                 },
                 _ => -1
@@ -174,12 +181,17 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     };
 
     match uptime_text.as_slice().words().next() {
-        Some(s) => match from_str(s.replace(".","").as_slice()) {
+        Some(s) => match from_str(s.replace(".", "").as_slice()) {
                     Some(n) => n,
                     None => -1
                    },
         None => -1
     }
+}
+
+#[cfg(windows)]
+fn get_uptime(boot_time: Option<time_t>) -> i64 {
+    unsafe { GetTickCount() as i64 }
 }
 
 fn print_uptime(upsecs: i64) {

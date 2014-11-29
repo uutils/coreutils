@@ -19,7 +19,6 @@ extern crate libc;
 
 use std::mem::uninitialized;
 use std::io::print;
-use std::string::raw::from_buf;
 use c_types::utsname;
 
 #[path = "../common/util.rs"] mod util;
@@ -41,11 +40,11 @@ unsafe fn getuname() -> utsrust {
     let mut uts: utsname = uninitialized();
     uname(&mut uts);
     utsrust {
-        sysname:  from_buf(uts.sysname.as_ptr()  as *const u8), 
-        nodename: from_buf(uts.nodename.as_ptr() as *const u8),
-        release:  from_buf(uts.release.as_ptr()  as *const u8), 
-        version:  from_buf(uts.version.as_ptr()  as *const u8),
-        machine:  from_buf(uts.machine.as_ptr()  as *const u8)
+        sysname:  String::from_raw_buf(uts.sysname.as_ptr()  as *const u8), 
+        nodename: String::from_raw_buf(uts.nodename.as_ptr() as *const u8),
+        release:  String::from_raw_buf(uts.release.as_ptr()  as *const u8), 
+        version:  String::from_raw_buf(uts.version.as_ptr()  as *const u8),
+        machine:  String::from_raw_buf(uts.machine.as_ptr()  as *const u8)
     }
 }
 

@@ -19,7 +19,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::print;
-use std::string;
 use libc::c_char;
 
 #[path = "../common/util.rs"] mod util;
@@ -32,7 +31,7 @@ extern {
 unsafe fn get_userlogin() -> String {
     let login: *const libc::c_char = getlogin();
 
-    string::raw::from_buf(login as *const u8)
+    String::from_raw_buf(login as *const u8)
 }
 
 static NAME: &'static str = "logname";

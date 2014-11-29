@@ -94,7 +94,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
 
 // break_simple implements a "greedy" breaking algorithm: print words until
 // maxlength would be exceeded, then print a linebreak and indent and continue.
-fn break_simple<'a, T: Iterator<&'a WordInfo<'a>>>(mut iter: T, args: &mut BreakArgs<'a>) {
+fn break_simple<'a, T: Iterator<&'a WordInfo<'a>>>(iter: T, args: &mut BreakArgs<'a>) {
     iter.fold((args.init_len, false), |l, winfo| accum_words_simple(args, l, winfo));
     silent_unwrap!(args.ostream.write_char('\n'));
 }

@@ -25,7 +25,6 @@ use std::io::print;
 #[cfg(unix)]
 mod platform {
     use super::libc;
-    use std::string;
     use self::c_types::{c_passwd, getpwuid};
 
     #[path = "../../common/c_types.rs"] mod c_types;
@@ -38,7 +37,7 @@ mod platform {
         let passwd: *const c_passwd = getpwuid(geteuid());
 
         let pw_name: *const libc::c_char = (*passwd).pw_name;
-        let name = string::raw::from_buf(pw_name as *const u8);
+        let name = String::from_raw_buf(pw_name as *const u8);
 
         name
     }
@@ -48,7 +47,6 @@ mod platform {
 mod platform {
     pub use super::libc;
     use std::mem;
-    use std::string;
 
     extern "system" {
         pub fn GetUserNameA(out: *mut libc::c_char, len: *mut libc::uint32_t) -> libc::uint8_t;
@@ -60,7 +58,7 @@ mod platform {
         if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }
-        string::raw::from_buf(buffer.as_ptr() as *const u8)
+        String::from_raw_buf(buffer.as_ptr() as *const u8)
     }
 }
 

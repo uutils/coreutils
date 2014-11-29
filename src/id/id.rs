@@ -25,7 +25,6 @@ use libc::{
     getuid
 };
 use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
-use std::string::raw::from_buf;
 use getopts::{getopts, optflag, usage};
 use c_types::{
     c_passwd,
@@ -139,7 +138,7 @@ pub fn uumain(args: Vec<String>) -> int {
         let gr = unsafe { getgrgid(id) };
 
         if nflag && gr.is_not_null() {
-            let gr_name = unsafe { from_buf(read(gr).gr_name as *const u8) };
+            let gr_name = unsafe { String::from_raw_buf(read(gr).gr_name as *const u8) };
             println!("{}", gr_name);
         } else {
             println!("{}", id);
@@ -159,7 +158,7 @@ pub fn uumain(args: Vec<String>) -> int {
         let pw = unsafe { getpwuid(id) };
         if nflag && pw.is_not_null() {
             let pw_name = unsafe {
-                from_buf(read(pw).pw_name as *const u8)
+                String::from_raw_buf(read(pw).pw_name as *const u8)
             };
             println!("{}", pw_name);
         } else {
@@ -197,16 +196,16 @@ fn pretty(possible_pw: Option<c_passwd>) {
     if possible_pw.is_some() {
         let pw = possible_pw.unwrap();
 
-        let pw_name = unsafe { from_buf(pw.pw_name as *const u8) };
+        let pw_name = unsafe { String::from_raw_buf(pw.pw_name as *const u8) };
         print!("uid\t{}\ngroups\t", pw_name);
         group(possible_pw, true);
     } else {
-        let login = unsafe { from_buf(getlogin() as *const u8) };
+        let login = unsafe { String::from_raw_buf(getlogin() as *const u8) };
         let rid = unsafe { getuid() };
         let pw = unsafe { getpwuid(rid) };
 
         let is_same_user = unsafe {
-            from_buf(read(pw).pw_name as *const u8) == login
+            String::from_raw_buf(read(pw).pw_name as *const u8) == login
         };
 
         if pw.is_null() || is_same_user {
@@ -216,7 +215,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
         if pw.is_not_null() {
             println!(
                 "uid\t{}",
-                unsafe { from_buf(read(pw).pw_name as *const u8) })
+                unsafe { String::from_raw_buf(read(pw).pw_name as *const u8) })
         } else {
             println!("uid\t{}\n", rid);
         }
@@ -227,7 +226,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
             if pw.is_not_null() {
                 println!(
                     "euid\t{}",
-                    unsafe { from_buf(read(pw).pw_name as *const u8) });
+                    unsafe { String::from_raw_buf(read(pw).pw_name as *const u8) });
             } else {
                 println!("euid\t{}", eid);
             }
@@ -240,7 +239,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
             if gr.is_not_null() {
                 println!(
                     "rgid\t{}",
-                    unsafe { from_buf(read(gr).gr_name as *const u8) });
+                    unsafe { String::from_raw_buf(read(gr).gr_name as *const u8) });
             } else {
                 println!("rgid\t{}", rid);
             }
@@ -259,12 +258,12 @@ fn pline(possible_pw: Option<c_passwd>) {
         possible_pw.unwrap()
     };
 
-    let pw_name     = unsafe { from_buf(pw.pw_name   as *const u8) };
-    let pw_passwd   = unsafe { from_buf(pw.pw_passwd as *const u8) };
-    let pw_class    = unsafe { from_buf(pw.pw_class  as *const u8) };
-    let pw_gecos    = unsafe { from_buf(pw.pw_gecos  as *const u8) };
-    let pw_dir      = unsafe { from_buf(pw.pw_dir    as *const u8) };
-    let pw_shell    = unsafe { from_buf(pw.pw_shell  as *const u8) };
+    let pw_name     = unsafe { String::from_raw_buf(pw.pw_name   as *const u8) };
+    let pw_passwd   = unsafe { String::from_raw_buf(pw.pw_passwd as *const u8) };
+    let pw_class    = unsafe { String::from_raw_buf(pw.pw_class  as *const u8) };
+    let pw_gecos    = unsafe { String::from_raw_buf(pw.pw_gecos  as *const u8) };
+    let pw_dir      = unsafe { String::from_raw_buf(pw.pw_dir    as *const u8) };
+    let pw_shell    = unsafe { String::from_raw_buf(pw.pw_shell  as *const u8) };
 
     println!(
         "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
@@ -288,11 +287,11 @@ fn pline(possible_pw: Option<c_passwd>) {
         possible_pw.unwrap()
     };
 
-    let pw_name     = unsafe { from_buf(pw.pw_name   as *const u8)};
-    let pw_passwd   = unsafe { from_buf(pw.pw_passwd as *const u8)};
-    let pw_gecos    = unsafe { from_buf(pw.pw_gecos  as *const u8)};
-    let pw_dir      = unsafe { from_buf(pw.pw_dir    as *const u8)};
-    let pw_shell    = unsafe { from_buf(pw.pw_shell  as *const u8)};
+    let pw_name     = unsafe { String::from_raw_buf(pw.pw_name   as *const u8)};
+    let pw_passwd   = unsafe { String::from_raw_buf(pw.pw_passwd as *const u8)};
+    let pw_gecos    = unsafe { String::from_raw_buf(pw.pw_gecos  as *const u8)};
+    let pw_dir      = unsafe { String::from_raw_buf(pw.pw_dir    as *const u8)};
+    let pw_shell    = unsafe { String::from_raw_buf(pw.pw_shell  as *const u8)};
 
     println!(
         "{}:{}:{}:{}:{}:{}:{}",
@@ -352,7 +351,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         print!(
             "uid={}({})",
             uid,
-            unsafe { from_buf(possible_pw.unwrap().pw_name as *const u8) });
+            unsafe { String::from_raw_buf(possible_pw.unwrap().pw_name as *const u8) });
     } else {
         print!("uid={}", unsafe { getuid() });
     }
@@ -362,7 +361,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     if gr.is_not_null() {
         print!(
             "({})",
-            unsafe { from_buf(read(gr).gr_name as *const u8) });
+            unsafe { String::from_raw_buf(read(gr).gr_name as *const u8) });
     }
 
     let euid = unsafe { geteuid() };
@@ -372,7 +371,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         if pw.is_not_null() {
             print!(
                 "({})",
-                unsafe { from_buf(read(pw).pw_name as *const u8) });
+                unsafe { String::from_raw_buf(read(pw).pw_name as *const u8) });
         }
     }
 
@@ -382,7 +381,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         unsafe {
             let grp = getgrgid(egid);
             if grp.is_not_null() {
-                print!("({})", from_buf(read(grp).gr_name as *const u8));
+                print!("({})", String::from_raw_buf(read(grp).gr_name as *const u8));
             }
         }
     }
@@ -397,7 +396,7 @@ fn id_print(possible_pw: Option<c_passwd>,
             let group = unsafe { getgrgid(gr) };
             if group.is_not_null() {
                 let name = unsafe {
-                    from_buf(read(group).gr_name as *const u8)
+                    String::from_raw_buf(read(group).gr_name as *const u8)
                 };
                 print!("({})", name);
             }
