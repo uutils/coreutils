@@ -174,7 +174,8 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         _ => return match boot_time {
                 Some(t) => {
                     let now = rtime::get_time().sec;
-                    ((now - t) * 100) as i64 // Return in ms
+                    let time = t.to_i64().unwrap();
+                    ((now - time) * 100) as i64 // Return in ms
                 },
                 _ => -1
              }
