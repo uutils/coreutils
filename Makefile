@@ -6,8 +6,20 @@ ENABLE_STRIP  ?= n
 RUSTC         ?= rustc
 RM            := rm
 
+# Install directories
+PREFIX        ?= /usr/local
+BINDIR        ?= /bin
+
+# This won't support any directory with spaces in its name, but you can just
+# make a symlink without spaces that points to the directory.
+BASEDIR       ?= $(shell pwd)
+SRCDIR        := $(BASEDIR)/src
+BUILDDIR      := $(BASEDIR)/build
+TESTDIR       := $(BASEDIR)/test
+TEMPDIR       := $(BASEDIR)/tmp
+
 # Flags
-RUSTCFLAGS    := --opt-level=3
+RUSTCFLAGS    := --opt-level=3 -L $(BUILDDIR)/
 RMFLAGS       :=
 
 # Handle config setup
@@ -18,20 +30,8 @@ RUSTCBINFLAGS := $(RUSTCFLAGS)
 endif
 
 ifneq ($(ENABLE_STRIP),y)
-ENABLE_STRIP :=
+ENABLE_STRIP  :=
 endif
-
-# Install directories
-PREFIX   ?= /usr/local
-BINDIR   ?= /bin
-
-# This won't support any directory with spaces in its name, but you can just
-# make a symlink without spaces that points to the directory.
-BASEDIR  ?= $(shell pwd)
-SRCDIR   := $(BASEDIR)/src
-BUILDDIR := $(BASEDIR)/build
-TESTDIR  := $(BASEDIR)/test
-TEMPDIR  := $(BASEDIR)/tmp
 
 # Possible programs
 PROGS       := \
@@ -168,7 +168,7 @@ $(BUILDDIR)/gen/$(1).rs: $(BUILDDIR)/mkmain
 	$(BUILDDIR)/mkmain $(1) $$@
 
 $(BUILDDIR)/$(1): $(BUILDDIR)/gen/$(1).rs $(BUILDDIR)/$($(1)_RLIB) | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCBINFLAGS) -L $(BUILDDIR)/ -o $$@ $$<
+	$(RUSTC) $(RUSTCBINFLAGS) -o $$@ $$<
 	$(if $(ENABLE_STRIP),strip $$@,)
 endef
 
@@ -176,7 +176,7 @@ define CRATE_BUILD
 -include $(BUILDDIR)/$(1).d
 
 $(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCFLAGS) -L $(BUILDDIR)/ --crate-type rlib --dep-info $(BUILDDIR)/$(1).d $$< --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --crate-type rlib --dep-info $(BUILDDIR)/$(1).d $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -198,7 +198,7 @@ test_$(1): $(TEMPDIR)/$(1)/$(1)_test $(BUILDDIR)/$(1)
 	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $$<)
 
 $(TEMPDIR)/$(1)/$(1)_test: $(TESTDIR)/$(1).rs | $(TEMPDIR)/$(1)
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --test -o $$@ $$<)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --test -o $$@ $$<)
 
 $(TEMPDIR)/$(1): | $(TEMPDIR)
 	$(call command,cp -r $(TESTDIR)/fixtures/$(1) $$@ || mkdir $$@)
@@ -216,7 +216,7 @@ $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 -include $(BUILDDIR)/uutils.d
 $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS)
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
-	$(RUSTC) $(RUSTCBINFLAGS) -L $(BUILDDIR)/ --dep-info $@.d $(BUILDDIR)/gen/uutils.rs -o $@
+	$(RUSTC) $(RUSTCBINFLAGS) --dep-info $@.d $(BUILDDIR)/gen/uutils.rs -o $@
 	$(if $(ENABLE_STRIP),strip $@)
 
 # Dependencies
@@ -225,16 +225,21 @@ $(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
 	$(RUSTC) $(RUSTCFLAGS) --crate-type rlib --dep-info $(BUILDDIR)/rust-crypto.d $(BASEDIR)/deps/rust-crypto/src/rust-crypto/lib.rs --out-dir $(BUILDDIR)/
 	@touch $@
 
+$(BUILDDIR)/.rust-time:
+	cd $(BASEDIR)/deps/time && cargo build --release
+	cp -r $(BASEDIR)/deps/time/target/release/libtime*.rlib $(BUILDDIR)/libtime.rlib
+	@touch $@
+
 $(BUILDDIR)/mkmain: mkmain.rs | $(BUILDDIR)
-	$(RUSTC) $(RUSTCFLAGS) -L $(BUILDDIR) $< -o $@
+	$(RUSTC) $(RUSTCFLAGS) $< -o $@
 
 $(BUILDDIR)/mkuutils: mkuutils.rs | $(BUILDDIR)
-	$(RUSTC) $(RUSTCFLAGS) -L $(BUILDDIR) $< -o $@
+	$(RUSTC) $(RUSTCFLAGS) $< -o $@
 
 $(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
 	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
-deps: $(BUILDDIR)/.rust-crypto $(SRCDIR)/cksum/crc_table.rs
+deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-time $(SRCDIR)/cksum/crc_table.rs
 
 crates:
 	echo $(EXES)
@@ -243,7 +248,7 @@ test: $(TEMPDIR) $(addprefix test_,$(TESTS))
 	$(RM) -rf $(TEMPDIR)
 
 clean:
-	$(RM) -rf $(BUILDDIR) $(TEMPDIR)
+	$(RM) -rf $(BUILDDIR) $(TEMPDIR) $(BASEDIR)/deps/time/target
 
 $(BUILDDIR):
 	git submodule update --init
