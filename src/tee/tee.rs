@@ -1,5 +1,4 @@
 #![crate_name = "tee"]
-#![license="MIT"]
 #![feature(phase)]
 #![feature(macro_rules)]
 

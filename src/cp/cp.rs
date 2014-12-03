@@ -122,13 +122,13 @@ fn copy(matches: getopts::Matches) {
             panic!();
         }
     } else {
-        if fs::stat(&dest).unwrap().kind != io::TypeDirectory {
+        if fs::stat(&dest).unwrap().kind != io::FileType::Directory {
             error!("error: TARGET must be a directory");
             panic!();
         }
 
         for source in sources.iter() {
-            if fs::stat(source).unwrap().kind != io::TypeFile {
+            if fs::stat(source).unwrap().kind != io::FileType::RegularFile {
                 error!("error: \"{}\" is not a file", source.display().to_string());
                 continue;
             }
@@ -165,12 +165,12 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::IoResult<bool> {
     };
 
     // We have to take symlinks and relative paths into account.
-    if p1_lstat.kind == io::TypeSymlink {
+    if p1_lstat.kind == io::FileType::Symlink {
         raw_p1 = fs::readlink(&raw_p1).unwrap();
     }
     raw_p1 = os::make_absolute(&raw_p1).unwrap();
 
-    if p2_lstat.kind == io::TypeSymlink {
+    if p2_lstat.kind == io::FileType::Symlink {
         raw_p2 = fs::readlink(&raw_p2).unwrap();
     }
     raw_p2 = os::make_absolute(&raw_p2).unwrap();
