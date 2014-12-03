@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
+#![feature(if_let, macro_rules)]
 
 extern crate getopts;
 extern crate libc;
@@ -114,10 +114,9 @@ pub fn uumain(args: Vec<String>) -> int {
                 return 0;
             }
         }
-        match remove(matches.free, force, interactive, one_fs, preserve_root,
-                     recursive, dir, verbose) {
-            Ok(()) => ( /* pass */ ),
-            Err(e) => return e
+        if let Err(e) = remove(matches.free, force, interactive, one_fs, preserve_root,
+                               recursive, dir, verbose) {
+            return e;
         }
     }
 
