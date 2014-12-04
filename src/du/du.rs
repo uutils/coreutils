@@ -16,7 +16,7 @@ extern crate getopts;
 extern crate libc;
 extern crate time;
 
-use std::io::{stderr, fs, FileStat, TypeDirectory};
+use std::io::{stderr, fs, FileStat, FileType};
 use std::num::Float;
 use std::option::Option;
 use std::path::Path;
@@ -48,7 +48,7 @@ fn du(path: &Path, mut my_stat: Stat,
     let mut stats = vec!();
     let mut futures = vec!();
 
-    if my_stat.fstat.kind == TypeDirectory {
+    if my_stat.fstat.kind == FileType::Directory {
         let read = match fs::readdir(path) {
             Ok(read) => read,
             Err(e) => {
@@ -60,7 +60,7 @@ fn du(path: &Path, mut my_stat: Stat,
 
         for f in read.into_iter() {
             let this_stat = Stat{path: f.clone(), fstat: safe_unwrap!(fs::lstat(&f))};
-            if this_stat.fstat.kind == TypeDirectory {
+            if this_stat.fstat.kind == FileType::Directory {
                 let oa_clone = options.clone();
                 futures.push(Future::spawn(proc() { du(&f, this_stat, oa_clone, depth + 1) }))
             } else {

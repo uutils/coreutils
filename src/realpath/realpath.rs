@@ -89,7 +89,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
             }
             match std::io::fs::lstat(&result) {
                 Err(_) => break,
-                Ok(ref s) if s.kind != std::io::TypeSymlink => break,
+                Ok(ref s) if s.kind != std::io::FileType::Symlink => break,
                 Ok(_) => {
                     links_left -= 1;
                     match std::io::fs::readlink(&result) {

@@ -64,8 +64,8 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let result = path.lstat().and_then(|info| {
         match info.kind {
-            io::TypeFile => Ok(()),
-            io::TypeSymlink => Ok(()),
+            io::FileType::RegularFile => Ok(()),
+            io::FileType::Symlink => Ok(()),
             _ => Err(io::IoError {
                 kind: io::OtherIoError,
                 desc: "is not a file or symlink",

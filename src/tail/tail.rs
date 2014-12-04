@@ -9,12 +9,12 @@
  *
  */
 
-#![feature(macro_rules)]
+#![feature(if_let, macro_rules)]
 
 extern crate getopts;
 
 use std::char::UnicodeChar;
-use std::io::{stdin};
+use std::io::{stdin, stdout};
 use std::io::{BufferedReader, BytesReader};
 use std::io::fs::File;
 use std::path::Path;
@@ -235,11 +235,44 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
     (options, None)
 }
 
-fn tail<T: Reader>(reader: &mut BufferedReader<T>, line_count: uint, byte_count: uint, beginning: bool, lines: bool, follow: bool, sleep_msec: u64) {
+macro_rules! tail_impl (
+    ($kind:ty, $kindfn:ident, $kindprint:ident, $reader:ident, $count:ident, $beginning:ident) => ({
+        // read through each line and store them in a ringbuffer that always contains
+        // count lines/chars. When reaching the end of file, output the data in the
+        // ringbuf.
+        let mut ringbuf: RingBuf<$kind> = RingBuf::new();
+        let mut data = $reader.$kindfn().skip(
+            if $beginning {
+                let temp = $count;
+                $count = ::std::uint::MAX;
+                temp - 1
+            } else {
+                0
+            }
+        );
+        for io_datum in data {
+            match io_datum {
+                Ok(datum) => {
+                    if $count <= ringbuf.len() {
+                        ringbuf.pop_front();
+                    }
+                    ringbuf.push_back(datum);
+                }
+                Err(err) => panic!(err)
+            }
+        }
+        let mut stdout = stdout();
+        for datum in ringbuf.iter() {
+            $kindprint(&mut stdout, datum);
+        }
+    })
+)
+
+fn tail<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: uint, mut byte_count: uint, beginning: bool, lines: bool, follow: bool, sleep_msec: u64) {
     if lines {
-        tail_lines(reader, line_count, beginning);
+        tail_impl!(String, lines, print_string, reader, line_count, beginning);
     } else {
-        tail_bytes(reader, byte_count, beginning);
+        tail_impl!(u8, bytes, print_byte, reader, byte_count, beginning);
     }
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
@@ -255,62 +288,15 @@ fn tail<T: Reader>(reader: &mut BufferedReader<T>, line_count: uint, byte_count:
 }
 
 #[inline]
-fn tail_lines<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: uint, beginning: bool) {
-    // read through each line and store them in a ringbuffer that always contains
-    // line_count lines. When reaching the end of file, output the lines in the
-    // ringbuf.
-    let mut ringbuf: RingBuf<String> = RingBuf::new();
-    let mut lines = reader.lines().skip(
-        if beginning {
-            let temp = line_count;
-            line_count = ::std::uint::MAX;
-            temp - 1
-        } else {
-            0
-        }
-    );
-    for io_line in lines {
-        match io_line {
-            Ok(line) => {
-                if line_count <= ringbuf.len() {
-                    ringbuf.pop_front();
-                }
-                ringbuf.push_back(line);
-            }
-            Err(err) => panic!(err)
-        }
-    }
-    for line in ringbuf.iter() {
-        print!("{}", line);
+fn print_byte<T: Writer>(stdout: &mut T, ch: &u8) {
+    if let Err(err) = stdout.write_u8(*ch) {
+        crash!(1, "{}", err);
     }
 }
 
 #[inline]
-fn tail_bytes<T: Reader>(reader: &mut BufferedReader<T>, mut byte_count: uint, beginning: bool) {
-    let mut ringbuf: RingBuf<char> = RingBuf::new();
-    let mut bytes = reader.bytes().skip(
-        if beginning {
-            let temp = byte_count;
-            byte_count = ::std::uint::MAX;
-            temp - 1
-        } else {
-            0
-        }
-    );
-    for io_byte in bytes {
-        match io_byte {
-            Ok(byte) => {
-                if byte_count <= ringbuf.len() {
-                    ringbuf.pop_front();
-                }
-                ringbuf.push_back(byte as char);
-            }
-            Err(err) => panic!(err)
-        }
-    }
-    for byte in ringbuf.iter() {
-        print!("{}", byte);
-    }
+fn print_string<T: Writer>(_: &mut T, s: &String) {
+    print!("{}", s);
 }
 
 fn version () {
