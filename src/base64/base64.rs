@@ -142,6 +142,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
 fn encode(input: &mut Reader, line_wrap: uint) {
     let b64_conf = base64::Config {
         char_set: base64::Standard,
+        newline: base64::Newline::LF,
         pad: true,
         line_length: match line_wrap {
             0 => None,
@@ -154,14 +155,7 @@ fn encode(input: &mut Reader, line_wrap: uint) {
     };
     let encoded = to_encode.as_slice().to_base64(b64_conf);
 
-    // To my knowledge, RFC 3548 does not specify which line endings to use. It
-    // seems that rust's base64 algorithm uses CRLF as prescribed by RFC 2045.
-    // However, since GNU base64 outputs only LF (presumably because that is
-    // the standard UNIX line ending), we strip CRs from the output to maintain
-    // compatibility.
-    let output = encoded.replace("\r", "");
-
-    println(output.as_slice());
+    println(encoded.as_slice());
 }
 
 fn help(progname: &str, usage: &str) {
