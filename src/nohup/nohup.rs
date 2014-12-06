@@ -33,19 +33,8 @@ extern {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
-#[cfg(target_os = "macos")]
-fn rewind_stdout(s: Fd) {
-    match s.seek(0, io::SeekEnd) {
-        Ok(_) => {}
-        Err(f) => crash!(1, "{}", f.detail.into_inner())
-    }
-}
-
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
-
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
-fn rewind_stdout(_: Fd) {}
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = &args[0];
@@ -107,8 +96,6 @@ fn replace_fds() {
     if replace_stdout {
         let new_stdout = find_stdout();
         let fd = new_stdout.as_raw_fd();
-
-        rewind_stdout(fd);
 
         if unsafe { dup2(fd, 1) } != 1 {
             crash!(2, "Cannot replace STDOUT: {}", std::io::IoError::last_error())
