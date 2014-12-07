@@ -115,7 +115,6 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
                       num == '+' as u8 || num == '/' as u8)
                 })
         } else {
-            to_decode = to_decode.as_slice().replace("\n", "");
             to_decode.as_slice()
         };
 
