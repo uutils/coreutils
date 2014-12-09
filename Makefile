@@ -75,6 +75,7 @@ PROGS       := \
   seq \
   shuf \
   sort \
+  stdbuf \
   sum \
   sync \
   tac \
