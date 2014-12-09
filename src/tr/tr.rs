@@ -16,8 +16,8 @@ extern crate getopts;
 use getopts::OptGroup;
 use std::char::from_u32;
 use std::collections::{BitvSet, VecMap};
-use std::io::print;
-use std::io::stdio::{stdin,stdout};
+use std::io::{BufferedReader, print};
+use std::io::stdio::{stdin_raw, stdout};
 use std::iter::FromIterator;
 use std::vec::Vec;
 
@@ -101,7 +101,7 @@ fn delete(set: Vec<char>, complement: bool) {
         |c: char| !bset.contains(&(c as uint))
     };
 
-    for c in stdin().chars() {
+    for c in BufferedReader::new(stdin_raw()).chars() {
         match c {
             Ok(c) if is_allowed(c) => out.write_char(c).unwrap(),
             Ok(_) => (),
@@ -126,7 +126,7 @@ fn tr(set1: &[char], set2: &[char]) {
         }
     }
 
-    for c in stdin().chars() {
+    for c in BufferedReader::new(stdin_raw()).chars() {
         match c {
             Ok(inc) => {
                 let trc = match map.get(&(inc as uint)) {

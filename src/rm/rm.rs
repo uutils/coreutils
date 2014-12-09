@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-#![feature(if_let, macro_rules)]
+#![feature(macro_rules)]
 
 extern crate getopts;
 extern crate libc;

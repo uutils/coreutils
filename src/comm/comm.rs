@@ -14,7 +14,7 @@ extern crate getopts;
 use std::cmp::Ord;
 use std::io::{BufferedReader, IoResult, print};
 use std::io::fs::File;
-use std::io::stdio::{stdin, StdReader};
+use std::io::stdio::{stdin, StdinReader};
 use std::path::Path;
 
 static NAME : &'static str = "comm";
@@ -45,7 +45,7 @@ fn ensure_nl(line: String) -> String {
 }
 
 enum LineReader {
-    Stdin(BufferedReader<StdReader>),
+    Stdin(StdinReader),
     FileIn(BufferedReader<File>)
 }
 
