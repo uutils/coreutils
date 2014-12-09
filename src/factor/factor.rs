@@ -13,8 +13,9 @@
 extern crate getopts;
 extern crate libc;
 
-use std::vec::{Vec};
-use std::io::{stdin};
+use std::vec::Vec;
+use std::io::BufferedReader;
+use std::io::stdio::stdin_raw;
 
 #[path="../common/util.rs"]
 mod util;
@@ -91,7 +92,7 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if matches.free.is_empty() {
-        for line in stdin().lines() {
+        for line in BufferedReader::new(stdin_raw()).lines() {
             print_factors_str(line.unwrap().as_slice().trim());
         }
     } else {

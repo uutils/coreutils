@@ -10,7 +10,7 @@
  * that was distributed with this source code.
  */
 
-#![feature(macro_rules, if_let)]
+#![feature(macro_rules)]
 
 extern crate getopts;
 
