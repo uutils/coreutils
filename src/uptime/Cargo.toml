@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "uptime"
 path = "uptime.rs"
+
+[dependencies.time]
+git = "https://github.com/rust-lang/time"
