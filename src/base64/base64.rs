@@ -96,7 +96,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = match input.read_to_string() {
+    let to_decode = match input.read_to_string() {
         Ok(m) => m,
         Err(f) => panic!(f)
     };

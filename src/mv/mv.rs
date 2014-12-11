@@ -49,6 +49,8 @@ pub enum OverwriteMode {
     Force,
 }
 
+impl Copy for OverwriteMode {}
+
 #[deriving(Eq, PartialEq)]
 pub enum BackupMode {
     NoBackup,
@@ -56,6 +58,8 @@ pub enum BackupMode {
     NumberedBackup,
     ExistingBackup,
 }
+
+impl Copy for BackupMode {}
 
 pub fn uumain(args: Vec<String>) -> int {
     let program = args[0].as_slice();

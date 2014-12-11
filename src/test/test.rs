@@ -199,6 +199,8 @@ enum Precedence {
     UnOp
 }
 
+impl Copy for Precedence {}
+
 fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
     if args.len() == 0 {
         false

@@ -322,7 +322,7 @@ fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<uint>) -> Vec<(&
     // now, chase the pointers back through the break list, recording
     // the words at which we should break
     loop {
-        let next_best = paths[best_idx];
+        let ref next_best = paths[best_idx];
         match next_best.linebreak {
             None => return breakwords,
             Some(prev) => {

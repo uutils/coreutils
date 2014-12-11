@@ -42,6 +42,8 @@ pub enum Mode {
     Version,
 }
 
+impl Copy for Mode {}
+
 //currently rust libc interface doesn't include gethostid
 extern {
     pub fn gethostid() -> c_long;

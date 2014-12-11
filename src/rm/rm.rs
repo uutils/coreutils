@@ -27,6 +27,8 @@ enum InteractiveMode {
     InteractiveAlways
 }
 
+impl Copy for InteractiveMode {}
+
 static NAME: &'static str = "rm";
 
 pub fn uumain(args: Vec<String>) -> int {
