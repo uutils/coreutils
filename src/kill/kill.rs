@@ -52,6 +52,8 @@ pub enum Mode {
     Version,
 }
 
+impl Copy for Mode {}
+
 pub fn uumain(args: Vec<String>) -> int {
     let opts = [
         optflag("h", "help", "display this help and exit"),
