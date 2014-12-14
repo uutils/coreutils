@@ -16,22 +16,21 @@ use getopts::{optopt, optflag, getopts, usage, Matches, OptGroup};
 use std::io::process::{Command, StdioContainer};
 use std::iter::range_inclusive;
 use std::num::Int;
+use std::os;
 
 #[path = "../common/util.rs"]
 mod util;
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";
-static LIBSTDBUF_PATH: &'static str = "liblibstdbuf.so libstdbuf.so"; 
+static LIBSTDBUF: &'static str = "libstdbuf.so"; 
 
-#[deriving(Show)]
 enum BufferType {
     Default,
     Line,
     Size(u64)
 }
 
-#[deriving(Show)]
 struct ProgramOptions {
     stdin: BufferType,
     stdout: BufferType,
@@ -48,6 +47,22 @@ enum OkMsg {
     Help,
     Version
 }
+
+#[cfg(target_os = "linux")]
+fn preload_env() -> &'static str { 
+    "LD_PRELOAD"
+}
+
+#[cfg(target_os = "macos")]
+fn preload_env() -> &'static str { 
+    "DYLD_INSERT_LIBRARIES"
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn preload_env() -> &'static str { 
+    crash!(1, "Command not supported for this operating system!")
+}
+
 
 fn print_version() {
     println!("{} version {}", NAME, VERSION);
@@ -181,7 +196,7 @@ pub fn uumain(args: Vec<String>) -> int {
     for i in range_inclusive(1, args.len()) {
         match parse_options(args.slice(1, i), &mut options, &optgrps) {
             Ok(OkMsg::Buffering) => {
-                command_idx = i-1;
+                command_idx = i - 1;
                 break;
             },
             Ok(OkMsg::Help) => {
@@ -201,7 +216,16 @@ pub fn uumain(args: Vec<String>) -> int {
     }
     let ref command_name = args[command_idx];
     let mut command = Command::new(command_name);
-    command.args(args.slice_from(command_idx+1)).env("LD_PRELOAD", LIBSTDBUF_PATH);
+    let mut path = match os::self_exe_path() {
+        Some(exe_path) => exe_path,
+        None => crash!(1, "Impossible to fetch the path of this executable.")
+    };
+    path.push(LIBSTDBUF);
+    let libstdbuf = match path.as_str() {
+        Some(s) => s,
+        None => crash!(1, "Error while converting path.")
+    };
+    command.args(args.slice_from(command_idx+1)).env(preload_env(), libstdbuf);
     command.stdin(StdioContainer::InheritFd(0)).stdout(StdioContainer::InheritFd(1)).stderr(StdioContainer::InheritFd(2));
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
@@ -212,4 +236,3 @@ pub fn uumain(args: Vec<String>) -> int {
     };
     0
 }
-

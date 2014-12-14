@@ -1,15 +1,22 @@
-#![crate_type = "dylib"]
+#![crate_name = "libstdbuf"]
+#![crate_type = "staticlib"]
+#![feature(macro_rules)]
 
 extern crate libc;
 use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF, setvbuf};
 use std::ptr;
 use std::os;
 
+#[path = "../common/util.rs"]
+mod util;
+
 extern {
     static stdin: *mut FILE;
     static stdout: *mut FILE;
     static stderr: *mut FILE;
 }
+
+static NAME: &'static str = "libstdbuf";
 
 fn set_buffer(stream: *mut FILE, value: &str) {
     let (mode, size): (c_int, size_t) = match value {
@@ -18,7 +25,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         input => {
             let buff_size: uint = match from_str(input) {
                 Some(num) => num,
-                None => panic!("incorrect size of buffer!")
+                None => crash!(1, "incorrect size of buffer!")
             };
             (_IOFBF, buff_size as size_t)
         }
@@ -30,7 +37,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        panic!("error while calling setvbuf!");
+        crash!(res, "error while calling setvbuf!");
     }
 }
 
