@@ -11,19 +11,16 @@
  * that was distributed with this source code.
  */
 
-#![allow(missing_copy_implementations)] //
-#![allow(unused_variables)]  // 
-#![allow(unused_imports)]  // 
+#![allow(missing_copy_implementations)] //to be removed in later stage
+#![allow(unused_variables)]  //to be removed in later stage 
 
 extern crate collections;
 extern crate getopts;
 #[phase(plugin, link)] extern crate log;
 extern crate regex;
 #[phase(plugin)] extern crate regex_macros;
-extern crate rustc;
 
-use std::iter::range_step;
-use std::fmt;
+use std::os::make_absolute;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use collections::string::String;
@@ -34,8 +31,6 @@ use getopts::{
     optopt,
     OptGroup,
 };
-use regex::Regex;
-use rustc::util::fs::realpath;
 use std::io::{
     fs,
     FilePermission,
@@ -51,6 +46,10 @@ use std::io::{
     USER_RWX,
     USER_WRITE,
 };
+#[path = "../common/util.rs"]
+mod util;
+
+static NAME: &'static str = "install";
 
 bitflags! {
     flags User: u32 {
@@ -93,7 +92,6 @@ impl Action {
 }
 
 pub fn uumain(args: Vec<String>) -> int {
-    //let args = os::args();
     let program = args[0].clone();
     let opts = [
         optflag("h", "help", "display this help and exit"),
@@ -104,8 +102,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
-            error!("error: {}", e);
-            panic!()
+            crash!(1, "{}", e);
         },
     };
     
@@ -121,46 +118,36 @@ pub fn uumain(args: Vec<String>) -> int {
     
     let mut free = matches.free.clone();
     
-    let dest : Path = match matches.opt_str("target-directory") {
+    let dest: Path = match matches.opt_str("target-directory") {
         Some(x) => Path::new(x),
         None => {
-            match free.len() {
-                0...1 => {
-                    error!("error: Missing TARGET argument. Try --help.");
-                    panic!()
-                },
-                _ => {
-                    let tmp = free.pop();
-                    Path::new(tmp.unwrap())
-                }
+            if free.len() <= 1 {
+                show_error!("Missing TARGET argument.  Try --help.");
+                return 1;
+            } else {
+                let tmp = free.pop();
+                Path::new(tmp.unwrap())
             }
         },
     };
-    let sources : Vec<Path> = match free.len() {
-        0 => {
-            error!("error: Missing SOURCE argument. Try --help.");
-            panic!()
-        },
-        _ => {
-            let mut tmp : Vec<Path> = Vec::new();
-            for i in range (0, free.len()) {
-                if fs::stat(&Path::new(free[i].clone())).is_err() {
-                    error!("cannot stat ‘{}’: No such file or directory", free[i]);
-                    panic!()
-                }
-                tmp.push( Path::new(free[i].clone()) );
+    let sources: Vec<Path> = if free.len() <= 0 {
+        show_error!("Missing SOURCE argument. Try --help.");
+        return 1;
+    } else {
+        let mut tmp : Vec<Path> = Vec::new();
+        for i in range(0, free.len()) {
+            if fs::stat(&Path::new(free[i].clone())).is_err() {
+                show_error!("cannot stat ‘{}’: No such file or directory", free[i]);
+                return 1;
             }
-            tmp
+            tmp.push(Path::new(free[i].clone()));
         }
+        tmp
     };
     
     let mode = match matches.opt_str("mode") {
         Some(x) => parse_mode(x),
-        None => {
-            let mut v = Vec::new();
-            v.push(Action{t: Type::Set, p: USER_RWX|GROUP_READ|GROUP_EXECUTE|OTHER_READ|OTHER_EXECUTE});
-            v
-        },
+        None => USER_RWX | GROUP_READ | GROUP_EXECUTE | OTHER_READ | OTHER_EXECUTE,
     };
     
     let is_dest_dir = match fs::stat(&dest) {
@@ -168,7 +155,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Err(_) => false
     };
     
-    if matches.opt_present("target-directory") || sources.len()>1  || is_dest_dir {
+    if matches.opt_present("target-directory") || sources.len() > 1  || is_dest_dir {
         files_to_directory(sources, dest, mode);
     } else {
         file_to_file(sources[0].clone(), dest, mode);
@@ -176,78 +163,50 @@ pub fn uumain(args: Vec<String>) -> int {
     0
 }
 
-fn file_to_file(source: Path, dest: Path, mode: Vec<Action>) {
-    let real_source = match realpath(&source) {
-        Ok(m) => m,
-        Err(e) => {
-            error!("error: {}", e);
-            panic!()
-        },
-    };
+fn file_to_file(source: Path, dest: Path, mode: FilePermission) {
+    let (real_source, real_dest) = real(&source, &dest);
     
-    let real_dest = match realpath(&dest) {
-        Ok(m) => m,
-        Err(e) => {
-            error!("error: {}", e);
-            panic!()
-        },
-    };
-    
-    if real_source==real_dest {
-        error!("error: {0} and {1} are the same file", source.display(), dest.display());
-        panic!()
+    if real_source == real_dest {
+        crash!(1, "{0} and {1} are the same file", source.display(), dest.display());
     }
     
     match fs::copy(&source, &dest) {
         Ok(m) => m,
         Err(e) => {
-            error!("error: {}", e);
-            panic!()
+            crash!(1, "{}", e);
         },
     }
     
-    let mut current_perm = FilePermission::empty();
-    
-    for m in mode.iter() {
-        m.apply_on(&mut current_perm);
-    }
-    
-    match fs::chmod(&dest, current_perm) {
+    match fs::chmod(&dest, mode) {
         Ok(m) => m,
         Err(e) => {
-            error!("error: {}", e);
-            panic!()
+            crash!(1, "{}", e);
         },
     }
 }
 
-fn files_to_directory(sources : Vec<Path>, dest : Path, mode: Vec<Action>) {
+fn files_to_directory(sources : Vec<Path>, dest : Path, mode: FilePermission) {
     match fs::stat(&dest) {
         Ok(m) => if m.kind != FileType::Directory {
-                error!("failed to access ‘{}’: No such file or directory", dest.display());
-                panic!()
-            },
+            crash!(1, "failed to access ‘{}’: No such file or directory", dest.display());
+        },
         Err(_) => {
-            error!("target ‘{}’ is not a directory", dest.display());
-            panic!()
+            crash!(1, "target ‘{}’ is not a directory", dest.display());
         }
     };
     
     let mut set = HashSet::new();
     
-    for i in range (0, sources.len()) {
+    for i in range(0, sources.len()) {
         let mut stat = fs::stat(&sources[i]);
         if stat.is_ok() && stat.unwrap().kind == FileType::Directory {
             println!("install: omitting directory ‘{}’", sources[i].display());
             continue;
         }
         let mut tmp_dest = dest.clone();
-        tmp_dest.push( match sources[i].filename_str() {
+        tmp_dest.push(match sources[i].filename_str() {
             Some(m) => m,
-            None => {
-                error!("error");
-                panic!()
-            },
+            None => unreachable!(),
         });
         
         stat = fs::stat(&tmp_dest);
@@ -255,24 +214,10 @@ fn files_to_directory(sources : Vec<Path>, dest : Path, mode: Vec<Action>) {
             println!("install: cannot overwrite directory ‘{}’ with non-directory", tmp_dest.display());
             continue;
         }
-        //TO DO: make sure not ot overrite file with itself
-        let real_dest = match realpath(&tmp_dest) {
-            Ok(m) => m,
-            Err(e) => {
-                error!("error: {}", e);
-                panic!()
-            },
-        };
         
-        let real_source = match realpath(&sources[i]) {
-            Ok(m) => m,
-            Err(e) => {
-                error!("error: {}", e);
-                panic!()
-            },
-        };
+        let (real_source, real_dest) = real(&tmp_dest, &sources[i]);
         
-        if real_source==real_dest {
+        if real_source == real_dest {
             println!("install: {0} and {1} are the same file", sources[i].display(), tmp_dest.display());
             continue;
         }
@@ -288,28 +233,20 @@ fn files_to_directory(sources : Vec<Path>, dest : Path, mode: Vec<Action>) {
                 m
             },
             Err(e) => {
-                error!("error: {}", e);
-                panic!()
+                crash!(1, "{}", e);
             },
         };
         
-        let mut current_perm = FilePermission::empty();
-        
-        for m in mode.iter() {
-            m.apply_on(&mut current_perm);
-        }
-        
-        match fs::chmod(&tmp_dest, current_perm) {
+        match fs::chmod(&tmp_dest, mode) {
             Ok(m) => m,
             Err(e) => {
-                error!("error: {}", e);
-                panic!()
+                crash!(1, "{}", e);
             },
         }
     }
 }
 
-fn parse_mode(s : String) -> Vec<Action> {
+fn parse_mode(s : String) -> FilePermission {
     let mut map = HashMap::new();
     map.insert((USER, READ), USER_READ);
     map.insert((USER, WRITE), USER_WRITE);
@@ -321,14 +258,13 @@ fn parse_mode(s : String) -> Vec<Action> {
     map.insert((OTHER, WRITE), OTHER_WRITE);
     map.insert((OTHER, EXECUTE), OTHER_EXECUTE);
     
-    let mut out: Vec<Action> = Vec::new();
+    let mut out = FilePermission::empty();
     let split: Vec<&str> = s.as_slice().split(',').collect();
     let regexp = regex!(r"^[ugoa]*[-=+][rwx]*$");
     for i in split.iter() {
     
         if !regexp.is_match(i.as_slice()) {
-            error!("invalid mode ‘{}’", s);
-            panic!()
+            crash!(1, "invalid mode '{}'", s);
         }
         
         let mut user = User::empty();
@@ -341,7 +277,7 @@ fn parse_mode(s : String) -> Vec<Action> {
                 'g' => GROUP,
                 'o' => OTHER,
                 'a' => User::all(),
-                _   => panic!(),
+                _   => unreachable!(),
             };
         }
         for c in sp[1].chars() {
@@ -349,7 +285,7 @@ fn parse_mode(s : String) -> Vec<Action> {
                 'r' => READ,
                 'w' => WRITE,
                 'x' => EXECUTE,
-                _   => panic!(),
+                _   => unreachable!(),
             };
         }
         
@@ -359,17 +295,15 @@ fn parse_mode(s : String) -> Vec<Action> {
             if u & user != User::empty() {
                 for p in vec![READ, WRITE, EXECUTE].into_iter() {
                     if p & permission != Permission::empty() {
-                        file_permissions.insert( match map.get(&(u.clone(), p.clone())) {
-                            Some(s) => *s,
-                            None => panic!(),
-                        } );
+                        file_permissions.insert(*map.get(&(u.clone(), p.clone())).unwrap());
                     }
                 }
             }
         }
-        let mut cap= match re.captures(i.as_slice()) {
+        
+        let mut cap = match re.captures(i.as_slice()) {
             Some(s) => s.at(0).chars(),
-            None => panic!(),
+            None => unreachable!(),
         };
         
         let operator = match cap.next() {
@@ -377,13 +311,32 @@ fn parse_mode(s : String) -> Vec<Action> {
                 '-' => Type::Remove,
                 '=' => Type::Set,
                 '+' => Type::Add,
-                _   => panic!(),
+                _   => unreachable!(),
             },
-            None => panic!(),
+            None => unreachable!(),
         };
-        out.push(Action{t: operator, p: file_permissions});
+        
+        let action = Action{ t: operator, p: file_permissions };
+        action.apply_on(&mut out);
     }
     out
+}
+
+fn real(source: &Path, dest: &Path) -> (Path, Path){
+    let real_source = match make_absolute(source) {
+        Ok(m) => m,
+        Err(e) => {
+            crash!(1, "{}", e);
+        },
+    };
+    
+    let real_dest = match make_absolute(dest) {
+        Ok(m) => m,
+        Err(e) => {
+            crash!(1, "{}", e);
+        },
+    };
+    (real_source, real_dest)
 }
 
 fn print_usage(opts: &[OptGroup]) {
