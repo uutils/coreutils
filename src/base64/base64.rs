@@ -104,7 +104,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
     let slice =
         if ignore_garbage {
             to_decode.as_slice()
-                .trim_chars(|c: char| {
+                .trim_chars(|&: c: char| {
                     let num = match c.to_ascii_opt() {
                         Some(ascii) => ascii.as_byte(),
                         None => return false
