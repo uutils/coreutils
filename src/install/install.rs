@@ -322,7 +322,7 @@ fn parse_mode(s : String) -> FilePermission {
     out
 }
 
-fn real(source: &Path, dest: &Path) -> (Path, Path){
+fn real(source: &Path, dest: &Path) -> (Path, Path) {
     let real_source = match make_absolute(source) {
         Ok(m) => m,
         Err(e) => {
