@@ -62,7 +62,7 @@ fn du(path: &Path, mut my_stat: Stat,
             let this_stat = Stat{path: f.clone(), fstat: safe_unwrap!(fs::lstat(&f))};
             if this_stat.fstat.kind == FileType::Directory {
                 let oa_clone = options.clone();
-                futures.push(Future::spawn(proc() { du(&f, this_stat, oa_clone, depth + 1) }))
+                futures.push(Future::spawn(move || { du(&f, this_stat, oa_clone, depth + 1) }))
             } else {
                 my_stat.fstat.size += this_stat.fstat.size;
                 my_stat.fstat.unstable.blocks += this_stat.fstat.unstable.blocks;
