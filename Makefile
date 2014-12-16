@@ -98,6 +98,7 @@ UNIX_PROGS := \
   kill \
   logname \
   mkfifo \
+  nice \
   nohup \
   timeout \
   tty \
