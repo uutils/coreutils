@@ -126,7 +126,7 @@ To do
 
 - chcon
 - chgrp
-- chmod
+- chmod (mostly done, just needs verbosity options)
 - chown
 - copy
 - cp (not much done)
@@ -144,8 +144,7 @@ To do
 - ls
 - mknod
 - mktemp
-- mv
-- nice
+- mv (almost done, one more option)
 - numfmt
 - od
 - pathchk
@@ -158,14 +157,14 @@ To do
 - runcon
 - setuidgid
 - shred
-- sort
-- split
+- sort (a couple of options implemented)
+- split (a couple of missing options)
 - stat
 - stdbuf
 - stty
 - tail (not all features implemented)
 - test (not all features implemented)
-- uniq (in progress)
+- uniq (a couple of missing options)
 - who
 
 License
