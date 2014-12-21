@@ -232,7 +232,8 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let real_sum: Vec<Ascii> = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
+                let mut ckf = safe_unwrap!(File::open(&Path::new(ck_filename)));
+                let real_sum: Vec<Ascii> = safe_unwrap!(digest_reader(&mut digest, &mut ckf, binary_check))
                     .as_slice().to_ascii().iter().map(|ch| ch.to_lowercase()).collect();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
