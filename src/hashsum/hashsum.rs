@@ -213,9 +213,13 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
                 let (ck_filename, sum, binary_check): (_, Vec<Ascii>, _) = match gnu_re.captures(line.as_slice()) {
-                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().iter().map(|ch| ch.to_lowercase()).collect(), caps.name("binary") == "*"),
+                    Some(caps) => (caps.name("fileName").unwrap(),
+                                   caps.name("digest").unwrap().to_ascii().iter().map(|ch| ch.to_lowercase()).collect(),
+                                   caps.name("binary").unwrap() == "*"),
                     None => match bsd_re.captures(line.as_slice()) {
-                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().iter().map(|ch| ch.to_lowercase()).collect(), true),
+                        Some(caps) => (caps.name("fileName").unwrap(),
+                                       caps.name("digest").unwrap().to_ascii().iter().map(|ch| ch.to_lowercase()).collect(),
+                                       true),
                         None => {
                             bad_format += 1;
                             if strict {
