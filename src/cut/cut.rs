@@ -463,7 +463,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
-            show_error!("Invalid options\n{}", f)
+            show_error!("Invalid options\n{}", f);
             return 1;
         }
     };

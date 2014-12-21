@@ -266,7 +266,7 @@ macro_rules! tail_impl (
             $kindprint(&mut stdout, datum);
         }
     })
-)
+);
 
 fn tail<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: uint, mut byte_count: uint, beginning: bool, lines: bool, follow: bool, sleep_msec: u64) {
     if lines {
