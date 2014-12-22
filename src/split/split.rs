@@ -221,10 +221,11 @@ fn split(settings: &Settings) -> int {
         if settings.input.as_slice() == "-" {
             box io::stdio::stdin_raw() as Box<Reader>
         } else {
-            box match io::File::open(&Path::new(settings.input.clone())) {
+            let r = match io::File::open(&Path::new(settings.input.clone())) {
                 Ok(a) => a,
                 Err(_) => crash!(1, "cannot open '{}' for reading: No such file or directory", settings.input)
-            } as Box<Reader>
+            };
+            box r as Box<Reader>
         }
     );
 
