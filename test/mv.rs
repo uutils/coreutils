@@ -17,7 +17,7 @@ macro_rules! assert_empty_stderr(
             panic!(format!("stderr: {}", $cond.stderr))
         }
     );
-)
+);
 struct CmdResult {
     success: bool,
     stderr: String,
@@ -388,7 +388,7 @@ fn test_mv_backup_dir() {
 
     assert_empty_stderr!(result);
     assert_eq!(result.stdout.as_slice(),
-        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b).as_slice())
+        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b).as_slice());
     assert!(result.success);
 
     assert!(!Path::new(dir_a).is_dir());

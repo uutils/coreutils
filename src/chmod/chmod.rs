@@ -205,9 +205,9 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                 };
             for mode in cmode.unwrap().as_slice().split(',') {  // cmode is guaranteed to be Some in this case
                 let cap = REGEXP.captures(mode).unwrap();  // mode was verified earlier, so this is safe
-                if cap.at(1) != "" {
+                if cap.at(1).unwrap() != "" {
                     // symbolic
-                    let mut levels = cap.at(2);
+                    let mut levels = cap.at(2).unwrap();
                     if levels.len() == 0 {
                         levels = "a";
                     }
@@ -272,7 +272,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                     }
                 } else {
                     // numeric
-                    let change = cap.at(4);
+                    let change = cap.at(4).unwrap();
                     let ch = change.char_at(0);
                     let (action, slice) = match ch {
                         '+' | '-' | '=' => (ch, change.slice_from(1)),

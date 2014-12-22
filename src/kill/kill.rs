@@ -146,7 +146,7 @@ fn table() {
 fn print_signal(signal_name_or_value: &str) {
     for signal in ALL_SIGNALS.iter() {
         if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name).as_slice()) == signal_name_or_value {
-            println!("{}", signal.value)
+            println!("{}", signal.value);
             exit!(EXIT_OK as i32)
         } else if signal_name_or_value == signal.value.to_string().as_slice() {
             println!("{}", signal.name);

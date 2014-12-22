@@ -75,7 +75,8 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
             if filename.as_slice() == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>
             } else {
-                box crash_if_err!(1, io::File::open(&Path::new(filename))) as Box<Reader>
+                let r = crash_if_err!(1, io::File::open(&Path::new(filename)));
+                box r as Box<Reader>
             }
         );
         let mut data = crash_if_err!(1, file.read_to_string());

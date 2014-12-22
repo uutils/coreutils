@@ -223,7 +223,7 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 # Dependencies
 -include $(BUILDDIR)/rust-crypto.d
 $(BUILDDIR)/.rust-crypto: $(BUILDDIR)/.rust-time | $(BUILDDIR)
-	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --crate-type rlib --dep-info $(BUILDDIR)/rust-crypto.d $(BASEDIR)/deps/rust-crypto/src/rust-crypto/lib.rs --out-dir $(BUILDDIR)/
+	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --crate-type rlib --crate-name crypto --dep-info $(BUILDDIR)/rust-crypto.d $(BASEDIR)/deps/rust-crypto/src/rust-crypto/lib.rs --out-dir $(BUILDDIR)/
 	@touch $@
 
 $(BUILDDIR)/.rust-time:

@@ -72,7 +72,7 @@ pub struct FileLines<'a> {
 }
 
 impl<'a> FileLines<'a> {
-    fn new<'a>(opts: &'a FmtOptions, lines: Lines<'a, FileOrStdReader>) -> FileLines<'a> {
+    fn new<'b>(opts: &'b FmtOptions, lines: Lines<'b, FileOrStdReader>) -> FileLines<'b> {
         FileLines { opts: opts, lines: lines }
     }
 
@@ -216,7 +216,7 @@ pub struct ParagraphStream<'a> {
 }
 
 impl<'a> ParagraphStream<'a> {
-    pub fn new<'a>(opts: &'a FmtOptions, reader: &'a mut FileOrStdReader) -> ParagraphStream<'a> {
+    pub fn new<'b>(opts: &'b FmtOptions, reader: &'b mut FileOrStdReader) -> ParagraphStream<'b> {
         let lines = FileLines::new(opts, reader.lines()).peekable();
         // at the beginning of the file, we might find mail headers
         ParagraphStream { lines: lines, next_mail: true, opts: opts }
@@ -399,7 +399,7 @@ pub struct ParaWords<'a> {
 }
 
 impl<'a> ParaWords<'a> {
-    pub fn new<'a>(opts: &'a FmtOptions, para: &'a Paragraph) -> ParaWords<'a> {
+    pub fn new<'b>(opts: &'b FmtOptions, para: &'b Paragraph) -> ParaWords<'b> {
         let mut pw = ParaWords { opts: opts, para: para, words: Vec::new() };
         pw.create_words();
         pw
@@ -478,7 +478,7 @@ impl<'a> WordSplit<'a> {
 }
 
 impl<'a> WordSplit<'a> {
-    fn new<'a>(opts: &'a FmtOptions, string: &'a str) -> WordSplit<'a> {
+    fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
         let trim_string = string.trim_left();
         WordSplit { opts: opts, string: trim_string, length: string.len(), position: 0, prev_punct: false }

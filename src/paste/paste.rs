@@ -62,7 +62,8 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
             if name.as_slice() == "-" {
                 box io::stdio::stdin_raw() as Box<Reader>
             } else {
-                box crash_if_err!(1, io::File::open(&Path::new(name))) as Box<Reader>
+                let r = crash_if_err!(1, io::File::open(&Path::new(name)));
+                box r as Box<Reader>
             }
         )
     ).collect();

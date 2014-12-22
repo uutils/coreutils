@@ -17,7 +17,7 @@ macro_rules! show_error(
         pipe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
         pipe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
-)
+);
 
 #[macro_export]
 macro_rules! show_warning(
@@ -25,7 +25,7 @@ macro_rules! show_warning(
         pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
         pipe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
-)
+);
 
 #[macro_export]
 macro_rules! show_info(
@@ -33,17 +33,17 @@ macro_rules! show_info(
         pipe_write!(&mut ::std::io::stderr(), "{}: ", ::NAME);
         pipe_writeln!(&mut ::std::io::stderr(), $($args),+);
     })
-)
+);
 
 #[macro_export]
 macro_rules! eprint(
     ($($args:expr),+) => (pipe_write!(&mut ::std::io::stderr(), $($args),+))
-)
+);
 
 #[macro_export]
 macro_rules! eprintln(
     ($($args:expr),+) => (pipe_writeln!(&mut ::std::io::stderr(), $($args),+))
-)
+);
 
 #[macro_export]
 macro_rules! crash(
@@ -51,14 +51,14 @@ macro_rules! crash(
         show_error!($($args),+);
         unsafe { ::util::libc::exit($exitcode as ::util::libc::c_int); }
     })
-)
+);
 
 #[macro_export]
 macro_rules! exit(
     ($exitcode:expr) => ({
         unsafe { ::util::libc::exit($exitcode); }
     })
-)
+);
 
 #[macro_export]
 macro_rules! crash_if_err(
@@ -68,7 +68,7 @@ macro_rules! crash_if_err(
             Err(f) => crash!($exitcode, "{}", f.to_string())
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! return_if_err(
@@ -81,7 +81,7 @@ macro_rules! return_if_err(
             }
         }
     )
-)
+);
 
 // XXX: should the pipe_* macros return an Err just to show the write failed?
 
@@ -99,7 +99,7 @@ macro_rules! pipe_print(
             }
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! pipe_println(
@@ -115,7 +115,7 @@ macro_rules! pipe_println(
             }
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! pipe_write(
@@ -131,7 +131,7 @@ macro_rules! pipe_write(
             }
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! pipe_writeln(
@@ -147,7 +147,7 @@ macro_rules! pipe_writeln(
             }
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! safe_write(
@@ -157,7 +157,7 @@ macro_rules! safe_write(
             Err(f) => panic!(f.to_string())
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! safe_writeln(
@@ -167,7 +167,7 @@ macro_rules! safe_writeln(
             Err(f) => panic!(f.to_string())
         }
     )
-)
+);
 
 #[macro_export]
 macro_rules! safe_unwrap(
@@ -177,4 +177,4 @@ macro_rules! safe_unwrap(
             Err(f) => crash!(1, "{}", f.to_string())
         }
     )
-)
+);

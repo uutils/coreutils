@@ -196,7 +196,8 @@ fn open_input_file(in_file_name: String) -> io::BufferedReader<Box<Reader+'stati
     } else {
         let path = Path::new(in_file_name);
         let in_file = io::File::open(&path);
-        box crash_if_err!(1, in_file) as Box<Reader>
+        let r = crash_if_err!(1, in_file);
+        box r as Box<Reader>
     };
     io::BufferedReader::new(in_file)
 }
@@ -207,7 +208,8 @@ fn open_output_file(out_file_name: String) -> io::BufferedWriter<Box<Writer+'sta
     } else {
         let path = Path::new(out_file_name);
         let in_file = io::File::create(&path);
-        box crash_if_err!(1, in_file) as Box<Writer>
+        let w = crash_if_err!(1, in_file);
+        box w as Box<Writer>
     };
     io::BufferedWriter::new(out_file)
 }

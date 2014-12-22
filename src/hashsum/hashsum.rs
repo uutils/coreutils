@@ -15,7 +15,7 @@
 
 extern crate regex;
 
-extern crate "rust-crypto" as crypto;
+extern crate crypto;
 extern crate getopts;
 
 use std::io::fs::File;
@@ -213,9 +213,13 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
                 let (ck_filename, sum, binary_check): (_, Vec<Ascii>, _) = match gnu_re.captures(line.as_slice()) {
-                    Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().iter().map(|ch| ch.to_lowercase()).collect(), caps.name("binary") == "*"),
+                    Some(caps) => (caps.name("fileName").unwrap(),
+                                   caps.name("digest").unwrap().to_ascii().iter().map(|ch| ch.to_lowercase()).collect(),
+                                   caps.name("binary").unwrap() == "*"),
                     None => match bsd_re.captures(line.as_slice()) {
-                        Some(caps) => (caps.name("fileName"), caps.name("digest").to_ascii().iter().map(|ch| ch.to_lowercase()).collect(), true),
+                        Some(caps) => (caps.name("fileName").unwrap(),
+                                       caps.name("digest").unwrap().to_ascii().iter().map(|ch| ch.to_lowercase()).collect(),
+                                       true),
                         None => {
                             bad_format += 1;
                             if strict {
@@ -228,7 +232,8 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let real_sum: Vec<Ascii> = safe_unwrap!(digest_reader(&mut digest, &mut safe_unwrap!(File::open(&Path::new(ck_filename))), binary_check))
+                let mut ckf = safe_unwrap!(File::open(&Path::new(ck_filename)));
+                let real_sum: Vec<Ascii> = safe_unwrap!(digest_reader(&mut digest, &mut ckf, binary_check))
                     .as_slice().to_ascii().iter().map(|ch| ch.to_lowercase()).collect();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {

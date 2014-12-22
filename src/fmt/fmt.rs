@@ -27,7 +27,7 @@ macro_rules! silent_unwrap(
             Err(_) => unsafe { ::util::libc::exit(1) }
         }
     )
-)
+);
 #[path = "../common/util.rs"]
 mod util;
 mod linebreak;
