@@ -128,12 +128,12 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
 
                     // try and convert the bytes to UTF-8 first
                     match from_utf8(raw_line.as_slice()) {
-                        Some(line) => {
+                        Ok(line) => {
                             word_count += line.words().count();
                             current_char_count = line.char_len();
                             char_count += current_char_count;
                         },
-                        None => {
+                        Err(..) => {
                             word_count += raw_line.as_slice().split(|&x| is_word_seperator(x)).count();
                             for byte in raw_line.iter() {
                                 match byte.is_ascii() {

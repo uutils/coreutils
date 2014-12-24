@@ -9,7 +9,7 @@
 
 use core::iter::Peekable;
 use std::io::Lines;
-use std::slice::Items;
+use std::slice::Iter;
 use std::str::CharRange;
 use FileOrStdReader;
 use FmtOptions;
@@ -440,7 +440,7 @@ impl<'a> ParaWords<'a> {
         }
     }
 
-    pub fn words(&'a self) -> Items<'a, WordInfo<'a>> { return self.words.iter() }
+    pub fn words(&'a self) -> Iter<'a, WordInfo<'a>> { return self.words.iter() }
 }
 
 struct WordSplit<'a> {

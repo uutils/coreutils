@@ -53,7 +53,7 @@ fn isodigit(c: u8) -> bool {
 }
 
 fn convert_str(string: &[u8], index: uint, base: uint) -> (char, uint) {
-    let (max_digits, is_legal_digit) = match base {
+    let (max_digits, is_legal_digit) : (uint, fn(u8) -> bool) = match base {
         8u => (3, isodigit),
         16u => (2, isxdigit),
         _ => panic!(),

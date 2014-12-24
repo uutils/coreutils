@@ -121,7 +121,7 @@ enum IntegerCondition {
 
 fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
     let (a, b): (&str, &str) = match (from_utf8(a), from_utf8(b)) {
-        (Some(a), Some(b)) => (a, b),
+        (Ok(a), Ok(b)) => (a, b),
         _ => return false,
     };
     let (a, b): (i64, i64) = match (from_str(a), from_str(b)) {
@@ -140,7 +140,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
 
 fn isatty(fd: &[u8]) -> bool {
     use libc::{isatty};
-    from_utf8(fd).and_then(|s| from_str(s))
+    from_utf8(fd).ok().and_then(|s| from_str(s))
             .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
 }
 
