@@ -40,7 +40,7 @@ fn main() {
             }
             _ => {
                 crates.push_str(format!("extern crate {};\n", prog).as_slice());
-                util_map.push_str(format!("map.insert(\"{prog}\", {prog}::uumain);\n", prog = prog).as_slice());
+                util_map.push_str(format!("map.insert(\"{prog}\", {prog}::uumain as fn(Vec<String>) -> int);\n", prog = prog).as_slice());
             }
         }
     }

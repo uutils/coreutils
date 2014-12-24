@@ -176,7 +176,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
         NumberingStyle::NumberForRegularExpression(ref re) => re,
         _ => REGEX_DUMMY,
     };
-    let mut line_filter = pass_regex;
+    let mut line_filter : fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
         if l.as_slice().chars().rev().next().unwrap() == '\n' {

@@ -54,7 +54,7 @@ directory).", &opts).as_slice());
         for path in matches.free.iter() {
             let p = std::path::Path::new(path.clone());
             let d = std::str::from_utf8(p.dirname());
-            if d.is_some() {
+            if d.is_ok() {
                 print(d.unwrap());
             }
             print(separator);
