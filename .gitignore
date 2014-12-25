@@ -1,5 +1,6 @@
 /build/
 /target/
+/tmp/
 /busybox/
 *~
 .*.swp
