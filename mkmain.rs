@@ -1,7 +1,6 @@
 use std::io::{File, Truncate, ReadWrite};
 use std::os;
 use std::path::Path;
-use std::str::replace;
 
 static TEMPLATE: &'static str = "\
 extern crate @UTIL_CRATE@;
@@ -31,7 +30,7 @@ fn main() {
     };
     let outfile  = args[2].as_slice();
 
-    let main = std::str::replace(TEMPLATE, "@UTIL_CRATE@", crat);
+    let main = TEMPLATE.replace("@UTIL_CRATE@", crat);
     let mut out = File::open_mode(&Path::new(outfile), Truncate, ReadWrite);
 
     match out.write(main.as_bytes()) {

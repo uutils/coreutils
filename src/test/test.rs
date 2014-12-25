@@ -124,7 +124,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
         (Ok(a), Ok(b)) => (a, b),
         _ => return false,
     };
-    let (a, b): (i64, i64) = match (from_str(a), from_str(b)) {
+    let (a, b): (i64, i64) = match (a.parse(), b.parse()) {
         (Some(a), Some(b)) => (a, b),
         _ => return false,
     };
@@ -140,7 +140,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
 
 fn isatty(fd: &[u8]) -> bool {
     use libc::{isatty};
-    from_utf8(fd).ok().and_then(|s| from_str(s))
+    from_utf8(fd).ok().and_then(|s| s.parse())
             .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
 }
 

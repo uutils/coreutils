@@ -184,7 +184,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         }
         slice
     }.to_string();
-    let mut number = match from_str::<u64>(bytes.as_slice()) {
+    let mut number: u64 = match bytes.as_slice().parse() {
         Some(num) => num,
         None => {
             crash!(1, "'{}' is not a valid number.", size)
