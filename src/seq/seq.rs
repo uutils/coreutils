@@ -26,7 +26,7 @@ fn parse_float(mut s: &str) -> Result<f64, String> {
     if s.starts_with("+") {
         s = s.slice_from(1);
     }
-    match from_str(s) {
+    match s.parse() {
         Some(n) => Ok(n),
         None => Err(format!("seq: invalid floating point argument: {}", s))
     }

@@ -1,5 +1,6 @@
 use std::io::process::Command;
 use std::io::fs::{rmdir, PathExtensions};
+use std::borrow::ToOwned;
 
 static EXE: &'static str = "./mkdir";
 static TEST_DIR1: &'static str = "mkdir_test1";
@@ -9,8 +10,8 @@ static TEST_DIR4: &'static str = "mkdir_test4/mkdir_test4_1";
 static TEST_DIR5: &'static str = "mkdir_test5/mkdir_test5_1";
 
 fn cleanup(dir: &'static str) {
-    let d = dir.into_string();
-    let p = Path::new(d.into_string());
+    let d = dir.to_owned();
+    let p = Path::new(d.to_owned());
     if p.exists() {
         rmdir(&p).unwrap();
     }

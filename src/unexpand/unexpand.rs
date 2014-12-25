@@ -15,7 +15,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::io;
-use std::str::from_str;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -29,7 +28,7 @@ fn tabstops_parse(s: String) -> Vec<uint> {
     let words = s.as_slice().split(',').collect::<Vec<&str>>();
 
     let nums = words.into_iter()
-        .map(|sn| from_str::<uint>(sn)
+        .map(|sn| sn.parse()
             .unwrap_or_else(
                 || crash!(1, "{}\n", "tab size contains invalid character(s)"))
             )
@@ -225,4 +224,3 @@ fn unexpand(options: Options) {
         }
     }
 }
-

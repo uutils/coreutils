@@ -7,6 +7,7 @@ use std::io::process::Command;
 use std::io::fs::PathExtensions;
 use std::io::pipe::PipeStream;
 use std::str::from_utf8;
+use std::borrow::ToOwned;
 
 static EXE: &'static str = "./mv";
 
@@ -27,8 +28,8 @@ fn run(cmd: &mut Command) -> CmdResult {
     let prog = cmd.spawn().unwrap().wait_with_output().unwrap();
     CmdResult {
         success: prog.status.success(),
-        stderr: from_utf8(prog.error.as_slice()).unwrap().into_string(),
-        stdout: from_utf8(prog.output.as_slice()).unwrap().into_string(),
+        stderr: from_utf8(prog.error.as_slice()).unwrap().to_owned(),
+        stdout: from_utf8(prog.output.as_slice()).unwrap().to_owned(),
     }
 }
 fn run_interactive(cmd: &mut Command, f: |&mut PipeStream|) -> CmdResult {
@@ -40,8 +41,8 @@ fn run_interactive(cmd: &mut Command, f: |&mut PipeStream|) -> CmdResult {
     let prog = command.wait_with_output().unwrap();
     CmdResult {
         success: prog.status.success(),
-        stderr: from_utf8(prog.error.as_slice()).unwrap().into_string(),
-        stdout: from_utf8(prog.output.as_slice()).unwrap().into_string(),
+        stderr: from_utf8(prog.error.as_slice()).unwrap().to_owned(),
+        stdout: from_utf8(prog.output.as_slice()).unwrap().to_owned(),
     }
 }
 

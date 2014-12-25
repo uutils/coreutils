@@ -25,6 +25,7 @@ use getopts::{
     optopt,
     usage,
 };
+use std::borrow::ToOwned;
 
 #[path = "../common/util.rs"]
 mod util;
@@ -142,7 +143,7 @@ pub fn uumain(args: Vec<String>) -> int {
             }
         }
     } else {
-        "~".into_string()
+        "~".to_owned()
     };
 
     if matches.opt_present("T") && matches.opt_present("t") {
@@ -347,7 +348,7 @@ fn numbered_backup_path(path: &Path) -> Path {
 }
 
 fn existing_backup_path(path: &Path, suffix: &String) -> Path {
-    let test_path = simple_backup_path(path, &".~1~".into_string());
+    let test_path = simple_backup_path(path, &".~1~".to_owned());
     if test_path.exists() {
         return numbered_backup_path(path);
     }
