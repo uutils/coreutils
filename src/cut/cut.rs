@@ -518,7 +518,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
                     match matches.opt_str("delimiter") {
                         Some(delim) => {
-                            if delim.as_slice().char_len() != 1 {
+                            if delim.as_slice().chars().count() != 1 {
                                 Err("the delimiter must be a single character".to_string())
                             } else {
                                 Ok(Mode::Fields(ranges,

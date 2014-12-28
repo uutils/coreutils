@@ -130,7 +130,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
                     match from_utf8(raw_line.as_slice()) {
                         Ok(line) => {
                             word_count += line.words().count();
-                            current_char_count = line.char_len();
+                            current_char_count = line.chars().count();
                             char_count += current_char_count;
                         },
                         Err(..) => {
