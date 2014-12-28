@@ -136,7 +136,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                 i += slice.len();
             }
         } else {
-            let mut len = line.char_len();
+            let mut len = line.chars().count();
             let newline = line.ends_with("\n");
             if newline {
                 if len == 1 {
@@ -156,7 +156,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                             if spaces && i + 1 < len {
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
-                                        let routput = slice.slice_chars(m + 1, slice.char_len());
+                                        let routput = slice.slice_chars(m + 1, slice.chars().count());
                                         let ncount = routput.chars().fold(0u, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
@@ -219,7 +219,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
 fn rfind_whitespace(slice: &str) -> Option<uint> {
     for (i, ch) in slice.chars().rev().enumerate() {
         if ch.is_whitespace() {
-            return Some(slice.char_len() - (i + 1));
+            return Some(slice.chars().count() - (i + 1));
         }
     }
     None

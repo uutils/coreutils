@@ -161,7 +161,7 @@ fn parse_date(str: &str) -> u64 {
 }
 
 fn parse_timestamp(str: &str) -> u64 {
-    let format = match str.char_len() {
+    let format = match str.chars().count() {
         15 => "%Y%m%d%H%M.%S",
         12 => "%Y%m%d%H%M",
         13 => "%y%m%d%H%M.%S",
