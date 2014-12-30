@@ -3,13 +3,15 @@ ENABLE_LTO     ?= n
 ENABLE_STRIP   ?= n
 
 # Binaries
-RUSTC          ?= rustc
-CARGO          ?= cargo
-RM             := rm
+RUSTC         ?= rustc
+CARGO         ?= cargo
+CC            ?= gcc
+RM            := rm
 
 # Install directories
-PREFIX         ?= /usr/local
-BINDIR         ?= /bin
+PREFIX        ?= /usr/local
+BINDIR        ?= /bin
+LIBDIR        ?= /lib
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
@@ -75,7 +77,6 @@ PROGS       := \
   seq \
   shuf \
   sort \
-  stdbuf \
   sum \
   sync \
   tac \
@@ -106,6 +107,7 @@ UNIX_PROGS := \
   mkfifo \
   nice \
   nohup \
+  stdbuf \
   timeout \
   tty \
   uname \
@@ -136,6 +138,22 @@ INSTALL     ?= $(EXES)
 
 INSTALLEES  := \
   $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils))
+
+# Shared library extension
+SYSTEM := $(shell uname)
+DYLIB_EXT := 
+ifeq ($(SYSTEM),Linux)
+	DYLIB_EXT    := so
+endif
+ifeq ($(SYSTEM),Darwin)
+	DYLIB_EXT    := dylib
+endif
+
+# Libaries to install
+LIBS :=
+ifneq (,$(findstring stdbuf, $(INSTALLEES)))
+LIBS += libstdbuf.$(DYLIB_EXT)
+endif
 
 # Programs with usable tests
 TEST_PROGS  := \
@@ -225,6 +243,16 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
 	$(RUSTC) $(RUSTCBINFLAGS) --extern test=$(BUILDDIR)/libtest.rlib --emit link,dep-info $(BUILDDIR)/gen/uutils.rs --out-dir $(BUILDDIR)
 	$(if $(ENABLE_STRIP),strip $@)
+	
+# Library for stdbuf
+$(BUILDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdbuf/libstdbuf.c $(SRCDIR)/stdbuf/libstdbuf.h | $(BUILDDIR)
+	cd $(SRCDIR)/stdbuf && \
+	$(RUSTC) libstdbuf.rs && \
+	$(CC) -c -Wall -Werror -fpic libstdbuf.c -L. -llibstdbuf.a && \
+	$(CC) -shared -o libstdbuf.$(DYLIB_EXT) -Wl,--whole-archive liblibstdbuf.a -Wl,--no-whole-archive libstdbuf.o -lpthread && \
+	mv *.so $(BUILDDIR) && $(RM) *.o && $(RM) *.a
+	
+$(BUILDDIR)/stdbuf: $(BUILDIR)/libstdbuf.$(DYLIB_EXT)
 
 # Dependencies
 $(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
@@ -278,6 +306,10 @@ install: $(addprefix $(BUILDDIR)/,$(INSTALLEES))
 	for prog in $(INSTALLEES); do \
 		install $(BUILDDIR)/$$prog $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX)$$prog; \
 	done
+	mkdir -p $(DESTDIR)$(PREFIX)$(LIBDIR)
+	for lib in $(LIBS); do \
+		install $(BUILDDIR)/$$lib $(DESTDIR)$(PREFIX)$(LIBDIR)/$$lib; \
+	done
 
 # TODO: figure out if there is way for prefixes to work with the symlinks
 install-multicall: $(BUILDDIR)/uutils
@@ -290,6 +322,7 @@ install-multicall: $(BUILDDIR)/uutils
 
 uninstall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(LIBDIR)/,$(LIBS))
 
 uninstall-multicall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)

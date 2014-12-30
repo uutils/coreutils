@@ -1,6 +1,6 @@
 #![crate_name = "libstdbuf"]
 #![crate_type = "staticlib"]
-#![feature(macro_rules)]
+#![allow(unstable)]
 
 extern crate libc;
 use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF, setvbuf};
@@ -8,6 +8,7 @@ use std::ptr;
 use std::os;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 extern {
@@ -23,7 +24,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "0" => (_IONBF, 0 as size_t),
         "L" => (_IOLBF, 0 as size_t),
         input => {
-            let buff_size: uint = match from_str(input) {
+            let buff_size: usize = match input.parse() {
                 Some(num) => num,
                 None => crash!(1, "incorrect size of buffer!")
             };

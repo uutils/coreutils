@@ -1,4 +1,5 @@
 #![crate_name = "stdbuf"]
+#![allow(unstable)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -8,22 +9,23 @@
 * For the full copyright and license information, please view the LICENSE
 * file that was distributed with this source code.
 */
-#![feature(macro_rules)]
 
 extern crate getopts;
 extern crate libc;
 use getopts::{optopt, optflag, getopts, usage, Matches, OptGroup};
 use std::io::process::{Command, StdioContainer};
+use std::io::fs::PathExtensions;
 use std::iter::range_inclusive;
 use std::num::Int;
 use std::os;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";
-static LIBSTDBUF: &'static str = "libstdbuf.so"; 
+static LIBSTDBUF: &'static str = "libstdbuf"; 
 
 enum BufferType {
     Default,
@@ -49,17 +51,17 @@ enum OkMsg {
 }
 
 #[cfg(target_os = "linux")]
-fn preload_env() -> &'static str { 
-    "LD_PRELOAD"
+fn preload_strings() -> (&'static str, &'static str) { 
+    ("LD_PRELOAD", ".so")
 }
 
 #[cfg(target_os = "macos")]
-fn preload_env() -> &'static str { 
-    "DYLD_INSERT_LIBRARIES"
+fn preload_strings() -> (&'static str, &'static str) { 
+    ("DYLD_INSERT_LIBRARIES", ".dyl")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn preload_env() -> &'static str { 
+fn preload_strings() -> (&'static str, &'static str) { 
     crash!(1, "Command not supported for this operating system!")
 }
 
@@ -88,18 +90,18 @@ fn print_usage(opts: &[OptGroup]) {
 }
 
 fn parse_size(size: &str) -> Option<u64> {
-    let ext = size.trim_left_chars(|c: char| c.is_digit(10));
-    let num = size.trim_right_chars(|c: char| c.is_alphabetic());
+    let ext = size.trim_left_matches(|&: c: char| c.is_digit(10));
+    let num = size.trim_right_matches(|&: c: char| c.is_alphabetic());
     let mut recovered = num.to_string();
     recovered.push_str(ext);
     if recovered.as_slice() != size {
         return None;
     }
-    let buf_size: u64 = match from_str(num) {
+    let buf_size: u64 = match num.parse() {
         Some(m) => m,
         None => return None,
     };
-    let (power, base): (uint, u64) = match ext {
+    let (power, base): (usize, u64) = match ext {
         "" => (0, 0),
         "KB" => (1, 1024),
         "K" => (1, 1000),
@@ -182,8 +184,28 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
     }
 }
 
+fn get_preload_env() -> (String, String) {
+    let (preload, extension) = preload_strings();
+    let mut libstdbuf = LIBSTDBUF.to_string();
+    libstdbuf.push_str(extension);
+    // First search for library in directory of executable.
+    let mut path = match os::self_exe_path() {
+        Some(exe_path) => exe_path,
+        None => crash!(1, "Impossible to fetch the path of this executable.")
+    };
+    path.push(libstdbuf.as_slice());
+    if path.exists() {
+        match path.as_str() {
+            Some(s) => { return (preload.to_string(), s.to_string()); },
+            None => crash!(1, "Error while converting path.")
+        };
+    }
+    // We assume library is in LD_LIBRARY_PATH/ DYLD_LIBRARY_PATH.
+    (preload.to_string(), libstdbuf)
+}
 
-pub fn uumain(args: Vec<String>) -> int {
+
+pub fn uumain(args: Vec<String>) -> isize {
     let optgrps = [
         optopt("i", "input", "adjust standard input stream buffering", "MODE"),
         optopt("o", "output", "adjust standard output stream buffering", "MODE"),
@@ -216,16 +238,8 @@ pub fn uumain(args: Vec<String>) -> int {
     }
     let ref command_name = args[command_idx];
     let mut command = Command::new(command_name);
-    let mut path = match os::self_exe_path() {
-        Some(exe_path) => exe_path,
-        None => crash!(1, "Impossible to fetch the path of this executable.")
-    };
-    path.push(LIBSTDBUF);
-    let libstdbuf = match path.as_str() {
-        Some(s) => s,
-        None => crash!(1, "Error while converting path.")
-    };
-    command.args(args.slice_from(command_idx+1)).env(preload_env(), libstdbuf);
+    let (preload_env, libstdbuf) = get_preload_env();
+    command.args(args.slice_from(command_idx+1)).env(preload_env.as_slice(), libstdbuf.as_slice());
     command.stdin(StdioContainer::InheritFd(0)).stdout(StdioContainer::InheritFd(1)).stderr(StdioContainer::InheritFd(2));
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
