@@ -14,6 +14,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::ascii::AsciiExt;
 use std::str::from_utf8;
 use std::io::{print, File, BufferedReader};
 use std::io::fs::PathExtensions;

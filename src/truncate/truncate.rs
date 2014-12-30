@@ -14,6 +14,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::ascii::AsciiExt;
 use std::io::{File, Open, ReadWrite, fs};
 use std::io::fs::PathExtensions;
 
@@ -191,8 +192,8 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         }
     };
     if size.char_at(size.len() - 1).is_alphabetic() {
-        number *= match size.char_at(size.len() - 1).to_ascii().to_uppercase().as_char() {
-            'B' => match size.char_at(size.len() - 2).to_ascii().to_uppercase().as_char() {
+        number *= match size.char_at(size.len() - 1).to_ascii_uppercase() {
+            'B' => match size.char_at(size.len() - 2).to_ascii_uppercase() {
                 'K' => 1000,
                 'M' => 1000 * 1000,
                 'G' => 1000 * 1000 * 1000,

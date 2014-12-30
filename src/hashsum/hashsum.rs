@@ -18,6 +18,7 @@ extern crate regex;
 extern crate crypto;
 extern crate getopts;
 
+use std::ascii::AsciiExt;
 use std::io::fs::File;
 use std::io::stdio::stdin_raw;
 use std::io::BufferedReader;
@@ -212,13 +213,13 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             let mut buffer = file;
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
-                let (ck_filename, sum, binary_check): (_, Vec<Ascii>, _) = match gnu_re.captures(line.as_slice()) {
+                let (ck_filename, sum, binary_check) = match gnu_re.captures(line.as_slice()) {
                     Some(caps) => (caps.name("fileName").unwrap(),
-                                   caps.name("digest").unwrap().to_ascii().iter().map(|ch| ch.to_lowercase()).collect(),
+                                   caps.name("digest").unwrap().to_ascii_lowercase(),
                                    caps.name("binary").unwrap() == "*"),
                     None => match bsd_re.captures(line.as_slice()) {
                         Some(caps) => (caps.name("fileName").unwrap(),
-                                       caps.name("digest").unwrap().to_ascii().iter().map(|ch| ch.to_lowercase()).collect(),
+                                       caps.name("digest").unwrap().to_ascii_lowercase(),
                                        true),
                         None => {
                             bad_format += 1;
@@ -233,8 +234,8 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                     }
                 };
                 let mut ckf = safe_unwrap!(File::open(&Path::new(ck_filename)));
-                let real_sum: Vec<Ascii> = safe_unwrap!(digest_reader(&mut digest, &mut ckf, binary_check))
-                    .as_slice().to_ascii().iter().map(|ch| ch.to_lowercase()).collect();
+                let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut ckf, binary_check))
+                    .as_slice().to_ascii_lowercase();
                 if sum.as_slice() == real_sum.as_slice() {
                     if !quiet {
                         pipe_println!("{}: OK", ck_filename);
