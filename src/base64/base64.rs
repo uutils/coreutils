@@ -17,6 +17,7 @@ extern crate getopts;
 extern crate libc;
 #[phase(plugin, link)] extern crate log;
 
+use std::ascii::AsciiExt;
 use std::io::{println, File, stdout};
 use std::io::stdio::stdin_raw;
 
@@ -105,14 +106,13 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         if ignore_garbage {
             to_decode.as_slice()
                 .trim_chars(|&: c: char| {
-                    let num = match c.to_ascii_opt() {
-                        Some(ascii) => ascii.as_byte(),
-                        None => return false
+                    if !c.is_ascii() {
+                        return false;
                     };
-                    !(num >= 'a' as u8 && num <= 'z' as u8 ||
-                      num >= 'A' as u8 && num <= 'Z' as u8 ||
-                      num >= '0' as u8 && num <= '9' as u8 ||
-                      num == '+' as u8 || num == '/' as u8)
+                    !(c >= 'a' && c <= 'z' ||
+                      c >= 'A' && c <= 'Z' ||
+                      c >= '0' && c <= '9' ||
+                      c == '+' || c == '/' )
                 })
         } else {
             to_decode.as_slice()

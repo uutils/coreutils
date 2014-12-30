@@ -69,7 +69,7 @@ impl Uniq {
             };
             let sliced = line.as_slice().slice(slice_start, slice_stop).into_string();
             if self.ignore_case {
-                sliced.into_ascii_upper()
+                sliced.into_ascii_uppercase()
             } else {
                 sliced
             }
