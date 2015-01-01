@@ -28,7 +28,7 @@ pub fn from_str(string: &str) -> Result<f64, String> {
             }
         }
     };
-    match ::std::str::from_str::<f64>(numstr) {
+    match numstr.parse::<f64>() {
         Some(m) => Ok(m * times as f64),
         None => Err(format!("invalid time interval '{}'", string))
     }

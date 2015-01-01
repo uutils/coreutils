@@ -79,7 +79,7 @@ pub fn uumain(args: Vec<String>) -> int {
                                  Try \"{} --help\" for more information.", args[0]);
                     return 125;
                 }
-                match from_str(nstr.as_slice()) {
+                match nstr.as_slice().parse() {
                     Some(num) => num,
                     None => {
                         show_error!("\"{}\" is not a valid number", nstr);

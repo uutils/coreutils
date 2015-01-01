@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> int {
     };
     let ignore_garbage = matches.opt_present("ignore-garbage");
     let line_wrap = match matches.opt_str("wrap") {
-        Some(s) => match from_str(s.as_slice()) {
+        Some(s) => match s.parse() {
             Some(s) => s,
             None => {
                 error!("error: {}", "Argument to option 'wrap' improperly formatted.");
