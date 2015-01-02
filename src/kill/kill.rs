@@ -19,7 +19,6 @@ extern crate serialize;
 
 #[phase(plugin, link)] extern crate log;
 
-use std::str::from_str;
 use std::io::process::Process;
 
 use getopts::{
@@ -109,7 +108,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
         let slice: &str = unsafe { std::mem::transmute(args[i].as_slice()) };
         if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
             let val = slice.slice_from(1);
-            match from_str(val) {
+            match val.parse() {
                 Some(num) => {
                     if signals::is_signal(num) {
                         args.remove(i);
@@ -194,7 +193,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> int {
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)
     };
     for pid in pids.iter() {
-        match from_str::<i32>(pid.as_slice()) {
+        match pid.as_slice().parse() {
             Some(x) => {
                 let result = Process::kill(x, signal_value as int);
                 match result {

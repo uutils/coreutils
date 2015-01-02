@@ -119,7 +119,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit(10)) {
-            let id = from_str::<u32>(username).unwrap();
+            let id = username.parse::<u32>().unwrap();
             let pw_pointer = unsafe { getpwuid(id as uid_t) };
 
             if pw_pointer.is_not_null() {
@@ -146,7 +146,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
 
 pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit(10)) {
-        unsafe { getgrgid(from_str::<gid_t>(groupname).unwrap()) }
+        unsafe { getgrgid(groupname.parse().unwrap()) }
     } else {
         unsafe { getgrnam(groupname.to_c_str().into_inner() as *const c_char) }
     };

@@ -21,7 +21,6 @@ extern crate "time" as rtime;
 use std::mem::transmute;
 use std::io::{print, File};
 use std::ptr::null;
-use std::str::from_str;
 use libc::{time_t, c_double, c_int, c_char};
 use utmpx::*;
 
@@ -182,7 +181,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     };
 
     match uptime_text.as_slice().words().next() {
-        Some(s) => match from_str(s.replace(".", "").as_slice()) {
+        Some(s) => match s.replace(".", "").as_slice().parse() {
                     Some(n) => n,
                     None => -1
                    },

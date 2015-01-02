@@ -52,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let tty = unsafe { String::from_raw_buf(ttyname(libc::STDIN_FILENO) as *const u8) };
 
     if !silent {
-        if !tty.as_slice().is_whitespace() {
+        if !tty.as_slice().chars().all(|c| c.is_whitespace()) {
             println(tty.as_slice());
         } else {
             println!("not a tty");

@@ -13,6 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::borrow::ToOwned;
 use std::io::{print, println};
 
 #[path = "../common/util.rs"]
@@ -99,12 +100,12 @@ fn strip_dir(fullname: &str) -> String {
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
-        return name.into_string();
+        return name.to_owned();
     }
 
     if name.ends_with(suffix) {
-        return name.slice_to(name.len() - suffix.len()).into_string();
+        return name.slice_to(name.len() - suffix.len()).to_owned();
     }
 
-    name.into_string()
+    name.to_owned()
 }
