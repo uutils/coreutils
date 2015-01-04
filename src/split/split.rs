@@ -162,6 +162,8 @@ impl Splitter for LineSplitter {
 struct ByteSplitter {
     saved_bytes_to_write: uint,
     bytes_to_write: uint,
+    break_on_line_end: bool,
+    require_whole_line: bool,
 }
 
 impl Splitter for ByteSplitter {
@@ -189,16 +191,27 @@ impl Splitter for ByteSplitter {
         box ByteSplitter {
             saved_bytes_to_write: n * multiplier,
             bytes_to_write: n * multiplier,
+            break_on_line_end: if settings.strategy == "b" { false } else { true },
+            require_whole_line: false,
         } as Box<Splitter>
     }
 
     fn consume(&mut self, control: &mut SplitControl) -> String {
         let line = control.current_line.clone();
         let n = std::cmp::min(line.as_slice().chars().count(), self.bytes_to_write);
+        if self.require_whole_line && n < line.as_slice().chars().count() {
+            self.bytes_to_write = self.saved_bytes_to_write;
+            control.request_new_file = true;
+            self.require_whole_line = false;
+            return line.as_slice().slice(0, 0).to_string();
+        }
         self.bytes_to_write -= n;
         if n == 0 {
             self.bytes_to_write = self.saved_bytes_to_write;
             control.request_new_file = true;
+        }
+        if self.break_on_line_end && n == line.as_slice().chars().count() {
+            self.require_whole_line = self.break_on_line_end;
         }
         line.as_slice().slice(0, n).to_string()
     }
@@ -250,7 +263,7 @@ fn split(settings: &Settings) -> int {
     let mut splitter: Box<Splitter> =
         match settings.strategy.as_slice() {
             "l" => Splitter::new(None::<LineSplitter>, settings),
-            "b" => Splitter::new(None::<ByteSplitter>, settings),
+            "b" | "C" => Splitter::new(None::<ByteSplitter>, settings),
             a @ _ => crash!(1, "strategy {} not supported", a)
         };
 
