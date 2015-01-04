@@ -296,6 +296,9 @@ fn split(settings: &Settings) -> int {
             fileno += 1;
             writer = io::BufferedWriter::new(box io::File::open_mode(&Path::new(filename.as_slice()), io::Open, io::Write) as Box<Writer>);
             control.request_new_file = false;
+            if settings.verbose {
+                println!("creating file '{}'", filename);
+            }
         }
 
         let consumed = splitter.consume(&mut control);
