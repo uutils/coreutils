@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> int {
     settings.numeric_suffix = if matches.opt_present("d") { true } else { false };
 
     settings.suffix_length = match matches.opt_str("a") {
-        Some(n) => match from_str(n.as_slice()) {
+        Some(n) => match n.as_slice().parse() {
             Some(m) => m,
             None => crash!(1, "cannot parse num")
         },
@@ -139,7 +139,7 @@ struct LineSplitter {
 
 impl Splitter for LineSplitter {
     fn new(_: Option<LineSplitter>, settings: &Settings) -> Box<Splitter> {
-        let n = match from_str(settings.strategy_param.as_slice()) {
+        let n = match settings.strategy_param.as_slice().parse() {
             Some(a) => a,
             _ => crash!(1, "invalid number of lines")
         };
@@ -194,7 +194,7 @@ impl Splitter for ByteSplitter {
 
     fn consume(&mut self, control: &mut SplitControl) -> String {
         let line = control.current_line.clone();
-        let n = std::cmp::min(line.as_slice().char_len(), self.bytes_to_write);
+        let n = std::cmp::min(line.as_slice().chars().count(), self.bytes_to_write);
         self.bytes_to_write -= n;
         if n == 0 {
             self.bytes_to_write = self.saved_bytes_to_write;
@@ -262,7 +262,7 @@ fn split(settings: &Settings) -> int {
     let mut writer = io::BufferedWriter::new(box io::stdio::stdout_raw() as Box<Writer>);
     let mut fileno = 0;
     loop {
-        if control.current_line.as_slice().char_len() == 0 {
+        if control.current_line.as_slice().chars().count() == 0 {
             match reader.read_line() {
                 Ok(a) => { control.current_line = a; }
                 Err(_) =>  { break; }
@@ -288,10 +288,10 @@ fn split(settings: &Settings) -> int {
         let consumed = splitter.consume(&mut control);
         crash_if_err!(1, writer.write_str(consumed.as_slice()));
 
-        let advance = consumed.as_slice().char_len();
+        let advance = consumed.as_slice().chars().count();
         let clone = control.current_line.clone();
         let sl = clone.as_slice();
-        control.current_line = sl.slice(advance, sl.char_len()).to_string();
+        control.current_line = sl.slice(advance, sl.chars().count()).to_string();
     }
     0
 }
