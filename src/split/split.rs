@@ -48,6 +48,8 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("  {0} [OPTION]... [INPUT [PREFIX]]", NAME);
         println!("");
         io::print(getopts::usage("Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is -, read standard input." , &opts).as_slice());
+        println!("");
+        println!("SIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.");
         return 0;
     }
 
@@ -164,13 +166,29 @@ struct ByteSplitter {
 
 impl Splitter for ByteSplitter {
     fn new(_: Option<ByteSplitter>, settings: &Settings) -> Box<Splitter> {
-        let n = match from_str(settings.strategy_param.as_slice()) {
-            Some(a) => a,
-            _ => crash!(1, "invalid number of lines")
+        let mut strategy_param : Vec<char> = settings.strategy_param.chars().collect();
+        let suffix = strategy_param.pop().unwrap();
+        let multiplier = match suffix {
+            '0'...'9' => 1u,
+            'b' => 512u,
+            'k' => 1024u,
+            'm' => 1024u * 1024u,
+            _ => crash!(1, "invalid number of bytes")
+        };
+        let n = if suffix.is_alphabetic() {
+            match String::from_chars(strategy_param.as_slice()).as_slice().parse::<uint>() {
+                Some(a) => a,
+                _ => crash!(1, "invalid number of bytes")
+            }
+        } else {
+            match settings.strategy_param.as_slice().parse::<uint>() {
+                Some(a) => a,
+                _ => crash!(1, "invalid number of bytes")
+            }
         };
         box ByteSplitter {
-            saved_bytes_to_write: n,
-            bytes_to_write: n,
+            saved_bytes_to_write: n * multiplier,
+            bytes_to_write: n * multiplier,
         } as Box<Splitter>
     }
 
