@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> int {
     settings.numeric_suffix = if matches.opt_present("d") { true } else { false };
 
     settings.suffix_length = match matches.opt_str("a") {
-        Some(n) => match from_str(n.as_slice()) {
+        Some(n) => match n.as_slice().parse() {
             Some(m) => m,
             None => crash!(1, "cannot parse num")
         },
@@ -139,7 +139,7 @@ struct LineSplitter {
 
 impl Splitter for LineSplitter {
     fn new(_: Option<LineSplitter>, settings: &Settings) -> Box<Splitter> {
-        let n = match from_str(settings.strategy_param.as_slice()) {
+        let n = match settings.strategy_param.as_slice().parse() {
             Some(a) => a,
             _ => crash!(1, "invalid number of lines")
         };
