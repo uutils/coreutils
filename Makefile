@@ -152,7 +152,7 @@ TESTS       := \
 
 # Setup for building crates
 define BUILD_SETUP
-X := $(shell $(RUSTC) --print-file-name --crate-type rlib $(SRCDIR)/$(1)/$(1).rs)
+X := $(shell $(RUSTC) --print file-names --crate-type rlib $(SRCDIR)/$(1)/$(1).rs)
 $(1)_RLIB := $$(X)
 CRATE_RLIBS += $$(X)
 endef
