@@ -28,10 +28,15 @@ extern {
     pub fn getlogin() -> *const libc::c_char;
 }
 
-unsafe fn get_userlogin() -> String {
-    let login: *const libc::c_char = getlogin();
-
-    String::from_raw_buf(login as *const u8)
+fn get_userlogin() -> Option<String> {
+    unsafe {
+            let login: *const libc::c_char = getlogin();
+            if login.is_null() {
+                    None
+            } else {
+                    Some(String::from_raw_buf(login as *const u8))
+            }
+    }
 }
 
 static NAME: &'static str = "logname";
@@ -77,8 +82,8 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn exec() {
-    unsafe {
-        let userlogin = get_userlogin();
-        println!("{}", userlogin);
-    }
+        match get_userlogin() {
+                Some(userlogin) => println!("{}", userlogin),
+                None => println!("{}: no login name", NAME)
+        }
 }
