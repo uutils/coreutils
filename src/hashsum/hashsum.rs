@@ -11,8 +11,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate regex;
 
 extern crate crypto;
@@ -31,6 +29,7 @@ use crypto::sha1::Sha1;
 use crypto::sha2::{Sha224, Sha256, Sha384, Sha512};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "hashsum";
@@ -275,7 +274,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
 
     // Digest file, do not hold too much in memory at any given moment
     let windows = cfg!(windows);
-    let mut buffer = [0, ..524288];
+    let mut buffer = [0; 524288];
     let mut vec = Vec::with_capacity(524288);
     let mut looking_for_newline = false;
     loop {

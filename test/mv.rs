@@ -1,5 +1,3 @@
-#![feature(macro_rules)]
-
 extern crate time;
 
 use std::io::{process, fs, FilePermission};

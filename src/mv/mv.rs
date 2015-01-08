@@ -10,8 +10,6 @@
  * that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::io::{BufferedReader, IoResult, fs};
@@ -28,6 +26,7 @@ use getopts::{
 use std::borrow::ToOwned;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "mv";
@@ -43,7 +42,7 @@ pub struct Behaviour {
     verbose: bool,
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum OverwriteMode {
     NoClobber,
     Interactive,
@@ -52,7 +51,7 @@ pub enum OverwriteMode {
 
 impl Copy for OverwriteMode {}
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum BackupMode {
     NoBackup,
     SimpleBackup,

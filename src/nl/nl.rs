@@ -1,5 +1,4 @@
 #![crate_name = "nl"]
-#![feature(macro_rules)]
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -10,9 +9,7 @@
  *
  */
 
-#![feature(phase)]
-#[phase(plugin)]
-extern crate regex_macros;
+#[macro_use] extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
@@ -24,6 +21,7 @@ use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 mod helper;
 
@@ -39,7 +37,7 @@ struct Settings {
     body_numbering: NumberingStyle,
     footer_numbering: NumberingStyle,
     // The variable corresponding to -d
-    section_delimiter: [char, ..2],
+    section_delimiter: [char; 2],
     // The variables corresponding to the options -v, -i, -l, -w.
     starting_line_number: u64,
     line_increment: u64,

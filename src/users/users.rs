@@ -14,8 +14,6 @@
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #![allow(dead_code, non_camel_case_types)]
 
-#![feature(macro_rules, globs)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -25,6 +23,7 @@ use std::ptr;
 use utmpx::*;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[path = "../common/utmpx.rs"]

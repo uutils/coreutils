@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -21,6 +19,7 @@ use getopts::{optopt, optflag, getopts, usage};
 use ranges::Range;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 mod ranges;
 mod buffer;
@@ -192,7 +191,7 @@ fn cut_characters<R: Reader>(reader: R,
     0
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 struct Searcher<'a> {
     haystack: &'a [u8],
     needle: &'a [u8],

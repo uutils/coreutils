@@ -1,5 +1,4 @@
 #![crate_name = "link"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,6 +15,7 @@ use std::io::fs::link;
 use std::path::Path;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME : &'static str = "link";

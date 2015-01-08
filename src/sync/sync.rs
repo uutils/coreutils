@@ -10,14 +10,12 @@
 
  /* Last synced with: sync (GNU coreutils) 8.13 */
 
- #![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use getopts::{optflag, getopts, usage};
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 static NAME: &'static str = "sync";
 static VERSION: &'static str = "1.0.0";
@@ -88,7 +86,7 @@ mod platform {
 
     #[allow(unused_unsafe)]
     unsafe fn find_first_volume() -> (String, *const libc::c_void) {
-        let mut name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
+        let mut name: [libc::c_char; 260] = mem::uninitialized(); // MAX_PATH
         match FindFirstVolumeA(name.as_mut_ptr(),
                                name.len() as libc::uint32_t) {
             _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
@@ -106,7 +104,7 @@ mod platform {
             (first_volume, next_volume_handle) => {
                 let mut volumes = Vec::from_elem(1, first_volume);
                 loop {
-                    let mut name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
+                    let mut name: [libc::c_char; 260] = mem::uninitialized(); // MAX_PATH
                     match FindNextVolumeA(next_volume_handle,
                                           name.as_mut_ptr(),
                                           name.len() as libc::uint32_t) {

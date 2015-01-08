@@ -11,16 +11,15 @@
 
 /* last synced with: unlink (GNU coreutils) 8.21 */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::io;
-use std::io::fs::{mod, PathExtensions};
+use std::io::fs::{self, PathExtensions};
 use std::io::print;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "unlink";

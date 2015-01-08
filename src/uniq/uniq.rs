@@ -9,8 +9,6 @@
  *
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::ascii::OwnedAsciiExt;
@@ -19,6 +17,7 @@ use std::str::FromStr;
 use std::io;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "uniq";
@@ -67,7 +66,7 @@ impl Uniq {
                 Some(i) => min(slice_start + i, len),
                 None => len
             };
-            let sliced = line.as_slice().slice(slice_start, slice_stop).into_string();
+            let sliced = line.as_slice().slice(slice_start, slice_stop).to_string();
             if self.ignore_case {
                 sliced.into_ascii_uppercase()
             } else {
@@ -112,7 +111,7 @@ impl Uniq {
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<T> {
     matches.opt_str(opt_name).map(|arg_str| {
-        let opt_val: Option<T> = from_str(arg_str.as_slice());
+        let opt_val: Option<T> = arg_str.parse();
         opt_val.unwrap_or_else(||
             crash!(1, "Invalid argument for {}: {}", opt_name, arg_str))
     })
@@ -158,8 +157,8 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} {}", NAME, VERSION);
     } else {
         let (in_file_name, out_file_name) = match matches.free.len() {
-            0 => ("-".into_string(), "-".into_string()),
-            1 => (matches.free[0].clone(), "-".into_string()),
+            0 => ("-".to_string(), "-".to_string()),
+            1 => (matches.free[0].clone(), "-".to_string()),
             2 => (matches.free[0].clone(), matches.free[1].clone()),
             _ => {
                 crash!(1, "Extra operand: {}", matches.free[2]);

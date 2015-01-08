@@ -1,6 +1,4 @@
 #![crate_name = "kill"]
-#![feature(macro_rules)]
-#![feature(phase)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +15,7 @@ extern crate libc;
 extern crate collections;
 extern crate serialize;
 
-#[phase(plugin, link)] extern crate log;
+#[macro_use] extern crate log;
 
 use std::io::process::Process;
 
@@ -32,6 +30,7 @@ use getopts::{
 use signals::ALL_SIGNALS;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[path = "../common/signals.rs"]

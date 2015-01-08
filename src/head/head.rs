@@ -10,11 +10,9 @@
  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
-use std::char::UnicodeChar;
+use std::char::CharExt;
 use std::io::{stdin};
 use std::io::{BufferedReader, BytesReader};
 use std::io::fs::File;
@@ -23,6 +21,7 @@ use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "head";
@@ -69,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 show_error!("cannot specify both --bytes and --lines.");
                 return 1;
             }
-            match from_str(n.as_slice()) {
+            match n.parse::<uint>() {
                 Some(m) => { line_count = m }
                 None => {
                     show_error!("invalid line count '{}'", n);
@@ -78,7 +77,7 @@ pub fn uumain(args: Vec<String>) -> int {
             }
         }
         None => match given_options.opt_str("c") {
-            Some(count) => match from_str(count.as_slice()) {
+            Some(count) => match count.parse::<uint>() {
                 Some(m) => byte_count = m,
                 None => {
                     show_error!("invalid byte count '{}'", count);
@@ -145,12 +144,12 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
             let len = current.len();
             for pos in range(1, len) {
                 // Ensure that the argument is only made out of digits
-                if !UnicodeChar::is_numeric(current[pos] as char) { break; }
+                if !(current[pos] as char).is_numeric() { break; }
 
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<uint> = from_str(from_utf8(current.slice(1,len)).unwrap());
+                    let number: Option<uint> = from_utf8(current.slice(1,len)).unwrap().parse::<uint>();
                     return (options, Some(number.unwrap()));
                 }
             }

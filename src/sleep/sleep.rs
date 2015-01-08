@@ -9,16 +9,15 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::f64;
 use std::io::{print, timer};
-use std::time::duration::{mod, Duration};
+use std::time::duration::{self, Duration};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[path = "../common/time.rs"]

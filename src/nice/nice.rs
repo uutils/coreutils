@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -26,6 +24,7 @@ const VERSION: &'static str = "1.0.0";
 const PRIO_PROCESS: c_int = 0;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 extern {

@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(globs, macro_rules)]
 extern crate getopts;
 extern crate libc;
 
@@ -22,7 +21,7 @@ use libc::consts::os::posix88::SIGHUP;
 use libc::funcs::posix01::signal::signal;
 use libc::consts::os::posix01::SIG_IGN;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
 
 static NAME: &'static str = "nohup";

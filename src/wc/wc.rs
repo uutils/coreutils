@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -23,6 +21,7 @@ use std::result::Result as StdResult;
 use getopts::Matches;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 struct Result {

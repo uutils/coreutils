@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -18,6 +16,7 @@ use std::io::{PathDoesntExist, FileNotFound};
 use std::io::process::{Command, ExitStatus, ExitSignal, InheritFd};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[path = "../common/time.rs"]

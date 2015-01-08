@@ -52,22 +52,22 @@ impl Copy for c_passwd {}
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
 pub struct utsname {
-    pub sysname: [c_char, ..256],
-    pub nodename: [c_char, ..256],
-    pub release: [c_char, ..256],
-    pub version: [c_char, ..256],
-    pub machine: [c_char, ..256]
+    pub sysname: [c_char; 256],
+    pub nodename: [c_char; 256],
+    pub release: [c_char; 256],
+    pub version: [c_char; 256],
+    pub machine: [c_char; 256]
 }
 
 #[cfg(target_os = "linux")]
 #[repr(C)]
 pub struct utsname {
-    pub sysname: [c_char, ..65],
-    pub nodename: [c_char, ..65],
-    pub release: [c_char, ..65],
-    pub version: [c_char, ..65],
-    pub machine: [c_char, ..65],
-    pub domainame: [c_char, ..65]
+    pub sysname: [c_char; 65],
+    pub nodename: [c_char; 65],
+    pub release: [c_char; 65],
+    pub version: [c_char; 65],
+    pub machine: [c_char; 65],
+    pub domainame: [c_char; 65]
 }
 
 impl Copy for utsname {}

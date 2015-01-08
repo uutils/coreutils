@@ -1,5 +1,4 @@
 #![crate_name = "cksum"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -19,6 +18,7 @@ use std::mem;
 use crc_table::CRC_TABLE;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
 mod crc_table;
@@ -59,7 +59,7 @@ fn cksum(fname: &str) -> IoResult<(u32, uint)> {
         }
     };
 
-    let mut bytes: [u8, ..1024 * 1024] = unsafe { mem::uninitialized() };
+    let mut bytes: [u8; 1024 * 1024] = unsafe { mem::uninitialized() };
     loop {
         match rd.read(&mut bytes) {
             Ok(num_bytes) => {

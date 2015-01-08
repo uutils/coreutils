@@ -13,14 +13,12 @@
 
 #![allow(non_camel_case_types)]
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::io::print;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 #[cfg(unix)]
 mod platform {
@@ -54,7 +52,7 @@ mod platform {
 
     #[allow(unused_unsafe)]
     pub unsafe fn getusername() -> String {
-        let mut buffer: [libc::c_char, ..2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
+        let mut buffer: [libc::c_char; 2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
         if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }

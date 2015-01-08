@@ -28,7 +28,7 @@ Linux Programmer's Manual
 */
 
 #[cfg(target_os = "linux")]
-pub static ALL_SIGNALS:[Signal<'static>, ..31] = [
+pub static ALL_SIGNALS:[Signal<'static>; 31] = [
     Signal{ name: "HUP",    value:1  },
     Signal{ name: "INT",    value:2  },
     Signal{ name: "QUIT",   value:3  },
@@ -105,7 +105,7 @@ No    Name         Default Action       Description
 */
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-pub static ALL_SIGNALS:[Signal<'static>, ..31] = [
+pub static ALL_SIGNALS:[Signal<'static>; 31] = [
     Signal{ name: "HUP",    value:1  },
     Signal{ name: "INT",    value:2  },
     Signal{ name: "QUIT",   value:3  },

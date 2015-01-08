@@ -1,6 +1,4 @@
 #![crate_name = "cp"]
-#![feature(macro_rules)]
-#![feature(phase)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,7 +10,7 @@
  */
 
 extern crate getopts;
-#[phase(plugin, link)] extern crate log;
+#[macro_use] extern crate log;
 
 use std::os;
 use std::io;
@@ -24,7 +22,7 @@ use getopts::{
     usage,
 };
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum Mode {
     Copy,
     Help,

@@ -9,13 +9,10 @@
  * that was distributed with this source code.
  */
 
-#![feature(phase)]
-#![feature(macro_rules)]
-
 extern crate serialize;
 extern crate getopts;
 extern crate libc;
-#[phase(plugin, link)] extern crate log;
+#[macro_use] extern crate log;
 
 use std::ascii::AsciiExt;
 use std::io::{println, File, stdout};
@@ -31,6 +28,7 @@ use serialize::base64;
 use serialize::base64::{FromBase64, ToBase64};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "base64";

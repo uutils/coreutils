@@ -9,11 +9,9 @@
  *
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
-use std::char::UnicodeChar;
+use std::char::CharExt;
 use std::io::{stdin, stdout};
 use std::io::{BufferedReader, BytesReader};
 use std::io::fs::File;
@@ -25,6 +23,7 @@ use std::io::timer::sleep;
 use std::time::duration::Duration;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "tail";
@@ -72,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> int {
     if follow {
         match given_options.opt_str("s") {
             Some(n) => {
-                let parsed: Option<u64> = from_str(n.as_slice());
+                let parsed: Option<u64> = n.parse();
                 match parsed {
                     Some(m) => { sleep_msec = m * 1000 }
                     None => {}
@@ -193,7 +192,7 @@ fn parse_size(mut size_slice: &str) -> Option<uint> {
         // sole B is not a valid suffix
         None
     } else {
-        let value = from_str(size_slice);
+        let value = size_slice.parse();
         match value {
             Some(v) => Some(multiplier * v),
             None => None
@@ -218,12 +217,12 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
             let len = current.len();
             for pos in range(1, len) {
                 // Ensure that the argument is only made out of digits
-                if !UnicodeChar::is_numeric(current[pos] as char) { break; }
+                if !(current[pos] as char).is_numeric() { break; }
 
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<uint> = from_str(from_utf8(current.slice(1,len)).unwrap());
+                    let number: Option<uint> = from_utf8(current.slice(1,len)).unwrap().parse();
                     return (options, Some(number.unwrap()));
                 }
             }

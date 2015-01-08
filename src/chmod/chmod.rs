@@ -9,14 +9,12 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules, phase)]
-
 #![allow(unused_variables)]  // only necessary while the TODOs still exist
 
 extern crate getopts;
 extern crate libc;
 extern crate regex;
-#[phase(plugin)] extern crate regex_macros;
+#[macro_use] extern crate regex_macros;
 
 use std::io::fs;
 use std::io::fs::PathExtensions;
@@ -26,6 +24,7 @@ use std::num::from_str_radix;
 use regex::Regex;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 const NAME: &'static str = "chmod";

@@ -9,14 +9,13 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::io;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "tac";
@@ -82,10 +81,10 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         let mut data = crash_if_err!(1, file.read_to_string());
         if data.as_slice().ends_with("\n") {
             // removes blank line that is inserted otherwise
-            let mut buf = data.into_string();
+            let mut buf = data.to_string();
             let len = buf.len();
             buf.truncate(len - 1);
-            data = buf.into_string();
+            data = buf.to_string();
         }
         let split_vec: Vec<&str> = data.as_slice().split_str(separator).collect();
         let rev: String = split_vec.iter().rev().fold(String::new(), |mut a, &b| {

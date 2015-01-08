@@ -11,14 +11,13 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::io::print;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "yes";

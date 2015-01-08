@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -19,6 +17,7 @@ use std::io::fs::File;
 use std::io::BufferedReader;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "fold";
@@ -63,7 +62,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 }
             };
         let width = match poss_width {
-            Some(inp_width) => match from_str(inp_width.as_slice()) {
+            Some(inp_width) => match inp_width.parse::<uint>() {
                 Some(width) => width,
                 None => crash!(1, "illegal width value (\"{}\")", inp_width)
             },
@@ -173,7 +172,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 (slice, "", 0)
                             };
                         println!("{}", out);
-                        (val.into_string(), ncount)
+                        (val.to_string(), ncount)
                     };
                     output = val;
                     count = ncount;

@@ -1,4 +1,3 @@
-#![feature(macro_rules)]
 #![crate_name = "echo"]
 
 /*
@@ -24,7 +23,7 @@ mod util;
 static NAME: &'static str = "echo";
 static VERSION: &'static str = "1.0.0";
 
-#[deriving(Clone)]
+#[derive(Clone)]
 struct EchoOptions {
     newline: bool,
     escape: bool

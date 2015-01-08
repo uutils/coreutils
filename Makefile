@@ -152,7 +152,7 @@ TESTS       := \
 
 # Setup for building crates
 define BUILD_SETUP
-X := $(shell $(RUSTC) --print-file-name --crate-type rlib $(SRCDIR)/$(1)/$(1).rs)
+X := $(shell $(RUSTC) --print file-names --crate-type rlib $(SRCDIR)/$(1)/$(1).rs)
 $(1)_RLIB := $$(X)
 CRATE_RLIBS += $$(X)
 endef
@@ -221,9 +221,9 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 	$(if $(ENABLE_STRIP),strip $@)
 
 # Dependencies
--include $(BUILDDIR)/rust-crypto.d
 $(BUILDDIR)/.rust-crypto: $(BUILDDIR)/.rust-time | $(BUILDDIR)
-	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --crate-type rlib --crate-name crypto --dep-info $(BUILDDIR)/rust-crypto.d $(BASEDIR)/deps/rust-crypto/src/rust-crypto/lib.rs --out-dir $(BUILDDIR)/
+	cd $(BASEDIR)/deps/rust-crypto && cargo build --release
+	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
 	@touch $@
 
 $(BUILDDIR)/.rust-time:

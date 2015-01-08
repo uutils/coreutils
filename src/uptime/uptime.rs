@@ -12,7 +12,6 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 #![allow(non_camel_case_types)]
-#![feature(macro_rules, globs)]
 
 extern crate getopts;
 extern crate libc;
@@ -24,7 +23,7 @@ use std::ptr::null;
 use libc::{time_t, c_double, c_int, c_char};
 use utmpx::*;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 #[path = "../common/c_types.rs"] mod c_types;
 
@@ -89,7 +88,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn print_loadavg() {
-    let mut avg: [c_double, ..3] = [0.0, ..3];
+    let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
     if loads == -1 {

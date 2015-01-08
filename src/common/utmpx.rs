@@ -36,17 +36,17 @@ mod utmpx {
     pub struct c_utmp {
         pub ut_type: libc::c_short,
         pub ut_pid: libc::pid_t,
-        pub ut_line: [libc::c_char, ..UT_LINESIZE],
-        pub ut_id: [libc::c_char, ..UT_IDSIZE],
+        pub ut_line: [libc::c_char; UT_LINESIZE],
+        pub ut_id: [libc::c_char; UT_IDSIZE],
 
-        pub ut_user: [libc::c_char, ..UT_NAMESIZE],
-        pub ut_host: [libc::c_char, ..UT_HOSTSIZE],
+        pub ut_user: [libc::c_char; UT_NAMESIZE],
+        pub ut_host: [libc::c_char; UT_HOSTSIZE],
         pub ut_exit: c_exit_status,
         pub ut_session: libc::c_long,
         pub ut_tv: libc::timeval,
 
-        pub ut_addr_v6: [libc::int32_t, ..4],
-        pub __unused: [libc::c_char, ..20],
+        pub ut_addr_v6: [libc::int32_t; 4],
+        pub __unused: [libc::c_char; 20],
     }
 }
 
@@ -80,14 +80,14 @@ mod utmpx {
 
     #[repr(C)]
     pub struct c_utmp {
-        pub ut_user: [libc::c_char, ..UT_NAMESIZE],
-        pub ut_id: [libc::c_char, ..UT_IDSIZE],
-        pub ut_line: [libc::c_char, ..UT_LINESIZE],
+        pub ut_user: [libc::c_char; UT_NAMESIZE],
+        pub ut_id: [libc::c_char; UT_IDSIZE],
+        pub ut_line: [libc::c_char; UT_LINESIZE],
         pub ut_pid: libc::pid_t,
         pub ut_type: libc::c_short,
         pub ut_tv: libc::timeval,
-        pub ut_host: [libc::c_char, ..UT_HOSTSIZE],
-        pub __unused: [libc::c_char, ..16]
+        pub ut_host: [libc::c_char; UT_HOSTSIZE],
+        pub __unused: [libc::c_char; 16]
     }
 }
 
@@ -116,11 +116,11 @@ mod utmpx {
     pub struct c_utmp {
         pub ut_type : libc::c_short,
         pub ut_tv   : libc::timeval,
-        pub ut_id   : [libc::c_char, ..UT_IDSIZE],
+        pub ut_id   : [libc::c_char; UT_IDSIZE],
         pub ut_pid  : libc::pid_t,
-        pub ut_user : [libc::c_char, ..UT_NAMESIZE],
-        pub ut_line : [libc::c_char, ..UT_LINESIZE],
-        pub ut_host : [libc::c_char, ..UT_HOSTSIZE],
-        pub ut_spare : [libc::c_char, ..64],
+        pub ut_user : [libc::c_char; UT_NAMESIZE],
+        pub ut_line : [libc::c_char; UT_LINESIZE],
+        pub ut_host : [libc::c_char; UT_HOSTSIZE],
+        pub ut_spare : [libc::c_char; 64],
     }
 }

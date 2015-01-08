@@ -1,5 +1,4 @@
 #![crate_name = "factor"]
-#![feature(macro_rules)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -18,6 +17,7 @@ use std::io::BufferedReader;
 use std::io::stdio::stdin_raw;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
 static VERSION: &'static str = "1.0.0";
@@ -56,7 +56,7 @@ fn print_factors(num: u64) {
 }
 
 fn print_factors_str(num_str: &str) {
-    let num = match from_str(num_str) {
+    let num = match num_str.parse::<u64>() {
         Some(x) => x,
         None => { crash!(1, "{} not a number", num_str); }
     };

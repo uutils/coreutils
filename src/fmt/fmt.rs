@@ -8,8 +8,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate core;
 extern crate getopts;
 
@@ -19,7 +17,6 @@ use std::io::stdio::{stdin_raw, stdout_raw};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 
-#[macro_export]
 macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
@@ -28,7 +25,9 @@ macro_rules! silent_unwrap(
         }
     )
 );
+
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 mod linebreak;
 mod parasplit;
@@ -141,7 +140,7 @@ pub fn uumain(args: Vec<String>) -> int {
     match matches.opt_str("w") {
         Some(s) => {
             fmt_opts.width =
-                match from_str(s.as_slice()) {
+                match s.parse::<uint>() {
                     Some(t) => t,
                     None => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
                 };
@@ -153,7 +152,7 @@ pub fn uumain(args: Vec<String>) -> int {
     match matches.opt_str("g") {
         Some(s) => {
             fmt_opts.goal =
-                match from_str(s.as_slice()) {
+                match s.parse::<uint>() {
                     Some(t) => t,
                     None => { crash!(1, "Invalid GOAL specification: `{}'", s); }
                 };
@@ -169,7 +168,7 @@ pub fn uumain(args: Vec<String>) -> int {
     match matches.opt_str("T") {
         Some(s) => {
             fmt_opts.tabwidth =
-                match from_str(s.as_slice()) {
+                match s.parse::<uint>() {
                     Some(t) => t,
                     None => { crash!(1, "Invalid TABWIDTH specification: `{}'", s); }
                 };

@@ -30,7 +30,7 @@ fn char_width(c: char) -> uint {
 
 // lines with PSKIP, lacking PREFIX, or which are entirely blank are
 // NoFormatLines; otherwise, they are FormatLines
-#[deriving(Show)]
+#[derive(Show)]
 pub enum Line {
     FormatLine(FileLine),
     NoFormatLine(String, bool)
@@ -56,7 +56,7 @@ impl Line {
 
 // each line's prefix has to be considered to know whether to merge it with
 // the next line or not
-#[deriving(Show)]
+#[derive(Show)]
 struct FileLine {
     line       : String,
     indent_end : uint,     // the end of the indent, always the start of the text
@@ -195,7 +195,7 @@ impl<'a> Iterator<Line> for FileLines<'a> {
 // plus info about the paragraph's indentation
 // (but we only retain the String from the FileLine; the other info
 // is only there to help us in deciding how to merge lines into Paragraphs
-#[deriving(Show)]
+#[derive(Show)]
 pub struct Paragraph {
         lines       : Vec<String>,  // the lines of the file
     pub init_str    : String,       // string representing the init, that is, the first line's indent
