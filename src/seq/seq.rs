@@ -14,7 +14,7 @@ mod util;
 
 static NAME: &'static str = "seq";
 
-#[deriving(Clone)]
+#[derive(Clone)]
 struct SeqOptions {
     separator: String,
     terminator: Option<String>,

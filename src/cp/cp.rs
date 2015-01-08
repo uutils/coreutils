@@ -22,7 +22,7 @@ use getopts::{
     usage,
 };
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum Mode {
     Copy,
     Help,

@@ -19,7 +19,7 @@ use std::io::fs::PathExtensions;
 #[macro_use]
 mod util;
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,

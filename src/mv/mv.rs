@@ -42,7 +42,7 @@ pub struct Behaviour {
     verbose: bool,
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum OverwriteMode {
     NoClobber,
     Interactive,
@@ -51,7 +51,7 @@ pub enum OverwriteMode {
 
 impl Copy for OverwriteMode {}
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum BackupMode {
     NoBackup,
     SimpleBackup,

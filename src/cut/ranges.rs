@@ -9,7 +9,7 @@
 
 use std;
 
-#[deriving(PartialEq,Eq,PartialOrd,Ord,Show)]
+#[derive(PartialEq,Eq,PartialOrd,Ord,Show)]
 pub struct Range {
     pub low: uint,
     pub high: uint,

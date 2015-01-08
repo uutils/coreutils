@@ -303,7 +303,7 @@ fn setup_hashmap<'a>() -> HashMap<&'a [u8], Precedence> {
     hashmap
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum PathCondition {
     BlockSpecial,
     CharacterSpecial,

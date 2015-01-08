@@ -81,7 +81,7 @@ pub fn uumain(args: Vec<String>) -> int {
     0
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum NumberingMode {
     NumberNone,
     NumberNonEmpty,

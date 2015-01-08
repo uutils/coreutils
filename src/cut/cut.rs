@@ -191,7 +191,7 @@ fn cut_characters<R: Reader>(reader: R,
     0
 }
 
-#[deriving(Clone)]
+#[derive(Clone)]
 struct Searcher<'a> {
     haystack: &'a [u8],
     needle: &'a [u8],
