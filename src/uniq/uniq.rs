@@ -111,7 +111,7 @@ impl Uniq {
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<T> {
     matches.opt_str(opt_name).map(|arg_str| {
-        let opt_val: Option<T> = from_str(arg_str.as_slice());
+        let opt_val: Option<T> = arg_str.parse();
         opt_val.unwrap_or_else(||
             crash!(1, "Invalid argument for {}: {}", opt_name, arg_str))
     })

@@ -13,7 +13,6 @@ extern crate getopts;
 extern crate libc;
 
 use std::cmp;
-use std::str::from_str;
 use std::io;
 use std::io::IoResult;
 use std::iter::{range_inclusive, RangeInclusive};
@@ -96,7 +95,7 @@ With no FILE, or when FILE is -, read standard input.",
         let repeat = matches.opt_present("repeat");
         let zero = matches.opt_present("zero-terminated");
         let count = match matches.opt_str("head-count") {
-            Some(cnt) => match from_str::<uint>(cnt.as_slice()) {
+            Some(cnt) => match cnt.parse::<uint>() {
                 Some(val) => val,
                 None => {
                     show_error!("'{}' is not a valid count", cnt);
@@ -191,11 +190,11 @@ fn parse_range(input_range: String) -> Result<RangeInclusive<uint>, (String, int
     if split.len() != 2 {
         Err(("invalid range format".to_string(), 1))
     } else {
-        let begin = match from_str::<uint>(split[0]) {
+        let begin = match split[0].parse::<uint>() {
             Some(m) => m,
             None => return Err((format!("{} is not a valid number", split[0]), 1))
         };
-        let end = match from_str::<uint>(split[1]) {
+        let end = match split[1].parse::<uint>() {
             Some(m) => m,
             None => return Err((format!("{} is not a valid number", split[1]), 1))
         };

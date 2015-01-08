@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> int {
                 show_error!("cannot specify both --bytes and --lines.");
                 return 1;
             }
-            match from_str(n.as_slice()) {
+            match n.parse::<uint>() {
                 Some(m) => { line_count = m }
                 None => {
                     show_error!("invalid line count '{}'", n);
@@ -77,7 +77,7 @@ pub fn uumain(args: Vec<String>) -> int {
             }
         }
         None => match given_options.opt_str("c") {
-            Some(count) => match from_str(count.as_slice()) {
+            Some(count) => match count.parse::<uint>() {
                 Some(m) => byte_count = m,
                 None => {
                     show_error!("invalid byte count '{}'", count);
@@ -149,7 +149,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<uint> = from_str(from_utf8(current.slice(1,len)).unwrap());
+                    let number: Option<uint> = from_utf8(current.slice(1,len)).unwrap().parse::<uint>();
                     return (options, Some(number.unwrap()));
                 }
             }
