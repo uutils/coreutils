@@ -1,7 +1,5 @@
 #![crate_name = "tee"]
 #![feature(phase)]
-#![feature(macro_rules)]
-
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -12,7 +10,7 @@
  */
 
 extern crate getopts;
-#[phase(plugin, link)] extern crate log;
+#[macro_use] extern crate log;
 
 use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::io::{IoResult};
@@ -143,7 +141,7 @@ impl Reader for NamedReader {
     }
 }
 
-fn with_path<T>(path: &Path, cb: || -> IoResult<T>) -> IoResult<T> {
+fn with_path<F, T>(path: &Path, cb: F) -> IoResult<T> where F: Fn() -> IoResult<T> {
     match cb() {
         Err(f) => { warn(format!("{}: {}", path.display(), f.to_string()).as_slice()); Err(f) }
         okay => okay

@@ -151,7 +151,7 @@ fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, o
 
 enum WrappedRng {
     RngFile(rand::reader::ReaderRng<io::File>),
-    RngDefault(rand::TaskRng),
+    RngDefault(rand::ThreadRng),
 }
 
 impl WrappedRng {
@@ -170,7 +170,7 @@ fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, out
     };
     let mut rng = match random {
         Some(name) => WrappedRng::RngFile(rand::reader::ReaderRng::new(try!(io::File::open(&Path::new(name))))),
-        None => WrappedRng::RngDefault(rand::task_rng()),
+        None => WrappedRng::RngDefault(rand::thread_rng()),
     };
     let mut len = lines.len();
     let max = if repeat { count } else { cmp::min(count, len) };

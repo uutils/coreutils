@@ -177,7 +177,7 @@ impl Splitter for ByteSplitter {
             _ => crash!(1, "invalid number of bytes")
         };
         let n = if suffix.is_alphabetic() {
-            match String::from_chars(strategy_param.as_slice()).as_slice().parse::<uint>() {
+            match strategy_param.as_slice().iter().map(|c| *c).collect::<String>().as_slice().parse::<uint>() {
                 Some(a) => a,
                 _ => crash!(1, "invalid number of bytes")
             }

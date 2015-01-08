@@ -13,6 +13,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::io;
+use std::iter::repeat; 
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -88,7 +89,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
             println!("{}", output.as_slice().slice_to(output.len() - 1));
         }
     } else {
-        let mut eof = Vec::from_elem(files.len(), false);
+        let mut eof : Vec<bool> = repeat(false).take(files.len()).collect();
         loop {
             let mut output = "".to_string();
             let mut eof_count = 0;

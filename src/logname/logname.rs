@@ -16,6 +16,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::ffi::c_str_to_bytes;
 use std::io::print;
 use libc::c_char;
 
@@ -32,7 +33,7 @@ fn get_userlogin() -> Option<String> {
             if login.is_null() {
                     None
             } else {
-                    Some(String::from_raw_buf(login as *const u8))
+                    Some(String::from_utf8_lossy(c_str_to_bytes(&login)).to_string())
             }
     }
 }

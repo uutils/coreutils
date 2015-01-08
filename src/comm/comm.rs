@@ -11,7 +11,7 @@
 
 extern crate getopts;
 
-use std::cmp::Ord;
+use std::cmp::Ordering;
 use std::io::{BufferedReader, IoResult, print};
 use std::io::fs::File;
 use std::io::stdio::{stdin, StdinReader};
@@ -60,33 +60,33 @@ impl LineReader {
 
 fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 
-    let delim = Vec::from_fn(4, |col| mkdelim(col, opts));
+    let delim : Vec<String> = range(0, 4).map(|col| mkdelim(col, opts)).collect();
 
     let mut ra = a.read_line();
     let mut rb = b.read_line();
 
     while ra.is_ok() || rb.is_ok() {
         let ord = match (ra.clone(), rb.clone()) {
-            (Err(_), Ok(_))  => Greater,
-            (Ok(_) , Err(_)) => Less,
+            (Err(_), Ok(_))  => Ordering::Greater,
+            (Ok(_) , Err(_)) => Ordering::Less,
             (Ok(s0), Ok(s1)) => s0.cmp(&s1),
             _ => unreachable!(),
         };
 
         match ord {
-            Less => {
+            Ordering::Less => {
                 if !opts.opt_present("1") {
                     print!("{}{}", delim[1], ra.map(ensure_nl).unwrap());
                 }
                 ra = a.read_line();
             }
-            Greater => {
+            Ordering::Greater => {
                 if !opts.opt_present("2") {
                     print!("{}{}", delim[2], rb.map(ensure_nl).unwrap());
                 }
                 rb = b.read_line();
             }
-            Equal => {
+            Ordering::Equal => {
                 if !opts.opt_present("3") {
                     print!("{}{}", delim[3], ra.map(ensure_nl).unwrap());
                 }

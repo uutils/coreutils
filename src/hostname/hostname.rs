@@ -17,6 +17,7 @@ extern crate libc;
 
 use std::collections::hash_set::HashSet;
 use std::io::net::addrinfo;
+use std::iter::repeat;
 use std::str;
 use getopts::{optflag, getopts, usage};
 
@@ -130,8 +131,7 @@ fn help_menu(program: &str, options: &[getopts::OptGroup]) {
 
 fn xgethostname() -> String {
     let namelen = 256u;
-    let mut name = Vec::from_elem(namelen, 0u8);
-
+    let mut name : Vec<u8> = repeat(0).take(namelen).collect();
     let err = unsafe {
         gethostname (name.as_mut_ptr() as *mut libc::c_char,
                                         namelen as libc::size_t)
