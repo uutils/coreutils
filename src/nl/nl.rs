@@ -37,7 +37,7 @@ struct Settings {
     body_numbering: NumberingStyle,
     footer_numbering: NumberingStyle,
     // The variable corresponding to -d
-    section_delimiter: [char, ..2],
+    section_delimiter: [char; 2],
     // The variables corresponding to the options -v, -i, -l, -w.
     starting_line_number: u64,
     line_increment: u64,

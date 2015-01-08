@@ -3,7 +3,7 @@ use std::io::{IoResult, IoError};
 
 pub struct BufReader<R> {
     reader: R,
-    buffer: [u8, ..4096],
+    buffer: [u8; 4096],
     start: uint,
     end: uint,  // exclusive
 }
@@ -25,7 +25,7 @@ pub mod Bytes {
 impl<R: Reader> BufReader<R> {
     pub fn new(reader: R) -> BufReader<R> {
         let empty_buffer = unsafe {
-            std::mem::uninitialized::<[u8, ..4096]>()
+            std::mem::uninitialized::<[u8; 4096]>()
         };
 
         BufReader {

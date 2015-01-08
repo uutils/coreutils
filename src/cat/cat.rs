@@ -99,8 +99,8 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
             None => continue,
         };
 
-        let mut in_buf  = [0, .. 1024 * 31];
-        let mut out_buf = [0, .. 1024 * 64];
+        let mut in_buf  = [0; 1024 * 31];
+        let mut out_buf = [0; 1024 * 64];
         let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
         let mut at_line_start = true;
         loop {
@@ -175,8 +175,8 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         // Flush all 1024 iterations.
         let mut flush_counter = range(0u, 1024);
 
-        let mut in_buf  = [0, .. 1024 * 32];
-        let mut out_buf = [0, .. 1024 * 64];
+        let mut in_buf  = [0; 1024 * 32];
+        let mut out_buf = [0; 1024 * 64];
         let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
         let mut at_line_start = true;
         loop {
@@ -242,7 +242,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 
 fn write_fast(files: Vec<String>) {
     let mut writer = stdout_raw();
-    let mut in_buf = [0, .. 1024 * 64];
+    let mut in_buf = [0; 1024 * 64];
 
     for path in files.iter() {
         let (mut reader, _) = match open(path.as_slice()) {

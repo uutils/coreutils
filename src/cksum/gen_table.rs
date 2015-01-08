@@ -20,7 +20,7 @@ fn main() {
     let mut file = io::File::open_mode(&Path::new("crc_table.rs"), io::Truncate, io::Write).unwrap();
     let output = format!("/* auto-generated (DO NOT EDIT) */
 
-pub static CRC_TABLE: [u32, ..{}] = {};", CRC_TABLE_LEN, table);
+pub static CRC_TABLE: [u32; {}] = {};", CRC_TABLE_LEN, table);
     file.write_line(output.as_slice()).unwrap();
 }
 

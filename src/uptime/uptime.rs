@@ -88,7 +88,7 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn print_loadavg() {
-    let mut avg: [c_double, ..3] = [0.0, ..3];
+    let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
     if loads == -1 {

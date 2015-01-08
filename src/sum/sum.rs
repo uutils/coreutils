@@ -23,7 +23,7 @@ static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "sum";
 
 fn bsd_sum(mut reader: Box<Reader>) -> (uint, u16) {
-    let mut buf = [0, .. 1024];
+    let mut buf = [0; 1024];
     let mut blocks_read = 0;
     let mut checksum: u16 = 0;
     loop {
@@ -43,7 +43,7 @@ fn bsd_sum(mut reader: Box<Reader>) -> (uint, u16) {
 }
 
 fn sysv_sum(mut reader: Box<Reader>) -> (uint, u16) {
-    let mut buf = [0, .. 512];
+    let mut buf = [0; 512];
     let mut blocks_read = 0;
     let mut ret = 0;
 

@@ -274,7 +274,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
 
     // Digest file, do not hold too much in memory at any given moment
     let windows = cfg!(windows);
-    let mut buffer = [0, ..524288];
+    let mut buffer = [0; 524288];
     let mut vec = Vec::with_capacity(524288);
     let mut looking_for_newline = false;
     loop {
