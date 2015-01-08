@@ -338,11 +338,11 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         use libc::{getgid, getuid};
         let (uid, gid) = unsafe { (getuid(), getgid()) };
         if uid == stat.st_uid {
-            stat.st_mode & (p as mode_t << 6) != 0
+            stat.st_mode & ((p as mode_t) << 6) != 0
         } else if gid == stat.st_gid {
-            stat.st_mode & (p as mode_t << 3) != 0
+            stat.st_mode & ((p as mode_t) << 3) != 0
         } else {
-            stat.st_mode & (p as mode_t << 0) != 0
+            stat.st_mode & ((p as mode_t) << 0) != 0
         }
     };
 

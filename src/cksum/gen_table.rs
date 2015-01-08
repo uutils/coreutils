@@ -26,7 +26,7 @@ pub static CRC_TABLE: [u32; {}] = {};", CRC_TABLE_LEN, table);
 
 #[inline]
 fn crc_entry(input: u8) -> u32 {
-    let mut crc = input as u32 << 24;
+    let mut crc = (input as u32) << 24;
 
     for _ in range(0u, 8) {
         if crc & 0x80000000 != 0 {
