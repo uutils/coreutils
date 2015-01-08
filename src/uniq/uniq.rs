@@ -66,7 +66,7 @@ impl Uniq {
                 Some(i) => min(slice_start + i, len),
                 None => len
             };
-            let sliced = line.as_slice().slice(slice_start, slice_stop).into_string();
+            let sliced = line.as_slice().slice(slice_start, slice_stop).to_string();
             if self.ignore_case {
                 sliced.into_ascii_uppercase()
             } else {
@@ -157,8 +157,8 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{} {}", NAME, VERSION);
     } else {
         let (in_file_name, out_file_name) = match matches.free.len() {
-            0 => ("-".into_string(), "-".into_string()),
-            1 => (matches.free[0].clone(), "-".into_string()),
+            0 => ("-".to_string(), "-".to_string()),
+            1 => (matches.free[0].clone(), "-".to_string()),
             2 => (matches.free[0].clone(), matches.free[1].clone()),
             _ => {
                 crash!(1, "Extra operand: {}", matches.free[2]);

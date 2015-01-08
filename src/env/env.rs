@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
             match (name, value) {
                 (Some(n), Some(v)) => {
-                    opts.sets.push((n.into_string(), v.into_string()));
+                    opts.sets.push((n.to_string(), v.to_string()));
                 }
                 _ => {
                     // read the program now
@@ -154,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> int {
             match (name, value) {
                 (Some(n), Some(v)) => {
                     // yes
-                    opts.sets.push((n.into_string(), v.into_string()));
+                    opts.sets.push((n.to_string(), v.to_string()));
                     wait_cmd = true;
                 }
                 // no, its a program-like opt

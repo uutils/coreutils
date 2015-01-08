@@ -172,7 +172,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 (slice, "", 0)
                             };
                         println!("{}", out);
-                        (val.into_string(), ncount)
+                        (val.to_string(), ncount)
                     };
                     output = val;
                     count = ncount;
