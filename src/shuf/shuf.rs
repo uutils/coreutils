@@ -16,7 +16,7 @@ use std::cmp;
 use std::io;
 use std::io::IoResult;
 use std::iter::{range_inclusive, RangeInclusive};
-use std::rand::{mod, Rng};
+use std::rand::{self, Rng};
 use std::uint;
 
 #[path = "../common/util.rs"]

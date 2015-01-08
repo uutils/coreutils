@@ -14,7 +14,7 @@ extern crate libc;
 
 use std::f64;
 use std::io::{print, timer};
-use std::time::duration::{mod, Duration};
+use std::time::duration::{self, Duration};
 
 #[path = "../common/util.rs"]
 #[macro_use]
