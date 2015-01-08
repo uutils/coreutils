@@ -1,5 +1,4 @@
 #![crate_name = "nl"]
-#![feature(macro_rules)]
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -10,9 +9,7 @@
  *
  */
 
-#![feature(phase)]
-#[phase(plugin)]
-extern crate regex_macros;
+#[macro_use] extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
@@ -24,6 +21,7 @@ use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 mod helper;
 

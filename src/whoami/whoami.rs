@@ -13,14 +13,12 @@
 
 #![allow(non_camel_case_types)]
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::io::print;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 #[cfg(unix)]
 mod platform {

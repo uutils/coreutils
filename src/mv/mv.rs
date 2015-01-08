@@ -10,8 +10,6 @@
  * that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::io::{BufferedReader, IoResult, fs};
@@ -28,6 +26,7 @@ use getopts::{
 use std::borrow::ToOwned;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "mv";

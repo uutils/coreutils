@@ -1,6 +1,4 @@
 #![crate_name = "hostid"]
-#![feature(macro_rules)]
-#![feature(phase)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,7 +16,7 @@ extern crate serialize;
 extern crate libc;
 
 
-#[phase(plugin, link)] extern crate log;
+#[macro_use] extern crate log;
 
 use getopts::{
     getopts,
@@ -29,6 +27,7 @@ use getopts::{
 use libc::{c_long};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME:     &'static str = "hostid";

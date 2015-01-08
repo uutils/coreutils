@@ -10,7 +10,6 @@
  */
 
 #![allow(non_snake_case)]
-#![feature(macro_rules)]
 
 extern crate getopts;
 extern crate libc;
@@ -25,6 +24,7 @@ use std::str::from_utf8;
 use time::Timespec;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "du";

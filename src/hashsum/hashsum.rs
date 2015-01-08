@@ -11,8 +11,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate regex;
 
 extern crate crypto;
@@ -31,6 +29,7 @@ use crypto::sha1::Sha1;
 use crypto::sha2::{Sha224, Sha256, Sha384, Sha512};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "hashsum";

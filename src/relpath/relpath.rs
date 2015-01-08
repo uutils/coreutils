@@ -9,13 +9,12 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
 extern crate getopts;
 extern crate libc;
 
 use getopts::{optflag, optopt, getopts, usage};
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 static NAME: &'static str = "relpath";
 static VERSION: &'static str = "1.0.0";

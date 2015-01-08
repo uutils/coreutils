@@ -10,14 +10,12 @@
 
  /* Last synced with: sync (GNU coreutils) 8.13 */
 
- #![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
 use getopts::{optflag, getopts, usage};
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 static NAME: &'static str = "sync";
 static VERSION: &'static str = "1.0.0";

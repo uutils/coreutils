@@ -14,8 +14,6 @@
 
 #![allow(dead_code)]
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -24,6 +22,7 @@ use std::io::stdio::stderr;
 use getopts::{optflag,getopts};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 extern {

@@ -1,4 +1,3 @@
-#![feature(macro_rules)]
 #![crate_name = "basename"]
 
 /*
@@ -17,6 +16,7 @@ use std::borrow::ToOwned;
 use std::io::{print, println};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "basename";

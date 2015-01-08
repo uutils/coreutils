@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
@@ -19,6 +17,7 @@ use std::io::{File, Open, ReadWrite, fs};
 use std::io::fs::PathExtensions;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[deriving(Eq, PartialEq)]

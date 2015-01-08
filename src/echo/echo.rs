@@ -1,4 +1,3 @@
-#![feature(macro_rules)]
 #![crate_name = "echo"]
 
 /*

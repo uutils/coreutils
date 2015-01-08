@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::os;
@@ -19,6 +17,7 @@ static NAME : &'static str = "nproc";
 static VERSION : &'static str = "0.0.0";
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 pub fn uumain(args: Vec<String>) -> int {

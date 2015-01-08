@@ -1,5 +1,4 @@
 #![crate_name = "cksum"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -19,6 +18,7 @@ use std::mem;
 use crc_table::CRC_TABLE;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
 mod crc_table;

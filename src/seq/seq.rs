@@ -1,7 +1,5 @@
 #![crate_name = "seq"]
 
-#![feature(macro_rules)]
-
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 
@@ -11,6 +9,7 @@ extern crate libc;
 use std::cmp;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "seq";

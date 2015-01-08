@@ -1,5 +1,4 @@
 #![crate_name = "factor"]
-#![feature(macro_rules)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -18,6 +17,7 @@ use std::io::BufferedReader;
 use std::io::stdio::stdin_raw;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
 static VERSION: &'static str = "1.0.0";

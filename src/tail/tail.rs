@@ -9,8 +9,6 @@
  *
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::char::UnicodeChar;
@@ -25,6 +23,7 @@ use std::io::timer::sleep;
 use std::time::duration::Duration;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "tail";

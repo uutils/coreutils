@@ -1,5 +1,4 @@
 #![crate_name = "tr"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -22,6 +21,7 @@ use std::iter::FromIterator;
 use std::vec::Vec;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME : &'static str = "tr";

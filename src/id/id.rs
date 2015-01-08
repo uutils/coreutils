@@ -14,7 +14,6 @@
  */
 
 #![allow(non_camel_case_types)]
-#![feature(macro_rules)]
 extern crate getopts;
 extern crate libc;
 
@@ -36,7 +35,7 @@ use c_types::{
     group
 };
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
 
 #[cfg(not(target_os = "linux"))]

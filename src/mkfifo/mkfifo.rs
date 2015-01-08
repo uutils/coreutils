@@ -1,5 +1,4 @@
 #![crate_name = "mkfifo"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,6 +17,7 @@ use std::os;
 use libc::funcs::posix88::stat_::mkfifo;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME : &'static str = "mkfifo";

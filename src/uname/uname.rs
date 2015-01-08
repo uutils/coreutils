@@ -12,7 +12,6 @@
 /* last synced with: uname (GNU coreutils) 8.21 */
 
 #![allow(non_camel_case_types)]
-#![feature(macro_rules)]
 
 extern crate getopts;
 extern crate libc;
@@ -21,7 +20,7 @@ use std::mem::uninitialized;
 use std::io::print;
 use c_types::utsname;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
 
 struct utsrust {

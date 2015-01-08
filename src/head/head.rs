@@ -10,8 +10,6 @@
  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::char::UnicodeChar;
@@ -23,6 +21,7 @@ use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "head";

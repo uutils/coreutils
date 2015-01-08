@@ -7,11 +7,8 @@
  * file that was distributed with this source code.
  */
 
-#![macro_escape]
-
 extern crate libc;
 
-#[macro_export]
 macro_rules! show_error(
     ($($args:expr),+) => ({
         pipe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);

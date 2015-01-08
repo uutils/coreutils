@@ -8,8 +8,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate core;
 extern crate getopts;
 
@@ -19,7 +17,6 @@ use std::io::stdio::{stdin_raw, stdout_raw};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 
-#[macro_export]
 macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
@@ -28,7 +25,9 @@ macro_rules! silent_unwrap(
         }
     )
 );
+
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 mod linebreak;
 mod parasplit;

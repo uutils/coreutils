@@ -9,8 +9,6 @@
  *
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
 use std::ascii::OwnedAsciiExt;
@@ -19,6 +17,7 @@ use std::str::FromStr;
 use std::io;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "uniq";
