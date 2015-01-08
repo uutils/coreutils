@@ -1,5 +1,4 @@
 #![crate_name = "uutils"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -87,7 +86,7 @@ static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
 fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
-    let mut map = HashMap::new();
+    let mut map : HashMap<&'static str, fn(Vec<String>) -> int> = HashMap::new();
 
     macro_rules! add_util(
         ($guard:meta, $util:expr, $crte:ident) => ( 
@@ -98,7 +97,7 @@ fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
                 _ => ()
             }
         )
-    )
+    );
 
     add_util!(feature="base64", "base64", base64);
     add_util!(feature="basename", "basename", basename);
