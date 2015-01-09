@@ -102,7 +102,7 @@ mod platform {
     unsafe fn find_all_volumes() -> Vec<String> {
         match find_first_volume() {
             (first_volume, next_volume_handle) => {
-                let mut volumes = Vec::from_elem(1, first_volume);
+                let mut volumes = vec![first_volume];
                 loop {
                     let mut name: [libc::c_char; 260] = mem::uninitialized(); // MAX_PATH
                     match FindNextVolumeA(next_volume_handle,

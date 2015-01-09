@@ -108,7 +108,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let sysv = matches.opt_present("sysv");
 
     let files = if matches.free.is_empty() {
-        Vec::from_elem(1, "-".to_string())
+        vec!["-".to_string()]
     } else {
         matches.free
     };

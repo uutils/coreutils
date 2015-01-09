@@ -17,6 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::ffi::c_str_to_bytes;
 use std::io::println;
 use std::io::stdio::stderr;
 use getopts::{optflag,getopts};
@@ -48,7 +49,14 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     };
 
-    let tty = unsafe { String::from_raw_buf(ttyname(libc::STDIN_FILENO) as *const u8) };
+    let tty = unsafe { 
+        let ptr = ttyname(libc::STDIN_FILENO);
+        if !ptr.is_null() {
+            String::from_utf8_lossy(c_str_to_bytes(&ptr)).to_string()
+        } else {
+            "".to_string()
+        }
+    };
 
     if !silent {
         if !tty.as_slice().chars().all(|c| c.is_whitespace()) {

@@ -15,6 +15,8 @@ use self::libc::int32_t;
 
 use self::libc::funcs::posix88::unistd::getgroups;
 
+use std::ffi::{c_str_to_bytes, CString};
+use std::iter::repeat;
 use std::vec::Vec;
 
 use std::os;
@@ -122,7 +124,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
             let id = username.parse::<u32>().unwrap();
             let pw_pointer = unsafe { getpwuid(id as uid_t) };
 
-            if pw_pointer.is_not_null() {
+            if !pw_pointer.is_null() {
                 Some(unsafe { read(pw_pointer) })
             } else {
                 crash!(1, "{}: no such user", username);
@@ -131,9 +133,10 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         // Passed the username as a string
         } else {
             let pw_pointer = unsafe {
-                getpwnam(username.as_slice().to_c_str().into_inner() as *const libc::c_char)
+                let cstr = CString::from_slice(username.as_bytes());
+                getpwnam(cstr.as_slice_with_nul().as_ptr())
             };
-            if pw_pointer.is_not_null() {
+            if !pw_pointer.is_null() {
                 Some(unsafe { read(pw_pointer) })
             } else {
                 crash!(1, "{}: no such user", username);
@@ -148,10 +151,13 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit(10)) {
         unsafe { getgrgid(groupname.parse().unwrap()) }
     } else {
-        unsafe { getgrnam(groupname.to_c_str().into_inner() as *const c_char) }
+        unsafe { 
+            let cstr = CString::from_slice(groupname.as_bytes());
+            getgrnam(cstr.as_slice_with_nul().as_ptr() as *const c_char)
+        }
     };
 
-    if group.is_not_null() {
+    if !group.is_null() {
         Some(unsafe { read(group) })
     }
     else {
@@ -199,7 +205,7 @@ pub fn get_groups() -> Result<Vec<gid_t>, uint> {
         return Err(os::errno());
     }
 
-    let mut groups = Vec::from_elem(ngroups as uint, 0 as gid_t);
+    let mut groups : Vec<gid_t>= repeat(0).take(ngroups as uint).collect();
     let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
     if ngroups == -1 {
         Err(os::errno())
@@ -222,9 +228,11 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
             for &g in groups.iter() {
                 if nflag {
                     let group = unsafe { getgrgid(g) };
-                    if group.is_not_null() {
+                    if !group.is_null() {
                         let name = unsafe {
-                            String::from_raw_buf(read(group).gr_name as *const u8)
+                            let gname = read(group).gr_name;
+                            let bytes= c_str_to_bytes(&gname);
+                            String::from_utf8_lossy(bytes).to_string()
                         };
                         print!("{} ", name);
                     }
