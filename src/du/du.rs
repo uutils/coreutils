@@ -20,7 +20,6 @@ use std::num::Float;
 use std::option::Option;
 use std::path::Path;
 use std::sync::{Arc, Future};
-use std::str::from_utf8;
 use time::Timespec;
 
 #[path = "../common/util.rs"]
@@ -232,22 +231,22 @@ ers of 1000).",
         Some(s) => {
             let mut found_number = false;
             let mut found_letter = false;
-            let mut numbers = vec!();
-            let mut letters = vec!();
+            let mut numbers = String::new(); 
+            let mut letters = String::new(); 
             for c in s.as_slice().chars() {
                 if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
                     show_error!("invalid --block-size argument '{}'", s);
                     return 1;
                 } else if c.is_digit(10) {
                     found_number = true;
-                    numbers.push(c as u8);
+                    numbers.push(c);
                 } else if c.is_alphabetic() {
                     found_letter = true;
                     letters.push(c);
                 }
             }
-            let number = from_utf8(numbers.as_slice()).ok().unwrap().parse::<uint>().unwrap();
-            let multiple = match String::from_chars(letters.as_slice()).as_slice() {
+            let number = numbers.parse::<uint>().unwrap();
+            let multiple = match letters.as_slice() {
                 "K" => 1024, "M" => 1024 * 1024, "G" => 1024 * 1024 * 1024,
                 "T" => 1024 * 1024 * 1024 * 1024, "P" => 1024 * 1024 * 1024 * 1024 * 1024,
                 "E" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
@@ -268,7 +267,7 @@ ers of 1000).",
         None => 1024
     };
 
-    let convert_size = |size: u64| -> String {
+    let convert_size = |&: size: u64| -> String {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
             if size >= MB {
                 format!("{:.1}M", (size as f64) / (MB as f64))

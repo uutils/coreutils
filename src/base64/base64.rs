@@ -95,28 +95,27 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let to_decode = match input.read_to_string() {
+    let mut to_decode = match input.read_to_string() {
         Ok(m) => m,
         Err(f) => panic!(f)
     };
 
-    let slice =
-        if ignore_garbage {
-            to_decode.as_slice()
-                .trim_chars(|&: c: char| {
-                    if !c.is_ascii() {
-                        return false;
-                    };
-                    !(c >= 'a' && c <= 'z' ||
-                      c >= 'A' && c <= 'Z' ||
-                      c >= '0' && c <= '9' ||
-                      c == '+' || c == '/' )
-                })
-        } else {
-            to_decode.as_slice()
-        };
+    if ignore_garbage {
+        let mut clean = String::new();
+        clean.extend(to_decode.chars().filter(|&c| {
+            if !c.is_ascii() {
+                false
+            } else {
+                c >= 'a' && c <= 'z' ||
+                c >= 'A' && c <= 'Z' ||
+                c >= '0' && c <= '9' ||
+                c == '+' || c == '/'
+            }
+        }));
+        to_decode = clean;
+    }
 
-    match slice.from_base64() {
+    match to_decode.as_slice().from_base64() {
         Ok(bytes) => {
             let mut out = stdout();
 
