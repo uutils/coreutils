@@ -208,7 +208,9 @@ impl<'a> Searcher<'a> {
     }
 }
 
-impl<'a> Iterator<(uint, uint)> for Searcher<'a> {
+impl<'a> Iterator for Searcher<'a> {
+    type Item = (uint, uint);
+
     fn next(&mut self) -> Option<(uint, uint)> {
         if self.needle.len() == 1 {
             for offset in range(self.position, self.haystack.len()) {
