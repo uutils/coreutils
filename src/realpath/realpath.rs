@@ -51,11 +51,11 @@ pub fn uumain(args: Vec<String>) -> int {
     let zero = opts.opt_present("z");
     let quiet = opts.opt_present("q");
     let mut retcode = 0;
-    opts.free.iter().map(|x|
-        if !resolve_path(x.as_slice(), strip, zero, quiet) {
+    for path in opts.free.iter() {
+        if !resolve_path(path.as_slice(), strip, zero, quiet) {
             retcode = 1
-        }
-    ).last();
+        };
+    }
     retcode
 }
 
