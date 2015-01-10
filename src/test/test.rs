@@ -12,6 +12,7 @@
 extern crate libc;
 
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::os::{args_as_bytes};
 use std::str::{from_utf8};
 
@@ -334,7 +335,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         Write   = 0o2,
         Execute = 0o1,
     }
-    let perm = |stat: stat, p: Permission| {
+    let perm = |&: stat: stat, p: Permission| {
         use libc::{getgid, getuid};
         let (uid, gid) = unsafe { (getuid(), getgid()) };
         if uid == stat.st_uid {
@@ -346,7 +347,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         }
     };
 
-    let path = unsafe { path.to_c_str_unchecked() };
+    let path = CString::from_slice(path);
     let mut stat = unsafe { std::mem::zeroed() };
     if cond == PathCondition::SymLink {
         if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {
