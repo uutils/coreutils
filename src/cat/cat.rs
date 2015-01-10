@@ -1,4 +1,6 @@
 #![crate_name = "cat"]
+#![allow(unstable)]
+
 #![feature(box_syntax, unsafe_destructor)]
 
 /*

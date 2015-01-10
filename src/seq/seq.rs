@@ -1,4 +1,5 @@
 #![crate_name = "seq"]
+#![allow(unstable)]
 
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag

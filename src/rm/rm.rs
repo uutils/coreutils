@@ -1,4 +1,5 @@
 #![crate_name = "rm"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.

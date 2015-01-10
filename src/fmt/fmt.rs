@@ -1,4 +1,6 @@
 #![crate_name = "fmt"]
+#![allow(unstable)]
+
 /*
  * This file is part of `fmt` from the uutils coreutils package.
  *

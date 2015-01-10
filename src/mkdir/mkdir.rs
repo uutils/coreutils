@@ -1,4 +1,5 @@
 #![crate_name = "mkdir"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.

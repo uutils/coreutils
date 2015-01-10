@@ -1,8 +1,11 @@
+#![allow(unstable)]
+
 use std::io::{File, Truncate, ReadWrite};
 use std::os;
 use std::path::Path;
 
 static TEMPLATE: &'static str = "\
+#![allow(unstable)]
 extern crate @UTIL_CRATE@;
 
 use std::os;

@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::io::process::Command;
 use std::io::fs::{rmdir, PathExtensions};
 use std::borrow::ToOwned;

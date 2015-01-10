@@ -1,4 +1,6 @@
 #![crate_name = "uusync"]
+#![allow(unstable)]
+
 /*
  * This file is part of the uutils coreutils package.
  *

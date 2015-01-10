@@ -1,4 +1,6 @@
 #![crate_name = "tail"]
+#![allow(unstable)]
+
 /*
  * This file is part of the uutils coreutils package.
  *

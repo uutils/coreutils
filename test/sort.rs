@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::io::process::Command;
 use std::io::File;
 use std::string::String;

@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::io::process::Command;
 
 static EXE: &'static str = "./test";

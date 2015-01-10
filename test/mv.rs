@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate time;
 
 use std::io::{process, fs, FilePermission};

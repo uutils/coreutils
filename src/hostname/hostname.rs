@@ -1,4 +1,6 @@
 #![crate_name = "hostname"]
+#![allow(unstable)]
+
 /*
  * This file is part of the uutils coreutils package.
  *

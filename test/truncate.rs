@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::io;
 use std::io::process::Command;
 
