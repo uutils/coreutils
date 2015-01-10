@@ -178,7 +178,7 @@ define CRATE_BUILD
 -include $(BUILDDIR)/$(1).d
 
 $(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --crate-type rlib --dep-info $(BUILDDIR)/$(1).d $$< --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -218,7 +218,7 @@ $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 -include $(BUILDDIR)/uutils.d
 $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS)
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
-	$(RUSTC) $(RUSTCBINFLAGS) --dep-info $@.d $(BUILDDIR)/gen/uutils.rs -o $@
+	$(RUSTC) $(RUSTCBINFLAGS) --emit link,dep-info $(BUILDDIR)/gen/uutils.rs -o $@
 	$(if $(ENABLE_STRIP),strip $@)
 
 # Dependencies
