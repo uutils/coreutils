@@ -80,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     loop {
         match reader.read_line() {
             Ok(line) => {
-                let ab: Vec<&str> = line.as_slice().trim_right_chars('\n').split(' ').collect();
+                let ab: Vec<&str> = line.as_slice().trim_right_matches('\n').split(' ').collect();
                 if ab.len() > 2 {
                     crash!(1, "{}: input contains an odd number of tokens", input);
                 }
@@ -159,7 +159,7 @@ impl Graph {
         }
 
         while !start_nodes.is_empty() {
-            let n = start_nodes.remove(0).unwrap();
+            let n = start_nodes.remove(0);
 
             self.result.push(n.clone());
 
