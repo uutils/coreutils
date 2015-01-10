@@ -20,7 +20,7 @@ static VERSION : &'static str = "0.0.0";
 #[macro_use]
 mod util;
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         getopts::optflag("", "all", "print the number of cores available to the system"),
         getopts::optopt("", "ignore", "ignore up to N cores", "N"),

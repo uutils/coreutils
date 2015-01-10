@@ -51,7 +51,7 @@ unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 
 static NAME: &'static str = "users";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),

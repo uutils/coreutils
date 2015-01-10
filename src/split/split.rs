@@ -23,7 +23,7 @@ mod util;
 static NAME: &'static str = "split";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         getopts::optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N"),
         getopts::optopt("b", "bytes", "put SIZE bytes per output file", "SIZE"),

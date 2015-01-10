@@ -31,7 +31,7 @@ pub enum Mode {
 
 impl Copy for Mode {}
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),

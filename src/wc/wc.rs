@@ -35,7 +35,7 @@ struct Result {
 
 static NAME: &'static str = "wc";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
@@ -230,7 +230,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
 
 fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
     if "-" == path {
-        let reader = box stdin_raw() as Box<Reader>;
+        let reader = Box::new(stdin_raw()) as Box<Reader>;
         return Ok(BufferedReader::new(reader));
     }
 
@@ -240,7 +240,7 @@ fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
     }
     match File::open(&fpath) {
         Ok(fd) => {
-            let reader = box fd as Box<Reader>;
+            let reader = Box::new(fd) as Box<Reader>;
             Ok(BufferedReader::new(reader))
         }
         Err(e) => {

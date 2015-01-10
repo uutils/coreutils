@@ -15,7 +15,7 @@ use std::io::print;
 
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("z", "zero", "separate output with NUL rather than newline"),

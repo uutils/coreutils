@@ -18,7 +18,7 @@ use std::str::{from_utf8};
 static NAME: &'static str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
-pub fn uumain(_: Vec<String>) -> int {
+pub fn uumain(_: Vec<String>) -> isize {
     let args = args_as_bytes();
     let args: Vec<&[u8]> = args.iter().map(|a| a.as_slice()).collect();
     if args.len() == 0 {

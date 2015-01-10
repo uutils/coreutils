@@ -48,7 +48,7 @@ extern {
     pub fn gethostid() -> c_long;
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
 
     let opts = [
         optflag("", "help", "display this help and exit"),

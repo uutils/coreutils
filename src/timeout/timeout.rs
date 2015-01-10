@@ -34,7 +34,7 @@ static VERSION: &'static str = "1.0.0";
 
 static ERR_EXIT_STATUS: int = 125;
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
 
     let opts = [

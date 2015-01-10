@@ -158,7 +158,7 @@ fn usage(opts: &[OptGroup]) {
     print(getopts::usage("Translate or delete characters.", opts).as_slice());
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         getopts::optflag("c", "complement", "use the complement of SET1"),
         getopts::optflag("C", "", "same as -c"),

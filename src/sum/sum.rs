@@ -22,7 +22,7 @@ mod util;
 static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "sum";
 
-fn bsd_sum(mut reader: Box<Reader>) -> (uint, u16) {
+fn bsd_sum(mut reader: Box<Reader>) -> (usize, u16) {
     let mut buf = [0; 1024];
     let mut blocks_read = 0;
     let mut checksum: u16 = 0;
@@ -42,7 +42,7 @@ fn bsd_sum(mut reader: Box<Reader>) -> (uint, u16) {
     (blocks_read, checksum)
 }
 
-fn sysv_sum(mut reader: Box<Reader>) -> (uint, u16) {
+fn sysv_sum(mut reader: Box<Reader>) -> (usize, u16) {
     let mut buf = [0; 512];
     let mut blocks_read = 0;
     let mut ret = 0;
@@ -67,15 +67,15 @@ fn sysv_sum(mut reader: Box<Reader>) -> (uint, u16) {
 
 fn open(name: &str) -> IoResult<Box<Reader>> {
     match name {
-        "-" => Ok(box stdin_raw() as Box<Reader>),
+        "-" => Ok(Box::new(stdin_raw()) as Box<Reader>),
         _ => {
             let f = try!(File::open(&Path::new(name)));
-            Ok(box f as Box<Reader>)
+            Ok(Box::new(f) as Box<Reader>)
         }
     }
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("r", "", "use the BSD compatible algorithm (default)"),

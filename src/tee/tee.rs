@@ -21,7 +21,7 @@ use getopts::{getopts, optflag, usage};
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     match options(args.as_slice()).and_then(exec) {
         Ok(_) => 0,
         Err(_) => 1

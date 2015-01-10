@@ -21,7 +21,7 @@ mod util;
 static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
 
     let opts = [
@@ -72,10 +72,10 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
     for filename in filenames.into_iter() {
         let mut file = io::BufferedReader::new(
             if filename.as_slice() == "-" {
-                box io::stdio::stdin_raw() as Box<Reader>
+                Box::new(io::stdio::stdin_raw()) as Box<Reader>
             } else {
                 let r = crash_if_err!(1, io::File::open(&Path::new(filename)));
-                box r as Box<Reader>
+                Box::new(r) as Box<Reader>
             }
         );
         let mut data = crash_if_err!(1, file.read_to_string());

@@ -30,7 +30,7 @@ impl Copy for InteractiveMode {}
 
 static NAME: &'static str = "rm";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
 
     // TODO: make getopts support -R in addition to -r

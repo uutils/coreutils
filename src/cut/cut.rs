@@ -447,7 +447,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> int {
     exit_code
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         optopt("b", "bytes", "select only these bytes", "LIST"),
         optopt("c", "characters", "select only these characters", "LIST"),

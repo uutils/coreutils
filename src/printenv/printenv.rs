@@ -23,7 +23,7 @@ mod util;
 
 static NAME: &'static str = "printenv";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),
