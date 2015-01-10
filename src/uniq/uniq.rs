@@ -191,24 +191,24 @@ pub fn uumain(args: Vec<String>) -> int {
 
 fn open_input_file(in_file_name: String) -> io::BufferedReader<Box<Reader+'static>> {
     let in_file = if in_file_name.as_slice() == "-" {
-        box io::stdio::stdin_raw() as Box<Reader>
+        Box::new(io::stdio::stdin_raw()) as Box<Reader>
     } else {
         let path = Path::new(in_file_name);
         let in_file = io::File::open(&path);
         let r = crash_if_err!(1, in_file);
-        box r as Box<Reader>
+        Box::new(r) as Box<Reader>
     };
     io::BufferedReader::new(in_file)
 }
 
 fn open_output_file(out_file_name: String) -> io::BufferedWriter<Box<Writer+'static>> {
     let out_file = if out_file_name.as_slice() == "-" {
-        box io::stdio::stdout_raw() as Box<Writer>
+        Box::new(io::stdio::stdout_raw()) as Box<Writer>
     } else {
         let path = Path::new(out_file_name);
         let in_file = io::File::create(&path);
         let w = crash_if_err!(1, in_file);
-        box w as Box<Writer>
+        Box::new(w) as Box<Writer>
     };
     io::BufferedWriter::new(out_file)
 }
