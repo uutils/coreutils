@@ -13,6 +13,7 @@
 
 extern crate getopts;
 
+use std::cmp::Ordering;
 use std::fmt::Show;
 use std::io::{print, File, BufferedReader};
 use std::io::stdio::stdin_raw;
@@ -28,7 +29,7 @@ static VERSION:  &'static str = "0.0.1";
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("n", "numeric-sort", "compare according to string numerical value"),
@@ -107,9 +108,9 @@ fn exec(files: Vec<String>, numeric: bool, reverse: bool) {
 fn skip_zeros(mut char_a: char, char_iter: &mut Chars, ret: Ordering) -> Ordering {
     char_a = match char_iter.next() { None => 0 as char, Some(t) => t };
     while char_a == '0' {
-        char_a = match char_iter.next() { None => return Equal, Some(t) => t };
+        char_a = match char_iter.next() { None => return Ordering::Equal, Some(t) => t };
     }
-    if char_a.is_digit(10) { ret } else { Equal }
+    if char_a.is_digit(10) { ret } else { Ordering::Equal }
 }
 
 /// Compares two decimal fractions as strings (n < 1)
@@ -127,25 +128,25 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
             char_b = match b_chars.next() { None => 0 as char, Some(t) => t };
             // hit the end at the same time, they are equal
             if !char_a.is_digit(10) {
-                return Equal;
+                return Ordering::Equal;
             }
         }
         if char_a.is_digit(10) && char_b.is_digit(10) {
             (char_a as int).cmp(&(char_b as int))
         } else if char_a.is_digit(10) {
-            skip_zeros(char_a, a_chars, Greater)
+            skip_zeros(char_a, a_chars, Ordering::Greater)
         } else if char_b.is_digit(10) {
-            skip_zeros(char_b, b_chars, Less)
-        } else { Equal }
+            skip_zeros(char_b, b_chars, Ordering::Less)
+        } else { Ordering::Equal }
     } else if char_a == DECIMAL_PT {
-        skip_zeros(char_a, a_chars, Greater)
+        skip_zeros(char_a, a_chars, Ordering::Greater)
     } else if char_b == DECIMAL_PT {
-        skip_zeros(char_b, b_chars, Less)
-    } else { Equal }
+        skip_zeros(char_b, b_chars, Ordering::Less)
+    } else { Ordering::Equal }
 }
 
 #[inline(always)]
-fn print_sorted<T: Iterator<S>, S: Show>(mut iter: T) {
+fn print_sorted<S, T: Iterator<Item=S>>(mut iter: T) where S: std::fmt::String {
     for line in iter {
         print!("{}", line);
     }
@@ -156,11 +157,11 @@ fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
     if path == "-" {
         let stdin = stdin_raw();
         let interactive = stdin.isatty();
-        return Some((box stdin as Box<Reader>, interactive));
+        return Some((Box::new(stdin) as Box<Reader>, interactive));
     }
 
     match File::open(&std::path::Path::new(path)) {
-        Ok(f) => Some((box f as Box<Reader>, false)),
+        Ok(f) => Some((Box::new(f) as Box<Reader>, false)),
         Err(e) => {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
