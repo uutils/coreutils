@@ -1,37 +1,40 @@
 # Config options
-ENABLE_LTO    ?= n
-ENABLE_STRIP  ?= n
+ENABLE_LTO     ?= n
+ENABLE_STRIP   ?= n
 
 # Binaries
-RUSTC         ?= rustc
-CARGO         ?= cargo
-RM            := rm
+RUSTC          ?= rustc
+CARGO          ?= cargo
+RM             := rm
 
 # Install directories
-PREFIX        ?= /usr/local
-BINDIR        ?= /bin
+PREFIX         ?= /usr/local
+BINDIR         ?= /bin
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
-BASEDIR       ?= $(shell pwd)
-SRCDIR        := $(BASEDIR)/src
-BUILDDIR      := $(BASEDIR)/build
-TESTDIR       := $(BASEDIR)/test
-TEMPDIR       := $(BASEDIR)/tmp
+BASEDIR        ?= $(shell pwd)
+SRCDIR         := $(BASEDIR)/src
+BUILDDIR       := $(BASEDIR)/build
+TESTDIR        := $(BASEDIR)/test
+TEMPDIR        := $(BASEDIR)/tmp
 
 # Flags
-RUSTCFLAGS    := -O -L $(BUILDDIR)/
-RMFLAGS       :=
+RUSTCFLAGS     := -O
+RMFLAGS        :=
+
+RUSTCLIBFLAGS  := $(RUSTCFLAGS) -L $(BUILDDIR)/
+RUSTCTESTFLAGS := $(RUSTCFLAGS)
 
 # Handle config setup
 ifeq ($(ENABLE_LTO),y)
-RUSTCBINFLAGS := $(RUSTCFLAGS) -Z lto
+RUSTCBINFLAGS  := $(RUSTCLIBFLAGS) -Z lto
 else
-RUSTCBINFLAGS := $(RUSTCFLAGS)
+RUSTCBINFLAGS  := $(RUSTCLIBFLAGS)
 endif
 
 ifneq ($(ENABLE_STRIP),y)
-ENABLE_STRIP  :=
+ENABLE_STRIP   :=
 endif
 
 # Possible programs
@@ -170,7 +173,7 @@ $(BUILDDIR)/gen/$(1).rs: $(BUILDDIR)/mkmain
 	$(BUILDDIR)/mkmain $(1) $$@
 
 $(BUILDDIR)/$(1): $(BUILDDIR)/gen/$(1).rs $(BUILDDIR)/$($(1)_RLIB) | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCBINFLAGS) -o $$@ $$<
+	$(RUSTC) $(RUSTCBINFLAGS) --extern test=$(BUILDDIR)/libtest.rlib -o $$@ $$<
 	$(if $(ENABLE_STRIP),strip $$@,)
 endef
 
@@ -178,7 +181,7 @@ define CRATE_BUILD
 -include $(BUILDDIR)/$(1).d
 
 $(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCLIBFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -200,7 +203,7 @@ test_$(1): $(TEMPDIR)/$(1)/$(1)_test $(BUILDDIR)/$(1)
 	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $$<)
 
 $(TEMPDIR)/$(1)/$(1)_test: $(TESTDIR)/$(1).rs | $(TEMPDIR)/$(1)
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --test -o $$@ $$<)
+	$(call command,$(RUSTC) $(RUSTCTESTFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --test -o $$@ $$<)
 
 $(TEMPDIR)/$(1): | $(TEMPDIR)
 	$(call command,cp -r $(TESTDIR)/fixtures/$(1) $$@ || mkdir $$@)
@@ -218,7 +221,7 @@ $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
 -include $(BUILDDIR)/uutils.d
 $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS)
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
-	$(RUSTC) $(RUSTCBINFLAGS) --emit link,dep-info $(BUILDDIR)/gen/uutils.rs -o $@
+	$(RUSTC) $(RUSTCBINFLAGS) --extern test=$(BUILDDIR)/libtest.rlib --emit link,dep-info $(BUILDDIR)/gen/uutils.rs --out-dir $(BUILDDIR)
 	$(if $(ENABLE_STRIP),strip $@)
 
 # Dependencies
@@ -229,12 +232,12 @@ $(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
 	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
 	@touch $@
 
-#$(BUILDDIR)/.rust-time:
+#$(BUILDDIR)/.rust-time: | $(BUILDDIR)
 #	cd $(BASEDIR)/deps/time && $(CARGO) build --release
 #	cp -r $(BASEDIR)/deps/time/target/release/libtime*.rlib $(BUILDDIR)/libtime.rlib
 #	@touch $@
 
-$(BUILDDIR)/.rust-regex:
+$(BUILDDIR)/.rust-regex: | $(BUILDDIR)
 	cd $(BASEDIR)/deps/regex/regex_macros && $(CARGO) build --release
 	cp -r $(BASEDIR)/deps/regex/regex_macros/target/release/libregex_macros* $(BUILDDIR)
 	cp -r $(BASEDIR)/deps/regex/regex_macros/target/release/deps/libregex*.rlib $(BUILDDIR)/libregex.rlib
@@ -247,7 +250,7 @@ $(BUILDDIR)/mkuutils: mkuutils.rs | $(BUILDDIR)
 	$(RUSTC) $(RUSTCFLAGS) $< -o $@
 
 $(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
-	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
+	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCBINFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
 deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-regex $(SRCDIR)/cksum/crc_table.rs
 

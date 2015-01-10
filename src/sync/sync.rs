@@ -1,4 +1,4 @@
-#![crate_name = "uusync"]
+#![crate_name = "sync"]
 #![allow(unstable)]
 
 /*
@@ -163,7 +163,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         return 0
     }
 
-    uusync();
+    sync();
     0
 }
 
@@ -179,7 +179,7 @@ fn help(program: &str, options: &[getopts::OptGroup]) {
     print!("{}", usage("Force changed blocks to disk, update the super block.", options));
 }
 
-fn uusync() -> isize {
+fn sync() -> isize {
     unsafe {
         platform::do_sync()
     }

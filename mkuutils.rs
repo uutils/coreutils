@@ -30,19 +30,11 @@ fn main() {
                     hashsum = true;
                 }
             }
-            "test" => {
-                crates.push_str("extern crate uutest;\n");
-                util_map.push_str("map.insert(\"test\", uutest::uumain);\n");
-            }
             "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> isize { 0 }\nmap.insert(\"true\", uutrue);\n"),
             "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> isize { 1 }\nmap.insert(\"false\", uufalse);\n"),
-            "sync" => {
-                crates.push_str("extern crate uusync;\n");
-                util_map.push_str("map.insert(\"sync\", uusync::uumain);\n");
-            }
             _ => {
-                crates.push_str(format!("extern crate {};\n", prog).as_slice());
-                util_map.push_str(format!("map.insert(\"{prog}\", {prog}::uumain as fn(Vec<String>) -> isize);\n", prog = prog).as_slice());
+                crates.push_str(format!("extern crate \"{0}\" as uu{0};\n", prog).as_slice());
+                util_map.push_str(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> isize);\n", prog = prog).as_slice());
             }
         }
     }
