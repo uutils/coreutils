@@ -98,14 +98,14 @@ fn print_loadavg() {
     else {
         print!("load average: ");
         for n in range(0, loads) {
-            print!("{:.2}{}", avg[n as uint], if n == loads - 1 { "\n" }
+            print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
     }
 }
 
 #[cfg(unix)]
-fn process_utmpx() -> (Option<time_t>, uint) {
+fn process_utmpx() -> (Option<time_t>, usize) {
     unsafe {
         utmpxname(CString::from_slice(DEFAULT_FILE.as_bytes()).as_ptr());
     }
@@ -142,11 +142,11 @@ fn process_utmpx() -> (Option<time_t>, uint) {
 }
 
 #[cfg(windows)]
-fn process_utmpx() -> (Option<time_t>, uint) {
+fn process_utmpx() -> (Option<time_t>, usize) {
     (None, 0) // TODO: change 0 to number of users
 }
 
-fn print_nusers(nusers: uint) {
+fn print_nusers(nusers: usize) {
     if nusers == 1 {
         print!("1 user, ");
     } else if nusers > 1 {

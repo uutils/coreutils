@@ -36,7 +36,7 @@ fn escape_sequences(s: &str) -> String {
         replace("\\t", "\t")
 }
 
-fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, int> {
+fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, isize> {
     let mut seq_args = vec!();
     let program = args[0].clone();
     let mut iter = args.into_iter().skip(1);
@@ -215,8 +215,8 @@ fn done_printing(next: f64, step: f64, last: f64) -> bool {
     }
 }
 
-fn print_seq(first: f64, step: f64, last: f64, largest_dec: uint, separator: String, terminator: String, pad: bool, padding: uint) {
-    let mut i = 0i;
+fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: String, terminator: String, pad: bool, padding: usize) {
+    let mut i = 0is;
     let mut value = first + i as f64 * step;
     while !done_printing(value, step, last) {
         let istr = value.to_string();

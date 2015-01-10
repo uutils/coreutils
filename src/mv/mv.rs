@@ -186,7 +186,7 @@ fn help(progname: &str, usage: &str) {
     println!("{}", msg);
 }
 
-fn exec(files: &[Path], b: Behaviour) -> int {
+fn exec(files: &[Path], b: Behaviour) -> isize {
     match b.target_dir {
         Some(ref name) => return move_files_into_dir(files, &Path::new(name.as_slice()), &b),
         None => {}
@@ -244,7 +244,7 @@ fn exec(files: &[Path], b: Behaviour) -> int {
     0
 }
 
-fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> int {
+fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> isize {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;

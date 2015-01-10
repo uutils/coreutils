@@ -42,7 +42,7 @@ struct Settings {
     starting_line_number: u64,
     line_increment: u64,
     join_blank_lines: u64,
-    number_width: uint, // Used with String::from_char, hence uint.
+    number_width: usize, // Used with String::from_char, hence usize.
     // The format of the number and the (default value for)
     // renumbering each page.
     number_format: NumberFormat,
@@ -278,7 +278,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
         // way, start counting empties from zero once more.
         empty_line_count = 0;
         // A line number is to be printed.
-        let mut w: uint = 0;
+        let mut w: usize = 0;
         if settings.number_width > line_no_width {
             w = settings.number_width - line_no_width;
         }

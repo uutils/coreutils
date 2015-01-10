@@ -83,7 +83,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("w") {
         None => {}
         Some(val) => {
-            let conv: Option<uint> = val.as_slice().parse();
+            let conv: Option<usize> = val.as_slice().parse();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -w"));

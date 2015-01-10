@@ -93,7 +93,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), int> {
+fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), isize> {
     let mut result = Ok(());
 
     let mut parent_dirs = Vec::new();

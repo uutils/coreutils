@@ -91,7 +91,7 @@ enum NumberingMode {
 fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                show_ends: bool) {
 
-    let mut line_counter: uint = 1;
+    let mut line_counter: usize = 1;
 
     for path in files.iter() {
         let (mut reader, interactive) = match open(path.as_slice()) {
@@ -164,7 +164,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                show_ends: bool, show_nonprint: bool, show_tabs: bool) {
 
-    let mut line_counter: uint = 1;
+    let mut line_counter: usize = 1;
 
     for path in files.iter() {
         let (mut reader, interactive) = match open(path.as_slice()) {
@@ -173,7 +173,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         };
 
         // Flush all 1024 iterations.
-        let mut flush_counter = range(0u, 1024);
+        let mut flush_counter = range(0us, 1024);
 
         let mut in_buf  = [0; 1024 * 32];
         let mut out_buf = [0; 1024 * 64];
@@ -187,7 +187,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
             for &byte in in_buf.slice_to(n).iter() {
                 if flush_counter.next().is_none() {
                     writer.possibly_flush();
-                    flush_counter = range(0u, 1024);
+                    flush_counter = range(0us, 1024);
                 }
                 if byte == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
@@ -293,8 +293,8 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
 struct UnsafeWriter<'a, W> {
     inner: W,
     buf: &'a mut [u8],
-    pos: uint,
-    threshold: uint,
+    pos: usize,
+    threshold: usize,
 }
 
 impl<'a, W: Writer> UnsafeWriter<'a, W> {

@@ -99,7 +99,7 @@ file based on its current size:
     0
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), int> {
+fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), isize> {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {

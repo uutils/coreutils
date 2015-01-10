@@ -49,9 +49,9 @@ struct FmtOptions {
     xanti_prefix    : bool,
     uniform         : bool,
     quick           : bool,
-    width           : uint,
-    goal            : uint,
-    tabwidth        : uint,
+    width           : usize,
+    goal            : usize,
+    tabwidth        : usize,
 }
 
 pub fn uumain(args: Vec<String>) -> isize {
@@ -140,7 +140,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     match matches.opt_str("w") {
         Some(s) => {
             fmt_opts.width =
-                match s.parse::<uint>() {
+                match s.parse::<usize>() {
                     Some(t) => t,
                     None => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
                 };
@@ -152,7 +152,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     match matches.opt_str("g") {
         Some(s) => {
             fmt_opts.goal =
-                match s.parse::<uint>() {
+                match s.parse::<usize>() {
                     Some(t) => t,
                     None => { crash!(1, "Invalid GOAL specification: `{}'", s); }
                 };
@@ -168,7 +168,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     match matches.opt_str("T") {
         Some(s) => {
             fmt_opts.tabwidth =
-                match s.parse::<uint>() {
+                match s.parse::<usize>() {
                     Some(t) => t,
                     None => { crash!(1, "Invalid TABWIDTH specification: `{}'", s); }
                 };

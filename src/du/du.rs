@@ -32,7 +32,7 @@ static VERSION: &'static str = "1.0.0";
 struct Options {
     all: bool,
     program_name: String,
-    max_depth: Option<uint>,
+    max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
 }
@@ -43,7 +43,7 @@ struct Stat {
 }
 // this takes `my_stat` to avoid having to stat files multiple times.
 fn du(path: &Path, mut my_stat: Stat,
-      options: Arc<Options>, depth: uint) -> Vec<Arc<Stat>> {
+      options: Arc<Options>, depth: usize) -> Vec<Arc<Stat>> {
     let mut stats = vec!();
     let mut futures = vec!();
 
@@ -193,7 +193,7 @@ ers of 1000).",
     let summarize = matches.opt_present("summarize");
 
     let max_depth_str = matches.opt_str("max-depth");
-    let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<uint>());
+    let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>());
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
             show_error!("summarizing conflicts with --max-depth={}", *s);
@@ -245,7 +245,7 @@ ers of 1000).",
                     letters.push(c);
                 }
             }
-            let number = numbers.parse::<uint>().unwrap();
+            let number = numbers.parse::<usize>().unwrap();
             let multiple = match letters.as_slice() {
                 "K" => 1024, "M" => 1024 * 1024, "G" => 1024 * 1024 * 1024,
                 "T" => 1024 * 1024 * 1024 * 1024, "P" => 1024 * 1024 * 1024 * 1024 * 1024,

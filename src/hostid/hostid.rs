@@ -33,7 +33,7 @@ mod util;
 static NAME:     &'static str = "hostid";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_ERR: int = 1;
+static EXIT_ERR: isize = 1;
 
 pub enum Mode {
     HostId,

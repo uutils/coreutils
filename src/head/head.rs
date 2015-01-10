@@ -27,8 +27,8 @@ mod util;
 static NAME: &'static str = "head";
 
 pub fn uumain(args: Vec<String>) -> isize {
-    let mut line_count = 10u;
-    let mut byte_count = 0u;
+    let mut line_count = 10us;
+    let mut byte_count = 0us;
 
     // handle obsolete -number syntax
     let options = match obsolete(args.tail()) {
@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                 show_error!("cannot specify both --bytes and --lines.");
                 return 1;
             }
-            match n.parse::<uint>() {
+            match n.parse::<usize>() {
                 Some(m) => { line_count = m }
                 None => {
                     show_error!("invalid line count '{}'", n);
@@ -77,7 +77,7 @@ pub fn uumain(args: Vec<String>) -> isize {
             }
         }
         None => match given_options.opt_str("c") {
-            Some(count) => match count.parse::<uint>() {
+            Some(count) => match count.parse::<usize>() {
                 Some(m) => byte_count = m,
                 None => {
                     show_error!("invalid byte count '{}'", count);
@@ -131,7 +131,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 //
 // In case is found, the options vector will get rid of that object so that
 // getopts works correctly.
-fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
+fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     let mut options: Vec<String> = options.to_vec();
     let mut a = 0;
     let b = options.len();
@@ -149,7 +149,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<uint> = from_utf8(current.slice(1,len)).unwrap().parse::<uint>();
+                    let number: Option<usize> = from_utf8(current.slice(1,len)).unwrap().parse::<usize>();
                     return (options, Some(number.unwrap()));
                 }
             }
@@ -162,7 +162,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
 }
 
 // TODO: handle errors on read
-fn head<T: Reader>(reader: &mut BufferedReader<T>, count: uint, use_bytes: bool) -> bool {
+fn head<T: Reader>(reader: &mut BufferedReader<T>, count: usize, use_bytes: bool) -> bool {
     if use_bytes {
         for byte in reader.bytes().take(count) {
             if !pipe_print!("{}", byte.unwrap() as char) {

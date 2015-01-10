@@ -19,13 +19,13 @@ use std::collections::hash_map::HashMap;
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
-fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
+fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> isize> {
     let mut map = HashMap::new();
     @UTIL_MAP@
     map
 }
 
-fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> int>) {
+fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> isize>) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");

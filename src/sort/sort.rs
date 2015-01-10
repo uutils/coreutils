@@ -132,7 +132,7 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
             }
         }
         if char_a.is_digit(10) && char_b.is_digit(10) {
-            (char_a as int).cmp(&(char_b as int))
+            (char_a as isize).cmp(&(char_b as isize))
         } else if char_a.is_digit(10) {
             skip_zeros(char_a, a_chars, Ordering::Greater)
         } else if char_b.is_digit(10) {
