@@ -32,7 +32,7 @@ enum Mode {
 static NAME: &'static str = "shuf";
 static VERSION: &'static str = "0.0.1";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
 
     let opts = [
@@ -157,16 +157,16 @@ enum WrappedRng {
 impl WrappedRng {
     fn next_u32(&mut self) -> u32 {
         match self {
-            &WrappedRng::RngFile(ref mut r) => r.next_u32(),
-            &WrappedRng::RngDefault(ref mut r) => r.next_u32(),
+            &mut WrappedRng::RngFile(ref mut r) => r.next_u32(),
+            &mut WrappedRng::RngDefault(ref mut r) => r.next_u32(),
         }
     }
 }
 
 fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, outname: Option<String>, random: Option<String>) -> IoResult<()> {
     let mut output = match outname {
-        Some(name) => box io::BufferedWriter::new(try!(io::File::create(&Path::new(name)))) as Box<Writer>,
-        None => box io::stdout() as Box<Writer>
+        Some(name) => Box::new(io::BufferedWriter::new(try!(io::File::create(&Path::new(name))))) as Box<Writer>,
+        None => Box::new(io::stdout()) as Box<Writer>
     };
     let mut rng = match random {
         Some(name) => WrappedRng::RngFile(rand::reader::ReaderRng::new(try!(io::File::open(&Path::new(name))))),
