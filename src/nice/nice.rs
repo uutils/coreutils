@@ -12,6 +12,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::ffi::CString;
 use std::io::IoError;
 use std::os;
 use std::ptr;
@@ -101,12 +102,10 @@ pub fn uumain(args: Vec<String>) -> isize {
             show_warning!("{}", IoError::last_error());
         }
 
-        unsafe {
-            let executable = matches.free[0].to_c_str().into_inner();
-            let mut args: Vec<*const i8> = matches.free.iter().map(|x| x.to_c_str().into_inner()).collect();
-            args.push(ptr::null());
-            execvp(executable as *const c_char, args.as_ptr() as *mut *const c_char);
-        }
+        let cstrs : Vec<CString> = matches.free.iter().map(|x| CString::from_slice(x.as_bytes())).collect();
+        let mut args : Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
+        args.push(0 as *const c_char);
+        unsafe { execvp(args[0], args.as_mut_ptr()); }
 
         show_error!("{}", IoError::last_error());
         if os::errno() as c_int == libc::ENOENT { 127 } else { 126 }
