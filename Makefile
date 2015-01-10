@@ -224,6 +224,7 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 # Dependencies
 $(BUILDDIR)/.rust-crypto: $(BUILDDIR)/.rust-time | $(BUILDDIR)
 	cd $(BASEDIR)/deps/rust-crypto && $(CARGO) build --release
+	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/lib{time,rustc-serialize}*.rlib $(BUILDDIR)
 	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
 	@touch $@
 
