@@ -145,7 +145,7 @@ fn print_version() {
     println!("seq 1.0.0\n");
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
     let mut options = SeqOptions {
         separator: "\n".to_string(),

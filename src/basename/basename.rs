@@ -22,7 +22,7 @@ mod util;
 static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = strip_dir(args[0].as_slice());
 
     //

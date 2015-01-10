@@ -41,7 +41,7 @@ extern {
     fn sethostname(name: *const libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = &args[0];
 
     let options = [

@@ -33,7 +33,7 @@ extern {
 
 static NAME: &'static str = "tty";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let options = [
         optflag("s", "silent", "print nothing, only return an exit status")
     ];

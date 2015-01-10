@@ -63,7 +63,7 @@ fn print_factors_str(num_str: &str) {
     print_factors(num);
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "show this help message"),

@@ -51,7 +51,7 @@ fn print_env(null: bool) {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let prog = args[0].as_slice();
 
     // to handle arguments the same way than GNU env, we can't use getopts

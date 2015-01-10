@@ -73,7 +73,7 @@ enum NumberFormat {
     RightZero,
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let possible_options = [
         optopt("b", "body-numbering", "use STYLE for numbering body lines", "STYLE"),
         optopt("d", "section-delimiter", "use CC for separating logical pages", "CC"),

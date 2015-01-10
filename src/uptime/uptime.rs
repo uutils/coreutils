@@ -53,7 +53,7 @@ unsafe extern fn utmpxname(_file: *const c_char) -> c_int {
     0
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("v", "version", "output version information and exit"),

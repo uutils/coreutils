@@ -117,7 +117,7 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<
     })
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program_path = Path::new(args[0].clone());
     let program = program_path.filename_str().unwrap_or(NAME);
 

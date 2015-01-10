@@ -25,7 +25,7 @@ mod time;
 
 static NAME: &'static str = "sleep";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].clone();
 
     let opts = [

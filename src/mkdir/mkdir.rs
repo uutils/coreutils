@@ -26,7 +26,7 @@ static VERSION: &'static str = "1.0.0";
 /**
  * Handles option parsing
  */
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
 
     let opts = [
         // Linux-specific options, not implemented

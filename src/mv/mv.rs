@@ -61,7 +61,7 @@ pub enum BackupMode {
 
 impl Copy for BackupMode {}
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let program = args[0].as_slice();
     let opts = [
         optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL"),
