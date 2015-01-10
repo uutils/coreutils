@@ -34,7 +34,7 @@ fn test_decrease_file_size() {
     }
     file.seek(0, io::SeekEnd).unwrap();
     if file.tell().unwrap() != 6 {
-        println!("{}", file.tell());
+        println!("{:?}", file.tell());
         panic!();
     }
     io::fs::unlink(&Path::new(TFILE2)).unwrap();
