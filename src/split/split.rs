@@ -111,7 +111,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 struct Settings {
     prefix: String,
     numeric_suffix: bool,
-    suffix_length: uint,
+    suffix_length: usize,
     input: String,
     strategy: String,
     strategy_param: String,
@@ -124,30 +124,29 @@ struct SplitControl {
 }
 
 trait Splitter {
-    // Factory pattern
-    fn new(_hint: Option<Self>, &Settings) -> Box<Splitter>;
-
     // Consume the current_line and return the consumed string
     fn consume(&mut self, &mut SplitControl) -> String;
 }
 
 struct LineSplitter {
-    saved_lines_to_write: uint,
-    lines_to_write: uint,
+    saved_lines_to_write: usize,
+    lines_to_write: usize,
 }
-
-impl Splitter for LineSplitter {
-    fn new(_: Option<LineSplitter>, settings: &Settings) -> Box<Splitter> {
+impl LineSplitter {
+    fn new(settings: &Settings) -> Box<Splitter> {
         let n = match settings.strategy_param.as_slice().parse() {
             Some(a) => a,
             _ => crash!(1, "invalid number of lines")
         };
-        box LineSplitter {
+        Box::new(LineSplitter {
             saved_lines_to_write: n,
             lines_to_write: n,
-        } as Box<Splitter>
+        }) as Box<Splitter>
     }
 
+}
+
+impl Splitter for LineSplitter {
     fn consume(&mut self, control: &mut SplitControl) -> String {
         self.lines_to_write -= 1;
         if self.lines_to_write == 0 {
@@ -159,42 +158,44 @@ impl Splitter for LineSplitter {
 }
 
 struct ByteSplitter {
-    saved_bytes_to_write: uint,
-    bytes_to_write: uint,
+    saved_bytes_to_write: usize,
+    bytes_to_write: usize,
     break_on_line_end: bool,
     require_whole_line: bool,
 }
 
-impl Splitter for ByteSplitter {
-    fn new(_: Option<ByteSplitter>, settings: &Settings) -> Box<Splitter> {
+impl ByteSplitter {
+    fn new(settings: &Settings) -> Box<Splitter> {
         let mut strategy_param : Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
-            '0'...'9' => 1u,
-            'b' => 512u,
-            'k' => 1024u,
-            'm' => 1024u * 1024u,
+            '0'...'9' => 1us,
+            'b' => 512us,
+            'k' => 1024us,
+            'm' => 1024us * 1024us,
             _ => crash!(1, "invalid number of bytes")
         };
         let n = if suffix.is_alphabetic() {
-            match strategy_param.as_slice().iter().map(|c| *c).collect::<String>().as_slice().parse::<uint>() {
+            match strategy_param.as_slice().iter().map(|c| *c).collect::<String>().as_slice().parse::<usize>() {
                 Some(a) => a,
                 _ => crash!(1, "invalid number of bytes")
             }
         } else {
-            match settings.strategy_param.as_slice().parse::<uint>() {
+            match settings.strategy_param.as_slice().parse::<usize>() {
                 Some(a) => a,
                 _ => crash!(1, "invalid number of bytes")
             }
         };
-        box ByteSplitter {
+        Box::new(ByteSplitter {
             saved_bytes_to_write: n * multiplier,
             bytes_to_write: n * multiplier,
             break_on_line_end: if settings.strategy == "b" { false } else { true },
             require_whole_line: false,
-        } as Box<Splitter>
+        }) as Box<Splitter>
     }
+}
 
+impl Splitter for ByteSplitter {
     fn consume(&mut self, control: &mut SplitControl) -> String {
         let line = control.current_line.clone();
         let n = std::cmp::min(line.as_slice().chars().count(), self.bytes_to_write);
@@ -217,13 +218,13 @@ impl Splitter for ByteSplitter {
 }
 
 // (1, 3) -> "aab"
-fn str_prefix(i: uint, width: uint) -> String {
+fn str_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_string();
     let mut n = i;
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = Int::pow(26 as uint, w);
+        let div = Int::pow(26 as usize, w);
         let r = n / div;
         n -= r * div;
         c.push(char::from_u32((r as u32) + 97).unwrap());
@@ -232,13 +233,13 @@ fn str_prefix(i: uint, width: uint) -> String {
 }
 
 // (1, 3) -> "001"
-fn num_prefix(i: uint, width: uint) -> String {
+fn num_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_string();
     let mut n = i;
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = Int::pow(10 as uint, w);
+        let div = Int::pow(10 as usize, w);
         let r = n / div;
         n -= r * div;
         c.push(char::from_digit(r, 10).unwrap());
@@ -246,23 +247,23 @@ fn num_prefix(i: uint, width: uint) -> String {
     c
 }
 
-fn split(settings: &Settings) -> int {
+fn split(settings: &Settings) -> isize {
     let mut reader = io::BufferedReader::new(
         if settings.input.as_slice() == "-" {
-            box io::stdio::stdin_raw() as Box<Reader>
+            Box::new(io::stdio::stdin_raw()) as Box<Reader>
         } else {
             let r = match io::File::open(&Path::new(settings.input.clone())) {
                 Ok(a) => a,
                 Err(_) => crash!(1, "cannot open '{}' for reading: No such file or directory", settings.input)
             };
-            box r as Box<Reader>
+            Box::new(r) as Box<Reader>
         }
     );
 
     let mut splitter: Box<Splitter> =
         match settings.strategy.as_slice() {
-            "l" => Splitter::new(None::<LineSplitter>, settings),
-            "b" | "C" => Splitter::new(None::<ByteSplitter>, settings),
+            "l" => LineSplitter::new(settings),
+            "b" | "C" => ByteSplitter::new(settings),
             a @ _ => crash!(1, "strategy {} not supported", a)
         };
 
@@ -271,7 +272,7 @@ fn split(settings: &Settings) -> int {
         request_new_file: true, // Request new file
     };
 
-    let mut writer = io::BufferedWriter::new(box io::stdio::stdout_raw() as Box<Writer>);
+    let mut writer = io::BufferedWriter::new(Box::new(io::stdio::stdout_raw()) as Box<Writer>);
     let mut fileno = 0;
     loop {
         if control.current_line.as_slice().chars().count() == 0 {
@@ -293,7 +294,7 @@ fn split(settings: &Settings) -> int {
                 crash_if_err!(1, writer.flush());
             }
             fileno += 1;
-            writer = io::BufferedWriter::new(box io::File::open_mode(&Path::new(filename.as_slice()), io::Open, io::Write) as Box<Writer>);
+            writer = io::BufferedWriter::new(Box::new(io::File::open_mode(&Path::new(filename.as_slice()), io::Open, io::Write)) as Box<Writer>);
             control.request_new_file = false;
             if settings.verbose {
                 println!("creating file '{}'", filename);

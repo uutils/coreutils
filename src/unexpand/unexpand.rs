@@ -21,9 +21,9 @@ mod util;
 static NAME: &'static str = "unexpand";
 static VERSION: &'static str = "0.0.1";
 
-static DEFAULT_TABSTOP: uint = 8;
+static DEFAULT_TABSTOP: usize = 8;
 
-fn tabstops_parse(s: String) -> Vec<uint> {
+fn tabstops_parse(s: String) -> Vec<usize> {
     let words = s.as_slice().split(',').collect::<Vec<&str>>();
 
     let nums = words.into_iter()
@@ -31,7 +31,7 @@ fn tabstops_parse(s: String) -> Vec<uint> {
             .unwrap_or_else(
                 || crash!(1, "{}\n", "tab size contains invalid character(s)"))
             )
-        .collect::<Vec<uint>>();
+        .collect::<Vec<usize>>();
 
     if nums.iter().any(|&n| n == 0) {
         crash!(1, "{}\n", "tab size cannot be 0");
@@ -47,7 +47,7 @@ fn tabstops_parse(s: String) -> Vec<uint> {
 
 struct Options {
     files: Vec<String>,
-    tabstops: Vec<uint>,
+    tabstops: Vec<usize>,
     aflag: bool
 }
 
@@ -108,24 +108,24 @@ pub fn uumain(args: Vec<String>) -> isize {
 fn open(path: String) -> io::BufferedReader<Box<Reader+'static>> {
     let mut file_buf;
     if path.as_slice() == "-" {
-        io::BufferedReader::new(box io::stdio::stdin_raw() as Box<Reader>)
+        io::BufferedReader::new(Box::new(io::stdio::stdin_raw()) as Box<Reader>)
     } else {
         file_buf = match io::File::open(&Path::new(path.as_slice())) {
             Ok(a) => a,
             _ => crash!(1, "{}: {}\n", path, "No such file or directory")
         };
-        io::BufferedReader::new(box file_buf as Box<Reader>)
+        io::BufferedReader::new(Box::new(file_buf) as Box<Reader>)
     }
 }
 
-fn is_tabstop(tabstops: &[uint], col: uint) -> bool {
+fn is_tabstop(tabstops: &[usize], col: usize) -> bool {
     match tabstops {
         [tabstop] => col % tabstop == 0,
-        tabstops => tabstops.binary_search(|&e| e.cmp(&col)).found().is_some()
+        tabstops => tabstops.binary_search_by(|&e| e.cmp(&col)).is_ok()
     }
 }
 
-fn to_next_stop(tabstops: &[uint], col: uint) -> Option<uint> {
+fn to_next_stop(tabstops: &[usize], col: usize) -> Option<usize> {
     match tabstops {
         [tabstop] => Some(tabstop - col % tabstop),
         tabstops => tabstops.iter().skip_while(|&t| *t <= col).next()
@@ -134,7 +134,7 @@ fn to_next_stop(tabstops: &[uint], col: uint) -> Option<uint> {
 }
 
 fn unexpandspan(mut output: &mut io::LineBufferedWriter<io::stdio::StdWriter>,
-                tabstops: &[uint], nspaces: uint, col: uint, init: bool) {
+                tabstops: &[usize], nspaces: usize, col: usize, init: bool) {
     let mut cur = col - nspaces;
     if nspaces > 1 || init {
         loop {

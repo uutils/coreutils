@@ -1,5 +1,4 @@
 #![crate_name = "tee"]
-#![feature(phase)]
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -66,7 +65,7 @@ fn options(args: &[String]) -> Result<Options, ()> {
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
-            files: box names.iter().map(|name| Path::new(name.clone())).collect()
+            files: Box::new(names.iter().map(|name| Path::new(name.clone())).collect())
         })
     }).map_err(|message| warn(message.as_slice()))
 }
@@ -81,7 +80,7 @@ fn exec(options: Options) -> Result<(), ()> {
 fn tee(options: Options) -> Result<(), ()> {
     let writers = options.files.iter().map(|path| open(path, options.append)).collect();
     let output = &mut MultiWriter::new(writers);
-    let input = &mut NamedReader { inner: box stdin() as Box<Reader> };
+    let input = &mut NamedReader { inner: Box::new(stdin()) as Box<Reader> };
     if copy(input, output).is_err() || output.flush().is_err() {
         Err(())
     } else {
@@ -91,15 +90,15 @@ fn tee(options: Options) -> Result<(), ()> {
 
 fn open(path: &Path, append: bool) -> Box<Writer+'static> {
     let inner = if *path == Path::new("-") {
-        box stdout() as Box<Writer>
+        Box::new(stdout()) as Box<Writer>
     } else {
         let mode = if append { Append } else { Truncate };
         match File::open_mode(path, mode, Write) {
-            Ok(file) => box file as Box<Writer>,
-            Err(_) => box NullWriter as Box<Writer>
+            Ok(file) => Box::new(file) as Box<Writer>,
+            Err(_) => Box::new(NullWriter) as Box<Writer>
         }
     };
-    box NamedWriter { inner: inner, path: box path.clone() } as Box<Writer>
+    Box::new(NamedWriter { inner: inner, path: Box::new(path.clone()) }) as Box<Writer>
 }
 
 struct NamedWriter {
@@ -112,7 +111,7 @@ impl Writer for NamedWriter {
         with_path(&*self.path.clone(), || {
             let val = self.inner.write(buf);
             if val.is_err() {
-                self.inner = box NullWriter as Box<Writer>;
+                self.inner = Box::new(NullWriter) as Box<Writer>;
             }
             val
         })
@@ -122,7 +121,7 @@ impl Writer for NamedWriter {
         with_path(&*self.path.clone(), || {
             let val = self.inner.flush();
             if val.is_err() {
-                self.inner = box NullWriter as Box<Writer>;
+                self.inner = Box::new(NullWriter) as Box<Writer>;
             }
             val
         })
@@ -134,14 +133,14 @@ struct NamedReader {
 }
 
 impl Reader for NamedReader {
-    fn read(&mut self, buf: &mut [u8]) -> IoResult<uint> {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         with_path(&Path::new("stdin"), || {
             self.inner.read(buf)
         })
     }
 }
 
-fn with_path<F, T>(path: &Path, cb: F) -> IoResult<T> where F: Fn() -> IoResult<T> {
+fn with_path<F, T>(path: &Path, mut cb: F) -> IoResult<T> where F: FnMut() -> IoResult<T> {
     match cb() {
         Err(f) => { warn(format!("{}: {}", path.display(), f.to_string()).as_slice()); Err(f) }
         okay => okay
