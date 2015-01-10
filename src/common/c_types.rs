@@ -167,15 +167,15 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
 
 pub fn get_group_list(name: *const c_char, gid: gid_t) -> Vec<gid_t> {
     let mut ngroups: c_int = 32;
-    let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as uint);
+    let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as usize);
 
     if unsafe { get_group_list_internal(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
-        groups.reserve(ngroups as uint);
+        groups.reserve(ngroups as usize);
         unsafe { get_group_list_internal(name, gid, groups.as_mut_ptr(), &mut ngroups); }
     } else {
-        groups.truncate(ngroups as uint);
+        groups.truncate(ngroups as usize);
     }
-    unsafe { groups.set_len(ngroups as uint); }
+    unsafe { groups.set_len(ngroups as usize); }
 
     groups
 }
@@ -199,18 +199,18 @@ unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut 
     }
 }
 
-pub fn get_groups() -> Result<Vec<gid_t>, uint> {
+pub fn get_groups() -> Result<Vec<gid_t>, usize> {
     let ngroups = unsafe { getgroups(0, null_mut()) };
     if ngroups == -1 {
         return Err(os::errno());
     }
 
-    let mut groups : Vec<gid_t>= repeat(0).take(ngroups as uint).collect();
+    let mut groups : Vec<gid_t>= repeat(0).take(ngroups as usize).collect();
     let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
     if ngroups == -1 {
         Err(os::errno())
     } else {
-        groups.truncate(ngroups as uint);
+        groups.truncate(ngroups as usize);
         Ok(groups)
     }
 }

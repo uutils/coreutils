@@ -15,6 +15,7 @@ extern crate libc;
 #[macro_use] extern crate log;
 
 use std::ascii::AsciiExt;
+use std::error::Error;
 use std::io::{println, File, stdout};
 use std::io::stdio::stdin_raw;
 
@@ -33,7 +34,7 @@ mod util;
 
 static NAME: &'static str = "base64";
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
@@ -46,8 +47,7 @@ pub fn uumain(args: Vec<String>) -> int {
     let matches = match getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(e) => {
-            error!("error: {}", e);
-            panic!()
+            crash!(1, "error: {}", e);
         }
     };
 
@@ -67,8 +67,7 @@ pub fn uumain(args: Vec<String>) -> int {
         Some(s) => match s.parse() {
             Some(s) => s,
             None => {
-                error!("error: {}", "Argument to option 'wrap' improperly formatted.");
-                panic!()
+                crash!(1, "error: {}", "Argument to option 'wrap' improperly formatted.");
             }
         },
         None => 76
@@ -129,13 +128,12 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
             }
         }
         Err(s) => {
-            error!("error: {}", s);
-            panic!()
+            crash!(1, "error: {} ({})", s.description(), s.detail().unwrap_or("".to_string()));
         }
     }
 }
 
-fn encode(input: &mut Reader, line_wrap: uint) {
+fn encode(input: &mut Reader, line_wrap: usize) {
     let b64_conf = base64::Config {
         char_set: base64::Standard,
         newline: base64::Newline::LF,

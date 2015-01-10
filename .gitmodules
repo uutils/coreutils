@@ -4,3 +4,6 @@
 [submodule "deps/time"]
 	path = deps/time
 	url = https://github.com/rust-lang/time
+[submodule "deps/regex"]
+	path = deps/regex
+	url = https://github.com/rust-lang/regex
