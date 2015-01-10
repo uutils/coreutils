@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "chmod"
 path = "chmod.rs"
+
+[dependencies]
+regex_macros = "*"

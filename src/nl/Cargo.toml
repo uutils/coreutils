@@ -6,3 +6,7 @@ authors = []
 [lib]
 name = "nl"
 path = "nl.rs"
+
+[dependencies]
+regex_macros = "*"
+
