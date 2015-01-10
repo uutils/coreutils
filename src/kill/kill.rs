@@ -1,4 +1,5 @@
 #![crate_name = "kill"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -39,8 +40,8 @@ mod signals;
 static NAME: &'static str = "kill";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_OK:  int = 0;
-static EXIT_ERR: int = 1;
+static EXIT_OK:  isize = 0;
+static EXIT_ERR: isize = 1;
 
 pub enum Mode {
     Kill,
@@ -184,7 +185,7 @@ fn help(progname: &str, usage: &str) {
     println!("{}", get_help_text(progname, usage));
 }
 
-fn kill(signalname: &str, pids: std::vec::Vec<String>) -> int {
+fn kill(signalname: &str, pids: std::vec::Vec<String>) -> isize {
     let mut status = 0;
     let optional_signal_value = signals::signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
@@ -194,7 +195,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> int {
     for pid in pids.iter() {
         match pid.as_slice().parse() {
             Some(x) => {
-                let result = Process::kill(x, signal_value as int);
+                let result = Process::kill(x, signal_value as isize);
                 match result {
                     Ok(_) => (),
                     Err(f) => {

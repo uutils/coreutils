@@ -1,4 +1,5 @@
 #![crate_name = "relpath"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -64,14 +65,13 @@ pub fn uumain(args: Vec<String>) -> isize {
     }
 
     let mut suffix_pos = 0;
-    absfrom.components()
-        .zip(absto.components())
-        .take_while(
-            |&(f, t)| if f == t {
-                suffix_pos += 1; true
-            } else {
-                false
-            }).last();
+    for (f, t) in absfrom.components().zip(absto.components()) {
+        if f == t {
+            suffix_pos += 1;
+        } else {
+            break;
+        }
+    }
 
     let mut result = Path::new("");
     absfrom.components().skip(suffix_pos).map(|_| result.push("..")).last();

@@ -1,4 +1,5 @@
 #![crate_name = "cksum"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -44,7 +45,7 @@ fn crc_final(mut crc: u32, mut length: usize) -> u32 {
 #[inline]
 fn cksum(fname: &str) -> IoResult<(u32, usize)> {
     let mut crc = 0u32;
-    let mut size = 0u;
+    let mut size = 0us;
 
     let mut stdin_buf;
     let mut file_buf;

@@ -1,4 +1,6 @@
 #![crate_name = "nl"]
+#![allow(unstable)]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -8,14 +10,16 @@
  * file that was distributed with this source code.
  *
  */
+#![feature(plugin)]
 
-#[macro_use] extern crate regex_macros;
+#[plugin] #[no_link] extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
 use std::io::{stdin};
 use std::io::BufferedReader;
 use std::io::fs::File;
+use std::iter::repeat;
 use std::num::Int;
 use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
@@ -42,7 +46,7 @@ struct Settings {
     starting_line_number: u64,
     line_increment: u64,
     join_blank_lines: u64,
-    number_width: uint, // Used with String::from_char, hence uint.
+    number_width: usize, // Used with String::from_char, hence usize.
     // The format of the number and the (default value for)
     // renumbering each page.
     number_format: NumberFormat,
@@ -278,11 +282,11 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
         // way, start counting empties from zero once more.
         empty_line_count = 0;
         // A line number is to be printed.
-        let mut w: uint = 0;
+        let mut w: usize = 0;
         if settings.number_width > line_no_width {
             w = settings.number_width - line_no_width;
         }
-        let fill = String::from_char(w, fill_char);
+        let fill : String = repeat(fill_char).take(w).collect();
         match settings.number_format {
             NumberFormat::Left => {
                 println!("{1}{0}{2}{3}", fill, line_no, settings.number_separator, line)

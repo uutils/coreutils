@@ -11,31 +11,31 @@ use std;
 
 #[derive(PartialEq,Eq,PartialOrd,Ord,Show)]
 pub struct Range {
-    pub low: uint,
-    pub high: uint,
+    pub low: usize,
+    pub high: usize,
 }
 
 impl std::str::FromStr for Range {
     fn from_str(s: &str) -> Option<Range> {
-        use std::uint::MAX;
+        use std::usize::MAX;
 
         let mut parts = s.splitn(1, '-');
 
         match (parts.next(), parts.next()) {
             (Some(nm), None) => {
-                nm.parse::<uint>().and_then(|nm| if nm > 0 { Some(nm) } else { None })
+                nm.parse::<usize>().and_then(|nm| if nm > 0 { Some(nm) } else { None })
                                     .map(|nm| Range { low: nm, high: nm })
             }
             (Some(n), Some(m)) if m.len() == 0 => {
-                n.parse::<uint>().and_then(|low| if low > 0 { Some(low) } else { None })
+                n.parse::<usize>().and_then(|low| if low > 0 { Some(low) } else { None })
                                    .map(|low| Range { low: low, high: MAX })
             }
             (Some(n), Some(m)) if n.len() == 0 => {
-                m.parse::<uint>().and_then(|high| if high >= 1 { Some(high) } else { None })
+                m.parse::<usize>().and_then(|high| if high >= 1 { Some(high) } else { None })
                                    .map(|high| Range { low: 1, high: high })
             }
             (Some(n), Some(m)) => {
-                match (n.parse::<uint>(), m.parse::<uint>()) {
+                match (n.parse::<usize>(), m.parse::<usize>()) {
                     (Some(low), Some(high)) if low > 0 && low <= high => {
                         Some(Range { low: low, high: high })
                     }
@@ -77,7 +77,7 @@ impl Range {
 }
 
 pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
-    use std::uint;
+    use std::usize;
 
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
@@ -97,10 +97,10 @@ pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
                 }
             }
             (Some(last), None) => {
-                if last.high < uint::MAX {
+                if last.high < usize::MAX {
                     complements.push(Range {
                                         low: last.high + 1,
-                                        high: uint::MAX
+                                        high: usize::MAX
                                      });
                 }
             }

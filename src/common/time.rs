@@ -14,10 +14,10 @@ pub fn from_str(string: &str) -> Result<f64, String> {
     }
     let slice = string.slice_to(len - 1);
     let (numstr, times) = match string.char_at(len - 1) {
-        's' | 'S' => (slice, 1u),
-        'm' | 'M' => (slice, 60u),
-        'h' | 'H' => (slice, 60u * 60),
-        'd' | 'D' => (slice, 60u * 60 * 24),
+        's' | 'S' => (slice, 1us),
+        'm' | 'M' => (slice, 60us),
+        'h' | 'H' => (slice, 60us * 60),
+        'd' | 'D' => (slice, 60us * 60 * 24),
         val => {
             if !val.is_alphabetic() {
                 (string, 1)

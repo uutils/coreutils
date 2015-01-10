@@ -10,10 +10,10 @@ mod utmpx {
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmp";
 
-    pub const UT_LINESIZE: uint = 32;
-    pub const UT_NAMESIZE: uint = 32;
-    pub const UT_IDSIZE: uint = 4;
-    pub const UT_HOSTSIZE: uint = 256;
+    pub const UT_LINESIZE: usize = 32;
+    pub const UT_NAMESIZE: usize = 32;
+    pub const UT_IDSIZE: usize = 4;
+    pub const UT_HOSTSIZE: usize = 256;
 
     pub const EMPTY: libc::c_short = 0;
     pub const RUN_LVL: libc::c_short = 1;
@@ -56,10 +56,10 @@ mod utmpx {
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmpx";
 
-    pub const UT_LINESIZE: uint = 32;
-    pub const UT_NAMESIZE: uint = 256;
-    pub const UT_IDSIZE: uint = 4;
-    pub const UT_HOSTSIZE: uint = 256;
+    pub const UT_LINESIZE: usize = 32;
+    pub const UT_NAMESIZE: usize = 256;
+    pub const UT_IDSIZE: usize = 4;
+    pub const UT_HOSTSIZE: usize = 256;
 
     pub const EMPTY: libc::c_short = 0;
     pub const RUN_LVL: libc::c_short = 1;
@@ -97,10 +97,10 @@ mod utmpx {
 
     pub static DEFAULT_FILE : &'static str = "";
 
-    pub const UT_LINESIZE : uint = 16;
-    pub const UT_NAMESIZE : uint = 32;
-    pub const UT_IDSIZE   : uint = 8;
-    pub const UT_HOSTSIZE : uint = 128;
+    pub const UT_LINESIZE : usize = 16;
+    pub const UT_NAMESIZE : usize = 32;
+    pub const UT_IDSIZE   : usize = 8;
+    pub const UT_HOSTSIZE : usize = 128;
 
     pub const EMPTY         : libc::c_short = 0;
     pub const BOOT_TIME     : libc::c_short = 1;

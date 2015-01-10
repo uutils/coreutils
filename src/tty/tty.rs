@@ -1,5 +1,5 @@
 #![crate_name = "tty"]
-
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -74,7 +74,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         }
     };
 
-    exit_code as int
+    exit_code as isize
 }
 
 fn usage () {

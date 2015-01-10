@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::io::{File, Truncate, Write};
 use std::os;
 use std::path::Path;
@@ -32,8 +34,8 @@ fn main() {
                 crates.push_str("extern crate uutest;\n");
                 util_map.push_str("map.insert(\"test\", uutest::uumain);\n");
             }
-            "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> int { 0 }\nmap.insert(\"true\", uutrue);\n"),
-            "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> int { 1 }\nmap.insert(\"false\", uufalse);\n"),
+            "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> isize { 0 }\nmap.insert(\"true\", uutrue);\n"),
+            "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> isize { 1 }\nmap.insert(\"false\", uufalse);\n"),
             "sync" => {
                 crates.push_str("extern crate uusync;\n");
                 util_map.push_str("map.insert(\"sync\", uusync::uumain);\n");

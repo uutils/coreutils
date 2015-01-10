@@ -8,7 +8,8 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
         ['t'] => { Ok(::NumberingStyle::NumberForNonEmpty) },
         ['n'] => { Ok(::NumberingStyle::NumberForNone) },
         ['p', rest..] => {
-            match regex::Regex::new(String::from_chars(rest).as_slice()) {
+            let s : String = rest.iter().map(|c| *c).collect();
+            match regex::Regex::new(s.as_slice()) {
                 Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
                 Err(_) => Err(String::from_str("Illegal regular expression")),
             }
@@ -83,7 +84,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("w") {
         None => {}
         Some(val) => {
-            let conv: Option<uint> = val.as_slice().parse();
+            let conv: Option<usize> = val.as_slice().parse();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -w"));

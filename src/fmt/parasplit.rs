@@ -11,12 +11,13 @@ use core::iter::Peekable;
 use std::io::Lines;
 use std::slice::Iter;
 use std::str::CharRange;
+use unicode::str::UnicodeStr;
 use FileOrStdReader;
 use FmtOptions;
 
 #[inline(always)]
-fn char_width(c: char) -> uint {
-    if (c as uint) < 0xA0 {
+fn char_width(c: char) -> usize {
+    if (c as usize) < 0xA0 {
         // if it is ASCII, call it exactly 1 wide (including control chars)
         // calling control chars' widths 1 is consistent with OpenBSD fmt
         1
@@ -59,10 +60,10 @@ impl Line {
 #[derive(Show)]
 struct FileLine {
     line       : String,
-    indent_end : uint,     // the end of the indent, always the start of the text
-    pfxind_end : uint,     // the end of the PREFIX's indent, that is, the spaces before the prefix
-    indent_len : uint,     // display length of indent taking into account tabs
-    prefix_len : uint,     // PREFIX indent length taking into account tabs
+    indent_end : usize,     // the end of the indent, always the start of the text
+    pfxind_end : usize,     // the end of the PREFIX's indent, that is, the spaces before the prefix
+    indent_len : usize,     // display length of indent taking into account tabs
+    prefix_len : usize,     // PREFIX indent length taking into account tabs
 }
 
 // iterator that produces a stream of Lines from a file
@@ -77,8 +78,8 @@ impl<'a> FileLines<'a> {
     }
 
     // returns true if this line should be formatted
-    fn match_prefix(&self, line: &str) -> (bool, uint) {
-        if !self.opts.use_prefix { return (true, 0u); }
+    fn match_prefix(&self, line: &str) -> (bool, usize) {
+        if !self.opts.use_prefix { return (true, 0); }
 
         FileLines::match_prefix_generic(self.opts.prefix.as_slice(), line, self.opts.xprefix)
     }
@@ -93,14 +94,14 @@ impl<'a> FileLines<'a> {
         }
     }
 
-    fn match_prefix_generic(pfx: &str, line: &str, exact: bool) -> (bool, uint) {
+    fn match_prefix_generic(pfx: &str, line: &str, exact: bool) -> (bool, usize) {
         if line.starts_with(pfx) {
             return (true, 0);
         }
 
         if !exact {
             // we do it this way rather than byte indexing to support unicode whitespace chars
-            let mut i = 0u;
+            let mut i = 0;
             while (i < line.len()) && line.char_at(i).is_whitespace() {
                 i = match line.char_range_at(i) { CharRange { ch: _ , next: nxi } => nxi };
                 if line.slice_from(i).starts_with(pfx) {
@@ -112,7 +113,7 @@ impl<'a> FileLines<'a> {
         (false, 0)
     }
 
-    fn compute_indent(&self, string: &str, prefix_end: uint) -> (uint, uint, uint) {
+    fn compute_indent(&self, string: &str, prefix_end: usize) -> (usize, usize, usize) {
         let mut prefix_len = 0;
         let mut indent_len = 0;
         let mut indent_end = 0;
@@ -138,7 +139,9 @@ impl<'a> FileLines<'a> {
     }
 }
 
-impl<'a> Iterator<Line> for FileLines<'a> {
+impl<'a> Iterator for FileLines<'a> {
+    type Item = Line;
+
     fn next(&mut self) -> Option<Line> {
         let n =
             match self.lines.next() {
@@ -199,11 +202,11 @@ impl<'a> Iterator<Line> for FileLines<'a> {
 pub struct Paragraph {
         lines       : Vec<String>,  // the lines of the file
     pub init_str    : String,       // string representing the init, that is, the first line's indent
-    pub init_len    : uint,         // printable length of the init string considering TABWIDTH
-        init_end    : uint,         // byte location of end of init in first line String
+    pub init_len    : usize,        // printable length of the init string considering TABWIDTH
+        init_end    : usize,        // byte location of end of init in first line String
     pub indent_str  : String,       // string representing indent
-    pub indent_len  : uint,         // length of above
-        indent_end  : uint,         // byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
+    pub indent_len  : usize,        // length of above
+        indent_end  : usize,        // byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
     pub mail_header : bool          // we need to know if this is a mail header because we do word splitting differently in that case
 }
 
@@ -243,7 +246,7 @@ impl<'a> ParagraphStream<'a> {
                 // header field must be nonzero length
                 if colon_posn == 0 { return false; }
 
-                return l_slice.slice_to(colon_posn).chars().all(|x| match x as uint {
+                return l_slice.slice_to(colon_posn).chars().all(|x| match x as usize {
                     y if y < 33 || y > 126 => false,
                     _ => true
                 });
@@ -252,7 +255,9 @@ impl<'a> ParagraphStream<'a> {
     }
 }
 
-impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
+impl<'a> Iterator for ParagraphStream<'a> {
+    type Item = Result<Paragraph, String>;
+
     fn next(&mut self) -> Option<Result<Paragraph, String>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat =
@@ -410,7 +415,7 @@ impl<'a> ParaWords<'a> {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
-            self.words.extend(self.para.lines.iter().flat_map(|x| x.as_slice().words()).map(|x| WordInfo {
+            self.words.extend(self.para.lines.iter().flat_map(|x| StrExt::words(x.as_slice())).map(|x| WordInfo {
                 word           : x,
                 word_start     : 0,
                 word_nchars    : x.len(),  // OK for mail headers; only ASCII allowed (unicode is escaped)
@@ -446,13 +451,13 @@ impl<'a> ParaWords<'a> {
 struct WordSplit<'a> {
     opts       : &'a FmtOptions,
     string     : &'a str,
-    length     : uint,
-    position   : uint,
+    length     : usize,
+    position   : usize,
     prev_punct : bool
 }
 
 impl<'a> WordSplit<'a> {
-    fn analyze_tabs(&self, string: &str) -> (Option<uint>, uint, Option<uint>) {
+    fn analyze_tabs(&self, string: &str) -> (Option<usize>, usize, Option<usize>) {
         // given a string, determine (length before tab) and (printed length after first tab)
         // if there are no tabs, beforetab = -1 and aftertab is the printed length
         let mut beforetab = None;
@@ -480,7 +485,7 @@ impl<'a> WordSplit<'a> {
 impl<'a> WordSplit<'a> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
-        let trim_string = string.trim_left();
+        let trim_string = StrExt::trim_left(string);
         WordSplit { opts: opts, string: trim_string, length: string.len(), position: 0, prev_punct: false }
     }
 
@@ -494,17 +499,19 @@ impl<'a> WordSplit<'a> {
 
 pub struct WordInfo<'a> {
     pub word           : &'a str,
-    pub word_start     : uint,
-    pub word_nchars    : uint,
-    pub before_tab     : Option<uint>,
-    pub after_tab      : uint,
+    pub word_start     : usize,
+    pub word_nchars    : usize,
+    pub before_tab     : Option<usize>,
+    pub after_tab      : usize,
     pub sentence_start : bool,
     pub ends_punct     : bool,
     pub new_line       : bool
 }
 
 // returns (&str, is_start_of_sentence)
-impl<'a> Iterator<WordInfo<'a>> for WordSplit<'a> {
+impl<'a> Iterator for WordSplit<'a> {
+    type Item = WordInfo<'a>;
+
     fn next(&mut self) -> Option<WordInfo<'a>> {
         if self.position >= self.length {
             return None

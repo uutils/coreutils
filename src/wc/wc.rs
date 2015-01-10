@@ -1,4 +1,5 @@
 #![crate_name = "wc"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -26,11 +27,11 @@ mod util;
 
 struct Result {
     filename: String,
-    bytes: uint,
-    chars: uint,
-    lines: uint,
-    words: uint,
-    max_line_length: uint,
+    bytes: usize,
+    chars: usize,
+    lines: usize,
+    words: usize,
+    max_line_length: usize,
 }
 
 static NAME: &'static str = "wc";
@@ -94,25 +95,25 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
-    let mut total_line_count: uint = 0;
-    let mut total_word_count: uint = 0;
-    let mut total_char_count: uint = 0;
-    let mut total_byte_count: uint = 0;
-    let mut total_longest_line_length: uint = 0;
+pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), isize> {
+    let mut total_line_count: usize = 0;
+    let mut total_word_count: usize = 0;
+    let mut total_char_count: usize = 0;
+    let mut total_byte_count: usize = 0;
+    let mut total_longest_line_length: usize = 0;
 
     let mut results = vec!();
-    let mut max_str_len: uint = 0;
+    let mut max_str_len: usize = 0;
 
     for path in files.iter() {
         let mut reader = try!(open(path.as_slice()));
 
-        let mut line_count: uint = 0;
-        let mut word_count: uint = 0;
-        let mut byte_count: uint = 0;
-        let mut char_count: uint = 0;
-        let mut current_char_count: uint = 0;
-        let mut longest_line_length: uint = 0;
+        let mut line_count: usize = 0;
+        let mut word_count: usize = 0;
+        let mut byte_count: usize = 0;
+        let mut char_count: usize = 0;
+        let mut current_char_count: usize = 0;
+        let mut longest_line_length: usize = 0;
 
         loop {
             // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
@@ -191,8 +192,8 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), int> {
     Ok(())
 }
 
-fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: uint,
-    byte_count: uint, longest_line_length: uint, matches: &Matches, max_str_len: uint) {
+fn print_stats(filename: &str, line_count: usize, word_count: usize, char_count: usize,
+    byte_count: usize, longest_line_length: usize, matches: &Matches, max_str_len: usize) {
     if matches.opt_present("lines") {
         print!("{:1$}", line_count, max_str_len);
     }
@@ -228,7 +229,7 @@ fn print_stats(filename: &str, line_count: uint, word_count: uint, char_count: u
     }
 }
 
-fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, int> {
+fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, isize> {
     if "-" == path {
         let reader = Box::new(stdin_raw()) as Box<Reader>;
         return Ok(BufferedReader::new(reader));

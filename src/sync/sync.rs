@@ -1,4 +1,6 @@
 #![crate_name = "uusync"]
+#![allow(unstable)]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -28,7 +30,7 @@ mod platform {
         fn sync() -> libc::c_void;
     }
 
-    pub unsafe fn do_sync() -> int {
+    pub unsafe fn do_sync() -> isize {
         sync();
         0
     }
@@ -177,7 +179,7 @@ fn help(program: &str, options: &[getopts::OptGroup]) {
     print!("{}", usage("Force changed blocks to disk, update the super block.", options));
 }
 
-fn uusync() -> int {
+fn uusync() -> isize {
     unsafe {
         platform::do_sync()
     }

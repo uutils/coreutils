@@ -1,4 +1,5 @@
 #![crate_name = "chmod"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,7 +16,7 @@
 extern crate getopts;
 extern crate libc;
 extern crate regex;
-#[plugin] extern crate regex_macros;
+#[plugin] #[no_link] extern crate regex_macros;
 
 use std::ffi::CString;
 use std::io::fs;

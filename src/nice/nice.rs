@@ -1,4 +1,5 @@
 #![crate_name = "nice"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,7 +16,6 @@ extern crate libc;
 use std::ffi::CString;
 use std::io::IoError;
 use std::os;
-use std::ptr;
 use libc::{c_char, c_int, execvp};
 
 const NAME: &'static str = "nice";

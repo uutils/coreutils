@@ -1,4 +1,5 @@
 #![crate_name = "shuf"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +18,7 @@ use std::io;
 use std::io::IoResult;
 use std::iter::{range_inclusive, RangeInclusive};
 use std::rand::{self, Rng};
-use std::uint;
+use std::usize;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -26,7 +27,7 @@ mod util;
 enum Mode {
     Default,
     Echo,
-    InputRange(RangeInclusive<uint>)
+    InputRange(RangeInclusive<usize>)
 }
 
 static NAME: &'static str = "shuf";
@@ -95,14 +96,14 @@ With no FILE, or when FILE is -, read standard input.",
         let repeat = matches.opt_present("repeat");
         let zero = matches.opt_present("zero-terminated");
         let count = match matches.opt_str("head-count") {
-            Some(cnt) => match cnt.parse::<uint>() {
+            Some(cnt) => match cnt.parse::<usize>() {
                 Some(val) => val,
                 None => {
                     show_error!("'{}' is not a valid count", cnt);
                     return 1;
                 }
             },
-            None => uint::MAX
+            None => usize::MAX
         };
         let output = matches.opt_str("output");
         let random = matches.opt_str("random-source");
@@ -118,7 +119,7 @@ With no FILE, or when FILE is -, read standard input.",
     0
 }
 
-fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: uint, output: Option<String>, random: Option<String>) -> IoResult<()> {
+fn shuf(input: Vec<String>, mode: Mode, repeat: bool, zero: bool, count: usize, output: Option<String>, random: Option<String>) -> IoResult<()> {
     match mode {
         Mode::Echo => shuf_lines(input, repeat, zero, count, output, random),
         Mode::InputRange(range) => shuf_lines(range.map(|num| num.to_string()).collect(), repeat, zero, count, output, random),
@@ -163,7 +164,7 @@ impl WrappedRng {
     }
 }
 
-fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, outname: Option<String>, random: Option<String>) -> IoResult<()> {
+fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: usize, outname: Option<String>, random: Option<String>) -> IoResult<()> {
     let mut output = match outname {
         Some(name) => Box::new(io::BufferedWriter::new(try!(io::File::create(&Path::new(name))))) as Box<Writer>,
         None => Box::new(io::stdout()) as Box<Writer>
@@ -175,7 +176,7 @@ fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, out
     let mut len = lines.len();
     let max = if repeat { count } else { cmp::min(count, len) };
     for _ in range(0, max) {
-        let idx = rng.next_u32() as uint % len;
+        let idx = rng.next_u32() as usize % len;
         try!(write!(output, "{}{}", lines[idx], if zero { '\0' } else { '\n' }));
         if !repeat {
             lines.remove(idx);
@@ -185,16 +186,16 @@ fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: uint, out
     Ok(())
 }
 
-fn parse_range(input_range: String) -> Result<RangeInclusive<uint>, (String, int)> {
+fn parse_range(input_range: String) -> Result<RangeInclusive<usize>, (String, isize)> {
     let split: Vec<&str> = input_range.as_slice().split('-').collect();
     if split.len() != 2 {
         Err(("invalid range format".to_string(), 1))
     } else {
-        let begin = match split[0].parse::<uint>() {
+        let begin = match split[0].parse::<usize>() {
             Some(m) => m,
             None => return Err((format!("{} is not a valid number", split[0]), 1))
         };
-        let end = match split[1].parse::<uint>() {
+        let end = match split[1].parse::<usize>() {
             Some(m) => m,
             None => return Err((format!("{} is not a valid number", split[1]), 1))
         };

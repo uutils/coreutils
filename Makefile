@@ -222,15 +222,17 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 	$(if $(ENABLE_STRIP),strip $@)
 
 # Dependencies
-$(BUILDDIR)/.rust-crypto: $(BUILDDIR)/.rust-time | $(BUILDDIR)
+$(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
 	cd $(BASEDIR)/deps/rust-crypto && $(CARGO) build --release
+	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/librustc-serialize*.rlib $(BUILDDIR)
+	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/libtime*.rlib $(BUILDDIR)/libtime.rlib
 	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
 	@touch $@
 
-$(BUILDDIR)/.rust-time:
-	cd $(BASEDIR)/deps/time && $(CARGO) build --release
-	cp -r $(BASEDIR)/deps/time/target/release/libtime*.rlib $(BUILDDIR)/libtime.rlib
-	@touch $@
+#$(BUILDDIR)/.rust-time:
+#	cd $(BASEDIR)/deps/time && $(CARGO) build --release
+#	cp -r $(BASEDIR)/deps/time/target/release/libtime*.rlib $(BUILDDIR)/libtime.rlib
+#	@touch $@
 
 $(BUILDDIR)/.rust-regex:
 	cd $(BASEDIR)/deps/regex/regex_macros && $(CARGO) build --release
@@ -247,7 +249,7 @@ $(BUILDDIR)/mkuutils: mkuutils.rs | $(BUILDDIR)
 $(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
 	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
-deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-time $(BUILDDIR)/.rust-regex $(SRCDIR)/cksum/crc_table.rs
+deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-regex $(SRCDIR)/cksum/crc_table.rs
 
 crates:
 	echo $(EXES)

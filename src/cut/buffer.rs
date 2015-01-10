@@ -4,14 +4,14 @@ use std::io::{IoResult, IoError};
 pub struct BufReader<R> {
     reader: R,
     buffer: [u8; 4096],
-    start: uint,
-    end: uint,  // exclusive
+    start: usize,
+    end: usize,  // exclusive
 }
 
 #[allow(non_snake_case)]
 pub mod Bytes {
     pub trait Select {
-        fn select<'a>(&'a mut self, bytes: uint) -> Selected<'a>;
+        fn select<'a>(&'a mut self, bytes: usize) -> Selected<'a>;
     }
 
     pub enum Selected<'a> {
@@ -37,7 +37,7 @@ impl<R: Reader> BufReader<R> {
     }
 
     #[inline]
-    fn read(&mut self) -> IoResult<uint> {
+    fn read(&mut self) -> IoResult<usize> {
         let buffer_fill = self.buffer.slice_from_mut(self.end);
 
         match self.reader.read(buffer_fill) {
@@ -50,7 +50,7 @@ impl<R: Reader> BufReader<R> {
     }
 
     #[inline]
-    fn maybe_fill_buf(&mut self) -> IoResult<uint> {
+    fn maybe_fill_buf(&mut self) -> IoResult<usize> {
         if self.end == self.start {
             self.start = 0;
             self.end = 0;
@@ -61,7 +61,7 @@ impl<R: Reader> BufReader<R> {
         }
     }
 
-    pub fn consume_line(&mut self) -> uint {
+    pub fn consume_line(&mut self) -> usize {
         let mut bytes_consumed = 0;
 
         loop {
@@ -91,7 +91,7 @@ impl<R: Reader> BufReader<R> {
 }
 
 impl<R: Reader> Bytes::Select for BufReader<R> {
-    fn select<'a>(&'a mut self, bytes: uint) -> Bytes::Selected<'a> {
+    fn select<'a>(&'a mut self, bytes: usize) -> Bytes::Selected<'a> {
         match self.maybe_fill_buf() {
             Err(IoError { kind: std::io::EndOfFile, .. }) => (),
             Err(err) => panic!("read error: {}", err.desc),

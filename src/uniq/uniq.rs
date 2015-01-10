@@ -1,4 +1,6 @@
 #![crate_name = "uniq"]
+#![allow(unstable)]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -29,8 +31,8 @@ struct Uniq {
     all_repeated: bool,
     delimiters: String,
     show_counts: bool,
-    slice_start: Option<uint>,
-    slice_stop: Option<uint>,
+    slice_start: Option<usize>,
+    slice_stop: Option<usize>,
     ignore_case: bool,
 }
 
@@ -96,7 +98,7 @@ impl Uniq {
         first_line_printed
     }
 
-    fn print_line<W: Writer>(&self, writer: &mut io::BufferedWriter<W>, line: &String, count: uint, print_delimiter: bool) {
+    fn print_line<W: Writer>(&self, writer: &mut io::BufferedWriter<W>, line: &String, count: usize, print_delimiter: bool) {
         let output_line = if self.show_counts {
             format!("{:7} {}", count, line)
         } else {

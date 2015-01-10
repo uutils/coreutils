@@ -1,4 +1,5 @@
 #![crate_name = "uptime"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,6 +18,7 @@ extern crate getopts;
 extern crate libc;
 extern crate "time" as rtime;
 
+use std::ffi::CString;
 use std::mem::transmute;
 use std::io::{print, File};
 use std::ptr::null;
@@ -97,19 +99,17 @@ fn print_loadavg() {
     else {
         print!("load average: ");
         for n in range(0, loads) {
-            print!("{:.2}{}", avg[n as uint], if n == loads - 1 { "\n" }
+            print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
     }
 }
 
 #[cfg(unix)]
-fn process_utmpx() -> (Option<time_t>, uint) {
-    DEFAULT_FILE.with_c_str(|filename| {
-        unsafe {
-            utmpxname(filename);
-        }
-    });
+fn process_utmpx() -> (Option<time_t>, usize) {
+    unsafe {
+        utmpxname(CString::from_slice(DEFAULT_FILE.as_bytes()).as_ptr());
+    }
 
     let mut nusers = 0;
     let mut boot_time = None;
@@ -143,11 +143,11 @@ fn process_utmpx() -> (Option<time_t>, uint) {
 }
 
 #[cfg(windows)]
-fn process_utmpx() -> (Option<time_t>, uint) {
+fn process_utmpx() -> (Option<time_t>, usize) {
     (None, 0) // TODO: change 0 to number of users
 }
 
-fn print_nusers(nusers: uint) {
+fn print_nusers(nusers: usize) {
     if nusers == 1 {
         print!("1 user, ");
     } else if nusers > 1 {
@@ -172,7 +172,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         _ => return match boot_time {
                 Some(t) => {
                     let now = rtime::get_time().sec;
-                    let time = t.to_i64().unwrap();
+                    let time = t as i64;
                     ((now - time) * 100) as i64 // Return in ms
                 },
                 _ => -1

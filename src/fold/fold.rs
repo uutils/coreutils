@@ -1,4 +1,5 @@
 #![crate_name = "fold"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -62,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                 }
             };
         let width = match poss_width {
-            Some(inp_width) => match inp_width.parse::<uint>() {
+            Some(inp_width) => match inp_width.parse::<usize>() {
                 Some(width) => width,
                 None => crash!(1, "illegal width value (\"{}\")", inp_width)
             },
@@ -91,7 +92,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 }
 
 #[inline]
-fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
+fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
     for filename in filenames.iter() {
         let filename: &str = filename.as_slice();
         let mut stdin_buf;
@@ -110,7 +111,7 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
 }
 
 #[inline]
-fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, width: uint) {
+fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, width: usize) {
     let mut file = file;
     for line in file.lines() {
         let line_string = safe_unwrap!(line);
@@ -156,7 +157,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
                                         let routput = slice.slice_chars(m + 1, slice.chars().count());
-                                        let ncount = routput.chars().fold(0u, |out, ch: char| {
+                                        let ncount = routput.chars().fold(0us, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
                                                 '\x08' => if out > 0 { -1 } else { 0 },
@@ -215,7 +216,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
 }
 
 #[inline]
-fn rfind_whitespace(slice: &str) -> Option<uint> {
+fn rfind_whitespace(slice: &str) -> Option<usize> {
     for (i, ch) in slice.chars().rev().enumerate() {
         if ch.is_whitespace() {
             return Some(slice.chars().count() - (i + 1));

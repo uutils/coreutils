@@ -1,4 +1,5 @@
 #![crate_name = "uutest"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -39,7 +40,7 @@ pub fn uumain(_: Vec<String>) -> isize {
         _ => args.slice(1, args.len()),
     };
     let mut error = false;
-    let retval = 1 - parse_expr(args, &mut error) as int;
+    let retval = 1 - parse_expr(args, &mut error) as isize;
     if error {
         2
     } else {
@@ -160,7 +161,7 @@ fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
     val
 }
 
-fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     let val = two(*args, error);
     if *error {
         *error = false;
@@ -170,7 +171,7 @@ fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
     }
 }
 
-fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     let val = three(*args, error);
     if *error {
         *error = false;
@@ -180,7 +181,7 @@ fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
     }
 }
 
-fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     let val = four(*args, error);
     if *error {
         *error = false;
@@ -226,7 +227,7 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
         *error = true;
         &min_prec
     });
-    while !*error && args.len() > 0 && prec as uint >= min_prec as uint {
+    while !*error && args.len() > 0 && prec as usize >= min_prec as usize {
         let op = args[0];
         *args = (*args).slice_from(1);
         let mut rhs = dispatch(args, error);
@@ -235,7 +236,7 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
                 *error = true;
                 &min_prec
             });
-            if subprec as uint <= prec as uint || *error {
+            if subprec as usize <= prec as usize || *error {
                 break;
             }
             rhs = parse_expr_helper(hashmap, args, rhs, subprec, error);

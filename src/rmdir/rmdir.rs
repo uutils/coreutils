@@ -1,4 +1,5 @@
 #![crate_name = "rmdir"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -65,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     0
 }
 
-fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), int>{
+fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), isize>{
     let mut r = Ok(());
 
     for dir in dirs.iter() {
@@ -86,7 +87,7 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
     r
 }
 
-fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), int> {
+fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), isize> {
     let mut walk_dir = match fs::walk_dir(path) {
         Ok(m) => m,
         Err(f) => {

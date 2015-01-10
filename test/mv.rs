@@ -1,9 +1,10 @@
+#![allow(unstable)]
+
 extern crate time;
 
 use std::io::{process, fs, FilePermission};
 use std::io::process::Command;
 use std::io::fs::PathExtensions;
-use std::io::pipe::PipeStream;
 use std::str::from_utf8;
 use std::borrow::ToOwned;
 
@@ -30,11 +31,11 @@ fn run(cmd: &mut Command) -> CmdResult {
         stdout: from_utf8(prog.output.as_slice()).unwrap().to_owned(),
     }
 }
-fn run_interactive(cmd: &mut Command, f: |&mut PipeStream|) -> CmdResult {
+fn run_interactive(cmd: &mut Command, input: &[u8])-> CmdResult {
     let stdin_cfg = process::CreatePipe(true, false);
     let mut command = cmd.stdin(stdin_cfg).spawn().unwrap();
 
-    f(command.stdin.as_mut().unwrap());
+    command.stdin.as_mut().unwrap().write(input);
 
     let prog = command.wait_with_output().unwrap();
     CmdResult {
@@ -140,10 +141,7 @@ fn test_mv_interactive() {
     touch(file_b);
 
 
-    let ia1 = |stdin: &mut PipeStream| {
-        stdin.write(b"n").unwrap();
-    };
-    let result1 = run_interactive(Command::new(EXE).arg("-i").arg(file_a).arg(file_b), ia1);
+    let result1 = run_interactive(Command::new(EXE).arg("-i").arg(file_a).arg(file_b), b"n");
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -152,10 +150,7 @@ fn test_mv_interactive() {
     assert!(Path::new(file_b).is_file());
 
 
-    let ia2 = |stdin: &mut PipeStream| {
-        stdin.write(b"Yesh").unwrap();
-    };
-    let result2 = run_interactive(Command::new(EXE).arg("-i").arg(file_a).arg(file_b), ia2);
+    let result2 = run_interactive(Command::new(EXE).arg("-i").arg(file_a).arg(file_b), b"Yesh");
 
     assert_empty_stderr!(result2);
     assert!(result2.success);

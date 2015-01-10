@@ -1,4 +1,5 @@
 #![crate_name = "rm"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -125,7 +126,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 }
 
 // TODO: implement one-file-system
-fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> Result<(), int> {
+fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> Result<(), isize> {
     let mut r = Ok(());
 
     for filename in files.iter() {
@@ -167,7 +168,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
     r
 }
 
-fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {
+fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), isize> {
     let response =
         if interactive == InteractiveMode::InteractiveAlways {
             prompt_file(path, name)
@@ -187,7 +188,7 @@ fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bo
     Ok(())
 }
 
-fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), int> {
+fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), isize> {
     let response =
         if interactive == InteractiveMode::InteractiveAlways {
             prompt_file(path, name)

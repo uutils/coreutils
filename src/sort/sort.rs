@@ -1,4 +1,5 @@
 #![crate_name = "sort"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +15,6 @@
 extern crate getopts;
 
 use std::cmp::Ordering;
-use std::fmt::Show;
 use std::io::{print, File, BufferedReader};
 use std::io::stdio::stdin_raw;
 use std::str::Chars;
@@ -132,7 +132,7 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
             }
         }
         if char_a.is_digit(10) && char_b.is_digit(10) {
-            (char_a as int).cmp(&(char_b as int))
+            (char_a as isize).cmp(&(char_b as isize))
         } else if char_a.is_digit(10) {
             skip_zeros(char_a, a_chars, Ordering::Greater)
         } else if char_b.is_digit(10) {

@@ -1,4 +1,5 @@
 #![crate_name = "whoami"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -35,9 +36,7 @@ mod platform {
         let passwd: *const c_passwd = getpwuid(geteuid());
 
         let pw_name: *const libc::c_char = (*passwd).pw_name;
-        let name = String::from_raw_buf(pw_name as *const u8);
-
-        name
+        String::from_utf8_lossy(::std::ffi::c_str_to_bytes(&pw_name)).to_string()
     }
 }
 
@@ -56,7 +55,7 @@ mod platform {
         if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }
-        String::from_raw_buf(buffer.as_ptr() as *const u8)
+        String::from_utf8_lossy(::std::ffi::c_str_to_bytes(&buffer.as_ptr())).to_string()
     }
 }
 

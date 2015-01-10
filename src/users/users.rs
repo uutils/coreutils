@@ -1,4 +1,5 @@
 #![crate_name = "users"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +18,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::c_str_to_bytes;
+use std::ffi::{CString, c_str_to_bytes};
 use std::io::print;
 use std::mem;
 use std::ptr;
@@ -89,11 +90,9 @@ pub fn uumain(args: Vec<String>) -> isize {
 }
 
 fn exec(filename: &str) {
-    filename.with_c_str(|filename| {
-        unsafe {
-            utmpxname(filename);
-        }
-    });
+    unsafe {
+        utmpxname(CString::from_slice(filename.as_bytes()).as_ptr());
+    }
 
     let mut users = vec!();
 

@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 use std::io::process::Command;
 use std::io::File;
 use std::string::String;
@@ -29,7 +31,7 @@ fn numeric5() {
     numeric_helper(5);
 }
 
-fn numeric_helper(test_num: int) {
+fn numeric_helper(test_num: isize) {
     let mut cmd = Command::new(PROGNAME);
     cmd.arg("-n");
     let po = match cmd.clone().arg(format!("{}{}{}", "numeric", test_num, ".txt")).output() {
@@ -42,5 +44,5 @@ fn numeric_helper(test_num: int) {
         Ok(answer) => answer,
         Err(err) => panic!("{}", err),
     };
-    assert_eq!(String::from_utf8(po.output), String::from_utf8(answer));
+    assert_eq!(String::from_utf8(po.output).unwrap(), String::from_utf8(answer).unwrap());
 }
