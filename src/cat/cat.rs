@@ -1,5 +1,5 @@
 #![crate_name = "cat"]
-#![feature(unsafe_destructor)]
+#![feature(box_syntax, unsafe_destructor)]
 
 /*
  * This file is part of the uutils coreutils package.
