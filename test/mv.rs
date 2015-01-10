@@ -5,7 +5,6 @@ extern crate time;
 use std::io::{process, fs, FilePermission};
 use std::io::process::Command;
 use std::io::fs::PathExtensions;
-use std::io::pipe::PipeStream;
 use std::str::from_utf8;
 use std::borrow::ToOwned;
 

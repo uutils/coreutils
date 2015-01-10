@@ -15,7 +15,6 @@
 extern crate getopts;
 
 use std::cmp::Ordering;
-use std::fmt::Show;
 use std::io::{print, File, BufferedReader};
 use std::io::stdio::stdin_raw;
 use std::str::Chars;
