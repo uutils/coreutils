@@ -12,7 +12,7 @@
  */
 #![feature(plugin)]
 
-#[plugin] extern crate regex_macros;
+#[plugin] #[no_link] extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
