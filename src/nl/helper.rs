@@ -8,7 +8,8 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
         ['t'] => { Ok(::NumberingStyle::NumberForNonEmpty) },
         ['n'] => { Ok(::NumberingStyle::NumberForNone) },
         ['p', rest..] => {
-            match regex::Regex::new(String::from_chars(rest).as_slice()) {
+            let s : String = rest.iter().map(|c| *c).collect();
+            match regex::Regex::new(s.as_slice()) {
                 Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
                 Err(_) => Err(String::from_str("Illegal regular expression")),
             }

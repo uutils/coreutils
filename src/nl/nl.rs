@@ -8,14 +8,16 @@
  * file that was distributed with this source code.
  *
  */
+#![feature(plugin)]
 
-#[macro_use] extern crate regex_macros;
+#[plugin] extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
 use std::io::{stdin};
 use std::io::BufferedReader;
 use std::io::fs::File;
+use std::iter::repeat;
 use std::num::Int;
 use std::path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
@@ -282,7 +284,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
         if settings.number_width > line_no_width {
             w = settings.number_width - line_no_width;
         }
-        let fill = String::from_char(w, fill_char);
+        let fill : String = repeat(fill_char).take(w).collect();
         match settings.number_format {
             NumberFormat::Left => {
                 println!("{1}{0}{2}{3}", fill, line_no, settings.number_separator, line)
