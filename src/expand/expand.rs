@@ -9,6 +9,8 @@
  * file that was distributed with this source code.
  */
 
+#![feature(box_syntax)]
+
 extern crate getopts;
 extern crate libc;
 

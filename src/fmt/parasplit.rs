@@ -11,6 +11,7 @@ use core::iter::Peekable;
 use std::io::Lines;
 use std::slice::Iter;
 use std::str::CharRange;
+use unicode::str::UnicodeStr;
 use FileOrStdReader;
 use FmtOptions;
 
@@ -78,7 +79,7 @@ impl<'a> FileLines<'a> {
 
     // returns true if this line should be formatted
     fn match_prefix(&self, line: &str) -> (bool, usize) {
-        if !self.opts.use_prefix { return (true, 0u); }
+        if !self.opts.use_prefix { return (true, 0); }
 
         FileLines::match_prefix_generic(self.opts.prefix.as_slice(), line, self.opts.xprefix)
     }
@@ -100,7 +101,7 @@ impl<'a> FileLines<'a> {
 
         if !exact {
             // we do it this way rather than byte indexing to support unicode whitespace chars
-            let mut i = 0u;
+            let mut i = 0;
             while (i < line.len()) && line.char_at(i).is_whitespace() {
                 i = match line.char_range_at(i) { CharRange { ch: _ , next: nxi } => nxi };
                 if line.slice_from(i).starts_with(pfx) {
@@ -138,7 +139,9 @@ impl<'a> FileLines<'a> {
     }
 }
 
-impl<'a> Iterator<Line> for FileLines<'a> {
+impl<'a> Iterator for FileLines<'a> {
+    type Item = Line;
+
     fn next(&mut self) -> Option<Line> {
         let n =
             match self.lines.next() {
@@ -252,7 +255,9 @@ impl<'a> ParagraphStream<'a> {
     }
 }
 
-impl<'a> Iterator<Result<Paragraph, String>> for ParagraphStream<'a> {
+impl<'a> Iterator for ParagraphStream<'a> {
+    type Item = Result<Paragraph, String>;
+
     fn next(&mut self) -> Option<Result<Paragraph, String>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat =
@@ -410,7 +415,7 @@ impl<'a> ParaWords<'a> {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
-            self.words.extend(self.para.lines.iter().flat_map(|x| x.as_slice().words()).map(|x| WordInfo {
+            self.words.extend(self.para.lines.iter().flat_map(|x| StrExt::words(x.as_slice())).map(|x| WordInfo {
                 word           : x,
                 word_start     : 0,
                 word_nchars    : x.len(),  // OK for mail headers; only ASCII allowed (unicode is escaped)
@@ -480,7 +485,7 @@ impl<'a> WordSplit<'a> {
 impl<'a> WordSplit<'a> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
-        let trim_string = string.trim_left();
+        let trim_string = StrExt::trim_left(string);
         WordSplit { opts: opts, string: trim_string, length: string.len(), position: 0, prev_punct: false }
     }
 
@@ -504,7 +509,9 @@ pub struct WordInfo<'a> {
 }
 
 // returns (&str, is_start_of_sentence)
-impl<'a> Iterator<WordInfo<'a>> for WordSplit<'a> {
+impl<'a> Iterator for WordSplit<'a> {
+    type Item = WordInfo<'a>;
+
     fn next(&mut self) -> Option<WordInfo<'a>> {
         if self.position >= self.length {
             return None

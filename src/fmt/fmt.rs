@@ -8,8 +8,11 @@
  * file that was distributed with this source code.
  */
 
+#![feature(box_syntax)]
+
 extern crate core;
 extern crate getopts;
+extern crate unicode;
 
 use std::cmp;
 use std::io::{BufferedReader, BufferedWriter, File, IoResult};

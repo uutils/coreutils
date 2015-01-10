@@ -12,6 +12,7 @@
 /* last synced with: env (GNU coreutils) 8.13 */
 
 #![allow(non_camel_case_types)]
+#![feature(box_syntax)]
 
 struct options {
     ignore_env: bool,
