@@ -20,7 +20,7 @@ use std::path::Path;
 static NAME : &'static str = "comm";
 static VERSION : &'static str = "1.0.0";
 
-fn mkdelim(col: uint, opts: &getopts::Matches) -> String {
+fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
     let delim = match opts.opt_str("output-delimiter") {
         Some(d) => d.clone(),
@@ -52,8 +52,8 @@ enum LineReader {
 impl LineReader {
     fn read_line(&mut self) -> IoResult<String> {
         match self {
-            &LineReader::Stdin(ref mut r)  => r.read_line(),
-            &LineReader::FileIn(ref mut r) => r.read_line(),
+            &mut LineReader::Stdin(ref mut r)  => r.read_line(),
+            &mut LineReader::FileIn(ref mut r) => r.read_line(),
         }
     }
 }
@@ -107,7 +107,7 @@ fn open_file(name: &str) -> IoResult<LineReader> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
     let opts = [
         getopts::optflag("1", "", "suppress column 1 (lines uniq to FILE1)"),
         getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),

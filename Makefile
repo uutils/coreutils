@@ -4,6 +4,7 @@ ENABLE_STRIP  ?= n
 
 # Binaries
 RUSTC         ?= rustc
+CARGO         ?= cargo
 RM            := rm
 
 # Install directories
@@ -177,7 +178,7 @@ define CRATE_BUILD
 -include $(BUILDDIR)/$(1).d
 
 $(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --crate-type rlib --dep-info $(BUILDDIR)/$(1).d $$< --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --crate-type rlib --dep-info $(BUILDDIR)/$(1).d $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -199,7 +200,7 @@ test_$(1): $(TEMPDIR)/$(1)/$(1)_test $(BUILDDIR)/$(1)
 	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $$<)
 
 $(TEMPDIR)/$(1)/$(1)_test: $(TESTDIR)/$(1).rs | $(TEMPDIR)/$(1)
-	$(call command,$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --test -o $$@ $$<)
+	$(call command,$(RUSTC) $(RUSTCFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --test -o $$@ $$<)
 
 $(TEMPDIR)/$(1): | $(TEMPDIR)
 	$(call command,cp -r $(TESTDIR)/fixtures/$(1) $$@ || mkdir $$@)
@@ -222,13 +223,19 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 
 # Dependencies
 $(BUILDDIR)/.rust-crypto: $(BUILDDIR)/.rust-time | $(BUILDDIR)
-	cd $(BASEDIR)/deps/rust-crypto && cargo build --release
+	cd $(BASEDIR)/deps/rust-crypto && $(CARGO) build --release
 	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
 	@touch $@
 
 $(BUILDDIR)/.rust-time:
-	cd $(BASEDIR)/deps/time && cargo build --release
+	cd $(BASEDIR)/deps/time && $(CARGO) build --release
 	cp -r $(BASEDIR)/deps/time/target/release/libtime*.rlib $(BUILDDIR)/libtime.rlib
+	@touch $@
+
+$(BUILDDIR)/.rust-regex:
+	cd $(BASEDIR)/deps/regex/regex_macros && $(CARGO) build --release
+	cp -r $(BASEDIR)/deps/regex/regex_macros/target/release/libregex_macros* $(BUILDDIR)
+	cp -r $(BASEDIR)/deps/regex/regex_macros/target/release/deps/libregex*.rlib $(BUILDDIR)/libregex.rlib
 	@touch $@
 
 $(BUILDDIR)/mkmain: mkmain.rs | $(BUILDDIR)
@@ -240,7 +247,7 @@ $(BUILDDIR)/mkuutils: mkuutils.rs | $(BUILDDIR)
 $(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
 	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
-deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-time $(SRCDIR)/cksum/crc_table.rs
+deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-time $(BUILDDIR)/.rust-regex $(SRCDIR)/cksum/crc_table.rs
 
 crates:
 	echo $(EXES)
