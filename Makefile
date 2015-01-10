@@ -256,6 +256,7 @@ $(BUILDDIR):
 	mkdir -p $(BUILDDIR)/gen
 
 $(TEMPDIR):
+	$(RM) -rf $(TEMPDIR)
 	mkdir $(TEMPDIR)
 
 install: $(addprefix $(BUILDDIR)/,$(INSTALLEES))
@@ -300,4 +301,4 @@ busytest: $(BUILDDIR)/busybox $(BUILDDIR)/.config
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS))
 endif
 
-.PHONY: all deps test clean busytest install uninstall
+.PHONY: $(TEMPDIR) all deps test clean busytest install uninstall
