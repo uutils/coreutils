@@ -1,4 +1,4 @@
-#![crate_name = "uufalse"]
+#![crate_name = "false"]
 #![allow(unstable)]
 
 /*
