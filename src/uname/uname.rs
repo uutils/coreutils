@@ -105,7 +105,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         output.push_str(uname.machine.as_slice());
         output.push_str(" ");
     }
-    println!("{}", output.as_slice().trim_left());
+    println!("{}", output.as_slice().trim());
 
     0
 }
