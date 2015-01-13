@@ -152,7 +152,6 @@ To do
 - pr
 - printf
 - ptx
-- readlink
 - remove
 - runcon
 - setuidgid
