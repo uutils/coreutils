@@ -3,15 +3,15 @@ ENABLE_LTO     ?= n
 ENABLE_STRIP   ?= n
 
 # Binaries
-RUSTC         ?= rustc
-CARGO         ?= cargo
-CC            ?= gcc
-RM            := rm
+RUSTC          ?= rustc
+CARGO          ?= cargo
+CC             ?= gcc
+RM             := rm
 
 # Install directories
-PREFIX        ?= /usr/local
-BINDIR        ?= /bin
-LIBDIR        ?= /lib
+PREFIX         ?= /usr/local
+BINDIR         ?= /bin
+LIBDIR         ?= /lib
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
@@ -143,16 +143,16 @@ INSTALLEES  := \
 SYSTEM := $(shell uname)
 DYLIB_EXT := 
 ifeq ($(SYSTEM),Linux)
-	DYLIB_EXT    := so
+	DYLIB_EXT    := .so
 endif
 ifeq ($(SYSTEM),Darwin)
-	DYLIB_EXT    := dylib
+	DYLIB_EXT    := .dylib
 endif
 
 # Libaries to install
 LIBS :=
 ifneq (,$(findstring stdbuf, $(INSTALLEES)))
-LIBS += libstdbuf.$(DYLIB_EXT)
+LIBS += libstdbuf$(DYLIB_EXT)
 endif
 
 # Programs with usable tests
@@ -319,6 +319,10 @@ install-multicall: $(BUILDDIR)/uutils
 	for prog in $(INSTALLEES); do \
 		ln -s $(PROG_PREFIX)uutils $$prog; \
 	done
+	mkdir -p $(DESTDIR)$(PREFIX)$(LIBDIR)
+	for lib in $(LIBS); do \
+		install $(BUILDDIR)/$$lib $(DESTDIR)$(PREFIX)$(LIBDIR)/$$lib; \
+	done
 
 uninstall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/$(PROG_PREFIX),$(PROGS))
@@ -326,6 +330,7 @@ uninstall:
 
 uninstall-multicall:
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)$(LIBDIR)/,$(LIBS))
 
 # Test under the busybox testsuite
 $(BUILDDIR)/busybox: $(BUILDDIR)/uutils

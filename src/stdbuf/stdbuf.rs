@@ -57,7 +57,7 @@ fn preload_strings() -> (&'static str, &'static str) {
 
 #[cfg(target_os = "macos")]
 fn preload_strings() -> (&'static str, &'static str) { 
-    ("DYLD_INSERT_LIBRARIES", ".dyl")
+    ("DYLD_INSERT_LIBRARIES", ".dylib")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -216,7 +216,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     let mut options = ProgramOptions {stdin: BufferType::Default, stdout: BufferType::Default, stderr: BufferType::Default};
     let mut command_idx = -1;
     for i in range_inclusive(1, args.len()) {
-        match parse_options(args.slice(1, i), &mut options, &optgrps) {
+        match parse_options(&args[1 .. i], &mut options, &optgrps) {
             Ok(OkMsg::Buffering) => {
                 command_idx = i - 1;
                 break;
@@ -239,14 +239,13 @@ pub fn uumain(args: Vec<String>) -> isize {
     let ref command_name = args[command_idx];
     let mut command = Command::new(command_name);
     let (preload_env, libstdbuf) = get_preload_env();
-    command.args(args.slice_from(command_idx+1)).env(preload_env.as_slice(), libstdbuf.as_slice());
+    command.args(&args[command_idx + 1 ..]).env(preload_env.as_slice(), libstdbuf.as_slice());
     command.stdin(StdioContainer::InheritFd(0)).stdout(StdioContainer::InheritFd(1)).stderr(StdioContainer::InheritFd(2));
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
-    match command.spawn() {
-        Ok(_) => {},
-        Err(e) => crash!(1, "failed to execute process: {}", e),
-    };
+    if let Err(e) = command.spawn() {
+        crash!(1, "failed to execute process: {}", e);
+    }
     0
 }
