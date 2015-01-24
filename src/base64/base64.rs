@@ -129,7 +129,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
             }
         }
         Err(s) => {
-            crash!(1, "error: {} ({})", s.description(), s.detail().unwrap_or("".to_string()));
+            crash!(1, "error: {} ({:?})", s.description(), s);
         }
     }
 }
