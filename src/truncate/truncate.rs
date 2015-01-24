@@ -175,12 +175,12 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
                 let size: &str = size;
                 size
             } else {
-                size.slice_from(1)
+                &size[1..]
             };
         if slice.char_at(slice.len() - 1).is_alphabetic() {
-            slice = slice.slice_to(slice.len() - 1);
+            slice = &slice[..slice.len() - 1];
             if slice.len() > 0 && slice.char_at(slice.len() - 1).is_alphabetic() {
-                slice = slice.slice_to(slice.len() - 1);
+                slice = &slice[..slice.len() - 1];
             }
         }
         slice

@@ -31,7 +31,7 @@ fn bsd_sum(mut reader: Box<Reader>) -> (usize, u16) {
         match reader.read(&mut buf) {
             Ok(n) if n != 0 => {
                 blocks_read += 1;
-                for &byte in buf.slice_to(n).iter() {
+                for &byte in buf[..n].iter() {
                     checksum = (checksum >> 1) + ((checksum & 1) << 15);
                     checksum += byte as u16;
                 }
@@ -52,7 +52,7 @@ fn sysv_sum(mut reader: Box<Reader>) -> (usize, u16) {
         match reader.read(&mut buf) {
             Ok(n) if n != 0 => {
                 blocks_read += 1;
-                for &byte in buf.slice_to(n).iter() {
+                for &byte in buf[..n].iter() {
                     ret += byte as u32;
                 }
             },

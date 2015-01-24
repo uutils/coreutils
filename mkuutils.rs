@@ -15,7 +15,7 @@ fn main() {
     let mut crates = String::new();
     let mut util_map = String::new();
     let mut hashsum = false;
-    for prog in args.slice_from(2).iter() {
+    for prog in args[2..].iter() {
         match prog.as_slice() {
             "hashsum" | "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
                 if !hashsum {

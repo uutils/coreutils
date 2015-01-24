@@ -145,7 +145,7 @@ fn xgethostname() -> String {
 
     let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
 
-    str::from_utf8(name.slice_to(last_char)).unwrap().to_string()
+    str::from_utf8(&name[..last_char]).unwrap().to_string()
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

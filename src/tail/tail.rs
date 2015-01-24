@@ -88,7 +88,7 @@ pub fn uumain(args: Vec<String>) -> isize {
             let mut slice = n.as_slice();
             if slice.len() > 0 && slice.char_at(0) == '+' {
                 beginning = true;
-                slice = slice.slice_from(1);
+                slice = &slice[1..];
             }
             line_count = match parse_size(slice) {
                 Some(m) => m,
@@ -103,7 +103,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                 let mut slice = n.as_slice();
                 if slice.len() > 0 && slice.char_at(0) == '+' {
                     beginning = true;
-                    slice = slice.slice_from(1);
+                    slice = &slice[1..];
                 }
                 byte_count = match parse_size(slice) {
                     Some(m) => m,
@@ -152,7 +152,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 fn parse_size(mut size_slice: &str) -> Option<usize> {
     let mut base =
         if size_slice.len() > 0 && size_slice.char_at(size_slice.len() - 1) == 'B' {
-            size_slice = size_slice.slice_to(size_slice.len() - 1);
+            size_slice = &size_slice[..size_slice.len() - 1];
             1000us
         } else {
             1024us
@@ -179,7 +179,7 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
                 }
             };
             if has_suffix {
-                size_slice = size_slice.slice_to(size_slice.len() - 1);
+                size_slice = &size_slice[..size_slice.len() - 1];
             }
             exp
         } else {
@@ -224,7 +224,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<usize> = from_utf8(current.slice(1,len)).unwrap().parse();
+                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse();
                     return (options, Some(number.unwrap()));
                 }
             }

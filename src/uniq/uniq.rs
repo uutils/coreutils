@@ -68,7 +68,7 @@ impl Uniq {
                 Some(i) => min(slice_start + i, len),
                 None => len
             };
-            let sliced = line.as_slice().slice(slice_start, slice_stop).to_string();
+            let sliced = line.as_slice()[slice_start..slice_stop].to_string();
             if self.ignore_case {
                 sliced.into_ascii_uppercase()
             } else {

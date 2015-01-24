@@ -204,7 +204,7 @@ impl Splitter for ByteSplitter {
             self.bytes_to_write = self.saved_bytes_to_write;
             control.request_new_file = true;
             self.require_whole_line = false;
-            return line.as_slice().slice(0, 0).to_string();
+            return line.as_slice()[0..0].to_string();
         }
         self.bytes_to_write -= n;
         if n == 0 {
@@ -214,7 +214,7 @@ impl Splitter for ByteSplitter {
         if self.break_on_line_end && n == line.as_slice().chars().count() {
             self.require_whole_line = self.break_on_line_end;
         }
-        line.as_slice().slice(0, n).to_string()
+        line.as_slice()[..n].to_string()
     }
 }
 
@@ -308,7 +308,7 @@ fn split(settings: &Settings) -> isize {
         let advance = consumed.as_slice().chars().count();
         let clone = control.current_line.clone();
         let sl = clone.as_slice();
-        control.current_line = sl.slice(advance, sl.chars().count()).to_string();
+        control.current_line = sl[advance..sl.chars().count()].to_string();
     }
     0
 }

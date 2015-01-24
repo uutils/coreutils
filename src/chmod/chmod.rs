@@ -219,7 +219,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                     let mut rwx = 0;
                     let mut special = 0;
                     let mut special_changed = false;
-                    for ch in change.slice_from(1).chars() {
+                    for ch in change[1..].chars() {
                         match ch {
                             '+' | '-' | '=' => {
                                 for level in levels.chars() {
@@ -277,7 +277,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                     let change = cap.at(4).unwrap();
                     let ch = change.char_at(0);
                     let (action, slice) = match ch {
-                        '+' | '-' | '=' => (ch, change.slice_from(1)),
+                        '+' | '-' | '=' => (ch, &change[1..]),
                         _ => ('=', change)
                     };
                     let mode = from_str_radix::<u32>(slice, 8).unwrap() as libc::mode_t;  // already verified

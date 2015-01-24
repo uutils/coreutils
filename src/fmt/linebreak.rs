@@ -108,7 +108,7 @@ fn accum_words_simple<'a>(args: &mut BreakArgs<'a>, (l, prev_punct): (usize, boo
 
     if l + wlen + slen > args.opts.width {
         write_newline(args.indent_str, args.ostream);
-        write_with_spaces(winfo.word.slice_from(winfo.word_start), 0, args.ostream);
+        write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream);
         (args.indent_len + winfo.word_nchars, winfo.ends_punct)
     } else {
         write_with_spaces(winfo.word, slen, args.ostream);
@@ -145,7 +145,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item=&'a WordInfo<'a>>>(mut iter: T
                     // OK, we found the matching word
                     if break_before {
                         write_newline(args.indent_str, args.ostream);
-                        write_with_spaces(winfo.word.slice_from(winfo.word_start), 0, args.ostream);
+                        write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream);
                     } else {
                         // breaking after this word, so that means "fresh" is true for the next iteration
                         write_with_spaces(word, slen, args.ostream);
@@ -427,7 +427,7 @@ fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize
 #[inline(always)]
 fn slice_if_fresh<'a>(fresh: bool, word: &'a str, start: usize, uniform: bool, newline: bool, sstart: bool, punct: bool) -> (usize, &'a str) {
     if fresh {
-        (0, word.slice_from(start))
+        (0, &word[start..])
     } else {
         (compute_slen(uniform, newline, sstart, punct), word)
     }
