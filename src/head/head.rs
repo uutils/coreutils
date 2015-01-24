@@ -151,7 +151,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<usize> = from_utf8(current.slice(1,len)).unwrap().parse::<usize>();
+                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse::<usize>();
                     return (options, Some(number.unwrap()));
                 }
             }

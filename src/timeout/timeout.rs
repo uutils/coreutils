@@ -95,7 +95,7 @@ Usage:
                 return ERR_EXIT_STATUS;
             }
         };
-        return timeout(matches.free[1].as_slice(), matches.free.slice_from(2), duration, signal, kill_after, foreground, status);
+        return timeout(matches.free[1].as_slice(), &matches.free[2..], duration, signal, kill_after, foreground, status);
     }
 
     0

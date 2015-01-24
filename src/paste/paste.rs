@@ -99,7 +99,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
                     eof_count += 1;
                 } else {
                     match file.read_line() {
-                        Ok(line) => output.push_str(line.as_slice().slice_to(line.len() - 1)),
+                        Ok(line) => output.push_str(&line.as_slice()[..line.len() - 1]),
                         Err(f) => if f.kind == io::EndOfFile {
                             eof[i] = true;
                             eof_count += 1;

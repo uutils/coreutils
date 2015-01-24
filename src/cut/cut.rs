@@ -168,13 +168,13 @@ fn cut_characters<R: Reader>(reader: R,
 
             match char_indices.nth(high - low) {
                 Some((high_idx, _)) => {
-                    let segment = line.as_bytes().slice(low_idx, high_idx);
+                    let segment = &line.as_bytes()[low_idx..high_idx];
 
                     out.write(segment).unwrap();
                 }
                 None => {
                     let bytes = line.as_bytes();
-                    let segment = bytes.slice(low_idx, bytes.len());
+                    let segment = &bytes[low_idx..];
 
                     out.write(segment).unwrap();
 
@@ -226,8 +226,7 @@ impl<'a> Iterator for Searcher<'a> {
         }
 
         while self.position + self.needle.len() <= self.haystack.len() {
-            if self.haystack.slice(self.position,
-                                   self.position + self.needle.len()) == self.needle {
+            if &self.haystack[self.position..self.position + self.needle.len()] == self.needle {
                 let match_pos = self.position;
                 self.position += self.needle.len();
                 return Some((match_pos, match_pos + self.needle.len()));
@@ -286,7 +285,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
 
                 match delim_search.next() {
                     Some((high_idx, next_low_idx)) => {
-                        let segment = line.slice(low_idx, high_idx);
+                        let segment = &line[low_idx..high_idx];
 
                         out.write(segment).unwrap();
 
@@ -296,7 +295,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
                         fields_pos = high + 1;
                     }
                     None => {
-                        let segment = line.slice(low_idx, line.len());
+                        let segment = &line[low_idx..];
 
                         out.write(segment).unwrap();
 
@@ -369,7 +368,7 @@ fn cut_fields<R: Reader>(reader: R,
 
             match delim_search.nth(high - low) {
                 Some((high_idx, next_low_idx)) => {
-                    let segment = line.slice(low_idx, high_idx);
+                    let segment = &line[low_idx..high_idx];
 
                     out.write(segment).unwrap();
 
@@ -378,7 +377,7 @@ fn cut_fields<R: Reader>(reader: R,
                     fields_pos = high + 1;
                 }
                 None => {
-                    let segment = line.slice(low_idx, line.len());
+                    let segment = &line[low_idx..line.len()];
 
                     out.write(segment).unwrap();
 

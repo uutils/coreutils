@@ -302,7 +302,7 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
                     digest.input(vec.as_slice());
                     vec.clear();
                 } else {
-                    digest.input(buffer.slice(0, nread));
+                    digest.input(&buffer[..nread]);
                 }
             },
             Err(e) => match e.kind {

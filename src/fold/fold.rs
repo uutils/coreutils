@@ -84,8 +84,8 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = arg.as_slice();
         if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
-            return (args.slice_to(i).to_vec() + args.slice_from(i + 1),
-                    Some(slice.slice_from(1).to_string()));
+            return (args[..i].to_vec() + &args[i + 1..],
+                    Some(slice[1..].to_string()));
         }
     }
     (args.to_vec(), None)
@@ -122,10 +122,10 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
             while i < len {
                 let width = if len - i >= width { width } else { len - i };
                 let slice = {
-                    let slice = line.slice(i, i + width);
+                    let slice = &line[i..i + width];
                     if spaces && i + width < len {
                         match slice.rfind(|&: ch: char| ch.is_whitespace()) {
-                            Some(m) => slice.slice_to(m + 1),
+                            Some(m) => &slice[..m + 1],
                             None => slice
                         }
                     } else {
@@ -143,7 +143,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                     println!("");
                     continue;
                 }
-                line = line.slice_to(line.len() - 1);
+                line = &line[..line.len() - 1];
                 len -= 1;
             }
             let mut output = String::new();

@@ -24,7 +24,7 @@ struct SeqOptions {
 
 fn parse_float(mut s: &str) -> Result<f64, String> {
     if s.starts_with("+") {
-        s = s.slice_from(1);
+        s = &s[1..];
     }
     match s.parse() {
         Some(n) => Ok(n),

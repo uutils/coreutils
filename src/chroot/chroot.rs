@@ -89,7 +89,7 @@ pub fn uumain(args: Vec<String>) -> isize {
             };
             vec!(shell, default_option)
         }
-        _ => opts.free.slice(1, opts.free.len()).iter().map(|x| x.as_slice()).collect()
+        _ => opts.free[1..opts.free.len()].iter().map(|x| x.as_slice()).collect()
     };
 
     set_context(&newroot, &opts);

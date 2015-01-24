@@ -12,7 +12,7 @@ pub fn from_str(string: &str) -> Result<f64, String> {
     if len == 0 {
         return Err("empty string".to_string())
     }
-    let slice = string.slice_to(len - 1);
+    let slice = &string[..len - 1];
     let (numstr, times) = match string.char_at(len - 1) {
         's' | 'S' => (slice, 1us),
         'm' | 'M' => (slice, 60us),

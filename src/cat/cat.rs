@@ -110,7 +110,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 Ok(n) if n != 0 => n,
                 _ => break,
             };
-            let in_buf = in_buf.slice_to(n);
+            let in_buf = &in_buf[..n];
             let mut buf_pos = range(0, n);
             loop {
                 writer.possibly_flush();
@@ -139,9 +139,9 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                     line_counter += 1;
                 }
-                match in_buf.slice_from(pos).iter().position(|c| *c == '\n' as u8) {
+                match in_buf[pos..].iter().position(|c| *c == '\n' as u8) {
                     Some(p) => {
-                        writer.write(in_buf.slice(pos, pos + p)).unwrap();
+                        writer.write(&in_buf[pos..pos + p]).unwrap();
                         if show_ends {
                             writer.write_u8('$' as u8).unwrap();
                         }
@@ -153,7 +153,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                         at_line_start = true;
                     },
                     None => {
-                        writer.write(in_buf.slice_from(pos)).unwrap();
+                        writer.write(&in_buf[pos..]).unwrap();
                         at_line_start = false;
                         break;
                     }
@@ -186,7 +186,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 Ok(n) if n != 0 => n,
                 _ => break,
             };
-            for &byte in in_buf.slice_to(n).iter() {
+            for &byte in in_buf[..n].iter() {
                 if flush_counter.next().is_none() {
                     writer.possibly_flush();
                     flush_counter = range(0us, 1024);
@@ -256,7 +256,7 @@ fn write_fast(files: Vec<String>) {
             match reader.read(&mut in_buf) {
                 Ok(n) if n != 0 => {
                     // This interface is completely broken.
-                    writer.write(in_buf.slice_to(n)).unwrap();
+                    writer.write(&in_buf[..n]).unwrap();
                 },
                 _ => break
             }
@@ -312,7 +312,7 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
 
     fn flush_buf(&mut self) -> IoResult<()> {
         if self.pos != 0 {
-            let ret = self.inner.write(self.buf.slice_to(self.pos));
+            let ret = self.inner.write(&self.buf[..self.pos]);
             self.pos = 0;
             ret
         } else {
@@ -322,7 +322,7 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
 
     fn possibly_flush(&mut self) {
         if self.pos > self.threshold {
-            self.inner.write(self.buf.slice_to(self.pos)).unwrap();
+            self.inner.write(&self.buf[..self.pos]).unwrap();
             self.pos = 0;
         }
     }
@@ -335,7 +335,7 @@ fn fail() -> ! {
 
 impl<'a, W: Writer> Writer for UnsafeWriter<'a, W> {
     fn write(&mut self, buf: &[u8]) -> IoResult<()> {
-        let dst = self.buf.slice_from_mut(self.pos);
+        let dst = &mut self.buf[self.pos..];
         if buf.len() > dst.len() {
             fail();
         }

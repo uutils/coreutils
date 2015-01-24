@@ -64,7 +64,7 @@ fn cksum(fname: &str) -> IoResult<(u32, usize)> {
     loop {
         match rd.read(&mut bytes) {
             Ok(num_bytes) => {
-                for &b in bytes.slice_to(num_bytes).iter() {
+                for &b in bytes[..num_bytes].iter() {
                     crc = crc_update(crc, b);
                 }
                 size += num_bytes;

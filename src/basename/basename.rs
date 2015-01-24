@@ -105,7 +105,7 @@ fn strip_suffix(name: &str, suffix: &str) -> String {
     }
 
     if name.ends_with(suffix) {
-        return name.slice_to(name.len() - suffix.len()).to_owned();
+        return name[..name.len() - suffix.len()].to_owned();
     }
 
     name.to_owned()
