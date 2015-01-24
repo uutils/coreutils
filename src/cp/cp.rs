@@ -117,8 +117,7 @@ fn copy(matches: getopts::Matches) {
 
         let io_result = fs::copy(source, &dest);
 
-        if io_result.is_err() {
-            let err = io_result.unwrap_err();
+        if let Err(err) = io_result {
             error!("error: {}", err.to_string());
             panic!();
         }
@@ -142,8 +141,7 @@ fn copy(matches: getopts::Matches) {
 
             let io_result = fs::copy(source, &full_dest);
 
-            if io_result.is_err() {
-                let err = io_result.unwrap_err();
+            if let Err(err) = io_result {
                 error!("error: {}", err.to_string());
                 panic!()
             }
