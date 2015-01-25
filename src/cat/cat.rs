@@ -101,11 +101,9 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         let mut out_buf = [0; 1024 * 64];
         let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
         let mut at_line_start = true;
-        loop {
-            let n = match reader.read(&mut in_buf) {
-                Ok(n) if n != 0 => n,
-                _ => break,
-            };
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 { break }
+
             let in_buf = &in_buf[..n];
             let mut buf_pos = range(0, n);
             loop {
@@ -173,11 +171,9 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         let mut out_buf = [0; 1024 * 64];
         let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
         let mut at_line_start = true;
-        loop {
-            let n = match reader.read(&mut in_buf) {
-                Ok(n) if n != 0 => n,
-                _ => break,
-            };
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 { break }
+
             for &byte in in_buf[..n].iter() {
                 if flush_counter.next().is_none() {
                     writer.possibly_flush();
@@ -239,14 +235,10 @@ fn write_fast(files: Vec<String>) {
     let mut in_buf = [0; 1024 * 64];
 
     for (mut reader, _) in files.iter().filter_map(|p| open(&p[])) {
-        loop {
-            match reader.read(&mut in_buf) {
-                Ok(n) if n != 0 => {
-                    // This interface is completely broken.
-                    writer.write(&in_buf[..n]).unwrap();
-                },
-                _ => break
-            }
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 { break }
+            // This interface is completely broken.
+            writer.write(&in_buf[..n]).unwrap();
         }
     }
 }
