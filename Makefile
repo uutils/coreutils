@@ -201,7 +201,7 @@ define CRATE_BUILD
 -include $(BUILDDIR)/$(1).d
 
 $(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCLIBFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCLIBFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --extern serialize=$(BUILDDIR)/librustc-serialize.rlib --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -257,7 +257,7 @@ $(BUILDDIR)/stdbuf: $(BUILDIR)/libstdbuf.$(DYLIB_EXT)
 # Dependencies
 $(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
 	cd $(BASEDIR)/deps/rust-crypto && $(CARGO) build --release
-	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/librustc-serialize*.rlib $(BUILDDIR)
+	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/librustc-serialize*.rlib $(BUILDDIR)/librustc-serialize.rlib
 	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/libtime*.rlib $(BUILDDIR)/libtime.rlib
 	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
 	@touch $@
