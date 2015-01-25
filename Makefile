@@ -62,6 +62,7 @@ PROGS       := \
   mv \
   nl \
   nproc \
+  od \
   paste \
   printenv \
   pwd \

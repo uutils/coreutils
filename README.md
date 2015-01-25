@@ -146,7 +146,6 @@ To do
 - mktemp
 - mv (almost done, one more option)
 - numfmt
-- od
 - pathchk
 - pinky
 - pr
