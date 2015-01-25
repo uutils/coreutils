@@ -18,7 +18,7 @@ use std::io::File;
 #[deriving(Show)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> isize {
    let opts = [
       getopts::optopt("A", "address-radix", "Select the base in which file offsets are printed.", "RADIX"),
       getopts::optopt("j", "skip-bytes", "Skip bytes input bytes before formatting and writing.", "BYTES"),
@@ -31,23 +31,23 @@ pub fn uumain(args: Vec<String>) -> int {
       getopts::optflag("v", "version", "output version information and exit."),
    ];
 
-   let matches = match getopts::getopts(args.tail(), opts) {
+   let matches = match getopts::getopts(args.tail(), &opts) {
       Ok(m) => m,
-      Err(f) => fail!("Invalid options\n{}", f)
+      Err(f) => panic!("Invalid options\n{}", f)
    };
 
 
-   let mut rad = Octal;
+   let mut rad = Radix::Octal;
    if matches.opt_present("A") {
       rad = parse_radix(matches.opt_str("A"));
    } else {
-      println!("{}", getopts::usage("od", opts));
+      println!("{}", getopts::usage("od", &opts));
    }
 
    let mut fname;
    match args.last() {
       Some(n) => fname = n,
-      None    => { fail!("Need fname for now") ; }
+      None    => { panic!("Need fname for now") ; }
    };
 
    main(rad, fname.clone());
@@ -58,22 +58,22 @@ pub fn uumain(args: Vec<String>) -> int {
 fn main(radix: Radix, fname: String) {
    let mut f = match File::open(&Path::new(fname)) {
       Ok(f) => f,
-      Err(e) => fail!("file error: {}", e)
+      Err(e) => panic!("file error: {}", e)
    };
 
    let mut addr = 0;
-   let mut bytes = [0, .. 16];
+   let bytes = &mut [b'\x00'; 16];
    loop {
       match f.read(bytes) {
          Ok(n) => {
             print!("{:07o}", addr);
             match radix {
-               Decimal => { 
+               Radix::Decimal => {
                },
-               Octal => {
+               Radix::Octal => {
                   for b in range(0, n/std::u16::BYTES) {
                      let bs = bytes.slice(2*b, 2*b+2);
-                     let p: u16 = bs[1] as u16 << 8 | bs[0] as u16;
+                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                      print!(" {:06o}", p);
                   }
                   if n % std::u16::BYTES == 1 {
@@ -95,23 +95,23 @@ fn parse_radix(radix_str: Option<String>) -> Radix {
       Some(s) => {
          let st = s.into_bytes();
          if st.len() != 1 {
-            fail!("Radix must be one of [d, o, b, x]\n");
+            panic!("Radix must be one of [d, o, b, x]\n");
          }
 
-         let radix: char = *st.get(0) as char;
+         let radix: char = *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
          if radix == 'd' {
-            Decimal
+            Radix::Decimal
          } else if radix == 'x' {
-            Hexadecimal
+            Radix::Hexadecimal
          } else if radix == 'o' {
-            Octal
+            Radix::Octal
          } else if radix == 'b' {
-            Binary
+            Radix::Binary
          } else {
-            fail!("Radix must be one of [d, o, b, x]\n");
+            panic!("Radix must be one of [d, o, b, x]\n");
          }
       },
-      None => Octal
+      None => Radix::Octal
    };
 
    rad
