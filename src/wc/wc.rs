@@ -19,6 +19,7 @@ use std::io::{print, File, BufferedReader};
 use std::io::fs::PathExtensions;
 use std::io::stdio::stdin_raw;
 use std::result::Result as StdResult;
+use std::borrow::IntoCow;
 use getopts::Matches;
 
 #[path = "../common/util.rs"]
@@ -37,7 +38,7 @@ struct Result {
 static NAME: &'static str = "wc";
 
 pub fn uumain(args: Vec<String>) -> isize {
-    let program = args[0].clone();
+    let program = &args[0][];
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
         getopts::optflag("m", "chars", "print the character counts"),
@@ -59,7 +60,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Print newline, word and byte counts for each FILE", &opts).as_slice());
+        print(&getopts::usage("Print newline, word and byte counts for each FILE", &opts)[]);
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
@@ -70,12 +71,13 @@ pub fn uumain(args: Vec<String>) -> isize {
         return 0;
     }
 
-    let mut files = matches.free.clone();
-    if files.is_empty() {
-        files = vec!("-".to_string());
-    }
+    let files = if matches.free.is_empty() {
+        vec!["-".to_string()].into_cow()
+    } else {
+        matches.free[].into_cow()
+    };
 
-    match wc(files, &matches) {
+    match wc(&files[], &matches) {
         Ok(()) => ( /* pass */ ),
         Err(e) => return e
     }
@@ -95,7 +97,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), isize> {
+pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), isize> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
     let mut total_char_count: usize = 0;
@@ -106,57 +108,43 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), isize> {
     let mut max_str_len: usize = 0;
 
     for path in files.iter() {
-        let mut reader = try!(open(path.as_slice()));
+        let mut reader = try!(open(&path[]));
 
         let mut line_count: usize = 0;
         let mut word_count: usize = 0;
         let mut byte_count: usize = 0;
         let mut char_count: usize = 0;
-        let mut current_char_count: usize = 0;
         let mut longest_line_length: usize = 0;
 
-        loop {
-            // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
-            // hence the option wrapped in a result here
-            match reader.read_until(LF) {
-                Ok(raw_line) => {
-                    // GNU 'wc' only counts lines that end in LF as lines
-                    if *raw_line.last().unwrap() == LF {
-                        line_count += 1;
-                    }
-
-                    byte_count += raw_line.len();
-
-                    // try and convert the bytes to UTF-8 first
-                    match from_utf8(raw_line.as_slice()) {
-                        Ok(line) => {
-                            word_count += line.words().count();
-                            current_char_count = line.chars().count();
-                            char_count += current_char_count;
-                        },
-                        Err(..) => {
-                            word_count += raw_line.as_slice().split(|&x| is_word_seperator(x)).count();
-                            for byte in raw_line.iter() {
-                                match byte.is_ascii() {
-                                    true => {
-                                        current_char_count += 1;
-                                    }
-                                    false => { }
-                                }
-                            }
-                            char_count += current_char_count;
-                        }
-                    }
-
-                    if current_char_count > longest_line_length {
-                        // we subtract one here because `line.len()` includes the LF
-                        // matches GNU 'wc' behaviour
-                        longest_line_length = current_char_count - 1;
-                    }
-                },
-                _ => break
+        // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
+        // hence the option wrapped in a result here
+        while let Ok(raw_line) = reader.read_until(LF) {
+            // GNU 'wc' only counts lines that end in LF as lines
+            if *raw_line.last().unwrap() == LF {
+                line_count += 1;
             }
 
+            byte_count += raw_line.len();
+
+            // try and convert the bytes to UTF-8 first
+            let current_char_count;
+            match from_utf8(&raw_line[]) {
+                Ok(line) => {
+                    word_count += line.words().count();
+                    current_char_count = line.chars().count();
+                },
+                Err(..) => {
+                    word_count += raw_line.split(|&x| is_word_seperator(x)).count();
+                    current_char_count = raw_line.iter().filter(|c|c.is_ascii()).count()
+                }
+            }
+            char_count += current_char_count;
+
+            if current_char_count > longest_line_length {
+                // we subtract one here because `line.len()` includes the LF
+                // matches GNU 'wc' behaviour
+                longest_line_length = current_char_count - 1;
+            }
         }
 
         results.push(Result {
@@ -182,7 +170,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), isize> {
     }
 
     for result in results.iter() {
-        print_stats(result.filename.as_slice(), result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
+        print_stats(&result.filename[], result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
     }
 
     if files.len() > 1 {
@@ -222,7 +210,7 @@ fn print_stats(filename: &str, line_count: usize, word_count: usize, char_count:
     }
 
     if filename != "-" {
-        println!(" {}", filename.as_slice());
+        println!(" {}", filename);
     }
     else {
         println!("");
