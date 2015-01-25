@@ -143,16 +143,16 @@ INSTALLEES  := \
 SYSTEM := $(shell uname)
 DYLIB_EXT := 
 ifeq ($(SYSTEM),Linux)
-	DYLIB_EXT    := .so
+	DYLIB_EXT    := so
 endif
 ifeq ($(SYSTEM),Darwin)
-	DYLIB_EXT    := .dylib
+	DYLIB_EXT    := dylib
 endif
 
 # Libaries to install
 LIBS :=
 ifneq (,$(findstring stdbuf, $(INSTALLEES)))
-LIBS += libstdbuf$(DYLIB_EXT)
+LIBS += libstdbuf.$(DYLIB_EXT)
 endif
 
 # Programs with usable tests
