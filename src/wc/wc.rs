@@ -112,7 +112,6 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), isize> {
         let mut word_count: usize = 0;
         let mut byte_count: usize = 0;
         let mut char_count: usize = 0;
-        let mut current_char_count: usize = 0;
         let mut longest_line_length: usize = 0;
 
         loop {
@@ -128,6 +127,7 @@ pub fn wc(files: Vec<String>, matches: &Matches) -> StdResult<(), isize> {
                     byte_count += raw_line.len();
 
                     // try and convert the bytes to UTF-8 first
+                    let mut current_char_count = 0;
                     match from_utf8(raw_line.as_slice()) {
                         Ok(line) => {
                             word_count += line.words().count();
