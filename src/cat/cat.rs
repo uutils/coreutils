@@ -22,7 +22,7 @@ use std::io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
 
 pub fn uumain(args: Vec<String>) -> isize {
-    let program = args[0].as_slice();
+    let program = &args[0];
     let opts = [
         getopts::optflag("A", "show-all", "equivalent to -vET"),
         getopts::optflag("b", "number-nonblank",
@@ -48,8 +48,8 @@ pub fn uumain(args: Vec<String>) -> isize {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("Concatenate FILE(s), or standard input, to \
-                             standard output.", &opts).as_slice());
+        print(&getopts::usage("Concatenate FILE(s), or standard input, to \
+                             standard output.", &opts)[]);
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
