@@ -1,4 +1,5 @@
 #![crate_name = "od"]
+#![allow(unstable)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,7 +16,7 @@ extern crate collections;
 use collections::string::String;
 use std::io::File;
 
-#[deriving(Show)]
+#[derive(Show)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
 pub fn uumain(args: Vec<String>) -> isize {
@@ -81,7 +82,7 @@ fn main(radix: Radix, fname: String) {
                     },
                     Radix::Octal => {
                         for b in range(0, n/std::u16::BYTES) {
-                            let bs = bytes.slice(2*b, 2*b+2);
+                            let bs = &bytes[2*b .. 2*b+2];
                             let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                             print!(" {:06o}", p);
                         }
