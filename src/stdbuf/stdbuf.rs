@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 use getopts::{optopt, optflag, getopts, usage, Matches, OptGroup};
-use std::io::process::{Command, StdioContainer};
+use std::io::process::{Command, StdioContainer, ProcessExit};
 use std::io::fs::PathExtensions;
 use std::iter::range_inclusive;
 use std::num::Int;
@@ -131,7 +131,7 @@ fn check_option(matches: &Matches, name: &str, modified: &mut bool) -> Option<Bu
             match value.as_slice() {
                 "L" => {
                     if name == "input" {
-                        show_info!("stdbuf: line buffering stdin is meaningless");
+                        show_info!("line buffering stdin is meaningless");
                         None
                     } else {
                         Some(BufferType::Line)
@@ -170,7 +170,7 @@ fn parse_options(args: &[String], options: &mut ProgramOptions, optgrps: &[OptGr
         return Err(ErrMsg::Retry);
     }
     if !modified {
-        show_error!("stdbuf: you must specify a buffering mode option");
+        show_error!("you must specify a buffering mode option");
         return Err(ErrMsg::Fatal);
     }
     Ok(OkMsg::Buffering)
@@ -244,8 +244,17 @@ pub fn uumain(args: Vec<String>) -> isize {
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
-    if let Err(e) = command.spawn() {
-        crash!(1, "failed to execute process: {}", e);
-    }
-    0
+    let mut process = match command.spawn() {
+        Ok(p) => p,
+        Err(e) => crash!(1, "failed to execute process: {}", e)
+    };
+    match process.wait() {
+        Ok(status) => {
+            match status {
+                ProcessExit::ExitStatus(i) => return i,
+                ProcessExit::ExitSignal(i) => crash!(1, "process killed by signal {}", i),
+            }
+        },
+        Err(e) => crash!(1, "{}", e)
+    };
 }
