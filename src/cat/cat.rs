@@ -95,11 +95,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 
     let mut line_counter: usize = 1;
 
-    for path in files.iter() {
-        let (mut reader, interactive) = match open(path.as_slice()) {
-            Some(f) => f,
-            None => continue,
-        };
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[])) {
 
         let mut in_buf  = [0; 1024 * 31];
         let mut out_buf = [0; 1024 * 64];
@@ -168,11 +164,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 
     let mut line_counter: usize = 1;
 
-    for path in files.iter() {
-        let (mut reader, interactive) = match open(path.as_slice()) {
-            Some(f) => f,
-            None => continue,
-        };
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[])) {
 
         // Flush all 1024 iterations.
         let mut flush_counter = range(0us, 1024);
@@ -246,12 +238,7 @@ fn write_fast(files: Vec<String>) {
     let mut writer = stdout_raw();
     let mut in_buf = [0; 1024 * 64];
 
-    for path in files.iter() {
-        let (mut reader, _) = match open(path.as_slice()) {
-            Some(x) => x,
-            None => continue,
-        };
-
+    for (mut reader, _) in files.iter().filter_map(|p| open(&p[])) {
         loop {
             match reader.read(&mut in_buf) {
                 Ok(n) if n != 0 => {
