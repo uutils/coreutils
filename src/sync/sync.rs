@@ -65,7 +65,7 @@ mod platform {
     unsafe fn flush_volume(name: &str) {
         let name_buffer = name.to_c_str().as_ptr();
         if 0x00000003 == GetDriveTypeA(name_buffer) { // DRIVE_FIXED
-            let sliced_name = name.slice_to(name.len() - 1); // eliminate trailing backslash
+            let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             let sliced_name_buffer = sliced_name.to_c_str().as_ptr();
             match CreateFileA(sliced_name_buffer,
                               0xC0000000, // GENERIC_WRITE
@@ -74,10 +74,10 @@ mod platform {
                               0x00000003, // OPEN_EXISTING
                               0,
                               null()) {
-                _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
+                -1 => { // INVALID_HANDLE_VALUE
                     crash!(GetLastError(), "failed to create volume handle");
                 }
-                handle @ _ => {
+                handle => {
                     if FlushFileBuffers(handle) == 0 {
                         crash!(GetLastError(), "failed to flush file buffer");
                     }
@@ -91,10 +91,10 @@ mod platform {
         let mut name: [libc::c_char; 260] = mem::uninitialized(); // MAX_PATH
         match FindFirstVolumeA(name.as_mut_ptr(),
                                name.len() as libc::uint32_t) {
-            _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
+            -1 => { // INVALID_HANDLE_VALUE
                 crash!(GetLastError(), "failed to find first volume");
             }
-            handle @ _ => {
+            handle => {
                 (string::raw::from_buf(name.as_ptr() as *const u8), handle)
             }
         }
@@ -116,7 +116,7 @@ mod platform {
                                     FindVolumeClose(next_volume_handle); // ignore FindVolumeClose() failures
                                     break;
                                 }
-                                err @ _ => {
+                                err => {
                                     crash!(err, "failed to find next volume");
                                 }
                             }
@@ -134,14 +134,14 @@ mod platform {
     pub unsafe fn do_sync() -> int {
         let volumes = find_all_volumes();
         for vol in volumes.iter() {
-            flush_volume(vol.as_slice());
+            flush_volume(&vol);
         }
         0
     }
 }
 
 pub fn uumain(args: Vec<String>) -> isize {
-    let program = &args[0];
+    let program = &args[0][];
 
     let options = [
         optflag("h", "help", "display this help and exit"),
@@ -150,11 +150,11 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     let matches = match getopts(args.tail(), &options) {
         Ok(m) => { m }
-        _ => { help(program.as_slice(), &options); return 1 }
+        _ => { help(program, &options); return 1 }
     };
 
     if matches.opt_present("h") {
-        help(program.as_slice(), &options);
+        help(program, &options);
         return 0
     }
 
