@@ -139,7 +139,6 @@ To do
 - getlimits
 - install
 - join
-- libstdbuf
 - ln
 - ls
 - mknod
@@ -159,7 +158,6 @@ To do
 - sort (a couple of options implemented)
 - split (a couple of missing options)
 - stat
-- stdbuf
 - stty
 - tail (not all features implemented)
 - test (not all features implemented)
