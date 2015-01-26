@@ -56,12 +56,12 @@ pub fn uumain(args: Vec<String>) -> isize {
         None => { panic!("Need fname for now") ; }
     };
 
-    main(input_offset_base, fname.as_slice());
+    main(&input_offset_base, fname.as_slice());
 
     0
 }
 
-fn main(input_offset_base: Radix, fname: &str) {
+fn main(input_offset_base: &Radix, fname: &str) {
     let mut f = match File::open(&Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
@@ -72,25 +72,22 @@ fn main(input_offset_base: Radix, fname: &str) {
     loop {
         match f.read(bytes) {
             Ok(n) => {
-                print!("{:07o}", addr);
-                match input_offset_base {
-                    Radix::Decimal => {},
-                    Radix::Octal => {
-                        for b in range(0, n / std::u16::BYTES) {
-                            let bs = &bytes[(2 * b) .. (2 * b + 2)];
-                            let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
-                            print!(" {:06o}", p);
-                        }
-                        if n % std::u16::BYTES == 1 {
-                            print!(" {:06o}", bytes[n - 1]);
-                        }
-                    }
-                    _ => { }
-                };
+                print_with_radix(input_offset_base, addr);
+                for b in range(0, n / std::u16::BYTES) {
+                    let bs = &bytes[(2 * b) .. (2 * b + 2)];
+                    let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
+                    print!(" {:06o}", p);
+                }
+                if n % std::u16::BYTES == 1 {
+                    print!(" {:06o}", bytes[n - 1]);
+                }
                 print!("\n");
                 addr += n;
             },
-            Err(_) => { println!("{:07o}", addr); break; }
+            Err(_) => {
+                print_with_radix(input_offset_base, addr);
+                break;
+            }
         };
     };
 }
@@ -114,5 +111,16 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
                 }
             }
         }
+    }
+}
+
+fn print_with_radix(r: &Radix, x: usize) {
+    // TODO(keunwoo): field widths should be based on sizeof(x), or chosen dynamically based on the
+    // expected range of address values.  Binary in particular is not great here.
+    match *r {
+        Radix::Decimal => print!("{:07}", x),
+        Radix::Hexadecimal => print!("{:07X}", x),
+        Radix::Octal => print!("{:07o}", x),
+        Radix::Binary => print!("{:07b}", x)
     }
 }
