@@ -1,4 +1,3 @@
-#![crate_name= "true"]
 
 /*
  * This file is part of the uutils coreutils package.

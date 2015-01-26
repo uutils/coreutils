@@ -1,4 +1,3 @@
-#![crate_name = "test"]
 #![feature(core, os, std_misc)]
 
 /*

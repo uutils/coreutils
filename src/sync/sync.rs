@@ -1,4 +1,3 @@
-#![crate_name = "sync"]
 #![feature(collections, rustc_private)]
 
 /*
