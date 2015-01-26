@@ -51,18 +51,17 @@ pub fn uumain(args: Vec<String>) -> isize {
         Err(f) => { panic!("Invalid -A/--address-radix\n{}", f) }
     };
 
-    let mut fname;
-    match args.last() {
-        Some(n) => fname = n,
-        None    => { panic!("Need fname for now") ; }
+    let fname = match args.last() {
+        Some(n) => n,
+        None => { panic!("Need fname for now") ; }
     };
 
-    main(input_offset_base, fname.clone());
+    main(input_offset_base, fname.as_slice());
 
     0
 }
 
-fn main(input_offset_base: Radix, fname: String) {
+fn main(input_offset_base: Radix, fname: &str) {
     let mut f = match File::open(&Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
