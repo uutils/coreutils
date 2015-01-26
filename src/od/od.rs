@@ -38,7 +38,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                           specified."),
                         "BYTES"),
         getopts::optflag("h", "help", "display this help and exit."),
-        getopts::optflag("v", "version", "output version information and exit."),
+        getopts::optflag("", "version", "output version information and exit."),
     ];
 
     let matches = match getopts::getopts(args.tail(), &opts) {
