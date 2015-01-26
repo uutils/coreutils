@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "base64"
 path = "base64.rs"
+
+[dependencies.rustc-serialize]
+git = "http://github.com/rust-lang/rustc-serialize"
