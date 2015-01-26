@@ -46,13 +46,10 @@ pub fn uumain(args: Vec<String>) -> isize {
         Err(f) => panic!("Invalid options\n{}", f)
     };
 
-
-    let mut rad = Radix::Octal;
-    if matches.opt_present("A") {
-        rad = parse_radix(matches.opt_str("A"));
-    } else {
-        println!("{}", getopts::usage("od", &opts));
-    }
+    let input_offset_base = match parse_radix(matches.opt_str("A")) {
+        Ok(r) => r,
+        Err(f) => { panic!("Invalid -A/--address-radix\n{}", f) }
+    };
 
     let mut fname;
     match args.last() {
@@ -60,12 +57,12 @@ pub fn uumain(args: Vec<String>) -> isize {
         None    => { panic!("Need fname for now") ; }
     };
 
-    main(rad, fname.clone());
+    main(input_offset_base, fname.clone());
 
     0
 }
 
-fn main(radix: Radix, fname: String) {
+fn main(input_offset_base: Radix, fname: String) {
     let mut f = match File::open(&Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
@@ -77,7 +74,7 @@ fn main(radix: Radix, fname: String) {
         match f.read(bytes) {
             Ok(n) => {
                 print!("{:07o}", addr);
-                match radix {
+                match input_offset_base {
                     Radix::Decimal => {},
                     Radix::Octal => {
                         for b in range(0, n / std::u16::BYTES) {
@@ -99,30 +96,24 @@ fn main(radix: Radix, fname: String) {
     };
 }
 
-fn parse_radix(radix_str: Option<String>) -> Radix {
-    let rad = match radix_str {
+fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
+    match radix_str {
+        None => Ok(Radix::Octal),
         Some(s) => {
             let st = s.into_bytes();
             if st.len() != 1 {
-                panic!("Radix must be one of [d, o, b, x]\n");
-            }
-
-            let radix: char = *(st.get(0)
-                                  .expect("byte string of length 1 lacks a 0th elem")) as char;
-            if radix == 'd' {
-                Radix::Decimal
-            } else if radix == 'x' {
-                Radix::Hexadecimal
-            } else if radix == 'o' {
-                Radix::Octal
-            } else if radix == 'b' {
-                Radix::Binary
+                Err("Radix must be one of [d, o, b, x]\n")
             } else {
-                panic!("Radix must be one of [d, o, b, x]\n");
+                let radix: char = *(st.get(0)
+                                      .expect("byte string of length 1 lacks a 0th elem")) as char;
+                match radix {
+                    'd' => Ok(Radix::Decimal),
+                    'x' => Ok(Radix::Hexadecimal),
+                    'o' => Ok(Radix::Octal),
+                    'b' => Ok(Radix::Binary),
+                    _ => Err("Radix must be one of [d, o, b, x]\n")
+                }
             }
-        },
-        None => Radix::Octal
-    };
-
-    rad
+        }
+    }
 }
