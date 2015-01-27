@@ -67,6 +67,7 @@ PROGS       := \
   od \
   paste \
   printenv \
+  ptx \
   pwd \
   readlink \
   realpath \
