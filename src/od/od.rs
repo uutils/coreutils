@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                         "BYTES"),
         getopts::optflag("h", "help", "display this help and exit."),
         getopts::optflag("v", "version", "output version information and exit."),
-        ];
+    ];
 
     let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
@@ -78,16 +78,15 @@ fn main(radix: Radix, fname: String) {
             Ok(n) => {
                 print!("{:07o}", addr);
                 match radix {
-                    Radix::Decimal => {
-                    },
+                    Radix::Decimal => {},
                     Radix::Octal => {
-                        for b in range(0, n/std::u16::BYTES) {
-                            let bs = &bytes[2*b .. 2*b+2];
+                        for b in range(0, n / std::u16::BYTES) {
+                            let bs = &bytes[(2 * b) .. (2 * b + 2)];
                             let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                             print!(" {:06o}", p);
                         }
                         if n % std::u16::BYTES == 1 {
-                            print!(" {:06o}", bytes[n-1]);
+                            print!(" {:06o}", bytes[n - 1]);
                         }
                     }
                     _ => { }
@@ -109,7 +108,7 @@ fn parse_radix(radix_str: Option<String>) -> Radix {
             }
 
             let radix: char = *(st.get(0)
-                                .expect("byte string of length 1 lacks a 0th elem")) as char;
+                                  .expect("byte string of length 1 lacks a 0th elem")) as char;
             if radix == 'd' {
                 Radix::Decimal
             } else if radix == 'x' {
