@@ -14,8 +14,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::ascii::AsciiExt;
-use std::io::{File, Open, ReadWrite, fs};
-use std::io::fs::PathExtensions;
+use std::old_io::{File, Open, ReadWrite, fs};
+use std::old_io::fs::PathExtensions;
 
 #[path = "../common/util.rs"]
 #[macro_use]

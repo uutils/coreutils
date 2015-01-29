@@ -18,11 +18,11 @@ extern crate crypto;
 extern crate getopts;
 
 use std::ascii::AsciiExt;
-use std::io::fs::File;
-use std::io::stdio::stdin_raw;
-use std::io::BufferedReader;
-use std::io::IoError;
-use std::io::EndOfFile;
+use std::old_io::fs::File;
+use std::old_io::stdio::stdin_raw;
+use std::old_io::BufferedReader;
+use std::old_io::IoError;
+use std::old_io::EndOfFile;
 use regex::Regex;
 use crypto::digest::Digest;
 use crypto::md5::Md5;

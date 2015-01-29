@@ -16,9 +16,9 @@
 
 extern crate getopts;
 
-use std::io::{print, File};
-use std::io::stdio::{stdout_raw, stdin_raw, stderr};
-use std::io::{IoResult};
+use std::old_io::{print, File};
+use std::old_io::stdio::{stdout_raw, stdin_raw, stderr};
+use std::old_io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
 
 pub fn uumain(args: Vec<String>) -> isize {
@@ -135,7 +135,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 }
                 match in_buf[pos..].iter().position(|c| *c == '\n' as u8) {
                     Some(p) => {
-                        writer.write(&in_buf[pos..pos + p]).unwrap();
+                        writer.write_all(&in_buf[pos..pos + p]).unwrap();
                         if show_ends {
                             writer.write_u8('$' as u8).unwrap();
                         }
@@ -147,7 +147,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                         at_line_start = true;
                     },
                     None => {
-                        writer.write(&in_buf[pos..]).unwrap();
+                        writer.write_all(&in_buf[pos..]).unwrap();
                         at_line_start = false;
                         break;
                     }
@@ -218,8 +218,8 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                         _ => byte,
                     };
                     match byte {
-                        0 ... 31 => writer.write(&['^' as u8, byte + 64]),
-                        127      => writer.write(&['^' as u8, byte - 64]),
+                        0 ... 31 => writer.write_all(&['^' as u8, byte + 64]),
+                        127      => writer.write_all(&['^' as u8, byte - 64]),
                         _        => writer.write_u8(byte),
                     }
                 } else {
@@ -238,7 +238,7 @@ fn write_fast(files: Vec<String>) {
         while let Ok(n) = reader.read(&mut in_buf) {
             if n == 0 { break }
             // This interface is completely broken.
-            writer.write(&in_buf[..n]).unwrap();
+            writer.write_all(&in_buf[..n]).unwrap();
         }
     }
 }
@@ -291,7 +291,7 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
 
     fn flush_buf(&mut self) -> IoResult<()> {
         if self.pos != 0 {
-            let ret = self.inner.write(&self.buf[..self.pos]);
+            let ret = self.inner.write_all(&self.buf[..self.pos]);
             self.pos = 0;
             ret
         } else {
@@ -301,7 +301,7 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
 
     fn possibly_flush(&mut self) {
         if self.pos > self.threshold {
-            self.inner.write(&self.buf[..self.pos]).unwrap();
+            self.inner.write_all(&self.buf[..self.pos]).unwrap();
             self.pos = 0;
         }
     }
@@ -313,7 +313,7 @@ fn fail() -> ! {
 }
 
 impl<'a, W: Writer> Writer for UnsafeWriter<'a, W> {
-    fn write(&mut self, buf: &[u8]) -> IoResult<()> {
+    fn write_all(&mut self, buf: &[u8]) -> IoResult<()> {
         let dst = &mut self.buf[self.pos..];
         if buf.len() > dst.len() {
             fail();

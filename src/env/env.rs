@@ -192,13 +192,13 @@ pub fn uumain(args: Vec<String>) -> isize {
     }
 
     if opts.program.len() >= 1 {
-        use std::io::process::{Command, InheritFd};
+        use std::old_io::process::{Command, InheritFd};
         let prog = opts.program[0].clone();
         let args = &opts.program[1..];
         match Command::new(prog).args(args).stdin(InheritFd(0)).stdout(InheritFd(1)).stderr(InheritFd(2)).status() {
             Ok(exit) =>
                 return match exit {
-                    std::io::process::ExitStatus(s) => s,
+                    std::old_io::process::ExitStatus(s) => s,
                     _ => 1
                 },
             Err(_) => return 1

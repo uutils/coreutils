@@ -1,6 +1,6 @@
 #![allow(unstable)]
 
-use std::io::{File, Truncate, Write};
+use std::old_io::{File, Truncate, Write};
 use std::os;
 use std::path::Path;
 
@@ -45,7 +45,7 @@ fn main() {
     let mut input = File::open(&Path::new("src/uutils/uutils.rs")).unwrap();
     let main = input.read_to_string().unwrap().replace("@CRATES@", crates.as_slice()).replace("@UTIL_MAP@", util_map.as_slice());
 
-    match out.write(main.as_bytes()) {
+    match out.write_all(main.as_bytes()) {
         Err(e) => panic!("{}", e),
         _ => (),
     }

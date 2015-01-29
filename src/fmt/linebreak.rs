@@ -60,18 +60,18 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
     let p_init_len = w_len +
         if opts.crown || opts.tagged {
             // handle "init" portion
-            silent_unwrap!(ostream.write(para.init_str.as_bytes()));
+            silent_unwrap!(ostream.write_all(para.init_str.as_bytes()));
             para.init_len
         } else if !para.mail_header {
             // for non-(crown, tagged) that's the same as a normal indent
-            silent_unwrap!(ostream.write(p_indent.as_bytes()));
+            silent_unwrap!(ostream.write_all(p_indent.as_bytes()));
             p_indent_len
         } else {
             // except that mail headers get no indent at all
             0
         };
     // write first word after writing init
-    silent_unwrap!(ostream.write(w.as_bytes()));
+    silent_unwrap!(ostream.write_all(w.as_bytes()));
 
     // does this paragraph require uniform spacing?
     let uniform = para.mail_header || opts.uniform;
@@ -437,16 +437,16 @@ fn slice_if_fresh<'a>(fresh: bool, word: &'a str, start: usize, uniform: bool, n
 #[inline(always)]
 fn write_newline(indent: &str, ostream: &mut Box<Writer>) {
     silent_unwrap!(ostream.write_char('\n'));
-    silent_unwrap!(ostream.write(indent.as_bytes()));
+    silent_unwrap!(ostream.write_all(indent.as_bytes()));
 }
 
 // Write the word, along with slen spaces.
 #[inline(always)]
 fn write_with_spaces(word: &str, slen: usize, ostream: &mut Box<Writer>) {
     if slen == 2 {
-        silent_unwrap!(ostream.write("  ".as_bytes()));
+        silent_unwrap!(ostream.write_all("  ".as_bytes()));
     } else if slen == 1 {
         silent_unwrap!(ostream.write_char(' '));
     }
-    silent_unwrap!(ostream.write(word.as_bytes()));
+    silent_unwrap!(ostream.write_all(word.as_bytes()));
 }

@@ -14,7 +14,7 @@ extern crate getopts;
 extern crate collections;
 
 use collections::string::String;
-use std::io::File;
+use std::old_io::File;
 
 #[derive(Show)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }

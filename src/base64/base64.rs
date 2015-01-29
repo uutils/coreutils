@@ -17,8 +17,8 @@ extern crate libc;
 
 use std::ascii::AsciiExt;
 use std::error::Error;
-use std::io::{println, File, stdout};
-use std::io::stdio::stdin_raw;
+use std::old_io::{println, File, stdout};
+use std::old_io::stdio::stdin_raw;
 
 use getopts::{
     getopts,
@@ -119,7 +119,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         Ok(bytes) => {
             let mut out = stdout();
 
-            match out.write(bytes.as_slice()) {
+            match out.write_all(bytes.as_slice()) {
                 Ok(_) => {}
                 Err(f) => { crash!(1, "{}", f); }
             }

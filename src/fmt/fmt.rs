@@ -17,8 +17,8 @@ extern crate getopts;
 extern crate unicode;
 
 use std::cmp;
-use std::io::{BufferedReader, BufferedWriter, File, IoResult};
-use std::io::stdio::{stdin_raw, stdout_raw};
+use std::old_io::{BufferedReader, BufferedWriter, File, IoResult};
+use std::old_io::stdio::{stdin_raw, stdout_raw};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 
@@ -207,7 +207,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         let mut p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
         for para_result in p_stream {
             match para_result {
-                Err(s) => silent_unwrap!(ostream.write(s.as_bytes())),
+                Err(s) => silent_unwrap!(ostream.write_all(s.as_bytes())),
                 Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
             }
         }

@@ -12,7 +12,7 @@
 
 extern crate getopts;
 
-use std::io::print;
+use std::old_io::print;
 
 static VERSION: &'static str = "1.0.0";
 

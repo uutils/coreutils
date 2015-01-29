@@ -1,7 +1,7 @@
 #![allow(unstable)]
 
-use std::io::process::Command;
-use std::io::File;
+use std::old_io::process::Command;
+use std::old_io::File;
 use std::string::String;
 
 static PROGNAME: &'static str = "./sort";

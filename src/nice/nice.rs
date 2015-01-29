@@ -14,7 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::CString;
-use std::io::IoError;
+use std::old_io::IoError;
 use std::os;
 use libc::{c_char, c_int, execvp};
 

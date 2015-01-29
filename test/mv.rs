@@ -2,9 +2,9 @@
 
 extern crate time;
 
-use std::io::{process, fs, FilePermission};
-use std::io::process::Command;
-use std::io::fs::PathExtensions;
+use std::old_io::{process, fs, FilePermission};
+use std::old_io::process::Command;
+use std::old_io::fs::PathExtensions;
 use std::str::from_utf8;
 use std::borrow::ToOwned;
 
@@ -35,7 +35,7 @@ fn run_interactive(cmd: &mut Command, input: &[u8])-> CmdResult {
     let stdin_cfg = process::CreatePipe(true, false);
     let mut command = cmd.stdin(stdin_cfg).spawn().unwrap();
 
-    command.stdin.as_mut().unwrap().write(input);
+    command.stdin.as_mut().unwrap().write_all(input);
 
     let prog = command.wait_with_output().unwrap();
     CmdResult {

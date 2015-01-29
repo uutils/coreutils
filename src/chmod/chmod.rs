@@ -19,9 +19,9 @@ extern crate regex;
 #[plugin] #[no_link] extern crate regex_macros;
 
 use std::ffi::CString;
-use std::io::fs;
-use std::io::fs::PathExtensions;
-use std::io::IoError;
+use std::old_io::fs;
+use std::old_io::fs::PathExtensions;
+use std::old_io::IoError;
 use std::mem;
 use std::num::from_str_radix;
 use regex::Regex;

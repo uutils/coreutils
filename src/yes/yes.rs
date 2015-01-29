@@ -15,7 +15,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::print;
+use std::old_io::print;
 use std::borrow::IntoCow;
 
 #[path = "../common/util.rs"]

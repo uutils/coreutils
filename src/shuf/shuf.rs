@@ -14,8 +14,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::cmp;
-use std::io;
-use std::io::IoResult;
+use std::old_io as io;
+use std::old_io::IoResult;
 use std::iter::{range_inclusive, RangeInclusive};
 use std::rand::{self, Rng};
 use std::usize;

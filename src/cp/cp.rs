@@ -14,8 +14,8 @@ extern crate getopts;
 #[macro_use] extern crate log;
 
 use std::os;
-use std::io;
-use std::io::fs;
+use std::old_io as io;
+use std::old_io::fs;
 
 use getopts::{
     getopts,

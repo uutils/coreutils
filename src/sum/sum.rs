@@ -13,8 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{File, IoResult, print};
-use std::io::stdio::{stdin_raw};
+use std::old_io::{File, IoResult, print};
+use std::old_io::stdio::{stdin_raw};
 
 #[path="../common/util.rs"]
 #[macro_use]

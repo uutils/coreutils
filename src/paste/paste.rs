@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io;
+use std::old_io as io;
 use std::iter::repeat; 
 
 #[path = "../common/util.rs"]

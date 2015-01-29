@@ -1,8 +1,8 @@
 #![allow(unstable)]
 
-use std::io::process::Command;
-use std::io::File;
-use std::io::fs::{unlink, PathExtensions};
+use std::old_io::process::Command;
+use std::old_io::File;
+use std::old_io::fs::{unlink, PathExtensions};
 
 static EXE: &'static str = "./cp";
 static TEST_HELLO_WORLD_SOURCE: &'static str = "hello_world.txt";

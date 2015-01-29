@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{print, println};
+use std::old_io::{print, println};
 use std::num::from_str_radix;
 use std::str::from_utf8;
 

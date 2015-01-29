@@ -17,7 +17,7 @@ use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
 use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
 use std::ffi::{c_str_to_bytes, CString};
-use std::io::fs::PathExtensions;
+use std::old_io::fs::PathExtensions;
 use std::iter::FromIterator;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;

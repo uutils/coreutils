@@ -18,8 +18,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::c_str_to_bytes;
-use std::io::println;
-use std::io::stdio::stderr;
+use std::old_io::println;
+use std::old_io::stdio::stderr;
 use getopts::{optflag,getopts};
 
 #[path = "../common/util.rs"]

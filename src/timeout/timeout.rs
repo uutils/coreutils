@@ -13,8 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{PathDoesntExist, FileNotFound};
-use std::io::process::{Command, ExitStatus, ExitSignal, InheritFd};
+use std::old_io::{PathDoesntExist, FileNotFound};
+use std::old_io::process::{Command, ExitStatus, ExitSignal, InheritFd};
 
 #[path = "../common/util.rs"]
 #[macro_use]

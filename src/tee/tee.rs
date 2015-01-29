@@ -13,9 +13,9 @@
 extern crate getopts;
 #[macro_use] extern crate log;
 
-use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
-use std::io::{IoResult};
-use std::io::util::{copy, NullWriter, MultiWriter};
+use std::old_io::{println, stdin, stdout, Append, File, Truncate, Write};
+use std::old_io::{IoResult};
+use std::old_io::util::{copy, NullWriter, MultiWriter};
 use std::os;
 use getopts::{getopts, optflag, usage};
 
@@ -109,9 +109,9 @@ struct NamedWriter {
 }
 
 impl Writer for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> IoResult<()> {
+    fn write_all(&mut self, buf: &[u8]) -> IoResult<()> {
         with_path(&*self.path.clone(), || {
-            let val = self.inner.write(buf);
+            let val = self.inner.write_all(buf);
             if val.is_err() {
                 self.inner = Box::new(NullWriter) as Box<Writer>;
             }

@@ -15,9 +15,9 @@ extern crate libc;
 
 use std::ascii::AsciiExt;
 use std::str::from_utf8;
-use std::io::{print, File, BufferedReader};
-use std::io::fs::PathExtensions;
-use std::io::stdio::stdin_raw;
+use std::old_io::{print, File, BufferedReader};
+use std::old_io::fs::PathExtensions;
+use std::old_io::stdio::stdin_raw;
 use std::result::Result as StdResult;
 use std::borrow::IntoCow;
 use getopts::Matches;

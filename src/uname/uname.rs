@@ -19,7 +19,7 @@ extern crate libc;
 
 use std::ffi::c_str_to_bytes;
 use std::mem::uninitialized;
-use std::io::print;
+use std::old_io::print;
 use c_types::utsname;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;

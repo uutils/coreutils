@@ -8,7 +8,7 @@
 * file that was distributed with this source code.
 */
 
-use std::io;
+use std::old_io as io;
 
 static CRC_TABLE_LEN: usize = 256;
 
