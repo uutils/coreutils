@@ -13,8 +13,8 @@
 extern crate getopts;
 extern crate libc;
 use getopts::{optopt, optflag, getopts, usage, Matches, OptGroup};
-use std::io::process::{Command, StdioContainer, ProcessExit};
-use std::io::fs::PathExtensions;
+use std::old_io::process::{Command, StdioContainer, ProcessExit};
+use std::old_io::fs::PathExtensions;
 use std::iter::range_inclusive;
 use std::num::Int;
 use std::os;

@@ -15,8 +15,8 @@ extern crate libc;
 
 use getopts::{optflag, getopts, usage};
 use std::ffi::CString;
-use std::io::stdio::{stdin_raw, stdout_raw, stderr_raw};
-use std::io::{File, Open, Read, Append, Write};
+use std::old_io::stdio::{stdin_raw, stdout_raw, stderr_raw};
+use std::old_io::{File, Open, Read, Append, Write};
 use std::os::unix::prelude::*;
 use libc::c_char;
 use libc::funcs::posix88::unistd::{dup2, execvp};
@@ -88,7 +88,7 @@ fn replace_fds() {
             }
         };
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
-            crash!(2, "Cannot replace STDIN: {}", std::io::IoError::last_error())
+            crash!(2, "Cannot replace STDIN: {}", std::old_io::IoError::last_error())
         }
     }
 
@@ -97,13 +97,13 @@ fn replace_fds() {
         let fd = new_stdout.as_raw_fd();
 
         if unsafe { dup2(fd, 1) } != 1 {
-            crash!(2, "Cannot replace STDOUT: {}", std::io::IoError::last_error())
+            crash!(2, "Cannot replace STDOUT: {}", std::old_io::IoError::last_error())
         }
     }
 
     if replace_stderr {
         if unsafe { dup2(1, 2) } != 2 {
-            crash!(2, "Cannot replace STDERR: {}", std::io::IoError::last_error())
+            crash!(2, "Cannot replace STDERR: {}", std::old_io::IoError::last_error())
         }
     }
 }

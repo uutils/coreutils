@@ -20,7 +20,7 @@ extern crate "time" as rtime;
 
 use std::ffi::CString;
 use std::mem::transmute;
-use std::io::{print, File};
+use std::old_io::{print, File};
 use std::ptr::null;
 use libc::{time_t, c_double, c_int, c_char};
 use utmpx::*;

@@ -13,9 +13,9 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io;
-use std::io::fs::File;
-use std::io::BufferedReader;
+use std::old_io;
+use std::old_io::fs::File;
+use std::old_io::BufferedReader;
 
 #[path = "../common/util.rs"]
 #[macro_use]

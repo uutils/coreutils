@@ -18,7 +18,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::c_str_to_bytes;
-use std::io::print;
+use std::old_io::print;
 use libc::c_char;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;

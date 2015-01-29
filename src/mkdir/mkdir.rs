@@ -13,8 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::fs::{self, PathExtensions};
-use std::io::FilePermission;
+use std::old_io::fs::{self, PathExtensions};
+use std::old_io::FilePermission;
 use std::num::from_str_radix;
 
 #[path = "../common/util.rs"]

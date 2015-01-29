@@ -13,9 +13,9 @@
 extern crate getopts;
 #[macro_use] extern crate log;
 
-use std::io::{println, stdin, stdout, Append, File, Truncate, Write};
-use std::io::{IoResult};
-use std::io::util::{copy, NullWriter, MultiWriter};
+use std::old_io::{println, stdin, stdout, Append, File, Truncate, Write};
+use std::old_io::{IoResult};
+use std::old_io::util::{copy, NullWriter, MultiWriter};
 use std::os;
 use getopts::{getopts, optflag, usage};
 

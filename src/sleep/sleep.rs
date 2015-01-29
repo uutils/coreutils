@@ -14,7 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::f64;
-use std::io::{print, timer};
+use std::old_io::{print, timer};
 use std::time::duration::{self, Duration};
 
 #[path = "../common/util.rs"]

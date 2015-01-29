@@ -19,7 +19,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::{CString, c_str_to_bytes};
-use std::io::print;
+use std::old_io::print;
 use std::mem;
 use std::ptr;
 use utmpx::*;

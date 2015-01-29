@@ -13,9 +13,9 @@
 extern crate getopts;
 
 use std::cmp::Ordering;
-use std::io::{BufferedReader, IoResult, print};
-use std::io::fs::File;
-use std::io::stdio::{stdin, StdinReader};
+use std::old_io::{BufferedReader, IoResult, print};
+use std::old_io::fs::File;
+use std::old_io::stdio::{stdin, StdinReader};
 use std::path::Path;
 
 static NAME : &'static str = "comm";
@@ -102,7 +102,7 @@ fn open_file(name: &str) -> IoResult<LineReader> {
     match name {
         "-" => Ok(LineReader::Stdin(stdin())),
         _   => {
-            let f = try!(std::io::File::open(&Path::new(name)));
+            let f = try!(std::old_io::File::open(&Path::new(name)));
             Ok(LineReader::FileIn(BufferedReader::new(f)))
         }
     }

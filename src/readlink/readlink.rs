@@ -13,8 +13,8 @@
 extern crate getopts;
 
 use getopts::{optflag, getopts, usage, OptGroup};
-use std::io;
-use std::io::fs;
+use std::old_io as io;
+use std::old_io::fs;
 use std::os;
 use std::vec::Vec;
 

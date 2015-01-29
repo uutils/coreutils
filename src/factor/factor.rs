@@ -14,8 +14,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::vec::Vec;
-use std::io::BufferedReader;
-use std::io::stdio::stdin_raw;
+use std::old_io::BufferedReader;
+use std::old_io::stdio::stdin_raw;
 
 #[path="../common/util.rs"]
 #[macro_use]

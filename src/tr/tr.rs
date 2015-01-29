@@ -16,8 +16,8 @@ extern crate getopts;
 use getopts::OptGroup;
 use std::char::from_u32;
 use std::collections::{BitvSet, VecMap};
-use std::io::{BufferedReader, print};
-use std::io::stdio::{stdin_raw, stdout};
+use std::old_io::{BufferedReader, print};
+use std::old_io::stdio::{stdin_raw, stdout};
 use std::iter::FromIterator;
 use std::vec::Vec;
 

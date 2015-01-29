@@ -16,9 +16,9 @@
 extern crate regex;
 extern crate getopts;
 
-use std::io::{stdin};
-use std::io::BufferedReader;
-use std::io::fs::File;
+use std::old_io::{stdin};
+use std::old_io::BufferedReader;
+use std::old_io::fs::File;
 use std::iter::repeat;
 use std::num::Int;
 use std::path::Path;

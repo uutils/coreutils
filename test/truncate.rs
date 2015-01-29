@@ -1,7 +1,7 @@
 #![allow(unstable)]
 
-use std::io;
-use std::io::process::Command;
+use std::old_io as io;
+use std::old_io::process::Command;
 
 static PROGNAME: &'static str = "./truncate";
 static TFILE1: &'static str = "truncate_test_1";

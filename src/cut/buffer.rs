@@ -1,5 +1,5 @@
 use std;
-use std::io::{IoResult, IoError};
+use std::old_io::{IoResult, IoError};
 
 pub struct BufReader<R> {
     reader: R,
@@ -66,7 +66,7 @@ impl<R: Reader> BufReader<R> {
 
         loop {
             match self.maybe_fill_buf() {
-                Ok(0) | Err(IoError { kind: std::io::EndOfFile, .. })
+                Ok(0) | Err(IoError { kind: std::old_io::EndOfFile, .. })
                     if self.start == self.end => return bytes_consumed,
                 Err(err) => panic!("read error: {}", err.desc),
                 _ => ()
@@ -93,7 +93,7 @@ impl<R: Reader> BufReader<R> {
 impl<R: Reader> Bytes::Select for BufReader<R> {
     fn select<'a>(&'a mut self, bytes: usize) -> Bytes::Selected<'a> {
         match self.maybe_fill_buf() {
-            Err(IoError { kind: std::io::EndOfFile, .. }) => (),
+            Err(IoError { kind: std::old_io::EndOfFile, .. }) => (),
             Err(err) => panic!("read error: {}", err.desc),
             _ => ()
         }

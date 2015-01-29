@@ -13,9 +13,9 @@
 
 extern crate getopts;
 
-use std::io::{BufferedReader, IoResult, fs};
-use std::io::stdio::stdin_raw;
-use std::io::fs::PathExtensions;
+use std::old_io::{BufferedReader, IoResult, fs};
+use std::old_io::stdio::stdin_raw;
+use std::old_io::fs::PathExtensions;
 use std::path::GenericPath;
 use getopts::{
     getopts,

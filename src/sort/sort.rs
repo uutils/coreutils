@@ -15,8 +15,8 @@
 extern crate getopts;
 
 use std::cmp::Ordering;
-use std::io::{print, File, BufferedReader};
-use std::io::stdio::stdin_raw;
+use std::old_io::{print, File, BufferedReader};
+use std::old_io::stdio::stdin_raw;
 use std::str::Chars;
 
 #[path = "../common/util.rs"]

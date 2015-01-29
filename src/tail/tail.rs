@@ -14,14 +14,14 @@
 extern crate getopts;
 
 use std::char::CharExt;
-use std::io::{stdin, stdout};
-use std::io::{BufferedReader, BytesReader};
-use std::io::fs::File;
+use std::old_io::{stdin, stdout};
+use std::old_io::{BufferedReader, BytesReader};
+use std::old_io::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 use std::collections::ring_buf::RingBuf;
-use std::io::timer::sleep;
+use std::old_io::timer::sleep;
 use std::time::duration::Duration;
 
 #[path = "../common/util.rs"]

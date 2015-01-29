@@ -8,7 +8,7 @@
  */
 
 use core::iter::Peekable;
-use std::io::Lines;
+use std::old_io::Lines;
 use std::slice::Iter;
 use std::str::CharRange;
 use unicode::str::UnicodeStr;

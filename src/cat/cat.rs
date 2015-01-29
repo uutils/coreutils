@@ -16,9 +16,9 @@
 
 extern crate getopts;
 
-use std::io::{print, File};
-use std::io::stdio::{stdout_raw, stdin_raw, stderr};
-use std::io::{IoResult};
+use std::old_io::{print, File};
+use std::old_io::stdio::{stdout_raw, stdin_raw, stderr};
+use std::old_io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
 
 pub fn uumain(args: Vec<String>) -> isize {

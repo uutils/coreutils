@@ -1,6 +1,6 @@
 #![allow(unstable)]
 
-use std::io::{File, Truncate, ReadWrite};
+use std::old_io::{File, Truncate, ReadWrite};
 use std::os;
 use std::path::Path;
 

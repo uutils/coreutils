@@ -14,7 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::borrow::ToOwned;
-use std::io::{print, println};
+use std::old_io::{print, println};
 
 #[path = "../common/util.rs"]
 #[macro_use]

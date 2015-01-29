@@ -1,6 +1,6 @@
 #![allow(unstable)]
 
-use std::io::process::Command;
+use std::old_io::process::Command;
 use std::str;
 
 static PROGNAME: &'static str = "./cat";

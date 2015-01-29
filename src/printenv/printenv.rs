@@ -16,7 +16,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::os;
-use std::io::print;
+use std::old_io::print;
 
 #[path = "../common/util.rs"]
 #[macro_use]

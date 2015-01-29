@@ -16,7 +16,7 @@ extern crate getopts;
 extern crate libc;
 extern crate time;
 
-use std::io::{stderr, fs, FileStat, FileType};
+use std::old_io::{stderr, fs, FileStat, FileType};
 use std::num::Float;
 use std::option::Option;
 use std::path::Path;

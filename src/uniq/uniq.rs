@@ -16,7 +16,7 @@ extern crate getopts;
 use std::ascii::OwnedAsciiExt;
 use std::cmp::min;
 use std::str::FromStr;
-use std::io;
+use std::old_io as io;
 
 #[path = "../common/util.rs"]
 #[macro_use]

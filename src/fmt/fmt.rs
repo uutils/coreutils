@@ -17,8 +17,8 @@ extern crate getopts;
 extern crate unicode;
 
 use std::cmp;
-use std::io::{BufferedReader, BufferedWriter, File, IoResult};
-use std::io::stdio::{stdin_raw, stdout_raw};
+use std::old_io::{BufferedReader, BufferedWriter, File, IoResult};
+use std::old_io::stdio::{stdin_raw, stdout_raw};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 

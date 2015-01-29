@@ -18,7 +18,7 @@ extern crate serialize;
 
 #[macro_use] extern crate log;
 
-use std::io::process::Process;
+use std::old_io::process::Process;
 
 use getopts::{
     getopts,

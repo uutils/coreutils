@@ -12,8 +12,8 @@
 
 extern crate getopts;
 
-use std::io::{EndOfFile, File, IoError, IoResult, print};
-use std::io::stdio::stdin_raw;
+use std::old_io::{EndOfFile, File, IoError, IoResult, print};
+use std::old_io::stdio::stdin_raw;
 use std::mem;
 
 use crc_table::CRC_TABLE;

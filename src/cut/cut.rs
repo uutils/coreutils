@@ -13,8 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{stdio, File, BufferedWriter, BufferedReader, print};
-use std::io::fs::PathExtensions;
+use std::old_io::{stdio, File, BufferedWriter, BufferedReader, print};
+use std::old_io::fs::PathExtensions;
 use getopts::{optopt, optflag, getopts, usage};
 
 use ranges::Range;
@@ -142,7 +142,7 @@ fn cut_characters<R: Reader>(reader: R,
     'newline: loop {
         let line = match buf_in.read_line() {
             Ok(line) => line,
-            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
+            Err(std::old_io::IoError { kind: std::old_io::EndOfFile, .. }) => break,
             _ => panic!(),
         };
 
@@ -249,7 +249,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
     'newline: loop {
         let line = match buf_in.read_until(b'\n') {
             Ok(line) => line,
-            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
+            Err(std::old_io::IoError { kind: std::old_io::EndOfFile, .. }) => break,
             _ => panic!(),
         };
 
@@ -331,7 +331,7 @@ fn cut_fields<R: Reader>(reader: R,
     'newline: loop {
         let line = match buf_in.read_until(b'\n') {
             Ok(line) => line,
-            Err(std::io::IoError { kind: std::io::EndOfFile, .. }) => break,
+            Err(std::old_io::IoError { kind: std::old_io::EndOfFile, .. }) => break,
             _ => panic!(),
         };
 

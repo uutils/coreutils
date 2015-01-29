@@ -1,7 +1,7 @@
 #![allow(unstable)]
 
-use std::io::process::Command;
-use std::io::fs::{rmdir, PathExtensions};
+use std::old_io::process::Command;
+use std::old_io::fs::{rmdir, PathExtensions};
 use std::borrow::ToOwned;
 
 static EXE: &'static str = "./mkdir";

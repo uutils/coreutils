@@ -2,9 +2,9 @@
 
 extern crate time;
 
-use std::io::{process, fs, FilePermission};
-use std::io::process::Command;
-use std::io::fs::PathExtensions;
+use std::old_io::{process, fs, FilePermission};
+use std::old_io::process::Command;
+use std::old_io::fs::PathExtensions;
 use std::str::from_utf8;
 use std::borrow::ToOwned;
 
