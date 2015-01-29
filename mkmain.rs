@@ -30,7 +30,7 @@ fn main() {
     let main = TEMPLATE.replace("@UTIL_CRATE@", crat);
     let mut out = File::open_mode(&Path::new(outfile), Truncate, ReadWrite);
 
-    match out.write(main.as_bytes()) {
+    match out.write_all(main.as_bytes()) {
         Err(e) => panic!("{}", e),
         _ => (),
     }

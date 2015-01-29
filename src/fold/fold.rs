@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io;
+use std::old_io as io;
 use std::old_io::fs::File;
 use std::old_io::BufferedReader;
 

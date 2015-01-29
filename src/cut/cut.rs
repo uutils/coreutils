@@ -71,7 +71,7 @@ fn cut_bytes<R: Reader>(reader: R,
             loop {
                 match buf_read.select(low - cur_pos) {
                     NewlineFound(_) => {
-                        out.write(&[b'\n']).unwrap();
+                        out.write_all(&[b'\n']).unwrap();
                         continue 'newline
                     }
                     Complete(bytes) => {
@@ -81,7 +81,7 @@ fn cut_bytes<R: Reader>(reader: R,
                     Partial(bytes) => cur_pos += bytes.len(),
                     EndOfFile => {
                         if orig_pos != cur_pos {
-                            out.write(&[b'\n']).unwrap();
+                            out.write_all(&[b'\n']).unwrap();
                         }
 
                         break 'newline
@@ -92,7 +92,7 @@ fn cut_bytes<R: Reader>(reader: R,
             match opts.out_delim {
                 Some(ref delim) => {
                     if print_delim {
-                        out.write(delim.as_bytes()).unwrap();
+                        out.write_all(delim.as_bytes()).unwrap();
                     }
                     print_delim = true;
                 }
@@ -103,21 +103,21 @@ fn cut_bytes<R: Reader>(reader: R,
             loop {
                 match buf_read.select(high - cur_pos + 1) {
                     NewlineFound(bytes) => {
-                        out.write(bytes).unwrap();
+                        out.write_all(bytes).unwrap();
                         continue 'newline
                     }
                     Complete(bytes) => {
-                        out.write(bytes).unwrap();
+                        out.write_all(bytes).unwrap();
                         cur_pos = high + 1;
                         break
                     }
                     Partial(bytes) => {
                         cur_pos += bytes.len();
-                        out.write(bytes).unwrap();
+                        out.write_all(bytes).unwrap();
                     }
                     EndOfFile => {
                         if cur_pos != low || low == high {
-                            out.write(&[b'\n']).unwrap();
+                            out.write_all(&[b'\n']).unwrap();
                         }
 
                         break 'newline
@@ -127,7 +127,7 @@ fn cut_bytes<R: Reader>(reader: R,
         }
 
         buf_read.consume_line();
-        out.write(&[b'\n']).unwrap();
+        out.write_all(&[b'\n']).unwrap();
     }
 
     0
@@ -159,7 +159,7 @@ fn cut_characters<R: Reader>(reader: R,
             match opts.out_delim {
                 Some(ref delim) => {
                     if print_delim {
-                        out.write(delim.as_bytes()).unwrap();
+                        out.write_all(delim.as_bytes()).unwrap();
                     }
                     print_delim = true;
                 }
@@ -170,13 +170,13 @@ fn cut_characters<R: Reader>(reader: R,
                 Some((high_idx, _)) => {
                     let segment = &line.as_bytes()[low_idx..high_idx];
 
-                    out.write(segment).unwrap();
+                    out.write_all(segment).unwrap();
                 }
                 None => {
                     let bytes = line.as_bytes();
                     let segment = &bytes[low_idx..];
 
-                    out.write(segment).unwrap();
+                    out.write_all(segment).unwrap();
 
                     if line.as_bytes()[bytes.len() - 1] == b'\n' {
                         continue 'newline
@@ -186,7 +186,7 @@ fn cut_characters<R: Reader>(reader: R,
 
             char_pos = high + 1;
         }
-        out.write(&[b'\n']).unwrap();
+        out.write_all(&[b'\n']).unwrap();
     }
 
     0
@@ -261,9 +261,9 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
 
         if delim_search.peek().is_none() {
             if ! only_delimited {
-                out.write(line.as_slice()).unwrap();
+                out.write_all(line.as_slice()).unwrap();
                 if line[line.len() - 1] != b'\n' {
-                    out.write(&[b'\n']).unwrap();
+                    out.write_all(&[b'\n']).unwrap();
                 }
             }
 
@@ -287,7 +287,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
                     Some((high_idx, next_low_idx)) => {
                         let segment = &line[low_idx..high_idx];
 
-                        out.write(segment).unwrap();
+                        out.write_all(segment).unwrap();
 
                         print_delim = true;
 
@@ -297,7 +297,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
                     None => {
                         let segment = &line[low_idx..];
 
-                        out.write(segment).unwrap();
+                        out.write_all(segment).unwrap();
 
                         if line[line.len() - 1] == b'\n' {
                             continue 'newline
@@ -308,7 +308,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
             }
         }
 
-        out.write(&[b'\n']).unwrap();
+        out.write_all(&[b'\n']).unwrap();
     }
 
     0
@@ -343,9 +343,9 @@ fn cut_fields<R: Reader>(reader: R,
 
         if delim_search.peek().is_none() {
             if ! opts.only_delimited {
-                out.write(line.as_slice()).unwrap();
+                out.write_all(line.as_slice()).unwrap();
                 if line[line.len() - 1] != b'\n' {
-                    out.write(&[b'\n']).unwrap();
+                    out.write_all(&[b'\n']).unwrap();
                 }
             }
 
@@ -370,7 +370,7 @@ fn cut_fields<R: Reader>(reader: R,
                 Some((high_idx, next_low_idx)) => {
                     let segment = &line[low_idx..high_idx];
 
-                    out.write(segment).unwrap();
+                    out.write_all(segment).unwrap();
 
                     print_delim = true;
                     low_idx = next_low_idx;
@@ -379,7 +379,7 @@ fn cut_fields<R: Reader>(reader: R,
                 None => {
                     let segment = &line[low_idx..line.len()];
 
-                    out.write(segment).unwrap();
+                    out.write_all(segment).unwrap();
 
                     if line[line.len() - 1] == b'\n' {
                         continue 'newline
@@ -389,7 +389,7 @@ fn cut_fields<R: Reader>(reader: R,
             }
         }
 
-        out.write(&[b'\n']).unwrap();
+        out.write_all(&[b'\n']).unwrap();
     }
 
     0

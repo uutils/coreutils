@@ -30,7 +30,7 @@ fn test_increase_file_size() {
 #[test]
 fn test_decrease_file_size() {
     let mut file = make_file(TFILE2);
-    file.write(b"1234567890").unwrap();
+    file.write_all(b"1234567890").unwrap();
     if !Command::new(PROGNAME).args(&["--size=-4", TFILE2]).status().unwrap().success() {
         panic!();
     }

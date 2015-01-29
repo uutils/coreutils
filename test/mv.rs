@@ -35,7 +35,7 @@ fn run_interactive(cmd: &mut Command, input: &[u8])-> CmdResult {
     let stdin_cfg = process::CreatePipe(true, false);
     let mut command = cmd.stdin(stdin_cfg).spawn().unwrap();
 
-    command.stdin.as_mut().unwrap().write(input);
+    command.stdin.as_mut().unwrap().write_all(input);
 
     let prog = command.wait_with_output().unwrap();
     CmdResult {

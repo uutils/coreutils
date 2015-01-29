@@ -109,9 +109,9 @@ struct NamedWriter {
 }
 
 impl Writer for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> IoResult<()> {
+    fn write_all(&mut self, buf: &[u8]) -> IoResult<()> {
         with_path(&*self.path.clone(), || {
-            let val = self.inner.write(buf);
+            let val = self.inner.write_all(buf);
             if val.is_err() {
                 self.inner = Box::new(NullWriter) as Box<Writer>;
             }
