@@ -246,14 +246,14 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 	$(if $(ENABLE_STRIP),strip $@)
 	
 # Library for stdbuf
-$(BUILDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdbuf/libstdbuf.c $(SRCDIR)/stdbuf/libstdbuf.h | $(BUILDDIR)
+$(BUILDDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdbuf/libstdbuf.c $(SRCDIR)/stdbuf/libstdbuf.h | $(BUILDDIR)
 	cd $(SRCDIR)/stdbuf && \
 	$(RUSTC) libstdbuf.rs && \
 	$(CC) -c -Wall -Werror -fpic libstdbuf.c -L. -llibstdbuf.a && \
 	$(CC) -shared -o libstdbuf.$(DYLIB_EXT) -Wl,--whole-archive liblibstdbuf.a -Wl,--no-whole-archive libstdbuf.o -lpthread && \
-	mv *.so $(BUILDDIR) && $(RM) *.o && $(RM) *.a
+	mv *.$(DYLIB_EXT) $(BUILDDIR) && $(RM) *.o && $(RM) *.a
 	
-$(BUILDDIR)/stdbuf: $(BUILDIR)/libstdbuf.$(DYLIB_EXT)
+$(BUILDDIR)/stdbuf: $(BUILDDIR)/libstdbuf.$(DYLIB_EXT)
 
 # Dependencies
 $(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
