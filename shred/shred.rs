@@ -15,6 +15,7 @@ use std::os;
 use std::rand;
 use std::rand::{ThreadRng, Rng};
 use std::vec::Vec;
+
 extern crate core;
 use self::core::fmt;
 use self::core::ops::DerefMut;
@@ -22,8 +23,21 @@ use self::core::ops::DerefMut;
 static NAME: &'static str = "shred";
 const BLOCK_SIZE: usize = 512;
 
+// Patterns as shown in the GNU coreutils shred implementation
+const PATTERNS: [&'static [u8]; 37] = [
+    b"\x00", b"\xFF",
+    b"\x55", b"\xAA",
+    b"\x24\x92\x49", b"\x49\x24\x92", b"\x6D\xB6\xDB", b"\x92\x49\x24",
+        b"\xB6\xDB\x6D", b"\xDB\x6D\xB6",
+    b"\x11", b"\x22", b"\x33", b"\x44", b"\x66", b"\x77", b"\x88", b"\x99", b"\xBB", b"\xCC",
+        b"\xDD", b"\xEE",
+    b"\x10\x00", b"\x12\x49", b"\x14\x92", b"\x16\xDB", b"\x19\x24",
+        b"\x1B\x6D", b"\x1D\xB6", b"\x1F\xFF", b"\x18\x88", b"\x19\x99",
+        b"\x1A\xAA", b"\x1B\xBB", b"\x1C\xCC", b"\x1D\xDD", b"\x1E\xEE",
+];
+
 #[derive(Copy)]
-enum GenType<'a> {
+enum PassType<'a> {
     Pattern(&'a [u8]),
     Random,
 }
@@ -32,14 +46,14 @@ struct BytesGenerator<'a> {
     total_bytes: u64,
     bytes_generated: Cell<u64>,
     block_size: usize,
-    gen_type: GenType<'a>,
+    gen_type: PassType<'a>,
     rng: Option<RefCell<ThreadRng>>,
 }
 
 impl<'a> BytesGenerator<'a> {
-    fn new(total_bytes: u64, gen_type: GenType<'a>) -> BytesGenerator {
+    fn new(total_bytes: u64, gen_type: PassType<'a>) -> BytesGenerator {
         let mut rng = match gen_type {
-            GenType::Random => Some(RefCell::new(rand::thread_rng())),
+            PassType::Random => Some(RefCell::new(rand::thread_rng())),
             _ => None,
         };
         
@@ -69,14 +83,14 @@ impl<'a> Iterator for BytesGenerator<'a> {
         let mut bytes : Vec<u8> = Vec::with_capacity(this_block_size);
         
         match self.gen_type {
-            GenType::Random => {
+            PassType::Random => {
                 let mut rng = self.rng.as_ref().unwrap().borrow_mut();
                 unsafe {
                     bytes.set_len(this_block_size);
                     rng.fill_bytes(bytes.as_mut_slice());
                 }
             }
-            GenType::Pattern(pattern) => {
+            PassType::Pattern(pattern) => {
                 let mut skip = {
                     if self.bytes_generated.get() == 0 { 0 }
                     else { (pattern.len() as u64 % self.bytes_generated.get()) as usize }
@@ -102,7 +116,7 @@ pub fn main() {
     }
     let filename = args[1].as_slice();
     
-    wipe_file(filename, 3);
+    wipe_file(filename, 10);
     return;
 }
 
@@ -121,34 +135,58 @@ fn print_slice<T: fmt::Display>(slice: &[T]) {
     }
 }
 
-fn wipe_file(filename: &str, num_passes: usize) {
-    if num_passes < 3 { panic!("Error: Must have at least 3 passes"); }
+fn bytes_to_string(bytes: &[u8]) -> String {
+    let mut s = String::new();
+    while s.len() < 6 {
+        for byte in bytes.iter() {
+            s.push_str(format!("{:02x}", *byte).as_slice());
+        }
+    }
+    return s;
+}
+
+fn wipe_file(filename: &str, n_passes: usize) {
+
+    let mut pass_sequence: Vec<PassType> = Vec::new();
+    
+    if n_passes <= 3 {
+        for i in 0..3 { pass_sequence.push(PassType::Random) }
+    }
+    // This filling process is intentionally similar to that used in GNU's implementation
+    else {
+        let n_patterns = n_passes - 3; // We do three random passes no matter what
+        let n_full_arrays = n_patterns / PATTERNS.len(); // How many times can we go through all the patterns?
+        let remainder = n_patterns % PATTERNS.len(); // How many do we get through on our last time through?
+        for i in 0..n_full_arrays {
+            for p in PATTERNS.iter() {
+                pass_sequence.push(PassType::Pattern(*p));
+            }
+        }
+        for i in 0..remainder {
+            pass_sequence.push(PassType::Pattern(PATTERNS[i]));
+        }
+        rand::thread_rng().shuffle(pass_sequence.as_mut_slice()); // randomize the order of application
+        pass_sequence.insert(0, PassType::Random); // Insert front
+        pass_sequence.push(PassType::Random); // Insert back
+        let middle = pass_sequence.len() / 2;
+        pass_sequence.insert(middle, PassType::Random); // Insert middle
+    }
 
     let path = Path::new(filename);
     if !path.exists() { panic!("Error: File does not exist"); }
     if !path.is_file() { panic!("Error: Only files may be given as arguments") }
     
-    let patterns = [
-        b"\x00", b"\xFF",
-        b"\x55", b"\xAA",
-        b"\x24\x92\x49", b"\x49\x24\x92", b"\x6D\xB6\xDB", b"\x92\x49\x24",
-            b"\xB6\xDB\x6D", b"\xDB\x6D\xB6",
-        b"\x11", b"\x22", b"\x33", b"\x44", b"\x66", b"\x77", b"\x88", b"\x99", b"\xBB", b"\xCC",
-            b"\xDD", b"\xEE",
-        b"\x10\x00", b"\x12\x49", b"\x14\x92", b"\x16\xDB", b"\x19\x24",
-            b"\x1B\x6D", b"\x1D\xB6", b"\x1F\xFF", b"\x18\x88", b"\x19\x99",
-            b"\x1A\xAA", b"\x1B\xBB", b"\x1C\xCC", b"\x1D\xDD", b"\x1E\xEE",
-    ];
-    
-    let mut b: Vec<GenType> = Vec::new();
-    
-    for seq in patterns.iter() { b.push(GenType::Pattern(*seq)) }
-    
-    do_pass(&path, GenType::Random);
-    do_pass(&path, b[4]);
+    for (i, pass_type) in pass_sequence.iter().enumerate() {
+        print!("{:2.0}/{:2.0}: ", i+1, n_passes);
+        match *pass_type {
+            PassType::Random => println!("(random)"),
+            PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
+        };
+        do_pass(&path, *pass_type);
+    }
 }
 
-fn do_pass(path: &Path, generator_type: GenType) {
+fn do_pass(path: &Path, generator_type: PassType) {
     
     let mut file: fs::File;
     let mut file_size: u64;
