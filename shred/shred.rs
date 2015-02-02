@@ -6,6 +6,8 @@
 extern crate getopts;
 extern crate libc;
 
+use std::borrow::Cow;
+use std::fmt;
 use std::cell::{Cell, RefCell};
 use std::old_io::fs;
 use std::old_io::fs::PathExtensions;
@@ -16,9 +18,9 @@ use std::rand;
 use std::rand::{ThreadRng, Rng};
 use std::vec::Vec;
 
-extern crate core;
-use self::core::fmt;
-use self::core::ops::DerefMut;
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
 
 static NAME: &'static str = "shred";
 const BLOCK_SIZE: usize = 512;
@@ -114,9 +116,9 @@ pub fn main() {
     if args.len() == 1 {
         return;
     }
+    let program_name : String = format!("{}", Path::new(args[0].as_slice()).filename_display());
     let filename = args[1].as_slice();
-    
-    wipe_file(filename, 10);
+    wipe_file(filename, 10, program_name.as_slice(), true);
     return;
 }
 
@@ -145,8 +147,20 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     return s;
 }
 
-fn wipe_file(filename: &str, n_passes: usize) {
+fn wipe_file(path_str: &str, n_passes: usize, program_name: &str, verbose: bool) {
 
+    // Get these potential errors out of the way first
+    let path = Path::new(path_str);
+    if !path.exists() { panic!("Error: File does not exist"); }
+    if !path.is_file() { panic!("Error: Only files may be given as arguments") }
+    
+    let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Write) {
+        Ok(f) => f,
+        Err(e) => panic!("Error: Could not open file: {}", e),
+    };
+
+    // Fill up our pass sequence
+    
     let mut pass_sequence: Vec<PassType> = Vec::new();
     
     if n_passes <= 3 {
@@ -172,42 +186,37 @@ fn wipe_file(filename: &str, n_passes: usize) {
         pass_sequence.insert(middle, PassType::Random); // Insert middle
     }
 
-    let path = Path::new(filename);
-    if !path.exists() { panic!("Error: File does not exist"); }
-    if !path.is_file() { panic!("Error: Only files may be given as arguments") }
-    
     for (i, pass_type) in pass_sequence.iter().enumerate() {
-        print!("{:2.0}/{:2.0}: ", i+1, n_passes);
-        match *pass_type {
-            PassType::Random => println!("(random)"),
-            PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
-        };
-        do_pass(&path, *pass_type);
+        if verbose {
+            print!("{}: {}: pass {:2.0}/{:2.0} ", program_name, path.filename_display(), i+1, n_passes);
+            match *pass_type {
+                PassType::Random => println!("(random)"),
+                PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
+            };
+        }
+        do_pass(&mut file, *pass_type);
+        file.fsync();
+        file.seek(0, old_io::SeekStyle::SeekSet);
+        //old_io::stdin().read_line(); // debugging: hit Enter after every pass
     }
 }
 
-fn do_pass(path: &Path, generator_type: PassType) {
-    
-    let mut file: fs::File;
+fn do_pass(file: &mut fs::File, generator_type: PassType) -> Result<(), ()> {
     let mut file_size: u64;
-    
-    match fs::File::open_mode(path, old_io::Open, old_io::Write) {
-        Ok(f) => file = f,
-        Err(e) => panic!("Error: Could not open file: {}", e),
-    };
+
     match file.stat() {
         Ok(stat) => file_size = stat.size,
-        Err(e) => panic!("Error: could not read file stats: {}", e),
+        Err(e) => { eprintln!("Error: could not read file stats: {}", e); return Err(()); }
     };
     
     let mut generator = BytesGenerator::new(file_size, generator_type);
     for block in generator {
         match file.write(&*block) {
             Ok(_) => (),
-            Err(e) => panic!("Write failed! {}", e),
+            Err(e) => { eprintln!("Write failed! {}", e); return Err(()); }
         }
     }
-    info!("Pass complete");
+    return Ok(());
 }
 
 fn remove_file(path: &Path, verbose: bool) -> Result<(), ()> {
