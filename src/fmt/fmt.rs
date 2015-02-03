@@ -146,8 +146,8 @@ pub fn uumain(args: Vec<String>) -> isize {
         Some(s) => {
             fmt_opts.width =
                 match s.parse::<usize>() {
-                    Some(t) => t,
-                    None => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
+                    Ok(t) => t,
+                    Err(e) => { crash!(1, "Invalid WIDTH specification: `{}': {}", s, e); }
                 };
             fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
         }
@@ -158,8 +158,8 @@ pub fn uumain(args: Vec<String>) -> isize {
         Some(s) => {
             fmt_opts.goal =
                 match s.parse::<usize>() {
-                    Some(t) => t,
-                    None => { crash!(1, "Invalid GOAL specification: `{}'", s); }
+                    Ok(t) => t,
+                    Err(e) => { crash!(1, "Invalid GOAL specification: `{}': {}", s, e); }
                 };
             if !matches.opt_present("w") {
                 fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
@@ -174,8 +174,8 @@ pub fn uumain(args: Vec<String>) -> isize {
         Some(s) => {
             fmt_opts.tabwidth =
                 match s.parse::<usize>() {
-                    Some(t) => t,
-                    None => { crash!(1, "Invalid TABWIDTH specification: `{}'", s); }
+                    Ok(t) => t,
+                    Err(e) => { crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e); }
                 };
         }
         None => ()

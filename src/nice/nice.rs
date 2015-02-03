@@ -80,9 +80,9 @@ pub fn uumain(args: Vec<String>) -> isize {
                     return 125;
                 }
                 match nstr.as_slice().parse() {
-                    Some(num) => num,
-                    None => {
-                        show_error!("\"{}\" is not a valid number", nstr);
+                    Ok(num) => num,
+                    Err(e)=> {
+                        show_error!("\"{}\" is not a valid number: {}", nstr, e);
                         return 125;
                     }
                 }

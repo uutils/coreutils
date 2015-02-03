@@ -25,8 +25,8 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "L" => (_IOLBF, 0 as size_t),
         input => {
             let buff_size: usize = match input.parse() {
-                Some(num) => num,
-                None => crash!(1, "incorrect size of buffer!")
+                Ok(num) => num,
+                Err(e) => crash!(1, "incorrect size of buffer!: {}", e)
             };
             (_IOFBF, buff_size as size_t)
         }

@@ -66,9 +66,9 @@ pub fn uumain(args: Vec<String>) -> isize {
     let ignore_garbage = matches.opt_present("ignore-garbage");
     let line_wrap = match matches.opt_str("wrap") {
         Some(s) => match s.parse() {
-            Some(s) => s,
-            None => {
-                crash!(1, "error: {}", "Argument to option 'wrap' improperly formatted.");
+            Ok(s) => s,
+            Err(e)=> {
+                crash!(1, "error: Argument to option 'wrap' improperly formatted: {}", e);
             }
         },
         None => 76

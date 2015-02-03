@@ -58,8 +58,8 @@ fn print_factors(num: u64) {
 
 fn print_factors_str(num_str: &str) {
     let num = match num_str.parse::<u64>() {
-        Some(x) => x,
-        None => { crash!(1, "{} not a number", num_str); }
+        Ok(x) => x,
+        Err(e)=> { crash!(1, "{} not a number: {}", num_str, e); }
     };
     print_factors(num);
 }

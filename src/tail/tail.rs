@@ -73,7 +73,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     if follow {
         match given_options.opt_str("s") {
             Some(n) => {
-                let parsed: Option<u64> = n.parse();
+                let parsed: Option<u64> = n.parse().ok();
                 match parsed {
                     Some(m) => { sleep_msec = m * 1000 }
                     None => {}
@@ -196,8 +196,8 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
     } else {
         let value = size_slice.parse();
         match value {
-            Some(v) => Some(multiplier * v),
-            None => None
+            Ok(v) => Some(multiplier * v),
+            _ => None
         }
     }
 }
@@ -224,7 +224,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse();
+                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse().ok();
                     return (options, Some(number.unwrap()));
                 }
             }

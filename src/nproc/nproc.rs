@@ -54,9 +54,9 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     let mut ignore = match matches.opt_str("ignore") {
         Some(numstr) => match numstr.parse() {
-            Some(num) => num,
-            None => {
-                show_error!("\"{}\" is not a valid number", numstr);
+            Ok(num) => num,
+            Err(e) => {
+                show_error!("\"{}\" is not a valid number: {}", numstr, e);
                 return 1;
             }
         },
@@ -66,8 +66,8 @@ pub fn uumain(args: Vec<String>) -> isize {
     if !matches.opt_present("all") {
         ignore += match os::getenv("OMP_NUM_THREADS") {
             Some(threadstr) => match threadstr.parse() {
-                Some(num) => num,
-                None => 0
+                Ok(num) => num,
+                Err(e)=> 0
             },
             None => 0
         };

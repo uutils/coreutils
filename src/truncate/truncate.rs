@@ -186,9 +186,9 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         slice
     }.to_string();
     let mut number: u64 = match bytes.as_slice().parse() {
-        Some(num) => num,
-        None => {
-            crash!(1, "'{}' is not a valid number.", size)
+        Ok(num) => num,
+        Err(e) => {
+            crash!(1, "'{}' is not a valid number: {}", size, e)
         }
     };
     if size.char_at(size.len() - 1).is_alphabetic() {

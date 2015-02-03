@@ -57,9 +57,9 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     let mode = match matches.opt_str("m") {
         Some(m) => match FromStrRadix::from_str_radix(m.as_slice(), 8) {
-            Some(m) => m,
-            None => {
-                show_error!("invalid mode");
+            Ok(m) => m,
+            Err(e )=> {
+                show_error!("invalid mode: {}", e);
                 return 1;
             }
         },
