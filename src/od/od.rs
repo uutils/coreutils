@@ -16,7 +16,7 @@ extern crate collections;
 use collections::string::String;
 use std::old_io::File;
 
-#[derive(Show)]
+#[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
 pub fn uumain(args: Vec<String>) -> isize {
