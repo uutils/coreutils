@@ -1,5 +1,5 @@
 #![crate_name = "sort"]
-#![allow(unstable)]
+#![feature(collections, core, io, path, rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.

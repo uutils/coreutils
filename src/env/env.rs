@@ -1,5 +1,5 @@
 #![crate_name = "env"]
-#![allow(unstable)]
+#![feature(core, io, os)]
 
 /*
  * This file is part of the uutils coreutils package.

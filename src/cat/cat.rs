@@ -1,5 +1,5 @@
 #![crate_name = "cat"]
-#![allow(unstable)]
+#![feature(collections, core, io, path, rustc_private)]
 
 #![feature(box_syntax, unsafe_destructor)]
 

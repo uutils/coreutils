@@ -1,11 +1,10 @@
-#![allow(unstable)]
-
+#![feature(core, io, os, path)]
 use std::old_io::{File, Truncate, ReadWrite};
 use std::os;
 use std::path::Path;
 
 static TEMPLATE: &'static str = "\
-#![allow(unstable)]
+#![feature(os)]
 extern crate \"@UTIL_CRATE@\" as uu@UTIL_CRATE@;
 
 use std::os;

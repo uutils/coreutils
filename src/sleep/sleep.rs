@@ -1,5 +1,5 @@
 #![crate_name = "sleep"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.

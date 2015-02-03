@@ -1,5 +1,5 @@
 #![crate_name = "fold"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.

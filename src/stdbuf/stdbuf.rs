@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![allow(unstable)]
+#![feature(core, io, libc, os, path, rustc_private, unicode)]
 
 /*
 * This file is part of the uutils coreutils package.

@@ -1,5 +1,5 @@
 #![crate_name = "nproc"]
-#![allow(unstable)]
+#![feature(collections, os, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
