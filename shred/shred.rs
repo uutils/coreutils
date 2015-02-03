@@ -9,7 +9,7 @@ extern crate libc;
 use std::borrow::Cow;
 use std::fmt;
 use std::cell::{Cell, RefCell};
-use std::old_io::fs;
+use std::old_io::{fs, IoErrorKind};
 use std::old_io::fs::PathExtensions;
 use std::old_io;
 use std::result::Result;
@@ -24,7 +24,7 @@ mod util;
 
 static NAME: &'static str = "shred";
 const BLOCK_SIZE: usize = 512;
-
+const NAMESET: &'static str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 // Patterns as shown in the GNU coreutils shred implementation
 const PATTERNS: [&'static [u8]; 37] = [
     b"\x00", b"\xFF",
@@ -42,6 +42,58 @@ const PATTERNS: [&'static [u8]; 37] = [
 enum PassType<'a> {
     Pattern(&'a [u8]),
     Random,
+}
+
+struct FilenameGenerator {
+    name_len: usize,
+    nameset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAMESET
+    exhausted: Cell<bool>,
+}
+
+impl FilenameGenerator {
+    fn new(name_len: usize) -> FilenameGenerator {
+        let mut indices = Vec::new();
+        for i in 0..name_len {
+            indices.push(0);
+        }
+        return FilenameGenerator{name_len: name_len,
+                                 nameset_indices: RefCell::new(indices),
+                                 exhausted: Cell::new(false)};
+    }
+}
+
+impl Iterator for FilenameGenerator {
+    type Item = String;
+    
+    fn next(&mut self) -> Option<String> {
+        if self.exhausted.get() {
+            return None;
+        }
+        
+        let mut nameset_indices = self.nameset_indices.borrow_mut();
+        
+        // Make the return value, then increment
+        let mut ret = String::new();
+        for i in nameset_indices.iter() {
+            ret.push(NAMESET.char_at(*i));
+        }
+        
+        if nameset_indices[0] == NAMESET.len()-1 { self.exhausted.set(true) }
+        // Now increment the least significant index
+        for i in range(0, self.name_len).rev() {
+            if nameset_indices[i] == NAMESET.len()-1 {
+                nameset_indices[i] = 0; // Carry the 1
+                continue;
+            }
+            else {
+                nameset_indices[i] += 1;
+                break;
+            }
+        }
+        
+        return Some(ret);
+        
+    }
 }
 
 struct BytesGenerator<'a> {
@@ -137,6 +189,10 @@ fn print_slice<T: fmt::Display>(slice: &[T]) {
     }
 }
 
+fn wait_enter() {
+    old_io::stdin().read_line();
+}
+
 fn bytes_to_string(bytes: &[u8]) -> String {
     let mut s = String::new();
     while s.len() < 6 {
@@ -197,8 +253,9 @@ fn wipe_file(path_str: &str, n_passes: usize, program_name: &str, verbose: bool)
         do_pass(&mut file, *pass_type);
         file.fsync();
         file.seek(0, old_io::SeekStyle::SeekSet);
-        //old_io::stdin().read_line(); // debugging: hit Enter after every pass
+        //wait_enter() // debugging: hit Enter after every pass
     }
+    wipe_name(&path, true);
 }
 
 fn do_pass(file: &mut fs::File, generator_type: PassType) -> Result<(), ()> {
@@ -206,15 +263,45 @@ fn do_pass(file: &mut fs::File, generator_type: PassType) -> Result<(), ()> {
 
     match file.stat() {
         Ok(stat) => file_size = stat.size,
-        Err(e) => { eprintln!("Error: could not read file stats: {}", e); return Err(()); }
+        Err(e) => { eprintln!("Error: Could not read file stats: {}", e); return Err(()); }
     };
     
     let mut generator = BytesGenerator::new(file_size, generator_type);
     for block in generator {
         match file.write(&*block) {
             Ok(_) => (),
-            Err(e) => { eprintln!("Write failed! {}", e); return Err(()); }
+            Err(e) => { eprintln!("Error: Write failed: {}", e); return Err(()); }
         }
+    }
+    return Ok(());
+}
+
+// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
+fn wipe_name(file_path: &Path, verbose: bool) -> Result<(), ()> {
+    let mut basename_len: usize = format!("{}", file_path.filename_display()).len();
+    let mut prev_path = file_path.clone();
+    let dir_path: Path = file_path.dir_path();
+    
+    for length in range(1, basename_len+1).rev() {
+        for name in FilenameGenerator::new(length) {
+            let new_path = dir_path.join(name.as_slice());
+            match fs::rename(&prev_path, &new_path) {
+                Ok(()) => {
+                    if verbose { println!("Renamed to {}", name.as_slice()) }
+                    prev_path = new_path;
+                    break;
+                }
+                Err(e) => {
+                    // Don't overwrite an existing file, just find another name
+                    if e.kind != IoErrorKind::PathAlreadyExists { continue; }
+                    else {
+                        eprintln!("Error: Could not rename file: {}", e);
+                        return Err(());
+                    }
+                }
+            }
+        }
+        wait_enter();
     }
     return Ok(());
 }
