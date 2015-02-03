@@ -67,7 +67,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         ignore += match os::getenv("OMP_NUM_THREADS") {
             Some(threadstr) => match threadstr.parse() {
                 Ok(num) => num,
-                Err(e)=> 0
+                Err(_)=> 0
             },
             None => 0
         };

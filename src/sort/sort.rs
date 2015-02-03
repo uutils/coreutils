@@ -146,7 +146,7 @@ fn frac_compare(a: &String, b: &String) -> Ordering {
 }
 
 #[inline(always)]
-fn print_sorted<S, T: Iterator<Item=S>>(mut iter: T) where S: std::fmt::Display {
+fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
     for line in iter {
         print!("{}", line);
     }

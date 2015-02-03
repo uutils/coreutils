@@ -242,7 +242,7 @@ macro_rules! tail_impl (
         // count lines/chars. When reaching the end of file, output the data in the
         // ringbuf.
         let mut ringbuf: RingBuf<$kind> = RingBuf::new();
-        let mut data = $reader.$kindfn().skip(
+        let data = $reader.$kindfn().skip(
             if $beginning {
                 let temp = $count;
                 $count = ::std::usize::MAX;
