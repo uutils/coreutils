@@ -168,27 +168,13 @@ pub fn main() {
     if args.len() == 1 {
         return;
     }
-    let program_name : String = format!("{}", Path::new(args[0].as_slice()).filename_display());
+    let prog_name : String = format!("{}", Path::new(args[0].as_slice()).filename_display());
     let filename = args[1].as_slice();
-    wipe_file(filename, 10, program_name.as_slice(), true);
+    wipe_file(filename, 10, prog_name.as_slice(), true);
     return;
 }
 
-/*impl<'a, T: fmt::Display> fmt::Display for AsSlice<T>+'a {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for elem in self.iter() {
-            f.write_string(format!("{} ", elem));
-        }
-        return Ok(());
-    }
-}*/
-
-fn print_slice<T: fmt::Display>(slice: &[T]) {
-    for elem in slice.iter() {
-        print!("{} ", elem);
-    }
-}
-
+// For debugging purposes
 fn wait_enter() {
     old_io::stdin().read_line();
 }
@@ -203,16 +189,19 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     return s;
 }
 
-fn wipe_file(path_str: &str, n_passes: usize, program_name: &str, verbose: bool) {
+fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
 
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
-    if !path.exists() { panic!("Error: File does not exist"); }
-    if !path.is_file() { panic!("Error: Only files may be given as arguments") }
+    if !path.exists() { eprintln!("{}: {}: PATH DOES NOT EXIST", prog_name, path.display()); return; }
+    if !path.is_file() { eprintln!("{}: {}: NOT A FILE", prog_name, path.display()); return; }
     
     let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Write) {
         Ok(f) => f,
-        Err(e) => panic!("Error: Could not open file: {}", e),
+        Err(e) => {
+            eprintln!("{}: {}: COULD NOT OPEN FILE \"{}\"", prog_name, path.filename_display(), e.desc);
+            return;
+        }
     };
 
     // Fill up our pass sequence
@@ -244,66 +233,84 @@ fn wipe_file(path_str: &str, n_passes: usize, program_name: &str, verbose: bool)
 
     for (i, pass_type) in pass_sequence.iter().enumerate() {
         if verbose {
-            print!("{}: {}: pass {:2.0}/{:2.0} ", program_name, path.filename_display(), i+1, n_passes);
+            print!("{}: {}: pass {:2.0}/{:2.0} ", prog_name, path.filename_display(), i+1, n_passes);
             match *pass_type {
                 PassType::Random => println!("(random)"),
                 PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
             };
         }
-        do_pass(&mut file, *pass_type);
+        do_pass(&mut file, *pass_type, prog_name);
         file.fsync();
         file.seek(0, old_io::SeekStyle::SeekSet);
-        //wait_enter() // debugging: hit Enter after every pass
     }
-    wipe_name(&path, true);
+    wipe_name(&path, prog_name, true);
 }
 
-fn do_pass(file: &mut fs::File, generator_type: PassType) -> Result<(), ()> {
+fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Result<(), ()> {
     let mut file_size: u64;
 
     match file.stat() {
         Ok(stat) => file_size = stat.size,
-        Err(e) => { eprintln!("Error: Could not read file stats: {}", e); return Err(()); }
+        Err(e) => {
+                eprintln!("{}: {}: COULD NOT READ FILE STATS \"{}\"", prog_name,
+                                                                      file.path().filename_display(),
+                                                                      e.desc);
+                return Err(());
+            }
     };
     
     let mut generator = BytesGenerator::new(file_size, generator_type);
     for block in generator {
         match file.write(&*block) {
             Ok(_) => (),
-            Err(e) => { eprintln!("Error: Write failed: {}", e); return Err(()); }
+            Err(e) => {
+                eprintln!("{}: {}: WRITE FAILED \"{}\"", prog_name,
+                                                         file.path().filename_display(),
+                                                         e.desc);
+                return Err(());
+            }
         }
     }
     return Ok(());
 }
 
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
-fn wipe_name(file_path: &Path, verbose: bool) -> Result<(), ()> {
+// Return the path of the file after its last renaming or None if error
+fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
     let mut basename_len: usize = format!("{}", file_path.filename_display()).len();
     let mut prev_path = file_path.clone();
     let dir_path: Path = file_path.dir_path();
     
+    let mut last_path: Path = Path::new(""); // for use inside the loop
+    
     for length in range(1, basename_len+1).rev() {
         for name in FilenameGenerator::new(length) {
             let new_path = dir_path.join(name.as_slice());
+            match fs::stat(&new_path) {
+                Err(_) => (), // Good. We don't want the filename to already exist (don't overwrite)
+                Ok(_) => continue, // If it does, find another name that doesn't
+            }
             match fs::rename(&prev_path, &new_path) {
                 Ok(()) => {
-                    if verbose { println!("Renamed to {}", name.as_slice()) }
+                    if verbose {
+                        println!("{}: {}: renamed to {}", prog_name,
+                                                          prev_path.filename_display(),
+                                                          new_path.filename_display());
+                    }
+                    last_path = new_path.clone();
                     prev_path = new_path;
                     break;
                 }
                 Err(e) => {
-                    // Don't overwrite an existing file, just find another name
-                    if e.kind != IoErrorKind::PathAlreadyExists { continue; }
-                    else {
-                        eprintln!("Error: Could not rename file: {}", e);
-                        return Err(());
-                    }
+                    eprintln!("{}: {}: COULD NOT RENAME TO {}", prog_name,
+                                                                prev_path.filename_display(),
+                                                                new_path.filename_display());
+                    return None;
                 }
             }
-        }
-        wait_enter();
+        } // If every possible filename already exists, just reduce the length and try again
     }
-    return Ok(());
+    return Some(last_path);
 }
 
 fn remove_file(path: &Path, verbose: bool) -> Result<(), ()> {
