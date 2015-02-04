@@ -1,22 +1,14 @@
 #![crate_name = "shred"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, os, path, rand)]
 
-#[macro_use] extern crate log;
-
-extern crate getopts;
-extern crate libc;
-
-use std::borrow::Cow;
-use std::fmt;
 use std::cell::{Cell, RefCell};
-use std::old_io::{fs, IoError};
+use std::old_io::fs;
 use std::old_io::fs::PathExtensions;
 use std::old_io;
-use std::result::Result;
 use std::os;
+use std::result::Result;
 use std::rand;
 use std::rand::{ThreadRng, Rng};
-use std::vec::Vec;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -53,7 +45,7 @@ struct FilenameGenerator {
 impl FilenameGenerator {
     fn new(name_len: usize) -> FilenameGenerator {
         let mut indices = Vec::new();
-        for i in 0..name_len {
+        for _ in 0..name_len {
             indices.push(0);
         }
         return FilenameGenerator{name_len: name_len,
@@ -106,7 +98,7 @@ struct BytesGenerator<'a> {
 
 impl<'a> BytesGenerator<'a> {
     fn new(total_bytes: u64, gen_type: PassType<'a>) -> BytesGenerator {
-        let mut rng = match gen_type {
+        let rng = match gen_type {
             PassType::Random => Some(RefCell::new(rand::thread_rng())),
             _ => None,
         };
@@ -145,7 +137,7 @@ impl<'a> Iterator for BytesGenerator<'a> {
                 }
             }
             PassType::Pattern(pattern) => {
-                let mut skip = {
+                let skip = {
                     if self.bytes_generated.get() == 0 { 0 }
                     else { (pattern.len() as u64 % self.bytes_generated.get()) as usize }
                 };
@@ -174,10 +166,11 @@ pub fn main() {
     return;
 }
 
-// For debugging purposes
+/* For debugging purposes
 fn wait_enter() {
     old_io::stdin().read_line();
 }
+*/
 
 fn bytes_to_string(bytes: &[u8]) -> String {
     let mut s = String::new();
@@ -209,14 +202,14 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
     let mut pass_sequence: Vec<PassType> = Vec::new();
     
     if n_passes <= 3 {
-        for i in 0..3 { pass_sequence.push(PassType::Random) }
+        for _ in 0..3 { pass_sequence.push(PassType::Random) }
     }
     // This filling process is intentionally similar to that used in GNU's implementation
     else {
         let n_patterns = n_passes - 3; // We do three random passes no matter what
         let n_full_arrays = n_patterns / PATTERNS.len(); // How many times can we go through all the patterns?
         let remainder = n_patterns % PATTERNS.len(); // How many do we get through on our last time through?
-        for i in 0..n_full_arrays {
+        for _ in 0..n_full_arrays {
             for p in PATTERNS.iter() {
                 pass_sequence.push(PassType::Pattern(*p));
             }
@@ -257,20 +250,20 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
         Ok(stat) => file_size = stat.size,
         Err(e) => {
                 eprintln!("{}: {}: COULD NOT READ FILE STATS: \"{}\"", prog_name,
-                                                                      file.path().filename_display(),
-                                                                      e.desc);
+                                                                       file.path().filename_display(),
+                                                                       e.desc);
                 return Err(());
             }
     };
     
     let mut generator = BytesGenerator::new(file_size, generator_type);
     for block in generator {
-        match file.write(&*block) {
+        match file.write_all(&*block) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("{}: {}: WRITE FAILED: \"{}\"", prog_name,
-                                                         file.path().filename_display(),
-                                                         e.desc);
+                                                          file.path().filename_display(),
+                                                          e.desc);
                 return Err(());
             }
         }
@@ -281,7 +274,7 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 // Return the path of the file after its last renaming or None if error
 fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
-    let mut basename_len: usize = format!("{}", file_path.filename_display()).len();
+    let basename_len: usize = format!("{}", file_path.filename_display()).len();
     let mut prev_path = file_path.clone();
     let dir_path: Path = file_path.dir_path();
     
