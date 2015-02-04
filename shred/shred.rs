@@ -9,7 +9,7 @@ extern crate libc;
 use std::borrow::Cow;
 use std::fmt;
 use std::cell::{Cell, RefCell};
-use std::old_io::{fs, IoErrorKind};
+use std::old_io::{fs, IoError};
 use std::old_io::fs::PathExtensions;
 use std::old_io;
 use std::result::Result;
@@ -199,7 +199,7 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
     let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Write) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("{}: {}: COULD NOT OPEN FILE \"{}\"", prog_name, path.filename_display(), e.desc);
+            eprintln!("{}: {}: COULD NOT OPEN FILE: \"{}\"", prog_name, path.filename_display(), e.desc);
             return;
         }
     };
@@ -240,10 +240,14 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
             };
         }
         do_pass(&mut file, *pass_type, prog_name);
-        file.fsync();
+        file.fsync(); // Sync to disk after each pass
         file.seek(0, old_io::SeekStyle::SeekSet);
     }
-    wipe_name(&path, prog_name, true);
+    let renamed_path: Option<Path> = wipe_name(&path, prog_name, true);
+    match renamed_path {
+        Some(rp) => { remove_file(&rp, path.filename_str().unwrap_or(""), prog_name, verbose); }
+        None => (),
+    }
 }
 
 fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Result<(), ()> {
@@ -252,7 +256,7 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
     match file.stat() {
         Ok(stat) => file_size = stat.size,
         Err(e) => {
-                eprintln!("{}: {}: COULD NOT READ FILE STATS \"{}\"", prog_name,
+                eprintln!("{}: {}: COULD NOT READ FILE STATS: \"{}\"", prog_name,
                                                                       file.path().filename_display(),
                                                                       e.desc);
                 return Err(());
@@ -264,7 +268,7 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
         match file.write(&*block) {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("{}: {}: WRITE FAILED \"{}\"", prog_name,
+                eprintln!("{}: {}: WRITE FAILED: \"{}\"", prog_name,
                                                          file.path().filename_display(),
                                                          e.desc);
                 return Err(());
@@ -313,13 +317,15 @@ fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
     return Some(last_path);
 }
 
-fn remove_file(path: &Path, verbose: bool) -> Result<(), ()> {
+fn remove_file(path: &Path, orig_filename: &str, prog_name: &str, verbose: bool) -> Result<(), ()> {
     match fs::unlink(path) {
-        Ok(_) => if verbose { println!("Removed '{}'", "<SOME FILE>"); },
-        Err(f) => {
-            println!("{}", f.to_string());
+        Ok(_) => {
+            if verbose { println!("{}: {}: removed", prog_name, orig_filename); }
+            return Ok(());
+        }
+        Err(e) => {
+            eprintln!("{}: {}: COULD NOT REMOVE: \"{}\"", prog_name, path.filename_display(), e.desc);
             return Err(());
         }
     }
-    Ok(())
 }
