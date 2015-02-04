@@ -49,9 +49,9 @@ impl FilenameGenerator {
         for _ in 0..name_len {
             indices.push(0);
         }
-        return FilenameGenerator{name_len: name_len,
-                                 nameset_indices: RefCell::new(indices),
-                                 exhausted: Cell::new(false)};
+        FilenameGenerator{name_len: name_len,
+                          nameset_indices: RefCell::new(indices),
+                          exhausted: Cell::new(false)}
     }
 }
 
@@ -84,7 +84,7 @@ impl Iterator for FilenameGenerator {
             }
         }
         
-        return Some(ret);
+        Some(ret)
         
     }
 }
@@ -111,7 +111,7 @@ impl<'a> BytesGenerator<'a> {
                                  block_size: BLOCK_SIZE,
                                  gen_type: gen_type,
                                  rng: rng};
-        return gen;
+        gen
     }
 }
 
@@ -154,14 +154,14 @@ impl<'a> Iterator for BytesGenerator<'a> {
         
         let new_bytes_generated = self.bytes_generated.get() + this_block_size as u64;
         self.bytes_generated.set(new_bytes_generated);
-        return Some(bytes.into_boxed_slice());
+        Some(bytes.into_boxed_slice())
     }
 }
 
 pub fn main() {
     let args = os::args();
     if args.len() == 1 {
-        return;
+        exit!(1);
     }
     let prog_name : String = format!("{}", Path::new(args[0].as_slice()).filename_display());
     let filename = args[1].as_slice();
@@ -189,13 +189,14 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
 
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
-    if !path.exists() { eprintln!("{}: {}: PATH DOES NOT EXIST", prog_name, path.display()); return; }
-    if !path.is_file() { eprintln!("{}: {}: NOT A FILE", prog_name, path.display()); return; }
+    if !path.exists() { eprintln!("{}: {}: No such file or directory", prog_name, path.display()); return; }
+    if !path.is_file() { eprintln!("{}: {}: Not a file", prog_name, path.display()); return; }
     
-    let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Read) {
+    let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Write) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("{}: {}: COULD NOT OPEN FILE: {}", prog_name, path.filename_display(), e.desc);
+            eprintln!("{}: {}: Couldn't open file for writing: {}", prog_name,
+                                                                    path.filename_display(), e.desc);
             return;
         }
     };
@@ -252,9 +253,9 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
     match file.stat() {
         Ok(stat) => file_size = stat.size,
         Err(e) => {
-                eprintln!("{}: {}: COULD NOT READ FILE STATS: {}", prog_name,
-                                                                   file.path().filename_display(),
-                                                                   e.desc);
+                eprintln!("{}: {}: Couldn't stat file: {}", prog_name,
+                                                            file.path().filename_display(),
+                                                            e.desc);
                 return Err(());
             }
     };
@@ -264,9 +265,9 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
         match file.write_all(&*block) {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("{}: {}: WRITE FAILED: {}", prog_name,
-                                                      file.path().filename_display(),
-                                                      e.desc);
+                eprintln!("{}: {}: Couldn't write to file: {}", prog_name,
+                                                                file.path().filename_display(),
+                                                                e.desc);
                 return Err(());
             }
         }
@@ -318,11 +319,11 @@ fn remove_file(path: &Path, orig_filename: &str, prog_name: &str, verbose: bool)
     match fs::unlink(path) {
         Ok(_) => {
             if verbose { println!("{}: {}: removed", prog_name, orig_filename); }
-            return Ok(());
+            Ok(())
         }
         Err(e) => {
             eprintln!("{}: {}: COULD NOT REMOVE: {}", prog_name, path.filename_display(), e.desc);
-            return Err(());
+            Err(())
         }
     }
 }
