@@ -1,4 +1,4 @@
-#![allow(unstable)]
+#![feature(core, io, os, path)]
 
 use std::old_io::{File, Truncate, Write};
 use std::os;

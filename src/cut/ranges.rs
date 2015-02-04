@@ -9,37 +9,48 @@
 
 use std;
 
-#[derive(PartialEq,Eq,PartialOrd,Ord,Show)]
+#[derive(PartialEq,Eq,PartialOrd,Ord,Debug)]
 pub struct Range {
     pub low: usize,
     pub high: usize,
 }
 
 impl std::str::FromStr for Range {
-    fn from_str(s: &str) -> Option<Range> {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Range, &'static str> {
         use std::usize::MAX;
 
         let mut parts = s.splitn(1, '-');
 
         match (parts.next(), parts.next()) {
             (Some(nm), None) => {
-                nm.parse::<usize>().and_then(|nm| if nm > 0 { Some(nm) } else { None })
-                                    .map(|nm| Range { low: nm, high: nm })
+                if let Ok(nm) = nm.parse::<usize>() {
+                    if nm > 0 { Ok(Range{ low: nm, high: nm}) } else { Err("invalid range") }
+                } else {
+                    Err("invalid range")
+                }
             }
             (Some(n), Some(m)) if m.len() == 0 => {
-                n.parse::<usize>().and_then(|low| if low > 0 { Some(low) } else { None })
-                                   .map(|low| Range { low: low, high: MAX })
+                if let Ok(low) = n.parse::<usize>() {
+                    if low > 0 { Ok(Range{ low: low, high: MAX}) } else { Err("invalid range") }
+                } else {
+                    Err("invalid range")
+                }
             }
             (Some(n), Some(m)) if n.len() == 0 => {
-                m.parse::<usize>().and_then(|high| if high >= 1 { Some(high) } else { None })
-                                   .map(|high| Range { low: 1, high: high })
+                if let Ok(high) = m.parse::<usize>() {
+                    if high > 0 { Ok(Range{ low: 1, high: high}) } else { Err("invalid range") }
+                } else {
+                    Err("invalid range")
+                }
             }
             (Some(n), Some(m)) => {
                 match (n.parse::<usize>(), m.parse::<usize>()) {
-                    (Some(low), Some(high)) if low > 0 && low <= high => {
-                        Some(Range { low: low, high: high })
+                    (Ok(low), Ok(high)) if low > 0 && low <= high => {
+                        Ok(Range { low: low, high: high })
                     }
-                    _ => None
+                    _ => Err("invalid range")
                 }
             }
             _ => unreachable!()
@@ -55,8 +66,8 @@ impl Range {
 
         for item in list.split(',') {
             match std::str::FromStr::from_str(item) {
-                Some(range_item) => ranges.push(range_item),
-                None => return Err(format!("range '{}' was invalid", item))
+                Ok(range_item) => ranges.push(range_item),
+                Err(e)=> return Err(format!("range '{}' was invalid: {}", item, e))
             }
         }
 

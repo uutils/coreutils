@@ -1,5 +1,5 @@
 #![crate_name = "relpath"]
-#![allow(unstable)]
+#![feature(collections, core, libc, os, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

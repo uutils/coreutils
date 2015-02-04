@@ -1,5 +1,5 @@
 #![crate_name = "tr"]
-#![allow(unstable)]
+#![feature(collections, core, io, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

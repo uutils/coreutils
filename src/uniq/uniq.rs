@@ -1,5 +1,5 @@
 #![crate_name = "uniq"]
-#![allow(unstable)]
+#![feature(collections, core, io, path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -113,7 +113,7 @@ impl Uniq {
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<T> {
     matches.opt_str(opt_name).map(|arg_str| {
-        let opt_val: Option<T> = arg_str.parse();
+        let opt_val: Option<T> = arg_str.parse().ok();
         opt_val.unwrap_or_else(||
             crash!(1, "Invalid argument for {}: {}", opt_name, arg_str))
     })

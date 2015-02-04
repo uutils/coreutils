@@ -1,5 +1,5 @@
 #![crate_name = "hashsum"]
-#![allow(unstable)]
+#![feature(collections, core, io, path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.

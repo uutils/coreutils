@@ -1,5 +1,5 @@
 #![crate_name = "mkdir"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -64,7 +64,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     let mode_match = matches.opts_str(&["mode".to_string()]);
     let mode: FilePermission = if mode_match.is_some() {
         let m = mode_match.unwrap();
-        let res: Option<u32> = from_str_radix(m.as_slice(), 8);
+        let res: Option<u32> = from_str_radix(m.as_slice(), 8).ok();
         if res.is_some() {
             unsafe { std::mem::transmute(res.unwrap()) }
         } else {

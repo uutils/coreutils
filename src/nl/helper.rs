@@ -72,7 +72,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("i") {
         None => {}
         Some(val) => {
-            let conv: Option<u64> = val.as_slice().parse();
+            let conv: Option<u64> = val.as_slice().parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -i"));
@@ -84,7 +84,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("w") {
         None => {}
         Some(val) => {
-            let conv: Option<usize> = val.as_slice().parse();
+            let conv: Option<usize> = val.as_slice().parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -w"));
@@ -96,7 +96,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("v") {
         None => {}
         Some(val) => {
-            let conv: Option<u64> = val.as_slice().parse();
+            let conv: Option<u64> = val.as_slice().parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -v"));
@@ -108,7 +108,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("l") {
         None => {}
         Some(val) => {
-            let conv: Option<u64> = val.as_slice().parse();
+            let conv: Option<u64> = val.as_slice().parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -l"));

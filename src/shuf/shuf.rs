@@ -1,5 +1,5 @@
 #![crate_name = "shuf"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rand, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -97,9 +97,9 @@ With no FILE, or when FILE is -, read standard input.",
         let zero = matches.opt_present("zero-terminated");
         let count = match matches.opt_str("head-count") {
             Some(cnt) => match cnt.parse::<usize>() {
-                Some(val) => val,
-                None => {
-                    show_error!("'{}' is not a valid count", cnt);
+                Ok(val) => val,
+                Err(e) => {
+                    show_error!("'{}' is not a valid count: {}", cnt, e);
                     return 1;
                 }
             },
@@ -192,12 +192,12 @@ fn parse_range(input_range: String) -> Result<RangeInclusive<usize>, (String, is
         Err(("invalid range format".to_string(), 1))
     } else {
         let begin = match split[0].parse::<usize>() {
-            Some(m) => m,
-            None => return Err((format!("{} is not a valid number", split[0]), 1))
+            Ok(m) => m,
+            Err(e)=> return Err((format!("{} is not a valid number: {}", split[0], e), 1))
         };
         let end = match split[1].parse::<usize>() {
-            Some(m) => m,
-            None => return Err((format!("{} is not a valid number", split[1]), 1))
+            Ok(m) => m,
+            Err(e)=> return Err((format!("{} is not a valid number: {}", split[1], e), 1))
         };
         Ok(range_inclusive(begin, end))
     }

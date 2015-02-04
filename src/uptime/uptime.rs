@@ -1,5 +1,5 @@
 #![crate_name = "uptime"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -181,8 +181,8 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
 
     match uptime_text.as_slice().words().next() {
         Some(s) => match s.replace(".", "").as_slice().parse() {
-                    Some(n) => n,
-                    None => -1
+                    Ok(n) => n,
+                    Err(_) => -1
                    },
         None => -1
     }

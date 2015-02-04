@@ -1,5 +1,5 @@
 #![crate_name = "od"]
-#![allow(unstable)]
+#![feature(collections, core, io, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,7 +16,7 @@ extern crate collections;
 use collections::string::String;
 use std::old_io::File;
 
-#[derive(Show)]
+#[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
 pub fn uumain(args: Vec<String>) -> isize {

@@ -1,5 +1,5 @@
 #![crate_name = "test"]
-#![allow(unstable)]
+#![feature(core, libc, os, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -127,7 +127,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
         _ => return false,
     };
     let (a, b): (i64, i64) = match (a.parse(), b.parse()) {
-        (Some(a), Some(b)) => (a, b),
+        (Ok(a), Ok(b)) => (a, b),
         _ => return false,
     };
     match cond {
@@ -142,7 +142,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
 
 fn isatty(fd: &[u8]) -> bool {
     use libc::{isatty};
-    from_utf8(fd).ok().and_then(|s| s.parse())
+    from_utf8(fd).ok().and_then(|s| s.parse().ok())
             .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
 }
 

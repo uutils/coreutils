@@ -1,5 +1,5 @@
 #![crate_name = "nice"]
-#![allow(unstable)]
+#![feature(collections, core, libc, os, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -80,9 +80,9 @@ pub fn uumain(args: Vec<String>) -> isize {
                     return 125;
                 }
                 match nstr.as_slice().parse() {
-                    Some(num) => num,
-                    None => {
-                        show_error!("\"{}\" is not a valid number", nstr);
+                    Ok(num) => num,
+                    Err(e)=> {
+                        show_error!("\"{}\" is not a valid number: {}", nstr, e);
                         return 125;
                     }
                 }

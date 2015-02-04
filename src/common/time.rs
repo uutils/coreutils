@@ -29,7 +29,7 @@ pub fn from_str(string: &str) -> Result<f64, String> {
         }
     };
     match numstr.parse::<f64>() {
-        Some(m) => Ok(m * times as f64),
-        None => Err(format!("invalid time interval '{}'", string))
+        Ok(m) => Ok(m * times as f64),
+        Err(e) => Err(format!("invalid time interval '{}': {}", string, e))
     }
 }

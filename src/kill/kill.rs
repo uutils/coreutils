@@ -1,5 +1,5 @@
 #![crate_name = "kill"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -109,13 +109,13 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
         if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
             let val = &slice[1..];
             match val.parse() {
-                Some(num) => {
+                Ok(num) => {
                     if signals::is_signal(num) {
                         args.remove(i);
                         return (args, Some(val.to_string()));
                     }
                 }
-                None => break  /* getopts will error out for us */
+                Err(_)=> break  /* getopts will error out for us */
             }
         }
         i += 1;
@@ -194,7 +194,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> isize {
     };
     for pid in pids.iter() {
         match pid.as_slice().parse() {
-            Some(x) => {
+            Ok(x) => {
                 let result = Process::kill(x, signal_value as isize);
                 match result {
                     Ok(_) => (),
@@ -204,7 +204,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> isize {
                     }
                 };
             },
-            None => crash!(EXIT_ERR, "failed to parse argument {}", pid)
+            Err(e) => crash!(EXIT_ERR, "failed to parse argument {}: {}", pid, e)
         };
     }
     status

@@ -1,5 +1,5 @@
 #![crate_name = "split"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -72,8 +72,8 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     settings.suffix_length = match matches.opt_str("a") {
         Some(n) => match n.as_slice().parse() {
-            Some(m) => m,
-            None => crash!(1, "cannot parse num")
+            Ok(m) => m,
+            Err(e) => crash!(1, "cannot parse num: {}", e)
         },
         None => 2
     };
@@ -136,8 +136,8 @@ struct LineSplitter {
 impl LineSplitter {
     fn new(settings: &Settings) -> Box<Splitter> {
         let n = match settings.strategy_param.as_slice().parse() {
-            Some(a) => a,
-            _ => crash!(1, "invalid number of lines")
+            Ok(a) => a,
+            Err(e) => crash!(1, "invalid number of lines: {}", e)
         };
         Box::new(LineSplitter {
             saved_lines_to_write: n,
@@ -178,13 +178,13 @@ impl ByteSplitter {
         };
         let n = if suffix.is_alphabetic() {
             match strategy_param.as_slice().iter().map(|c| *c).collect::<String>().as_slice().parse::<usize>() {
-                Some(a) => a,
-                _ => crash!(1, "invalid number of bytes")
+                Ok(a) => a,
+                Err(e) => crash!(1, "invalid number of bytes: {}", e)
             }
         } else {
             match settings.strategy_param.as_slice().parse::<usize>() {
-                Some(a) => a,
-                _ => crash!(1, "invalid number of bytes")
+                Ok(a) => a,
+                Err(e) => crash!(1, "invalid number of bytes: {}", e)
             }
         };
         Box::new(ByteSplitter {

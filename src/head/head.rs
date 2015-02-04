@@ -1,5 +1,5 @@
 #![crate_name = "head"]
-#![allow(unstable)]
+#![feature(collections, core, io, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -71,18 +71,18 @@ pub fn uumain(args: Vec<String>) -> isize {
                 return 1;
             }
             match n.parse::<usize>() {
-                Some(m) => { line_count = m }
-                None => {
-                    show_error!("invalid line count '{}'", n);
+                Ok(m) => { line_count = m }
+                Err(e) => {
+                    show_error!("invalid line count '{}': {}", n, e);
                     return 1;
                 }
             }
         }
         None => match given_options.opt_str("c") {
             Some(count) => match count.parse::<usize>() {
-                Some(m) => byte_count = m,
-                None => {
-                    show_error!("invalid byte count '{}'", count);
+                Ok(m) => byte_count = m,
+                Err(e)=> {
+                    show_error!("invalid byte count '{}': {}", count, e);
                     return 1;
                 }
             },
@@ -151,7 +151,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse::<usize>();
+                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse::<usize>().ok();
                     return (options, Some(number.unwrap()));
                 }
             }

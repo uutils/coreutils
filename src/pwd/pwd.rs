@@ -1,5 +1,5 @@
 #![crate_name = "pwd"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, os, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

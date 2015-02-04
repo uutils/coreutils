@@ -1,5 +1,5 @@
 #![crate_name = "sync"]
-#![allow(unstable)]
+#![feature(collections, libc, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

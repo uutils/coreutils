@@ -1,5 +1,5 @@
 #![crate_name = "du"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private, std_misc, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -194,7 +194,7 @@ ers of 1000).",
     let summarize = matches.opt_present("summarize");
 
     let max_depth_str = matches.opt_str("max-depth");
-    let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>());
+    let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
             show_error!("summarizing conflicts with --max-depth={}", *s);

@@ -1,5 +1,5 @@
 #![crate_name = "expand"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -33,7 +33,7 @@ fn tabstops_parse(s: String) -> Vec<usize> {
     let nums = words.into_iter()
         .map(|sn| sn.parse::<usize>()
             .unwrap_or_else(
-                || crash!(1, "{}\n", "tab size contains invalid character(s)"))
+                |_| crash!(1, "{}\n", "tab size contains invalid character(s)"))
             )
         .collect::<Vec<usize>>();
 

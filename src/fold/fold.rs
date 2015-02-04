@@ -1,5 +1,5 @@
 #![crate_name = "fold"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -64,8 +64,8 @@ pub fn uumain(args: Vec<String>) -> isize {
             };
         let width = match poss_width {
             Some(inp_width) => match inp_width.parse::<usize>() {
-                Some(width) => width,
-                None => crash!(1, "illegal width value (\"{}\")", inp_width)
+                Ok(width) => width,
+                Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e)
             },
             None => 80
         };

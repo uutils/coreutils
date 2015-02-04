@@ -1,5 +1,5 @@
 #![crate_name = "groups"]
-#![allow(unstable)]
+#![feature(collections, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

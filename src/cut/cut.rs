@@ -1,5 +1,5 @@
 #![crate_name = "cut"]
-#![allow(unstable)]
+#![feature(collections, core, io, libc, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

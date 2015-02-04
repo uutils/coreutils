@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![allow(unstable)]
+#![feature(core, io, libc, os, path, rustc_private, unicode)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -97,7 +97,7 @@ fn parse_size(size: &str) -> Option<u64> {
     if recovered.as_slice() != size {
         return None;
     }
-    let buf_size: u64 = match num.parse() {
+    let buf_size: u64 = match num.parse().ok() {
         Some(m) => m,
         None => return None,
     };
