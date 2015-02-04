@@ -36,6 +36,7 @@ enum PassType<'a> {
     Random,
 }
 
+// Used to generate all possible filenames of a certain length using NAMESET as an alphabet
 struct FilenameGenerator {
     name_len: usize,
     nameset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAMESET
@@ -88,6 +89,8 @@ impl Iterator for FilenameGenerator {
     }
 }
 
+// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
+// or randomness
 struct BytesGenerator<'a> {
     total_bytes: u64,
     bytes_generated: Cell<u64>,
@@ -189,10 +192,10 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
     if !path.exists() { eprintln!("{}: {}: PATH DOES NOT EXIST", prog_name, path.display()); return; }
     if !path.is_file() { eprintln!("{}: {}: NOT A FILE", prog_name, path.display()); return; }
     
-    let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Write) {
+    let mut file = match fs::File::open_mode(&path, old_io::Open, old_io::Read) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("{}: {}: COULD NOT OPEN FILE: \"{}\"", prog_name, path.filename_display(), e.desc);
+            eprintln!("{}: {}: COULD NOT OPEN FILE: {}", prog_name, path.filename_display(), e.desc);
             return;
         }
     };
@@ -232,8 +235,8 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
                 PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
             };
         }
-        do_pass(&mut file, *pass_type, prog_name);
-        file.fsync(); // Sync to disk after each pass
+        do_pass(&mut file, *pass_type, prog_name); // Ignore failed writes; just keep trying
+        file.fsync(); // Sync data & metadata to disk after each pass just in case
         file.seek(0, old_io::SeekStyle::SeekSet);
     }
     let renamed_path: Option<Path> = wipe_name(&path, prog_name, true);
@@ -249,9 +252,9 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
     match file.stat() {
         Ok(stat) => file_size = stat.size,
         Err(e) => {
-                eprintln!("{}: {}: COULD NOT READ FILE STATS: \"{}\"", prog_name,
-                                                                       file.path().filename_display(),
-                                                                       e.desc);
+                eprintln!("{}: {}: COULD NOT READ FILE STATS: {}", prog_name,
+                                                                   file.path().filename_display(),
+                                                                   e.desc);
                 return Err(());
             }
     };
@@ -261,9 +264,9 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
         match file.write_all(&*block) {
             Ok(_) => (),
             Err(e) => {
-                eprintln!("{}: {}: WRITE FAILED: \"{}\"", prog_name,
-                                                          file.path().filename_display(),
-                                                          e.desc);
+                eprintln!("{}: {}: WRITE FAILED: {}", prog_name,
+                                                      file.path().filename_display(),
+                                                      e.desc);
                 return Err(());
             }
         }
@@ -299,9 +302,10 @@ fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
                     break;
                 }
                 Err(e) => {
-                    eprintln!("{}: {}: COULD NOT RENAME TO {}", prog_name,
-                                                                prev_path.filename_display(),
-                                                                new_path.filename_display());
+                    eprintln!("{}: {}: COULD NOT RENAME TO {}: {}", prog_name,
+                                                                    prev_path.filename_display(),
+                                                                    new_path.filename_display(),
+                                                                    e.desc);
                     return None;
                 }
             }
@@ -317,7 +321,7 @@ fn remove_file(path: &Path, orig_filename: &str, prog_name: &str, verbose: bool)
             return Ok(());
         }
         Err(e) => {
-            eprintln!("{}: {}: COULD NOT REMOVE: \"{}\"", prog_name, path.filename_display(), e.desc);
+            eprintln!("{}: {}: COULD NOT REMOVE: {}", prog_name, path.filename_display(), e.desc);
             return Err(());
         }
     }
