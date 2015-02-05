@@ -1,7 +1,7 @@
 #![feature(core, io, os, path)]
 use std::old_io::{File, Truncate, ReadWrite};
 use std::os;
-use std::path::Path;
+use std::old_path::Path;
 
 static TEMPLATE: &'static str = "\
 #![feature(os)]

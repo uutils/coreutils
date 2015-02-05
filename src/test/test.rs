@@ -384,7 +384,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 fn path(path: &[u8], cond: PathCondition) -> bool {
     use std::old_io::{TypeFile, TypeDirectory, TypeBlockSpecial, TypeNamedPipe};
     use std::old_io::fs::{stat};
-    use std::path::{Path};
+    use std::old_path::{Path};
 
     let path = match Path::new_opt(path) {
         Some(p) => p,

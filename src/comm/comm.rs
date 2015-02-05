@@ -16,7 +16,7 @@ use std::cmp::Ordering;
 use std::old_io::{BufferedReader, IoResult, print};
 use std::old_io::fs::File;
 use std::old_io::stdio::{stdin, StdinReader};
-use std::path::Path;
+use std::old_path::Path;
 
 static NAME : &'static str = "comm";
 static VERSION : &'static str = "1.0.0";

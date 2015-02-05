@@ -19,7 +19,7 @@ extern crate time;
 use std::old_io::{stderr, fs, FileStat, FileType};
 use std::num::Float;
 use std::option::Option;
-use std::path::Path;
+use std::old_path::Path;
 use std::sync::{Arc, Future};
 use time::Timespec;
 
