@@ -150,5 +150,5 @@ fn with_path<F, T>(path: &Path, mut cb: F) -> IoResult<T> where F: FnMut() -> Io
 }
 
 fn warn(message: &str) {
-    error!("{}: {}", os::args()[0], message);
+    error!("tee: {}", message);
 }

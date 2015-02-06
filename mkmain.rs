@@ -1,7 +1,6 @@
 #![feature(core, env, io, os, path)]
 use std::env;
 use std::old_io::{File, Truncate, ReadWrite};
-use std::os;
 use std::old_path::Path;
 
 static TEMPLATE: &'static str = "\
@@ -9,16 +8,19 @@ static TEMPLATE: &'static str = "\
 extern crate \"@UTIL_CRATE@\" as uu@UTIL_CRATE@;
 
 use std::env;
-use std::os;
 use uu@UTIL_CRATE@::uumain;
 
+fn args() -> Vec<String> {
+    env::args().map(|a| a.into_string().unwrap()).collect()
+}
+
 fn main() {
-    env::set_exit_status(uumain(os::args()));
+    env::set_exit_status(uumain(args()));
 }
 ";
 
 fn main() {
-    let args = os::args();
+    let args : Vec<String> = env::args().map(|a| a.into_string().unwrap()).collect();
     if args.len() != 3 {
         println!("usage: mkbuild <crate> <outfile>");
         env::set_exit_status(1);
