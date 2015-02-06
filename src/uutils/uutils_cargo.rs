@@ -1,5 +1,5 @@
 #![crate_name = "uutils"]
-#![feature(core, os, path, rustc_private)]
+#![feature(core, env, os, path, rustc_private)]
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -79,14 +79,13 @@ extern crate getopts;
 #[cfg(feature="whoami")]    extern crate whoami;
 #[cfg(feature="yes")]       extern crate yes;
 
-use std::os;
 use std::collections::hash_map::HashMap;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
-fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> isize> {
-    let mut map : HashMap<&'static str, fn(Vec<String>) -> isize> = HashMap::new();
+fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> i32> {
+    let mut map : HashMap<&'static str, fn(Vec<String>) -> i32> = HashMap::new();
 
     macro_rules! add_util(
         ($guard:meta, $util:expr, $crte:ident) => ( 
@@ -176,7 +175,7 @@ fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> isize> {
     map
 }
 
-fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> isize>) {
+fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> i32>) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
@@ -191,7 +190,7 @@ fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> isize>) {
 
 fn main() {
     let umap = util_map();
-    let mut args = os::args();
+    let mut args : Vec<String> = std::env::args().map(|a| a.into_string().unwrap()).collect();
 
     // try binary name as util name.
     let binary = Path::new(args[0].as_slice());
@@ -199,7 +198,7 @@ fn main() {
 
     match umap.get(binary_as_util) {
         Some(&uumain) => {
-            os::set_exit_status(uumain(args));
+            std::env::set_exit_status(uumain(args));
             return
         }
         None => (),
@@ -212,7 +211,7 @@ fn main() {
             // what busybox uses the -suffix pattern for.
     } else {
         println!("{}: applet not found", binary_as_util);
-        os::set_exit_status(1);
+        std::env::set_exit_status(1);
         return
     }
 
@@ -223,7 +222,7 @@ fn main() {
 
         match umap.get(util) {
             Some(&uumain) => {
-                os::set_exit_status(uumain(args.clone()));
+                std::env::set_exit_status(uumain(args.clone()));
                 return
             }
             None => {
@@ -233,22 +232,22 @@ fn main() {
                         let util = args[1].as_slice();
                         match umap.get(util) {
                             Some(&uumain) => {
-                                os::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
+                                std::env::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
                                 return
                             }
                             None => {
                                 println!("{}: applet not found", util);
-                                os::set_exit_status(1);
+                                std::env::set_exit_status(1);
                                 return
                             }
                         }
                     }
                     usage(&umap);
-                    os::set_exit_status(0);
+                    std::env::set_exit_status(0);
                     return
                 } else {
                     println!("{}: applet not found", util);
-                    os::set_exit_status(1);
+                    std::env::set_exit_status(1);
                     return
                 }
             }
@@ -256,7 +255,7 @@ fn main() {
     } else {
         // no arguments provided
         usage(&umap);
-        os::set_exit_status(0);
+        std::env::set_exit_status(0);
         return
     }
 }
