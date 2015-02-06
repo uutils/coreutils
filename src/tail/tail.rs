@@ -17,7 +17,7 @@ use std::char::CharExt;
 use std::old_io::{stdin, stdout};
 use std::old_io::{BufferedReader, BytesReader};
 use std::old_io::fs::File;
-use std::path::Path;
+use std::old_path::Path;
 use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 use std::collections::ring_buf::RingBuf;

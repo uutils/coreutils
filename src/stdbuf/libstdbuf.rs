@@ -1,6 +1,6 @@
 #![crate_name = "libstdbuf"]
 #![crate_type = "staticlib"]
-#![feature(core, libc, os)]
+#![feature(core, os)]
 
 extern crate libc;
 use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF, setvbuf};

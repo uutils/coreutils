@@ -1,5 +1,5 @@
 #![crate_name = "expand"]
-#![feature(collections, core, io, libc, path, rustc_private)]
+#![feature(collections, core, io, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

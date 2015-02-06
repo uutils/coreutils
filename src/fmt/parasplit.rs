@@ -213,7 +213,7 @@ pub struct Paragraph {
 // an iterator producing a stream of paragraphs from a stream of lines
 // given a set of options.
 pub struct ParagraphStream<'a> {
-    lines     : Peekable<Line, FileLines<'a>>,
+    lines     : Peekable<FileLines<'a>>,
     next_mail : bool,
     opts      : &'a FmtOptions,
 }

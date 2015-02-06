@@ -262,7 +262,7 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
         return Some((box stdin as Box<Reader>, interactive));
     }
 
-    match File::open(&std::path::Path::new(path)) {
+    match File::open(&std::old_path::Path::new(path)) {
         Ok(f) => Some((box f as Box<Reader>, false)),
         Err(e) => {
             (writeln!(&mut stderr(), "cat: {0}: {1}", path, e.to_string())).unwrap();

@@ -1,5 +1,5 @@
 #![crate_name = "hostid"]
-#![feature(collections, core, libc, rustc_private)]
+#![feature(collections, core, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

@@ -13,7 +13,7 @@
 extern crate getopts;
 
 use std::old_io::fs::link;
-use std::path::Path;
+use std::old_path::Path;
 
 #[path="../common/util.rs"]
 #[macro_use]

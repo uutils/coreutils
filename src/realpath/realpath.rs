@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(collections, core, io, libc, os, path, rustc_private)]
+#![feature(collections, core, io, os, path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

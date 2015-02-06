@@ -1,5 +1,5 @@
 #![crate_name = "sync"]
-#![feature(collections, libc, rustc_private)]
+#![feature(collections, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

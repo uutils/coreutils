@@ -21,7 +21,7 @@ use std::old_io::BufferedReader;
 use std::old_io::fs::File;
 use std::iter::repeat;
 use std::num::Int;
-use std::path::Path;
+use std::old_path::Path;
 use getopts::{optopt, optflag, getopts, usage, OptGroup};
 
 #[path="../common/util.rs"]

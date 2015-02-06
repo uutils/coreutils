@@ -2,7 +2,7 @@
 
 use std::old_io::{File, Truncate, Write};
 use std::os;
-use std::path::Path;
+use std::old_path::Path;
 
 fn main() {
     let args = os::args();

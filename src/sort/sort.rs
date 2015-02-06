@@ -160,7 +160,7 @@ fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
         return Some((Box::new(stdin) as Box<Reader>, interactive));
     }
 
-    match File::open(&std::path::Path::new(path)) {
+    match File::open(&std::old_path::Path::new(path)) {
         Ok(f) => Some((Box::new(f) as Box<Reader>, false)),
         Err(e) => {
             show_error!("sort: {0}: {1}", path, e.to_string());

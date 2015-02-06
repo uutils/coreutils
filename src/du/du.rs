@@ -1,5 +1,5 @@
 #![crate_name = "du"]
-#![feature(collections, core, io, libc, path, rustc_private, std_misc, unicode)]
+#![feature(collections, core, io, path, rustc_private, std_misc, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -19,7 +19,7 @@ extern crate time;
 use std::old_io::{stderr, fs, FileStat, FileType};
 use std::num::Float;
 use std::option::Option;
-use std::path::Path;
+use std::old_path::Path;
 use std::sync::{Arc, Future};
 use time::Timespec;
 
