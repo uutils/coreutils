@@ -1,5 +1,5 @@
 #![crate_name = "test"]
-#![feature(core, libc, os, std_misc)]
+#![feature(core, os, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.

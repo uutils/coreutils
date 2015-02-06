@@ -1,5 +1,5 @@
 #![crate_name = "uptime"]
-#![feature(collections, core, io, libc, path, rustc_private, std_misc)]
+#![feature(collections, core, io, path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.

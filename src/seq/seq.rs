@@ -1,5 +1,5 @@
 #![crate_name = "seq"]
-#![feature(collections, core, libc, rustc_private)]
+#![feature(collections, core, rustc_private)]
 
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag

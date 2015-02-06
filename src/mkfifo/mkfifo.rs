@@ -1,5 +1,5 @@
 #![crate_name = "mkfifo"]
-#![feature(collections, core, libc, rustc_private, std_misc)]
+#![feature(collections, core, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.

@@ -1,5 +1,5 @@
 #![crate_name = "shuf"]
-#![feature(collections, core, io, libc, path, rand, rustc_private)]
+#![feature(collections, core, io, path, rand, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

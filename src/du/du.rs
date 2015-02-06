@@ -1,5 +1,5 @@
 #![crate_name = "du"]
-#![feature(collections, core, io, libc, path, rustc_private, std_misc, unicode)]
+#![feature(collections, core, io, path, rustc_private, std_misc, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
