@@ -110,7 +110,7 @@ fn canonicalize(original: &Path, can_mode: &CanonicalizeMode) -> io::IoResult<Pa
 }
 
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         optflag("f", "canonicalize",

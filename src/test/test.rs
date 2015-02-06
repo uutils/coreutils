@@ -20,7 +20,7 @@ use std::str::{from_utf8};
 static NAME: &'static str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
-pub fn uumain(_: Vec<String>) -> isize {
+pub fn uumain(_: Vec<String>) -> i32 {
     let args = args_as_bytes();
     let args: Vec<&[u8]> = args.iter().map(|a| a.as_slice()).collect();
     if args.len() == 0 {
@@ -40,7 +40,7 @@ pub fn uumain(_: Vec<String>) -> isize {
         _ => &args[1..args.len()],
     };
     let mut error = false;
-    let retval = 1 - parse_expr(args, &mut error) as isize;
+    let retval = 1 - parse_expr(args, &mut error) as i32;
     if error {
         2
     } else {

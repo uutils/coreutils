@@ -33,7 +33,7 @@ extern {
 
 static NAME: &'static str = "tty";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let options = [
         optflag("s", "silent", "print nothing, only return an exit status")
     ];
@@ -74,7 +74,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         }
     };
 
-    exit_code as isize
+    exit_code
 }
 
 fn usage () {

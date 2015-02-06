@@ -16,7 +16,7 @@ use std::old_io::print;
 
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("z", "zero", "separate output with NUL rather than newline"),

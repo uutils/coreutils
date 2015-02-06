@@ -40,8 +40,8 @@ mod signals;
 static NAME: &'static str = "kill";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_OK:  isize = 0;
-static EXIT_ERR: isize = 1;
+static EXIT_OK:  i32 = 0;
+static EXIT_ERR: i32 = 1;
 
 pub enum Mode {
     Kill,
@@ -53,7 +53,7 @@ pub enum Mode {
 
 impl Copy for Mode {}
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         optflag("h", "help", "display this help and exit"),
         optflag("V", "version", "output version information and exit"),
@@ -185,7 +185,7 @@ fn help(progname: &str, usage: &str) {
     println!("{}", get_help_text(progname, usage));
 }
 
-fn kill(signalname: &str, pids: std::vec::Vec<String>) -> isize {
+fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
     let mut status = 0;
     let optional_signal_value = signals::signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {

@@ -205,7 +205,7 @@ fn get_preload_env() -> (String, String) {
 }
 
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let optgrps = [
         optopt("i", "input", "adjust standard input stream buffering", "MODE"),
         optopt("o", "output", "adjust standard output stream buffering", "MODE"),
@@ -251,7 +251,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     match process.wait() {
         Ok(status) => {
             match status {
-                ProcessExit::ExitStatus(i) => return i,
+                ProcessExit::ExitStatus(i) => return i as i32,
                 ProcessExit::ExitSignal(i) => crash!(1, "process killed by signal {}", i),
             }
         },

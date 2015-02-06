@@ -19,7 +19,7 @@ use std::old_io::File;
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("A", "address-radix",
                         "Select the base in which file offsets are printed.", "RADIX"),

@@ -20,7 +20,7 @@ use getopts::{optflag, getopts, usage};
 static NAME: &'static str = "realpath";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
     let options = [
         optflag("h", "help", "Show help and exit"),

@@ -33,7 +33,7 @@ enum Mode {
 static NAME: &'static str = "shuf";
 static VERSION: &'static str = "0.0.1";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     let opts = [
@@ -186,7 +186,7 @@ fn shuf_lines(mut lines: Vec<String>, repeat: bool, zero: bool, count: usize, ou
     Ok(())
 }
 
-fn parse_range(input_range: String) -> Result<RangeInclusive<usize>, (String, isize)> {
+fn parse_range(input_range: String) -> Result<RangeInclusive<usize>, (String, i32)> {
     let split: Vec<&str> = input_range.as_slice().split('-').collect();
     if split.len() != 2 {
         Err(("invalid range format".to_string(), 1))

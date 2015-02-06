@@ -31,7 +31,7 @@ mod util;
 static NAME: &'static str = "tail";
 static VERSION: &'static str = "0.0.1";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let mut beginning = false;
     let mut lines = true;
     let mut byte_count = 0us;
