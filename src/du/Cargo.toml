@@ -7,5 +7,6 @@ authors = []
 name = "du"
 path = "du.rs"
 
-[dependencies.time]
-git = "https://github.com/rust-lang/time"
+[dependencies]
+time = "*"
+libc = "*"

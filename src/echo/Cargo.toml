@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "echo"
 path = "echo.rs"
+
+[dependencies]
+libc = "*"

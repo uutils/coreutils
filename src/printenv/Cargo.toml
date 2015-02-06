@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "printenv"
 path = "printenv.rs"
+
+[dependencies]
+libc = "*"

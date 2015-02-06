@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "hostname"
 path = "hostname.rs"
+
+[dependencies]
+libc = "*"

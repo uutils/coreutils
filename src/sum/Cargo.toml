@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "sum"
 path = "sum.rs"
+
+[dependencies]
+libc = "*"

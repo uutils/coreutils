@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "pwd"
 path = "pwd.rs"
+
+[depenencies]
+libc = "*"

@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "expand"
 path = "expand.rs"
+
+[dependencies]
+libc = "*"

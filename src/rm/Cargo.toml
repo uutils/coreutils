@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "rm"
 path = "rm.rs"
+
+[dependencies]
+libc = "*"

@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "tac"
 path = "tac.rs"
+
+[dependencies]
+libc = "*"

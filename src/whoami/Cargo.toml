@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "whoami"
 path = "whoami.rs"
+
+[dependencies]
+libc = "*"

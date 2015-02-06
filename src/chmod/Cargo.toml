@@ -7,9 +7,7 @@ authors = []
 name = "chmod"
 path = "chmod.rs"
 
-[dependencies.regex]
-git = "https://github.com/rust-lang/regex"
-
-[dependencies.regex_macros]
-git = "https://github.com/rust-lang/regex"
-
+[dependencies]
+regex = "*"
+regex_macros = "*"
+libc = "*"

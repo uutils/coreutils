@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "cut"
 path = "cut.rs"
+
+[dependencies]
+libc = "*"

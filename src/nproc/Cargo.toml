@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "nproc"
 path = "nproc.rs"
+
+[dependencies]
+libc = "*"

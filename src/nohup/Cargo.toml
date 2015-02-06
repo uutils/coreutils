@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "nohup"
 path = "nohup.rs"
+
+[dependencies]
+libc = "*"

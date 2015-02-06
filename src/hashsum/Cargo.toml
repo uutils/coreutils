@@ -7,8 +7,6 @@ authors = []
 name = "hashsum"
 path = "hashsum.rs"
 
-[dependencies.rust-crypto]
-git = "https://github.com/dagenix/rust-crypto"
-
-[dependencies.regex]
-git = "https://github.com/rust-lang/regex"
+[dependencies]
+rust-crypto = "*"
+regex = "*"

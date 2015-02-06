@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "unexpand"
 path = "unexpand.rs"
+
+[dependencies]
+libc = "*"

@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "sleep"
 path = "sleep.rs"
+
+[dependencies]
+libc = "*"

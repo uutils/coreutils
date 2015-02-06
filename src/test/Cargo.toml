@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "uutest"
 path = "test.rs"
+
+[dependencies]
+libc = "*"

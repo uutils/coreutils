@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "mkdir"
 path = "mkdir.rs"
+
+[dependencies]
+libc = "*"

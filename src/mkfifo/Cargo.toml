@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "mkfifo"
 path = "mkfifo.rs"
+
+[dependencies]
+libc = "*"

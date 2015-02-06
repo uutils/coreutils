@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "tsort"
 path = "tsort.rs"
+
+[dependencies]
+libc = "*"

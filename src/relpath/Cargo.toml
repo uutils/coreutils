@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "relpath"
 path = "relpath.rs"
+
+[dependencies]
+libc = "*"

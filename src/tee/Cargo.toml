@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "tee"
 path = "tee.rs"
+
+[dependencies]
+libc = "*"

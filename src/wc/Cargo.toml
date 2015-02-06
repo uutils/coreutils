@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "wc"
 path = "wc.rs"
+
+[dependencies]
+libc = "*"

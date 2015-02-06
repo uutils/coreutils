@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "uusync"
 path = "sync.rs"
+
+[dependencies]
+libc = "*"

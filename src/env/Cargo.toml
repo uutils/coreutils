@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "env"
 path = "env.rs"
+
+[dependencies]
+libc = "*"

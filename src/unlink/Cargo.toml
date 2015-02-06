@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "unlink"
 path = "unlink.rs"
+
+[dependencies]
+libc = "*"

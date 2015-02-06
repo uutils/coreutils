@@ -6,3 +6,6 @@ authors = []
 [lib]
 name = "timeout"
 path = "timeout.rs"
+
+[dependencies]
+libc = "*"
