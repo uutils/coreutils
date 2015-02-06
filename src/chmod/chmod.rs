@@ -33,7 +33,7 @@ mod util;
 const NAME: &'static str = "chmod";
 const VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     let opts = [
@@ -146,7 +146,7 @@ fn verify_mode(mode: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), isize> {
+fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
     let mut r = Ok(());
 
     for filename in files.iter() {
@@ -182,7 +182,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     r
 }
 
-fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), isize> {
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
     let path = CString::from_slice(name.as_bytes());
     match fmode {
         Some(mode) => {

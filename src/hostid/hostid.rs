@@ -34,7 +34,7 @@ mod util;
 static NAME:     &'static str = "hostid";
 static VERSION:  &'static str = "0.0.1";
 
-static EXIT_ERR: isize = 1;
+static EXIT_ERR: i32 = 1;
 
 pub enum Mode {
     HostId,
@@ -49,7 +49,7 @@ extern {
     pub fn gethostid() -> c_long;
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
 
     let opts = [
         optflag("", "help", "display this help and exit"),

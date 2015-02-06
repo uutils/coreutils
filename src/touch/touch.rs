@@ -23,7 +23,7 @@ mod util;
 static NAME: &'static str = "touch";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optflag("a", "",               "change only the access time"),
         getopts::optflag("c", "no-create",      "do not create any files"),

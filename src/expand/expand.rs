@@ -75,7 +75,7 @@ impl Options {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optflag("i", "initial", "do not convert tabs after non blanks"),
         getopts::optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER"),

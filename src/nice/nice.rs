@@ -33,7 +33,7 @@ extern {
     fn setpriority(which: c_int, who: c_int, prio: c_int) -> c_int;
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("n", "adjustment", "add N to the niceness (default is 10)", "N"),
         getopts::optflag("h", "help", "display this help and exit"),

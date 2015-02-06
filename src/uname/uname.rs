@@ -56,7 +56,7 @@ unsafe fn getuname() -> utsrust {
 
 static NAME: &'static str = "uname";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),

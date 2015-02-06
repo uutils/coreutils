@@ -37,7 +37,7 @@ struct Result {
 
 static NAME: &'static str = "wc";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0][];
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
@@ -97,7 +97,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), isize> {
+pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
     let mut total_char_count: usize = 0;
@@ -217,7 +217,7 @@ fn print_stats(filename: &str, line_count: usize, word_count: usize, char_count:
     }
 }
 
-fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, isize> {
+fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, i32> {
     if "-" == path {
         let reader = Box::new(stdin_raw()) as Box<Reader>;
         return Ok(BufferedReader::new(reader));

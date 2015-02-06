@@ -90,7 +90,7 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
     let binary = Path::new(program.as_slice());
     let binary_name = binary.filename_str().unwrap();
@@ -168,7 +168,7 @@ fn usage(program: &str, binary_name: &str, opts: &[getopts::OptGroup]) {
     pipe_print!("{}", getopts::usage("Compute and check message digests.", opts));
 }
 
-fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), isize> {
+fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {
     let mut bad_format = 0;
     let mut failed = 0;
     let binary_marker = if binary {

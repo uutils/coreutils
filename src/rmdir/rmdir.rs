@@ -22,7 +22,7 @@ mod util;
 
 static NAME: &'static str = "rmdir";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     let opts = [
@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     0
 }
 
-fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), isize>{
+fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32>{
     let mut r = Ok(());
 
     for dir in dirs.iter() {
@@ -87,7 +87,7 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
     r
 }
 
-fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), isize> {
+fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32> {
     let mut walk_dir = match fs::walk_dir(path) {
         Ok(m) => m,
         Err(f) => {

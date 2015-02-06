@@ -38,7 +38,7 @@ extern {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
 
     let options = [
@@ -72,7 +72,7 @@ pub fn uumain(args: Vec<String>) -> isize {
     let cstrs : Vec<CString> = opts.free.iter().map(|x| CString::from_slice(x.as_bytes())).collect();
     let mut args : Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(std::ptr::null());
-    unsafe { execvp(args[0], args.as_mut_ptr()) as isize }
+    unsafe { execvp(args[0], args.as_mut_ptr())}
 }
 
 fn replace_fds() {

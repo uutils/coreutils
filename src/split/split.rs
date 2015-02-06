@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "split";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N"),
         getopts::optopt("b", "bytes", "put SIZE bytes per output file", "SIZE"),
@@ -248,7 +248,7 @@ fn num_prefix(i: usize, width: usize) -> String {
     c
 }
 
-fn split(settings: &Settings) -> isize {
+fn split(settings: &Settings) -> i32 {
     let mut reader = io::BufferedReader::new(
         if settings.input.as_slice() == "-" {
             Box::new(io::stdio::stdin_raw()) as Box<Reader>

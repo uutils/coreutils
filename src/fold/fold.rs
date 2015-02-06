@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(args.as_slice());
     let program = args[0].clone();
 

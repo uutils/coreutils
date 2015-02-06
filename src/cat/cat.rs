@@ -21,7 +21,7 @@ use std::old_io::stdio::{stdout_raw, stdin_raw, stderr};
 use std::old_io::{IoResult};
 use std::ptr::{copy_nonoverlapping_memory};
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
     let opts = [
         getopts::optflag("A", "show-all", "equivalent to -vET"),

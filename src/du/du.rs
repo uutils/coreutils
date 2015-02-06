@@ -90,7 +90,7 @@ fn du(path: &Path, mut my_stat: Stat,
     stats
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         // In task

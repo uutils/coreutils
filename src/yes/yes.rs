@@ -24,7 +24,7 @@ mod util;
 
 static NAME: &'static str = "yes";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),

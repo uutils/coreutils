@@ -28,7 +28,7 @@ mod util;
 
 static NAME: &'static str = "head";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let mut line_count = 10us;
     let mut byte_count = 0us;
 

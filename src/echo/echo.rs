@@ -163,7 +163,7 @@ fn print_version() {
     println!("echo version: {}", VERSION);
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let mut options = EchoOptions {
         newline: false,
         escape: false

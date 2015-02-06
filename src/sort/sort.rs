@@ -29,7 +29,7 @@ static VERSION:  &'static str = "0.0.1";
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("n", "numeric-sort", "compare according to string numerical value"),
