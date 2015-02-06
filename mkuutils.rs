@@ -6,7 +6,7 @@ use std::os;
 use std::old_path::Path;
 
 fn main() {
-    let args = os::args();
+    let args : Vec<String> = env::args().map(|a| a.into_string().unwrap()).collect();
     if args.len() < 3 {
         println!("usage: mkuutils <outfile> <crates>");
         env::set_exit_status(1);
