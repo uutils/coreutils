@@ -72,7 +72,7 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<Digest>),
         _ => {
             {
-                let mut set_or_crash = |&mut: n, val| -> () {
+                let mut set_or_crash = |n, val| -> () {
                     if alg.is_some() { crash!(1, "You cannot combine multiple hash algorithms!") };
                     name = n;
                     alg = Some(val);
