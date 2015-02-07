@@ -1,0 +1,11 @@
+[project]
+name = "split"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "split"
+path = "split.rs"
+
+[dependencies]
+libc = "*"

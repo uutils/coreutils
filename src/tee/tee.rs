@@ -22,7 +22,7 @@ use getopts::{getopts, optflag, usage};
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     match options(args.as_slice()).and_then(exec) {
         Ok(_) => 0,
         Err(_) => 1
@@ -150,5 +150,5 @@ fn with_path<F, T>(path: &Path, mut cb: F) -> IoResult<T> where F: FnMut() -> Io
 }
 
 fn warn(message: &str) {
-    error!("{}: {}", os::args()[0], message);
+    error!("tee: {}", message);
 }

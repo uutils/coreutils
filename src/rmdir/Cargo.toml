@@ -1,0 +1,11 @@
+[project]
+name = "rmdir"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "rmdir"
+path = "rmdir.rs"
+
+[dependencies]
+libc = "*"

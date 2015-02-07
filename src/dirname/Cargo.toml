@@ -1,0 +1,8 @@
+[project]
+name = "dirname"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "dirname"
+path = "dirname.rs"

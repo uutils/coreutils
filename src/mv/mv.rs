@@ -62,7 +62,7 @@ pub enum BackupMode {
 
 impl Copy for BackupMode {}
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL"),
@@ -187,7 +187,7 @@ fn help(progname: &str, usage: &str) {
     println!("{}", msg);
 }
 
-fn exec(files: &[Path], b: Behaviour) -> isize {
+fn exec(files: &[Path], b: Behaviour) -> i32 {
     match b.target_dir {
         Some(ref name) => return move_files_into_dir(files, &Path::new(name.as_slice()), &b),
         None => {}
@@ -245,7 +245,7 @@ fn exec(files: &[Path], b: Behaviour) -> isize {
     0
 }
 
-fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> isize {
+fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;

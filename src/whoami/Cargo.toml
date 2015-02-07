@@ -1,0 +1,11 @@
+[project]
+name = "whoami"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "whoami"
+path = "whoami.rs"
+
+[dependencies]
+libc = "*"

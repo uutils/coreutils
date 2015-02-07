@@ -22,7 +22,7 @@ mod util;
 static NAME: &'static str = "pwd";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("", "help", "display this help and exit"),

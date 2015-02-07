@@ -171,7 +171,7 @@ macro_rules! safe_unwrap(
     ($exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!(1, "{}", f.to_string())
+            Err(f) => crash!(1, "{:?}", f)
         }
     )
 );

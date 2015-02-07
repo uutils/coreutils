@@ -1,0 +1,13 @@
+[project]
+name = "chmod"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "chmod"
+path = "chmod.rs"
+
+[dependencies]
+regex = "*"
+regex_macros = "*"
+libc = "*"

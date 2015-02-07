@@ -1,0 +1,11 @@
+[project]
+name = "cut"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "cut"
+path = "cut.rs"
+
+[dependencies]
+libc = "*"

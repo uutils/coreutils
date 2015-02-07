@@ -1,0 +1,11 @@
+[project]
+name = "realpath"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "realpath"
+path = "realpath.rs"
+
+[dependencies]
+libc = "*"

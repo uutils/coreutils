@@ -1,0 +1,8 @@
+[project]
+name = "comm"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "comm"
+path = "comm.rs"

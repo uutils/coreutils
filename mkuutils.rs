@@ -1,14 +1,15 @@
-#![feature(core, io, os, path)]
+#![feature(core, env, io, os, path)]
 
+use std::env;
 use std::old_io::{File, Truncate, Write};
 use std::os;
 use std::old_path::Path;
 
 fn main() {
-    let args = os::args();
+    let args : Vec<String> = env::args().map(|a| a.into_string().unwrap()).collect();
     if args.len() < 3 {
         println!("usage: mkuutils <outfile> <crates>");
-        os::set_exit_status(1);
+        env::set_exit_status(1);
         return;
     }
 
@@ -30,11 +31,11 @@ fn main() {
                     hashsum = true;
                 }
             }
-            "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> isize { 0 }\nmap.insert(\"true\", uutrue);\n"),
-            "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> isize { 1 }\nmap.insert(\"false\", uufalse);\n"),
+            "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> i32 { 0 }\nmap.insert(\"true\", uutrue);\n"),
+            "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> i32 { 1 }\nmap.insert(\"false\", uufalse);\n"),
             _ => {
                 crates.push_str(format!("extern crate \"{0}\" as uu{0};\n", prog).as_slice());
-                util_map.push_str(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> isize);\n", prog = prog).as_slice());
+                util_map.push_str(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> i32);\n", prog = prog).as_slice());
             }
         }
     }

@@ -1,0 +1,11 @@
+[project]
+name = "mkfifo"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "mkfifo"
+path = "mkfifo.rs"
+
+[dependencies]
+libc = "*"

@@ -1,0 +1,11 @@
+[project]
+name = "pwd"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "pwd"
+path = "pwd.rs"
+
+[depenencies]
+libc = "*"

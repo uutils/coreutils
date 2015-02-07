@@ -1,0 +1,11 @@
+[project]
+name = "timeout"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "timeout"
+path = "timeout.rs"
+
+[dependencies]
+libc = "*"

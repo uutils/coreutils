@@ -1,0 +1,8 @@
+[project]
+name = "seq"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "seq"
+path = "seq.rs"

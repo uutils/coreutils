@@ -1,0 +1,12 @@
+[project]
+name = "base64"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "base64"
+path = "base64.rs"
+
+[dependencies]
+rustc-serialize = "*"
+libc = "*"

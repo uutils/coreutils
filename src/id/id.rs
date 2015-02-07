@@ -85,7 +85,7 @@ extern {
 
 static NAME: &'static str = "id";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let args_t = args.tail();
 
     let options = [

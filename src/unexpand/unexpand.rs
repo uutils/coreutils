@@ -73,7 +73,7 @@ impl Options {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optflag("a", "all", "convert all blanks, instead of just initial blanks"),
         getopts::optflag("", "first-only", "convert only leading sequences of blanks (overrides -a)"),

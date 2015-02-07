@@ -1,0 +1,12 @@
+[project]
+name = "nl"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "nl"
+path = "nl.rs"
+
+[dependencies]
+regex = "*"
+regex_macros = "*"

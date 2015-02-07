@@ -1,0 +1,11 @@
+[project]
+name = "sync"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "uusync"
+path = "sync.rs"
+
+[dependencies]
+libc = "*"

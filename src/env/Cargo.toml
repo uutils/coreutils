@@ -1,0 +1,11 @@
+[project]
+name = "env"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "env"
+path = "env.rs"
+
+[dependencies]
+libc = "*"

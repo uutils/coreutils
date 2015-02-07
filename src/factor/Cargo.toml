@@ -1,0 +1,11 @@
+[project]
+name = "factor"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "factor"
+path = "factor.rs"
+
+[dependencies]
+libc = "*"

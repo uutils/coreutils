@@ -1,0 +1,11 @@
+[project]
+name = "nohup"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "nohup"
+path = "nohup.rs"
+
+[dependencies]
+libc = "*"

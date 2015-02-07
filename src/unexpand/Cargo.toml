@@ -1,0 +1,11 @@
+[project]
+name = "unexpand"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "unexpand"
+path = "unexpand.rs"
+
+[dependencies]
+libc = "*"

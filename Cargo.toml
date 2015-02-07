@@ -3,269 +3,350 @@ name = "uutils-coreutils"
 version = "0.0.1"
 authors = []
 
-[[bin]]
-name = "base64"
-path = "base64/base64.rs"
-
-[[bin]]
-name = "basename"
-path = "basename/basename.rs"
-
-[[bin]]
-name = "cat"
-path = "cat/cat.rs"
-
-[[bin]]
-name = "chmod"
-path = "chmod/chmod.rs"
-
-[[bin]]
-name = "chroot"
-path = "chroot/chroot.rs"
-
-[[bin]]
-name = "cksum"
-path = "cksum/cksum.rs"
-
-[[bin]]
-name = "comm"
-path = "comm/comm.rs"
-
-[[bin]]
-name = "cp"
-path = "cp/cp.rs"
-
-[[bin]]
-name = "cut"
-path = "cut/cut.rs"
-
-[[bin]]
-name = "dirname"
-path = "dirname/dirname.rs"
-
-[[bin]]
-name = "du"
-path = "du/du.rs"
-
-[[bin]]
-name = "echo"
-path = "echo/echo.rs"
-
-[[bin]]
-name = "env"
-path = "env/env.rs"
-
-[[bin]]
-name = "expand"
-path = "expand/expand.rs"
-
-[[bin]]
-name = "factor"
-path = "factor/factor.rs"
-
-[[bin]]
-name = "false"
-path = "false/false.rs"
-
-[[bin]]
-name = "fmt"
-path = "fmt/fmt.rs"
-
-[[bin]]
-name = "fold"
-path = "fold/fold.rs"
-
-[[bin]]
-name = "groups"
-path = "groups/groups.rs"
-
-[[bin]]
-name = "hashsum"
-path = "hashsum/hashsum.rs"
-
-[[bin]]
-name = "head"
-path = "head/head.rs"
-
-[[bin]]
-name = "hostid"
-path = "hostid/hostid.rs"
-
-[[bin]]
-name = "hostname"
-path = "hostname/hostname.rs"
-
-[[bin]]
-name = "id"
-path = "id/id.rs"
-
-[[bin]]
-name = "kill"
-path = "kill/kill.rs"
-
-[[bin]]
-name = "link"
-path = "link/link.rs"
-
-[[bin]]
-name = "logname"
-path = "logname/logname.rs"
-
-[[bin]]
-name = "mkdir"
-path = "mkdir/mkdir.rs"
-
-[[bin]]
-name = "mv"
-path = "mv/mv.rs"
-
-[[bin]]
-name = "mkfifo"
-path = "mkfifo/mkfifo.rs"
-
-[[bin]]
-name = "nl"
-path = "nl/nl.rs"
-
-[[bin]]
-name = "nohup"
-path = "nohup/nohup.rs"
-
-[[bin]]
-name = "paste"
-path = "paste/paste.rs"
-
-[[bin]]
-name = "printenv"
-path = "printenv/printenv.rs"
-
-[[bin]]
-name = "pwd"
-path = "pwd/pwd.rs"
-
-[[bin]]
-name = "realpath"
-path = "realpath/realpath.rs"
-
-[[bin]]
-name = "relpath"
-path = "relpath/relpath.rs"
-
-[[bin]]
-name = "rm"
-path = "rm/rm.rs"
-
-[[bin]]
-name = "rmdir"
-path = "rmdir/rmdir.rs"
-
-[[bin]]
-name = "seq"
-path = "seq/seq.rs"
-
-[[bin]]
-name = "shuf"
-path = "shuf/shuf.rs"
-
-[[bin]]
-name = "sleep"
-path = "sleep/sleep.rs"
-
-[[bin]]
-name = "sort"
-path = "sort/sort.rs"
-
-[[bin]]
-name = "split"
-path = "split/split.rs"
-
-[[bin]]
-name = "sum"
-path = "sum/sum.rs"
-
-[[bin]]
-name = "sync"
-path = "sync/sync.rs"
-
-[[bin]]
-name = "tac"
-path = "tac/tac.rs"
-
-[[bin]]
-name = "tail"
-path = "tail/tail.rs"
-
-[[bin]]
-name = "tee"
-path = "tee/tee.rs"
-
-[[bin]]
-name = "test"
-path = "test/test.rs"
-
-[[bin]]
-name = "timeout"
-path = "timeout/timeout.rs"
-
-[[bin]]
-name = "touch"
-path = "touch/touch.rs"
-
-[[bin]]
-name = "tr"
-path = "tr/tr.rs"
-
-[[bin]]
-name = "true"
-path = "true/true.rs"
-
-[[bin]]
-name = "truncate"
-path = "truncate/truncate.rs"
-
-[[bin]]
-name = "tsort"
-path = "tsort/tsort.rs"
-
-[[bin]]
-name = "tty"
-path = "tty/tty.rs"
-
-[[bin]]
-name = "uname"
-path = "uname/uname.rs"
-
-[[bin]]
-name = "unexpand"
-path = "unexpand/unexpand.rs"
-
-[[bin]]
-name = "uniq"
-path = "uniq/uniq.rs"
-
-[[bin]]
-name = "unlink"
-path = "unlink/unlink.rs"
-
-[[bin]]
-name = "uptime"
-path = "uptime/uptime.rs"
-
-[[bin]]
-name = "users"
-path = "users/users.rs"
-
-[[bin]]
-name = "wc"
-path = "wc/wc.rs"
-
-[[bin]]
-name = "whoami"
-path = "whoami/whoami.rs"
-
-[[bin]]
-name = "yes"
-path = "yes/yes.rs"
-
-[dependencies.rust-crypto]
-git = "https://github.com/dagenix/rust-crypto"
+[features]
+default = ["unix", "utils" ]
+utils = [
+	"base64",
+	"basename",
+	"cat",
+	"chmod",
+	"cksum",
+	"comm",
+	"cp",
+	"cut",
+	"dirname",
+	"echo",
+	"env",
+	"du",
+	"expand",
+	"factor",
+	"false",
+	"fmt",
+	"fold",
+	"link",
+	"hashsum",
+	"mkdir",
+	"mv",
+	"nl",
+	"nproc",
+	"paste",
+	"printenv",
+	"pwd",
+	"realpath",
+	"relpath",
+	"rm",
+	"rmdir",
+	"sleep",
+	"split",
+	"seq",
+	"shuf",
+	"sort",
+	"sum",
+	"sync",
+	"tac",
+	"tee",
+	"test",
+	"touch",
+	"tr",
+	"true",
+	"truncate",
+	"tsort",
+	"unexpand",
+	"unlink",
+	"uniq",
+	"wc",
+	"yes",
+	"head",
+	"tail",
+	"whoami",
+]
+
+# unix only
+unix = [
+	"chroot",
+	"groups",
+	"hostid",
+	"hostname",
+	"id",
+	"kill",
+	"logname",
+	"mkfifo",
+	"nohup",
+	"timeout",
+	"tty",
+	"uname",
+	"uptime",
+	"users",
+]
+
+[[bin]]
+name = "uutils"
+path = "src/uutils/uutils_cargo.rs"
+
+[dependencies.base64]
+path = "src/base64"
+optional = true
+
+[dependencies.basename]
+path = "src/basename"
+optional = true
+
+[dependencies.cat]
+path = "src/cat"
+optional = true
+
+[dependencies.chmod]
+path = "src/chmod"
+optional = true
+
+[dependencies.chroot]
+path = "src/chroot"
+optional = true
+
+[dependencies.cksum]
+path = "src/cksum"
+optional = true
+
+[dependencies.comm]
+path = "src/comm"
+optional = true
+
+[dependencies.cp]
+path = "src/cp"
+optional = true
+
+[dependencies.cut]
+path = "src/cut"
+optional = true
+
+[dependencies.dirname]
+path = "src/dirname"
+optional = true
+
+[dependencies.du]
+path = "src/du"
+optional = true
+
+[dependencies.echo]
+path = "src/echo"
+optional = true
+
+[dependencies.env]
+path = "src/env"
+optional = true
+
+[dependencies.expand]
+path = "src/expand"
+optional = true
+
+[dependencies.factor]
+path = "src/factor"
+optional = true
+
+[dependencies.false]
+path = "src/false"
+optional = true
+
+[dependencies.fmt]
+path = "src/fmt"
+optional = true
+
+[dependencies.fold]
+path = "src/fold"
+optional = true
+
+[dependencies.groups]
+path = "src/groups"
+optional = true
+
+[dependencies.hashsum]
+path = "src/hashsum"
+optional = true
+
+[dependencies.head]
+path = "src/head"
+optional = true
+
+[dependencies.hostid]
+path = "src/hostid"
+optional = true
+
+[dependencies.hostname]
+path = "src/hostname"
+optional = true
+
+[dependencies.id]
+path = "src/id"
+optional = true
+
+[dependencies.kill]
+path = "src/kill"
+optional = true
+
+[dependencies.link]
+path = "src/link"
+optional = true
+
+[dependencies.logname]
+path = "src/logname"
+optional = true
+
+[dependencies.mkdir]
+path = "src/mkdir"
+optional = true
+
+[dependencies.mkfifo]
+path = "src/mkfifo"
+optional = true
+
+[dependencies.mv]
+path = "src/mv"
+optional = true
+
+[dependencies.nl]
+path = "src/nl"
+optional = true
+
+[dependencies.nohup]
+path = "src/nohup"
+optional = true
+
+[dependencies.nproc]
+path = "src/nproc"
+optional = true
+
+[dependencies.paste]
+path = "src/paste"
+optional = true
+
+[dependencies.printenv]
+path = "src/printenv"
+optional = true
+
+[dependencies.pwd]
+path = "src/pwd"
+optional = true
+
+[dependencies.realpath]
+path = "src/realpath"
+optional = true
+
+[dependencies.relpath]
+path = "src/relpath"
+optional = true
+
+[dependencies.rm]
+path = "src/rm"
+optional = true
+
+[dependencies.rmdir]
+path = "src/rmdir"
+optional = true
+
+[dependencies.seq]
+path = "src/seq"
+optional = true
+
+[dependencies.shuf]
+path = "src/shuf"
+optional = true
+
+[dependencies.sleep]
+path = "src/sleep"
+optional = true
+
+[dependencies.sort]
+path = "src/sort"
+optional = true
+
+[dependencies.split]
+path = "src/split"
+optional = true
+
+[dependencies.sum]
+path = "src/sum"
+optional = true
+
+[dependencies.sync]
+path = "src/sync"
+optional = true
+
+[dependencies.tac]
+path = "src/tac"
+optional = true
+
+[dependencies.tail]
+path = "src/tail"
+optional = true
+
+[dependencies.tee]
+path = "src/tee"
+optional = true
+
+[dependencies.test]
+path = "src/test"
+optional = true
+
+[dependencies.timeout]
+path = "src/timeout"
+optional = true
+
+[dependencies.touch]
+path = "src/touch"
+optional = true
+
+[dependencies.tr]
+path = "src/tr"
+optional = true
+
+[dependencies.true]
+path = "src/true"
+optional = true
+
+[dependencies.truncate]
+path = "src/truncate"
+optional = true
+
+[dependencies.tsort]
+path = "src/tsort"
+optional = true
+
+[dependencies.tty]
+path = "src/tty"
+optional = true
+
+[dependencies.uname]
+path = "src/uname"
+optional = true
+
+[dependencies.unexpand]
+path = "src/unexpand"
+optional = true
+
+[dependencies.uniq]
+path = "src/uniq"
+optional = true
+
+[dependencies.unlink]
+path = "src/unlink"
+optional = true
+
+[dependencies.uptime]
+path = "src/uptime"
+optional = true
+
+[dependencies.users]
+path = "src/users"
+optional = true
+
+[dependencies.wc]
+path = "src/wc"
+optional = true
+
+[dependencies.whoami]
+path = "src/whoami"
+optional = true
+
+[dependencies.yes]
+path = "src/yes"
+optional = true

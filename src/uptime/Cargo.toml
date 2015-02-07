@@ -1,0 +1,12 @@
+[project]
+name = "uptime"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "uptime"
+path = "uptime.rs"
+
+[dependencies]
+libc = "*"
+time = "*"

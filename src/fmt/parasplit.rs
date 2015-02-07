@@ -535,7 +535,7 @@ impl<'a> Iterator for WordSplit<'a> {
         let mut word_nchars = 0;
         self.position =
             match self.string[word_start..]
-            .find(|&mut: x: char| if !x.is_whitespace() { word_nchars += char_width(x); false } else { true }) {
+            .find(|x: char| if !x.is_whitespace() { word_nchars += char_width(x); false } else { true }) {
                 None => self.length,
                 Some(s) => s + word_start
             };

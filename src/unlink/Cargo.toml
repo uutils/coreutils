@@ -1,0 +1,11 @@
+[project]
+name = "unlink"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "unlink"
+path = "unlink.rs"
+
+[dependencies]
+libc = "*"

@@ -1,0 +1,11 @@
+[project]
+name = "touch"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "touch"
+path = "touch.rs"
+
+[dependencies.time]
+git = "https://github.com/rust-lang/time"

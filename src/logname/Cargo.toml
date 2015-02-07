@@ -1,0 +1,11 @@
+[project]
+name = "logname"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "logname"
+path = "logname.rs"
+
+[dependencies]
+libc = "*"

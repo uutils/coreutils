@@ -1,0 +1,11 @@
+[project]
+name = "rm"
+version = "0.0.0"
+authors = []
+
+[lib]
+name = "rm"
+path = "rm.rs"
+
+[dependencies]
+libc = "*"

@@ -25,7 +25,7 @@ mod util;
 static NAME : &'static str = "mkfifo";
 static VERSION : &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("m", "mode", "file permissions for the fifo", "(default 0666)"),
         getopts::optflag("h", "help", "display this help and exit"),
