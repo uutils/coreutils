@@ -1,6 +1,8 @@
 #![crate_name = "shred"]
 #![feature(collections, core, io, libc, os, path, rand)]
 
+extern crate getopts;
+
 use std::cell::{Cell, RefCell};
 use std::old_io::fs;
 use std::old_io::fs::PathExtensions;
@@ -15,6 +17,7 @@ use std::rand::{ThreadRng, Rng};
 mod util;
 
 static NAME: &'static str = "shred";
+static VERSION_STR: &'static str = "1.0.0";
 const BLOCK_SIZE: usize = 512;
 const NAMESET: &'static str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 // Patterns as shown in the GNU coreutils shred implementation
@@ -160,13 +163,68 @@ impl<'a> Iterator for BytesGenerator<'a> {
 
 pub fn main() {
     let args = os::args();
-    if args.len() == 1 {
-        exit!(1);
-    }
+
     let prog_name : String = format!("{}", Path::new(args[0].as_slice()).filename_display());
-    let filename = args[1].as_slice();
-    wipe_file(filename, 10, prog_name.as_slice(), true);
-    return;
+
+    let mut opts = getopts::Options::new();
+    //opts.optflag("f", "force", "change permissions to allow writing if necessary");
+    opts.optopt("n", "iterations", "overwrite N times instead of the default (3)", "N");
+    //opts.optopt("", "random-source", "get random bytes from FILE");
+    //opts.optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)");
+    opts.optflag("u", "remove", "truncate and remove the file after overwriting; See below");
+    opts.optflag("v", "verbose", "show progress");
+    //opts.optflag("x", "exact", "do not round file sizes up to the next full block;\
+    //                                this is the default for non-regular files");
+    opts.optflag("z", "zero", "add a final overwrite with zeros to hide shredding");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+    
+    let matches = match opts.parse(args.tail()) {
+        Ok(m) => m,
+        Err(f) => {
+            crash!(1, "{}", f)
+        }
+    };
+    if matches.opt_present("help") {
+        println!("Usage: {} [OPTION]... FILE...", prog_name);
+        println!("Overwrite the specified FILE(s) repeatedly, in order to make it harder");
+        println!("for even very expensive hardware probing to recover the data.");
+        println!("{}", opts.usage(""));
+        println!("If FILE is -, shred standard output.");
+        println!("");
+        println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
+        println!("the files because it is common to operate on device files like /dev/hda,");
+        println!("and those files usually should not be removed.");
+        println!("");
+        //return 0;
+    } else if matches.opt_present("version") {
+        println!("{} {}", NAME, VERSION_STR);
+        //return 0;
+    } else if matches.free.is_empty() {
+        eprintln!("{}: missing an argument", NAME);
+        eprintln!("for help, try '{0} --help'", prog_name);
+        //return 1;
+    } else {
+        let iterations = match matches.opt_str("iterations") {
+            Some(s) => match s.parse::<usize>() {
+                           Ok(u) => u,
+                           Err(e) => {
+                               eprintln!("{}: invalid number of passes", prog_name);
+                               return;
+                               //return 1;
+                           }
+                       },
+            None => 3us
+        };
+        let remove = matches.opt_present("remove");
+        let verbose = matches.opt_present("verbose");
+        let zero = matches.opt_present("zero");
+        for path_str in matches.free.into_iter() {
+            wipe_file(path_str.as_slice(), iterations, prog_name.as_slice(), remove, zero, verbose);
+        }
+    }
+    
+    //return 0;
 }
 
 /* For debugging purposes
@@ -185,7 +243,7 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     return s;
 }
 
-fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
+fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, remove: bool, zero: bool, verbose: bool) {
 
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
@@ -227,10 +285,18 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
         let middle = pass_sequence.len() / 2;
         pass_sequence.insert(middle, PassType::Random); // Insert middle
     }
+    
+    if zero { pass_sequence.push(PassType::Pattern(b"\x00")); }
+    let total_passes = n_passes + { if zero { 1 } else { 0 } };
 
     for (i, pass_type) in pass_sequence.iter().enumerate() {
         if verbose {
-            print!("{}: {}: pass {:2.0}/{:2.0} ", prog_name, path.filename_display(), i+1, n_passes);
+            if total_passes.to_string().len() == 1 {
+                print!("{}: {}: pass {}/{} ", prog_name, path.filename_display(), i+1, total_passes);
+            }
+            else {
+                print!("{}: {}: pass {:2.0}/{:2.0} ", prog_name, path.filename_display(), i+1, total_passes);
+            }
             match *pass_type {
                 PassType::Random => println!("(random)"),
                 PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
@@ -240,10 +306,13 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, verbose: bool) {
         file.fsync(); // Sync data & metadata to disk after each pass just in case
         file.seek(0, old_io::SeekStyle::SeekSet);
     }
-    let renamed_path: Option<Path> = wipe_name(&path, prog_name, true);
-    match renamed_path {
-        Some(rp) => { remove_file(&rp, path.filename_str().unwrap_or(""), prog_name, verbose); }
-        None => (),
+    
+    if remove {
+        let renamed_path: Option<Path> = wipe_name(&path, prog_name, true);
+        match renamed_path {
+            Some(rp) => { remove_file(&rp, path.filename_str().unwrap_or(""), prog_name, verbose); }
+            None => (),
+        }
     }
 }
 
@@ -303,10 +372,10 @@ fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
                     break;
                 }
                 Err(e) => {
-                    eprintln!("{}: {}: COULD NOT RENAME TO {}: {}", prog_name,
-                                                                    prev_path.filename_display(),
-                                                                    new_path.filename_display(),
-                                                                    e.desc);
+                    eprintln!("{}: {}: Couldn't rename to {}: {}", prog_name,
+                                                                   prev_path.filename_display(),
+                                                                   new_path.filename_display(),
+                                                                   e.desc);
                     return None;
                 }
             }
@@ -322,7 +391,7 @@ fn remove_file(path: &Path, orig_filename: &str, prog_name: &str, verbose: bool)
             Ok(())
         }
         Err(e) => {
-            eprintln!("{}: {}: COULD NOT REMOVE: {}", prog_name, path.filename_display(), e.desc);
+            eprintln!("{}: {}: Couldn't remove {}", prog_name, path.filename_display(), e.desc);
             Err(())
         }
     }
