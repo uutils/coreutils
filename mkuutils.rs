@@ -2,7 +2,6 @@
 
 use std::env;
 use std::old_io::{File, Truncate, Write};
-use std::os;
 use std::old_path::Path;
 
 fn main() {
