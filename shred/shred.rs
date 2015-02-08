@@ -238,6 +238,7 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     while s.len() < 6 {
         for byte in bytes.iter() {
             s.push_str(format!("{:02x}", *byte).as_slice());
+            if s.len() == 6 { break; }
         }
     }
     return s;
