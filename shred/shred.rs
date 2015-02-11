@@ -20,17 +20,15 @@ static NAME: &'static str = "shred";
 static VERSION_STR: &'static str = "1.0.0";
 const BLOCK_SIZE: usize = 512;
 const NAMESET: &'static str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
+
 // Patterns as shown in the GNU coreutils shred implementation
-const PATTERNS: [&'static [u8]; 37] = [
+const PATTERNS: [&'static [u8]; 22] = [
     b"\x00", b"\xFF",
     b"\x55", b"\xAA",
     b"\x24\x92\x49", b"\x49\x24\x92", b"\x6D\xB6\xDB", b"\x92\x49\x24",
         b"\xB6\xDB\x6D", b"\xDB\x6D\xB6",
     b"\x11", b"\x22", b"\x33", b"\x44", b"\x66", b"\x77", b"\x88", b"\x99", b"\xBB", b"\xCC",
         b"\xDD", b"\xEE",
-    b"\x10\x00", b"\x12\x49", b"\x14\x92", b"\x16\xDB", b"\x19\x24",
-        b"\x1B\x6D", b"\x1D\xB6", b"\x1F\xFF", b"\x18\x88", b"\x19\x99",
-        b"\x1A\xAA", b"\x1B\xBB", b"\x1C\xCC", b"\x1D\xDD", b"\x1E\xEE",
 ];
 
 #[derive(Copy)]
@@ -161,16 +159,39 @@ impl<'a> Iterator for BytesGenerator<'a> {
     }
 }
 
+fn get_size(size_str_opt: Option<String>, prog_name: &str) -> Option<u64> {
+    if size_str_opt.is_none() { return None; }
+    
+    let mut size_str = size_str_opt.unwrap().clone();
+    // Immutably look at last character of size string
+    let unit = match size_str.as_slice().char_at_reverse(size_str.len()) {
+        'K' => { size_str.pop();  1024u64 }
+        'M' => { size_str.pop(); (1024*1024) as u64 }
+        'G' => { size_str.pop(); (1024*1024*1024) as u64 }
+         _   => { 1u64 }
+    };
+    
+    let coeff = match size_str.parse::<u64>() {
+        Ok(u) => u,
+        Err(_) => {
+            eprintln!("{}: Invalid file size", prog_name);
+            exit!(1);
+        }
+    };
+    
+    Some(coeff*unit)
+}
+
 pub fn main() {
     let args = os::args();
 
-    let prog_name : String = format!("{}", Path::new(args[0].as_slice()).filename_display());
+    let prog_name: String = format!("{}", Path::new(args[0].as_slice()).filename_display());
 
     let mut opts = getopts::Options::new();
     //opts.optflag("f", "force", "change permissions to allow writing if necessary");
     opts.optopt("n", "iterations", "overwrite N times instead of the default (3)", "N");
     //opts.optopt("", "random-source", "get random bytes from FILE");
-    //opts.optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)");
+    opts.optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)", "FILESIZE");
     opts.optflag("u", "remove", "truncate and remove the file after overwriting; See below");
     opts.optflag("v", "verbose", "show progress");
     //opts.optflag("x", "exact", "do not round file sizes up to the next full block;\
@@ -182,7 +203,8 @@ pub fn main() {
     let matches = match opts.parse(args.tail()) {
         Ok(m) => m,
         Err(f) => {
-            crash!(1, "{}", f)
+            eprintln!("{}: {}", prog_name, f);
+            exit!(1);
         }
     };
     if matches.opt_present("help") {
@@ -196,38 +218,41 @@ pub fn main() {
         println!("the files because it is common to operate on device files like /dev/hda,");
         println!("and those files usually should not be removed.");
         println!("");
-        //return 0;
+        exit!(0);
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION_STR);
-        //return 0;
+        exit!(0);
     } else if matches.free.is_empty() {
-        eprintln!("{}: missing an argument", NAME);
-        eprintln!("for help, try '{0} --help'", prog_name);
-        //return 1;
+        eprintln!("{}: Missing an argument", NAME);
+        eprintln!("For help, try '{0} --help'", prog_name);
+        exit!(0);
     } else {
         let iterations = match matches.opt_str("iterations") {
             Some(s) => match s.parse::<usize>() {
                            Ok(u) => u,
-                           Err(e) => {
-                               eprintln!("{}: invalid number of passes", prog_name);
+                           Err(_) => {
+                               eprintln!("{}: Invalid number of passes", prog_name);
                                return;
-                               //return 1;
+                               exit!(1);
                            }
                        },
             None => 3us
         };
         let remove = matches.opt_present("remove");
-        let verbose = matches.opt_present("verbose");
+        let size = get_size(matches.opt_str("size"), prog_name.as_slice());
         let zero = matches.opt_present("zero");
+        let verbose = matches.opt_present("verbose");
         for path_str in matches.free.into_iter() {
-            wipe_file(path_str.as_slice(), iterations, prog_name.as_slice(), remove, zero, verbose);
+            wipe_file(path_str.as_slice(), iterations, prog_name.as_slice(),
+                      remove, size, zero, verbose);
         }
     }
     
-    //return 0;
+    exit!(0);
 }
 
-/* For debugging purposes
+// For debugging purposes
+/*
 fn wait_enter() {
     old_io::stdin().read_line();
 }
@@ -244,7 +269,8 @@ fn bytes_to_string(bytes: &[u8]) -> String {
     return s;
 }
 
-fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, remove: bool, zero: bool, verbose: bool) {
+fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str,
+             remove: bool, size: Option<u64>, zero: bool, verbose: bool) {
 
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
@@ -287,6 +313,7 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, remove: bool, zer
         pass_sequence.insert(middle, PassType::Random); // Insert middle
     }
     
+    // --zero specifies whether we want one final pass of 0x00 on our file
     if zero { pass_sequence.push(PassType::Pattern(b"\x00")); }
     let total_passes = n_passes + { if zero { 1 } else { 0 } };
 
@@ -303,7 +330,8 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, remove: bool, zer
                 PassType::Pattern(p) => println!("({})", bytes_to_string(p)),
             };
         }
-        do_pass(&mut file, *pass_type, prog_name); // Ignore failed writes; just keep trying
+        // size is an optional argument for exactly how many bytes we want to shred
+        do_pass(&mut file, *pass_type, size, prog_name); // Ignore failed writes; just keep trying
         file.fsync(); // Sync data & metadata to disk after each pass just in case
         file.seek(0, old_io::SeekStyle::SeekSet);
     }
@@ -317,11 +345,11 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str, remove: bool, zer
     }
 }
 
-fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Result<(), ()> {
-    let mut file_size: u64;
-
-    match file.stat() {
-        Ok(stat) => file_size = stat.size,
+fn do_pass(file: &mut fs::File, generator_type: PassType,
+           given_file_size: Option<u64>, prog_name: &str) -> Result<(), ()> {
+           
+    let real_file_size = match file.stat() {
+        Ok(stat) => stat.size,
         Err(e) => {
                 eprintln!("{}: {}: Couldn't stat file: {}", prog_name,
                                                             file.path().filename_display(),
@@ -330,7 +358,12 @@ fn do_pass(file: &mut fs::File, generator_type: PassType, prog_name: &str) -> Re
             }
     };
     
-    let mut generator = BytesGenerator::new(file_size, generator_type);
+    // Recall --size specifies how many bytes we want to shred
+    let mut generator = match given_file_size {
+        Some(given) => BytesGenerator::new(given, generator_type),
+        None        => BytesGenerator::new(real_file_size, generator_type),
+    };
+    
     for block in generator {
         match file.write_all(&*block) {
             Ok(_) => (),
