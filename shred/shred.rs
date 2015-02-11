@@ -126,7 +126,7 @@ impl<'a> Iterator for BytesGenerator<'a> {
         
         let this_block_size = {
             let bytes_left = self.total_bytes - self.bytes_generated.get();
-            if bytes_left > self.block_size as u64 { self.block_size }
+            if bytes_left >= self.block_size as u64 { self.block_size }
             else { (bytes_left % self.block_size as u64) as usize }
         };
         
