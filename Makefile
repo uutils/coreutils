@@ -76,6 +76,7 @@ PROGS       := \
   sleep \
   split \
   seq \
+  shred\
   shuf \
   sort \
   sum \
