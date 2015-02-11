@@ -1,5 +1,13 @@
 #![crate_name = "shred"]
 #![feature(collections, core, io, libc, os, path, rand)]
+/*
+* This file is part of the uutils coreutils package.
+*
+* (c) Michael Rosenberg <42micro@gmail.com>
+*
+* For the full copyright and license information, please view the LICENSE
+* file that was distributed with this source code.
+*/
 
 extern crate getopts;
 
@@ -86,7 +94,6 @@ impl Iterator for FilenameGenerator {
         }
         
         Some(ret)
-        
     }
 }
 
@@ -164,6 +171,8 @@ impl<'a> Iterator for BytesGenerator<'a> {
     }
 }
 
+// TODO: Add support for all postfixes here up to and including EiB
+//       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
 fn get_size(size_str_opt: Option<String>, prog_name: &str) -> Option<u64> {
     if size_str_opt.is_none() { return None; }
     
@@ -187,7 +196,7 @@ fn get_size(size_str_opt: Option<String>, prog_name: &str) -> Option<u64> {
     Some(coeff*unit)
 }
 
-pub fn main() {
+pub fn uumain(args: Vec<String>) -> isize {
     let args = os::args();
 
     let prog_name: String = format!("{}", Path::new(args[0].as_slice()).filename_display());
@@ -215,8 +224,6 @@ pub fn main() {
         println!("Overwrite the specified FILE(s) repeatedly, in order to make it harder");
         println!("for even very expensive hardware probing to recover the data.");
         println!("{}", opts.usage(""));
-        println!("If FILE is -, shred standard output.");
-        println!("");
         println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
         println!("the files because it is common to operate on device files like /dev/hda,");
         println!("and those files usually should not be removed.");
@@ -235,7 +242,6 @@ pub fn main() {
                            Ok(u) => u,
                            Err(_) => {
                                eprintln!("{}: Invalid number of passes", prog_name);
-                               return;
                                exit!(1);
                            }
                        },
