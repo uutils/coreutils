@@ -96,12 +96,13 @@ struct BytesGenerator<'a> {
     total_bytes: u64,
     bytes_generated: Cell<u64>,
     block_size: usize,
+    exact: bool, // if false, every block's size is block_size
     gen_type: PassType<'a>,
     rng: Option<RefCell<ThreadRng>>,
 }
 
 impl<'a> BytesGenerator<'a> {
-    fn new(total_bytes: u64, gen_type: PassType<'a>) -> BytesGenerator {
+    fn new(total_bytes: u64, gen_type: PassType<'a>, exact: bool) -> BytesGenerator {
         let rng = match gen_type {
             PassType::Random => Some(RefCell::new(rand::thread_rng())),
             _ => None,
@@ -110,6 +111,7 @@ impl<'a> BytesGenerator<'a> {
         let gen = BytesGenerator{total_bytes: total_bytes,
                                  bytes_generated: Cell::new(0u64),
                                  block_size: BLOCK_SIZE,
+                                 exact: exact,
                                  gen_type: gen_type,
                                  rng: rng};
         gen
@@ -120,13 +122,16 @@ impl<'a> Iterator for BytesGenerator<'a> {
     type Item = Box<[u8]>;
     
     fn next(&mut self) -> Option<Box<[u8]>> {
-        if self.bytes_generated.get() == self.total_bytes {
+        // We go over the total_bytes limit when !self.exact and total_bytes isn't a multiple
+        // of self.block_size
+        if self.bytes_generated.get() >= self.total_bytes {
             return None;
         }
         
         let this_block_size = {
             let bytes_left = self.total_bytes - self.bytes_generated.get();
-            if bytes_left >= self.block_size as u64 { self.block_size }
+            if !self.exact { self.block_size }
+            else if bytes_left >= self.block_size as u64 { self.block_size }
             else { (bytes_left % self.block_size as u64) as usize }
         };
         
@@ -174,7 +179,7 @@ fn get_size(size_str_opt: Option<String>, prog_name: &str) -> Option<u64> {
     let coeff = match size_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
-            eprintln!("{}: Invalid file size", prog_name);
+            eprintln!("{}: {}: Invalid file size", prog_name, size_str_opt.unwrap());
             exit!(1);
         }
     };
@@ -188,14 +193,12 @@ pub fn main() {
     let prog_name: String = format!("{}", Path::new(args[0].as_slice()).filename_display());
 
     let mut opts = getopts::Options::new();
-    //opts.optflag("f", "force", "change permissions to allow writing if necessary");
     opts.optopt("n", "iterations", "overwrite N times instead of the default (3)", "N");
-    //opts.optopt("", "random-source", "get random bytes from FILE");
     opts.optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)", "FILESIZE");
     opts.optflag("u", "remove", "truncate and remove the file after overwriting; See below");
     opts.optflag("v", "verbose", "show progress");
-    //opts.optflag("x", "exact", "do not round file sizes up to the next full block;\
-    //                                this is the default for non-regular files");
+    opts.optflag("x", "exact", "do not round file sizes up to the next full block;\
+                                    this is the default for non-regular files");
     opts.optflag("z", "zero", "add a final overwrite with zeros to hide shredding");
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
@@ -240,11 +243,12 @@ pub fn main() {
         };
         let remove = matches.opt_present("remove");
         let size = get_size(matches.opt_str("size"), prog_name.as_slice());
+        let exact = matches.opt_present("exact") && size.is_none(); // if -s is given, ignore -x
         let zero = matches.opt_present("zero");
         let verbose = matches.opt_present("verbose");
         for path_str in matches.free.into_iter() {
             wipe_file(path_str.as_slice(), iterations, prog_name.as_slice(),
-                      remove, size, zero, verbose);
+                      remove, size, exact, zero, verbose);
         }
     }
     
@@ -270,7 +274,7 @@ fn bytes_to_string(bytes: &[u8]) -> String {
 }
 
 fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str,
-             remove: bool, size: Option<u64>, zero: bool, verbose: bool) {
+             remove: bool, size: Option<u64>, exact: bool, zero: bool, verbose: bool) {
 
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
@@ -331,7 +335,7 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str,
             };
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        do_pass(&mut file, *pass_type, size, prog_name); // Ignore failed writes; just keep trying
+        do_pass(&mut file, *pass_type, size, exact, prog_name); // Ignore failed writes; just keep trying
         file.fsync(); // Sync data & metadata to disk after each pass just in case
         file.seek(0, old_io::SeekStyle::SeekSet);
     }
@@ -346,7 +350,7 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str,
 }
 
 fn do_pass(file: &mut fs::File, generator_type: PassType,
-           given_file_size: Option<u64>, prog_name: &str) -> Result<(), ()> {
+           given_file_size: Option<u64>, exact: bool, prog_name: &str) -> Result<(), ()> {
            
     let real_file_size = match file.stat() {
         Ok(stat) => stat.size,
@@ -360,8 +364,8 @@ fn do_pass(file: &mut fs::File, generator_type: PassType,
     
     // Recall --size specifies how many bytes we want to shred
     let mut generator = match given_file_size {
-        Some(given) => BytesGenerator::new(given, generator_type),
-        None        => BytesGenerator::new(real_file_size, generator_type),
+        Some(given) => BytesGenerator::new(given, generator_type, exact),
+        None        => BytesGenerator::new(real_file_size, generator_type, exact),
     };
     
     for block in generator {
