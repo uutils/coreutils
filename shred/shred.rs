@@ -385,6 +385,16 @@ fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
     let mut prev_path = file_path.clone();
     let dir_path: Path = file_path.dir_path();
     
+    // make a fs::File for the containing directory so we can call fsync() after every rename
+    let mut dir_file = match fs::File::open_mode(&dir_path, old_io::Open, old_io::Read) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("{}: {}: Couldn't open directory as read-only", prog_name,
+                                                                      dir_path.display());
+            return None;
+        }
+    };
+    
     let mut last_path: Path = Path::new(""); // for use inside the loop
     
     for length in range(1, basename_len+1).rev() {
@@ -401,6 +411,10 @@ fn wipe_name(file_path: &Path, prog_name: &str, verbose: bool) -> Option<Path> {
                                                           prev_path.filename_display(),
                                                           new_path.filename_display());
                     }
+                    // Sync this change to disk immediately; Note: this is equivalent to the
+                    // --remove=wipesync option in coreutils' shred. Here, it is the only option
+                    dir_file.fsync();
+                    
                     last_path = new_path.clone();
                     prev_path = new_path;
                     break;
