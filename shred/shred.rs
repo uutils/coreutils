@@ -197,33 +197,33 @@ fn get_size(size_str_opt: Option<String>, prog_name: &str) -> Option<u64> {
 }
 
 pub fn uumain(args: Vec<String>) -> isize {
-    let args = os::args();
-
     let prog_name: String = format!("{}", Path::new(args[0].as_slice()).filename_display());
 
-    let mut opts = getopts::Options::new();
-    opts.optopt("n", "iterations", "overwrite N times instead of the default (3)", "N");
-    opts.optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)", "FILESIZE");
-    opts.optflag("u", "remove", "truncate and remove the file after overwriting; See below");
-    opts.optflag("v", "verbose", "show progress");
-    opts.optflag("x", "exact", "do not round file sizes up to the next full block;\
-                                    this is the default for non-regular files");
-    opts.optflag("z", "zero", "add a final overwrite with zeros to hide shredding");
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    let opts = [
+        getopts::optopt("n", "iterations", "overwrite N times instead of the default (3)", "N"),
+        getopts::optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)", "FILESIZE"),
+        getopts::optflag("u", "remove", "truncate and remove the file after overwriting; See below"),
+        getopts::optflag("v", "verbose", "show progress"),
+        getopts::optflag("x", "exact", "do not round file sizes up to the next full block;\
+                                        this is the default for non-regular files"),
+        getopts::optflag("z", "zero", "add a final overwrite with zeros to hide shredding"),
+        getopts::optflag("", "help", "display this help and exit"),
+        getopts::optflag("", "version", "output version information and exit"),
+    ];
     
-    let matches = match opts.parse(args.tail()) {
+    let matches = match getopts::getopts(args.tail(), &opts) {
         Ok(m) => m,
         Err(f) => {
             eprintln!("{}: {}", prog_name, f);
             exit!(1);
         }
     };
+
     if matches.opt_present("help") {
         println!("Usage: {} [OPTION]... FILE...", prog_name);
         println!("Overwrite the specified FILE(s) repeatedly, in order to make it harder");
-        println!("for even very expensive hardware probing to recover the data.");
-        println!("{}", opts.usage(""));
+        print!("for even very expensive hardware probing to recover the data.");
+        println!("{}", getopts::usage("", &opts));
         println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
         println!("the files because it is common to operate on device files like /dev/hda,");
         println!("and those files usually should not be removed.");
