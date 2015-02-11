@@ -167,7 +167,7 @@ impl<'a> Iterator for BytesGenerator<'a> {
 fn get_size(size_str_opt: Option<String>, prog_name: &str) -> Option<u64> {
     if size_str_opt.is_none() { return None; }
     
-    let mut size_str = size_str_opt.unwrap().clone();
+    let mut size_str = size_str_opt.as_ref().unwrap().clone();
     // Immutably look at last character of size string
     let unit = match size_str.as_slice().char_at_reverse(size_str.len()) {
         'K' => { size_str.pop();  1024u64 }
@@ -294,14 +294,14 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str,
     
     let mut pass_sequence: Vec<PassType> = Vec::new();
     
-    if n_passes <= 3 {
-        for _ in 0..3 { pass_sequence.push(PassType::Random) }
+    if n_passes <= 3 { // Only random passes if n_passes <= 3
+        for _ in 0..n_passes { pass_sequence.push(PassType::Random) }
     }
-    // This filling process is intentionally similar to that used in GNU's implementation
+    // First fill it with Patterns, shuffle it, then evenly distribute Random
     else {
-        let n_patterns = n_passes - 3; // We do three random passes no matter what
-        let n_full_arrays = n_patterns / PATTERNS.len(); // How many times can we go through all the patterns?
-        let remainder = n_patterns % PATTERNS.len(); // How many do we get through on our last time through?
+        let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
+        let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
+        
         for _ in 0..n_full_arrays {
             for p in PATTERNS.iter() {
                 pass_sequence.push(PassType::Pattern(*p));
@@ -311,10 +311,12 @@ fn wipe_file(path_str: &str, n_passes: usize, prog_name: &str,
             pass_sequence.push(PassType::Pattern(PATTERNS[i]));
         }
         rand::thread_rng().shuffle(pass_sequence.as_mut_slice()); // randomize the order of application
-        pass_sequence.insert(0, PassType::Random); // Insert front
-        pass_sequence.push(PassType::Random); // Insert back
-        let middle = pass_sequence.len() / 2;
-        pass_sequence.insert(middle, PassType::Random); // Insert middle
+        
+        let n_random = 3us + n_passes/10us; // Minimum 3 random passes; ratio of 10 after
+        // Evenly space random passes; ensures one at the beginning and end
+        for i in 0us..n_random {
+            pass_sequence[i * (n_passes - 1us)/(n_random - 1us)] = PassType::Random;
+        }
     }
     
     // --zero specifies whether we want one final pass of 0x00 on our file
