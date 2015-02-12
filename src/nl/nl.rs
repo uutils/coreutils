@@ -1,5 +1,6 @@
 #![crate_name = "nl"]
 #![feature(collections, core, io, path, rustc_private)]
+#![plugin(regex_macros)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,7 +13,6 @@
  */
 #![feature(plugin)]
 
-#[plugin] #[no_link] extern crate regex_macros;
 extern crate regex;
 extern crate getopts;
 
