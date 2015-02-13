@@ -41,7 +41,7 @@ fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> i32>) {
 
 fn main() {
     let umap = util_map();
-    let mut args : Vec<String> = env::args().map(|a| a.into_string().unwrap()).collect();
+    let mut args : Vec<String> = env::args().collect();
 
     // try binary name as util name.
     let binary = Path::new(args[0].as_slice());

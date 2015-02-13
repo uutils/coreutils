@@ -10,17 +10,13 @@ extern crate \"@UTIL_CRATE@\" as uu@UTIL_CRATE@;
 use std::env;
 use uu@UTIL_CRATE@::uumain;
 
-fn args() -> Vec<String> {
-    env::args().map(|a| a.into_string().unwrap()).collect()
-}
-
 fn main() {
-    env::set_exit_status(uumain(args()));
+    env::set_exit_status(uumain(env::args().collect()));
 }
 ";
 
 fn main() {
-    let args : Vec<String> = env::args().map(|a| a.into_string().unwrap()).collect();
+    let args : Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("usage: mkbuild <crate> <outfile>");
         env::set_exit_status(1);

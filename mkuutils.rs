@@ -5,7 +5,7 @@ use std::old_io::{File, Truncate, Write};
 use std::old_path::Path;
 
 fn main() {
-    let args : Vec<String> = env::args().map(|a| a.into_string().unwrap()).collect();
+    let args : Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("usage: mkuutils <outfile> <crates>");
         env::set_exit_status(1);
