@@ -12,11 +12,11 @@
 
 #![allow(unused_variables)]  // only necessary while the TODOs still exist
 #![feature(plugin)]
+#![plugin(regex_macros)]
 
 extern crate getopts;
 extern crate libc;
 extern crate regex;
-#[plugin] #[no_link] extern crate regex_macros;
 
 use std::ffi::CString;
 use std::old_io::fs;
