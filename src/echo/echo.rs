@@ -31,7 +31,7 @@ struct EchoOptions {
 }
 
 #[inline(always)]
-fn to_char(bytes: &Vec<u8>, base: usize) -> char {
+fn to_char(bytes: &Vec<u8>, base: u32) -> char {
     from_str_radix::<usize>(from_utf8(bytes.as_slice()).unwrap(), base).unwrap() as u8 as char
 }
 
@@ -52,10 +52,10 @@ fn isodigit(c: u8) -> bool {
     }
 }
 
-fn convert_str(string: &[u8], index: usize, base: usize) -> (char, usize) {
+fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
     let (max_digits, is_legal_digit) : (usize, fn(u8) -> bool) = match base {
-        8us => (3, isodigit),
-        16us => (2, isxdigit),
+        8 => (3, isodigit),
+        16 => (2, isxdigit),
         _ => panic!(),
     };
 
@@ -202,7 +202,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                                 't' => print!("\t"),
                                 'v' => print!("\x0B"),
                                 'x' => {
-                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16us);
+                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16);
                                     if num_char_used == 0 {
                                         print!("\\x");
                                     } else {
@@ -213,7 +213,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                                     }
                                 },
                                 '0' => {
-                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8us);
+                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8);
                                     if num_char_used == 0 {
                                         print!("\0");
                                     } else {
@@ -224,7 +224,7 @@ pub fn uumain(args: Vec<String>) -> isize {
                                     }
                                 }
                                 _ => {
-                                    let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8us);
+                                    let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8);
                                     if num_char_used == 0 {
                                         print!("\\{}", c);
                                     } else {

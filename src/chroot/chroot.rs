@@ -96,7 +96,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     unsafe {
         let executable = CString::from_slice(command[0].as_bytes()).as_bytes_with_nul().as_ptr();
-        let mut command_parts: Vec<*const i8> = command.iter().map(|x| CString::from_slice(x.as_bytes()).as_bytes_with_nul().as_ptr()).collect();
+        let mut command_parts: Vec<*const u8> = command.iter().map(|x| CString::from_slice(x.as_bytes()).as_bytes_with_nul().as_ptr()).collect();
         command_parts.push(std::ptr::null());
         execvp(executable as *const libc::c_char, command_parts.as_ptr() as *mut *const libc::c_char) as isize
     }
