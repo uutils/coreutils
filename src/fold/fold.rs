@@ -157,7 +157,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
                                         let routput = slice.slice_chars(m + 1, slice.chars().count());
-                                        let ncount = routput.chars().fold(0us, |out, ch: char| {
+                                        let ncount = routput.chars().fold(0usize, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
                                                 '\x08' => if out > 0 { -1 } else { 0 },

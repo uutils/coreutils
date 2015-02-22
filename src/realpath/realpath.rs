@@ -78,7 +78,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         Some(x) => x,
     };
 
-    let mut links_left = 256is;
+    let mut links_left = 256isize;
 
     for part in abs.components() {
         result.push(part);

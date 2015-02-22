@@ -29,8 +29,8 @@ mod util;
 static NAME: &'static str = "head";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut line_count = 10us;
-    let mut byte_count = 0us;
+    let mut line_count = 10usize;
+    let mut byte_count = 0usize;
 
     // handle obsolete -number syntax
     let options = match obsolete(args.tail()) {

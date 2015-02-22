@@ -217,7 +217,7 @@ fn done_printing(next: f64, step: f64, last: f64) -> bool {
 }
 
 fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: String, terminator: String, pad: bool, padding: usize) {
-    let mut i = 0is;
+    let mut i = 0isize;
     let mut value = first + i as f64 * step;
     while !done_printing(value, step, last) {
         let istr = value.to_string();
