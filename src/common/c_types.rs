@@ -15,7 +15,7 @@ use self::libc::int32_t;
 
 use self::libc::funcs::posix88::unistd::getgroups;
 
-use std::ffi::{c_str_to_bytes, CString};
+use std::ffi::{CStr, CString};
 use std::iter::repeat;
 use std::vec::Vec;
 
@@ -231,7 +231,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
                     if !group.is_null() {
                         let name = unsafe {
                             let gname = read(group).gr_name;
-                            let bytes= c_str_to_bytes(&gname);
+                            let bytes= CStr::from_ptr(gname).to_bytes();
                             String::from_utf8_lossy(bytes).to_string()
                         };
                         print!("{} ", name);

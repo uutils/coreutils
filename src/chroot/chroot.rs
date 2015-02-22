@@ -16,7 +16,7 @@ extern crate libc;
 use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
 use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
-use std::ffi::{c_str_to_bytes, CString};
+use std::ffi::{CStr, CString};
 use std::old_io::fs::PathExtensions;
 use std::iter::FromIterator;
 
@@ -196,7 +196,7 @@ fn set_user(user: &str) {
 fn strerror(errno: i32) -> String {
     unsafe {
         let err = libc::funcs::c95::string::strerror(errno) as *const libc::c_char;
-        let bytes= c_str_to_bytes(&err);
+        let bytes= CStr::from_ptr(err).to_bytes();
         String::from_utf8_lossy(bytes).to_string()
     }
 }

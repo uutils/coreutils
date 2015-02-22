@@ -36,7 +36,7 @@ mod platform {
         let passwd: *const c_passwd = getpwuid(geteuid());
 
         let pw_name: *const libc::c_char = (*passwd).pw_name;
-        String::from_utf8_lossy(::std::ffi::c_str_to_bytes(&pw_name)).to_string()
+        String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes()).to_string()
     }
 }
 
@@ -55,7 +55,7 @@ mod platform {
         if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
             crash!(1, "username is too long");
         }
-        String::from_utf8_lossy(::std::ffi::c_str_to_bytes(&buffer.as_ptr())).to_string()
+        String::from_utf8_lossy(::std::ffi::CStr::from_ptr(buffer.as_ptr()).to_bytes()).to_string()
     }
 }
 

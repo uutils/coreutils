@@ -17,7 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::c_str_to_bytes;
+use std::ffi::CStr;
 use std::old_io::println;
 use std::old_io::stdio::stderr;
 use getopts::{optflag,getopts};
@@ -52,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let tty = unsafe { 
         let ptr = ttyname(libc::STDIN_FILENO);
         if !ptr.is_null() {
-            String::from_utf8_lossy(c_str_to_bytes(&ptr)).to_string()
+            String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
         } else {
             "".to_string()
         }

@@ -17,7 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::c_str_to_bytes;
+use std::ffi::CStr;
 use std::mem::uninitialized;
 use std::old_io::print;
 use c_types::utsname;
@@ -38,7 +38,7 @@ extern {
 }
 
 unsafe fn string_from_c_str(ptr: *const i8) -> String {
-    String::from_utf8_lossy(c_str_to_bytes(&ptr)).to_string()
+    String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
 }
 
 unsafe fn getuname() -> utsrust {

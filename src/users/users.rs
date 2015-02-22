@@ -18,7 +18,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::{CString, c_str_to_bytes};
+use std::ffi::{CStr, CString};
 use std::old_io::print;
 use std::mem;
 use std::ptr;
@@ -107,7 +107,7 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = String::from_utf8_lossy(c_str_to_bytes(mem::transmute(&(*line).ut_user))).to_string();
+                let user = String::from_utf8_lossy(CStr::from_ptr(mem::transmute(&(*line).ut_user)).to_bytes()).to_string();
                 users.push(user);
             }
         }
