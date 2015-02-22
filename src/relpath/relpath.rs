@@ -1,5 +1,5 @@
 #![crate_name = "relpath"]
-#![feature(collections, core, os, path, rustc_private)]
+#![feature(collections, core, os, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

@@ -1,5 +1,5 @@
 #![crate_name = "tty"]
-#![feature(collections, core, io, rustc_private, std_misc)]
+#![feature(collections, core, old_io, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.

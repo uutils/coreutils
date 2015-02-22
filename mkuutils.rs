@@ -1,4 +1,4 @@
-#![feature(core, env, io, path)]
+#![feature(core, env, old_io, old_path)]
 
 use std::env;
 use std::old_io::{File, Truncate, Write};

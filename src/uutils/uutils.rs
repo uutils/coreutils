@@ -1,5 +1,5 @@
 #![crate_name = "uutils"]
-#![feature(core, env, path, rustc_private)]
+#![feature(core, env, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

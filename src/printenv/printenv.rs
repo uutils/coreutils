@@ -1,5 +1,5 @@
 #![crate_name = "printenv"]
-#![feature(collections, core, io, os, rustc_private)]
+#![feature(collections, core, old_io, os, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

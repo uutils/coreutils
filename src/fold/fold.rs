@@ -1,5 +1,5 @@
 #![crate_name = "fold"]
-#![feature(collections, core, io, path, rustc_private, unicode)]
+#![feature(collections, core, old_io, old_path, rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.

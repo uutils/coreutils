@@ -1,5 +1,5 @@
 #![crate_name = "env"]
-#![feature(core, io, os)]
+#![feature(core, old_io, os)]
 
 /*
  * This file is part of the uutils coreutils package.
