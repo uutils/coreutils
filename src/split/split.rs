@@ -243,7 +243,7 @@ fn num_prefix(i: usize, width: usize) -> String {
         let div = Int::pow(10 as usize, w);
         let r = n / div;
         n -= r * div;
-        c.push(char::from_digit(r, 10).unwrap());
+        c.push(char::from_digit(r as u32, 10).unwrap());
     }
     c
 }

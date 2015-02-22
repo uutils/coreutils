@@ -15,7 +15,7 @@ extern crate getopts;
 
 use getopts::OptGroup;
 use std::char::from_u32;
-use std::collections::{BitvSet, VecMap};
+use std::collections::{BitSet, VecMap};
 use std::old_io::{BufferedReader, print};
 use std::old_io::stdio::{stdin_raw, stdout};
 use std::iter::FromIterator;
@@ -89,7 +89,7 @@ fn expand_set(s: &str) -> Vec<char> {
 }
 
 fn delete(set: Vec<char>, complement: bool) {
-    let mut bset = BitvSet::new();
+    let mut bset = BitSet::new();
     let mut out = stdout();
 
     for &c in set.iter() {

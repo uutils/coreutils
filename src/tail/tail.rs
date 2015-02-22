@@ -20,7 +20,7 @@ use std::old_io::fs::File;
 use std::old_path::Path;
 use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
-use std::collections::ring_buf::RingBuf;
+use std::collections::VecDeque;
 use std::old_io::timer::sleep;
 use std::time::duration::Duration;
 
@@ -241,7 +241,7 @@ macro_rules! tail_impl (
         // read through each line and store them in a ringbuffer that always contains
         // count lines/chars. When reaching the end of file, output the data in the
         // ringbuf.
-        let mut ringbuf: RingBuf<$kind> = RingBuf::new();
+        let mut ringbuf: VecDeque<$kind> = VecDeque::new();
         let data = $reader.$kindfn().skip(
             if $beginning {
                 let temp = $count;
