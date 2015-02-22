@@ -91,7 +91,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn exec(filename: &str) {
     unsafe {
-        utmpxname(CString::from_slice(filename.as_bytes()).as_ptr());
+        utmpxname(CString::new(filename).unwrap().as_ptr());
     }
 
     let mut users = vec!();

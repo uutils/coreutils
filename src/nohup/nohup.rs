@@ -69,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() { crash!(2, "Cannot detach from console")};
 
-    let cstrs : Vec<CString> = opts.free.iter().map(|x| CString::from_slice(x.as_bytes())).collect();
+    let cstrs : Vec<CString> = opts.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
     let mut args : Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(std::ptr::null());
     unsafe { execvp(args[0], args.as_mut_ptr())}

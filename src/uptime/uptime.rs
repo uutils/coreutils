@@ -108,7 +108,7 @@ fn print_loadavg() {
 #[cfg(unix)]
 fn process_utmpx() -> (Option<time_t>, usize) {
     unsafe {
-        utmpxname(CString::from_slice(DEFAULT_FILE.as_bytes()).as_ptr());
+        utmpxname(CString::new(DEFAULT_FILE).unwrap().as_ptr());
     }
 
     let mut nusers = 0;

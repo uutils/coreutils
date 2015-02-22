@@ -183,7 +183,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
 }
 
 fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
-    let path = CString::from_slice(name.as_bytes());
+    let path = CString::new(name).unwrap();
     match fmode {
         Some(mode) => {
             if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {

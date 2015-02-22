@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut exit_status = 0;
     for f in matches.free.iter() {
-        let err = unsafe { mkfifo(CString::from_slice(f.as_bytes()).as_ptr(), mode) };
+        let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode) };
         if err == -1 {
             show_error!("creating '{}': {}", f, os::error_string(os::errno()));
             exit_status = 1;

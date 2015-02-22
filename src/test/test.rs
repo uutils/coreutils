@@ -348,7 +348,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         }
     };
 
-    let path = CString::from_slice(path);
+    let path = CString::new(path).unwrap();
     let mut stat = unsafe { std::mem::zeroed() };
     if cond == PathCondition::SymLink {
         if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {

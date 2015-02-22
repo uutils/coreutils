@@ -95,8 +95,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     set_context(&newroot, &opts);
 
     unsafe {
-        let executable = CString::from_slice(command[0].as_bytes()).as_bytes_with_nul().as_ptr();
-        let mut command_parts: Vec<*const u8> = command.iter().map(|x| CString::from_slice(x.as_bytes()).as_bytes_with_nul().as_ptr()).collect();
+        let executable = CString::new(command[0]).unwrap().as_bytes_with_nul().as_ptr();
+        let mut command_parts: Vec<*const u8> = command.iter().map(|x| CString::new(x.as_bytes()).unwrap().as_bytes_with_nul().as_ptr()).collect();
         command_parts.push(std::ptr::null());
         execvp(executable as *const libc::c_char, command_parts.as_ptr() as *mut *const libc::c_char) as i32 
     }
@@ -131,7 +131,7 @@ fn enter_chroot(root: &Path) {
     let root_str = root.display();
     std::os::change_dir(root).unwrap();
     let err = unsafe {
-        chroot(CString::from_slice(b".").as_bytes_with_nul().as_ptr() as *const libc::c_char)
+        chroot(CString::new(b".").unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
     };
     if err != 0 {
         crash!(1, "cannot chroot to {}: {}", root_str, strerror(err).as_slice())
