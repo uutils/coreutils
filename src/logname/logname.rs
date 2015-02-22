@@ -1,5 +1,5 @@
 #![crate_name = "logname"]
-#![feature(collections, core, io, rustc_private, std_misc)]
+#![feature(collections, core, old_io, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::c_str_to_bytes;
+use std::ffi::CStr;
 use std::old_io::print;
 use libc::c_char;
 
@@ -34,7 +34,7 @@ fn get_userlogin() -> Option<String> {
             if login.is_null() {
                     None
             } else {
-                    Some(String::from_utf8_lossy(c_str_to_bytes(&login)).to_string())
+                    Some(String::from_utf8_lossy(CStr::from_ptr(login).to_bytes()).to_string())
             }
     }
 }
@@ -46,7 +46,7 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     //

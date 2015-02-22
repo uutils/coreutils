@@ -1,5 +1,5 @@
 #![crate_name = "uutils"]
-#![feature(core, os, path, rustc_private)]
+#![feature(core, env, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,19 +14,19 @@ extern crate getopts;
 
 @CRATES@
 
-use std::os;
+use std::env;
 use std::collections::hash_map::HashMap;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
-fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> isize> {
+fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> i32> {
     let mut map = HashMap::new();
     @UTIL_MAP@
     map
 }
 
-fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> isize>) {
+fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> i32>) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
@@ -41,7 +41,7 @@ fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> isize>) {
 
 fn main() {
     let umap = util_map();
-    let mut args = os::args();
+    let mut args : Vec<String> = env::args().collect();
 
     // try binary name as util name.
     let binary = Path::new(args[0].as_slice());
@@ -49,7 +49,7 @@ fn main() {
 
     match umap.get(binary_as_util) {
         Some(&uumain) => {
-            os::set_exit_status(uumain(args));
+            env::set_exit_status(uumain(args));
             return
         }
         None => (),
@@ -62,7 +62,7 @@ fn main() {
             // what busybox uses the -suffix pattern for.
     } else {
         println!("{}: applet not found", binary_as_util);
-        os::set_exit_status(1);
+        env::set_exit_status(1);
         return
     }
 
@@ -73,7 +73,7 @@ fn main() {
 
         match umap.get(util) {
             Some(&uumain) => {
-                os::set_exit_status(uumain(args.clone()));
+                env::set_exit_status(uumain(args.clone()));
                 return
             }
             None => {
@@ -83,22 +83,22 @@ fn main() {
                         let util = args[1].as_slice();
                         match umap.get(util) {
                             Some(&uumain) => {
-                                os::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
+                                env::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
                                 return
                             }
                             None => {
                                 println!("{}: applet not found", util);
-                                os::set_exit_status(1);
+                                env::set_exit_status(1);
                                 return
                             }
                         }
                     }
                     usage(&umap);
-                    os::set_exit_status(0);
+                    env::set_exit_status(0);
                     return
                 } else {
                     println!("{}: applet not found", util);
-                    os::set_exit_status(1);
+                    env::set_exit_status(1);
                     return
                 }
             }
@@ -106,7 +106,7 @@ fn main() {
     } else {
         // no arguments provided
         usage(&umap);
-        os::set_exit_status(0);
+        env::set_exit_status(0);
         return
     }
 }

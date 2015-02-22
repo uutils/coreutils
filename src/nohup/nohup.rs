@@ -1,5 +1,5 @@
 #![crate_name = "nohup"]
-#![feature(collections, core, io, os, path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, os, old_path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -38,7 +38,7 @@ extern {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
 
     let options = [
@@ -69,10 +69,10 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() { crash!(2, "Cannot detach from console")};
 
-    let cstrs : Vec<CString> = opts.free.iter().map(|x| CString::from_slice(x.as_bytes())).collect();
+    let cstrs : Vec<CString> = opts.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
     let mut args : Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(std::ptr::null());
-    unsafe { execvp(args[0], args.as_mut_ptr()) as isize }
+    unsafe { execvp(args[0], args.as_mut_ptr())}
 }
 
 fn replace_fds() {

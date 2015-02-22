@@ -1,5 +1,5 @@
 #![crate_name = "cksum"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -45,7 +45,7 @@ fn crc_final(mut crc: u32, mut length: usize) -> u32 {
 #[inline]
 fn cksum(fname: &str) -> IoResult<(u32, usize)> {
     let mut crc = 0u32;
-    let mut size = 0us;
+    let mut size = 0usize;
 
     let mut stdin_buf;
     let mut file_buf;
@@ -75,7 +75,7 @@ fn cksum(fname: &str) -> IoResult<(u32, usize)> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),

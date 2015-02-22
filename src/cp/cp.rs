@@ -1,5 +1,5 @@
 #![crate_name = "cp"]
-#![feature(collections, core, io, os, path, rustc_private)]
+#![feature(collections, core, old_io, os, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -32,7 +32,7 @@ pub enum Mode {
 
 impl Copy for Mode {}
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),

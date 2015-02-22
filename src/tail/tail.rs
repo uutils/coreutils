@@ -1,5 +1,5 @@
 #![crate_name = "tail"]
-#![feature(collections, core, io, path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -31,11 +31,11 @@ mod util;
 static NAME: &'static str = "tail";
 static VERSION: &'static str = "0.0.1";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let mut beginning = false;
     let mut lines = true;
-    let mut byte_count = 0us;
-    let mut line_count = 10us;
+    let mut byte_count = 0usize;
+    let mut line_count = 10usize;
     let mut sleep_msec = 1000u64;
 
     // handle obsolete -number syntax
@@ -153,29 +153,29 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
     let mut base =
         if size_slice.len() > 0 && size_slice.char_at(size_slice.len() - 1) == 'B' {
             size_slice = &size_slice[..size_slice.len() - 1];
-            1000us
+            1000usize
         } else {
-            1024us
+            1024usize
         };
     let exponent = 
         if size_slice.len() > 0 {
             let mut has_suffix = true;
             let exp = match size_slice.char_at(size_slice.len() - 1) {
-                'K' => 1us,
-                'M' => 2us,
-                'G' => 3us,
-                'T' => 4us,
-                'P' => 5us,
-                'E' => 6us,
-                'Z' => 7us,
-                'Y' => 8us,
+                'K' => 1usize,
+                'M' => 2usize,
+                'G' => 3usize,
+                'T' => 4usize,
+                'P' => 5usize,
+                'E' => 6usize,
+                'Z' => 7usize,
+                'Y' => 8usize,
                 'b' => {
-                    base = 512us;
-                    1us
+                    base = 512usize;
+                    1usize
                 }
                 _ => {
                     has_suffix = false;
-                    0us
+                    0usize
                 }
             };
             if has_suffix {
@@ -183,14 +183,14 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
             }
             exp
         } else {
-            0us
+            0usize
         };
 
-    let mut multiplier = 1us;
-    for _ in range(0us, exponent) {
+    let mut multiplier = 1usize;
+    for _ in range(0usize, exponent) {
         multiplier *= base;
     }
-    if base == 1000us && exponent == 0us {
+    if base == 1000usize && exponent == 0usize {
         // sole B is not a valid suffix
         None
     } else {

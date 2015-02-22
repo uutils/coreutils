@@ -140,8 +140,8 @@ mod platform {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
-    let program = &args[0][];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let program = &args[0][..];
 
     let options = [
         optflag("h", "help", "display this help and exit"),

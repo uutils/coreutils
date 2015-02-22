@@ -1,5 +1,5 @@
 #![crate_name = "link"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -22,7 +22,7 @@ mod util;
 static NAME : &'static str = "link";
 static VERSION : &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),

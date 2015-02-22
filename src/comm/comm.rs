@@ -1,5 +1,5 @@
 #![crate_name = "comm"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -108,7 +108,7 @@ fn open_file(name: &str) -> IoResult<LineReader> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optflag("1", "", "suppress column 1 (lines uniq to FILE1)"),
         getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),

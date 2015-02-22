@@ -1,5 +1,5 @@
 #![crate_name = "nl"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 #![plugin(regex_macros)]
 
 /*
@@ -77,7 +77,7 @@ enum NumberFormat {
     RightZero,
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let possible_options = [
         optopt("b", "body-numbering", "use STYLE for numbering body lines", "STYLE"),
         optopt("d", "section-delimiter", "use CC for separating logical pages", "CC"),

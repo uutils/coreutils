@@ -1,25 +1,25 @@
-#![feature(core, io, os, path)]
+#![feature(core, env, old_io, old_path)]
+use std::env;
 use std::old_io::{File, Truncate, ReadWrite};
-use std::os;
 use std::old_path::Path;
 
 static TEMPLATE: &'static str = "\
-#![feature(os)]
+#![feature(env)]
 extern crate \"@UTIL_CRATE@\" as uu@UTIL_CRATE@;
 
-use std::os;
+use std::env;
 use uu@UTIL_CRATE@::uumain;
 
 fn main() {
-    os::set_exit_status(uumain(os::args()));
+    env::set_exit_status(uumain(env::args().collect()));
 }
 ";
 
 fn main() {
-    let args = os::args();
+    let args : Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("usage: mkbuild <crate> <outfile>");
-        os::set_exit_status(1);
+        env::set_exit_status(1);
         return;
     }
 

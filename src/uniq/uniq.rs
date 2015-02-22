@@ -1,5 +1,5 @@
 #![crate_name = "uniq"]
-#![feature(collections, core, io, path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -119,7 +119,7 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<
     })
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program_path = Path::new(args[0].clone());
     let program = program_path.filename_str().unwrap_or(NAME);
 

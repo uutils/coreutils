@@ -1,5 +1,5 @@
 #![crate_name = "nice"]
-#![feature(collections, core, os, rustc_private, std_misc)]
+#![feature(collections, core, old_io, os, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -33,7 +33,7 @@ extern {
     fn setpriority(which: c_int, who: c_int, prio: c_int) -> c_int;
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("n", "adjustment", "add N to the niceness (default is 10)", "N"),
         getopts::optflag("h", "help", "display this help and exit"),
@@ -102,7 +102,7 @@ pub fn uumain(args: Vec<String>) -> isize {
             show_warning!("{}", IoError::last_error());
         }
 
-        let cstrs : Vec<CString> = matches.free.iter().map(|x| CString::from_slice(x.as_bytes())).collect();
+        let cstrs : Vec<CString> = matches.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
         let mut args : Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
         args.push(0 as *const c_char);
         unsafe { execvp(args[0], args.as_mut_ptr()); }

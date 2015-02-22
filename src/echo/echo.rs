@@ -1,5 +1,5 @@
 #![crate_name = "echo"]
-#![feature(collections, core, io, rustc_private)]
+#![feature(collections, core, old_io, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -60,7 +60,7 @@ fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
     };
 
     let mut bytes = vec!();
-    for offset in range(0us, max_digits) {
+    for offset in range(0usize, max_digits) {
         if string.len() <= index + offset as usize {
             break;
         }
@@ -163,7 +163,7 @@ fn print_version() {
     println!("echo version: {}", VERSION);
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let mut options = EchoOptions {
         newline: false,
         escape: false

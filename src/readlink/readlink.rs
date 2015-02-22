@@ -1,5 +1,5 @@
 #![crate_name = "readlink"]
-#![feature(collections, core, io, os, path, rustc_private)]
+#![feature(collections, core, old_io, os, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -110,7 +110,7 @@ fn canonicalize(original: &Path, can_mode: &CanonicalizeMode) -> io::IoResult<Pa
 }
 
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         optflag("f", "canonicalize",

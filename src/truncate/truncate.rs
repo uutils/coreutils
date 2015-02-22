@@ -1,5 +1,5 @@
 #![crate_name = "truncate"]
-#![feature(collections, core, io, path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -34,7 +34,7 @@ enum TruncateMode {
 
 static NAME: &'static str = "truncate";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     let opts = [
@@ -100,7 +100,7 @@ file based on its current size:
     0
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), isize> {
+fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), i32> {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let rfile = match File::open(&Path::new(rfilename.clone())) {

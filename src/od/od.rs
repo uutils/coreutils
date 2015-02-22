@@ -1,5 +1,5 @@
 #![crate_name = "od"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -19,7 +19,7 @@ use std::old_io::File;
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("A", "address-radix",
                         "Select the base in which file offsets are printed.", "RADIX"),

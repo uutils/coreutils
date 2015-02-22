@@ -1,5 +1,5 @@
 #![crate_name = "hostname"]
-#![feature(collections, core, io, rustc_private)]
+#![feature(collections, core, old_io, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -43,7 +43,7 @@ extern {
     fn sethostname(name: *const libc::c_char, namelen: libc::size_t) -> libc::c_int;
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
 
     let options = [
@@ -132,7 +132,7 @@ fn help_menu(program: &str, options: &[getopts::OptGroup]) {
 }
 
 fn xgethostname() -> String {
-    let namelen = 256us;
+    let namelen = 256usize;
     let mut name : Vec<u8> = repeat(0).take(namelen).collect();
     let err = unsafe {
         gethostname (name.as_mut_ptr() as *mut libc::c_char,

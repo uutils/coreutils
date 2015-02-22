@@ -1,5 +1,5 @@
 #![crate_name = "tee"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,13 +16,12 @@ extern crate getopts;
 use std::old_io::{println, stdin, stdout, Append, File, Truncate, Write};
 use std::old_io::{IoResult};
 use std::old_io::util::{copy, NullWriter, MultiWriter};
-use std::os;
 use getopts::{getopts, optflag, usage};
 
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     match options(args.as_slice()).and_then(exec) {
         Ok(_) => 0,
         Err(_) => 1
@@ -150,5 +149,5 @@ fn with_path<F, T>(path: &Path, mut cb: F) -> IoResult<T> where F: FnMut() -> Io
 }
 
 fn warn(message: &str) {
-    error!("{}: {}", os::args()[0], message);
+    error!("tee: {}", message);
 }

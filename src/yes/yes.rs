@@ -1,5 +1,5 @@
 #![crate_name = "yes"]
-#![feature(collections, core, io, rustc_private)]
+#![feature(collections, old_io, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,7 +24,7 @@ mod util;
 
 static NAME: &'static str = "yes";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -42,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", program);
         println!("");
-        print(&getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts)[]);
+        print(&getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts)[..]);
         return 0;
     }
     if matches.opt_present("version") {
@@ -55,7 +55,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         matches.free.connect(" ").into_cow()
     };
 
-    exec(&string[]);
+    exec(&string[..]);
 
     0
 }

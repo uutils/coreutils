@@ -1,5 +1,5 @@
 #![crate_name = "sleep"]
-#![feature(collections, core, io, rustc_private, std_misc)]
+#![feature(collections, core, old_io, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -26,7 +26,7 @@ mod time;
 
 static NAME: &'static str = "sleep";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     let opts = [

@@ -1,5 +1,5 @@
 #![crate_name = "factor"]
-#![feature(collections, core, io, rustc_private)]
+#![feature(collections, core, old_io, rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -64,7 +64,7 @@ fn print_factors_str(num_str: &str) {
     print_factors(num);
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "show this help message"),

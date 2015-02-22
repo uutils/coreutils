@@ -1,5 +1,5 @@
 #![crate_name = "cut"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -54,7 +54,7 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 
 fn cut_bytes<R: Reader>(reader: R,
                         ranges: &Vec<Range>,
-                        opts: &Options) -> isize {
+                        opts: &Options) -> i32 {
     use buffer::Bytes::Select;
     use buffer::Bytes::Selected::{NewlineFound, Complete, Partial, EndOfFile};
 
@@ -135,7 +135,7 @@ fn cut_bytes<R: Reader>(reader: R,
 
 fn cut_characters<R: Reader>(reader: R,
                              ranges: &Vec<Range>,
-                             opts: &Options) -> isize {
+                             opts: &Options) -> i32 {
     let mut buf_in = BufferedReader::new(reader);
     let mut out = BufferedWriter::new(stdio::stdout_raw());
 
@@ -242,7 +242,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
                                    ranges: &Vec<Range>,
                                    delim: &String,
                                    only_delimited: bool,
-                                   out_delim: &String) -> isize {
+                                   out_delim: &String) -> i32 {
     let mut buf_in = BufferedReader::new(reader);
     let mut out = BufferedWriter::new(stdio::stdout_raw());
 
@@ -316,7 +316,7 @@ fn cut_fields_delimiter<R: Reader>(reader: R,
 
 fn cut_fields<R: Reader>(reader: R,
                          ranges: &Vec<Range>,
-                         opts: &FieldOptions) -> isize {
+                         opts: &FieldOptions) -> i32 {
     match opts.out_delimeter {
         Some(ref delim) => {
             return cut_fields_delimiter(reader, ranges, &opts.delimiter,
@@ -395,7 +395,7 @@ fn cut_fields<R: Reader>(reader: R,
     0
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> isize {
+fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
     let mut stdin_read = false;
     let mut exit_code = 0;
 
@@ -447,7 +447,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> isize {
     exit_code
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         optopt("b", "bytes", "select only these bytes", "LIST"),
         optopt("c", "characters", "select only these characters", "LIST"),

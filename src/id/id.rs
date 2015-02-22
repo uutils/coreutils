@@ -18,7 +18,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::c_str_to_bytes;
+use std::ffi::CStr;
 use std::ptr::read;
 use libc::{
     uid_t,
@@ -85,7 +85,7 @@ extern {
 
 static NAME: &'static str = "id";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let args_t = args.tail();
 
     let options = [
@@ -139,7 +139,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         let gr = unsafe { getgrgid(id) };
 
         if nflag && !gr.is_null() {
-            let gr_name = unsafe { String::from_utf8_lossy(c_str_to_bytes(&read(gr).gr_name)).to_string() };
+            let gr_name = unsafe { String::from_utf8_lossy(CStr::from_ptr(read(gr).gr_name).to_bytes()).to_string() };
             println!("{}", gr_name);
         } else {
             println!("{}", id);
@@ -159,7 +159,7 @@ pub fn uumain(args: Vec<String>) -> isize {
         let pw = unsafe { getpwuid(id) };
         if nflag && !pw.is_null() {
             let pw_name = unsafe {
-                String::from_utf8_lossy(c_str_to_bytes(&read(pw).pw_name)).to_string()
+                String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string()
             };
             println!("{}", pw_name);
         } else {
@@ -197,16 +197,16 @@ fn pretty(possible_pw: Option<c_passwd>) {
     if possible_pw.is_some() {
         let pw = possible_pw.unwrap();
 
-        let pw_name = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_name)).to_string() };
+        let pw_name = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_name).to_bytes()).to_string() };
         print!("uid\t{}\ngroups\t", pw_name);
         group(possible_pw, true);
     } else {
-        let login = unsafe { String::from_utf8_lossy(c_str_to_bytes(&(getlogin() as *const i8))).to_string() };
+        let login = unsafe { String::from_utf8_lossy(CStr::from_ptr((getlogin() as *const i8)).to_bytes()).to_string() };
         let rid = unsafe { getuid() };
         let pw = unsafe { getpwuid(rid) };
 
         let is_same_user = unsafe {
-            String::from_utf8_lossy(c_str_to_bytes(&read(pw).pw_name)).to_string() == login
+            String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() == login
         };
 
         if pw.is_null() || is_same_user {
@@ -216,7 +216,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
         if !pw.is_null() {
             println!(
                 "uid\t{}",
-                unsafe { String::from_utf8_lossy(c_str_to_bytes(&read(pw).pw_name)).to_string() })
+                unsafe { String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() })
         } else {
             println!("uid\t{}\n", rid);
         }
@@ -227,7 +227,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
             if !pw.is_null() {
                 println!(
                     "euid\t{}",
-                    unsafe { String::from_utf8_lossy(c_str_to_bytes(&read(pw).pw_name)).to_string() });
+                    unsafe { String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() });
             } else {
                 println!("euid\t{}", eid);
             }
@@ -240,7 +240,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
             if !gr.is_null() {
                 println!(
                     "rgid\t{}",
-                    unsafe { String::from_utf8_lossy(c_str_to_bytes(&read(gr).gr_name)).to_string() });
+                    unsafe { String::from_utf8_lossy(CStr::from_ptr(read(gr).gr_name).to_bytes()).to_string() });
             } else {
                 println!("rgid\t{}", rid);
             }
@@ -259,12 +259,12 @@ fn pline(possible_pw: Option<c_passwd>) {
         possible_pw.unwrap()
     };
 
-    let pw_name     = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_name  )).to_string()};
-    let pw_passwd   = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_passwd)).to_string()};
-    let pw_class    = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_class )).to_string()};
-    let pw_gecos    = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_gecos )).to_string()};
-    let pw_dir      = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_dir   )).to_string()};
-    let pw_shell    = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_shell )).to_string()};
+    let pw_name     = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_name  ).to_bytes()).to_string()};
+    let pw_passwd   = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_passwd).to_bytes()).to_string()};
+    let pw_class    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_class ).to_bytes()).to_string()};
+    let pw_gecos    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_gecos ).to_bytes()).to_string()};
+    let pw_dir      = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_dir   ).to_bytes()).to_string()};
+    let pw_shell    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_shell ).to_bytes()).to_string()};
 
     println!(
         "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
@@ -288,11 +288,11 @@ fn pline(possible_pw: Option<c_passwd>) {
         possible_pw.unwrap()
     };
 
-    let pw_name     = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_name  )).to_string()};
-    let pw_passwd   = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_passwd)).to_string()};
-    let pw_gecos    = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_gecos )).to_string()};
-    let pw_dir      = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_dir   )).to_string()};
-    let pw_shell    = unsafe { String::from_utf8_lossy(c_str_to_bytes(&pw.pw_shell )).to_string()};
+    let pw_name     = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_name  ).to_bytes()).to_string()};
+    let pw_passwd   = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_passwd).to_bytes()).to_string()};
+    let pw_gecos    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_gecos ).to_bytes()).to_string()};
+    let pw_dir      = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_dir   ).to_bytes()).to_string()};
+    let pw_shell    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_shell ).to_bytes()).to_string()};
 
     println!(
         "{}:{}:{}:{}:{}:{}:{}",
@@ -352,7 +352,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         print!(
             "uid={}({})",
             uid,
-            unsafe { String::from_utf8_lossy(c_str_to_bytes(&possible_pw.unwrap().pw_name)).to_string() });
+            unsafe { String::from_utf8_lossy(CStr::from_ptr(possible_pw.unwrap().pw_name).to_bytes()).to_string() });
     } else {
         print!("uid={}", unsafe { getuid() });
     }
@@ -362,7 +362,7 @@ fn id_print(possible_pw: Option<c_passwd>,
     if !gr.is_null() {
         print!(
             "({})",
-            unsafe { String::from_utf8_lossy(c_str_to_bytes(&read(gr).gr_name)).to_string() });
+            unsafe { String::from_utf8_lossy(CStr::from_ptr(read(gr).gr_name).to_bytes()).to_string() });
     }
 
     let euid = unsafe { geteuid() };
@@ -372,7 +372,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         if !pw.is_null() {
             print!(
                 "({})",
-                unsafe { String::from_utf8_lossy(c_str_to_bytes(&read(pw).pw_name)).to_string() });
+                unsafe { String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() });
         }
     }
 
@@ -382,7 +382,7 @@ fn id_print(possible_pw: Option<c_passwd>,
         unsafe {
             let grp = getgrgid(egid);
             if !grp.is_null() {
-                print!("({})", String::from_utf8_lossy(c_str_to_bytes(&read(grp).gr_name)).to_string());
+                print!("({})", String::from_utf8_lossy(CStr::from_ptr(read(grp).gr_name).to_bytes()).to_string());
             }
         }
     }
@@ -397,7 +397,7 @@ fn id_print(possible_pw: Option<c_passwd>,
             let group = unsafe { getgrgid(gr) };
             if !group.is_null() {
                 let name = unsafe {
-                    String::from_utf8_lossy(c_str_to_bytes(&read(group).gr_name)).to_string()
+                    String::from_utf8_lossy(CStr::from_ptr(read(group).gr_name).to_bytes()).to_string()
                 };
                 print!("({})", name);
             }

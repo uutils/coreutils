@@ -1,5 +1,5 @@
 #![crate_name = "users"]
-#![feature(collections, core, io, rustc_private, std_misc)]
+#![feature(collections, core, old_io, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,7 +18,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::{CString, c_str_to_bytes};
+use std::ffi::{CStr, CString};
 use std::old_io::print;
 use std::mem;
 use std::ptr;
@@ -52,7 +52,7 @@ unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 
 static NAME: &'static str = "users";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
@@ -91,7 +91,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 
 fn exec(filename: &str) {
     unsafe {
-        utmpxname(CString::from_slice(filename.as_bytes()).as_ptr());
+        utmpxname(CString::new(filename).unwrap().as_ptr());
     }
 
     let mut users = vec!();
@@ -107,7 +107,7 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = String::from_utf8_lossy(c_str_to_bytes(mem::transmute(&(*line).ut_user))).to_string();
+                let user = String::from_utf8_lossy(CStr::from_ptr(mem::transmute(&(*line).ut_user)).to_bytes()).to_string();
                 users.push(user);
             }
         }

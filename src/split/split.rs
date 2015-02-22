@@ -1,5 +1,5 @@
 #![crate_name = "split"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "split";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N"),
         getopts::optopt("b", "bytes", "put SIZE bytes per output file", "SIZE"),
@@ -170,10 +170,10 @@ impl ByteSplitter {
         let mut strategy_param : Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
-            '0'...'9' => 1us,
-            'b' => 512us,
-            'k' => 1024us,
-            'm' => 1024us * 1024us,
+            '0'...'9' => 1usize,
+            'b' => 512usize,
+            'k' => 1024usize,
+            'm' => 1024usize * 1024usize,
             _ => crash!(1, "invalid number of bytes")
         };
         let n = if suffix.is_alphabetic() {
@@ -248,7 +248,7 @@ fn num_prefix(i: usize, width: usize) -> String {
     c
 }
 
-fn split(settings: &Settings) -> isize {
+fn split(settings: &Settings) -> i32 {
     let mut reader = io::BufferedReader::new(
         if settings.input.as_slice() == "-" {
             Box::new(io::stdio::stdin_raw()) as Box<Reader>

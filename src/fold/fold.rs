@@ -1,5 +1,5 @@
 #![crate_name = "fold"]
-#![feature(collections, core, io, path, rustc_private, unicode)]
+#![feature(collections, core, old_io, old_path, rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,7 +24,7 @@ mod util;
 static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(args.as_slice());
     let program = args[0].clone();
 
@@ -157,7 +157,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
                                         let routput = slice.slice_chars(m + 1, slice.chars().count());
-                                        let ncount = routput.chars().fold(0us, |out, ch: char| {
+                                        let ncount = routput.chars().fold(0usize, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
                                                 '\x08' => if out > 0 { -1 } else { 0 },

@@ -15,7 +15,7 @@ use self::libc::int32_t;
 
 use self::libc::funcs::posix88::unistd::getgroups;
 
-use std::ffi::{c_str_to_bytes, CString};
+use std::ffi::{CStr, CString};
 use std::iter::repeat;
 use std::vec::Vec;
 
@@ -133,7 +133,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         // Passed the username as a string
         } else {
             let pw_pointer = unsafe {
-                let cstr = CString::from_slice(username.as_bytes());
+                let cstr = CString::new(username).unwrap();
                 getpwnam(cstr.as_bytes_with_nul().as_ptr() as *const i8)
             };
             if !pw_pointer.is_null() {
@@ -152,7 +152,7 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
         unsafe { getgrgid(groupname.parse().unwrap()) }
     } else {
         unsafe { 
-            let cstr = CString::from_slice(groupname.as_bytes());
+            let cstr = CString::new(groupname).unwrap();
             getgrnam(cstr.as_bytes_with_nul().as_ptr() as *const c_char)
         }
     };
@@ -231,7 +231,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
                     if !group.is_null() {
                         let name = unsafe {
                             let gname = read(group).gr_name;
-                            let bytes= c_str_to_bytes(&gname);
+                            let bytes= CStr::from_ptr(gname).to_bytes();
                             String::from_utf8_lossy(bytes).to_string()
                         };
                         print!("{} ", name);

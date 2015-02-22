@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(collections, core, io, os, path, rustc_private)]
+#![feature(collections, core, old_io, os, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -20,7 +20,7 @@ use getopts::{optflag, getopts, usage};
 static NAME: &'static str = "realpath";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
     let options = [
         optflag("h", "help", "Show help and exit"),
@@ -78,7 +78,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         Some(x) => x,
     };
 
-    let mut links_left = 256is;
+    let mut links_left = 256isize;
 
     for part in abs.components() {
         result.push(part);

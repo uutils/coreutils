@@ -1,5 +1,5 @@
 #![crate_name = "unlink"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -25,7 +25,7 @@ mod util;
 
 static NAME: &'static str = "unlink";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),

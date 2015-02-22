@@ -1,5 +1,5 @@
 #![crate_name = "head"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -28,9 +28,9 @@ mod util;
 
 static NAME: &'static str = "head";
 
-pub fn uumain(args: Vec<String>) -> isize {
-    let mut line_count = 10us;
-    let mut byte_count = 0us;
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut line_count = 10usize;
+    let mut byte_count = 0usize;
 
     // handle obsolete -number syntax
     let options = match obsolete(args.tail()) {

@@ -1,5 +1,5 @@
 #![crate_name = "mkdir"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -27,7 +27,7 @@ static VERSION: &'static str = "1.0.0";
 /**
  * Handles option parsing
  */
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
 
     let opts = [
         // Linux-specific options, not implemented
@@ -94,7 +94,7 @@ fn print_help(opts: &[getopts::OptGroup]) {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), isize> {
+fn exec(dirs: Vec<String>, mk_parents: bool, mode: FilePermission, verbose: bool) -> Result<(), i32> {
     let mut result = Ok(());
 
     let mut parent_dirs = Vec::new();

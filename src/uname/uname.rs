@@ -1,5 +1,5 @@
 #![crate_name = "uname"]
-#![feature(collections, core, io, rustc_private, std_misc)]
+#![feature(collections, core, old_io, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ffi::c_str_to_bytes;
+use std::ffi::CStr;
 use std::mem::uninitialized;
 use std::old_io::print;
 use c_types::utsname;
@@ -38,7 +38,7 @@ extern {
 }
 
 unsafe fn string_from_c_str(ptr: *const i8) -> String {
-    String::from_utf8_lossy(c_str_to_bytes(&ptr)).to_string()
+    String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
 }
 
 unsafe fn getuname() -> utsrust {
@@ -56,7 +56,7 @@ unsafe fn getuname() -> utsrust {
 
 static NAME: &'static str = "uname";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),

@@ -1,5 +1,5 @@
 #![crate_name = "printenv"]
-#![feature(collections, core, io, os, rustc_private)]
+#![feature(collections, core, old_io, os, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,7 +24,7 @@ mod util;
 
 static NAME: &'static str = "printenv";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
     let opts = [
         getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),

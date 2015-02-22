@@ -1,5 +1,5 @@
 #![crate_name = "base64"]
-#![feature(collections, core, io, path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -35,7 +35,7 @@ mod util;
 
 static NAME: &'static str = "base64";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         optflag("d", "decode", "decode data"),
         optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),

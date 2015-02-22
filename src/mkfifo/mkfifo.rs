@@ -1,5 +1,5 @@
 #![crate_name = "mkfifo"]
-#![feature(collections, core, rustc_private, std_misc)]
+#![feature(collections, core, os, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -25,7 +25,7 @@ mod util;
 static NAME : &'static str = "mkfifo";
 static VERSION : &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         getopts::optopt("m", "mode", "file permissions for the fifo", "(default 0666)"),
         getopts::optflag("h", "help", "display this help and exit"),
@@ -68,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> isize {
 
     let mut exit_status = 0;
     for f in matches.free.iter() {
-        let err = unsafe { mkfifo(CString::from_slice(f.as_bytes()).as_ptr(), mode) };
+        let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode) };
         if err == -1 {
             show_error!("creating '{}': {}", f, os::error_string(os::errno()));
             exit_status = 1;

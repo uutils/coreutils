@@ -1,5 +1,5 @@
 #![crate_name = "sum"]
-#![feature(collections, core, io, path, rustc_private)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -76,7 +76,7 @@ fn open(name: &str) -> IoResult<Box<Reader>> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> isize {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].as_slice();
     let opts = [
         getopts::optflag("r", "", "use the BSD compatible algorithm (default)"),
