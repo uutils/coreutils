@@ -42,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", program);
         println!("");
-        print(&getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts)[]);
+        print(&getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts)[..]);
         return 0;
     }
     if matches.opt_present("version") {
@@ -55,7 +55,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         matches.free.connect(" ").into_cow()
     };
 
-    exec(&string[]);
+    exec(&string[..]);
 
     0
 }

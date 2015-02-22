@@ -38,7 +38,7 @@ struct Result {
 static NAME: &'static str = "wc";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0][];
+    let program = &args[0][..];
     let opts = [
         getopts::optflag("c", "bytes", "print the byte counts"),
         getopts::optflag("m", "chars", "print the character counts"),
@@ -60,7 +60,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
-        print(&getopts::usage("Print newline, word and byte counts for each FILE", &opts)[]);
+        print(&getopts::usage("Print newline, word and byte counts for each FILE", &opts)[..]);
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
@@ -74,10 +74,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let files = if matches.free.is_empty() {
         vec!["-".to_string()].into_cow()
     } else {
-        matches.free[].into_cow()
+        matches.free[..].into_cow()
     };
 
-    match wc(&files[], &matches) {
+    match wc(&files[..], &matches) {
         Ok(()) => ( /* pass */ ),
         Err(e) => return e
     }
@@ -108,7 +108,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
     let mut max_str_len: usize = 0;
 
     for path in files.iter() {
-        let mut reader = try!(open(&path[]));
+        let mut reader = try!(open(&path[..]));
 
         let mut line_count: usize = 0;
         let mut word_count: usize = 0;
@@ -128,7 +128,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
 
             // try and convert the bytes to UTF-8 first
             let current_char_count;
-            match from_utf8(&raw_line[]) {
+            match from_utf8(&raw_line[..]) {
                 Ok(line) => {
                     word_count += line.words().count();
                     current_char_count = line.chars().count();
@@ -170,7 +170,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
     }
 
     for result in results.iter() {
-        print_stats(&result.filename[], result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
+        print_stats(&result.filename[..], result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
     }
 
     if files.len() > 1 {

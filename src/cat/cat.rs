@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
         print(&getopts::usage("Concatenate FILE(s), or standard input, to \
-                             standard output.", &opts)[]);
+                             standard output.", &opts)[..]);
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
@@ -95,7 +95,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 
     let mut line_counter: usize = 1;
 
-    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[])) {
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
 
         let mut in_buf  = [0; 1024 * 31];
         let mut out_buf = [0; 1024 * 64];
@@ -162,7 +162,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 
     let mut line_counter: usize = 1;
 
-    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[])) {
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
 
         // Flush all 1024 iterations.
         let mut flush_counter = range(0us, 1024);
@@ -234,7 +234,7 @@ fn write_fast(files: Vec<String>) {
     let mut writer = stdout_raw();
     let mut in_buf = [0; 1024 * 64];
 
-    for (mut reader, _) in files.iter().filter_map(|p| open(&p[])) {
+    for (mut reader, _) in files.iter().filter_map(|p| open(&p[..])) {
         while let Ok(n) = reader.read(&mut in_buf) {
             if n == 0 { break }
             // This interface is completely broken.
