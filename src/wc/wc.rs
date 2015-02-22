@@ -1,5 +1,5 @@
 #![crate_name = "wc"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
+#![feature(collections, old_io, old_path, rustc_private, str_words)]
 
 /*
  * This file is part of the uutils coreutils package.

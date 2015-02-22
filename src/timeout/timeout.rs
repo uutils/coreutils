@@ -1,5 +1,5 @@
 #![crate_name = "timeout"]
-#![feature(collections, core, old_io, rustc_private)]
+#![feature(collections, core, io, old_io, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.

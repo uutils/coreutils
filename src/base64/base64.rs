@@ -1,5 +1,5 @@
 #![crate_name = "base64"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
+#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
