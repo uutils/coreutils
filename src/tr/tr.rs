@@ -96,7 +96,7 @@ fn delete(set: Vec<char>, complement: bool) {
         bset.insert(c as usize);
     }
 
-    let is_allowed = |&: c : char| {
+    let is_allowed = |c : char| {
         if complement {
             bset.contains(&(c as usize))
         } else {

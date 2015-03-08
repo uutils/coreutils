@@ -268,7 +268,7 @@ ers of 1000).",
         None => 1024
     };
 
-    let convert_size = |&: size: u64| -> String {
+    let convert_size = |size: u64| -> String {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
             if size >= MB {
                 format!("{:.1}M", (size as f64) / (MB as f64))

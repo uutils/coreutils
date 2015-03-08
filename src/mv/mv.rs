@@ -161,7 +161,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         verbose: matches.opt_present("v"),
     };
 
-    let string_to_path = |&: s: &String| { Path::new(s.as_slice()) };
+    let string_to_path = |s: &String| { Path::new(s.as_slice()) };
     let paths: Vec<Path> = matches.free.iter().map(string_to_path).collect();
 
     if matches.opt_present("version") {

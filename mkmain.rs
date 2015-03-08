@@ -1,10 +1,10 @@
-#![feature(core, env, old_io, old_path)]
+#![feature(core, exit_status, old_io, old_path)]
 use std::env;
 use std::old_io::{File, Truncate, ReadWrite};
 use std::old_path::Path;
 
 static TEMPLATE: &'static str = "\
-#![feature(env)]
+#![feature(exit_status)]
 extern crate \"@UTIL_CRATE@\" as uu@UTIL_CRATE@;
 
 use std::env;

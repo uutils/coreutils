@@ -225,7 +225,7 @@ fn str_prefix(i: usize, width: usize) -> String {
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = Int::pow(26 as usize, w);
+        let div = Int::pow(26 as usize, w as u32);
         let r = n / div;
         n -= r * div;
         c.push(char::from_u32((r as u32) + 97).unwrap());
@@ -240,7 +240,7 @@ fn num_prefix(i: usize, width: usize) -> String {
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = Int::pow(10 as usize, w);
+        let div = Int::pow(10 as usize, w as u32);
         let r = n / div;
         n -= r * div;
         c.push(char::from_digit(r as u32, 10).unwrap());

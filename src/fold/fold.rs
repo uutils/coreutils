@@ -124,7 +124,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                 let slice = {
                     let slice = &line[i..i + width];
                     if spaces && i + width < len {
-                        match slice.rfind(|&: ch: char| ch.is_whitespace()) {
+                        match slice.rfind(|ch: char| ch.is_whitespace()) {
                             Some(m) => &slice[..m + 1],
                             None => slice
                         }

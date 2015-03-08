@@ -73,12 +73,12 @@ fn main(input_offset_base: &Radix, fname: &str) {
         match f.read(bytes) {
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
-                for b in range(0, n / std::u16::BYTES) {
+                for b in range(0, n / std::u16::BYTES as usize) {
                     let bs = &bytes[(2 * b) .. (2 * b + 2)];
                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                     print!(" {:06o}", p);
                 }
-                if n % std::u16::BYTES == 1 {
+                if n % std::u16::BYTES as usize == 1 {
                     print!(" {:06o}", bytes[n - 1]);
                 }
                 print!("\n");
