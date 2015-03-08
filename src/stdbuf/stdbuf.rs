@@ -101,7 +101,7 @@ fn parse_size(size: &str) -> Option<u64> {
         Some(m) => m,
         None => return None,
     };
-    let (power, base): (usize, u64) = match ext {
+    let (power, base): (u32, u64) = match ext {
         "" => (0, 0),
         "KB" => (1, 1024),
         "K" => (1, 1000),
