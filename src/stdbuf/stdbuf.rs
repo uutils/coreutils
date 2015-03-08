@@ -90,8 +90,8 @@ fn print_usage(opts: &[OptGroup]) {
 }
 
 fn parse_size(size: &str) -> Option<u64> {
-    let ext = size.trim_left_matches(|&: c: char| c.is_digit(10));
-    let num = size.trim_right_matches(|&: c: char| c.is_alphabetic());
+    let ext = size.trim_left_matches(|c: char| c.is_digit(10));
+    let num = size.trim_right_matches(|c: char| c.is_alphabetic());
     let mut recovered = num.to_string();
     recovered.push_str(ext);
     if recovered.as_slice() != size {

@@ -336,7 +336,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         Write   = 0o2,
         Execute = 0o1,
     }
-    let perm = |&: stat: stat, p: Permission| {
+    let perm = |stat: stat, p: Permission| {
         use libc::{getgid, getuid};
         let (uid, gid) = unsafe { (getuid(), getgid()) };
         if uid == stat.st_uid {
