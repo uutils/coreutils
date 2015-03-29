@@ -1,6 +1,6 @@
 #![feature(core, exit_status, old_io, old_path)]
 use std::env;
-use std::old_io::{File, Truncate, ReadWrite};
+use std::old_io::{File, Truncate, ReadWrite, Writer};
 use std::old_path::Path;
 
 static TEMPLATE: &'static str = "\
@@ -29,8 +29,10 @@ fn main() {
     let main = TEMPLATE.replace("@UTIL_CRATE@", crat);
     let mut out = File::open_mode(&Path::new(outfile), Truncate, ReadWrite);
 
-    match out.write_all(main.as_bytes()) {
-        Err(e) => panic!("{}", e),
-        _ => (),
+    if out.is_ok() {
+        match out.unwrap().write_all(main.as_bytes()) {
+            Err(e) => panic!("{}", e),
+            _ => (),
+        }
     }
 }
