@@ -267,5 +267,5 @@ path = "whoami/whoami.rs"
 name = "yes"
 path = "yes/yes.rs"
 
-[dependencies.rust-crypto]
-git = "https://github.com/dagenix/rust-crypto"
+[dependencies]
+rust-crypto = "*"
