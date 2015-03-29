@@ -268,4 +268,4 @@ name = "yes"
 path = "yes/yes.rs"
 
 [dependencies]
-rust-crypto = "*"
+rust-crypto = "0.2.26"
