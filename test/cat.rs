@@ -1,6 +1,8 @@
 #![allow(unstable)]
+#![feature(old_io, core)]
 
 use std::old_io::process::Command;
+use std::old_io::Writer;
 use std::str;
 
 static PROGNAME: &'static str = "./cat";
