@@ -266,6 +266,3 @@ path = "whoami/whoami.rs"
 [[bin]]
 name = "yes"
 path = "yes/yes.rs"
-
-[dependencies.rust-crypto]
-git = "https://github.com/dagenix/rust-crypto"

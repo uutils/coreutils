@@ -1,5 +1,4 @@
 #![crate_name = "fmt"]
-#![allow(unstable)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.
@@ -10,15 +9,16 @@
  * file that was distributed with this source code.
  */
 
-#![feature(box_syntax)]
+#![feature(box_syntax,core,rustc_private,collections,str_char,unicode,str_words)]
 
 extern crate core;
 extern crate getopts;
 extern crate unicode;
 
 use std::cmp;
-use std::old_io::{BufferedReader, BufferedWriter, File, IoResult};
-use std::old_io::stdio::{stdin_raw, stdout_raw};
+use std::io::{Read, BufReader, BufWriter};
+use std::fs::File;
+use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 
@@ -41,7 +41,8 @@ mod parasplit;
 static NAME: &'static str = "fmt";
 static VERSION: &'static str = "0.0.3";
 
-struct FmtOptions {
+pub type FileOrStdReader = BufReader<Box<Read+'static>>;
+pub struct FmtOptions {
     crown           : bool,
     tagged          : bool,
     mail            : bool,
@@ -85,13 +86,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "Display this help message and exit.")
             ];
 
-    let matches = match getopts::getopts(args.tail(), opts.as_slice()) {
+    let matches = match getopts::getopts(args.tail(), &opts[..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, args[0])
     };
 
     if matches.opt_present("h") {
-        print_usage(args[0].as_slice(), opts.as_slice(), "");
+        print_usage(&(args[0])[..], &opts[..], "");
     }
 
     if matches.opt_present("V") || matches.opt_present("h") {
@@ -193,18 +194,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
         files.push("-".to_string());
     }
 
-    let mut ostream = box BufferedWriter::new(stdout_raw()) as Box<Writer>;
+    let mut ostream = BufWriter::new(stdout());
 
-    for i in files.iter().map(|x| x.as_slice()) {
-        let mut fp =
-            match open_file(i) {
+    for i in files.iter().map(|x| &x[..]) {
+        let mut fp = match i {
+            "-" => BufReader::new(box stdin() as Box<Read+'static>),
+            _ => match File::open(i) {
+                Ok(f) => BufReader::new(box f as Box<Read+'static>),
                 Err(e) => {
                     show_warning!("{}: {}", i, e);
                     continue;
-                }
-                Ok(f) => f
-            };
-        let mut p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
+                },
+            },
+        };
+        let p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
         for para_result in p_stream {
             match para_result {
                 Err(s) => silent_unwrap!(ostream.write_all(s.as_bytes())),
@@ -221,19 +224,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
     println!("Usage: {} [OPTION]... [FILE]...\n\n{}{}", arg0, getopts::usage("Reformat paragraphs from input files (or stdin) to stdout.", opts), errmsg);
-}
-
-// uniform interface for opening files
-// since we don't need seeking
-type FileOrStdReader = BufferedReader<Box<Reader+'static>>;
-
-fn open_file(filename: &str) -> IoResult<FileOrStdReader> {
-    if filename == "-" {
-        Ok(BufferedReader::new(box stdin_raw() as Box<Reader>))
-    } else {
-        match File::open(&Path::new(filename)) {
-            Ok(f) => Ok(BufferedReader::new(box f as Box<Reader>)),
-            Err(e) => return Err(e)
-        }
-    }
 }

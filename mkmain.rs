@@ -1,11 +1,11 @@
-#![feature(core, exit_status, old_io, old_path)]
+#![feature(exit_status)]
 use std::env;
-use std::old_io::{File, Truncate, ReadWrite};
-use std::old_path::Path;
+use std::io::Write;
+use std::fs::File;
 
 static TEMPLATE: &'static str = "\
 #![feature(exit_status)]
-extern crate \"@UTIL_CRATE@\" as uu@UTIL_CRATE@;
+extern crate @UTIL_CRATE@ as uu@UTIL_CRATE@;
 
 use std::env;
 use uu@UTIL_CRATE@::uumain;
@@ -23,14 +23,15 @@ fn main() {
         return;
     }
 
-    let crat    = args[1].as_slice();
-    let outfile = args[2].as_slice();
+    let crat    = &args[1][..];
+    let outfile = &args[2][..];
 
     let main = TEMPLATE.replace("@UTIL_CRATE@", crat);
-    let mut out = File::open_mode(&Path::new(outfile), Truncate, ReadWrite);
-
-    match out.write_all(main.as_bytes()) {
+    match File::create(outfile) {
+        Ok(mut out) => match out.write_all(main.as_bytes()) {
+            Err(e) => panic!("{}", e),
+            _ => (),
+        },
         Err(e) => panic!("{}", e),
-        _ => (),
     }
 }
