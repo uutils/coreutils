@@ -1,5 +1,5 @@
 #![crate_name = "uutils"]
-#![feature(core, exit_status, old_path, rustc_private)]
+#![feature(exit_status, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,6 +16,7 @@ extern crate getopts;
 
 use std::env;
 use std::collections::hash_map::HashMap;
+use std::path::Path;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
@@ -44,8 +45,9 @@ fn main() {
     let mut args : Vec<String> = env::args().collect();
 
     // try binary name as util name.
-    let binary = Path::new(args[0].as_slice());
-    let binary_as_util = binary.filename_str().unwrap();
+    let args0 = args[0].clone();
+    let binary = Path::new(&args0[..]);
+    let binary_as_util = binary.file_name().unwrap().to_str().unwrap();
 
     match umap.get(binary_as_util) {
         Some(&uumain) => {
@@ -69,7 +71,7 @@ fn main() {
     // try first arg as util name.
     if args.len() >= 2 {
         args.remove(0);
-        let util = args[0].as_slice();
+        let util = &args[0][..];
 
         match umap.get(util) {
             Some(&uumain) => {
@@ -77,10 +79,10 @@ fn main() {
                 return
             }
             None => {
-                if args[0].as_slice() == "--help" {
+                if &args[0][..] == "--help" {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
-                        let util = args[1].as_slice();
+                        let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
                                 env::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));

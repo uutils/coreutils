@@ -8,7 +8,7 @@
  */
 
 use core::iter::Peekable;
-use std::old_io::Lines;
+use std::io::{BufRead, Lines};
 use std::slice::Iter;
 use std::str::CharRange;
 use unicode::str::UnicodeStr;
@@ -69,11 +69,11 @@ struct FileLine {
 // iterator that produces a stream of Lines from a file
 pub struct FileLines<'a> {
     opts  : &'a FmtOptions,
-    lines : Lines<'a, FileOrStdReader>,
+    lines : Lines<&'a mut FileOrStdReader>,
 }
 
 impl<'a> FileLines<'a> {
-    fn new<'b>(opts: &'b FmtOptions, lines: Lines<'b, FileOrStdReader>) -> FileLines<'b> {
+    fn new<'b>(opts: &'b FmtOptions, lines: Lines<&'b mut FileOrStdReader>) -> FileLines<'b> {
         FileLines { opts: opts, lines: lines }
     }
 
@@ -81,14 +81,14 @@ impl<'a> FileLines<'a> {
     fn match_prefix(&self, line: &str) -> (bool, usize) {
         if !self.opts.use_prefix { return (true, 0); }
 
-        FileLines::match_prefix_generic(self.opts.prefix.as_slice(), line, self.opts.xprefix)
+        FileLines::match_prefix_generic(&self.opts.prefix[..], line, self.opts.xprefix)
     }
 
     // returns true if this line should be formatted
     fn match_anti_prefix(&self, line: &str) -> bool {
         if !self.opts.use_anti_prefix { return true; }
 
-        match FileLines::match_prefix_generic(self.opts.anti_prefix.as_slice(), line, self.opts.xanti_prefix) {
+        match FileLines::match_prefix_generic(&self.opts.anti_prefix[..], line, self.opts.xanti_prefix) {
             (true, _) => false,
             (_   , _) => true
         }
@@ -156,16 +156,16 @@ impl<'a> Iterator for FileLines<'a> {
         // emit a blank line
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
-        if n.as_slice().is_whitespace() {
+        if n.is_whitespace() {
             return Some(Line::NoFormatLine("\n".to_string(), true));
         }
 
         // if this line does not match the prefix,
         // emit the line unprocessed and iterate again
-        let (pmatch, poffset) = self.match_prefix(n.as_slice());
+        let (pmatch, poffset) = self.match_prefix(&n[..]);
         if !pmatch {
             return Some(Line::NoFormatLine(n, false));
-        } else if n.as_slice()[poffset + self.opts.prefix.len()..].is_whitespace() {
+        } else if n[poffset + self.opts.prefix.len()..].is_whitespace() {
             // if the line matches the prefix, but is blank after,
             // don't allow lines to be combined through it (that is,
             // treat it like a blank line, except that since it's
@@ -176,13 +176,13 @@ impl<'a> Iterator for FileLines<'a> {
 
         // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
-        if !self.match_anti_prefix(n.as_slice()) {
+        if !self.match_anti_prefix(&n[..]) {
             return Some(Line::NoFormatLine(n, false));
         }
 
         // figure out the indent, prefix, and prefixindent ending points
         let prefix_end = poffset + self.opts.prefix.len();
-        let (indent_end, prefix_len, indent_len) = self.compute_indent(n.as_slice(), prefix_end);
+        let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
         Some(Line::FormatLine(FileLine {
             line       : n,
@@ -233,7 +233,7 @@ impl<'a> ParagraphStream<'a> {
         if line.indent_end > 0 {
             false
         } else {
-            let l_slice = line.line.as_slice();
+            let l_slice = &line.line[..];
             if l_slice.starts_with("From ") {
                 true
             } else {
@@ -314,7 +314,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
                         indent_len = 2;
                     } else {
                         if self.opts.crown || self.opts.tagged {
-                            init_str.push_str(&fl.line.as_slice()[..fl.indent_end]);
+                            init_str.push_str(&fl.line[..fl.indent_end]);
                             init_len = fl.indent_len;
                             init_end = fl.indent_end;
                         } else {
@@ -324,7 +324,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
                         // these will be overwritten in the 2nd line of crown or tagged mode, but
                         // we are not guaranteed to get to the 2nd line, e.g., if the next line
                         // is a NoFormatLine or None. Thus, we set sane defaults the 1st time around
-                        indent_str.push_str(&fl.line.as_slice()[..fl.indent_end]);
+                        indent_str.push_str(&fl.line[..fl.indent_end]);
                         indent_len = fl.indent_len;
                         indent_end = fl.indent_end;
 
@@ -358,7 +358,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     } else {
                         // this is part of the same paragraph, get the indent info from this line
                         indent_str.clear();
-                        indent_str.push_str(&fl.line.as_slice()[..fl.indent_end]);
+                        indent_str.push_str(&fl.line[..fl.indent_end]);
                         indent_len = fl.indent_len;
                         indent_end = fl.indent_end;
                     }
@@ -415,7 +415,7 @@ impl<'a> ParaWords<'a> {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
-            self.words.extend(self.para.lines.iter().flat_map(|x| StrExt::words(x.as_slice())).map(|x| WordInfo {
+            self.words.extend(self.para.lines.iter().flat_map(|x| x.words()).map(|x| WordInfo {
                 word           : x,
                 word_start     : 0,
                 word_nchars    : x.len(),  // OK for mail headers; only ASCII allowed (unicode is escaped)
@@ -430,17 +430,17 @@ impl<'a> ParaWords<'a> {
             self.words.extend(
                 if self.opts.crown || self.opts.tagged {
                     // crown and tagged mode has the "init" in the first line, so slice from there
-                    WordSplit::new(self.opts, &self.para.lines[0].as_slice()[self.para.init_end..])
+                    WordSplit::new(self.opts, &self.para.lines[0][self.para.init_end..])
                 } else {
                     // otherwise we slice from the indent
-                    WordSplit::new(self.opts, &self.para.lines[0].as_slice()[self.para.indent_end..])
+                    WordSplit::new(self.opts, &self.para.lines[0][self.para.indent_end..])
                 });
 
             if self.para.lines.len() > 1 {
                 let indent_end = self.para.indent_end;
                 let opts = self.opts;
                 self.words.extend(
-                    self.para.lines.iter().skip(1).flat_map(|x| WordSplit::new(opts, &x.as_slice()[indent_end..])));
+                    self.para.lines.iter().skip(1).flat_map(|x| WordSplit::new(opts, &x[indent_end..])));
             }
         }
     }
@@ -485,7 +485,7 @@ impl<'a> WordSplit<'a> {
 impl<'a> WordSplit<'a> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
-        let trim_string = StrExt::trim_left(string);
+        let trim_string = string.trim_left();
         WordSplit { opts: opts, string: trim_string, length: string.len(), position: 0, prev_punct: false }
     }
 

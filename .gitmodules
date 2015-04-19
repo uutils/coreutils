@@ -1,6 +1,6 @@
 [submodule "deps/rust-crypto"]
 	path = deps/rust-crypto
-	url = git://github.com/DaGenix/rust-crypto.git
+	url = https://github.com/DaGenix/rust-crypto
 [submodule "deps/time"]
 	path = deps/time
 	url = https://github.com/rust-lang/time

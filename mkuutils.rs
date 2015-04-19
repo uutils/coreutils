@@ -1,8 +1,8 @@
-#![feature(core, exit_status, old_io, old_path)]
+#![feature(exit_status)]
 
 use std::env;
-use std::old_io::{File, Truncate, Write};
-use std::old_path::Path;
+use std::fs::File;
+use std::io::{Read, Write};
 
 fn main() {
     let args : Vec<String> = env::args().collect();
@@ -16,7 +16,7 @@ fn main() {
     let mut util_map = String::new();
     let mut hashsum = false;
     for prog in args[2..].iter() {
-        match prog.as_slice() {
+        match &prog[..] {
             "hashsum" | "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
                 if !hashsum {
                     crates.push_str("extern crate hashsum;\n");
@@ -33,18 +33,22 @@ fn main() {
             "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> i32 { 0 }\nmap.insert(\"true\", uutrue);\n"),
             "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> i32 { 1 }\nmap.insert(\"false\", uufalse);\n"),
             _ => {
-                crates.push_str(format!("extern crate \"{0}\" as uu{0};\n", prog).as_slice());
-                util_map.push_str(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> i32);\n", prog = prog).as_slice());
+                crates.push_str(&(format!("extern crate {0} as uu{0};\n", prog))[..]);
+                util_map.push_str(&(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> i32);\n", prog = prog))[..]);
             }
         }
     }
-    let outfile = args[1].as_slice();
+    let outfile = &(args[1])[..];
 
     // XXX: this all just assumes that the IO works correctly
-    let mut out = File::open_mode(&Path::new(outfile), Truncate, Write).unwrap();
-    let mut input = File::open(&Path::new("src/uutils/uutils.rs")).unwrap();
-    let main = input.read_to_string().unwrap().replace("@CRATES@", crates.as_slice()).replace("@UTIL_MAP@", util_map.as_slice());
+    let mut out = File::create(outfile).unwrap();
+    let mut input = File::open("src/uutils/uutils.rs").unwrap();
 
+    let mut template = String::new();
+    input.read_to_string(&mut template).unwrap();
+    let template = template;
+
+    let main = template.replace("@CRATES@", &crates[..]).replace("@UTIL_MAP@", &util_map[..]);
     match out.write_all(main.as_bytes()) {
         Err(e) => panic!("{}", e),
         _ => (),
