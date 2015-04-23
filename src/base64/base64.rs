@@ -1,5 +1,5 @@
 #![crate_name = "base64"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(box_syntax, collections, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,8 +17,9 @@ extern crate libc;
 
 use std::ascii::AsciiExt;
 use std::error::Error;
-use std::old_io::{println, File, stdout};
-use std::old_io::stdio::stdin_raw;
+use std::fs::File;
+use std::io::{BufReader, Read, stdin, stdout, Write};
+use std::path::Path;
 
 use getopts::{
     getopts,
@@ -34,6 +35,8 @@ use serialize::base64::{FromBase64, ToBase64};
 mod util;
 
 static NAME: &'static str = "base64";
+
+pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
@@ -75,30 +78,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     let mut stdin_buf;
     let mut file_buf;
-    let input = if matches.free.is_empty() || matches.free[0].as_slice() == "-" {
-        stdin_buf = stdin_raw();
-        &mut stdin_buf as &mut Reader
+    let mut input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
+        stdin_buf = stdin();
+        BufReader::new(box stdin_buf as Box<Read+'static>)
     } else {
-        let path = Path::new(matches.free[0].as_slice());
-        file_buf = File::open(&path);
-        &mut file_buf as &mut Reader
+        let path = Path::new(&matches.free[0][..]);
+        file_buf = safe_unwrap!(File::open(&path));
+        BufReader::new(box file_buf as Box<Read+'static>)
     };
 
     match mode {
-        Mode::Decode  => decode(input, ignore_garbage),
-        Mode::Encode  => encode(input, line_wrap),
-        Mode::Help    => help(progname.as_slice(), usage.as_slice()),
+        Mode::Decode  => decode(&mut input, ignore_garbage),
+        Mode::Encode  => encode(&mut input, line_wrap),
+        Mode::Help    => help(&progname[..], &usage[..]),
         Mode::Version => version()
     }
 
     0
 }
 
-fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = match input.read_to_string() {
-        Ok(m) => m,
-        Err(f) => panic!(f)
-    };
+fn decode(input: &mut FileOrStdReader, ignore_garbage: bool) {
+    let mut to_decode = String::new();
+    input.read_to_string(&mut to_decode).unwrap();
 
     if ignore_garbage {
         let mut clean = String::new();
@@ -115,11 +116,11 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         to_decode = clean;
     }
 
-    match to_decode.as_slice().from_base64() {
+    match to_decode[..].from_base64() {
         Ok(bytes) => {
             let mut out = stdout();
 
-            match out.write_all(bytes.as_slice()) {
+            match out.write_all(&bytes[..]) {
                 Ok(_) => {}
                 Err(f) => { crash!(1, "{}", f); }
             }
@@ -134,7 +135,7 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
     }
 }
 
-fn encode(input: &mut Reader, line_wrap: usize) {
+fn encode(input: &mut FileOrStdReader, line_wrap: usize) {
     let b64_conf = base64::Config {
         char_set: base64::Standard,
         newline: base64::Newline::LF,
@@ -144,19 +145,17 @@ fn encode(input: &mut Reader, line_wrap: usize) {
             _ => Some(line_wrap)
         }
     };
-    let to_encode = match input.read_to_end() {
-        Ok(m) => m,
-        Err(err) => crash!(1, "{}", err)
-    };
-    let encoded = to_encode.as_slice().to_base64(b64_conf);
+    let mut to_encode: Vec<u8> = vec!();
+    input.read_to_end(&mut to_encode).unwrap();
+    let encoded = to_encode.to_base64(b64_conf);
 
-    println(encoded.as_slice());
+    println!("{}", &encoded[..]);
 }
 
 fn help(progname: &str, usage: &str) {
     println!("Usage: {} [OPTION]... [FILE]", progname);
     println!("");
-    println(usage);
+    println!("{}", usage);
 
     let msg = "With no FILE, or when FILE is -, read standard input.\n\n\
         The data are encoded as described for the base64 alphabet in RFC \
@@ -165,7 +164,7 @@ fn help(progname: &str, usage: &str) {
         to attempt to recover from any other\nnon-alphabet bytes in the \
         encoded stream.";
 
-    println(msg);
+    println!("{}", msg);
 }
 
 fn version() {
