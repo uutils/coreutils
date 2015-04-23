@@ -1,5 +1,5 @@
 #![crate_name = "basename"]
-#![feature(collections, core, old_io, rustc_private)]
+#![feature(collections, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::borrow::ToOwned;
-use std::old_io::{print, println};
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -24,7 +24,7 @@ static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = strip_dir(args[0].as_slice());
+    let program = strip_dir(args[0].as_ref());
 
     //
     // Argument parsing
@@ -45,7 +45,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Print NAME with any leading directory components removed.");
         println!("If specified, also remove a trailing SUFFIX.");
 
-        print(getopts::usage("", &opts).as_slice());
+        print!("{}", getopts::usage("", &opts));
 
         return 0;
     }
@@ -74,14 +74,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let fullname = &args[1];
 
-    let mut name = strip_dir(fullname.as_slice());
+    let mut name = strip_dir(fullname.as_ref());
 
     if args.len() > 2 {
         let suffix = args[2].clone();
-        name = strip_suffix(name.as_slice(), suffix.as_slice());
+        name = strip_suffix(name.as_ref(), suffix.as_ref());
     }
 
-    println(name.as_slice());
+    println!("{}", name);
 
     0
 }
@@ -96,7 +96,7 @@ fn strip_dir(fullname: &str) -> String {
         name.push(c);
     }
 
-    name.as_slice().chars().rev().collect()
+    name.chars().rev().collect()
 }
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
