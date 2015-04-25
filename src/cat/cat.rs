@@ -1,5 +1,5 @@
 #![crate_name = "cat"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(collections, rustc_private)]
 
 #![feature(box_syntax, unsafe_destructor)]
 
@@ -15,11 +15,15 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 extern crate getopts;
+extern crate libc;
 
-use std::old_io::{print, File};
-use std::old_io::stdio::{stdout_raw, stdin_raw, stderr};
-use std::old_io::{IoResult};
-use std::ptr::{copy_nonoverlapping_memory};
+use std::fs::File;
+use std::io::{stdout, stdin, stderr, Write, Read};
+use std::io::Result;
+use std::intrinsics::{copy_nonoverlapping};
+use libc::consts::os::posix88::STDIN_FILENO;
+use libc::funcs::posix88::unistd::isatty;
+use libc::types::os::arch::c95::c_int;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
@@ -48,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
-        print(&getopts::usage("Concatenate FILE(s), or standard input, to \
+        print!("{}", &getopts::usage("Concatenate FILE(s), or standard input, to \
                              standard output.", &opts)[..]);
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
@@ -99,13 +103,13 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 
         let mut in_buf  = [0; 1024 * 31];
         let mut out_buf = [0; 1024 * 64];
-        let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
+        let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
         let mut at_line_start = true;
         while let Ok(n) = reader.read(&mut in_buf) {
             if n == 0 { break }
 
             let in_buf = &in_buf[..n];
-            let mut buf_pos = range(0, n);
+            let mut buf_pos = 0..n;
             loop {
                 writer.possibly_flush();
                 let pos = match buf_pos.next() {
@@ -119,9 +123,9 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                             line_counter += 1;
                         }
                         if show_ends {
-                            writer.write_u8('$' as u8).unwrap();
+                            writer.write_all(&['$' as u8]).unwrap();
                         }
-                        writer.write_u8('\n' as u8).unwrap();
+                        writer.write_all(&['\n' as u8]).unwrap();
                         if interactive {
                             writer.flush().unwrap();
                         }
@@ -137,13 +141,13 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     Some(p) => {
                         writer.write_all(&in_buf[pos..pos + p]).unwrap();
                         if show_ends {
-                            writer.write_u8('$' as u8).unwrap();
+                            writer.write_all(&['$' as u8]).unwrap();
                         }
-                        writer.write_u8('\n' as u8).unwrap();
+                        writer.write_all(&['\n' as u8]).unwrap();
                         if interactive {
                             writer.flush().unwrap();
                         }
-                        buf_pos = range(pos + p + 1, n);
+                        buf_pos = pos + p + 1..n;
                         at_line_start = true;
                     },
                     None => {
@@ -165,11 +169,11 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
     for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
 
         // Flush all 1024 iterations.
-        let mut flush_counter = range(0usize, 1024);
+        let mut flush_counter = 0usize..1024;
 
         let mut in_buf  = [0; 1024 * 32];
         let mut out_buf = [0; 1024 * 64];
-        let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
+        let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
         let mut at_line_start = true;
         while let Ok(n) = reader.read(&mut in_buf) {
             if n == 0 { break }
@@ -177,7 +181,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
             for &byte in in_buf[..n].iter() {
                 if flush_counter.next().is_none() {
                     writer.possibly_flush();
-                    flush_counter = range(0usize, 1024);
+                    flush_counter = 0usize..1024;
                 }
                 if byte == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
@@ -186,9 +190,9 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                             line_counter += 1;
                         }
                         if show_ends {
-                            writer.write_u8('$' as u8).unwrap();
+                            writer.write_all(&['$' as u8]).unwrap();
                         }
-                        writer.write_u8('\n' as u8).unwrap();
+                        writer.write_all(&['\n' as u8]).unwrap();
                         if interactive {
                             writer.flush().unwrap();
                         }
@@ -205,14 +209,14 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 // this by having the whole loop inside show_nonprint.
                 if byte == '\t' as u8 {
                     if show_tabs {
-                        writer.write_str("^I")
+                        writer.write_all("^I".as_bytes())
                     } else {
-                        writer.write_u8(byte)
+                        writer.write_all(&[byte])
                     }
                 } else if show_nonprint {
                     let byte = match byte {
                         128 ... 255 => {
-                            writer.write_str("M-").unwrap();
+                            writer.write_all("M-".as_bytes()).unwrap();
                             byte - 128
                         },
                         _ => byte,
@@ -220,10 +224,10 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     match byte {
                         0 ... 31 => writer.write_all(&['^' as u8, byte + 64]),
                         127      => writer.write_all(&['^' as u8, byte - 64]),
-                        _        => writer.write_u8(byte),
+                        _        => writer.write_all(&[byte]),
                     }
                 } else {
-                    writer.write_u8(byte)
+                    writer.write_all(&[byte])
                 }.unwrap();
             }
         }
@@ -231,7 +235,7 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 }
 
 fn write_fast(files: Vec<String>) {
-    let mut writer = stdout_raw();
+    let mut writer = stdout();
     let mut in_buf = [0; 1024 * 64];
 
     for (mut reader, _) in files.iter().filter_map(|p| open(&p[..])) {
@@ -255,15 +259,15 @@ fn exec(files: Vec<String>, number: NumberingMode, show_nonprint: bool,
     }
 }
 
-fn open(path: &str) -> Option<(Box<Reader>, bool)> {
+fn open(path: &str) -> Option<(Box<Read>, bool)> {
     if path == "-" {
-        let stdin = stdin_raw();
-        let interactive = stdin.isatty();
-        return Some((box stdin as Box<Reader>, interactive));
+        let stdin = stdin();
+        let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
+        return Some((box stdin as Box<Read>, interactive));
     }
 
-    match File::open(&std::old_path::Path::new(path)) {
-        Ok(f) => Some((box f as Box<Reader>, false)),
+    match File::open(path) {
+        Ok(f) => Some((box f as Box<Read>, false)),
         Err(e) => {
             (writeln!(&mut stderr(), "cat: {0}: {1}", path, e.to_string())).unwrap();
             None
@@ -271,14 +275,14 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
     }
 }
 
-struct UnsafeWriter<'a, W> {
+struct UnsafeWriter<'a, W: Write> {
     inner: W,
     buf: &'a mut [u8],
     pos: usize,
     threshold: usize,
 }
 
-impl<'a, W: Writer> UnsafeWriter<'a, W> {
+impl<'a, W: Write> UnsafeWriter<'a, W> {
     fn new(buf: &'a mut [u8], inner: W) -> UnsafeWriter<'a, W> {
         let threshold = buf.len()/2;
         UnsafeWriter {
@@ -289,11 +293,14 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
         }
     }
 
-    fn flush_buf(&mut self) -> IoResult<()> {
+    fn flush_buf(&mut self) -> Result<()> {
         if self.pos != 0 {
-            let ret = self.inner.write_all(&self.buf[..self.pos]);
+            let ret = self.inner.write(&self.buf[..self.pos]);
             self.pos = 0;
-            ret
+            match ret {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e),
+            }
         } else {
             Ok(())
         }
@@ -312,26 +319,27 @@ fn fail() -> ! {
     panic!("assertion failed");
 }
 
-impl<'a, W: Writer> Writer for UnsafeWriter<'a, W> {
-    fn write_all(&mut self, buf: &[u8]) -> IoResult<()> {
+impl<'a, W: Write> Write for UnsafeWriter<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let dst = &mut self.buf[self.pos..];
-        if buf.len() > dst.len() {
+        let len = buf.len();
+        if len > dst.len() {
             fail();
         }
         unsafe {
-            copy_nonoverlapping_memory(dst.as_mut_ptr(), buf.as_ptr(), buf.len())
+            copy_nonoverlapping(buf.as_ptr(), dst.as_mut_ptr(), len)
         }
-        self.pos += buf.len();
-        Ok(())
+        self.pos += len;
+        Ok(len)
     }
 
-    fn flush(&mut self) -> IoResult<()> {
+    fn flush(&mut self) -> Result<()> {
         self.flush_buf().and_then(|()| self.inner.flush())
     }
 }
 
 #[unsafe_destructor]
-impl<'a, W: Writer> Drop for UnsafeWriter<'a, W> {
+impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
     fn drop(&mut self) {
         let _ = self.flush_buf();
     }
