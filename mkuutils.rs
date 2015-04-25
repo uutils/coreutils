@@ -29,9 +29,15 @@ fn main() {
                     util_map.push_str("map.insert(\"sha512sum\", hashsum::uumain);\n");
                     hashsum = true;
                 }
-            }
-            "true" => util_map.push_str("fn uutrue(_: Vec<String>) -> i32 { 0 }\nmap.insert(\"true\", uutrue);\n"),
-            "false" => util_map.push_str("fn uufalse(_: Vec<String>) -> i32 { 1 }\nmap.insert(\"false\", uufalse);\n"),
+            },
+            "true" => {
+                util_map.push_str("fn uutrue(_: Vec<String>) -> i32 { 0 }\n");
+                util_map.push_str("map.insert(\"true\", uutrue as fn(Vec<String>) -> i32);\n");
+            },
+            "false" => {
+                util_map.push_str("fn uufalse(_: Vec<String>) -> i32 { 1 }\n");
+                util_map.push_str("map.insert(\"false\", uufalse as fn(Vec<String>) -> i32);\n");
+            },
             _ => {
                 crates.push_str(&(format!("extern crate {0} as uu{0};\n", prog))[..]);
                 util_map.push_str(&(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> i32);\n", prog = prog))[..]);

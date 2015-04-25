@@ -9,11 +9,12 @@
  * file that was distributed with this source code.
  */
 
-#![feature(box_syntax,core,rustc_private,collections,str_char,unicode,str_words)]
+#![feature(box_syntax,core,rustc_private,collections,str_char,unicode)]
 
 extern crate core;
 extern crate getopts;
-extern crate unicode;
+extern crate rustc_unicode;
+extern crate unicode_width;
 
 use std::cmp;
 use std::io::{Read, BufReader, BufWriter};

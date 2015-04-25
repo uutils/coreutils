@@ -1,0 +1,16 @@
+[project]
+name = "deps"
+version = "0.0.0"
+
+[lib]
+name = "null"
+
+[dependencies]
+libc = "0.1.6"
+rand = "0.3.8"
+regex = "0.1.30"
+regex_macros = "0.1.17"
+rust-crypto = "0.2.31"
+rustc-serialize = "0.3.13"
+time = "0.1.25"
+unicode-width = "0.1.1"
