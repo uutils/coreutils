@@ -1,0 +1,1 @@
+DEPLIBS += rustc-serialize

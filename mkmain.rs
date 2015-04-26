@@ -23,7 +23,12 @@ fn main() {
         return;
     }
 
-    let crat    = &args[1][..];
+    let crat    = match &args[1][..] {
+        "false" => "uufalse",
+        "test" => "uutest",
+        "true" => "uutrue",
+        _ => &args[1][..],
+    };
     let outfile = &args[2][..];
 
     let main = TEMPLATE.replace("@UTIL_CRATE@", crat);

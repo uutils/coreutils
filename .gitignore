@@ -2,6 +2,8 @@
 /target/
 /tmp/
 /busybox/
+/deps/target/
 *~
 .*.swp
 .*.swo
+Cargo.lock

@@ -8,7 +8,7 @@
 * file that was distributed with this source code.
 */
 
-use std::fs::OpenOptions;
+use std::fs::File;
 use std::io::Write;
 
 static CRC_TABLE_LEN: usize = 256;
@@ -18,10 +18,10 @@ fn main() {
     for num in (0 .. CRC_TABLE_LEN) {
         table.push(crc_entry(num as u8) as u32);
     }
-    let file = OpenOptions::new().truncate(true).write(true).open("crc_table.rs").ok().unwrap();
+    let file = File::create("crc_table.rs").unwrap_or_else(|e| panic!("{}", e));
     write!(&file, "/* auto-generated (DO NOT EDIT) */
 
-pub static CRC_TABLE: [u32; {}] = {:?};", CRC_TABLE_LEN, table);
+pub static CRC_TABLE: [u32; {}] = {:?};", CRC_TABLE_LEN, table).unwrap();
 }
 
 #[inline]

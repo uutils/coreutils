@@ -10,7 +10,7 @@
  * that was distributed with this source code.
  */
 
-extern crate serialize;
+extern crate rustc_serialize as serialize;
 extern crate getopts;
 extern crate libc;
 #[macro_use] extern crate log;

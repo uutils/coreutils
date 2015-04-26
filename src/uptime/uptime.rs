@@ -16,7 +16,7 @@
 
 extern crate getopts;
 extern crate libc;
-extern crate "time" as rtime;
+extern crate time as rtime;
 
 use std::ffi::CString;
 use std::mem::transmute;

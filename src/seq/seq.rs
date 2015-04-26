@@ -1,5 +1,5 @@
 #![crate_name = "seq"]
-#![feature(collections, core, rustc_private)]
+#![feature(rustc_private)]
 
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
@@ -8,6 +8,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::cmp;
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -43,7 +44,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
     let mut iter = args.into_iter().skip(1);
     loop {
         match iter.next() {
-            Some(arg) => match arg.as_slice() {
+            Some(arg) => match &arg[..] {
                 "--help" | "-h" => {
                     print_help(&program);
                     return Err(0);
@@ -72,9 +73,9 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                     break;
                 },
                 _ => {
-                    if arg.len() > 1 && arg.as_slice().char_at(0) == '-' {
+                    if arg.len() > 1 && arg.chars().next().unwrap() == '-' {
                         let argptr: *const String = &arg;  // escape from the borrow checker
-                        let mut chiter = unsafe { (*argptr).as_slice() }.chars().skip(1);
+                        let mut chiter = unsafe { &(*argptr)[..] }.chars().skip(1);
                         let mut ch = ' ';
                         while match chiter.next() { Some(m) => { ch = m; true } None => false } {
                             match ch {
@@ -164,7 +165,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut largest_dec = 0;
     let mut padding = 0;
     let first = if free.len() > 1 {
-        let slice = free[0].as_slice();
+        let slice = &free[0][..];
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = len - dec;
@@ -177,7 +178,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         1.0
     };
     let step = if free.len() > 2 {
-        let slice = free[1].as_slice();
+        let slice = &free[1][..];
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
@@ -190,16 +191,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         1.0
     };
     let last = {
-        let slice = free[free.len() - 1].as_slice();
+        let slice = &free[free.len() - 1][..];
         padding = cmp::max(padding, slice.find('.').unwrap_or(slice.len()));
         match parse_float(slice) {
             Ok(n) => n,
             Err(s) => { show_error!("{}", s); return 1; }
         }
     };
-    let separator = escape_sequences(options.separator.as_slice());
+    let separator = escape_sequences(&options.separator[..]);
     let terminator = match options.terminator {
-        Some(term) => escape_sequences(term.as_slice()),
+        Some(term) => escape_sequences(&term[..]),
         None => separator.clone()
     };
     print_seq(first, step, last, largest_dec, separator, terminator, options.widths, padding);
@@ -222,9 +223,9 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
     while !done_printing(value, step, last) {
         let istr = value.to_string();
         let ilen = istr.len();
-        let before_dec = istr.as_slice().find('.').unwrap_or(ilen);
+        let before_dec = istr.find('.').unwrap_or(ilen);
         if pad && before_dec < padding {
-            for _ in range(0, padding - before_dec) {
+            for _ in 0..(padding - before_dec) {
                 if !pipe_print!("0") {
                     return;
                 }
@@ -239,7 +240,7 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
                 }
                 idec += 1;
             }
-            for _ in range(idec, largest_dec) {
+            for _ in idec..largest_dec {
                 if !pipe_print!("0") {
                     return;
                 }

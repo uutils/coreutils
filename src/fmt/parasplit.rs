@@ -11,7 +11,8 @@ use core::iter::Peekable;
 use std::io::{BufRead, Lines};
 use std::slice::Iter;
 use std::str::CharRange;
-use unicode::str::UnicodeStr;
+use rustc_unicode::str::UnicodeStr;
+use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
 use FmtOptions;
 
@@ -25,7 +26,7 @@ fn char_width(c: char) -> usize {
         // otherwise, get the unicode width
         // note that we shouldn't actually get None here because only c < 0xA0
         // can return None, but for safety and future-proofing we do it this way
-        c.width(false).unwrap_or(1)
+        UnicodeWidthChar::width(c).unwrap_or(1)
     }
 }
 
@@ -415,7 +416,7 @@ impl<'a> ParaWords<'a> {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
-            self.words.extend(self.para.lines.iter().flat_map(|x| x.words()).map(|x| WordInfo {
+            self.words.extend(self.para.lines.iter().flat_map(|x| x.split_whitespace()).map(|x| WordInfo {
                 word           : x,
                 word_start     : 0,
                 word_nchars    : x.len(),  // OK for mail headers; only ASCII allowed (unicode is escaped)
