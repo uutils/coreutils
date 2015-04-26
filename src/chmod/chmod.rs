@@ -1,5 +1,5 @@
 #![crate_name = "chmod"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
+#![feature(collections, path_ext, fs_walk, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -19,12 +19,15 @@ extern crate libc;
 extern crate regex;
 
 use std::ffi::CString;
-use std::old_io::fs;
-use std::old_io::fs::PathExtensions;
-use std::old_io::IoError;
+use std::fs;
+use std::io;
+use std::io::Write;
 use std::mem;
-use std::num::from_str_radix;
+use std::u32;
+use std::path::Path;
+use std::fs::PathExt;
 use regex::Regex;
+use libc::types::os::arch::posix01;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -81,18 +84,18 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         let preserve_root = matches.opt_present("preserve-root");
         let recursive = matches.opt_present("recursive");
         let fmode = matches.opt_str("reference").and_then(|fref| {
-            let mut stat = unsafe { mem::uninitialized() };
-            let statres = unsafe { libc::stat(fref.as_slice().as_ptr() as *const i8, &mut stat as *mut libc::stat) };
+            let mut stat : posix01::stat = unsafe { mem::uninitialized() };
+            let statres = unsafe { libc::stat(fref.as_ptr() as *const i8, &mut stat as *mut libc::stat) };
             if statres == 0 {
                 Some(stat.st_mode)
             } else {
-                crash!(1, "{}", IoError::last_error())
+                crash!(1, "{}", io::Error::last_os_error())
             }
         });
         let cmode =
             if fmode.is_none() {
                 let mode = matches.free.remove(0);
-                match verify_mode(mode.as_slice()) {
+                match verify_mode(mode.as_ref()) {
                     Ok(_) => Some(mode),
                     Err(f) => {
                         show_error!("{}", f);
@@ -150,7 +153,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     let mut r = Ok(());
 
     for filename in files.iter() {
-        let filename = filename.as_slice();
+        let filename = filename.as_ref();
         let file = Path::new(filename);
         if file.exists() {
             if file.is_dir() {
@@ -162,7 +165,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
                                 crash!(1, "{}", f.to_string());
                             }
                         };
-                        r = chmod(walk_dir.map(|x| x.as_str().unwrap().to_string()).collect(), changes, quiet, verbose, preserve_root, recursive, fmode, cmode).and(r);
+                        r = chmod(walk_dir.map(|x| x.ok().unwrap().path().to_str().unwrap().to_string()).collect(), changes, quiet, verbose, preserve_root, recursive, fmode, cmode).and(r);
                         r = chmod_file(&file, filename, changes, quiet, verbose, fmode, cmode).and(r);
                     }
                 } else {
@@ -171,7 +174,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
                     r = Err(1);
                 }
             } else {
-                r = chmod_file(&file, filename.as_slice(), changes, quiet, verbose, fmode, cmode).and(r);
+                r = chmod_file(&file, filename, changes, quiet, verbose, fmode, cmode).and(r);
             }
         } else {
             show_error!("no such file or directory '{}'", filename);
@@ -189,23 +192,23 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
             if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
                 // TODO: handle changes, quiet, and verbose
             } else {
-                show_error!("{}", IoError::last_error());
+                show_error!("{}", io::Error::last_os_error());
                 return Err(1);
             }
         }
         None => {
             // TODO: make the regex processing occur earlier (i.e. once in the main function)
             static REGEXP: regex::Regex = regex!(r"^(([ugoa]*)((?:[-+=](?:[rwxXst]*|[ugo]))+))|([-+=]?[0-7]+)$");
-            let mut stat = unsafe { mem::uninitialized() };
+            let mut stat : posix01::stat = unsafe { mem::uninitialized() };
             let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
             let mut fperm =
                 if statres == 0 {
                     stat.st_mode
                 } else {
-                    show_error!("{}", IoError::last_error());
+                    show_error!("{}", io::Error::last_os_error());
                     return Err(1);
                 };
-            for mode in cmode.unwrap().as_slice().split(',') {  // cmode is guaranteed to be Some in this case
+            for mode in cmode.unwrap().split(',') {  // cmode is guaranteed to be Some in this case
                 let cap = REGEXP.captures(mode).unwrap();  // mode was verified earlier, so this is safe
                 if cap.at(1).unwrap() != "" {
                     // symbolic
@@ -213,9 +216,8 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                     if levels.len() == 0 {
                         levels = "a";
                     }
-                    let change_str = cap.at(3).unwrap().to_string() + "+";
-                    let change = change_str.as_slice();
-                    let mut action = change.char_at(0);
+                    let change = cap.at(3).unwrap().to_string() + "+";
+                    let mut action = change.chars().next().unwrap();
                     let mut rwx = 0;
                     let mut special = 0;
                     let mut special_changed = false;
@@ -275,12 +277,12 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                 } else {
                     // numeric
                     let change = cap.at(4).unwrap();
-                    let ch = change.char_at(0);
+                    let ch = change.chars().next().unwrap();
                     let (action, slice) = match ch {
                         '+' | '-' | '=' => (ch, &change[1..]),
                         _ => ('=', change)
                     };
-                    let mode = from_str_radix::<u32>(slice, 8).unwrap() as libc::mode_t;  // already verified
+                    let mode = u32::from_str_radix(slice, 8).unwrap() as libc::mode_t;  // already verified
                     match action {
                         '+' => fperm |= mode,
                         '-' => fperm &= !mode,
@@ -291,7 +293,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                 if unsafe { libc::chmod(path.as_ptr(), fperm) } == 0 {
                     // TODO: see above
                 } else {
-                    show_error!("{}", IoError::last_error());
+                    show_error!("{}", io::Error::last_os_error());
                     return Err(1);
                 }
             }
