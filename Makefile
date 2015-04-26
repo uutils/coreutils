@@ -183,7 +183,13 @@ endef
 DEPLIBS := libc
 DEPPLUGS :=
 # now, add in deps in src/utilname/deps.mk
-$(foreach build,$(sort $(EXES) $(TESTS)),$(eval $(call DEP_INCLUDE,$(build))))
+# if we're testing, only consider the TESTS variable,
+# otherwise consider the EXES variable
+ifeq ($(MAKECMDGOALS),test)
+$(foreach build,$(TESTS),$(eval $(call DEP_INCLUDE,$(build))))
+else
+$(foreach build,$(sort $(TESTS) $(EXES)),$(eval $(call DEP_INCLUDE,$(build))))
+endif
 # uniqify deps
 DEPLIBS := $(sort $(DEPLIBS))
 DEPPLUGS := $(sort $(DEPPLUGS))
@@ -248,8 +254,8 @@ endef
 
 # Test exe built rules
 define TEST_BUILD
-test_$(1): $(TEMPDIR)/$(1)/$(1)_test $(BUILDDIR)/$(1)
-	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $$<)
+test_$(1): $(BUILDDIR)/$(1) $(TEMPDIR)/$(1)/$(1)_test
+	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $(TEMPDIR)/$(1)/$(1)_test)
 
 $(TEMPDIR)/$(1)/$(1)_test: $(TESTDIR)/$(1).rs | $(TEMPDIR)/$(1)
 	$(call command,$(RUSTC) $(RUSTCTESTFLAGS) $(DEP_EXTERN) --test -o $$@ $$<)
