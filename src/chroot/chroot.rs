@@ -17,8 +17,9 @@ use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
 use libc::funcs::posix88::unistd::{execvp, setuid, setgid};
 use std::ffi::{CStr, CString};
-use std::old_io::fs::PathExtensions;
 use std::iter::FromIterator;
+use std::path::Path;
+use std::env;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
@@ -74,7 +75,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
-    let user_shell = std::os::getenv("SHELL");
+    let user_shell = env::var("SHELL");
 
     let newroot = Path::new(opts.free[0].as_slice());
     if !newroot.is_dir() {
@@ -129,7 +130,7 @@ fn set_context(root: &Path, options: &getopts::Matches) {
 
 fn enter_chroot(root: &Path) {
     let root_str = root.display();
-    std::os::change_dir(root).unwrap();
+    env::set_current_dir(root).unwrap();
     let err = unsafe {
         chroot(CString::new(b".").unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
     };
