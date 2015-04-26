@@ -1,5 +1,5 @@
 #![crate_name = "chmod"]
-#![feature(collections, path_ext, fs_walk, rustc_private)]
+#![feature(fs_walk, path_ext, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -19,15 +19,11 @@ extern crate libc;
 extern crate regex;
 
 use std::ffi::CString;
-use std::fs;
-use std::io;
-use std::io::Write;
-use std::mem;
-use std::u32;
+use std::fs::{self, PathExt};
 use std::path::Path;
-use std::fs::PathExt;
+use std::io::{Error, Write};
+use std::mem;
 use regex::Regex;
-use libc::types::os::arch::posix01;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -51,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit")
     ];
     // TODO: sanitize input for - at beginning (e.g. chmod -x testfile).  Solution is to add a to -x, making a-x
-    let mut matches = match getopts::getopts(args.tail(), &opts) {
+    let mut matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "{}", f)
@@ -69,7 +65,7 @@ Usage:
 Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
                name = NAME, version = VERSION, program = program,
                usage = getopts::usage("Change the mode of each FILE to MODE. \
-                                       With --reference, change the mode of \
+                                       \nWith --reference, change the mode of \
                                        each FILE to that of RFILE.", &opts));
     } else if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
@@ -84,18 +80,18 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         let preserve_root = matches.opt_present("preserve-root");
         let recursive = matches.opt_present("recursive");
         let fmode = matches.opt_str("reference").and_then(|fref| {
-            let mut stat : posix01::stat = unsafe { mem::uninitialized() };
+            let mut stat : libc::stat = unsafe { mem::uninitialized() };
             let statres = unsafe { libc::stat(fref.as_ptr() as *const i8, &mut stat as *mut libc::stat) };
             if statres == 0 {
                 Some(stat.st_mode)
             } else {
-                crash!(1, "{}", io::Error::last_os_error())
+                crash!(1, "{}", Error::last_os_error())
             }
         });
         let cmode =
             if fmode.is_none() {
                 let mode = matches.free.remove(0);
-                match verify_mode(mode.as_ref()) {
+                match verify_mode(&mode[..]) {
                     Ok(_) => Some(mode),
                     Err(f) => {
                         show_error!("{}", f);
@@ -153,7 +149,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     let mut r = Ok(());
 
     for filename in files.iter() {
-        let filename = filename.as_ref();
+        let filename = &filename[..];
         let file = Path::new(filename);
         if file.exists() {
             if file.is_dir() {
@@ -165,7 +161,19 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
                                 crash!(1, "{}", f.to_string());
                             }
                         };
-                        r = chmod(walk_dir.map(|x| x.ok().unwrap().path().to_str().unwrap().to_string()).collect(), changes, quiet, verbose, preserve_root, recursive, fmode, cmode).and(r);
+                        // XXX: here (and elsewhere) we see that this impl will have issues
+                        // with non-UTF-8 filenames. Using OsString won't fix this because
+                        // on Windows OsStrings cannot be built out of non-UTF-8 chars. One
+                        // possible fix is to use CStrings rather than Strings in the args
+                        // to chmod() and chmod_file().
+                        r = chmod(walk_dir.filter_map(|x| match x {
+                                                            Ok(o) => match o.path().into_os_string().to_str() {
+                                                                Some(s) => Some(s.to_string()),
+                                                                None => None,
+                                                            },
+                                                            Err(e) => None,
+                                                          }).collect(),
+                                  changes, quiet, verbose, preserve_root, recursive, fmode, cmode).and(r);
                         r = chmod_file(&file, filename, changes, quiet, verbose, fmode, cmode).and(r);
                     }
                 } else {
@@ -186,31 +194,34 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
 }
 
 fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
-    let path = CString::new(name).unwrap();
+    let path = CString::new(name).unwrap_or_else(|e| panic!("{}", e));
     match fmode {
         Some(mode) => {
             if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
                 // TODO: handle changes, quiet, and verbose
             } else {
-                show_error!("{}", io::Error::last_os_error());
+                show_error!("{}", Error::last_os_error());
                 return Err(1);
             }
         }
         None => {
             // TODO: make the regex processing occur earlier (i.e. once in the main function)
             static REGEXP: regex::Regex = regex!(r"^(([ugoa]*)((?:[-+=](?:[rwxXst]*|[ugo]))+))|([-+=]?[0-7]+)$");
-            let mut stat : posix01::stat = unsafe { mem::uninitialized() };
+            let mut stat : libc::stat = unsafe { mem::uninitialized() };
             let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
             let mut fperm =
                 if statres == 0 {
                     stat.st_mode
                 } else {
-                    show_error!("{}", io::Error::last_os_error());
+                    show_error!("{}", Error::last_os_error());
                     return Err(1);
                 };
             for mode in cmode.unwrap().split(',') {  // cmode is guaranteed to be Some in this case
                 let cap = REGEXP.captures(mode).unwrap();  // mode was verified earlier, so this is safe
-                if cap.at(1).unwrap() != "" {
+                if match cap.at(1) {
+                    Some("") | None => false,
+                    _ => true,
+                } {
                     // symbolic
                     let mut levels = cap.at(2).unwrap();
                     if levels.len() == 0 {
@@ -293,7 +304,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                 if unsafe { libc::chmod(path.as_ptr(), fperm) } == 0 {
                     // TODO: see above
                 } else {
-                    show_error!("{}", io::Error::last_os_error());
+                    show_error!("{}", Error::last_os_error());
                     return Err(1);
                 }
             }
