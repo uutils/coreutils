@@ -374,4 +374,15 @@ busytest: $(BUILDDIR)/busybox $(BUILDDIR)/.config
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS))
 endif
 
+# This rule will build each program, ignore all output, and return pass
+# or fail depending on whether the build has errors.
+build-check:
+	@for prog in $(sort $(PROGS)); do \
+		make BUILD="$$prog" >/dev/null 2>&1; status=$$?; \
+		if [ $$status -eq 0 ]; \
+		then printf "%-10s\t\033[1;32mpass\033[00;m\n" $$prog; \
+		else printf "%-10s\t\033[1;31mfail\033[00;m\n" $$prog; \
+		fi; \
+	done
+
 .PHONY: $(TEMPDIR) all deps test distclean clean busytest install uninstall

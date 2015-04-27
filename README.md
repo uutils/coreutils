@@ -41,6 +41,11 @@ To build with LTO and stripping:
 make ENABLE_LTO=y ENABLE_STRIP=y
 ```
 
+To check all available utilities for build errors:
+```
+make build-check
+```
+
 Installation Instructions
 -------------------------
 
