@@ -7,7 +7,7 @@
  * file that was distributed with this source code.
  */
 
-use core::iter::Peekable;
+use std::iter::Peekable;
 use std::io::{BufRead, Lines};
 use std::slice::Iter;
 use std::str::CharRange;

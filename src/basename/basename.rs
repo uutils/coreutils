@@ -1,5 +1,5 @@
 #![crate_name = "basename"]
-#![feature(collections, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -34,7 +34,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m)  => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
