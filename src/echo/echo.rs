@@ -1,5 +1,5 @@
 #![crate_name = "echo"]
-#![feature(rustc_private, str_char)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -94,7 +94,7 @@ fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<Str
             "-e" => options.escape = true,
             "-E" => options.escape = false,
             _ => {
-                if arg.len() > 1 && arg.char_at(0) == '-' {
+                if arg.len() > 1 && arg.chars().next().unwrap_or('_') == '-' {
                     let mut newopts = options.clone();
                     for ch in arg.chars().skip(1) {
                         match ch {

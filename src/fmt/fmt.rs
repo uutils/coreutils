@@ -1,4 +1,5 @@
 #![crate_name = "fmt"]
+#![feature(box_syntax,rustc_private,str_char,unicode,core)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.
@@ -9,9 +10,6 @@
  * file that was distributed with this source code.
  */
 
-#![feature(box_syntax,core,rustc_private,collections,str_char,unicode)]
-
-extern crate core;
 extern crate getopts;
 extern crate rustc_unicode;
 extern crate unicode_width;
@@ -87,7 +85,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "Display this help message and exit.")
             ];
 
-    let matches = match getopts::getopts(args.tail(), &opts[..]) {
+    let matches = match getopts::getopts(&args[1..], &opts[..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, args[0])
     };

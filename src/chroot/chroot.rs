@@ -1,5 +1,5 @@
 #![crate_name = "chroot"]
-#![feature(collections, rustc_private, path_ext)]
+#![feature(rustc_private, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -57,7 +57,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("V", "version", "Show program's version")
     ];
 
-    let opts = match getopts(args.tail(), &options) {
+    let opts = match getopts(&args[1..], &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
@@ -195,7 +195,7 @@ fn set_groups_from_str(groups: &str) {
 
 fn set_user(user: &str) {
     if !user.is_empty() {
-        let user_id = get_pw_from_args(&vec!(String::from_str(user))).unwrap().pw_uid;
+        let user_id = get_pw_from_args(&vec!(user.to_string())).unwrap().pw_uid;
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
             crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())

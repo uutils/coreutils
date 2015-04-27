@@ -1,7 +1,5 @@
 #![crate_name = "cat"]
-#![feature(collections, rustc_private)]
-
-#![feature(box_syntax, unsafe_destructor)]
+#![feature(rustc_private, box_syntax, unsafe_destructor)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -42,7 +40,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };

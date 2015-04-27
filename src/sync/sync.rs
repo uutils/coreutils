@@ -1,5 +1,5 @@
 #![crate_name = "sync"]
-#![feature(collections, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -148,7 +148,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("V", "version", "output version information and exit")
     ];
 
-    let matches = match getopts(args.tail(), &options) {
+    let matches = match getopts(&args[1..], &options) {
         Ok(m) => { m }
         _ => { help(program, &options); return 1 }
     };

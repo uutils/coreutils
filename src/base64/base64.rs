@@ -1,5 +1,5 @@
 #![crate_name = "base64"]
-#![feature(box_syntax, collections, rustc_private)]
+#![feature(box_syntax, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("h", "help", "display this help text and exit"),
         optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(e) => {
             crash!(1, "error: {}", e);
