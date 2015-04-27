@@ -15,12 +15,13 @@ extern crate libc;
 
 use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
-use libc::funcs::posix88::unistd::{execvp, setgid, setuid};
-use std::ffi::{CStr, CString};
+use libc::funcs::posix88::unistd::{setgid, setuid};
+use std::ffi::{CString};
 use std::fs::PathExt;
-use std::io::Write;
+use std::io::{Error, Write};
 use std::iter::FromIterator;
 use std::path::Path;
+use std::process::Command;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
@@ -87,20 +88,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
         1 => {
             let shell: &str = match user_shell {
                 Err(_) => default_shell,
-                Ok(ref s) => &s[..],
+                Ok(ref s) => s.as_ref(),
             };
             vec!(shell, default_option)
-        }
-        _ => opts.free[1..opts.free.len()].iter().map(|x| &x[..]).collect()
+        },
+        _ => opts.free[1..].iter().map(|x| &x[..]).collect()
     };
 
     set_context(&newroot, &opts);
 
-    unsafe {
-        let executable = CString::new(command[0]).unwrap().as_bytes_with_nul().as_ptr();
-        let mut command_parts: Vec<*const u8> = command.iter().map(|x| CString::new(x.as_bytes()).unwrap().as_bytes_with_nul().as_ptr()).collect();
-        command_parts.push(std::ptr::null());
-        execvp(executable as *const libc::c_char, command_parts.as_ptr() as *mut *const libc::c_char) as i32 
+    let pstatus = Command::new(command[0])
+        .args(&command[1..])
+        .status()
+        .unwrap_or_else(|e| crash!(1, "Cannot exec: {}", e));
+
+    if pstatus.success() {
+        0
+    } else {
+        match pstatus.code() {
+            Some(i) => i,
+            None => -1,
+        }
     }
 }
 
@@ -136,7 +144,7 @@ fn enter_chroot(root: &Path) {
         chroot(CString::new(".".as_bytes()).unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
     };
     if err != 0 {
-        crash!(1, "cannot chroot to {}: {}", root_str, strerror(err))
+        crash!(1, "cannot chroot to {}: {}", root_str, Error::last_os_error())
     };
 }
 
@@ -148,7 +156,7 @@ fn set_main_group(group: &str) {
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
-            crash!(1, "cannot set gid to {}: {}", group_id, strerror(err))
+            crash!(1, "cannot set gid to {}: {}", group_id, Error::last_os_error())
         }
     }
 }
@@ -180,7 +188,7 @@ fn set_groups_from_str(groups: &str) {
             );
         let err = set_groups(groups_vec);
         if err != 0 {
-            crash!(1, "cannot set groups: {}", strerror(err))
+            crash!(1, "cannot set groups: {}", Error::last_os_error())
         }
     }
 }
@@ -190,16 +198,8 @@ fn set_user(user: &str) {
         let user_id = get_pw_from_args(&vec!(String::from_str(user))).unwrap().pw_uid;
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
-            crash!(1, "cannot set user to {}: {}", user, strerror(err))
+            crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())
         }
-    }
-}
-
-fn strerror(errno: i32) -> String {
-    unsafe {
-        let err = libc::funcs::c95::string::strerror(errno) as *const libc::c_char;
-        let bytes= CStr::from_ptr(err).to_bytes();
-        String::from_utf8_lossy(bytes).to_string()
     }
 }
 
