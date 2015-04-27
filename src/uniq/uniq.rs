@@ -1,5 +1,5 @@
 #![crate_name = "uniq"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,10 +13,11 @@
 
 extern crate getopts;
 
-use std::ascii::OwnedAsciiExt;
 use std::cmp::min;
 use std::str::FromStr;
-use std::old_io as io;
+use std::fs::File;
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -37,10 +38,10 @@ struct Uniq {
 }
 
 impl Uniq {
-    pub fn print_uniq<R: Reader, W: Writer>(&self, reader: &mut io::BufferedReader<R>, writer: &mut io::BufferedWriter<W>) {
+    pub fn print_uniq<R: Read, W: Write>(&self, reader: &mut BufReader<R>, writer: &mut BufWriter<W>) {
         let mut lines: Vec<String> = vec!();
         let mut first_line_printed = false;
-        let delimiters = self.delimiters.as_slice();
+        let delimiters = &self.delimiters[..];
 
         for io_line in reader.lines() {
             let line = crash_if_err!(1, io_line);
@@ -68,18 +69,18 @@ impl Uniq {
                 Some(i) => min(slice_start + i, len),
                 None => len
             };
-            let sliced = line.as_slice()[slice_start..slice_stop].to_string();
-            if self.ignore_case {
-                sliced.into_ascii_uppercase()
-            } else {
-                sliced
-            }
+
+            line[slice_start..slice_stop].chars()
+                .map(|c| match c {
+                    'a' ... 'z' if self.ignore_case => ((c as u8) - 32) as char,
+                    _ => c,
+                }).collect()
         } else {
             line.clone()
         }
     }
 
-    fn print_lines<W: Writer>(&self, writer: &mut io::BufferedWriter<W>, lines: &Vec<String>, print_delimiter: bool) -> bool {
+    fn print_lines<W: Write>(&self, writer: &mut BufWriter<W>, lines: &Vec<String>, print_delimiter: bool) -> bool {
         let mut first_line_printed = false;
         let mut count = if self.all_repeated { 1 } else { lines.len() };
         if lines.len() == 1 && !self.repeats_only
@@ -89,7 +90,7 @@ impl Uniq {
             count += 1;
         }
         if self.all_repeated {
-            for line in lines.tail().iter() {
+            for line in lines[1..].iter() {
                 self.print_line(writer, line, count, print_delimiter && !first_line_printed);
                 first_line_printed = true;
                 count += 1;
@@ -98,16 +99,17 @@ impl Uniq {
         first_line_printed
     }
 
-    fn print_line<W: Writer>(&self, writer: &mut io::BufferedWriter<W>, line: &String, count: usize, print_delimiter: bool) {
-        let output_line = if self.show_counts {
-            format!("{:7} {}", count, line)
-        } else {
-            line.clone()
-        };
+    fn print_line<W: Write>(&self, writer: &mut BufWriter<W>, line: &String, count: usize, print_delimiter: bool) {
         if print_delimiter {
-            crash_if_err!(1, writer.write_line(""));
+            crash_if_err!(1, writer.write_all(&['\n' as u8]));
         }
-        crash_if_err!(1, writer.write_str(output_line.as_slice()));
+
+        crash_if_err!(1, if self.show_counts {
+            writer.write_all(format!("{:7} {}", count, line).as_bytes())
+        } else {
+            writer.write_all(line.as_bytes())
+        });
+        crash_if_err!(1, writer.write_all("\n".as_bytes()));
     }
 }
 
@@ -120,9 +122,6 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program_path = Path::new(args[0].clone());
-    let program = program_path.filename_str().unwrap_or(NAME);
-
     let opts = [
         getopts::optflag("c", "count", "prefix lines by the number of occurrences"),
         getopts::optflag("d", "repeated", "only print duplicate lines"),
@@ -139,7 +138,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -148,13 +147,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", args[0]);
         println!("");
         print!("{}", getopts::usage("Filter adjacent matching lines from INPUT (or standard input),\n\
                                     writing to OUTPUT (or standard output).", &opts));
         println!("");
         println!("Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
-                  You may want to sort the input first, or use 'sort -u' without '{0}'.\n", program);
+                  You may want to sort the input first, or use 'sort -u' without '{0}'.\n", args[0]);
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {
@@ -171,7 +170,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             uniques_only: matches.opt_present("unique"),
             all_repeated: matches.opt_present("all-repeated"),
             delimiters: match matches.opt_default("all-repeated", "none") {
-                Some(ref opt_arg) if opt_arg.as_slice() != "none" => {
+                Some(ref opt_arg) if opt_arg != "none" => {
                     let rep_args = ["prepend".to_string(), "separate".to_string()];
                     if !rep_args.contains(opt_arg) {
                         crash!(1, "Incorrect argument for all-repeated: {}", opt_arg.clone());
@@ -191,26 +190,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open_input_file(in_file_name: String) -> io::BufferedReader<Box<Reader+'static>> {
-    let in_file = if in_file_name.as_slice() == "-" {
-        Box::new(io::stdio::stdin_raw()) as Box<Reader>
+fn open_input_file(in_file_name: String) -> BufReader<Box<Read+'static>> {
+    let in_file = if in_file_name == "-" {
+        Box::new(stdin()) as Box<Read>
     } else {
-        let path = Path::new(in_file_name);
-        let in_file = io::File::open(&path);
+        let path = Path::new(&in_file_name[..]);
+        let in_file = File::open(&path);
         let r = crash_if_err!(1, in_file);
-        Box::new(r) as Box<Reader>
+        Box::new(r) as Box<Read>
     };
-    io::BufferedReader::new(in_file)
+    BufReader::new(in_file)
 }
 
-fn open_output_file(out_file_name: String) -> io::BufferedWriter<Box<Writer+'static>> {
-    let out_file = if out_file_name.as_slice() == "-" {
-        Box::new(io::stdio::stdout_raw()) as Box<Writer>
+fn open_output_file(out_file_name: String) -> BufWriter<Box<Write+'static>> {
+    let out_file = if out_file_name == "-" {
+        Box::new(stdout()) as Box<Write>
     } else {
-        let path = Path::new(out_file_name);
-        let in_file = io::File::create(&path);
+        let path = Path::new(&out_file_name[..]);
+        let in_file = File::create(&path);
         let w = crash_if_err!(1, in_file);
-        Box::new(w) as Box<Writer>
+        Box::new(w) as Box<Write>
     };
-    io::BufferedWriter::new(out_file)
+    BufWriter::new(out_file)
 }
