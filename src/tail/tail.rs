@@ -1,5 +1,5 @@
 #![crate_name = "tail"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,16 +13,13 @@
 
 extern crate getopts;
 
-use std::char::CharExt;
-use std::old_io::{stdin, stdout};
-use std::old_io::{BufferedReader, BytesReader};
-use std::old_io::fs::File;
-use std::old_path::Path;
-use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 use std::collections::VecDeque;
-use std::old_io::timer::sleep;
-use std::time::duration::Duration;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, stdout, Write};
+use std::path::Path;
+use std::str::from_utf8;
+use std::thread::sleep_ms;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -36,10 +33,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut lines = true;
     let mut byte_count = 0usize;
     let mut line_count = 10usize;
-    let mut sleep_msec = 1000u64;
+    let mut sleep_msec = 1000u32;
 
     // handle obsolete -number syntax
-    let options = match obsolete(args.tail()) {
+    let options = match obsolete(&args[1..]) {
         (args, Some(n)) => { line_count = n; args },
         (args, None) => args
     };
@@ -55,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("V", "version", "version"),
     ];
 
-    let given_options = match getopts(args.as_slice(), &possible_options) {
+    let given_options = match getopts(args.as_ref(), &possible_options) {
         Ok (m) => { m }
         Err(_) => {
             println!("{}", usage(NAME, &possible_options));
@@ -73,7 +70,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if follow {
         match given_options.opt_str("s") {
             Some(n) => {
-                let parsed: Option<u64> = n.parse().ok();
+                let parsed: Option<u32> = n.parse().ok();
                 match parsed {
                     Some(m) => { sleep_msec = m * 1000 }
                     None => {}
@@ -85,8 +82,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     match given_options.opt_str("n") {
         Some(n) => {
-            let mut slice = n.as_slice();
-            if slice.len() > 0 && slice.char_at(0) == '+' {
+            let mut slice: &str = n.as_ref();
+            if slice.len() > 0 && slice.chars().next().unwrap_or('_') == '+' {
                 beginning = true;
                 slice = &slice[1..];
             }
@@ -100,8 +97,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
         None => match given_options.opt_str("c") {
             Some(n) => {
-                let mut slice = n.as_slice();
-                if slice.len() > 0 && slice.char_at(0) == '+' {
+                let mut slice: &str = n.as_ref();
+                if slice.len() > 0 && slice.chars().next().unwrap_or('_') == '+' {
                     beginning = true;
                     slice = &slice[1..];
                 }
@@ -121,7 +118,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let files = given_options.free;
 
     if files.is_empty() {
-        let mut buffer = BufferedReader::new(stdin());
+        let mut buffer = BufReader::new(stdin());
         tail(&mut buffer, line_count, byte_count, beginning, lines, follow, sleep_msec);
     } else {
         let mut multiple = false;
@@ -135,13 +132,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         for file in files.iter() {
             if multiple {
                 if !firstime { println!(""); }
-                println!("==> {} <==", file.as_slice());
+                println!("==> {} <==", file);
             }
             firstime = false;
 
-            let path = Path::new(file.as_slice());
+            let path = Path::new(file);
             let reader = File::open(&path).unwrap();
-            let mut buffer = BufferedReader::new(reader);
+            let mut buffer = BufReader::new(reader);
             tail(&mut buffer, line_count, byte_count, beginning, lines, follow, sleep_msec);
         }
     }
@@ -151,7 +148,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn parse_size(mut size_slice: &str) -> Option<usize> {
     let mut base =
-        if size_slice.len() > 0 && size_slice.char_at(size_slice.len() - 1) == 'B' {
+        if size_slice.len() > 0 && size_slice.chars().last().unwrap_or('_') == 'B' {
             size_slice = &size_slice[..size_slice.len() - 1];
             1000usize
         } else {
@@ -160,7 +157,7 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
     let exponent = 
         if size_slice.len() > 0 {
             let mut has_suffix = true;
-            let exp = match size_slice.char_at(size_slice.len() - 1) {
+            let exp = match size_slice.chars().last().unwrap_or('_') {
                 'K' => 1usize,
                 'M' => 2usize,
                 'G' => 3usize,
@@ -187,16 +184,16 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
         };
 
     let mut multiplier = 1usize;
-    for _ in range(0usize, exponent) {
+    for _ in (0usize .. exponent) {
         multiplier *= base;
     }
     if base == 1000usize && exponent == 0usize {
         // sole B is not a valid suffix
         None
     } else {
-        let value = size_slice.parse();
+        let value: Option<usize> = size_slice.parse().ok();
         match value {
-            Ok(v) => Some(multiplier * v),
+            Some(v) => Some(multiplier * v),
             _ => None
         }
     }
@@ -217,7 +214,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in range(1, len) {
+            for pos in (1 .. len) {
                 // Ensure that the argument is only made out of digits
                 if !(current[pos] as char).is_numeric() { break; }
 
@@ -269,7 +266,7 @@ macro_rules! tail_impl (
     })
 );
 
-fn tail<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: usize, mut byte_count: usize, beginning: bool, lines: bool, follow: bool, sleep_msec: u64) {
+fn tail<T: Read>(reader: &mut BufReader<T>, mut line_count: usize, mut byte_count: usize, beginning: bool, lines: bool, follow: bool, sleep_msec: u32) {
     if lines {
         tail_impl!(String, lines, print_string, reader, line_count, beginning);
     } else {
@@ -278,7 +275,7 @@ fn tail<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: usize, mut by
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
     while follow {
-        sleep(Duration::milliseconds(sleep_msec as i64));
+        sleep_ms(sleep_msec);
         for io_line in reader.lines() {
             match io_line {
                 Ok(line) => print!("{}", line),
@@ -289,14 +286,14 @@ fn tail<T: Reader>(reader: &mut BufferedReader<T>, mut line_count: usize, mut by
 }
 
 #[inline]
-fn print_byte<T: Writer>(stdout: &mut T, ch: &u8) {
-    if let Err(err) = stdout.write_u8(*ch) {
+fn print_byte<T: Write>(stdout: &mut T, ch: &u8) {
+    if let Err(err) = stdout.write(&[*ch]) {
         crash!(1, "{}", err);
     }
 }
 
 #[inline]
-fn print_string<T: Writer>(_: &mut T, s: &String) {
+fn print_string<T: Write>(_: &mut T, s: &String) {
     print!("{}", s);
 }
 

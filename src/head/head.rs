@@ -1,5 +1,5 @@
 #![crate_name = "head"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,11 +14,9 @@
 
 extern crate getopts;
 
-use std::char::CharExt;
-use std::old_io::{stdin};
-use std::old_io::{BufferedReader, BytesReader};
-use std::old_io::fs::File;
-use std::old_path::Path;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::fs::File;
+use std::path::Path;
 use std::str::from_utf8;
 use getopts::{optopt, optflag, getopts, usage};
 
@@ -33,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut byte_count = 0usize;
 
     // handle obsolete -number syntax
-    let options = match obsolete(args.tail()) {
+    let options = match obsolete(&args[1..]) {
         (args, Some(n)) => { line_count = n; args },
         (args, None) => args
     };
@@ -47,7 +45,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("V", "version", "version")
     ];
 
-    let given_options = match getopts(args.as_slice(), &possible_options) {
+    let given_options = match getopts(args.as_ref(), &possible_options) {
         Ok (m) => { m }
         Err(_) => {
             println!("{}", usage(NAME, &possible_options));
@@ -100,7 +98,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         };
 
     if files.is_empty() {
-        let mut buffer = BufferedReader::new(stdin());
+        let mut buffer = BufReader::new(stdin());
         head(&mut buffer, count, use_bytes);
     } else {
         let mut multiple = false;
@@ -113,13 +111,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         for file in files.iter() {
             if multiple {
                 if !firstime { pipe_println!(""); }
-                pipe_println!("==> {} <==", file.as_slice());
+                pipe_println!("==> {} <==", file);
             }
             firstime = false;
 
-            let path = Path::new(file.as_slice());
+            let path = Path::new(file);
             let reader = File::open(&path).unwrap();
-            let mut buffer = BufferedReader::new(reader);
+            let mut buffer = BufReader::new(reader);
             if !head(&mut buffer, count, use_bytes) {
                 break;
             }
@@ -144,7 +142,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in range(1, len) {
+            for pos in (1 .. len) {
                 // Ensure that the argument is only made out of digits
                 if !(current[pos] as char).is_numeric() { break; }
 
@@ -164,7 +162,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 }
 
 // TODO: handle errors on read
-fn head<T: Reader>(reader: &mut BufferedReader<T>, count: usize, use_bytes: bool) -> bool {
+fn head<T: Read>(reader: &mut BufReader<T>, count: usize, use_bytes: bool) -> bool {
     if use_bytes {
         for byte in reader.bytes().take(count) {
             if !pipe_print!("{}", byte.unwrap() as char) {
