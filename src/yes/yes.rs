@@ -1,5 +1,5 @@
 #![crate_name = "yes"]
-#![feature(collections, old_io, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,8 +15,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io::print;
-use std::borrow::IntoCow;
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -30,7 +29,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "invalid options\n{}", f)
@@ -42,7 +41,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", program);
         println!("");
-        print(&getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts)[..]);
+        print!("{}", getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts));
         return 0;
     }
     if matches.opt_present("version") {
@@ -50,9 +49,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
     let string = if matches.free.is_empty() {
-        "y".into_cow()
+        "y".to_string()
     } else {
-        matches.free.connect(" ").into_cow()
+        matches.free.connect(" ")
     };
 
     exec(&string[..]);
