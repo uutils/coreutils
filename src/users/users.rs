@@ -1,5 +1,5 @@
 #![crate_name = "users"]
-#![feature(collections, core, old_io, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,13 +13,12 @@
 /* last synced with: whoami (GNU coreutils) 8.22 */
 
 // Allow dead code here in order to keep all fields, constants here, for consistency.
-#![allow(dead_code, non_camel_case_types)]
+#![allow(dead_code)]
 
 extern crate getopts;
 extern crate libc;
 
 use std::ffi::{CStr, CString};
-use std::old_io::print;
 use std::mem;
 use std::ptr;
 use utmpx::*;
@@ -53,13 +52,12 @@ unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 static NAME: &'static str = "users";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => panic!("{}", f),
     };
@@ -68,9 +66,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("users 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {} [OPTION]... [FILE]", program);
+        println!("  {} [OPTION]... [FILE]", args[0]);
         println!("");
-        print(getopts::usage("Output who is currently logged in according to FILE.", &opts).as_slice());
+        println!("{}", getopts::usage("Output who is currently logged in according to FILE.", &opts));
         return 0;
     }
 
@@ -79,10 +77,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let mut filename = DEFAULT_FILE;
-    if matches.free.len() > 0 {
-        filename = matches.free[0].as_slice();
-    }
+    let filename = if matches.free.len() > 0 {
+        matches.free[0].as_ref()
+    } else {
+        DEFAULT_FILE
+    };
 
     exec(filename);
 
