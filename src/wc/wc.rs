@@ -1,5 +1,5 @@
 #![crate_name = "wc"]
-#![feature(collections, old_io, old_path, rustc_private, str_words)]
+#![feature(rustc_private, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,14 +13,14 @@
 extern crate getopts;
 extern crate libc;
 
-use std::ascii::AsciiExt;
-use std::str::from_utf8;
-use std::old_io::{print, File, BufferedReader};
-use std::old_io::fs::PathExtensions;
-use std::old_io::stdio::stdin_raw;
-use std::result::Result as StdResult;
-use std::borrow::IntoCow;
 use getopts::Matches;
+
+use std::ascii::AsciiExt;
+use std::fs::{File, PathExt};
+use std::io::{stdin, BufRead, BufReader, Read, Write};
+use std::path::Path;
+use std::result::Result as StdResult;
+use std::str::from_utf8;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let mut matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f)
@@ -60,8 +60,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
-        print(&getopts::usage("Print newline, word and byte counts for each FILE", &opts)[..]);
-        println!("");
+        println!("{}", getopts::usage("Print newline, word and byte counts for each FILE", &opts));
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
     }
@@ -71,13 +70,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let files = if matches.free.is_empty() {
-        vec!["-".to_string()].into_cow()
-    } else {
-        matches.free[..].into_cow()
-    };
+    if matches.free.is_empty() {
+        matches.free.push("-".to_string());
+    }
 
-    match wc(&files[..], &matches) {
+    match wc(&matches) {
         Ok(()) => ( /* pass */ ),
         Err(e) => return e
     }
@@ -97,7 +94,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
+pub fn wc(matches: &Matches) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
     let mut total_char_count: usize = 0;
@@ -107,7 +104,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
     let mut results = vec!();
     let mut max_str_len: usize = 0;
 
-    for path in files.iter() {
+    for path in matches.free.iter() {
         let mut reader = try!(open(&path[..]));
 
         let mut line_count: usize = 0;
@@ -115,10 +112,18 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
         let mut byte_count: usize = 0;
         let mut char_count: usize = 0;
         let mut longest_line_length: usize = 0;
+        let mut raw_line = Vec::new();
 
         // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
         // hence the option wrapped in a result here
-        while let Ok(raw_line) = reader.read_until(LF) {
+        while match reader.read_until(LF, &mut raw_line) {
+            Ok(n) if n > 0 => true,
+            Err(ref e) if raw_line.len() > 0 => {
+                show_warning!("Error while reading {}: {}", path, e);
+                raw_line.len() > 0
+            },
+            _ => false,
+        } {
             // GNU 'wc' only counts lines that end in LF as lines
             if *raw_line.last().unwrap() == LF {
                 line_count += 1;
@@ -130,7 +135,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
             let current_char_count;
             match from_utf8(&raw_line[..]) {
                 Ok(line) => {
-                    word_count += line.words().count();
+                    word_count += line.split_whitespace().count();
                     current_char_count = line.chars().count();
                 },
                 Err(..) => {
@@ -145,6 +150,8 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
                 // matches GNU 'wc' behaviour
                 longest_line_length = current_char_count - 1;
             }
+
+            raw_line.truncate(0);
         }
 
         results.push(Result {
@@ -173,7 +180,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
         print_stats(&result.filename[..], result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
     }
 
-    if files.len() > 1 {
+    if matches.free.len() > 1 {
         print_stats("total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
     }
 
@@ -217,10 +224,10 @@ fn print_stats(filename: &str, line_count: usize, word_count: usize, char_count:
     }
 }
 
-fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, i32> {
+fn open(path: &str) -> StdResult<BufReader<Box<Read+'static>>, i32> {
     if "-" == path {
-        let reader = Box::new(stdin_raw()) as Box<Reader>;
-        return Ok(BufferedReader::new(reader));
+        let reader = Box::new(stdin()) as Box<Read>;
+        return Ok(BufReader::new(reader));
     }
 
     let fpath = Path::new(path);
@@ -229,8 +236,8 @@ fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, i32> {
     }
     match File::open(&fpath) {
         Ok(fd) => {
-            let reader = Box::new(fd) as Box<Reader>;
-            Ok(BufferedReader::new(reader))
+            let reader = Box::new(fd) as Box<Read>;
+            Ok(BufReader::new(reader))
         }
         Err(e) => {
             show_error!("wc: {}: {}", path, e);

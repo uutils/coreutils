@@ -1,5 +1,5 @@
 #![crate_name = "whoami"]
-#![feature(collections, core, old_io, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,62 +12,22 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-#![allow(non_camel_case_types)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::old_io::print;
+use std::io::Write;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
-
-#[cfg(unix)]
-mod platform {
-    use super::libc;
-    use self::c_types::{c_passwd, getpwuid};
-
-    #[path = "../../common/c_types.rs"] mod c_types;
-
-    extern {
-        pub fn geteuid() -> libc::uid_t;
-    }
-
-    pub unsafe fn getusername() -> String {
-        let passwd: *const c_passwd = getpwuid(geteuid());
-
-        let pw_name: *const libc::c_char = (*passwd).pw_name;
-        String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes()).to_string()
-    }
-}
-
-#[cfg(windows)]
-mod platform {
-    pub use super::libc;
-    use std::mem;
-
-    extern "system" {
-        pub fn GetUserNameA(out: *mut libc::c_char, len: *mut libc::uint32_t) -> libc::uint8_t;
-    }
-
-    #[allow(unused_unsafe)]
-    pub unsafe fn getusername() -> String {
-        let mut buffer: [libc::c_char; 2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
-        if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
-            crash!(1, "username is too long");
-        }
-        String::from_utf8_lossy(::std::ffi::CStr::from_ptr(buffer.as_ptr()).to_bytes()).to_string()
-    }
-}
+mod platform;
 
 static NAME: &'static str = "whoami";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
@@ -75,9 +35,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("whoami 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {}", program);
+        println!("  {}", args[0]);
         println!("");
-        print(getopts::usage("print effective userid", &opts).as_slice());
+        println!("{}", getopts::usage("print effective userid", &opts));
         return 0;
     }
     if matches.opt_present("version") {

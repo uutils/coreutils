@@ -1,5 +1,5 @@
 #![crate_name = "uptime"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc, str_words)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,15 +12,14 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-#![allow(non_camel_case_types)]
-
 extern crate getopts;
 extern crate libc;
 extern crate time as rtime;
 
 use std::ffi::CString;
+use std::fs::File;
+use std::io::{Read, Write};
 use std::mem::transmute;
-use std::old_io::{print, File};
 use std::ptr::null;
 use libc::{time_t, c_double, c_int, c_char};
 use utmpx::*;
@@ -61,7 +60,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("v", "version", "output version information and exit"),
         getopts::optflag("h", "help", "display this help and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -73,9 +72,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]", program);
         println!("");
-        print(getopts::usage("Print the current time, the length of time the system has been up,\n\
+        println!("{}", getopts::usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes.", &opts).as_slice());
+                              in the run queue over the last 1, 5 and 15 minutes.", &opts));
         return 0;
     }
 
@@ -98,7 +97,7 @@ fn print_loadavg() {
     }
     else {
         print!("load average: ");
-        for n in range(0, loads) {
+        for n in 0..loads {
             print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
@@ -164,27 +163,23 @@ fn print_time() {
 
 #[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
-    let proc_uptime = File::open(&Path::new("/proc/uptime"))
-                            .read_to_string();
+    let mut proc_uptime = String::new();
 
-    let uptime_text = match proc_uptime {
-        Ok(s) => s,
-        _ => return match boot_time {
-                Some(t) => {
-                    let now = rtime::get_time().sec;
-                    let time = t as i64;
-                    ((now - time) * 100) as i64 // Return in ms
-                },
-                _ => -1
-             }
-    };
-
-    match uptime_text.as_slice().words().next() {
-        Some(s) => match s.replace(".", "").as_slice().parse() {
-                    Ok(n) => n,
-                    Err(_) => -1
-                   },
-        None => -1
+    if let Some(n) =
+        File::open("/proc/uptime").ok()
+            .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
+            .and_then(|_| proc_uptime.split_whitespace().next())
+            .and_then(|s| s.replace(".", "").parse().ok()) {
+        n
+    } else {
+        match boot_time {
+            Some(t) => {
+                let now = rtime::get_time().sec;
+                let time = t as i64;
+                ((now - time) * 100)
+            },
+            _ => -1,
+        }
     }
 }
 
@@ -198,12 +193,12 @@ fn print_uptime(upsecs: i64) {
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
-        print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins);
+        print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
     }
     else if updays > 1 {
-        print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
+        print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
     }
     else {
-        print!("up  {:2}:{:02},  ", uphours, upmins);
+        print!("up  {:2}:{:02}, ", uphours, upmins);
     }
 }
