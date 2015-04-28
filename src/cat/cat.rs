@@ -1,5 +1,5 @@
 #![crate_name = "cat"]
-#![feature(rustc_private, box_syntax, unsafe_destructor)]
+#![feature(rustc_private, unsafe_destructor)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -261,11 +261,11 @@ fn open(path: &str) -> Option<(Box<Read>, bool)> {
     if path == "-" {
         let stdin = stdin();
         let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
-        return Some((box stdin as Box<Read>, interactive));
+        return Some((Box::new(stdin) as Box<Read>, interactive));
     }
 
     match File::open(path) {
-        Ok(f) => Some((box f as Box<Read>, false)),
+        Ok(f) => Some((Box::new(f) as Box<Read>, false)),
         Err(e) => {
             (writeln!(&mut stderr(), "cat: {0}: {1}", path, e.to_string())).unwrap();
             None
