@@ -83,7 +83,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     match given_options.opt_str("n") {
         Some(n) => {
             let mut slice: &str = n.as_ref();
-            if slice.len() > 0 && slice.chars().next().unwrap_or('_') == '+' {
+            if slice.chars().next().unwrap_or('_') == '+' {
                 beginning = true;
                 slice = &slice[1..];
             }
@@ -98,7 +98,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         None => match given_options.opt_str("c") {
             Some(n) => {
                 let mut slice: &str = n.as_ref();
-                if slice.len() > 0 && slice.chars().next().unwrap_or('_') == '+' {
+                if slice.chars().next().unwrap_or('_') == '+' {
                     beginning = true;
                     slice = &slice[1..];
                 }
@@ -148,7 +148,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn parse_size(mut size_slice: &str) -> Option<usize> {
     let mut base =
-        if size_slice.len() > 0 && size_slice.chars().last().unwrap_or('_') == 'B' {
+        if size_slice.chars().last().unwrap_or('_') == 'B' {
             size_slice = &size_slice[..size_slice.len() - 1];
             1000usize
         } else {
