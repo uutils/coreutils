@@ -142,14 +142,22 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
     }
 }
 
-fn write_tabs(mut output: &mut BufWriter<Stdout>, tabstops: &[usize], mut scol: usize, col: usize) {
-    while let Some(nts) = next_tabstop(tabstops, scol) {
-        if col < scol + nts {
-            break;
-        }
+fn write_tabs(mut output: &mut BufWriter<Stdout>, tabstops: &[usize],
+              mut scol: usize, col: usize, prevtab: bool, init: bool, amode: bool) {
+    // This conditional establishes the following:
+    // We never turn a single space before a non-blank into
+    // a tab, unless it's at the start of the line.
+    let ai = init || amode;
+    if (ai && !prevtab && col > scol + 1) ||
+       (col > scol && (init || ai && prevtab)) {
+        while let Some(nts) = next_tabstop(tabstops, scol) {
+            if col < scol + nts {
+                break;
+            }
 
-        safe_unwrap!(output.write_all("\t".as_bytes()));
-        scol += nts;
+            safe_unwrap!(output.write_all("\t".as_bytes()));
+            scol += nts;
+        }
     }
 
     while col > scol {
@@ -194,15 +202,9 @@ fn unexpand(options: Options) {
             while byte < buf.len() {
                 // when we have a finite number of columns, never convert past the last column
                 if lastcol > 0 && col >= lastcol {
-                    if (pctype != Tab && col > scol + 1) || 
-                       (col > scol && (init || pctype == Tab)) {
-                        write_tabs(&mut output, ts, scol, col);
-                    } else if col > scol {
-                        safe_unwrap!(output.write_all(" ".as_bytes()));
-                    }
-                    scol = col;
-
+                    write_tabs(&mut output, ts, scol, col, pctype == Tab, init, true);
                     safe_unwrap!(output.write_all(&buf[byte..]));
+                    scol = col;
                     break;
                 }
 
@@ -253,15 +255,8 @@ fn unexpand(options: Options) {
                         }
                     },
                     Other | Backspace => {  // always 
-                        // never turn a single space before a non-blank into a tab
-                        // unless it's at the start of the line
-                        if (tabs_buffered && pctype != Tab && col > scol + 1) || 
-                           (col > scol && (init || (tabs_buffered && pctype == Tab))) {
-                            write_tabs(&mut output, ts, scol, col);
-                        } else if col > scol {
-                            safe_unwrap!(output.write_all(" ".as_bytes()));
-                        }
-                        init = false;
+                        write_tabs(&mut output, ts, scol, col, pctype == Tab, init, options.aflag);
+                        init = false;               // no longer at the start of a line
                         col = if ctype == Other {   // use computed width
                             col + cwidth
                         } else if col > 0 {         // Backspace case, but only if col > 0
@@ -279,12 +274,7 @@ fn unexpand(options: Options) {
             }
 
             // write out anything remaining
-            if col > scol + 1 || (init && col > scol) {
-                write_tabs(&mut output, ts, scol, col);
-            } else if col > scol {
-                safe_unwrap!(output.write_all(" ".as_bytes()));
-            }
-
+            write_tabs(&mut output, ts, scol, col, pctype == Tab, init, true);
             buf.truncate(0);    // clear out the buffer
         }
     }

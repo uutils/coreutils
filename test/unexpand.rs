@@ -105,4 +105,8 @@ fn unexpand_spaces_follow_tabs_1() { // evil
     assert_eq!(&out[..], b"a\t\t  B \t" as &[u8]);
 }
 
-
+#[test]
+fn unexpand_spaces_after_fields() {
+    let out = run("   \t        A B C D             A\t\n", &["-a"]);
+    assert_eq!(&out[..], b"\t\tA B C D\t\t    A\t\n" as &[u8]);
+}
