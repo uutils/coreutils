@@ -1,5 +1,5 @@
 #![crate_name = "base64"]
-#![feature(box_syntax, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -80,11 +80,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut file_buf;
     let mut input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
         stdin_buf = stdin();
-        BufReader::new(box stdin_buf as Box<Read+'static>)
+        BufReader::new(Box::new(stdin_buf) as Box<Read+'static>)
     } else {
         let path = Path::new(&matches.free[0][..]);
         file_buf = safe_unwrap!(File::open(&path));
-        BufReader::new(box file_buf as Box<Read+'static>)
+        BufReader::new(Box::new(file_buf) as Box<Read+'static>)
     };
 
     match mode {

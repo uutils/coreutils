@@ -1,5 +1,5 @@
 #![crate_name = "fmt"]
-#![feature(box_syntax,rustc_private,str_char,unicode,core)]
+#![feature(rustc_private,str_char,unicode,core)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.
@@ -197,9 +197,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     for i in files.iter().map(|x| &x[..]) {
         let mut fp = match i {
-            "-" => BufReader::new(box stdin() as Box<Read+'static>),
+            "-" => BufReader::new(Box::new(stdin()) as Box<Read+'static>),
             _ => match File::open(i) {
-                Ok(f) => BufReader::new(box f as Box<Read+'static>),
+                Ok(f) => BufReader::new(Box::new(f) as Box<Read+'static>),
                 Err(e) => {
                     show_warning!("{}: {}", i, e);
                     continue;

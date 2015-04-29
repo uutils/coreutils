@@ -1,22 +1,28 @@
 #![crate_name = "expand"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private, unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
  *
  * (c) Virgile Andreani <virgile.andreani@anbuco.fr>
+ * (c) kwantam <kwantam@gmail.com>
+ *     20150428 updated to work with both UTF-8 and non-UTF-8 encodings
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
-#![feature(box_syntax)]
-
 extern crate getopts;
 extern crate libc;
+extern crate rustc_unicode;
+extern crate unicode_width;
 
-use std::old_io as io;
-use std::str::StrExt;
+use std::fs::File;
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::iter::repeat;
+use std::str::from_utf8;
+use rustc_unicode::str::utf8_char_width;
+use unicode_width::UnicodeWidthChar;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -28,7 +34,7 @@ static VERSION: &'static str = "0.0.1";
 static DEFAULT_TABSTOP: usize = 8;
 
 fn tabstops_parse(s: String) -> Vec<usize> {
-    let words = s.as_slice().split(',').collect::<Vec<&str>>();
+    let words = s.split(',').collect::<Vec<&str>>();
 
     let nums = words.into_iter()
         .map(|sn| sn.parse::<usize>()
@@ -52,7 +58,9 @@ fn tabstops_parse(s: String) -> Vec<usize> {
 struct Options {
     files: Vec<String>,
     tabstops: Vec<usize>,
-    iflag: bool
+    tspaces: String,
+    iflag: bool,
+    uflag: bool,
 }
 
 impl Options {
@@ -63,6 +71,16 @@ impl Options {
         };
 
         let iflag = matches.opt_present("i");
+        let uflag = !matches.opt_present("U");
+
+        // avoid allocations when dumping out long sequences of spaces
+        // by precomputing the longest string of spaces we will ever need
+        let nspaces = tabstops.iter().scan(0, |pr,&it| {
+            let ret = Some(it - *pr);
+            *pr = it;
+            ret
+        }).max().unwrap();  // length of tabstops is guaranteed >= 1
+        let tspaces = repeat(' ').take(nspaces).collect();
 
         let files =
             if matches.free.is_empty() {
@@ -71,7 +89,7 @@ impl Options {
                 matches.free
             };
 
-        Options { files: files, tabstops: tabstops, iflag: iflag }
+        Options { files: files, tabstops: tabstops, tspaces: tspaces, iflag: iflag, uflag: uflag }
     }
 }
 
@@ -80,20 +98,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("i", "initial", "do not convert tabs after non blanks"),
         getopts::optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER"),
         getopts::optopt("t", "tabs", "use comma separated list of explicit tab positions", "LIST"),
+        getopts::optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8"),
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("help") {
         println!("Usage: {} [OPTION]... [FILE]...", NAME);
-        io::print(getopts::usage(
+        println!("{}", getopts::usage(
             "Convert tabs in each FILE to spaces, writing to standard output.\n\
-            With no FILE, or when FILE is -, read standard input.", &opts).as_slice());
+            With no FILE, or when FILE is -, read standard input.", &opts));
         return 0;
     }
 
@@ -107,64 +126,119 @@ pub fn uumain(args: Vec<String>) -> i32 {
     return 0;
 }
 
-fn open(path: String) -> io::BufferedReader<Box<Reader+'static>> {
+fn open(path: String) -> BufReader<Box<Read+'static>> {
     let mut file_buf;
-    if path.as_slice() == "-" {
-        io::BufferedReader::new(box io::stdio::stdin_raw() as Box<Reader>)
+    if path == "-" {
+        BufReader::new(Box::new(stdin()) as Box<Read>)
     } else {
-        file_buf = match io::File::open(&Path::new(path.as_slice())) {
+        file_buf = match File::open(&path[..]) {
             Ok(a) => a,
-            _ => crash!(1, "{}: {}\n", path, "No such file or directory")
+            Err(e) => crash!(1, "{}: {}\n", &path[..], e),
         };
-        io::BufferedReader::new(box file_buf as Box<Reader>)
+        BufReader::new(Box::new(file_buf) as Box<Read>)
     }
 }
 
-fn to_next_stop(tabstops: &[usize], col: usize) -> usize {
-    match tabstops.as_slice() {
-        [tabstop] => tabstop - col % tabstop,
-        tabstops => match tabstops.iter().skip_while(|&t| *t <= col).next() {
-            Some(&tabstop) => tabstop - col % tabstop,
-            None => 1
+fn next_tabstop(tabstops: &[usize], col: usize) -> usize {
+    if tabstops.len() == 1 {
+        tabstops[0] - col % tabstops[0]
+    } else {
+        match tabstops.iter().skip_while(|&&t| t <= col).next() {
+            Some(t) => t - col,
+            None => 1,
         }
     }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+enum CharType {
+    Backspace,
+    Tab,
+    Other,
 }
 
 fn expand(options: Options) {
-    let mut output = io::stdout();
+    use self::CharType::*;
+
+    let mut output = BufWriter::new(stdout());
+    let ts = options.tabstops.as_ref();
+    let mut buf = Vec::new();
 
     for file in options.files.into_iter() {
-        let mut col = 0;
-        let mut init = true;
-        for c in open(file).chars() {
-            match c {
-                Ok('\t') if init || !options.iflag => {
-                    let nb_spaces = to_next_stop(options.tabstops.as_slice(), col);
-                    col += nb_spaces;
-                    safe_write!(&mut output, "{:1$}", "", nb_spaces);
-                }
-                Ok('\x08') => {
-                    if col > 0 {
-                        col -= 1;
+        let mut fh = open(file);
+
+        while match fh.read_until('\n' as u8, &mut buf) {
+            Ok(s) => s > 0,
+            Err(_) => buf.len() > 0,
+        } {
+            let mut col = 0;
+            let mut byte = 0;
+            let mut init = true;
+
+            while byte < buf.len() {
+                let (ctype, cwidth, nbytes) = if options.uflag {
+                    let nbytes = utf8_char_width(buf[byte]);
+
+                    if byte + nbytes > buf.len() {
+                        // don't overrun buffer because of invalid UTF-8
+                        (Other, 1, 1)
+                    } else if let Ok(t) = from_utf8(&buf[byte..byte+nbytes]) {
+                        match t.chars().next() {
+                            Some('\t') => (Tab, 0, nbytes),
+                            Some('\x08') => (Backspace, 0, nbytes),
+                            Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
+                            None => {   // no valid char at start of t, so take 1 byte
+                                (Other, 1, 1)
+                            },
+                        }
+                    } else {
+                        (Other, 1, 1)   // implicit assumption: non-UTF-8 char is 1 col wide
                     }
-                    init = false;
-                    safe_write!(&mut output, "{}", '\x08');
+                } else {
+                    (match buf[byte] {   // always take exactly 1 byte in strict ASCII mode
+                        0x09 => Tab,
+                        0x08 => Backspace,
+                        _ => Other,
+                    }, 1, 1)
+                };
+
+                // figure out how many columns this char takes up
+                match ctype {
+                    Tab => {
+                        // figure out how many spaces to the next tabstop
+                        let nts = next_tabstop(ts, col);
+                        col += nts;
+
+                        // now dump out either spaces if we're expanding, or a literal tab if we're not
+                        if init || !options.iflag {
+                            safe_unwrap!(output.write_all(&options.tspaces[..nts].as_bytes()));
+                        } else {
+                            safe_unwrap!(output.write_all(&buf[byte..byte+nbytes]));
+                        }
+                    },
+                    _ => {
+                        col = if ctype == Other {
+                            col + cwidth
+                        } else if col > 0 {
+                            col - 1
+                        } else {
+                            0
+                        };
+
+                        // if we're writing anything other than a space, then we're
+                        // done with the line's leading spaces
+                        if buf[byte] != 0x20 {
+                            init = false;
+                        }
+
+                        safe_unwrap!(output.write_all(&buf[byte..byte+nbytes]));
+                    },
                 }
-                Ok('\n') =>  {
-                    col = 0;
-                    init = true;
-                    safe_write!(&mut output, "{}", '\n');
-                }
-                Ok(c) => {
-                    col += 1;
-                    if c != ' ' {
-                        init = false;
-                    }
-                    safe_write!(&mut output, "{}", c);
-                }
-                Err(_) => break
+
+                byte += nbytes; // advance the pointer
             }
+
+            buf.truncate(0);    // clear the buffer
         }
     }
 }
-
