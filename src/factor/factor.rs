@@ -1,10 +1,14 @@
 #![crate_name = "factor"]
-#![feature(collections, core, old_io, rustc_private)]
+#![feature(rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
 *
 * (c) T. Jameson Little <t.jameson.little@gmail.com>
+* (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
+*     20150223 added Pollard rho method implementation
+* (c) kwantam <kwantam@gmail.com>
+*     20150429 sped up trial division by adding table of prime inverses
 *
 * For the full copyright and license information, please view the LICENSE file
 * that was distributed with this source code.
@@ -14,111 +18,47 @@ extern crate getopts;
 extern crate libc;
 extern crate rand;
 
-use std::vec::Vec;
-use std::old_io::BufferedReader;
-use std::old_io::stdio::stdin_raw;
-use std::cmp::{max,min};
+use numeric::*;
+use prime_table::{P_INVS_U64, NEXT_PRIME};
+use std::cmp::{max, min};
+use std::io::{stdin, BufRead, BufReader, Write};
+use std::num::Wrapping;
 use std::mem::swap;
-use rand::distributions::{IndependentSample, Range};
+use rand::weak_rng;
+use rand::distributions::{Range, IndependentSample};
 
 #[path="../common/util.rs"]
 #[macro_use]
 mod util;
+mod numeric;
+mod prime_table;
 
 static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "factor";
 
-// computes (a + b) % m using the russian peasant algorithm
-fn multiply(mut a: u64, mut b: u64, m: u64) -> u64 {
-    let mut result = 0;
-    while b > 0 {
-        if b & 1 > 0 {
-            result = (result + a) % m;
-        }
-        a = (a << 1) % m;
-        b >>= 1;
-    }
-    result
-}
-
-// computes a.pow(b) % m
-fn pow(mut a: u64, mut b: u64, m: u64) -> u64 {
-    let mut result = 1;
-    while b > 0 {
-        if b & 1 > 0 {
-            result = multiply(result, a, m);
-        }
-        a = multiply(a, a, m);
-        b >>= 1;
-    }
-    result
-}
-
-fn witness(mut a: u64, exponent: u64, m: u64) -> bool {
-    if a == 0 {
-        return false;
-    }
-    if pow(a, m-1, m) != 1 {
-        return true;
-    }
-    a = pow(a, exponent, m);
-    if a == 1 {
-        return false;
-    }
-    loop {
-        if a == 1 {
-            return true;
-        }
-        if a == m-1 {
-            return false;
-        }
-        a = multiply(a, a, m);
-    }
-}
-
-// uses the Miller-Rabin test
-fn is_prime(num: u64) -> bool {
-    if num < 2 {
-        return false;
-    }
-    if num % 2 == 0 {
-        return num == 2;
-    }
-    let mut exponent = num - 1;
-    while exponent & 1 == 0 {
-        exponent >>= 1;
-    }
-    let witnesses = [2, 325, 9375, 28178, 450775, 9780504, 1795265022];
-    for wit in witnesses.iter() {
-        if witness(*wit % num, exponent, num) {
-            return false;
-        }
-    }
-    true
-}
-
-fn trial_division(mut num: u64) -> Vec<u64> {
-    let mut ret = Vec::new();
-
-    if num < 2 {
-        return ret;
-    }
-    while num % 2 == 0 {
-        num /= 2;
-        ret.push(2);
-    }
-    let mut i = 3;
+fn trial_division_slow(mut num: u64, factors: &mut Vec<u64>) {
+    // assumption: this number has already been run through
+    // trial_division, which checks primes from the table.
+    // The first candidate we need to check is NEXT_PRIME.
+    let mut i = NEXT_PRIME;
     while i * i <= num {
         while num % i == 0 {
             num /= i;
-            ret.push(i);
+            factors.push(i);
+            if is_prime(num) {
+                factors.push(num);
+                return;
+            }
+            if num < 1 << 63 {
+                // once we're small enough, switch to Pollard's rho
+                return rho_pollard_factor(num, factors);
+            }
         }
         i += 2;
     }
     if num > 1 {
-        ret.push(num);
+        factors.push(num);
     }
-    ret
 }
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
@@ -145,7 +85,7 @@ fn rho_pollard_find_divisor(num: u64) -> u64 {
         x = rho_pollard_pseudorandom_function(x, a, b, num);
         y = rho_pollard_pseudorandom_function(y, a, b, num);
         y = rho_pollard_pseudorandom_function(y, a, b, num);
-        let d = gcd(num, max(x,y) - min(x,y));
+        let d = gcd(num, max(x, y) - min(x, y));
         if d == num {
             // Failure, retry with diffrent function
             x = range.ind_sample(&mut rng);
@@ -158,29 +98,73 @@ fn rho_pollard_find_divisor(num: u64) -> u64 {
     }
 }
 
-fn rho_pollard_factor(num: u64) -> Vec<u64> {
-    let mut ret = Vec::new();
+fn rho_pollard_factor(num: u64, factors: &mut Vec<u64>) {
     if is_prime(num) {
-        ret.push(num);
-        return ret;
+        factors.push(num);
+        return;
     }
     let divisor = rho_pollard_find_divisor(num);
-    ret.push_all(rho_pollard_factor(divisor).as_slice());
-    ret.push_all(rho_pollard_factor(num/divisor).as_slice());
-    ret
+    rho_pollard_factor(divisor, factors);
+    rho_pollard_factor(num / divisor, factors);
+}
+
+fn table_division(mut num: u64, factors: &mut Vec<u64>) {
+    if num < 2 {
+        return;
+    }
+    while num % 2 == 0 {
+        num /= 2;
+        factors.push(2);
+    }
+    if is_prime(num) {
+        factors.push(num);
+        return;
+    }
+    for &(prime, inv, ceil) in P_INVS_U64 {
+        if num == 1 {
+            break;
+        }
+
+        // inv = prime^-1 mod 2^64
+        // ceil = floor((2^64-1) / prime)
+        // if (num * inv) mod 2^64 <= ceil, then prime divides num
+        // See http://math.stackexchange.com/questions/1251327/
+        // for a nice explanation.
+        loop {
+            let Wrapping(x) = Wrapping(num) * Wrapping(inv);    // x = num * inv mod 2^64
+            if x <= ceil {
+                num = x;
+                factors.push(prime);
+                if is_prime(num) {
+                    factors.push(num);
+                    return;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    // do we still have more factoring to do?
+    // Decide whether to use Pollard Rho or slow divisibility based on
+    // number's size:
+    if num >= 1 << 63 {
+        // number is too big to use rho pollard without overflowing
+        trial_division_slow(num, factors);
+    } else if num > 1 {
+        // number is still greater than 1, but not so big that we have to worry
+        rho_pollard_factor(num, factors);
+    }
 }
 
 fn print_factors(num: u64) {
     print!("{}:", num);
 
-    // Rho-Pollard is slower for small numbers and may cause 64-bit overflows
-    // for numbers bigger than 1 << 63, hence the constraints
-    let mut factors = if num < 1 << 63 && num > 1 << 40 {
-        rho_pollard_factor(num)
-    } else {
-        trial_division(num)
-    };
+    let mut factors = Vec::new();
+    // we always start with table division, and go from there
+    table_division(num, &mut factors);
     factors.sort();
+
     for fac in factors.iter() {
         print!(" {}", fac);
     }
@@ -188,21 +172,18 @@ fn print_factors(num: u64) {
 }
 
 fn print_factors_str(num_str: &str) {
-    let num = match num_str.parse::<u64>() {
-        Ok(x) => x,
-        Err(e)=> { crash!(1, "{} not a number: {}", num_str, e); }
-    };
-    print_factors(num);
+    if let Err(e) = num_str.parse::<u64>().and_then(|x| Ok(print_factors(x))) {
+        show_warning!("{}: {}", num_str, e);
+    }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("h", "help", "show this help message"),
         getopts::optflag("v", "version", "print the version and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -214,22 +195,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 \t{program} [NUMBER]...\n\
                 \t{program} [OPTION]\n\
                 \n\
-                {usage}", program = program, version = VERSION, usage = getopts::usage("Print the prime factors of the given number(s). \
+                {usage}",
+                program = &args[0][..],
+                version = VERSION, 
+                usage = getopts::usage("Print the prime factors of the given number(s). \
                                         If none are specified, read from standard input.", &opts));
         return 1;
     }
+
     if matches.opt_present("version") {
-        println!("{} {}", program, VERSION);
+        println!("{} {}", &args[0][..], VERSION);
         return 0;
     }
 
     if matches.free.is_empty() {
-        for line in BufferedReader::new(stdin_raw()).lines() {
-            print_factors_str(line.unwrap().as_slice().trim());
+        for line in BufReader::new(stdin()).lines() {
+            for number in line.unwrap().split_whitespace() {
+                print_factors_str(number);
+            }
         }
     } else {
         for num_str in matches.free.iter() {
-            print_factors_str(num_str.as_slice());
+            print_factors_str(num_str);
         }
     }
     0
