@@ -1,5 +1,5 @@
 #![crate_name = "tsort"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(collections, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,8 +14,10 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io as io;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -41,7 +43,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTIONS] FILE", NAME);
         println!("");
-        io::print(getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", &opts).as_slice());
+        println!("{}", getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", &opts));
         return 0;
     }
 
@@ -61,31 +63,37 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut stdin_buf;
     let mut file_buf;
-    let mut reader = io::BufferedReader::new(
-        if input.as_slice() == "-" {
-            stdin_buf = io::stdio::stdin_raw();
-            &mut stdin_buf as &mut Reader
+    let mut reader = BufReader::new(
+        if input == "-" {
+            stdin_buf = stdin();
+            &mut stdin_buf as &mut Read
         } else {
-            file_buf = match io::File::open(&Path::new(input.as_slice())) {
+            file_buf = match File::open(Path::new(&input)) {
                 Ok(a) => a,
                 _ => {
                     show_error!("{}: No such file or directory", input);
                     return 1;
                 }
             };
-            &mut file_buf as &mut Reader
+            &mut file_buf as &mut Read
         }
     );
 
     let mut g = Graph::new();
     loop {
-        match reader.read_line() {
-            Ok(line) => {
-                let ab: Vec<&str> = line.as_slice().trim_right_matches('\n').split(' ').collect();
-                if ab.len() > 2 {
-                    crash!(1, "{}: input contains an odd number of tokens", input);
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(_) => {
+                let tokens: Vec<String> = line.trim_right().split_whitespace().map(|s| s.to_string()).collect();
+                if tokens.len() == 0 {
+                    break
                 }
-                g.add_edge(&ab[0].to_string(), &ab[1].to_string());
+                for ab in tokens.chunks(2) {
+                    match ab.len() {
+                        2 => g.add_edge(&ab[0], &ab[1]),
+                        _ => crash!(1, "{}: input contains an odd number of tokens", input)
+                    }
+                }
             },
             _ => break
         }
