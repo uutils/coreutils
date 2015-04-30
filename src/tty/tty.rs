@@ -1,5 +1,5 @@
 #![crate_name = "tty"]
-#![feature(collections, core, old_io, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,14 +12,10 @@
  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
  */
 
-#![allow(dead_code)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::ffi::CStr;
-use std::old_io::println;
-use std::old_io::stdio::stderr;
 use getopts::{optflag,getopts};
 
 #[path = "../common/util.rs"]
@@ -38,7 +34,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("s", "silent", "print nothing, only return an exit status")
     ];
 
-    let silent = match getopts(args.tail(), &options) {
+    let silent = match getopts(&args[1..], &options) {
         Ok(m) => {
             m.opt_present("s")
         },
@@ -59,8 +55,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if !silent {
-        if !tty.as_slice().chars().all(|c| c.is_whitespace()) {
-            println(tty.as_slice());
+        if !tty.chars().all(|c| c.is_whitespace()) {
+            println!("{}", tty);
         } else {
             println!("not a tty");
         }
@@ -77,6 +73,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
     exit_code
 }
 
-fn usage () {
-    safe_writeln!(&mut stderr(), "usage: tty [-s]");
+fn usage() {
+    println!("usage: {} [-s]", NAME);
 }
