@@ -1,5 +1,5 @@
 #![crate_name = "tac"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io as io;
+use std::fs::File;
+use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -23,8 +24,6 @@ static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-
     let opts = [
         getopts::optflag("b", "before", "attach the separator before instead of after"),
         getopts::optflag("r", "regex", "interpret the sequence as a regular expression (NOT IMPLEMENTED)"),
@@ -32,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -40,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("tac {}", VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", &args[0][..]);
         println!("");
         print!("{}", getopts::usage("Write each file to standard output, last line first.", &opts));
     } else if matches.opt_present("version") {
@@ -63,41 +62,86 @@ pub fn uumain(args: Vec<String>) -> i32 {
         } else {
             matches.free
         };
-        tac(files, before, regex, separator.as_slice());
+        tac(files, before, regex, &separator[..]);
     }
 
     0
 }
 
 fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
-    for filename in filenames.into_iter() {
-        let mut file = io::BufferedReader::new(
-            if filename.as_slice() == "-" {
-                Box::new(io::stdio::stdin_raw()) as Box<Reader>
+    let mut out = stdout();
+    let sbytes = separator.as_bytes();
+    let slen = sbytes.len();
+
+    for filename in filenames.iter() {
+        let mut file = BufReader::new(
+            if filename == "-" {
+                Box::new(stdin()) as Box<Read>
             } else {
-                let r = crash_if_err!(1, io::File::open(&Path::new(filename)));
-                Box::new(r) as Box<Reader>
+                match File::open(filename) {
+                    Ok(f) => Box::new(f) as Box<Read>,
+                    Err(e) => {
+                        show_warning!("failed to open '{}' for reading: {}", filename, e);
+                        continue;
+                    },
+                }
+            });
+
+        let mut data = Vec::new();
+        match file.read_to_end(&mut data) {
+            Err(e) => {
+                show_warning!("failed to read '{}': {}", filename, e);
+                continue;
+            },
+            Ok(_) => (),
+        };
+
+        // find offsets in string of all separators
+        let mut offsets = Vec::new();
+        let mut i = 0;
+        loop {
+            if i + slen > data.len() {
+                break;
             }
-        );
-        let mut data = crash_if_err!(1, file.read_to_string());
-        if data.as_slice().ends_with("\n") {
-            // removes blank line that is inserted otherwise
-            let mut buf = data.to_string();
-            let len = buf.len();
-            buf.truncate(len - 1);
-            data = buf.to_string();
+
+            if &data[i..i+slen] == sbytes {
+                offsets.push(i);
+                i += slen;
+            } else {
+                i += 1;
+            }
         }
-        let split_vec: Vec<&str> = data.as_slice().split_str(separator).collect();
-        let rev: String = split_vec.iter().rev().fold(String::new(), |mut a, &b| {
-            if before {
-               a.push_str(separator);
-               a.push_str(b);
+        drop(i);
+
+        // if there isn't a separator at the end of the file, fake it
+        if offsets.len() == 0 || *offsets.last().unwrap() < data.len() - slen {
+            offsets.push(data.len());
+        }
+
+        let mut prev = *offsets.last().unwrap();
+        let mut start = true;
+        for off in offsets.iter().rev().skip(1) {
+            // correctly handle case of no final separator in file
+            if start && prev == data.len() {
+                show_line(&mut out, &[], &data[*off+slen..prev], before);
+                start = false;
             } else {
-                a.push_str(b);
-                a.push_str(separator);
+                show_line(&mut out, sbytes, &data[*off+slen..prev], before);
             }
-            a
-        });
-        print!("{}", rev);
+            prev = *off;
+        }
+        show_line(&mut out, sbytes, &data[0..prev], before);
+    }
+}
+
+fn show_line(out: &mut Stdout, sep: &[u8], dat: &[u8], before: bool) {
+    if before {
+        out.write_all(sep).unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
+    }
+
+    out.write_all(dat).unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
+
+    if !before {
+        out.write_all(sep).unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
     }
 }
