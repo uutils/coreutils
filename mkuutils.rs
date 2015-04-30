@@ -39,7 +39,11 @@ fn main() {
                 util_map.push_str("map.insert(\"false\", uufalse as fn(Vec<String>) -> i32);\n");
             },
             _ => {
-                crates.push_str(&(format!("extern crate {0} as uu{0};\n", prog))[..]);
+                if prog == "test" {
+                    crates.push_str(&(format!("extern crate uu{0} as uu{0};\n", prog))[..]);
+                } else {
+                    crates.push_str(&(format!("extern crate {0} as uu{0};\n", prog))[..]);
+                }
                 util_map.push_str(&(format!("map.insert(\"{prog}\", uu{prog}::uumain as fn(Vec<String>) -> i32);\n", prog = prog))[..]);
             }
         }

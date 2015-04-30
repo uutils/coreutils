@@ -1,5 +1,5 @@
 #![crate_name = "test"]
-#![feature(core, os, std_misc)]
+#![feature(convert)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,16 +13,16 @@
 extern crate libc;
 
 use std::collections::HashMap;
-use std::ffi::CString;
-use std::os::{args_as_bytes};
+use std::ffi::{CString, OsString};
+use std::env::{args_os};
 use std::str::{from_utf8};
 
 static NAME: &'static str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
 pub fn uumain(_: Vec<String>) -> i32 {
-    let args = args_as_bytes();
-    let args: Vec<&[u8]> = args.iter().map(|a| a.as_slice()).collect();
+    let args = args_os().collect::<Vec<OsString>>();
+    let args = args.iter().map(|a| a.to_bytes().unwrap()).collect::<Vec<&[u8]>>();
     if args.len() == 0 {
         return 2;
     }
@@ -30,7 +30,7 @@ pub fn uumain(_: Vec<String>) -> i32 {
         if !args[0].ends_with(NAME.as_bytes()) {
             &args[1..]
         } else {
-            args.as_slice()
+            &args[..]
         };
     let args = match args[0] {
         b"[" => match args[args.len() - 1] {
@@ -83,6 +83,7 @@ fn two(args: &[&[u8]], error: &mut bool) -> bool {
 fn three(args: &[&[u8]], error: &mut bool) -> bool {
     match args[1] {
         b"=" => args[0] == args[2],
+        b"==" => args[0] == args[2],
         b"!=" => args[0] != args[2],
         b"-eq" => integers(args[0], args[2], IntegerCondition::Equal),
         b"-ne" => integers(args[0], args[2], IntegerCondition::Unequal),
@@ -191,6 +192,7 @@ fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Precedence {
     Unknown = 0,
     Paren,     // FIXME: this is useless (parentheses have not been implemented)
@@ -200,8 +202,6 @@ enum Precedence {
     BinOp,
     UnOp
 }
-
-impl Copy for Precedence {}
 
 fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
     if args.len() == 0 {
