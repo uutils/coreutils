@@ -1,5 +1,5 @@
 #![crate_name = "dirname"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,7 +12,7 @@
 
 extern crate getopts;
 
-use std::old_io::print;
+use std::path::Path;
 
 static VERSION: &'static str = "1.0.0";
 
@@ -24,7 +24,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
@@ -35,9 +35,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION] NAME...", program);
         println!("");
-        print(getopts::usage("Output each NAME with its last non-slash component and trailing slashes
+        print!("{}", getopts::usage("Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
-directory).", &opts).as_slice());
+directory).", &opts));
         return 0;
     }
 
@@ -53,12 +53,12 @@ directory).", &opts).as_slice());
 
     if !matches.free.is_empty() {
         for path in matches.free.iter() {
-            let p = std::old_path::Path::new(path.clone());
-            let d = std::str::from_utf8(p.dirname());
-            if d.is_ok() {
-                print(d.unwrap());
+            let p = Path::new(path);
+            let d = p.parent().unwrap().to_str();
+            if d.is_some() {
+                print!("{}", d.unwrap());
             }
-            print(separator);
+            print!("{}", separator);
         }
     } else {
         println!("{0}: missing operand", program);
