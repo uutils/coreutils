@@ -1,14 +1,14 @@
-#![allow(unstable)]
-
-use std::old_io as io;
-use std::old_io::process::Command;
+use std::fs::{File, remove_file};
+use std::io::{Seek, SeekFrom, Write};
+use std::path::Path;
+use std::process::Command;
 
 static PROGNAME: &'static str = "./truncate";
 static TFILE1: &'static str = "truncate_test_1";
 static TFILE2: &'static str = "truncate_test_2";
 
-fn make_file(name: &str) -> io::File {
-    match io::File::create(&Path::new(name)) {
+fn make_file(name: &str) -> File {
+    match File::create(Path::new(name)) {
         Ok(f) => f,
         Err(_) => panic!()
     }
@@ -20,11 +20,11 @@ fn test_increase_file_size() {
     if !Command::new(PROGNAME).args(&["-s", "+5K", TFILE1]).status().unwrap().success() {
         panic!();
     }
-    file.seek(0, io::SeekEnd).unwrap();
-    if file.tell().unwrap() != 5 * 1024 {
+    file.seek(SeekFrom::End(0)).unwrap();
+    if file.seek(SeekFrom::Current(0)).unwrap() != 5 * 1024 {
         panic!();
     }
-    io::fs::unlink(&Path::new(TFILE1)).unwrap();
+    remove_file(Path::new(TFILE1)).unwrap();
 }
 
 #[test]
@@ -34,10 +34,10 @@ fn test_decrease_file_size() {
     if !Command::new(PROGNAME).args(&["--size=-4", TFILE2]).status().unwrap().success() {
         panic!();
     }
-    file.seek(0, io::SeekEnd).unwrap();
-    if file.tell().unwrap() != 6 {
-        println!("{:?}", file.tell());
+    file.seek(SeekFrom::End(0)).unwrap();
+    if file.seek(SeekFrom::Current(0)).unwrap() != 6 {
+        println!("{:?}", file.seek(SeekFrom::Current(0)));
         panic!();
     }
-    io::fs::unlink(&Path::new(TFILE2)).unwrap();
+    remove_file(Path::new(TFILE2)).unwrap();
 }
