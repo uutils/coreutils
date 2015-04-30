@@ -161,6 +161,7 @@ TEST_PROGS  := \
   cat \
   cp \
   env \
+  factor \
   mkdir \
   mv \
   nl \
