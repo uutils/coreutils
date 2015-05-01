@@ -1,5 +1,5 @@
 #![crate_name = "sleep"]
-#![feature(collections, core, old_io, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,9 +13,9 @@
 extern crate getopts;
 extern crate libc;
 
-use std::f64;
-use std::old_io::{print, timer};
-use std::time::duration::{self, Duration};
+use std::io::Write;
+use std::thread::sleep_ms;
+use std::u32::MAX as U32_MAX;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -27,13 +27,11 @@ mod time;
 static NAME: &'static str = "sleep";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-
     let opts = [
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
@@ -45,20 +43,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("sleep 1.0.0");
         println!("");
         println!("Usage:");
-        println!("  {0} NUMBER[SUFFIX]", program);
+        println!("  {0} NUMBER[SUFFIX]", &args[0][..]);
         println!("or");
-        println!("  {0} OPTION", program);
+        println!("  {0} OPTION", &args[0][..]);
         println!("");
-        print(getopts::usage("Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
+        println!("{}", getopts::usage("Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.", &opts).as_slice());
+specified by the sum of their values.", &opts));
     } else if matches.opt_present("version") {
         println!("sleep 1.0.0");
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", program);
+        show_error!("for help, try '{0} --help'", &args[0][..]);
         return 1;
     } else {
         sleep(matches.free);
@@ -68,19 +66,18 @@ specified by the sum of their values.", &opts).as_slice());
 }
 
 fn sleep(args: Vec<String>) {
-    let sleep_time = args.iter().fold(0.0, |result, arg| {
-        let num = match time::from_str(arg.as_slice()) {
-            Ok(m) => m,
-            Err(f) => {
-                crash!(1, "{}", f)
-            }
-        };
-        result + num
-    });
-    let sleep_dur = if sleep_time == f64::INFINITY { 
-        duration::MAX 
+    let sleep_time = args.iter().fold(0.0, |result, arg|
+        match time::from_str(&arg[..]) {
+            Ok(m) => m + result,
+            Err(f) => crash!(1, "{}", f),
+        });
+
+    let sleep_dur = if sleep_time > (U32_MAX as f64) { 
+        U32_MAX
     } else { 
-        Duration::seconds(sleep_time as i64)
+        (1000.0 * sleep_time) as u32
     };
-    timer::sleep(sleep_dur);
+    sleep_ms(sleep_dur);
 }
+
+
