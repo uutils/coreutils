@@ -1,5 +1,5 @@
 #![crate_name = "groups"]
-#![feature(collections, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,12 +12,9 @@
  */
 extern crate getopts;
 
-use getopts::{
-    optflag,
-    getopts,
-    usage
-};
 use c_types::{get_pw_from_args, group};
+use getopts::{getopts, optflag, usage};
+use std::io::Write;
 
 #[path = "../common/util.rs"] #[macro_use]  mod util;
 #[path = "../common/c_types.rs"] mod c_types;
@@ -33,7 +30,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("V", "version", "display version information and exit")
     ];
 
-    let matches = match getopts(args.tail(), &options) {
+    let matches = match getopts(&args[1..], &options) {
         Ok(m) => { m },
         Err(f) => {
             show_error!("{}", f);

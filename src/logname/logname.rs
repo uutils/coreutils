@@ -1,5 +1,5 @@
 #![crate_name = "logname"]
-#![feature(collections, core, old_io, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,14 +12,11 @@
 
 /* last synced with: logname (GNU coreutils) 8.22 */
 
-#![allow(non_camel_case_types)]
-
 extern crate getopts;
 extern crate libc;
 
 use std::ffi::CStr;
-use std::old_io::print;
-use libc::c_char;
+use std::io::Write;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 
@@ -30,12 +27,12 @@ extern {
 
 fn get_userlogin() -> Option<String> {
     unsafe {
-            let login: *const libc::c_char = getlogin();
-            if login.is_null() {
-                    None
-            } else {
-                    Some(String::from_utf8_lossy(CStr::from_ptr(login).to_bytes()).to_string())
-            }
+        let login: *const libc::c_char = getlogin();
+        if login.is_null() {
+            None
+        } else {
+            Some(String::from_utf8_lossy(CStr::from_ptr(login).to_bytes()).to_string())
+        }
     }
 }
 
@@ -57,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -68,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {}", program);
         println!("");
-        print(getopts::usage("print user's login name", &opts).as_slice());
+        print!("{}", getopts::usage("print user's login name", &opts));
         return 0;
     }
     if matches.opt_present("version") {
@@ -82,8 +79,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn exec() {
-        match get_userlogin() {
-                Some(userlogin) => println!("{}", userlogin),
-                None => println!("{}: no login name", NAME)
-        }
+    match get_userlogin() {
+        Some(userlogin) => println!("{}", userlogin),
+        None => println!("{}: no login name", NAME)
+    }
 }
