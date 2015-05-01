@@ -1,5 +1,5 @@
 #![crate_name = "printenv"]
-#![feature(collections, core, old_io, os, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,8 +15,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::os;
-use std::old_io::print;
+use std::env;
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -31,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit"),
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f)
@@ -43,7 +43,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [VARIABLE]... [OPTION]...", program);
         println!("");
-        print(getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", &opts).as_slice());
+        print!("{}", getopts::usage("Prints the given environment VARIABLE(s), otherwise prints them all.", &opts));
         return 0;
     }
     if matches.opt_present("version") {
@@ -62,19 +62,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 pub fn exec(args: Vec<String>, separator: &str) {
     if args.is_empty() {
-        let vars = os::env();
-        for (env_var, value) in vars.into_iter() {
-            print!("{0}={1}", env_var, value);
-            print(separator);
+        for (env_var, value) in env::vars() {
+            print!("{}={}{}", env_var, value, separator);
         }
         return;
     }
 
     for env_var in args.iter() {
-        match os::getenv(env_var.as_slice()) {
-            Some(var) => {
-                print(var.as_slice());
-                print(separator);
+        match env::var(env_var) {
+            Ok(var) => {
+                print!("{}{}", var, separator);
             }
             _ => ()
         }
