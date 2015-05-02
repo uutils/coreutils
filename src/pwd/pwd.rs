@@ -1,5 +1,5 @@
 #![crate_name = "pwd"]
-#![feature(collections, core, old_io, os, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io::print;
+use std::env;
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -29,7 +30,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f)
@@ -42,14 +43,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION] NAME...", program);
         println!("");
-        print(getopts::usage("Print the full filename of the current working directory.", &opts).as_slice());
+        print!("{}", getopts::usage("Print the full filename of the current working directory.", &opts));
     } else if matches.opt_present("version") {
         println!("pwd version: {}", VERSION);
 
         return 0;
     } else {
-        let cwd = std::os::getcwd();
-        println!("{}", cwd.unwrap().display());
+        println!("{:?}", env::current_dir().unwrap());
 
         return 0;
     }
