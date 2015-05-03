@@ -1,5 +1,5 @@
 #![crate_name = "hostid"]
-#![feature(collections, core, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -10,22 +10,14 @@
  * that was distributed with this source code.
  */
 
-
 extern crate getopts;
-extern crate collections;
 extern crate serialize;
 extern crate libc;
-
-
 #[macro_use] extern crate log;
 
-use getopts::{
-    getopts,
-    optflag,
-    usage,
-};
-
+use getopts::{getopts, optflag, usage};
 use libc::{c_long};
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -42,15 +34,12 @@ pub enum Mode {
     Version,
 }
 
-impl Copy for Mode {}
-
 //currently rust libc interface doesn't include gethostid
 extern {
     pub fn gethostid() -> c_long;
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-
     let opts = [
         optflag("", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),
@@ -58,11 +47,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let usage = usage("[options]", &opts);
 
-
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));
+            show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_ref()));
             return EXIT_ERR;
         },
     };
@@ -77,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     match mode {
         Mode::HostId  => hostid(),
-        Mode::Help    => help(NAME, usage.as_slice()),
+        Mode::Help    => help(NAME, usage.as_ref()),
         Mode::Version => version(),
     }
 
@@ -97,10 +85,11 @@ fn help(progname: &str, usage: &str) {
 }
 
 fn hostid() {
-
-  /* POSIX says gethostid returns a "32-bit identifier" but is silent
-     whether it's sign-extended.  Turn off any sign-extension.  This
-     is a no-op unless unsigned int is wider than 32 bits.  */
+  /*
+   * POSIX says gethostid returns a "32-bit identifier" but is silent
+   * whether it's sign-extended.  Turn off any sign-extension.  This
+   * is a no-op unless unsigned int is wider than 32 bits.
+   */
 
     let mut result:c_long;
     unsafe {
