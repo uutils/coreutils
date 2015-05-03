@@ -15,8 +15,9 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::{getopts, optflag};
 use std::ffi::CStr;
-use getopts::{optflag,getopts};
+use std::io::Write;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -28,51 +29,56 @@ extern {
 }
 
 static NAME: &'static str = "tty";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let options = [
-        optflag("s", "silent", "print nothing, only return an exit status")
+        optflag("s", "silent", "print nothing, only return an exit status"),
+        optflag("h", "help", "display this help and exit"),
+        optflag("V", "version", "output version information and exit")
     ];
 
-    let silent = match getopts(&args[1..], &options) {
-        Ok(m) => {
-            m.opt_present("s")
-        },
+    let matches = match getopts(&args[1..], &options) {
+        Ok(m) => m,
         Err(f) => {
-            println!("{}", f);
-            usage();
-            return 2;
+            crash!(2, "{}", f)
         }
     };
 
-    let tty = unsafe { 
-        let ptr = ttyname(libc::STDIN_FILENO);
-        if !ptr.is_null() {
-            String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
-        } else {
-            "".to_string()
-        }
-    };
+    if matches.opt_present("help") {
+        let usage = getopts::usage("Print the file name of the terminal connected to standard input.", &options);
 
-    if !silent {
-        if !tty.chars().all(|c| c.is_whitespace()) {
-            println!("{}", tty);
-        } else {
-            println!("not a tty");
+        println!("Usage: {} [OPTION]...\n{}", NAME, usage);
+    } else if matches.opt_present("version") {
+        println!("{} {}", NAME, VERSION);
+    } else {
+        let silent = matches.opt_present("s");
+
+        let tty = unsafe {
+            let ptr = ttyname(libc::STDIN_FILENO);
+            if !ptr.is_null() {
+                String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
+            } else {
+                "".to_string()
+            }
+        };
+
+        if !silent {
+            if !tty.chars().all(|c| c.is_whitespace()) {
+                println!("{}", tty);
+            } else {
+                println!("not a tty");
+            }
         }
+
+        return unsafe {
+            if isatty(libc::STDIN_FILENO) == 1 {
+                libc::EXIT_SUCCESS
+            } else {
+                libc::EXIT_FAILURE
+            }
+        };
     }
 
-    let exit_code = unsafe {
-        if isatty(libc::STDIN_FILENO) == 1 {
-            libc::EXIT_SUCCESS
-        } else {
-            libc::EXIT_FAILURE
-        }
-    };
-
-    exit_code
-}
-
-fn usage() {
-    println!("usage: {} [-s]", NAME);
+    0
 }
