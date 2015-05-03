@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         return 0;
     } else {
-        println!("{:?}", env::current_dir().unwrap());
+        println!("{}", env::current_dir().unwrap().display());
 
         return 0;
     }
