@@ -1,5 +1,5 @@
 #![crate_name = "sort"]
-#![feature(collections, core, old_io, old_path, rustc_private, unicode)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,10 +13,15 @@
 #![allow(dead_code)]
 
 extern crate getopts;
+extern crate libc;
 
+use libc::consts::os::posix88::STDIN_FILENO;
+use libc::funcs::posix88::unistd::isatty;
+use libc::types::os::arch::c95::c_int;
 use std::cmp::Ordering;
-use std::old_io::{print, File, BufferedReader};
-use std::old_io::stdio::stdin_raw;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::path::Path;
 use std::str::Chars;
 
 #[path = "../common/util.rs"]
@@ -30,7 +35,6 @@ static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
     let opts = [
         getopts::optflag("n", "numeric-sort", "compare according to string numerical value"),
         getopts::optflag("r", "reverse", "reverse the output"),
@@ -38,15 +42,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("Usage: {0} [OPTION]... [FILE]...", program);
+        println!("Usage: {0} [OPTION]... [FILE]...", args[0]);
         println!("Write the sorted concatenation of all FILE(s) to standard output.");
         println!("");
-        print(getopts::usage("Mandatory arguments for long options are mandatory for short options too.", &opts).as_slice());
+        print!("{}", getopts::usage("Mandatory arguments for long options are mandatory for short options too.", &opts));
         println!("");
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
@@ -73,12 +77,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn exec(files: Vec<String>, numeric: bool, reverse: bool) {
     for path in files.iter() {
-        let (reader, _) = match open(path.as_slice()) {
+        let (reader, _) = match open(path) {
             Some(x) => x,
             None => continue,
         };
         
-        let mut buf_reader = BufferedReader::new(reader);
+        let buf_reader = BufReader::new(reader);
         let mut lines = Vec::new();
 
         for line in buf_reader.lines() {
@@ -116,8 +120,8 @@ fn skip_zeros(mut char_a: char, char_iter: &mut Chars, ret: Ordering) -> Orderin
 /// Compares two decimal fractions as strings (n < 1)
 /// This requires the strings to start with a decimal, otherwise it's treated as 0
 fn frac_compare(a: &String, b: &String) -> Ordering {
-    let a_chars = &mut a.as_slice().chars();
-    let b_chars = &mut b.as_slice().chars();
+    let a_chars = &mut a.chars();
+    let b_chars = &mut b.chars();
 
     let mut char_a = match a_chars.next() { None => 0 as char, Some(t) => t };
     let mut char_b = match b_chars.next() { None => 0 as char, Some(t) => t };
@@ -153,15 +157,15 @@ fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
 }
 
 // from cat.rs
-fn open<'a>(path: &str) -> Option<(Box<Reader + 'a>, bool)> {
+fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
     if path == "-" {
-        let stdin = stdin_raw();
-        let interactive = stdin.isatty();
-        return Some((Box::new(stdin) as Box<Reader>, interactive));
+        let stdin = stdin();
+        let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
+        return Some((Box::new(stdin) as Box<Read>, interactive));
     }
 
-    match File::open(&std::old_path::Path::new(path)) {
-        Ok(f) => Some((Box::new(f) as Box<Reader>, false)),
+    match File::open(Path::new(path)) {
+        Ok(f) => Some((Box::new(f) as Box<Read>, false)),
         Err(e) => {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
