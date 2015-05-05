@@ -1,8 +1,9 @@
-#![allow(unstable)]
+#![feature(path_ext)]
 
-use std::old_io::process::Command;
-use std::old_io::File;
-use std::old_io::fs::{unlink, PathExtensions};
+use std::fs::{File, PathExt, remove_file};
+use std::io::Read;
+use std::path::{Path};
+use std::process::Command;
 
 static EXE: &'static str = "./cp";
 static TEST_HELLO_WORLD_SOURCE: &'static str = "hello_world.txt";
@@ -11,7 +12,7 @@ static TEST_HELLO_WORLD_DEST: &'static str = "copy_of_hello_world.txt";
 fn cleanup(filename: &'static str) {
     let path = Path::new(filename);
     if path.exists() {
-        unlink(&path).unwrap();
+        remove_file(&path).unwrap();
     }
 }
 
@@ -29,10 +30,10 @@ fn test_cp_cp() {
     assert_eq!(exit_success, true);
 
     // Check the content of the destination file that was copied.
-    let contents = File::open(&Path::new(TEST_HELLO_WORLD_DEST))
-                            .read_to_string()
-                            .unwrap();
-    assert_eq!(contents.as_slice(), "Hello, World!\n");
+    let mut contents = String::new();
+    let mut f = File::open(Path::new(TEST_HELLO_WORLD_DEST)).unwrap();
+    let _ = f.read_to_string(&mut contents);
+    assert_eq!(contents, "Hello, World!\n");
 
     cleanup(TEST_HELLO_WORLD_SOURCE);
     cleanup(TEST_HELLO_WORLD_DEST);
