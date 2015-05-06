@@ -35,7 +35,7 @@ fn numeric_helper(test_num: isize) {
     cmd.arg("-n");
     let po = match cmd.arg(format!("{}{}{}", "numeric", test_num, ".txt")).output() {
         Ok(p) => p,
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!("{}", err)
     };
 
     let filename = format!("{}{}{}", "numeric", test_num, ".ans");
@@ -43,6 +43,9 @@ fn numeric_helper(test_num: isize) {
         panic!("{}", err)
     });
     let mut answer = vec!();
-    let _ = f.read_to_end(&mut answer);
+    match f.read_to_end(&mut answer) {
+        Ok(_) => {},
+        Err(err) => panic!("{}", err)
+    }
     assert_eq!(String::from_utf8(po.stdout).unwrap(), String::from_utf8(answer).unwrap());
 }
