@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(collections, core, old_io, os, old_path, rustc_private)]
+#![feature(file_type, path_ext, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,10 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{optflag, getopts, usage};
+use getopts::{getopts, optflag, usage};
+use std::fs::PathExt;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 
@@ -30,21 +33,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("q", "quiet", "Do not print warnings for invalid paths"),
     ];
 
-    let opts = match getopts(args.tail(), &options) {
+    let opts = match getopts(&args[1..], &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            show_usage(program.as_slice(), &options);
+            show_usage(program, &options);
             return 1
         }
     };
 
     if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { show_usage(program.as_slice(), &options); return 0 }
+    if opts.opt_present("h") { show_usage(program, &options); return 0 }
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: FILENAME, at least one is required");
-        println!("Try `{} --help` for more information.", program.as_slice());
+        println!("Try `{} --help` for more information.", program);
         return 1
     }
 
@@ -53,7 +56,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let quiet = opts.opt_present("q");
     let mut retcode = 0;
     for path in opts.free.iter() {
-        if !resolve_path(path.as_slice(), strip, zero, quiet) {
+        if !resolve_path(path, strip, zero, quiet) {
             retcode = 1
         };
     }
@@ -61,8 +64,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
-    let p = Path::new(path);
-    let abs = std::os::make_absolute(&p).unwrap();
+    let p = Path::new(path).to_path_buf();
+    let abs = p.canonicalize().unwrap();
 
     if strip {
         if zero {
@@ -73,29 +76,25 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         return true
     }
 
-    let mut result = match abs.root_path() {
-        None => crash!(2, "Broken path parse! Report to developers: {}", path),
-        Some(x) => x,
-    };
-
-    let mut links_left = 256isize;
+    let mut result = PathBuf::new();
+    let mut links_left = 256;
 
     for part in abs.components() {
-        result.push(part);
+        result.push(part.as_ref());
         loop {
             if links_left == 0 {
                 if !quiet { show_error!("Too many symbolic links: {}", path) };
                 return false
             }
-            match std::old_io::fs::lstat(&result) {
+            match result.as_path().metadata() {
                 Err(_) => break,
-                Ok(ref s) if s.kind != std::old_io::FileType::Symlink => break,
+                Ok(ref m) if !m.file_type().is_symlink() => break,
                 Ok(_) => {
                     links_left -= 1;
-                    match std::old_io::fs::readlink(&result) {
+                    match result.as_path().read_link() {
                         Ok(x) => {
                             result.pop();
-                            result.push(x);
+                            result.push(x.as_path());
                         },
                         _ => {
                             if !quiet {

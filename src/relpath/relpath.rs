@@ -1,5 +1,5 @@
 #![crate_name = "relpath"]
-#![feature(collections, core, os, old_path, rustc_private)]
+#![feature(path_ext, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,11 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{optflag, optopt, getopts, usage};
+use getopts::{getopts, optflag, optopt, usage};
+use std::env;
+use std::fs::PathExt;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 
@@ -28,37 +32,37 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optopt("d", "", "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative", "DIR"),
     ];
 
-    let opts = match getopts(args.tail(), &options) {
+    let opts = match getopts(&args[1..], &options) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            show_usage(program.as_slice(), &options);
+            show_usage(program, &options);
             return 1
         }
     };
 
     if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { show_usage(program.as_slice(), &options); return 0 }
+    if opts.opt_present("h") { show_usage(program, &options); return 0 }
 
     if opts.free.len() == 0 {
         show_error!("Missing operand: TO");
-        println!("Try `{} --help` for more information.", program.as_slice());
+        println!("Try `{} --help` for more information.", program);
         return 1
     }
 
-    let to = Path::new(opts.free[0].as_slice());
+    let to = Path::new(&opts.free[0]);
     let from = if opts.free.len() > 1 {
-        Path::new(opts.free[1].as_slice())
+        Path::new(&opts.free[1]).to_path_buf()
     } else {
-        std::os::getcwd().unwrap()
+        env::current_dir().unwrap()
     };
-    let absto = std::os::make_absolute(&to).unwrap();
-    let absfrom = std::os::make_absolute(&from).unwrap();
+    let absto = to.canonicalize().unwrap();
+    let absfrom = from.canonicalize().unwrap();
 
     if opts.opt_present("d") {
-        let base = Path::new(opts.opt_str("d").unwrap());
-        let absbase = std::os::make_absolute(&base).unwrap();
-        if !absbase.is_ancestor_of(&absto) || !absbase.is_ancestor_of(&absfrom) {
+        let base = Path::new(&opts.opt_str("d").unwrap()).to_path_buf();
+        let absbase = base.canonicalize().unwrap();
+        if !absto.as_path().starts_with(absbase.as_path()) || !absfrom.as_path().starts_with(absbase.as_path()) {
             println!("{}", absto.display());
             return 0
         }
@@ -73,9 +77,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
 
-    let mut result = Path::new("");
+    let mut result = PathBuf::new();
     absfrom.components().skip(suffix_pos).map(|_| result.push("..")).last();
-    absto.components().skip(suffix_pos).map(|x| result.push(x)).last();
+    absto.components().skip(suffix_pos).map(|x| result.push(x.as_ref())).last();
 
     println!("{}", result.display());
     0
