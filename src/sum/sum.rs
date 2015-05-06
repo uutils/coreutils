@@ -1,5 +1,5 @@
 #![crate_name = "sum"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -13,8 +13,9 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io::{File, IoResult, print};
-use std::old_io::stdio::{stdin_raw};
+use std::fs::File;
+use std::io::{Read, Result, stdin, Write};
+use std::path::Path;
 
 #[path="../common/util.rs"]
 #[macro_use]
@@ -23,7 +24,7 @@ mod util;
 static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "sum";
 
-fn bsd_sum(mut reader: Box<Reader>) -> (usize, u16) {
+fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
     let mut blocks_read = 0;
     let mut checksum: u16 = 0;
@@ -43,7 +44,7 @@ fn bsd_sum(mut reader: Box<Reader>) -> (usize, u16) {
     (blocks_read, checksum)
 }
 
-fn sysv_sum(mut reader: Box<Reader>) -> (usize, u16) {
+fn sysv_sum(mut reader: Box<Read>) -> (usize, u16) {
     let mut buf = [0; 512];
     let mut blocks_read = 0;
     let mut ret = 0;
@@ -66,18 +67,18 @@ fn sysv_sum(mut reader: Box<Reader>) -> (usize, u16) {
     (blocks_read, ret as u16)
 }
 
-fn open(name: &str) -> IoResult<Box<Reader>> {
+fn open(name: &str) -> Result<Box<Read>> {
     match name {
-        "-" => Ok(Box::new(stdin_raw()) as Box<Reader>),
+        "-" => Ok(Box::new(stdin()) as Box<Read>),
         _ => {
             let f = try!(File::open(&Path::new(name)));
-            Ok(Box::new(f) as Box<Reader>)
+            Ok(Box::new(f) as Box<Read>)
         }
     }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
+    let program = &args[0];
     let opts = [
         getopts::optflag("r", "", "use the BSD compatible algorithm (default)"),
         getopts::optflag("s", "sysv", "use System V compatible algorithm"),
@@ -85,7 +86,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("v", "version", "print the version and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -96,7 +97,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", program);
         println!("");
-        print(getopts::usage("checksum and count the blocks in a file", &opts).as_slice());
+        print!("{}", getopts::usage("checksum and count the blocks in a file", &opts));
         println!("");
         println!("With no FILE, or when  FILE is -, read standard input.");
         return 0;
@@ -117,7 +118,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let print_names = sysv || files.len() > 1;
 
     for file in files.iter() {
-        let reader = match open(file.as_slice()) {
+        let reader = match open(file) {
             Ok(f) => f,
             _ => crash!(1, "unable to open file")
         };
