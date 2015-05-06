@@ -1,5 +1,5 @@
 #![crate_name = "cp"]
-#![feature(collections, core, old_io, os, old_path, rustc_private)]
+#![feature(rustc_private, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,31 +13,28 @@
 extern crate getopts;
 #[macro_use] extern crate log;
 
-use std::os;
-use std::old_io as io;
-use std::old_io::fs;
+use getopts::{getopts, optflag, usage};
+use std::fs;
+use std::fs::{PathExt};
+use std::io::{ErrorKind, Result};
+use std::path::Path;
 
-use getopts::{
-    getopts,
-    optflag,
-    usage,
-};
-
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
     Copy,
     Help,
     Version,
 }
 
-impl Copy for Mode {}
+static NAME: &'static str = "cp";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
         optflag("h", "help", "display this help and exit"),
         optflag("", "version", "output version information and exit"),
     ];
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(e) => {
             error!("error: {}", e);
@@ -57,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     match mode {
         Mode::Copy    => copy(matches),
-        Mode::Help    => help(progname.as_slice(), usage.as_slice()),
+        Mode::Help    => help(&progname, &usage),
         Mode::Version => version(),
     }
 
@@ -65,10 +62,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn version() {
-    println!("cp 1.0.0");
+    println!("{} {}", NAME, VERSION);
 }
 
-fn help(progname: &str, usage: &str) {
+fn help(progname: &String, usage: &String) {
     let msg = format!("Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY\n  \
                          or:  {0} -t DIRECTORY SOURCE\n\
@@ -78,101 +75,80 @@ fn help(progname: &str, usage: &str) {
 }
 
 fn copy(matches: getopts::Matches) {
-    let sources : Vec<Path> = if matches.free.len() < 1 {
+    let sources: Vec<String> = if matches.free.is_empty() {
         error!("error: Missing SOURCE argument. Try --help.");
         panic!()
     } else {
         // All but the last argument:
-        matches.free[..matches.free.len() - 1].iter()
-            .map(|arg| Path::new(arg.clone())).collect()
+        matches.free[..matches.free.len() - 1].iter().map(|arg| arg.clone()).collect()
     };
     let dest = if matches.free.len() < 2 {
         error!("error: Missing DEST argument. Try --help.");
         panic!()
     } else {
         // Only the last argument:
-        Path::new(matches.free[matches.free.len() - 1].as_slice())
+        Path::new(&matches.free[matches.free.len() - 1])
     };
 
     assert!(sources.len() >= 1);
 
     if sources.len() == 1 {
-        let source = &sources[0];
-        let same_file = match paths_refer_to_same_file(source, &dest) {
-            Ok(b)  => b,
-            Err(e) => if e.kind == io::FileNotFound {
-                false
-            } else {
-                error!("error: {}", e.to_string());
-                panic!()
+        let source = Path::new(&sources[0]);
+        let same_file = paths_refer_to_same_file(source, dest).unwrap_or_else(|err| {
+            match err.kind() {
+                ErrorKind::NotFound => false,
+                _ => {
+                    error!("error: {}", err);
+                    panic!()
+                }
             }
-        };
+        });
 
         if same_file {
             error!("error: \"{}\" and \"{}\" are the same file",
-                source.display().to_string(),
-                dest.display().to_string());
+                source.display(),
+                dest.display());
             panic!();
         }
 
-        let io_result = fs::copy(source, &dest);
-
-        if let Err(err) = io_result {
-            error!("error: {}", err.to_string());
+        if let Err(err) = fs::copy(source, dest) {
+            error!("error: {}", err);
             panic!();
         }
     } else {
-        if fs::stat(&dest).unwrap().kind != io::FileType::Directory {
+        if !fs::metadata(dest).unwrap().is_dir() {
             error!("error: TARGET must be a directory");
             panic!();
         }
 
-        for source in sources.iter() {
-            if fs::stat(source).unwrap().kind != io::FileType::RegularFile {
-                error!("error: \"{}\" is not a file", source.display().to_string());
+        for src in sources.iter() {
+            let source = Path::new(&src);
+
+            if !fs::metadata(source).unwrap().is_file() {
+                error!("error: \"{}\" is not a file", source.display());
                 continue;
             }
 
-            let mut full_dest = dest.clone();
+            let mut full_dest = dest.to_path_buf();
 
-            full_dest.push(source.filename_str().unwrap());
+            full_dest.push(source.to_str().unwrap());
 
-            println!("{}", full_dest.display().to_string());
+            println!("{}", full_dest.display());
 
-            let io_result = fs::copy(source, &full_dest);
+            let io_result = fs::copy(source, full_dest);
 
             if let Err(err) = io_result {
-                error!("error: {}", err.to_string());
+                error!("error: {}", err);
                 panic!()
             }
         }
     }
 }
 
-pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::IoResult<bool> {
-    let mut raw_p1 = p1.clone();
-    let mut raw_p2 = p2.clone();
-
-    let p1_lstat = match fs::lstat(&raw_p1) {
-        Ok(stat) => stat,
-        Err(e)   => return Err(e),
-    };
-
-    let p2_lstat = match fs::lstat(&raw_p2) {
-        Ok(stat) => stat,
-        Err(e)   => return Err(e),
-    };
-
+pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
     // We have to take symlinks and relative paths into account.
-    if p1_lstat.kind == io::FileType::Symlink {
-        raw_p1 = fs::readlink(&raw_p1).unwrap();
-    }
-    raw_p1 = os::make_absolute(&raw_p1).unwrap();
+    let pathbuf1 = try!(p1.canonicalize());
+    let pathbuf2 = try!(p2.canonicalize());
 
-    if p2_lstat.kind == io::FileType::Symlink {
-        raw_p2 = fs::readlink(&raw_p2).unwrap();
-    }
-    raw_p2 = os::make_absolute(&raw_p2).unwrap();
-
-    Ok(raw_p1 == raw_p2)
+    Ok(pathbuf1 == pathbuf2)
 }
