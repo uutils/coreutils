@@ -67,8 +67,10 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
             }
         )
     ).collect();
-    let delimiters: Vec<String> = delimiters.chars().map(|x| x.to_string()).collect();
+
+    let delimiters: Vec<String> = unescape(delimiters).chars().map(|x| x.to_string()).collect();
     let mut delim_count = 0;
+
     if serial {
         for file in files.iter_mut() {
             let mut output = String::new();
@@ -115,4 +117,13 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
             delim_count = 0;
         }
     }
+}
+
+// Unescape all special characters
+// TODO: this will need work to conform to GNU implementation
+fn unescape(s: String) -> String {
+    s.replace("\\n", "\n")
+     .replace("\\t", "\t")
+     .replace("\\\\", "\\")
+     .replace("\\", "")
 }
