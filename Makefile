@@ -387,4 +387,15 @@ build-check:
 		fi; \
 	done
 
+# This rule will test each program, ignore all output, and return pass
+# or fail depending on whether the test has errors.
+test-check:
+	@for prog in $(sort $(TEST_PROGS)); do \
+		make TEST="$$prog" test >/dev/null 2>&1; status=$$?; \
+		if [ $$status -eq 0 ]; \
+		then printf "%-10s\t\033[1;32mpass\033[00;m\n" $$prog; \
+		else printf "%-10s\t\033[1;31mfail\033[00;m\n" $$prog; \
+		fi; \
+	done
+
 .PHONY: $(TEMPDIR) all deps test distclean clean busytest install uninstall
