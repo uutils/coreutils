@@ -1,5 +1,5 @@
 #![crate_name = "paste"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,8 +13,10 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io as io;
-use std::iter::repeat; 
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::iter::repeat;
+use std::fs::File;
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -24,7 +26,7 @@ static NAME: &'static str = "paste";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
+    let program = &args[0];
 
     let opts = [
         getopts::optflag("s", "serial", "paste one file at a time instead of in parallel"),
@@ -32,9 +34,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "display this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(e) => crash!(1, "{}", e)
     };
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
@@ -47,24 +49,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{} {}", NAME, VERSION);
     } else {
         let serial = matches.opt_present("serial");
-        let delimiters = match matches.opt_str("delimiters") {
-            Some(m) => m,
-            None => "\t".to_string()
-        };
-        paste(matches.free, serial, delimiters.as_slice());
+        let delimiters = matches.opt_str("delimiters").unwrap_or("\t".to_string());
+        paste(matches.free, serial, delimiters);
     }
 
     0
 }
 
-fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
-    let mut files: Vec<io::BufferedReader<Box<Reader>>> = filenames.into_iter().map(|name|
-        io::BufferedReader::new(
-            if name.as_slice() == "-" {
-                Box::new(io::stdio::stdin_raw()) as Box<Reader>
+fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
+    let mut files: Vec<BufReader<Box<Read>>> = filenames.into_iter().map(|name|
+        BufReader::new(
+            if name == "-" {
+                Box::new(stdin()) as Box<Read>
             } else {
-                let r = crash_if_err!(1, io::File::open(&Path::new(name)));
-                Box::new(r) as Box<Reader>
+                let r = crash_if_err!(1, File::open(Path::new(&name)));
+                Box::new(r) as Box<Read>
             }
         )
     ).collect();
@@ -74,47 +73,45 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
         for file in files.iter_mut() {
             let mut output = String::new();
             loop {
-                match file.read_line() {
-                    Ok(line) => {
-                        output.push_str(line.as_slice().trim_right());
-                        output.push_str(delimiters[delim_count % delimiters.len()].as_slice());
+                let mut line = String::new();
+                match file.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        output.push_str(line.trim_right());
+                        output.push_str(&delimiters[delim_count % delimiters.len()]);
                     }
-                    Err(f) => if f.kind == io::EndOfFile {
-                        break
-                    } else {
-                        crash!(1, "{}", f.to_string())
-                    }
+                    Err(e) => crash!(1, "{}", e.to_string())
                 }
                 delim_count += 1;
             }
-            println!("{}", output.as_slice().slice_to(output.len() - 1));
+            println!("{}", &output[..output.len()-1]);
         }
     } else {
-        let mut eof : Vec<bool> = repeat(false).take(files.len()).collect();
+        let mut eof: Vec<bool> = repeat(false).take(files.len()).collect();
         loop {
-            let mut output = "".to_string();
+            let mut output = String::new();
             let mut eof_count = 0;
             for (i, file) in files.iter_mut().enumerate() {
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    match file.read_line() {
-                        Ok(line) => output.push_str(&line.as_slice()[..line.len() - 1]),
-                        Err(f) => if f.kind == io::EndOfFile {
+                    let mut line = String::new();
+                    match file.read_line(&mut line) {
+                        Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
-                        } else {
-                            crash!(1, "{}", f.to_string());
                         }
+                        Ok(_) => output.push_str(line.trim_right()),
+                        Err(e) => crash!(1, "{}", e.to_string())
                     }
                 }
-                output.push_str(delimiters[delim_count % delimiters.len()].as_slice());
+                output.push_str(&delimiters[delim_count % delimiters.len()]);
                 delim_count += 1;
             }
             if files.len() == eof_count {
                 break;
             }
-            println!("{}", output.as_slice().slice_to(output.len() - 1));
+            println!("{}", &output[..output.len()-1]);
             delim_count = 0;
         }
     }
