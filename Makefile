@@ -164,6 +164,7 @@ TEST_PROGS  := \
   mkdir \
   mv \
   nl \
+  paste \
   seq \
   sort \
   test \
