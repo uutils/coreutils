@@ -1,5 +1,5 @@
 #![crate_name = "comm"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,10 +13,9 @@
 extern crate getopts;
 
 use std::cmp::Ordering;
-use std::old_io::{BufferedReader, IoResult, print};
-use std::old_io::fs::File;
-use std::old_io::stdio::{stdin, StdinReader};
-use std::old_path::Path;
+use std::io::{self, stdin, Stdin, BufReader, BufRead, Read};
+use std::fs::File;
+use std::path::Path;
 
 static NAME : &'static str = "comm";
 static VERSION : &'static str = "1.0.0";
@@ -29,81 +28,90 @@ fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     };
 
     if col > 1 && !opts.opt_present("1") {
-        s.push_str(delim.as_slice());
+        s.push_str(delim.as_ref());
     }
     if col > 2 && !opts.opt_present("2") {
-        s.push_str(delim.as_slice());
+        s.push_str(delim.as_ref());
     }
 
     s
 }
 
-fn ensure_nl(line: String) -> String {
-    match line.as_slice().chars().last() {
-        Some('\n') => line,
-        _ => line + "\n",
+fn ensure_nl(line: &mut String) {
+    match line.chars().last() {
+        Some('\n') => (),
+        _ => line.push_str("\n")
     }
 }
 
 enum LineReader {
-    Stdin(StdinReader),
-    FileIn(BufferedReader<File>)
+    Stdin(Stdin),
+    FileIn(BufReader<File>)
 }
 
 impl LineReader {
-    fn read_line(&mut self) -> IoResult<String> {
+    fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         match self {
-            &mut LineReader::Stdin(ref mut r)  => r.read_line(),
-            &mut LineReader::FileIn(ref mut r) => r.read_line(),
+            &mut LineReader::Stdin(ref mut r)  => r.read_line(buf),
+            &mut LineReader::FileIn(ref mut r) => r.read_line(buf),
         }
     }
 }
 
 fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 
-    let delim : Vec<String> = range(0, 4).map(|col| mkdelim(col, opts)).collect();
+    let delim : Vec<String> = (0 .. 4).map(|col| mkdelim(col, opts)).collect();
 
-    let mut ra = a.read_line();
-    let mut rb = b.read_line();
+    let mut ra = &mut String::new();
+    let mut na = a.read_line(ra);
+    let mut rb = &mut String::new();
+    let mut nb = b.read_line(rb);
 
-    while ra.is_ok() || rb.is_ok() {
-        let ord = match (ra.clone(), rb.clone()) {
-            (Err(_), Ok(_))  => Ordering::Greater,
-            (Ok(_) , Err(_)) => Ordering::Less,
-            (Ok(s0), Ok(s1)) => s0.cmp(&s1),
+    while na.is_ok() || nb.is_ok() {
+        let ord = match (na.is_ok(), nb.is_ok()) {
+            (false, true)  => Ordering::Greater,
+            (true , false) => Ordering::Less,
+            (true , true) => match(&na, &nb) {
+                (&Ok(0), _) => Ordering::Greater,
+                (_, &Ok(0)) => Ordering::Less,
+                _ =>  ra.cmp(&rb),
+            },
             _ => unreachable!(),
         };
 
         match ord {
             Ordering::Less => {
                 if !opts.opt_present("1") {
-                    print!("{}{}", delim[1], ra.map(ensure_nl).unwrap());
+                    ensure_nl(ra);
+                    print!("{}{}", delim[1], ra);
                 }
-                ra = a.read_line();
-            }
+                na = a.read_line(ra);
+            },
             Ordering::Greater => {
                 if !opts.opt_present("2") {
-                    print!("{}{}", delim[2], rb.map(ensure_nl).unwrap());
+                    ensure_nl(rb);
+                    print!("{}{}", delim[2], rb);
                 }
-                rb = b.read_line();
-            }
+                nb = b.read_line(rb);
+            },
             Ordering::Equal => {
                 if !opts.opt_present("3") {
-                    print!("{}{}", delim[3], ra.map(ensure_nl).unwrap());
+                    ensure_nl(ra);
+                    print!("{}{}", delim[3], ra);
                 }
-                ra = a.read_line();
-                rb = b.read_line();
+                na = a.read_line(ra);
+                nb = b.read_line(rb);
             }
         }
     }
 }
 
-fn open_file(name: &str) -> IoResult<LineReader> {
+fn open_file(name: &str) -> io::Result<LineReader> {
     match name {
         "-" => Ok(LineReader::Stdin(stdin())),
-        _   => {
-            let f = try!(std::old_io::File::open(&Path::new(name)));
-            Ok(LineReader::FileIn(BufferedReader::new(f)))
+        _  => {
+            let f = try!(File::open(&Path::new(name)));
+            Ok(LineReader::FileIn(BufReader::new(f)))
         }
     }
 }
@@ -118,7 +126,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -134,7 +142,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTIONS] FILE1 FILE2", NAME);
         println!("");
-        print(getopts::usage("Compare sorted files line by line.", opts.as_slice()).as_slice());
+        print!("{}", getopts::usage("Compare sorted files line by line.", opts.as_ref()));
         if matches.free.len() != 2 {
             return 1;
         }
@@ -142,8 +150,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
 
-    let mut f1 = open_file(matches.free[0].as_slice()).unwrap();
-    let mut f2 = open_file(matches.free[1].as_slice()).unwrap();
+    let mut f1 = open_file(matches.free[0].as_ref()).unwrap();
+    let mut f2 = open_file(matches.free[1].as_ref()).unwrap();
 
     comm(&mut f1, &mut f2, &matches);
 
