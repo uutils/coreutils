@@ -1,5 +1,4 @@
 #![crate_name = "env"]
-#![feature(core, old_io, os)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +12,9 @@
 /* last synced with: env (GNU coreutils) 8.13 */
 
 #![allow(non_camel_case_types)]
-#![feature(box_syntax)]
+
+use std::env;
+use std::process::Command;
 
 struct options {
     ignore_env: bool,
@@ -42,28 +43,22 @@ fn version() {
 // print name=value env pairs on screen
 // if null is true, separate pairs with a \0, \n otherwise
 fn print_env(null: bool) {
-    let env = std::os::env();
-
-    for &(ref n, ref v) in env.iter() {
-        print!("{}={}{}",
-            n.as_slice(),
-            v.as_slice(),
-            if null { '\0' } else { '\n' }
-        );
+    for (n, v) in env::vars() {
+        print!("{}={}{}", n, v, if null { '\0' } else { '\n' });
     }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let prog = args[0].as_slice();
+    let prog = &args[0];
 
     // to handle arguments the same way than GNU env, we can't use getopts
-    let mut opts = box options {
+    let mut opts = Box::new(options {
         ignore_env: false,
         null: false,
         unsets: vec!(),
         sets: vec!(),
         program: vec!()
-    };
+    });
 
     let mut wait_cmd = false;
     let mut iter = args.iter();
@@ -78,7 +73,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         if wait_cmd {
             // we still accept NAME=VAL here but not other options
-            let mut sp = opt.as_slice().splitn(1, '=');
+            let mut sp = opt.splitn(2, '=');
             let name = sp.next();
             let value = sp.next();
 
@@ -92,8 +87,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     break;
                 }
             }
-        } else if opt.as_slice().starts_with("--") {
-            match opt.as_slice() {
+        } else if opt.starts_with("--") {
+            match opt.as_ref() {
                 "--help" => { usage(prog); return 0; }
                 "--version" => { version(); return 0; }
 
@@ -103,7 +98,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     let var = iter.next();
 
                     match var {
-                        None => println!("{}: this option requires an argument: {}", prog, opt.as_slice()),
+                        None => println!("{}: this option requires an argument: {}", prog, opt),
                         Some(s) => opts.unsets.push(s.to_string())
                     }
                 }
@@ -114,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     return 1;
                 }
             }
-        } else if opt.as_slice().starts_with("-") {
+        } else if opt.starts_with("-") {
             if opt.len() == 0 {
                 // implies -i and stop parsing opts
                 wait_cmd = true;
@@ -122,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 continue;
             }
 
-            let mut chars = opt.as_slice().chars();
+            let mut chars = opt.chars();
             chars.next();
 
             for c in chars {
@@ -136,7 +131,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         let var = iter.next();
 
                         match var {
-                            None => println!("{}: this option requires an argument: {}", prog, opt.as_slice()),
+                            None => println!("{}: this option requires an argument: {}", prog, opt),
                             Some(s) => opts.unsets.push(s.to_string())
                         }
                     }
@@ -149,7 +144,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else {
             // is it a NAME=VALUE like opt ?
-            let mut sp = opt.as_slice().splitn(1, '=');
+            let mut sp = opt.splitn(2, "=");
             let name = sp.next();
             let value = sp.next();
 
@@ -175,32 +170,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
         opts.program.push(opt.to_string());
     }
 
-    let env = std::os::env();
-
     if opts.ignore_env {
-        for &(ref name, _) in env.iter() {
-            std::os::unsetenv(name.as_slice())
+        for (ref name, _) in env::vars() {
+            env::remove_var(name);
         }
     }
 
     for name in opts.unsets.iter() {
-        std::os::unsetenv((name).as_slice())
+        env::remove_var(name);
     }
 
     for &(ref name, ref val) in opts.sets.iter() {
-        std::os::setenv(name.as_slice(), val.as_slice())
+        env::set_var(name, val);
     }
 
     if opts.program.len() >= 1 {
-        use std::old_io::process::{Command, InheritFd};
         let prog = opts.program[0].clone();
         let args = &opts.program[1..];
-        match Command::new(prog).args(args).stdin(InheritFd(0)).stdout(InheritFd(1)).stderr(InheritFd(2)).status() {
-            Ok(exit) =>
-                return match exit {
-                    std::old_io::process::ExitStatus(s) => s as i32,
-                    _ => 1
-                },
+        match Command::new(prog).args(args).status() {
+            Ok(exit) => return if exit.success() { 0 } else { exit.code().unwrap() },
             Err(_) => return 1
         }
     } else {

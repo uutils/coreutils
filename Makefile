@@ -160,6 +160,7 @@ endif
 TEST_PROGS  := \
   cat \
   cp \
+  env \
   mkdir \
   mv \
   nl \
