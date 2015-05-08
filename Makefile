@@ -307,7 +307,7 @@ $(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
 	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCBINFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
 $(SRCDIR)/factor/prime_table.rs: $(SRCDIR)/factor/gen_table.rs
-	cd $(SRCDIR)/factor && $(RUSTC) $(RUSTCBINFLAGS) gen_table.rs && ./gen_table 1000 > $@ && $(RM) gen_table
+	cd $(SRCDIR)/factor && $(RUSTC) $(RUSTCBINFLAGS) gen_table.rs && ./gen_table > $@ && $(RM) gen_table
 
 crates:
 	echo $(EXES)

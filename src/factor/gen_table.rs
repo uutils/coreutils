@@ -8,7 +8,9 @@
 */
 
 //! Generate a table of the multiplicative inverses of p_i mod 2^64
-//! for the first 10000 odd primes.
+//! for the first 1027 odd primes (all 13 bit and smaller primes).
+//! You can supply a commandline argument to override the default
+//! value of 1027 for the number of entries in the table.
 //!
 //! 2 has no multiplicative inverse mode 2^64 because 2 | 2^64,
 //! and in any case divisibility by two is trivial by checking the LSB.
@@ -65,7 +67,7 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
-    let n = args().skip(1).next().unwrap_or("1000".to_string()).parse::<usize>().ok().unwrap_or(1000);
+    let n = args().skip(1).next().unwrap_or("1027".to_string()).parse::<usize>().ok().unwrap_or(1027);
 
     print!("{}", PREAMBLE);
     let mut cols = 3;
@@ -91,7 +93,7 @@ fn main() {
         x = next;
     }
 
-    print!("\n];\n\npub const NEXT_PRIME: u64 = {};\n", x);
+    print!("\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n", x);
 }
 
 #[test]

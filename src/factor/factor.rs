@@ -19,7 +19,7 @@ extern crate libc;
 extern crate rand;
 
 use numeric::*;
-use prime_table::{P_INVS_U64, NEXT_PRIME};
+use prime_table::P_INVS_U64;
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead, BufReader, Write};
 use std::num::Wrapping;
@@ -36,33 +36,12 @@ mod prime_table;
 static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "factor";
 
-fn trial_division_slow(mut num: u64, factors: &mut Vec<u64>) {
-    // assumption: this number has already been run through
-    // trial_division, which checks primes from the table.
-    // The first candidate we need to check is NEXT_PRIME.
-    let mut i = NEXT_PRIME;
-    while i * i <= num {
-        while num % i == 0 {
-            num /= i;
-            factors.push(i);
-            if is_prime(num) {
-                factors.push(num);
-                return;
-            }
-            if num < 1 << 63 {
-                // once we're small enough, switch to Pollard's rho
-                return rho_pollard_factor(num, factors);
-            }
-        }
-        i += 2;
-    }
-    if num > 1 {
-        factors.push(num);
-    }
-}
-
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
-    (multiply(a, multiply(x, x, num), num) + b) % num
+    if num < 1 << 63 {
+        (sm_mul(a, sm_mul(x, x, num), num) + b) % num
+    } else {
+        big_add(big_mul(a, big_mul(x, x, num), num), b, num)
+    }
 }
 
 fn gcd(mut a: u64, mut b: u64) -> u64 {
@@ -148,13 +127,13 @@ fn table_division(mut num: u64, factors: &mut Vec<u64>) {
     // do we still have more factoring to do?
     // Decide whether to use Pollard Rho or slow divisibility based on
     // number's size:
-    if num >= 1 << 63 {
+    //if num >= 1 << 63 {
         // number is too big to use rho pollard without overflowing
-        trial_division_slow(num, factors);
-    } else if num > 1 {
+        //trial_division_slow(num, factors);
+    //} else if num > 1 {
         // number is still greater than 1, but not so big that we have to worry
         rho_pollard_factor(num, factors);
-    }
+    //}
 }
 
 fn print_factors(num: u64) {
