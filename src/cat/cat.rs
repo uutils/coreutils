@@ -1,5 +1,5 @@
 #![crate_name = "cat"]
-#![feature(rustc_private, unsafe_destructor)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -336,7 +336,6 @@ impl<'a, W: Write> Write for UnsafeWriter<'a, W> {
     }
 }
 
-#[unsafe_destructor]
 impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
     fn drop(&mut self) {
         let _ = self.flush_buf();
