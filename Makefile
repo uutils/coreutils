@@ -162,6 +162,7 @@ TEST_PROGS  := \
   cp \
   env \
   factor \
+  fold \
   mkdir \
   mv \
   nl \
