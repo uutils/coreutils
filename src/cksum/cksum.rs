@@ -1,5 +1,5 @@
 #![crate_name = "cksum"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,8 +12,9 @@
 
 extern crate getopts;
 
-use std::old_io::{EndOfFile, File, IoError, IoResult, print};
-use std::old_io::stdio::stdin_raw;
+use std::io::{self, stdin, Read, Write, BufReader};
+use std::path::Path;
+use std::fs::File;
 use std::mem;
 
 use crc_table::CRC_TABLE;
@@ -43,20 +44,18 @@ fn crc_final(mut crc: u32, mut length: usize) -> u32 {
 }
 
 #[inline]
-fn cksum(fname: &str) -> IoResult<(u32, usize)> {
+fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut crc = 0u32;
     let mut size = 0usize;
 
-    let mut stdin_buf;
-    let mut file_buf;
-    let rd = match fname {
+    let file;
+    let mut rd : Box<Read> = match fname {
         "-" => {
-            stdin_buf = stdin_raw();
-            &mut stdin_buf as &mut Reader
+            Box::new(stdin())
         }
         _ => {
-            file_buf = try!(File::open(&Path::new(fname)));
-            &mut file_buf as &mut Reader
+            file = try!(File::open(&Path::new(fname)));
+            Box::new(BufReader::new(file))
         }
     };
 
@@ -64,12 +63,14 @@ fn cksum(fname: &str) -> IoResult<(u32, usize)> {
     loop {
         match rd.read(&mut bytes) {
             Ok(num_bytes) => {
+                if num_bytes == 0 {
+                    return Ok((crc_final(crc, size), size));
+                }
                 for &b in bytes[..num_bytes].iter() {
                     crc = crc_update(crc, b);
                 }
                 size += num_bytes;
             }
-            Err(IoError { kind: EndOfFile, .. }) => return Ok((crc_final(crc, size), size)),
             Err(err) => return Err(err)
         }
     }
@@ -81,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -92,7 +93,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTIONS] [FILE]...", NAME);
         println!("");
-        print(getopts::usage("Print CRC and size for each file.", opts.as_slice()).as_slice());
+        println!("{}", getopts::usage("Print CRC and size for each file.", opts.as_ref()));
         return 0;
     }
 
@@ -116,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut exit_code = 0;
     for fname in files.iter() {
-        match cksum(fname.as_slice()) {
+        match cksum(fname.as_ref()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
             Err(err) => {
                 show_error!("'{}' {}", fname, err);
