@@ -158,6 +158,7 @@ endif
 
 # Programs with usable tests
 TEST_PROGS  := \
+  basename \
   cat \
   cp \
   env \
@@ -173,6 +174,7 @@ TEST_PROGS  := \
   pwd \
   seq \
   sort \
+  split \
   test \
   tr \
   true \
