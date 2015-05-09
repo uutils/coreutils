@@ -164,6 +164,7 @@ TEST_PROGS  := \
   dirname \
   echo \
   factor \
+  false \
   fold \
   mkdir \
   mv \
@@ -173,6 +174,7 @@ TEST_PROGS  := \
   sort \
   test \
   tr \
+  true \
   truncate \
   unexpand
 
