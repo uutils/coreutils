@@ -170,6 +170,7 @@ TEST_PROGS  := \
   mv \
   nl \
   paste \
+  pwd \
   seq \
   sort \
   test \
