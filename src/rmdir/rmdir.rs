@@ -1,5 +1,5 @@
 #![crate_name = "rmdir"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,8 +13,9 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io::{print, fs};
-use std::old_io::fs::PathExtensions;
+use std::path::Path;
+use std::io::Write;
+use std::fs;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -32,7 +33,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("h", "help", "print this help and exit"),
         getopts::optflag("V", "version", "output version information and exit")
     ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
@@ -46,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]... DIRECTORY...", program);
         println!("");
-        print(getopts::usage("Remove the DIRECTORY(ies), if they are empty.", &opts).as_slice());
+        println!("{}", &getopts::usage("Remove the DIRECTORY(ies), if they are empty.", &opts)[..]);
     } else if matches.opt_present("version") {
         println!("rmdir 1.0.0");
     } else if matches.free.is_empty() {
@@ -66,58 +67,58 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32>{
+fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32> {
     let mut r = Ok(());
 
     for dir in dirs.iter() {
-        let path = Path::new(dir.as_slice());
-        if path.exists() {
-            if path.is_dir() {
-                r = remove_dir(&path, dir.as_slice(), ignore, parents, verbose).and(r);
-            } else {
-                show_error!("failed to remove '{}' (file)", *dir);
-                r = Err(1);
+        let path = Path::new(&dir[..]);
+        r = remove_dir(&path, ignore, verbose).and(r);
+        if parents {
+            let mut p = path;
+            loop {
+                let new_p = match p.parent() {
+                    Some(p) => p,
+                    None => break,
+                };
+                p = new_p;
+
+                match p.as_os_str().to_str() {
+                    None => break,
+                    Some(s) => match s {
+                        "" | "." | "/" => break,
+                        _ => (),
+                    },
+                };
+                r = remove_dir(p, ignore, verbose).and(r);
             }
-        } else {
-            show_error!("no such file or directory '{}'", *dir);
-            r = Err(1);
         }
     }
 
     r
 }
 
-fn remove_dir(path: &Path, dir: &str, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32> {
-    let mut walk_dir = match fs::walk_dir(path) {
+fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
+    let mut read_dir = match fs::read_dir(path) {
         Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f.to_string());
+        Err(e) => {
+            show_error!("reading directory '{}': {}", path.display(), e);
             return Err(1);
         }
     };
 
     let mut r = Ok(());
 
-    if walk_dir.next() == None {
-        match fs::rmdir(path) {
-            Ok(_) => {
-                if verbose {
-                    println!("Removed directory '{}'", dir);
-                }
-                if parents {
-                    let dirname = path.dirname_str().unwrap();
-                    if dirname != "." {
-                        r = remove_dir(&Path::new(dirname), dirname, ignore, parents, verbose).and(r);
-                    }
-                }
-            }
-            Err(f) => {
-                show_error!("{}", f.to_string());
+    if read_dir.next().is_none() {
+        match fs::remove_dir(path) {
+            Err(e) => {
+                show_error!("removing directory '{}': {}", path.display(), e);
                 r = Err(1);
-            }
+            },
+            Ok(_) if verbose => println!("Removed directory '{}'", path.display()),
+            _ => (),
         }
     } else if !ignore {
-        show_error!("Failed to remove directory '{}' (non-empty)", dir);
+        show_error!("failed to remove '{}' Directory not empty", path.display());
         r = Err(1);
     }
 
