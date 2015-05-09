@@ -13,8 +13,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::borrow::ToOwned;
 use std::io::Write;
+use std::path::{is_separator, PathBuf};
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -24,7 +24,7 @@ static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = strip_dir(args[0].as_ref());
+    let program = strip_dir(&args[0]);
 
     //
     // Argument parsing
@@ -72,9 +72,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Main Program Processing
     //
 
-    let fullname = &args[1];
-
-    let mut name = strip_dir(fullname.as_ref());
+    let mut name = strip_dir(&args[1]);
 
     if args.len() > 2 {
         let suffix = args[2].clone();
@@ -87,26 +85,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn strip_dir(fullname: &str) -> String {
-    let mut name = String::new();
+    // Remove all platform-specific path separators from the end
+    let mut path: String = fullname.chars().rev().skip_while(|&ch| is_separator(ch)).collect();
 
-    for c in fullname.chars().rev() {
-        if c == '/' || c == '\\' {
-            break;
-        }
-        name.push(c);
+    // Undo reverse
+    path = path.chars().rev().collect();
+
+    // Convert to path buffer and get last path component
+    let pb = PathBuf::from(path);
+    match pb.components().last() {
+        Some(c) => c.as_os_str().to_str().unwrap().to_string(),
+        None => "".to_string()
     }
-
-    name.chars().rev().collect()
 }
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
-        return name.to_owned();
+        return name.to_string();
     }
 
     if name.ends_with(suffix) {
-        return name[..name.len() - suffix.len()].to_owned();
+        return name[..name.len() - suffix.len()].to_string();
     }
 
-    name.to_owned()
+    name.to_string()
 }
