@@ -161,16 +161,21 @@ TEST_PROGS  := \
   cat \
   cp \
   env \
+  dirname \
+  echo \
   factor \
+  false \
   fold \
   mkdir \
   mv \
   nl \
   paste \
+  pwd \
   seq \
   sort \
   test \
   tr \
+  true \
   truncate \
   unexpand
 
