@@ -169,6 +169,7 @@ TEST_PROGS  := \
   paste \
   seq \
   sort \
+  split \
   test \
   tr \
   truncate \
