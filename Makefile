@@ -162,6 +162,7 @@ TEST_PROGS  := \
   cp \
   env \
   dirname \
+  echo \
   factor \
   fold \
   mkdir \
