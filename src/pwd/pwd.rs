@@ -41,17 +41,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("pwd {}", VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION] NAME...", program);
+        println!("  {0} [OPTION]...", program);
         println!("");
         print!("{}", getopts::usage("Print the full filename of the current working directory.", &opts));
     } else if matches.opt_present("version") {
         println!("pwd version: {}", VERSION);
-
-        return 0;
     } else {
         println!("{}", env::current_dir().unwrap().display());
-
-        return 0;
     }
 
     0
