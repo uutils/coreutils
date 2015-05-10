@@ -179,6 +179,7 @@ TEST_PROGS  := \
   tr \
   true \
   truncate \
+  tsort \
   unexpand
 
 TEST        ?= $(TEST_PROGS)
