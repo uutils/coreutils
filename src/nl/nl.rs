@@ -1,5 +1,5 @@
 #![crate_name = "nl"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(collections, rustc_private, slice_patterns)]
 #![plugin(regex_macros)]
 
 /*
@@ -16,13 +16,11 @@
 extern crate regex;
 extern crate getopts;
 
-use std::old_io::{stdin};
-use std::old_io::BufferedReader;
-use std::old_io::fs::File;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::iter::repeat;
-use std::num::Int;
-use std::old_path::Path;
-use getopts::{optopt, optflag, getopts, usage, OptGroup};
+use std::path::Path;
+use getopts::{getopts, optflag, OptGroup, optopt, usage};
 
 #[path="../common/util.rs"]
 #[macro_use]
@@ -35,7 +33,7 @@ static USAGE: &'static str = "nl [OPTION]... [FILE]...";
 static REGEX_DUMMY: &'static regex::Regex = &regex!(r".?");
 
 // Settings store options used by nl to produce its output.
-struct Settings {
+pub struct Settings {
     // The variables corresponding to the options -h, -b, and -f.
     header_numbering: NumberingStyle,
     body_numbering: NumberingStyle,
@@ -109,7 +107,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         number_separator: String::from_str("\t"),
     };
 
-    let given_options = match getopts(args.tail(), &possible_options) {
+    let given_options = match getopts(&args[1..], &possible_options) {
         Ok (m) => { m }
         Err(f) => {
             show_error!("{}", f);
@@ -130,7 +128,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if parse_errors.len() > 0 {
         show_error!("Invalid arguments supplied.");
         for message in parse_errors.iter() {
-            println!("{}", message.as_slice());
+            println!("{}", message);
         }
         return 1;
     }
@@ -139,27 +137,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut read_stdin = files.is_empty();
 
     for file in files.iter() {
-        if file.as_slice() == "-" {
+        if file == "-" {
             // If both file names and '-' are specified, we choose to treat first all
             // regular files, and then read from stdin last.
             read_stdin = true;
             continue
         }
-        let path = Path::new(file.as_slice());
-        let reader = File::open(&path).unwrap();
-        let mut buffer = BufferedReader::new(reader);
+        let path = Path::new(file);
+        let reader = File::open(path).unwrap();
+        let mut buffer = BufReader::new(reader);
         nl(&mut buffer, &settings);
     }
 
     if read_stdin {
-        let mut buffer = BufferedReader::new(stdin());
+        let mut buffer = BufReader::new(stdin());
         nl(&mut buffer, &settings);
     }
     0
 }
 
 // nl implements the main functionality for an individual buffer.
-fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
+fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
     let mut line_no = settings.starting_line_number;
     // The current line number's width as a string. Using to_string is inefficient
     // but since we only do it once, it should not hurt.
@@ -167,7 +165,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let line_no_width_initial = line_no_width;
     // Stores the smallest integer with one more digit than line_no, so that
     // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = Int::pow(10u64, line_no_width as u32);
+    let mut line_no_threshold = 10u64.pow(line_no_width as u32);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
         NumberFormat::RightZero => '0',
@@ -181,13 +179,13 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
     let mut line_filter : fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
-        if l.as_slice().chars().rev().next().unwrap() == '\n' {
+        if l.len() > 0 && l.chars().rev().next().unwrap() == '\n' {
             l.pop();
         }
         // Next we iterate through the individual chars to see if this
         // is one of the special lines starting a new "section" in the
         // document.
-        let line = l.as_slice();
+        let line = l;
         let mut odd = false;
         // matched_group counts how many copies of section_delimiter
         // this string consists of (0 if there's anything else)
@@ -229,7 +227,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
                     if settings.renumber {
                         line_no = settings.starting_line_number;
                         line_no_width = line_no_width_initial;
-                        line_no_threshold = Int::pow(10u64, line_no_width as u32);
+                        line_no_threshold = 10u64.pow(line_no_width as u32);
                     }
                     &settings.header_numbering
                 },
@@ -268,7 +266,7 @@ fn nl<T: Reader> (reader: &mut BufferedReader<T>, settings: &Settings) {
             // in the next selector.
             empty_line_count = 0;
         }
-        if !line_filter(line, regex_filter)
+        if !line_filter(&line, regex_filter)
             || ( empty_line_count > 0 && empty_line_count < settings.join_blank_lines) {
             // No number is printed for this line. Either we did not
             // want to print one in the first place, or it is a blank
