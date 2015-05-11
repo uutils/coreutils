@@ -1,5 +1,5 @@
 #![crate_name = "od"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,10 +11,11 @@
  */
 
 extern crate getopts;
-extern crate collections;
 
-use collections::string::String;
-use std::old_io::File;
+use std::fs::File;
+use std::io::Read;
+use std::mem;
+use std::path::Path;
 
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
@@ -41,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("", "version", "output version information and exit."),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
@@ -56,13 +57,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         None => { panic!("Need fname for now") ; }
     };
 
-    main(&input_offset_base, fname.as_slice());
+    main(&input_offset_base, &fname);
 
     0
 }
 
 fn main(input_offset_base: &Radix, fname: &str) {
-    let mut f = match File::open(&Path::new(fname)) {
+    let mut f = match File::open(Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
     };
@@ -73,12 +74,12 @@ fn main(input_offset_base: &Radix, fname: &str) {
         match f.read(bytes) {
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
-                for b in range(0, n / std::u16::BYTES as usize) {
+                for b in 0 .. n / mem::size_of::<u16>() {
                     let bs = &bytes[(2 * b) .. (2 * b + 2)];
                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                     print!(" {:06o}", p);
                 }
-                if n % std::u16::BYTES as usize == 1 {
+                if n % mem::size_of::<u16>() == 1 {
                     print!(" {:06o}", bytes[n - 1]);
                 }
                 print!("\n");
