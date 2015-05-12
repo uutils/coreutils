@@ -62,7 +62,23 @@ macro_rules! crash_if_err(
     ($exitcode:expr, $exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!($exitcode, "{}", f.to_string())
+            Err(f) => crash!($exitcode, "{}", f),
+        }
+    )
+);
+
+#[macro_export]
+macro_rules! pipe_crash_if_err(
+    ($exitcode:expr, $exp:expr) => (
+        match $exp {
+            Ok(_) => (),
+            Err(f) => {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
+                    ()
+                } else {
+                    crash!($exitcode, "{}", f)
+                }
+            },
         }
     )
 );
