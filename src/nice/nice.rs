@@ -1,5 +1,5 @@
 #![crate_name = "nice"]
-#![feature(collections, core, old_io, os, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,8 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::CString;
-use std::old_io::IoError;
-use std::os;
+use std::io::{Error, Write};
 use libc::{c_char, c_int, execvp};
 
 const NAME: &'static str = "nice";
@@ -40,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(err) => {
             show_error!("{}", err);
@@ -67,8 +66,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         0
     } else {
         let mut niceness = unsafe { getpriority(PRIO_PROCESS, 0) };
-        if os::errno() != 0 {
-            show_error!("{}", IoError::last_error());
+        if Error::last_os_error().raw_os_error().unwrap() != 0 {
+            show_error!("{}", Error::last_os_error());
             return 125;
         }
 
@@ -79,7 +78,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                  Try \"{} --help\" for more information.", args[0]);
                     return 125;
                 }
-                match nstr.as_slice().parse() {
+                match nstr.parse() {
                     Ok(num) => num,
                     Err(e)=> {
                         show_error!("\"{}\" is not a valid number: {}", nstr, e);
@@ -98,16 +97,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         niceness += adjustment;
         unsafe { setpriority(PRIO_PROCESS, 0, niceness); }
-        if os::errno() != 0 {
-            show_warning!("{}", IoError::last_error());
+        if Error::last_os_error().raw_os_error().unwrap() != 0 {
+            show_warning!("{}", Error::last_os_error());
         }
 
-        let cstrs : Vec<CString> = matches.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
-        let mut args : Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
+        let cstrs: Vec<CString> = matches.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
+        let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
         args.push(0 as *const c_char);
         unsafe { execvp(args[0], args.as_mut_ptr()); }
 
-        show_error!("{}", IoError::last_error());
-        if os::errno() as c_int == libc::ENOENT { 127 } else { 126 }
+        show_error!("{}", Error::last_os_error());
+        if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT { 127 } else { 126 }
     }
 }
