@@ -352,5 +352,5 @@ fn existing_backup_path(path: &Path, suffix: &String) -> Path {
     if test_path.exists() {
         return numbered_backup_path(path);
     }
-    return simple_backup_path(path, suffix);
+    simple_backup_path(path, suffix)
 }

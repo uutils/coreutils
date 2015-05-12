@@ -123,7 +123,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     expand(Options::new(matches));
 
-    return 0;
+    0
 }
 
 fn open(path: String) -> BufReader<Box<Read+'static>> {
