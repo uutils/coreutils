@@ -84,8 +84,9 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
         if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
-            return (args[..i].to_vec() + &args[i + 1..],
-                    Some(slice[1..].to_string()));
+            let mut v = args.to_vec();
+            v.remove(i);
+            return (v, Some(slice[1..].to_string()));
         }
     }
     (args.to_vec(), None)
