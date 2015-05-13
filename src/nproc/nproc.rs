@@ -82,6 +82,5 @@ pub fn uumain(args: Vec<String>) -> i32 {
         cores -= ignore;
     }
     println!("{}", cores);
-
-    return 0
+    0
 }

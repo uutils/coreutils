@@ -109,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{}", x);
     }
 
-    return 0
+    0
 }
 
 // We use String as a representation of node here
