@@ -1,5 +1,5 @@
 #![crate_name = "readlink"]
-#![feature(collections, core, old_io, os, old_path, rustc_private)]
+#![feature(file_type, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,22 +12,20 @@
 
 extern crate getopts;
 
-use getopts::{optflag, getopts, usage, OptGroup};
-use std::old_io as io;
-use std::old_io::fs;
-use std::os;
-use std::vec::Vec;
+use getopts::{getopts, optflag, OptGroup, usage};
+use std::env;
+use std::fs::{metadata, read_link};
+use std::io::{Error, ErrorKind, Result, Write};
+use std::path::{Component, PathBuf};
 
 use CanonicalizeMode::{None, Normal, Existing, Missing};
-
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
 const NAME: &'static str = "readlink";
-const VERSION:  &'static str = "0.0.1";
-
+const VERSION: &'static str = "0.0.1";
 
 #[derive(PartialEq)]
 enum CanonicalizeMode {
@@ -37,22 +35,21 @@ enum CanonicalizeMode {
     Missing,
 }
 
-
-fn resolve(original: &Path) -> io::IoResult<Path> {
+fn resolve(original: &PathBuf) -> Result<PathBuf> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.clone();
     loop {
         if followed == MAX_LINKS_FOLLOWED {
-            return Err(io::standard_error(io::InvalidInput));
+            return Err(Error::new(ErrorKind::InvalidInput, "maximum links followed"));
         }
 
-        match fs::lstat(&result) {
+        match metadata(&result) {
             Err(e) => return Err(e),
-            Ok(ref stat) if stat.kind != io::FileType::Symlink => break,
+            Ok(ref m) if !m.file_type().is_symlink() => break,
             Ok(..) => {
                 followed += 1;
-                match fs::readlink(&result) {
+                match read_link(&result) {
                     Ok(path) => {
                         result.pop();
                         result.push(path);
@@ -64,21 +61,41 @@ fn resolve(original: &Path) -> io::IoResult<Path> {
             }
         }
     }
-    return Ok(result);
+    Ok(result)
 }
 
+fn canonicalize(original: &PathBuf, can_mode: &CanonicalizeMode) -> Result<PathBuf> {
+    // Create an absolute path
+    let original = if original.as_path().is_absolute() {
+        original.clone()
+    } else {
+        env::current_dir().unwrap().join(original)
+    };
 
-fn canonicalize(original: &Path, can_mode: &CanonicalizeMode) -> io::IoResult<Path> {
-    let original = os::make_absolute(original).unwrap();
-    let result = original.root_path();
-    let mut result = result.expect("make_absolute has no root_path");
-    let mut parts = vec![];
+    let mut result = PathBuf::new();
+    let mut parts = vec!();
+
+    // Split path by directory separator; add prefix (Windows-only) and root
+    // directory to final path buffer; add remaining parts to temporary
+    // vector for canonicalization.
     for part in original.components() {
-        parts.push(part);
+        match part {
+            Component::Prefix(_) | Component::RootDir => {
+                result.push(part.as_os_str());
+            },
+            Component::CurDir => {},
+            Component::ParentDir => {
+                parts.pop();
+            },
+            Component::Normal(_) => {
+                parts.push(part.as_os_str());
+            }
+        }
     }
 
-    if parts.len() > 1 {
-        for part in parts.init().iter() {
+    // Resolve the symlinks where possible
+    if parts.len() > 0 {
+        for part in parts[..parts.len()-1].iter() {
             result.push(part);
 
             if *can_mode == None {
@@ -86,9 +103,9 @@ fn canonicalize(original: &Path, can_mode: &CanonicalizeMode) -> io::IoResult<Pa
             }
 
             match resolve(&result) {
-                Err(_) => match *can_mode {
+                Err(e) => match *can_mode {
                     Missing => continue,
-                    _ => return Err(io::standard_error(io::InvalidInput)),
+                    _ => return Err(e)
                 },
                 Ok(path) => {
                     result.pop();
@@ -96,22 +113,22 @@ fn canonicalize(original: &Path, can_mode: &CanonicalizeMode) -> io::IoResult<Pa
                 }
             }
         }
-    }
 
-    result.push(parts.last().unwrap());
-    match resolve(&result) {
-        Err(e) => { if *can_mode == Existing { return Err(e); } },
-        Ok(path) => {
-            result.pop();
-            result.push(path);
+        result.push(parts.last().unwrap());
+
+        match resolve(&result) {
+            Err(e) => { if *can_mode == Existing { return Err(e); } },
+            Ok(path) => {
+                result.pop();
+                result.push(path);
+            }
         }
     }
-    return Ok(result);
+    Ok(result)
 }
 
-
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
+    let program = &args[0];
     let opts = [
         optflag("f", "canonicalize",
                 "canonicalize by following every symlink in every component of the \
@@ -131,7 +148,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
@@ -148,6 +165,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut no_newline = matches.opt_present("no-newline");
     let use_zero = matches.opt_present("zero");
     let silent = matches.opt_present("silent") || matches.opt_present("quiet");
+    let verbose = matches.opt_present("verbose");
 
     let mut can_mode = None;
     if matches.opt_present("canonicalize") {
@@ -175,37 +193,46 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     for f in files.iter() {
-        let p = Path::new(f);
+        let p = PathBuf::from(f);
         if can_mode == None {
-            match fs::readlink(&p) {
-                Ok(path) => show(path.as_str().unwrap(), no_newline, use_zero),
-                Err(_) => return 1
+            match read_link(&p) {
+                Ok(path) => show(&path, no_newline, use_zero),
+                Err(err) => {
+                    if verbose {
+                        eprintln!("{}: {}: errno {}", NAME, f, err.raw_os_error().unwrap());
+                    }
+                    return 1
+                }
             }
         } else {
             match canonicalize(&p, &can_mode) {
-                Ok(path) => show(path.as_str().unwrap(), no_newline, use_zero),
-                Err(_) => return 1
+                Ok(path) => show(&path, no_newline, use_zero),
+                Err(err) => {
+                    if verbose {
+                        eprintln!("{}: {}: errno {:?}", NAME, f, err.raw_os_error().unwrap());
+                    }
+                    return 1
+                }
             }
         }
     }
-    return 0;
+
+    0
 }
 
-
-fn show(path: &str, no_newline: bool, use_zero: bool) {
+fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
+    let path = path.as_path().to_str().unwrap();
     if use_zero {
         print!("{}\0", path);
+    } else if no_newline {
+        print!("{}", path);
     } else {
-        if no_newline {
-            io::print(path);
-        } else {
-            io::println(path);
-        }
+        println!("{}", path);
     }
 }
 
 fn show_usage(program: &str, opts: &[OptGroup]) {
     println!("Usage: {0} [OPTION]... [FILE]...", program);
     print!("Print value of a symbolic link or canonical file name");
-    io::print(usage("", opts).as_slice());
+    print!("{}", usage("", opts));
 }

@@ -172,6 +172,7 @@ TEST_PROGS  := \
   nl \
   paste \
   pwd \
+  readlink \
   seq \
   sort \
   split \
