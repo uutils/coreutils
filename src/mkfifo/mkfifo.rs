@@ -1,5 +1,5 @@
 #![crate_name = "mkfifo"]
-#![feature(collections, core, os, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,8 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::CString;
-use std::num::FromStrRadix;
-use std::os;
+use std::io::{Error, Write};
 use libc::funcs::posix88::stat_::mkfifo;
 
 #[path = "../common/util.rs"]
@@ -32,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -48,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTIONS] NAME...", NAME);
         println!("");
-        print!("{}", getopts::usage("Create a FIFO with the given name.", opts.as_slice()).as_slice());
+        print!("{}", getopts::usage("Create a FIFO with the given name.", &opts));
         if matches.free.is_empty() {
             return 1;
         }
@@ -56,9 +55,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let mode = match matches.opt_str("m") {
-        Some(m) => match FromStrRadix::from_str_radix(m.as_slice(), 8) {
+        Some(m) => match u16::from_str_radix(&m, 8) {
             Ok(m) => m,
-            Err(e )=> {
+            Err(e)=> {
                 show_error!("invalid mode: {}", e);
                 return 1;
             }
@@ -70,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     for f in matches.free.iter() {
         let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode) };
         if err == -1 {
-            show_error!("creating '{}': {}", f, os::error_string(os::errno()));
+            show_error!("creating '{}': {}", f, Error::last_os_error().raw_os_error().unwrap());
             exit_status = 1;
         }
     }
