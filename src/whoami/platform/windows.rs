@@ -17,8 +17,8 @@ extern "system" {
 
 #[allow(unused_unsafe)]
 pub unsafe fn getusername() -> String {
-    // XXX: it may be possible that this isn't long enough.  I don't know
-    let mut buffer: [libc::c_char; 2048] = mem::uninitialized();
+    // usernames can only be up to 104 characters in windows
+    let mut buffer: [libc::c_char; 105] = mem::uninitialized();
 
     if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
         crash!(1, "username is too long");
