@@ -6,7 +6,7 @@ version = "0.0.0"
 name = "null"
 
 [dependencies]
-libc = "0.1.6"
+libc = "0.1.7"
 num_cpus = "*"
 rand = "0.3.8"
 regex = "0.1.30"
