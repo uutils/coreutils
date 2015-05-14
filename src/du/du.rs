@@ -1,5 +1,5 @@
 #![crate_name = "du"]
-#![feature(collections, core, old_io, old_path, rustc_private, std_misc, unicode)]
+#![feature(collections, fs_time, metadata_ext, rustc_private, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,15 +11,16 @@
  */
 
 #![allow(non_snake_case)]
+#![allow(deprecated)]
 
 extern crate getopts;
 extern crate libc;
 extern crate time;
 
-use std::old_io::{stderr, fs, FileStat, FileType};
-use std::num::Float;
-use std::option::Option;
-use std::old_path::Path;
+use std::fs;
+use std::io::{stderr, Write};
+use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
 use std::sync::{Arc, Future};
 use time::Timespec;
 
@@ -39,33 +40,56 @@ struct Options {
 }
 
 struct Stat {
-    path: Path,
-    fstat: FileStat,
+    path: PathBuf,
+    is_dir: bool,
+    size: u64,
+    blocks: u64,
+    nlink: u64,
+    created: u64,
+    accessed: u64,
+    modified: u64,
 }
+
+impl Stat {
+    fn new(path: &PathBuf) -> Stat {
+        let metadata = safe_unwrap!(fs::metadata(path));
+        Stat {
+            path: path.clone(),
+            is_dir: metadata.is_dir(),
+            size: metadata.len(),
+            blocks: metadata.as_raw().blocks() as u64,
+            nlink: metadata.as_raw().nlink() as u64,
+            created: metadata.modified(),
+            accessed: metadata.accessed(),
+            modified: metadata.modified()
+        }
+    }
+}
+
 // this takes `my_stat` to avoid having to stat files multiple times.
-fn du(path: &Path, mut my_stat: Stat,
-      options: Arc<Options>, depth: usize) -> Vec<Arc<Stat>> {
+fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) -> Vec<Arc<Stat>> {
     let mut stats = vec!();
     let mut futures = vec!();
 
-    if my_stat.fstat.kind == FileType::Directory {
-        let read = match fs::readdir(path) {
+    if my_stat.is_dir {
+        let read = match fs::read_dir(path) {
             Ok(read) => read,
             Err(e) => {
-                safe_writeln!(&mut stderr(), "{}: cannot read directory ‘{}‘: {}",
+                safe_writeln!(stderr(), "{}: cannot read directory ‘{}‘: {}",
                               options.program_name, path.display(), e);
                 return vec!(Arc::new(my_stat))
             }
         };
 
         for f in read.into_iter() {
-            let this_stat = Stat{path: f.clone(), fstat: safe_unwrap!(fs::lstat(&f))};
-            if this_stat.fstat.kind == FileType::Directory {
+            let entry = f.unwrap();
+            let this_stat = Stat::new(&entry.path());
+            if this_stat.is_dir {
                 let oa_clone = options.clone();
-                futures.push(Future::spawn(move || { du(&f, this_stat, oa_clone, depth + 1) }))
+                futures.push(Future::spawn(move || { du(&entry.path(), this_stat, oa_clone, depth + 1) }))
             } else {
-                my_stat.fstat.size += this_stat.fstat.size;
-                my_stat.fstat.unstable.blocks += this_stat.fstat.unstable.blocks;
+                my_stat.size += this_stat.size;
+                my_stat.blocks += this_stat.blocks;
                 if options.all {
                     stats.push(Arc::new(this_stat))
                 }
@@ -75,9 +99,9 @@ fn du(path: &Path, mut my_stat: Stat,
 
     for future in futures.iter_mut() {
         for stat in future.get().into_iter().rev() {
-            if !options.separate_dirs && stat.path.dir_path() == my_stat.path {
-                my_stat.fstat.size += stat.fstat.size;
-                my_stat.fstat.unstable.blocks += stat.fstat.unstable.blocks;
+            if !options.separate_dirs && stat.path.parent().unwrap().to_path_buf() == my_stat.path {
+                my_stat.size += stat.size;
+                my_stat.blocks += stat.blocks;
             }
             if options.max_depth == None || depth < options.max_depth.unwrap() {
                 stats.push(stat.clone());
@@ -91,7 +115,7 @@ fn du(path: &Path, mut my_stat: Stat,
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
+    let program = &args[0];
     let opts = [
         // In task
         getopts::optflag("a", "all", " write counts for all files, not just directories"),
@@ -234,7 +258,7 @@ ers of 1000).",
             let mut found_letter = false;
             let mut numbers = String::new(); 
             let mut letters = String::new(); 
-            for c in s.as_slice().chars() {
+            for c in s.chars() {
                 if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
                     show_error!("invalid --block-size argument '{}'", s);
                     return 1;
@@ -246,18 +270,16 @@ ers of 1000).",
                     letters.push(c);
                 }
             }
-            let number = numbers.parse::<usize>().unwrap();
-            let multiple = match letters.as_slice() {
-                "K" => 1024, "M" => 1024 * 1024, "G" => 1024 * 1024 * 1024,
-                "T" => 1024 * 1024 * 1024 * 1024, "P" => 1024 * 1024 * 1024 * 1024 * 1024,
-                "E" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-                "Z" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-                "Y" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-                "KB" => 1000, "MB" => 1000 * 1000, "GB" => 1000 * 1000 * 1000,
-                "TB" => 1000 * 1000 * 1000 * 1000, "PB" => 1000 * 1000 * 1000 * 1000 * 1000,
-                "EB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-                "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-                "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
+            let number = numbers.parse::<u64>().unwrap();
+            let multiple = match &letters[..] {
+                "K" => 1024u64.pow(1), "M" => 1024u64.pow(2),
+                "G" => 1024u64.pow(3), "T" => 1024u64.pow(4),
+                "P" => 1024u64.pow(5), "E" => 1024u64.pow(6),
+                "Z" => 1024u64.pow(7), "Y" => 1024u64.pow(8),
+                "KB" => 1000u64.pow(1), "MB" => 1000u64.pow(2),
+                "GB" => 1000u64.pow(3), "TB" => 1000u64.pow(4),
+                "PB" => 1000u64.pow(5), "EB" => 1000u64.pow(6),
+                "ZB" => 1000u64.pow(7), "YB" => 1000u64.pow(8),
                 _ => {
                     show_error!("invalid --block-size argument '{}'", s);
                     return 1;
@@ -288,7 +310,7 @@ ers of 1000).",
 
     let time_format_str = match matches.opt_str("time-style") {
         Some(s) => {
-            match s.as_slice() {
+            match &s[..] {
                 "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
                 "long-iso" => "%Y-%m-%d %H:%M",
                 "iso" => "%Y-%m-%d",
@@ -313,26 +335,25 @@ Try '{} --help' for more information.", s, program);
 
     let mut grand_total = 0;
     for path_str in strs.into_iter() {
-        let path = Path::new(path_str);
-        let stat = safe_unwrap!(fs::lstat(&path));
-        let iter = du(&path, Stat{path: path.clone(), fstat: stat}, options_arc.clone(), 0).into_iter();
+        let path = PathBuf::from(path_str);
+        let iter = du(&path, Stat::new(&path), options_arc.clone(), 0).into_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat) in iter.enumerate() {
             let size = match matches.opt_present("apparent-size") {
-                true => stat.fstat.unstable.nlink * stat.fstat.size,
+                true => stat.nlink * stat.size,
                 // C's stat is such that each block is assume to be 512 bytes
                 // See: http://linux.die.net/man/2/stat
-                false => stat.fstat.unstable.blocks * 512,
+                false => stat.blocks * 512,
             };
             if matches.opt_present("time") {
                 let tm = {
                     let (secs, nsecs) = {
                         let time = match matches.opt_str("time") {
-                            Some(s) => match s.as_slice() {
-                                "accessed" => stat.fstat.accessed,
-                                "created" => stat.fstat.created,
-                                "modified" => stat.fstat.modified,
+                            Some(s) => match &s[..] {
+                                "accessed" => stat.accessed,
+                                "created" => stat.created,
+                                "modified" => stat.modified,
                                 _ => {
                                     show_error!("invalid argument 'modified' for '--time'
     Valid arguments are:
@@ -341,7 +362,7 @@ Try '{} --help' for more information.", s, program);
                                     return 1;
                                 }
                             },
-                            None => stat.fstat.modified
+                            None => stat.modified
                         };
                         ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
