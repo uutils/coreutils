@@ -1,5 +1,6 @@
 #![crate_name = "mv"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(collections, fs_time, path_ext, rustc_private, slice_patterns, str_char)]
+#![allow(deprecated)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,26 +13,19 @@
  */
 
 extern crate getopts;
+extern crate libc;
 
-use std::old_io::{BufferedReader, IoResult, fs};
-use std::old_io::stdio::stdin_raw;
-use std::old_io::fs::PathExtensions;
-use std::old_path::GenericPath;
-use getopts::{
-    getopts,
-    optflag,
-    optflagopt,
-    optopt,
-    usage,
-};
-use std::borrow::ToOwned;
+use getopts::{getopts, optflag, optflagopt, optopt, usage};
+use std::fs::{self, PathExt};
+use std::io::{BufRead, BufReader, Result, stdin, Write};
+use std::path::PathBuf;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
 static NAME: &'static str = "mv";
-static VERSION:  &'static str = "0.0.1";
+static VERSION: &'static str = "0.0.1";
 
 pub struct Behaviour {
     overwrite: OverwriteMode,
@@ -43,16 +37,14 @@ pub struct Behaviour {
     verbose: bool,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum OverwriteMode {
     NoClobber,
     Interactive,
     Force,
 }
 
-impl Copy for OverwriteMode {}
-
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum BackupMode {
     NoBackup,
     SimpleBackup,
@@ -60,10 +52,8 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
-impl Copy for BackupMode {}
-
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].as_slice();
+    let program = &args[0];
     let opts = [
         optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL"),
         optflag("b", "", "like --backup but does not accept an argument"),
@@ -84,7 +74,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         optflag("V", "version", "output version information and exit"),
     ];
 
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
@@ -111,7 +101,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else if matches.opt_present("backup") {
         match matches.opt_str("backup") {
             None => BackupMode::SimpleBackup,
-            Some(mode) => match mode.as_slice() {
+            Some(mode) => match &mode[..] {
                 "simple" | "never" => BackupMode::SimpleBackup,
                 "numbered" | "t"   => BackupMode::NumberedBackup,
                 "existing" | "nil" => BackupMode::ExistingBackup,
@@ -143,7 +133,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
     } else {
-        "~".to_owned()
+        "~".to_string()
     };
 
     if matches.opt_present("T") && matches.opt_present("t") {
@@ -161,17 +151,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
         verbose: matches.opt_present("v"),
     };
 
-    let string_to_path = |s: &String| { Path::new(s.as_slice()) };
-    let paths: Vec<Path> = matches.free.iter().map(string_to_path).collect();
+    let string_to_path = |s: &String| { PathBuf::from(s) };
+    let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
 
     if matches.opt_present("version") {
         version();
         0
     } else if matches.opt_present("help") {
-        help(program.as_slice(), usage.as_slice());
+        help(program, &usage);
         0
     } else {
-        exec(paths.as_slice(), behaviour)
+        exec(&paths[..], behaviour)
     }
 }
 
@@ -187,9 +177,9 @@ fn help(progname: &str, usage: &str) {
     println!("{}", msg);
 }
 
-fn exec(files: &[Path], b: Behaviour) -> i32 {
+fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
     match b.target_dir {
-        Some(ref name) => return move_files_into_dir(files, &Path::new(name.as_slice()), &b),
+        Some(ref name) => return move_files_into_dir(files, &PathBuf::from(name), &b),
         None => {}
     }
     match files {
@@ -245,7 +235,7 @@ fn exec(files: &[Path], b: Behaviour) -> i32 {
     0
 }
 
-fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> i32 {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
@@ -253,7 +243,7 @@ fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> i32 
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.filename_str() {
+        let targetpath = match sourcepath.as_os_str().to_str() {
             Some(name) => target_dir.join(name),
             None => {
                 show_error!("cannot stat ‘{}’: No such file or directory",
@@ -276,7 +266,7 @@ fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> i32 
     if all_successful { 0 } else { 1 }
 }
 
-fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
+fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -302,7 +292,7 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
         }
 
         if b.update {
-            if try!(from.stat()).modified <= try!(to.stat()).modified {
+            if try!(fs::metadata(from)).modified() <= try!(fs::metadata(to)).modified() {
                 return Ok(());
             }
         }
@@ -321,8 +311,9 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
 }
 
 fn read_yes() -> bool {
-    match BufferedReader::new(stdin_raw()).read_line() {
-        Ok(s) => match s.as_slice().slice_shift_char() {
+    let mut s = String::new();
+    match BufReader::new(stdin()).read_line(&mut s) {
+        Ok(_) => match s.slice_shift_char() {
             Some((x, _)) => x == 'y' || x == 'Y',
             _ => false
         },
@@ -330,13 +321,13 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &Path, suffix: &String) -> Path {
-    let mut p = path.clone().into_vec();
-    p.push_all(suffix.as_slice().as_bytes());
-    return Path::new(p);
+fn simple_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
+    let mut p = path.as_os_str().to_str().unwrap().to_string();
+    p.push_str(suffix);
+    return PathBuf::from(p);
 }
 
-fn numbered_backup_path(path: &Path) -> Path {
+fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
@@ -347,8 +338,8 @@ fn numbered_backup_path(path: &Path) -> Path {
     }
 }
 
-fn existing_backup_path(path: &Path, suffix: &String) -> Path {
-    let test_path = simple_backup_path(path, &".~1~".to_owned());
+fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
+    let test_path = simple_backup_path(path, &".~1~".to_string());
     if test_path.exists() {
         return numbered_backup_path(path);
     }
