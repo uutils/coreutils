@@ -27,9 +27,7 @@ const PROGNAME: &'static str = "./factor";
 
 #[test]
 fn test_random() {
-    let mut primes = Sieve::new().take(NUM_PRIMES - 1).collect::<Vec<u64>>();
-    primes.push(2);
-    let primes = primes;
+    let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
     let mut rng = weak_rng();
     let mut rand_gt = move |min: u64| {

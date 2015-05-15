@@ -15,6 +15,8 @@
 //! 2 has no multiplicative inverse mode 2^64 because 2 | 2^64,
 //! and in any case divisibility by two is trivial by checking the LSB.
 
+#![cfg_attr(test, allow(dead_code))]
+
 use sieve::Sieve;
 use std::env::args;
 use std::num::Wrapping;
@@ -73,7 +75,7 @@ fn main() {
     let mut cols = 3;
 
     // we want a total of n + 1 values
-    let mut primes = Sieve::new().take(n + 1);
+    let mut primes = Sieve::odd_primes().take(n + 1);
 
     // in each iteration of the for loop, we use the value yielded
     // by the previous iteration. This leaves one value left at the
@@ -97,14 +99,20 @@ fn main() {
 }
 
 #[test]
-fn test_generator_and_inverter() {
+fn test_inverter() {
     let num = 10000;
 
-    let invs = Sieve::new().map(|x| inv_mod_u64(x).unwrap());
-    assert!(Sieve::new().zip(invs).take(num).all(|(x, y)| {
+    let invs = Sieve::odd_primes().map(|x| inv_mod_u64(x).unwrap());
+    assert!(Sieve::odd_primes().zip(invs).take(num).all(|(x, y)| {
         let Wrapping(z) = Wrapping(x) * Wrapping(y);
         is_prime(x) && z == 1
     }));
+}
+
+#[test]
+fn test_generator() {
+    let prime_10001 = Sieve::primes().skip(10000).next();
+    assert_eq!(prime_10001, Some(104743));
 }
 
 const MAX_WIDTH: usize = 102;

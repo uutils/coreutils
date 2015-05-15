@@ -329,7 +329,7 @@ clean:
 	$(RM) -rf $(BUILDDIR) $(TEMPDIR)
 
 distclean: clean
-	cd $(BASEDIR)/deps && $(CARGO) clean
+	cd $(BASEDIR)/deps && $(CARGO) clean && $(CARGO) update
 
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)/gen
