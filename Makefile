@@ -173,6 +173,7 @@ TEST_PROGS  := \
   paste \
   pwd \
   readlink \
+  rm \
   seq \
   sort \
   split \
