@@ -173,6 +173,7 @@ TEST_PROGS  := \
   paste \
   pwd \
   readlink \
+  rm \
   seq \
   sort \
   split \
@@ -181,6 +182,7 @@ TEST_PROGS  := \
   true \
   truncate \
   tsort \
+  unlink \
   unexpand
 
 TEST        ?= $(TEST_PROGS)
