@@ -182,6 +182,7 @@ TEST_PROGS  := \
   true \
   truncate \
   tsort \
+  unlink \
   unexpand
 
 TEST        ?= $(TEST_PROGS)
