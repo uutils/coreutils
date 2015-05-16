@@ -21,13 +21,15 @@ use std::path::Path;
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
-fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> i32> {
-    let mut map = HashMap::new();
+type UtilityMap = HashMap<&'static str, fn(Vec<String>) -> i32>;
+
+fn util_map() -> UtilityMap {
+    let mut map: UtilityMap = HashMap::new();
     @UTIL_MAP@
     map
 }
 
-fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> i32>) {
+fn usage(cmap: &UtilityMap) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
