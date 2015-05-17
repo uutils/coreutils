@@ -167,6 +167,7 @@ TEST_PROGS  := \
   factor \
   false \
   fold \
+  hashsum \
   mkdir \
   mv \
   nl \

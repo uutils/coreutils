@@ -1,5 +1,5 @@
 #![crate_name = "hashsum"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,17 +17,15 @@ extern crate regex;
 extern crate crypto;
 extern crate getopts;
 
-use std::ascii::AsciiExt;
-use std::old_io::fs::File;
-use std::old_io::stdio::stdin_raw;
-use std::old_io::BufferedReader;
-use std::old_io::IoError;
-use std::old_io::EndOfFile;
-use regex::Regex;
 use crypto::digest::Digest;
 use crypto::md5::Md5;
 use crypto::sha1::Sha1;
 use crypto::sha2::{Sha224, Sha256, Sha384, Sha512};
+use regex::Regex;
+use std::ascii::AsciiExt;
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Read, stdin, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -91,18 +89,17 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-    let binary = Path::new(program.as_slice());
-    let binary_name = binary.filename_str().unwrap();
+    let program = &args[0];
+    let binary_name = Path::new(program).file_name().unwrap().to_str().unwrap();
 
     // Default binary in Windows, text mode otherwise
     let binary_flag_default = cfg!(windows);
 
     let mut opts: Vec<getopts::OptGroup> = vec!(
-        getopts::optflag("b", "binary", format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" }).as_slice()),
+        getopts::optflag("b", "binary", &format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" })),
         getopts::optflag("c", "check", "read hashsums from the FILEs and check them"),
         getopts::optflag("", "tag", "create a BSD-style checksum"),
-        getopts::optflag("t", "text", format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" }).as_slice()),
+        getopts::optflag("t", "text", &format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" })),
         getopts::optflag("q", "quiet", "don't print OK for each successfully verified file"),
         getopts::optflag("s", "status", "don't output anything, status code shows success"),
         getopts::optflag("", "strict", "exit non-zero for improperly formatted checksum lines"),
@@ -111,19 +108,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
         getopts::optflag("V", "version", "output version information and exit"),
     );
 
-    opts.extend(get_algo_opts(binary_name.as_slice()).into_iter());
+    opts.extend(get_algo_opts(binary_name).into_iter());
 
-    let matches = match getopts::getopts(args.tail(), opts.as_slice()) {
+    let matches = match getopts::getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("help") {
-        usage(program.as_slice(), binary_name.as_slice(), opts.as_slice());
+        usage(program, binary_name, &opts);
     } else if matches.opt_present("version") {
         version();
     } else {
-        let (name, algo) = detect_algo(binary_name.as_slice(), &matches);
+        let (name, algo) = detect_algo(binary_name, &matches);
 
         let binary_flag = matches.opt_present("binary");
         let text_flag = matches.opt_present("text");
@@ -168,7 +165,7 @@ fn usage(program: &str, binary_name: &str, opts: &[getopts::OptGroup]) {
     pipe_print!("{}", getopts::usage("Compute and check message digests.", opts));
 }
 
-fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {
+fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {
     let mut bad_format = 0;
     let mut failed = 0;
     let binary_marker = if binary {
@@ -177,16 +174,16 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
         " "
     };
     for filename in files.iter() {
-        let filename: &str = filename.as_slice();
+        let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;
-        let mut file = BufferedReader::new(
+        let mut file = BufReader::new(
             if filename == "-" {
-                stdin_buf = stdin_raw();
-                &mut stdin_buf as &mut Reader
+                stdin_buf = stdin();
+                Box::new(stdin_buf) as Box<Read>
             } else {
-                file_buf = safe_unwrap!(File::open(&Path::new(filename)));
-                &mut file_buf as &mut Reader
+                file_buf = safe_unwrap!(File::open(filename));
+                Box::new(file_buf) as Box<Read>
             }
         );
         if check {
@@ -194,30 +191,30 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             let bytes = digest.output_bits() / 4;
             let gnu_re = safe_unwrap!(
                 Regex::new(
-                    format!(
+                    &format!(
                         r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
                         bytes
-                    ).as_slice()
+                    )
                 )
             );
             let bsd_re = safe_unwrap!(
                 Regex::new(
-                    format!(
+                    &format!(
                         r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{{{digest_size}}})",
                         algorithm = algoname,
                         digest_size = bytes
-                    ).as_slice()
+                    )
                 )
             );
 
-            let mut buffer = file;
+            let buffer = file;
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
-                let (ck_filename, sum, binary_check) = match gnu_re.captures(line.as_slice()) {
+                let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => (caps.name("fileName").unwrap(),
                                    caps.name("digest").unwrap().to_ascii_lowercase(),
                                    caps.name("binary").unwrap() == "*"),
-                    None => match bsd_re.captures(line.as_slice()) {
+                    None => match bsd_re.captures(&line) {
                         Some(caps) => (caps.name("fileName").unwrap(),
                                        caps.name("digest").unwrap().to_ascii_lowercase(),
                                        true),
@@ -233,10 +230,11 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                         }
                     }
                 };
-                let mut ckf = safe_unwrap!(File::open(&Path::new(ck_filename)));
+                let f = safe_unwrap!(File::open(ck_filename));
+                let mut ckf = BufReader::new(Box::new(f) as Box<Read>);
                 let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut ckf, binary_check))
-                    .as_slice().to_ascii_lowercase();
-                if sum.as_slice() == real_sum.as_slice() {
+                    .to_ascii_lowercase();
+                if sum == real_sum {
                     if !quiet {
                         pipe_println!("{}: OK", ck_filename);
                     }
@@ -270,21 +268,21 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
     Ok(())
 }
 
-fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) -> Result<String, IoError> {
+fn digest_reader<'a, T: Read>(digest: &mut Box<Digest+'a>, reader: &mut BufReader<T>, binary: bool) -> io::Result<String> {
     digest.reset();
 
     // Digest file, do not hold too much in memory at any given moment
     let windows = cfg!(windows);
-    let mut buffer = [0; 524288];
+    let mut buffer = Vec::with_capacity(524288);
     let mut vec = Vec::with_capacity(524288);
     let mut looking_for_newline = false;
     loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => {},
+        match reader.read_to_end(&mut buffer) {
+            Ok(0) => { break; },
             Ok(nread) => {
                 if windows && !binary {
                     // Windows text mode returns '\n' when reading '\r\n'
-                    for i in range(0, nread) {
+                    for i in 0 .. nread {
                         if looking_for_newline {
                             if buffer[i] != ('\n' as u8) {
                                 vec.push('\r' as u8);
@@ -299,25 +297,18 @@ fn digest_reader(digest: &mut Box<Digest>, reader: &mut Reader, binary: bool) ->
                             looking_for_newline = true;
                         }
                     }
-                    digest.input(vec.as_slice());
+                    digest.input(&vec);
                     vec.clear();
                 } else {
                     digest.input(&buffer[..nread]);
                 }
             },
-            Err(e) => match e.kind {
-                EndOfFile => {
-                    break;
-                },
-                _ => {
-                    return Err(e);
-                }
-            }
+            Err(e) => return Err(e)
         }
     }
     if windows && looking_for_newline {
         vec.push('\r' as u8);
-        digest.input(vec.as_slice());
+        digest.input(&vec);
     }
 
     Ok(digest.result_str())
