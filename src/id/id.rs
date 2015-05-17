@@ -1,5 +1,5 @@
 #![crate_name = "id"]
-#![feature(collections, core, rustc_private, std_misc)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,6 +18,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::io::Write;
 use std::ffi::CStr;
 use std::ptr::read;
 use libc::{
@@ -86,7 +87,7 @@ extern {
 static NAME: &'static str = "id";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let args_t = args.tail();
+    let args_t = &args[1..];
 
     let options = [
         optflag("h", "", "Show help"),

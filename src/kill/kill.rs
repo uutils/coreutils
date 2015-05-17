@@ -1,5 +1,5 @@
 #![crate_name = "kill"]
-#![feature(collections, core, old_io, rustc_private, unicode)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -10,39 +10,34 @@
  * that was distributed with this source code.
  */
 
-
 extern crate getopts;
 extern crate libc;
-extern crate collections;
 extern crate serialize;
 
 #[macro_use] extern crate log;
 
-use std::old_io::process::Process;
-
-use getopts::{
-    getopts,
-    optopt,
-    optflag,
-    optflagopt,
-    usage,
-};
-
+use getopts::{getopts, optflag, optflagopt, optopt, usage};
+use libc::{c_int, pid_t};
 use signals::ALL_SIGNALS;
+use std::io::{Error, Write};
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
+#[path = "../common/c_types.rs"]
+mod c_types;
+
 #[path = "../common/signals.rs"]
 mod signals;
 
 static NAME: &'static str = "kill";
-static VERSION:  &'static str = "0.0.1";
+static VERSION: &'static str = "0.0.1";
 
 static EXIT_OK:  i32 = 0;
 static EXIT_ERR: i32 = 1;
 
+#[derive(Clone, Copy)]
 pub enum Mode {
     Kill,
     Table,
@@ -50,8 +45,6 @@ pub enum Mode {
     Help,
     Version,
 }
-
-impl Copy for Mode {}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let opts = [
@@ -66,10 +59,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let (args, obs_signal) = handle_obsolete(args);
 
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match getopts(&args[1..], &opts) {
         Ok(m) => m,
         Err(e) => {
-            show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));
+            show_error!("{}\n{}", e,  get_help_text(NAME, &usage));
             return EXIT_ERR;
         },
     };
@@ -87,10 +80,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::Kill    => return kill(matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())).as_slice(), matches.free),
+        Mode::Kill    => return kill(&matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())), matches.free),
         Mode::Table   => table(),
         Mode::List    => list(matches.opt_str("list")),
-        Mode::Help    => help(NAME, usage.as_slice()),
+        Mode::Help    => help(NAME, &usage),
         Mode::Version => version(),
     }
 
@@ -105,8 +98,8 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     let mut i = 0;
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
-        let slice: &str = unsafe { std::mem::transmute(args[i].as_slice()) };
-        if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
+        let slice = &args[i].clone();//unsafe { std::mem::transmute(args[i]) };
+        if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
             let val = &slice[1..];
             match val.parse() {
                 Ok(num) => {
@@ -144,10 +137,10 @@ fn table() {
 
 fn print_signal(signal_name_or_value: &str) {
     for signal in ALL_SIGNALS.iter() {
-        if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name).as_slice()) == signal_name_or_value {
+        if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name)) == signal_name_or_value {
             println!("{}", signal.value);
             exit!(EXIT_OK as i32)
-        } else if signal_name_or_value == signal.value.to_string().as_slice() {
+        } else if signal_name_or_value == signal.value.to_string() {
             println!("{}", signal.name);
             exit!(EXIT_OK as i32)
         }
@@ -172,7 +165,7 @@ fn print_signals() {
 
 fn list(arg: Option<String>) {
     match arg {
-      Some(x) => print_signal(x.as_slice()),
+      Some(ref x) => print_signal(x),
       None => print_signals(),
     };
 }
@@ -193,16 +186,12 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)
     };
     for pid in pids.iter() {
-        match pid.as_slice().parse() {
+        match pid.parse::<usize>() {
             Ok(x) => {
-                let result = Process::kill(x, signal_value as isize);
-                match result {
-                    Ok(_) => (),
-                    Err(f) => {
-                        show_error!("{}", f);
-                        status = 1;
-                    }
-                };
+                if unsafe { libc::funcs::posix88::signal::kill(x as pid_t, signal_value as c_int) } != 0 {
+                    show_error!("{}", Error::last_os_error());
+                    status = 1;
+                }
             },
             Err(e) => crash!(EXIT_ERR, "failed to parse argument {}: {}", pid, e)
         };
