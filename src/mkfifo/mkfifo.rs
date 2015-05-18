@@ -55,7 +55,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let mode = match matches.opt_str("m") {
-        Some(m) => match u16::from_str_radix(&m, 8) {
+        Some(m) => match usize::from_str_radix(&m, 8) {
             Ok(m) => m,
             Err(e)=> {
                 show_error!("invalid mode: {}", e);
@@ -67,7 +67,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut exit_status = 0;
     for f in matches.free.iter() {
-        let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode) };
+        let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode as libc::mode_t) };
         if err == -1 {
             show_error!("creating '{}': {}", f, Error::last_os_error().raw_os_error().unwrap());
             exit_status = 1;
