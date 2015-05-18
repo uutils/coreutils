@@ -58,8 +58,10 @@ PROGS       := \
   false \
   fmt \
   fold \
+  join \
   link \
   hashsum \
+  join \
   mkdir \
   mv \
   nl \
