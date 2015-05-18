@@ -58,7 +58,6 @@ PROGS       := \
   false \
   fmt \
   fold \
-  join \
   link \
   hashsum \
   join \
