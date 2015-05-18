@@ -1,11 +1,13 @@
 #![crate_name = "libstdbuf"]
 #![crate_type = "staticlib"]
-#![feature(core, libc, os)]
+#![feature(libc)]
 
 extern crate libc;
+
 use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF, setvbuf};
+use std::env;
+use std::io::Write;
 use std::ptr;
-use std::os;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -44,13 +46,13 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 
 #[no_mangle]
 pub extern fn stdbuf() {
-    if let Some(val) = os::getenv("_STDBUF_E") {
-        set_buffer(stderr, val.as_slice());
+    if let Ok(val) = env::var("_STDBUF_E") {
+        set_buffer(stderr, &val);
     }
-    if let Some(val) = os::getenv("_STDBUF_I") {
-        set_buffer(stdin, val.as_slice());
+    if let Ok(val) = env::var("_STDBUF_I") {
+        set_buffer(stdin, &val);
     }
-    if let Some(val) = os::getenv("_STDBUF_O") {
-        set_buffer(stdout, val.as_slice()); 
+    if let Ok(val) = env::var("_STDBUF_O") {
+        set_buffer(stdout, &val);
     }
 }

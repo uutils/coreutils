@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![feature(core, old_io, os, old_path, rustc_private, unicode)]
+#![feature(negate_unsigned, path_ext, rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -12,12 +12,14 @@
 
 extern crate getopts;
 extern crate libc;
-use getopts::{optopt, optflag, getopts, usage, Matches, OptGroup};
-use std::old_io::process::{Command, StdioContainer, ProcessExit};
-use std::old_io::fs::PathExtensions;
-use std::iter::range_inclusive;
-use std::num::Int;
-use std::os;
+
+use getopts::{getopts, Matches, optflag, OptGroup, optopt, usage};
+use std::env;
+use std::fs::PathExt;
+use std::io::{self, Write};
+use std::os::unix::process::ExitStatusExt;
+use std::path::PathBuf;
+use std::process::Command;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -65,7 +67,6 @@ fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
 
-
 fn print_version() {
     println!("{} version {}", NAME, VERSION);
 }
@@ -94,7 +95,7 @@ fn parse_size(size: &str) -> Option<u64> {
     let num = size.trim_right_matches(|c: char| c.is_alphabetic());
     let mut recovered = num.to_string();
     recovered.push_str(ext);
-    if recovered.as_slice() != size {
+    if recovered != size {
         return None;
     }
     let buf_size: u64 = match num.parse().ok() {
@@ -128,7 +129,7 @@ fn check_option(matches: &Matches, name: &str, modified: &mut bool) -> Option<Bu
     match matches.opt_str(name) {
         Some(value) => {
             *modified = true;
-            match value.as_slice() {
+            match &value[..] {
                 "L" => {
                     if name == "input" {
                         show_info!("line buffering stdin is meaningless");
@@ -184,18 +185,24 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
     }
 }
 
+fn exe_path() -> io::Result<PathBuf> {
+    let exe_path = try!(env::current_exe());
+    let absolute_path = try!(exe_path.as_path().canonicalize());
+    Ok(match absolute_path.parent() {
+        Some(p) => p.to_path_buf(),
+        None => absolute_path.clone()
+    })
+}
+
 fn get_preload_env() -> (String, String) {
     let (preload, extension) = preload_strings();
     let mut libstdbuf = LIBSTDBUF.to_string();
     libstdbuf.push_str(extension);
     // First search for library in directory of executable.
-    let mut path = match os::self_exe_path() {
-        Some(exe_path) => exe_path,
-        None => crash!(1, "Impossible to fetch the path of this executable.")
-    };
-    path.push(libstdbuf.as_slice());
+    let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
+    path.push(libstdbuf.clone());
     if path.exists() {
-        match path.as_str() {
+        match path.as_os_str().to_str() {
             Some(s) => { return (preload.to_string(), s.to_string()); },
             None => crash!(1, "Error while converting path.")
         };
@@ -203,7 +210,6 @@ fn get_preload_env() -> (String, String) {
     // We assume library is in LD_LIBRARY_PATH/ DYLD_LIBRARY_PATH.
     (preload.to_string(), libstdbuf)
 }
-
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let optgrps = [
@@ -215,7 +221,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     ];
     let mut options = ProgramOptions {stdin: BufferType::Default, stdout: BufferType::Default, stderr: BufferType::Default};
     let mut command_idx = -1;
-    for i in range_inclusive(1, args.len()) {
+    for i in 1 .. args.len()-1 {
         match parse_options(&args[1 .. i], &mut options, &optgrps) {
             Ok(OkMsg::Buffering) => {
                 command_idx = i - 1;
@@ -239,8 +245,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let ref command_name = args[command_idx];
     let mut command = Command::new(command_name);
     let (preload_env, libstdbuf) = get_preload_env();
-    command.args(&args[command_idx + 1 ..]).env(preload_env.as_slice(), libstdbuf.as_slice());
-    command.stdin(StdioContainer::InheritFd(0)).stdout(StdioContainer::InheritFd(1)).stderr(StdioContainer::InheritFd(2));
+    command.args(&args[command_idx + 1 ..]).env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
@@ -250,9 +255,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     match process.wait() {
         Ok(status) => {
-            match status {
-                ProcessExit::ExitStatus(i) => return i as i32,
-                ProcessExit::ExitSignal(i) => crash!(1, "process killed by signal {}", i),
+            match status.code() {
+                Some(i) => return i,
+                None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
             }
         },
         Err(e) => crash!(1, "{}", e)
