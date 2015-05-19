@@ -1,5 +1,5 @@
 #![crate_name = "uutils"]
-#![feature(exit_status, rustc_private)]
+#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -53,7 +53,7 @@ fn main() {
 
     match umap.get(binary_as_util) {
         Some(&uumain) => {
-            env::set_exit_status(uumain(args));
+            std::process::exit(uumain(args));
             return
         }
         None => (),
@@ -66,7 +66,7 @@ fn main() {
             // what busybox uses the -suffix pattern for.
     } else {
         println!("{}: applet not found", binary_as_util);
-        env::set_exit_status(1);
+        std::process::exit(1);
         return
     }
 
@@ -77,7 +77,7 @@ fn main() {
 
         match umap.get(util) {
             Some(&uumain) => {
-                env::set_exit_status(uumain(args.clone()));
+                std::process::exit(uumain(args.clone()));
                 return
             }
             None => {
@@ -87,22 +87,22 @@ fn main() {
                         let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                env::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
+                                std::process::exit(uumain(vec![util.to_string(), "--help".to_string()]));
                                 return
                             }
                             None => {
                                 println!("{}: applet not found", util);
-                                env::set_exit_status(1);
+                                std::process::exit(1);
                                 return
                             }
                         }
                     }
                     usage(&umap);
-                    env::set_exit_status(0);
+                    std::process::exit(0);
                     return
                 } else {
                     println!("{}: applet not found", util);
-                    env::set_exit_status(1);
+                    std::process::exit(1);
                     return
                 }
             }
@@ -110,7 +110,7 @@ fn main() {
     } else {
         // no arguments provided
         usage(&umap);
-        env::set_exit_status(0);
+        std::process::exit(0);
         return
     }
 }

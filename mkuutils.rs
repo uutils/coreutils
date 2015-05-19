@@ -1,5 +1,3 @@
-#![feature(exit_status)]
-
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -8,8 +6,7 @@ fn main() {
     let args : Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("usage: mkuutils <outfile> <crates>");
-        env::set_exit_status(1);
-        return;
+        std::process::exit(1);
     }
 
     let mut crates = String::new();
