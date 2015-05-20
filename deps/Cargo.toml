@@ -6,6 +6,7 @@ version = "0.0.0"
 name = "null"
 
 [dependencies]
+getopts = "0.2.11"
 libc = "0.1.7"
 num_cpus = "*"
 rand = "0.3.8"

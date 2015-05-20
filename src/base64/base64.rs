@@ -1,5 +1,4 @@
 #![crate_name = "base64"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -21,12 +20,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, stdin, stdout, Write};
 use std::path::Path;
 
-use getopts::{
-    getopts,
-    optflag,
-    optopt,
-    usage
-};
+use getopts::Options;
 use serialize::base64;
 use serialize::base64::{FromBase64, ToBase64};
 
@@ -39,16 +33,15 @@ static NAME: &'static str = "base64";
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        optflag("d", "decode", "decode data"),
-        optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
-        optopt("w", "wrap",
+    let mut opts = Options::new();
+    opts.optflag("d", "decode", "decode data");
+    opts.optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters");
+    opts.optopt("w", "wrap",
             "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS"
-        ),
-        optflag("h", "help", "display this help text and exit"),
-        optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts(&args[1..], &opts) {
+        );
+    opts.optflag("h", "help", "display this help text and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(e) => {
             crash!(1, "error: {}", e);
@@ -56,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let progname = args[0].clone();
-    let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", &opts);
+    let usage = opts.usage("Base64 encode or decode FILE, or standard input, to standard output.");
     let mode = if matches.opt_present("help") {
         Mode::Help
     } else if matches.opt_present("version") {
