@@ -1,5 +1,4 @@
 #![crate_name = "id"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -27,7 +26,7 @@ use libc::{
     getuid
 };
 use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
-use getopts::{getopts, optflag, usage};
+use getopts::Options;
 use c_types::{
     c_passwd,
     c_group,
@@ -89,28 +88,27 @@ static NAME: &'static str = "id";
 pub fn uumain(args: Vec<String>) -> i32 {
     let args_t = &args[1..];
 
-    let options = [
-        optflag("h", "", "Show help"),
-        optflag("A", "", "Display the process audit (not available on Linux)"),
-        optflag("G", "", "Display the different group IDs"),
-        optflag("g", "", "Display the effective group ID as a number"),
-        optflag("n", "", "Display the name of the user or group ID for the -G, -g and -u options"),
-        optflag("P", "", "Display the id as a password file entry"),
-        optflag("p", "", "Make the output human-readable"),
-        optflag("r", "", "Display the real ID for the -g and -u options"),
-        optflag("u", "", "Display the effective user ID as a number")
-    ];
+    let mut options = Options::new();
+    options.optflag("h", "", "Show help");
+    options.optflag("A", "", "Display the process audit (not available on Linux)");
+    options.optflag("G", "", "Display the different group IDs");
+    options.optflag("g", "", "Display the effective group ID as a number");
+    options.optflag("n", "", "Display the name of the user or group ID for the -G, -g and -u options");
+    options.optflag("P", "", "Display the id as a password file entry");
+    options.optflag("p", "", "Make the output human-readable");
+    options.optflag("r", "", "Display the real ID for the -g and -u options");
+    options.optflag("u", "", "Display the effective user ID as a number");
 
-    let matches = match getopts(args_t, &options) {
+    let matches = match options.parse(args_t) {
         Ok(m) => { m },
         Err(_) => {
-            println!("{}", usage(NAME, &options));
+            println!("{}", options.usage(NAME));
             return 1;
         }
     };
 
     if matches.opt_present("h") {
-        println!("{}", usage(NAME, &options));
+        println!("{}", options.usage(NAME));
         return 0;
     }
 
