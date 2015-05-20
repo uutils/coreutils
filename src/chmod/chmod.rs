@@ -11,8 +11,6 @@
  */
 
 #![allow(unused_variables)]  // only necessary while the TODOs still exist
-#![feature(plugin)]
-#![plugin(regex_macros)]
 
 extern crate getopts;
 extern crate libc;
@@ -114,9 +112,9 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
 #[cfg(unix)]
 #[inline]
 fn verify_mode(modes: &str) -> Result<(), String> {
-    static REGEXP: regex::Regex = regex!(r"^[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+$");
+    let re: regex::Regex = Regex::new(r"^[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+$").unwrap();
     for mode in modes.split(',') {
-        if !REGEXP.is_match(mode) {
+        if !re.is_match(mode) {
             return Err(format!("invalid mode '{}'", mode));
         }
     }
@@ -127,9 +125,9 @@ fn verify_mode(modes: &str) -> Result<(), String> {
 #[inline]
 // XXX: THIS IS NOT TESTED!!!
 fn verify_mode(mode: &str) -> Result<(), String> {
-    static REGEXP: regex::Regex = regex!(r"^[ugoa]*(?:[-+=](?:([rwxXst]*)|[ugo]))+|[-+=]?([0-7]+)$");
+    let re: regex::Regex = Regex::new(r"^[ugoa]*(?:[-+=](?:([rwxXst]*)|[ugo]))+|[-+=]?([0-7]+)$").unwrap();
     for mode in modes.split(',') {
-        match REGEXP.captures(mode) {
+        match re.captures(mode) {
             Some(cap) => {
                 let symbols = cap.at(1);
                 let numbers = cap.at(2);
@@ -206,8 +204,8 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
         }
         None => {
             // TODO: make the regex processing occur earlier (i.e. once in the main function)
-            static REGEXP: regex::Regex = regex!(r"^(([ugoa]*)((?:[-+=](?:[rwxXst]*|[ugo]))+))|([-+=]?[0-7]+)$");
-            let mut stat : libc::stat = unsafe { mem::uninitialized() };
+            let re: regex::Regex = Regex::new(r"^(([ugoa]*)((?:[-+=](?:[rwxXst]*|[ugo]))+))|([-+=]?[0-7]+)$").unwrap();
+            let mut stat: libc::stat = unsafe { mem::uninitialized() };
             let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
             let mut fperm =
                 if statres == 0 {
@@ -217,7 +215,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                     return Err(1);
                 };
             for mode in cmode.unwrap().split(',') {  // cmode is guaranteed to be Some in this case
-                let cap = REGEXP.captures(mode).unwrap();  // mode was verified earlier, so this is safe
+                let cap = re.captures(mode).unwrap();  // mode was verified earlier, so this is safe
                 if match cap.at(1) {
                     Some("") | None => false,
                     _ => true,

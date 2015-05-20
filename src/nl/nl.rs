@@ -1,6 +1,5 @@
 #![crate_name = "nl"]
 #![feature(collections, rustc_private, slice_patterns)]
-#![plugin(regex_macros)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,10 +10,9 @@
  * file that was distributed with this source code.
  *
  */
-#![feature(plugin)]
 
-extern crate regex;
 extern crate getopts;
+extern crate regex;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
@@ -30,7 +28,6 @@ mod helper;
 static NAME: &'static str = "nl";
 static USAGE: &'static str = "nl [OPTION]... [FILE]...";
 // A regular expression matching everything.
-static REGEX_DUMMY: &'static regex::Regex = &regex!(r".?");
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -158,6 +155,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 // nl implements the main functionality for an individual buffer.
 fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
+    let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;
     // The current line number's width as a string. Using to_string is inefficient
     // but since we only do it once, it should not hurt.
@@ -174,7 +172,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
     // Initially, we use the body's line counting settings
     let mut regex_filter = match settings.body_numbering {
         NumberingStyle::NumberForRegularExpression(ref re) => re,
-        _ => REGEX_DUMMY,
+        _ => &regexp,
     };
     let mut line_filter : fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
