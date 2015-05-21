@@ -1,5 +1,4 @@
 #![crate_name = "users"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,6 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::Options;
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
@@ -50,30 +50,31 @@ unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 }
 
 static NAME: &'static str = "users";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("{}", f),
     };
 
     if matches.opt_present("help") {
-        println!("users 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {} [OPTION]... [FILE]", args[0]);
+        println!("  {} [OPTION]... [FILE]", NAME);
         println!("");
-        println!("{}", getopts::usage("Output who is currently logged in according to FILE.", &opts));
+        println!("{}", opts.usage("Output who is currently logged in according to FILE."));
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("users 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

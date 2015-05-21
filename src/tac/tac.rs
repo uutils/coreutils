@@ -1,5 +1,4 @@
 #![crate_name = "tac"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +13,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
+use std::io::{BufReader, Read, stdin, stdout, Stdout, Write};
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -24,26 +23,29 @@ static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("b", "before", "attach the separator before instead of after"),
-        getopts::optflag("r", "regex", "interpret the sequence as a regular expression (NOT IMPLEMENTED)"),
-        getopts::optopt("s", "separator", "use STRING as the separator instead of newline", "STRING"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = getopts::Options::new();
+
+    opts.optflag("b", "before", "attach the separator before instead of after");
+    opts.optflag("r", "regex", "interpret the sequence as a regular expression (NOT IMPLEMENTED)");
+    opts.optopt("s", "separator", "use STRING as the separator instead of newline", "STRING");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
     if matches.opt_present("help") {
-        println!("tac {}", VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", &args[0][..]);
-        println!("");
-        print!("{}", getopts::usage("Write each file to standard output, last line first.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]... [FILE]...
+
+Write each file to standard output, last line first.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
-        println!("tac {}", VERSION);
+        println!("{} {}", NAME, VERSION);
     } else {
         let before = matches.opt_present("b");
         let regex = matches.opt_present("r");

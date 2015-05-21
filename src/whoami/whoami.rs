@@ -1,5 +1,4 @@
 #![crate_name = "whoami"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,33 +14,36 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::Options;
 use std::io::Write;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 mod platform;
 
 static NAME: &'static str = "whoami";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
-        println!("whoami 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {}", args[0]);
+        println!("  {} [OPTIONS]", NAME);
         println!("");
-        println!("{}", getopts::usage("print effective userid", &opts));
+        println!("{}", opts.usage("print effective userid"));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("whoami 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

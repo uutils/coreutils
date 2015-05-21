@@ -1,5 +1,4 @@
 #![crate_name = "unlink"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,53 +14,52 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::Options;
 use libc::consts::os::posix88::{S_IFMT, S_IFLNK, S_IFREG};
-use libc::types::os::arch::c95::c_char;
-use libc::types::os::arch::posix01::stat;
 use libc::funcs::posix01::stat_::lstat;
 use libc::funcs::posix88::unistd::unlink;
-
-use std::mem::uninitialized;
+use libc::types::os::arch::c95::c_char;
+use libc::types::os::arch::posix01::stat;
 use std::io::{Error, ErrorKind, Write};
+use std::mem::uninitialized;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
 static NAME: &'static str = "unlink";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "invalid options\n{}", f)
-        }
+        Err(f) => crash!(1, "invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        println!("unlink 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [FILE]... [OPTION]...", args[0]);
+        println!("  {} [FILE]... [OPTION]...", NAME);
         println!("");
-        println!("{}", getopts::usage("Unlink the file at [FILE].", &opts));
+        println!("{}", opts.usage("Unlink the file at [FILE]."));
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("unlink 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
     if matches.free.len() == 0 {
-        crash!(1, "missing operand\nTry '{0} --help' for more information.", args[0]);
+        crash!(1, "missing operand\nTry '{0} --help' for more information.", NAME);
     } else if matches.free.len() > 1 {
-        crash!(1, "extra operand: '{1}'\nTry '{0} --help' for more information.", args[0], matches.free[1]);
+        crash!(1, "extra operand: '{1}'\nTry '{0} --help' for more information.", NAME, matches.free[1]);
     }
 
     let st_mode = {

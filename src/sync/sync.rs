@@ -1,5 +1,4 @@
 #![crate_name = "sync"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,8 +13,6 @@
 
 extern crate getopts;
 extern crate libc;
-
-use getopts::{optflag, getopts, usage};
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 
@@ -141,20 +138,18 @@ mod platform {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0][..];
+    let mut opts = getopts::Options::new();
 
-    let options = [
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit")
-    ];
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts(&args[1..], &options) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
-        _ => { help(program, &options); return 1 }
+        _ => { help(&opts); return 1 }
     };
 
     if matches.opt_present("h") {
-        help(program, &options);
+        help(&opts);
         return 0
     }
 
@@ -174,9 +169,15 @@ fn version() {
     println!("Author -- Alexander Fomin.");
 }
 
-fn help(program: &str, options: &[getopts::OptGroup]) {
-    println!("Usage: {} [OPTION]", program);
-    print!("{}", usage("Force changed blocks to disk, update the super block.", options));
+fn help(opts: &getopts::Options) {
+    let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]
+
+Force changed blocks to disk, update the super block.", NAME, VERSION);
+
+    print!("{}", opts.usage(&msg));
 }
 
 fn sync() -> isize {
