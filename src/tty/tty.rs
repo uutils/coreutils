@@ -1,5 +1,4 @@
 #![crate_name = "tty"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,7 +14,6 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{getopts, optflag};
 use std::ffi::CStr;
 use std::io::Write;
 
@@ -32,23 +30,24 @@ static NAME: &'static str = "tty";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let options = [
-        optflag("s", "silent", "print nothing, only return an exit status"),
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit")
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts(&args[1..], &options) {
+    opts.optflag("s", "silent", "print nothing, only return an exit status");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(2, "{}", f)
-        }
+        Err(f) => { crash!(2, "{}", f) }
     };
 
     if matches.opt_present("help") {
-        let usage = getopts::usage("Print the file name of the terminal connected to standard input.", &options);
-
-        println!("Usage: {} [OPTION]...\n{}", NAME, usage);
+        println!("{} {}", NAME, VERSION);
+        println!("");
+        println!("Usage:");
+        println!("  {} [OPTION]...", NAME);
+        println!("");
+        print!("{}", opts.usage("Print the file name of the terminal connected to standard input."));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {

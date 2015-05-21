@@ -1,5 +1,4 @@
 #![crate_name = "truncate"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -34,32 +33,30 @@ enum TruncateMode {
 }
 
 static NAME: &'static str = "truncate";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("c", "no-create", "do not create files that do not exist"),
-        getopts::optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)"),
-        getopts::optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE"),
-        getopts::optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("c", "no-create", "do not create files that do not exist");
+    opts.optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)");
+    opts.optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE");
+    opts.optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "{}", f)
-        }
+        Err(f) => { crash!(1, "{}", f) }
     };
 
     if matches.opt_present("help") {
-        println!("truncate 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... FILE...", program);
+        println!("  {} [OPTION]... FILE...", NAME);
         println!("");
-        print!("{}", getopts::usage("Shrink or extend the size of each file to the specified size.", &opts));
+        print!("{}", opts.usage("Shrink or extend the size of each file to the specified size."));
         print!("
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -79,7 +76,7 @@ file based on its current size:
     '%'  => round up to multiple of
 ");
     } else if matches.opt_present("version") {
-        println!("truncate 1.0.0");
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
         return 1;
@@ -100,7 +97,6 @@ file based on its current size:
 
     0
 }
-
 
 fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<()> {
     let (refsize, mode) = match reference {

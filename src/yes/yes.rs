@@ -1,5 +1,4 @@
 #![crate_name = "yes"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,6 +14,7 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::Options;
 use std::io::Write;
 
 #[path = "../common/util.rs"]
@@ -22,30 +22,29 @@ use std::io::Write;
 mod util;
 
 static NAME: &'static str = "yes";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "invalid options\n{}", f)
-        }
+        Err(f) => crash!(1, "invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("yes 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", program);
+        println!("  {0} [STRING]... [OPTION]...", NAME);
         println!("");
-        print!("{}", getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts));
+        print!("{}", opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'."));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("yes 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
     let string = if matches.free.is_empty() {

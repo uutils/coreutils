@@ -1,5 +1,4 @@
 #![crate_name = "uptime"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,12 +15,13 @@ extern crate getopts;
 extern crate libc;
 extern crate time as rtime;
 
+use getopts::Options;
+use libc::{time_t, c_double, c_int, c_char};
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::mem::transmute;
 use std::ptr::null;
-use libc::{time_t, c_double, c_int, c_char};
 use utmpx::*;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
@@ -31,6 +31,7 @@ use utmpx::*;
 #[path = "../common/utmpx.rs"] mod utmpx;
 
 static NAME: &'static str = "uptime";
+static VERSION: &'static str = "1.0.0";
 
 #[cfg(unix)]
 extern {
@@ -55,26 +56,28 @@ unsafe extern fn utmpxname(_file: *const c_char) -> c_int {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-    let opts = [
-        getopts::optflag("v", "version", "output version information and exit"),
-        getopts::optflag("h", "help", "display this help and exit"),
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+
+    opts.optflag("v", "version", "output version information and exit");
+    opts.optflag("h", "help", "display this help and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("version") {
-        println!("uptime 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
     if matches.opt_present("help") || matches.free.len() > 0 {
-        println!("Usage:");
-        println!("  {0} [OPTION]", program);
+        println!("{} {}", NAME, VERSION);
         println!("");
-        println!("{}", getopts::usage("Print the current time, the length of time the system has been up,\n\
+        println!("Usage:");
+        println!("  {0} [OPTION]", NAME);
+        println!("");
+        println!("{}", opts.usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes.", &opts));
+                              in the run queue over the last 1, 5 and 15 minutes."));
         return 0;
     }
 

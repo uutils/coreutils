@@ -1,5 +1,4 @@
 #![crate_name = "tee"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,12 +10,14 @@
  */
 
 extern crate getopts;
-#[macro_use] extern crate log;
 
 use std::fs::OpenOptions;
 use std::io::{copy, Error, ErrorKind, Read, Result, sink, stdin, stdout, Write};
 use std::path::{Path, PathBuf};
-use getopts::{getopts, optflag, usage};
+
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
 
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";
@@ -38,21 +39,20 @@ struct Options {
 }
 
 fn options(args: &Vec<String>) -> Result<Options> {
-    let opts = [
-        optflag("a", "append", "append to the given FILEs, do not overwrite"),
-        optflag("i", "ignore-interrupts", "ignore interrupt signals"),
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    getopts(&args[1..], &opts).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e))).and_then(|m| {
+    opts.optflag("a", "append", "append to the given FILEs, do not overwrite");
+    opts.optflag("i", "ignore-interrupts", "ignore interrupt signals");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    opts.parse(&args[1..]).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e))).and_then(|m| {
         let version = format!("{} {}", NAME, VERSION);
-        let program = &args[0][..];
         let arguments = "[OPTION]... [FILE]...";
         let brief = "Copy standard input to each FILE, and also to standard output.";
         let comment = "If a FILE is -, copy again to standard output.";
         let help = format!("{}\n\nUsage:\n  {} {}\n\n{}\n{}",
-                           version, program, arguments, usage(brief, &opts),
+                           version, NAME, arguments, opts.usage(brief),
                            comment);
         let mut names: Vec<String> = m.free.clone().into_iter().collect();
         names.push("-".to_string());
@@ -60,7 +60,7 @@ fn options(args: &Vec<String>) -> Result<Options> {
                        else if m.opt_present("version") { Some(version) }
                        else { None };
         Ok(Options {
-            program: program.to_string(),
+            program: NAME.to_string(),
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
@@ -169,6 +169,6 @@ impl Read for NamedReader {
 }
 
 fn warn(message: &str) -> Error {
-    error!("tee: {}", message);
-    Error::new(ErrorKind::Other, format!("tee: {}", message))
+    eprintln!("{}: {}", NAME, message);
+    Error::new(ErrorKind::Other, format!("{}: {}", NAME, message))
 }

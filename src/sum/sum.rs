@@ -1,5 +1,4 @@
 #![crate_name = "sum"]
-#![feature(rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -21,8 +20,8 @@ use std::path::Path;
 #[macro_use]
 mod util;
 
-static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "sum";
+static VERSION: &'static str = "1.0.0";
 
 fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
@@ -78,32 +77,30 @@ fn open(name: &str) -> Result<Box<Read>> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let opts = [
-        getopts::optflag("r", "", "use the BSD compatible algorithm (default)"),
-        getopts::optflag("s", "sysv", "use System V compatible algorithm"),
-        getopts::optflag("h", "help", "show this help message"),
-        getopts::optflag("v", "version", "print the version and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("r", "", "use the BSD compatible algorithm (default)");
+    opts.optflag("s", "sysv", "use System V compatible algorithm");
+    opts.optflag("h", "help", "show this help message");
+    opts.optflag("v", "version", "print the version and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        println!("{} {}", program, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
-        println!("");
-        print!("{}", getopts::usage("checksum and count the blocks in a file", &opts));
-        println!("");
-        println!("With no FILE, or when  FILE is -, read standard input.");
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]... [FILE]...
+
+Checksum and count the blocks in a file.", NAME, VERSION);
+        println!("{}\nWith no FILE, or when  FILE is -, read standard input.", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("{} {}", program, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

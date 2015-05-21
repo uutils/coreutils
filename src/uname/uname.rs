@@ -1,5 +1,4 @@
 #![crate_name = "uname"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,10 +14,10 @@
 extern crate getopts;
 extern crate libc;
 
+use c_types::utsname;
 use std::ffi::CStr;
 use std::io::Write;
 use std::mem::uninitialized;
-use c_types::utsname;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
@@ -51,31 +50,32 @@ unsafe fn getuname() -> Uts {
     }
 }
 
-
 static NAME: &'static str = "uname";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("a", "all", "Behave as though all of the options -mnrsv were specified."),
-        getopts::optflag("m", "machine", "print the machine hardware name."),
-        getopts::optflag("n", "nodename", "print the nodename (the nodename may be a name that the system is known by to a communications network)."),
-        getopts::optflag("p", "processor", "print the machine processor architecture name."),
-        getopts::optflag("r", "release", "print the operating system release."),
-        getopts::optflag("s", "sysname", "print the operating system name."),
-        getopts::optflag("v", "version", "print the operating system version."),
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = getopts::Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("a", "all", "Behave as though all of the options -mnrsv were specified.");
+    opts.optflag("m", "machine", "print the machine hardware name.");
+    opts.optflag("n", "nodename", "print the nodename (the nodename may be a name that the system is known by to a communications network).");
+    opts.optflag("p", "processor", "print the machine processor architecture name.");
+    opts.optflag("r", "release", "print the operating system release.");
+    opts.optflag("s", "sysname", "print the operating system name.");
+    opts.optflag("v", "version", "print the operating system version.");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
-        println!("uname 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {}", args[0]);
+        println!("  {} [OPTIONS]", NAME);
         println!("");
-        println!("{}", getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", &opts));
+        print!("{}", opts.usage("The uname utility writes symbols representing one or more system characteristics to the standard output."));
         return 0;
     }
     let uname = unsafe { getuname() };

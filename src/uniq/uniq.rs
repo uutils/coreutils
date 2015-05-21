@@ -1,5 +1,4 @@
 #![crate_name = "uniq"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,11 +12,12 @@
 
 extern crate getopts;
 
+use getopts::{Matches, Options};
 use std::cmp::min;
-use std::str::FromStr;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
 use std::path::Path;
+use std::str::FromStr;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -113,7 +113,7 @@ impl Uniq {
     }
 }
 
-fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<T> {
+fn opt_parsed<T: FromStr>(opt_name: &str, matches: &Matches) -> Option<T> {
     matches.opt_str(opt_name).map(|arg_str| {
         let opt_val: Option<T> = arg_str.parse().ok();
         opt_val.unwrap_or_else(||
@@ -122,23 +122,24 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &getopts::Matches) -> Option<
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("c", "count", "prefix lines by the number of occurrences"),
-        getopts::optflag("d", "repeated", "only print duplicate lines"),
-        getopts::optflagopt(
-            "D",
-            "all-repeated",
-            "print all duplicate lines delimit-method={none(default),prepend,separate} Delimiting is done with blank lines",
-            "delimit-method"
-        ),
-        getopts::optopt("s", "skip-chars", "avoid comparing the first N characters", "N"),
-        getopts::optopt("w", "check-chars", "compare no more than N characters in lines", "N"),
-        getopts::optflag("i", "ignore-case", "ignore differences in case when comparing"),
-        getopts::optflag("u", "unique", "only print unique lines"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+
+    opts.optflag("c", "count", "prefix lines by the number of occurrences");
+    opts.optflag("d", "repeated", "only print duplicate lines");
+    opts.optflagopt(
+        "D",
+        "all-repeated",
+        "print all duplicate lines delimit-method={none(default),prepend,separate} Delimiting is done with blank lines",
+        "delimit-method"
+    );
+    opts.optopt("s", "skip-chars", "avoid comparing the first N characters", "N");
+    opts.optopt("w", "check-chars", "compare no more than N characters in lines", "N");
+    opts.optflag("i", "ignore-case", "ignore differences in case when comparing");
+    opts.optflag("u", "unique", "only print unique lines");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -147,13 +148,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", args[0]);
+        println!("  {0} [OPTION]... [FILE]...", NAME);
         println!("");
-        print!("{}", getopts::usage("Filter adjacent matching lines from INPUT (or standard input),\n\
-                                    writing to OUTPUT (or standard output).", &opts));
+        print!("{}", opts.usage("Filter adjacent matching lines from INPUT (or standard input),\n\
+                                    writing to OUTPUT (or standard output)."));
         println!("");
         println!("Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
-                  You may want to sort the input first, or use 'sort -u' without '{0}'.\n", args[0]);
+                  You may want to sort the input first, or use 'sort -u' without '{0}'.\n", NAME);
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {

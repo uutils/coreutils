@@ -1,5 +1,4 @@
 #![crate_name = "split"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -26,31 +25,33 @@ static NAME: &'static str = "split";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N"),
-        getopts::optopt("b", "bytes", "put SIZE bytes per output file", "SIZE"),
-        getopts::optopt("C", "line-bytes", "put at most SIZE bytes of lines per output file", "SIZE"),
-        getopts::optflag("d", "numeric-suffixes", "use numeric suffixes instead of alphabetic"),
-        getopts::optopt("l", "lines", "put NUMBER lines per output file", "NUMBER"),
-        getopts::optflag("", "verbose", "print a diagnostic just before each output file is opened"),
-        getopts::optflag("h", "help", "display help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N");
+    opts.optopt("b", "bytes", "put SIZE bytes per output file", "SIZE");
+    opts.optopt("C", "line-bytes", "put at most SIZE bytes of lines per output file", "SIZE");
+    opts.optflag("d", "numeric-suffixes", "use numeric suffixes instead of alphabetic");
+    opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
+    opts.optflag("", "verbose", "print a diagnostic just before each output file is opened");
+    opts.optflag("h", "help", "display help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("h") {
-        println!("{} v{}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [INPUT [PREFIX]]", NAME);
-        println!("");
-        print!("{}", getopts::usage("Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is -, read standard input." , &opts));
-        println!("");
-        println!("SIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.");
+        let msg = format!("{0} v{1}
+
+Usage:
+  {0} [OPTION]... [INPUT [PREFIX]]
+
+Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
+size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
+-, read standard input.", NAME, VERSION);
+
+        println!("{}\nSIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.", opts.usage(&msg));
         return 0;
     }
 
