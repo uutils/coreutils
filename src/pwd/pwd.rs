@@ -1,5 +1,4 @@
 #![crate_name = "pwd"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,13 +23,12 @@ static NAME: &'static str = "pwd";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-    let opts = [
-        getopts::optflag("", "help", "display this help and exit"),
-        getopts::optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "Invalid options\n{}", f)
@@ -38,14 +36,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("help") {
-        println!("pwd {}", VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]...", program);
-        println!("");
-        print!("{}", getopts::usage("Print the full filename of the current working directory.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]...
+
+Print the full filename of the current working directory.", NAME, VERSION);
+        print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
-        println!("pwd version: {}", VERSION);
+        println!("{} version: {}", NAME, VERSION);
     } else {
         println!("{}", env::current_dir().unwrap().display());
     }

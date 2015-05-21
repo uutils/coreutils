@@ -1,5 +1,4 @@
 #![crate_name = "cksum"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,10 +11,11 @@
 
 extern crate getopts;
 
-use std::io::{self, stdin, Read, Write, BufReader};
-use std::path::Path;
+use getopts::Options;
 use std::fs::File;
+use std::io::{self, stdin, Read, Write, BufReader};
 use std::mem;
+use std::path::Path;
 
 use crc_table::CRC_TABLE;
 
@@ -77,23 +77,24 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
 
     if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] [FILE]...", NAME);
-        println!("");
-        println!("{}", getopts::usage("Print CRC and size for each file.", opts.as_ref()));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS] [FILE]...
+
+Print CRC and size for each file.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
 

@@ -1,5 +1,5 @@
 #![crate_name = "chroot"]
-#![feature(rustc_private, path_ext)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,10 +13,10 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{optflag, optopt, getopts, usage};
 use c_types::{get_pw_from_args, get_group};
+use getopts::Options;
 use libc::funcs::posix88::unistd::{setgid, setuid};
-use std::ffi::{CString};
+use std::ffi::CString;
 use std::fs::PathExt;
 use std::io::{Error, Write};
 use std::iter::FromIterator;
@@ -44,34 +44,32 @@ static NAME: &'static str = "chroot";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
+    let mut opts = Options::new();
 
-    let options = [
-        optopt("u", "user", "User (ID or name) to switch before running the program", "USER"),
-        optopt("g", "group", "Group (ID or name) to switch to", "GROUP"),
-        optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2…"),
-        optopt("", "userspec", "Colon-separated user and group to switch to. \
-                                Same as -u USER -g GROUP. \
-                                Userspec has higher preference than -u and/or -g", "USER:GROUP"),
-        optflag("h", "help", "Show help"),
-        optflag("V", "version", "Show program's version")
-    ];
+    opts.optopt("u", "user", "User (ID or name) to switch before running the program", "USER");
+    opts.optopt("g", "group", "Group (ID or name) to switch to", "GROUP");
+    opts.optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2…");
+    opts.optopt("", "userspec", "Colon-separated user and group to switch to. \
+        Same as -u USER -g GROUP. \
+        Userspec has higher preference than -u and/or -g", "USER:GROUP");
+    opts.optflag("h", "help", "Show help");
+    opts.optflag("V", "version", "Show program's version");
 
-    let opts = match getopts(&args[1..], &options) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            help_menu(program, &options);
+            help_menu(opts);
             return 1
         }
     };
 
-    if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { help_menu(program, &options); return 0 }
+    if matches.opt_present("V") { version(); return 0 }
+    if matches.opt_present("h") { help_menu(opts); return 0 }
 
-    if opts.free.len() == 0 {
+    if matches.free.len() == 0 {
         println!("Missing operand: NEWROOT");
-        println!("Try `{} --help` for more information.", program);
+        println!("Try `{} --help` for more information.", NAME);
         return 1
     }
 
@@ -79,12 +77,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
-    let newroot = Path::new(&opts.free[0][..]);
+    let newroot = Path::new(&matches.free[0][..]);
     if !newroot.is_dir() {
         crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
     }
 
-    let command: Vec<&str> = match opts.free.len() {
+    let command: Vec<&str> = match matches.free.len() {
         1 => {
             let shell: &str = match user_shell {
                 Err(_) => default_shell,
@@ -92,10 +90,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             };
             vec!(shell, default_option)
         },
-        _ => opts.free[1..].iter().map(|x| &x[..]).collect()
+        _ => matches.free[1..].iter().map(|x| &x[..]).collect()
     };
 
-    set_context(&newroot, &opts);
+    set_context(&newroot, &matches);
 
     let pstatus = Command::new(command[0])
         .args(&command[1..])
@@ -207,13 +205,15 @@ fn version() {
     println!("{} v{}", NAME, VERSION)
 }
 
-fn help_menu(program: &str, options: &[getopts::OptGroup]) {
-    version();
-    println!("Usage:");
-    println!("  {} [OPTION]… NEWROOT [COMMAND [ARG]…]", program);
-    println!("");
-    print!("{}", usage(
-            "Run COMMAND with root directory set to NEWROOT.\n\
-             If COMMAND is not specified, it defaults to '${SHELL} -i'. \
-             If ${SHELL} is not set, /bin/sh is used.", options))
+fn help_menu(options: Options) {
+    let msg = format!("{0} v{1}
+
+Usage:
+  {0} [OPTION]… NEWROOT [COMMAND [ARG]…]
+
+Run COMMAND with root directory set to NEWROOT.
+If COMMAND is not specified, it defaults to '$(SHELL) -i'.
+If $(SHELL) is not set, /bin/sh is used.", NAME, VERSION);
+
+    print!("{}", options.usage(&msg));
 }

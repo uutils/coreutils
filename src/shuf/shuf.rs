@@ -1,5 +1,4 @@
 #![crate_name = "shuf"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,8 +13,8 @@ extern crate getopts;
 extern crate libc;
 extern crate rand;
 
-use rand::read::ReadRng;
 use rand::{Rng, ThreadRng};
+use rand::read::ReadRng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::usize::MAX as MAX_USIZE;
@@ -34,34 +33,33 @@ static NAME: &'static str = "shuf";
 static VERSION: &'static str = "0.0.1";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("e", "echo", "treat each ARG as an input line"),
-        getopts::optopt("i", "input-range", "treat each number LO through HI as an input line", "LO-HI"),
-        getopts::optopt("n", "head-count", "output at most COUNT lines", "COUNT"),
-        getopts::optopt("o", "output", "write result to FILE instead of standard output", "FILE"),
-        getopts::optopt("", "random-source", "get random bytes from FILE", "FILE"),
-        getopts::optflag("r", "repeat", "output lines can be repeated"),
-        getopts::optflag("z", "zero-terminated", "end lines with 0 byte, not newline"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let mut matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = getopts::Options::new();
+    opts.optflag("e", "echo", "treat each ARG as an input line");
+    opts.optopt("i", "input-range", "treat each number LO through HI as an input line", "LO-HI");
+    opts.optopt("n", "head-count", "output at most COUNT lines", "COUNT");
+    opts.optopt("o", "output", "write result to FILE instead of standard output", "FILE");
+    opts.optopt("", "random-source", "get random bytes from FILE", "FILE");
+    opts.optflag("r", "repeat", "output lines can be repeated");
+    opts.optflag("z", "zero-terminated", "end lines with 0 byte, not newline");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             crash!(1, "{}", f)
         }
     };
     if matches.opt_present("help") {
-        println!("{name} v{version}
+        let msg = format!("{0} v{1}
 
 Usage:
-  {prog} [OPTION]... [FILE]
-  {prog} -e [OPTION]... [ARG]...
-  {prog} -i LO-HI [OPTION]...\n
-{usage}
-With no FILE, or when FILE is -, read standard input.",
-                 name = NAME, version = VERSION, prog = &args[0][..],
-                 usage = getopts::usage("Write a random permutation of the input lines to standard output.", &opts));
+  {0} [OPTION]... [FILE]
+  {0} -e [OPTION]... [ARG]...
+  {0} -i LO-HI [OPTION]...
+
+Write a random permutation of the input lines to standard output.
+With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+        print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
     } else {

@@ -1,5 +1,4 @@
 #![crate_name = "uutils"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,8 +8,6 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
-extern crate getopts;
 
 @CRATES@
 
@@ -54,7 +51,6 @@ fn main() {
     match umap.get(binary_as_util) {
         Some(&uumain) => {
             std::process::exit(uumain(args));
-            return
         }
         None => (),
     }
@@ -67,7 +63,6 @@ fn main() {
     } else {
         println!("{}: applet not found", binary_as_util);
         std::process::exit(1);
-        return
     }
 
     // try first arg as util name.
@@ -78,7 +73,6 @@ fn main() {
         match umap.get(util) {
             Some(&uumain) => {
                 std::process::exit(uumain(args.clone()));
-                return
             }
             None => {
                 if &args[0][..] == "--help" {
@@ -88,22 +82,18 @@ fn main() {
                         match umap.get(util) {
                             Some(&uumain) => {
                                 std::process::exit(uumain(vec![util.to_string(), "--help".to_string()]));
-                                return
                             }
                             None => {
                                 println!("{}: applet not found", util);
                                 std::process::exit(1);
-                                return
                             }
                         }
                     }
                     usage(&umap);
                     std::process::exit(0);
-                    return
                 } else {
                     println!("{}: applet not found", util);
                     std::process::exit(1);
-                    return
                 }
             }
         }
@@ -111,6 +101,5 @@ fn main() {
         // no arguments provided
         usage(&umap);
         std::process::exit(0);
-        return
     }
 }

@@ -196,7 +196,8 @@ define DEP_INCLUDE
 -include $(SRCDIR)/$(1)/deps.mk
 endef
 # we always depend on libc because common/util does
-DEPLIBS := libc
+# we also depend on getopts since all utilities support command-line arguments
+DEPLIBS := libc getopts
 DEPPLUGS :=
 # now, add in deps in src/utilname/deps.mk
 # if we're testing, only consider the TESTS variable,

@@ -1,5 +1,4 @@
 #![crate_name = "dirname"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,35 +13,36 @@ extern crate getopts;
 
 use std::path::Path;
 
+static NAME: &'static str = "dirname";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-    let opts = [
-        getopts::optflag("z", "zero", "separate output with NUL rather than newline"),
-        getopts::optflag("", "help", "display this help and exit"),
-        getopts::optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
+    opts.optflag("z", "zero", "separate output with NUL rather than newline");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        println!("dirname {} - strip last component from file name", VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION] NAME...", program);
-        println!("");
-        print!("{}", getopts::usage("Output each NAME with its last non-slash component and trailing slashes
+        let msg = format!("{0} {1} - strip last component from file name
+
+Usage:
+  {0} [OPTION] NAME...
+
+Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
-directory).", &opts));
+directory).", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("dirname version: {}", VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
@@ -61,8 +61,8 @@ directory).", &opts));
             print!("{}", separator);
         }
     } else {
-        println!("{0}: missing operand", program);
-        println!("Try '{0} --help' for more information.", program);
+        println!("{0}: missing operand", NAME);
+        println!("Try '{0} --help' for more information.", NAME);
         return 1;
     }
 

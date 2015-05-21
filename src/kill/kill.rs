@@ -1,5 +1,4 @@
 #![crate_name = "kill"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,11 +11,7 @@
 
 extern crate getopts;
 extern crate libc;
-extern crate serialize;
 
-#[macro_use] extern crate log;
-
-use getopts::{getopts, optflag, optflagopt, optopt, usage};
 use libc::{c_int, pid_t};
 use signals::ALL_SIGNALS;
 use std::io::{Error, Write};
@@ -47,22 +42,20 @@ pub enum Mode {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit"),
-        optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL"),
-        optflagopt("l", "list", "list all signal names, or convert one to a name", "LIST"),
-        optflag("L", "table", "list all signal names in a nice table"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let usage = usage("[options] <pid> [...]", &opts);
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    opts.optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL");
+    opts.optflagopt("l", "list", "list all signal names, or convert one to a name", "LIST");
+    opts.optflag("L", "table", "list all signal names in a nice table");
 
     let (args, obs_signal) = handle_obsolete(args);
 
-    let matches = match getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => {
-            show_error!("{}\n{}", e,  get_help_text(NAME, &usage));
+        Err(_) => {
+            help(&opts);
             return EXIT_ERR;
         },
     };
@@ -83,7 +76,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Mode::Kill    => return kill(&matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())), matches.free),
         Mode::Table   => table(),
         Mode::List    => list(matches.opt_str("list")),
-        Mode::Help    => help(NAME, &usage),
+        Mode::Help    => help(&opts),
         Mode::Version => version(),
     }
 
@@ -98,7 +91,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     let mut i = 0;
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
-        let slice = &args[i].clone();//unsafe { std::mem::transmute(args[i]) };
+        let slice = &args[i].clone();
         if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
             let val = &slice[1..];
             match val.parse() {
@@ -170,12 +163,13 @@ fn list(arg: Option<String>) {
     };
 }
 
-fn get_help_text(progname: &str, usage: &str) -> String {
-    format!("Usage: \n {0} {1}", progname, usage)
-}
+fn help(opts: &getopts::Options) {
+    let msg = format!("{0} {1}
 
-fn help(progname: &str, usage: &str) {
-    println!("{}", get_help_text(progname, usage));
+Usage:
+ {0} [options] <pid> [...]", NAME, VERSION);
+
+    println!("{}", opts.usage(&msg));
 }
 
 fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {

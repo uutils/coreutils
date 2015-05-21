@@ -1,5 +1,4 @@
 #![crate_name = "logname"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -39,37 +38,33 @@ fn get_userlogin() -> Option<String> {
 static NAME: &'static str = "logname";
 static VERSION: &'static str = "1.0.0";
 
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-
     //
     // Argument parsing
     //
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        version();
-        println!("");
-        println!("Usage:");
-        println!("  {}", program);
-        println!("");
-        print!("{}", getopts::usage("print user's login name", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0}
+
+Print user's login name.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {
-        version();
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

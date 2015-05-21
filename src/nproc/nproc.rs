@@ -1,5 +1,4 @@
 #![crate_name = "nproc"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,14 +23,14 @@ static VERSION : &'static str = "0.0.0";
 mod util;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("", "all", "print the number of cores available to the system"),
-        getopts::optopt("", "ignore", "ignore up to N cores", "N"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("", "all", "print the number of cores available to the system");
+    opts.optopt("", "ignore", "ignore up to N cores", "N");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => {
             show_error!("{}", err);
@@ -45,12 +44,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS]...", NAME);
-        println!("");
-        print!("{}", getopts::usage("Print the number of cores available to the current process.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS]...
+
+Print the number of cores available to the current process.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
 

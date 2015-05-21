@@ -1,5 +1,4 @@
 #![crate_name = "hashsum"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,10 +11,9 @@
  * file that was distributed with this source code.
  */
 
-extern crate regex;
-
 extern crate crypto;
 extern crate getopts;
+extern crate regex;
 
 use crypto::digest::Digest;
 use crypto::md5::Md5;
@@ -40,21 +38,6 @@ fn is_custom_binary(program: &str) -> bool {
             | "sha224sum" | "sha256sum"
             | "sha384sum" | "sha512sum" => true,
         _ => false
-    }
-}
-
-fn get_algo_opts(program: &str) -> Vec<getopts::OptGroup> {
-    if is_custom_binary(program) {
-        Vec::new()
-    } else {
-        vec!(
-            getopts::optflag("", "md5", "work with MD5"),
-            getopts::optflag("", "sha1", "work with SHA1"),
-            getopts::optflag("", "sha224", "work with SHA224"),
-            getopts::optflag("", "sha256", "work with SHA256"),
-            getopts::optflag("", "sha384", "work with SHA384"),
-            getopts::optflag("", "sha512", "work with SHA512")
-        )
     }
 }
 
@@ -95,22 +78,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Default binary in Windows, text mode otherwise
     let binary_flag_default = cfg!(windows);
 
-    let mut opts: Vec<getopts::OptGroup> = vec!(
-        getopts::optflag("b", "binary", &format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" })),
-        getopts::optflag("c", "check", "read hashsums from the FILEs and check them"),
-        getopts::optflag("", "tag", "create a BSD-style checksum"),
-        getopts::optflag("t", "text", &format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" })),
-        getopts::optflag("q", "quiet", "don't print OK for each successfully verified file"),
-        getopts::optflag("s", "status", "don't output anything, status code shows success"),
-        getopts::optflag("", "strict", "exit non-zero for improperly formatted checksum lines"),
-        getopts::optflag("w", "warn", "warn about improperly formatted checksum lines"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    );
+    let mut opts = getopts::Options::new();
+    opts.optflag("b", "binary", &format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" }));
+    opts.optflag("c", "check", "read hashsums from the FILEs and check them");
+    opts.optflag("", "tag", "create a BSD-style checksum");
+    opts.optflag("t", "text", &format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" }));
+    opts.optflag("q", "quiet", "don't print OK for each successfully verified file");
+    opts.optflag("s", "status", "don't output anything, status code shows success");
+    opts.optflag("", "strict", "exit non-zero for improperly formatted checksum lines");
+    opts.optflag("w", "warn", "warn about improperly formatted checksum lines");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    opts.extend(get_algo_opts(binary_name).into_iter());
+    if !is_custom_binary(program) {
+        opts.optflag("", "md5", "work with MD5");
+        opts.optflag("", "sha1", "work with SHA1");
+        opts.optflag("", "sha224", "work with SHA224");
+        opts.optflag("", "sha256", "work with SHA256");
+        opts.optflag("", "sha384", "work with SHA384");
+        opts.optflag("", "sha512", "work with SHA512");
+    }
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -152,17 +141,21 @@ fn version() {
     pipe_println!("{} v{}", NAME, VERSION);
 }
 
-fn usage(program: &str, binary_name: &str, opts: &[getopts::OptGroup]) {
-    version();
-    pipe_println!("");
-    pipe_println!("Usage:");
-    if is_custom_binary(binary_name) {
-        pipe_println!("  {} [OPTION]... [FILE]...", program);
+fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
+    let spec = if is_custom_binary(binary_name) {
+        format!("  {} [OPTION]... [FILE]...", program)
     } else {
-        pipe_println!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program);
-    }
-    pipe_println!("");
-    pipe_print!("{}", getopts::usage("Compute and check message digests.", opts));
+        format!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program)
+    };
+
+    let msg = format!("{} v{}
+
+Usage:
+{}
+
+Compute and check message digests.", NAME, VERSION, spec);
+
+    pipe_print!("{}", opts.usage(&msg));
 }
 
 fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {

@@ -1,5 +1,4 @@
 #![crate_name = "paste"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -26,25 +25,27 @@ static NAME: &'static str = "paste";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("s", "serial", "paste one file at a time instead of in parallel"),
-        getopts::optopt("d", "delimiters", "reuse characters from LIST instead of TABs", "LIST"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("s", "serial", "paste one file at a time instead of in parallel");
+    opts.optopt("d", "delimiters", "reuse characters from LIST instead of TABs", "LIST");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(e) => crash!(1, "{}", e)
     };
+
     if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
-        println!("");
-        print!("{}", getopts::usage("Write lines consisting of the sequentially corresponding lines from each FILE, separated by TABs, to standard output.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]... [FILE]...
+
+Write lines consisting of the sequentially corresponding lines from each
+FILE, separated by TABs, to standard output.", NAME, VERSION);
+        print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {

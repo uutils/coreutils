@@ -1,5 +1,4 @@
 #![crate_name = "id"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,16 +17,11 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::Write;
-use std::ffi::CStr;
-use std::ptr::read;
-use libc::{
-    uid_t,
-    getgid,
-    getuid
-};
+use libc::{getgid, getuid, uid_t};
 use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
-use getopts::{getopts, optflag, usage};
+use std::ffi::CStr;
+use std::io::Write;
+use std::ptr::read;
 use c_types::{
     c_passwd,
     c_group,
@@ -87,30 +81,27 @@ extern {
 static NAME: &'static str = "id";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let args_t = &args[1..];
+    let mut opts = getopts::Options::new();
+    opts.optflag("h", "", "Show help");
+    opts.optflag("A", "", "Display the process audit (not available on Linux)");
+    opts.optflag("G", "", "Display the different group IDs");
+    opts.optflag("g", "", "Display the effective group ID as a number");
+    opts.optflag("n", "", "Display the name of the user or group ID for the -G, -g and -u options");
+    opts.optflag("P", "", "Display the id as a password file entry");
+    opts.optflag("p", "", "Make the output human-readable");
+    opts.optflag("r", "", "Display the real ID for the -g and -u options");
+    opts.optflag("u", "", "Display the effective user ID as a number");
 
-    let options = [
-        optflag("h", "", "Show help"),
-        optflag("A", "", "Display the process audit (not available on Linux)"),
-        optflag("G", "", "Display the different group IDs"),
-        optflag("g", "", "Display the effective group ID as a number"),
-        optflag("n", "", "Display the name of the user or group ID for the -G, -g and -u options"),
-        optflag("P", "", "Display the id as a password file entry"),
-        optflag("p", "", "Make the output human-readable"),
-        optflag("r", "", "Display the real ID for the -g and -u options"),
-        optflag("u", "", "Display the effective user ID as a number")
-    ];
-
-    let matches = match getopts(args_t, &options) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(_) => {
-            println!("{}", usage(NAME, &options));
+            println!("{}", opts.usage(NAME));
             return 1;
         }
     };
 
     if matches.opt_present("h") {
-        println!("{}", usage(NAME, &options));
+        println!("{}", opts.usage(NAME));
         return 0;
     }
 
@@ -118,7 +109,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         auditid();
         return 0;
     }
-
 
     let possible_pw = get_pw_from_args(&matches.free);
 
@@ -325,10 +315,7 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(possible_pw: Option<c_passwd>,
-            p_euid: bool,
-            p_egid: bool) {
-
+fn id_print(possible_pw: Option<c_passwd>, p_euid: bool, p_egid: bool) {
     let uid;
     let gid;
 
