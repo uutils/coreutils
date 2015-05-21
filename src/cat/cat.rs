@@ -1,5 +1,4 @@
 #![crate_name = "cat"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,49 +14,47 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::Options;
 use std::fs::File;
-use std::io::{stdout, stdin, stderr, Write, Read};
-use std::io::Result;
 use std::intrinsics::{copy_nonoverlapping};
+use std::io::{stdout, stdin, stderr, Write, Read, Result};
 use libc::consts::os::posix88::STDIN_FILENO;
 use libc::funcs::posix88::unistd::isatty;
 use libc::types::os::arch::c95::c_int;
 
+static NAME: &'static str = "cat";
+static VERSION: &'static str = "1.0.0";
+
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let opts = [
-        getopts::optflag("A", "show-all", "equivalent to -vET"),
-        getopts::optflag("b", "number-nonblank",
-                         "number nonempty output lines, overrides -n"),
-        getopts::optflag("e", "", "equivalent to -vE"),
-        getopts::optflag("E", "show-ends", "display $ at end of each line"),
-        getopts::optflag("n", "number", "number all output lines"),
-        getopts::optflag("s", "squeeze-blank", "suppress repeated empty output lines"),
-        getopts::optflag("t", "", "equivalent to -vT"),
-        getopts::optflag("T", "show-tabs", "display TAB characters as ^I"),
-        getopts::optflag("v", "show-nonprinting",
-                         "use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+    opts.optflag("A", "show-all", "equivalent to -vET");
+    opts.optflag("b", "number-nonblank",
+                 "number nonempty output lines, overrides -n");
+    opts.optflag("e", "", "equivalent to -vE");
+    opts.optflag("E", "show-ends", "display $ at end of each line");
+    opts.optflag("n", "number", "number all output lines");
+    opts.optflag("s", "squeeze-blank", "suppress repeated empty output lines");
+    opts.optflag("t", "", "equivalent to -vT");
+    opts.optflag("T", "show-tabs", "display TAB characters as ^I");
+    opts.optflag("v", "show-nonprinting",
+                 "use ^ and M- notation, except for LF (\\n) and TAB (\\t)");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("cat 1.0.0");
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
-        println!("");
-        print!("{}", &getopts::usage("Concatenate FILE(s), or standard input, to \
-                             standard output.", &opts)[..]);
-        println!("");
-        println!("With no FILE, or when FILE is -, read standard input.");
+        let msg = format!("{} {}\n\n\
+        Usage:\n  {0} [OPTION]... [FILE]...\n\n\
+        Concatenate FILE(s), or standard input, to standard output.\n\n\
+        With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("cat 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

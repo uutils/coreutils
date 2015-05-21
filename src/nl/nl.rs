@@ -14,11 +14,11 @@
 extern crate getopts;
 extern crate regex;
 
+use getopts::{getopts, optflag, OptGroup, optopt, usage};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::iter::repeat;
 use std::path::Path;
-use getopts::{getopts, optflag, OptGroup, optopt, usage};
 
 #[path="../common/util.rs"]
 #[macro_use]

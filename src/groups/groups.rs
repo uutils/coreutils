@@ -1,5 +1,4 @@
 #![crate_name = "groups"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +12,6 @@
 extern crate getopts;
 
 use c_types::{get_pw_from_args, group};
-use getopts::{getopts, optflag, usage};
 use std::io::Write;
 
 #[path = "../common/util.rs"] #[macro_use]  mod util;
@@ -23,14 +21,11 @@ static NAME: &'static str = "groups";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
+    let mut opts = getopts::Options::new();
+    opts.optflag("h", "help", "display this help menu and exit");
+    opts.optflag("V", "version", "display version information and exit");
 
-    let options = [
-        optflag("h", "help", "display this help menu and exit"),
-        optflag("V", "version", "display version information and exit")
-    ];
-
-    let matches = match getopts(&args[1..], &options) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(f) => {
             show_error!("{}", f);
@@ -41,10 +36,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
     } else if matches.opt_present("help") {
-        print!("{} v{}\n\n\
-                Usage:\n  \
-                  {} [OPTION]... [USER]...\n\n\
-                {}", NAME, VERSION, program, usage("Prints the groups a user is in to standard output.", &options));
+        let msg = format!("{0} v{1}
+
+Usage:
+  {0} [OPTION]... [USER]...
+
+Prints the groups a user is in to standard output.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
     } else {
         group(get_pw_from_args(&matches.free), true);
     }

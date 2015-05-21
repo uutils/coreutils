@@ -1,5 +1,4 @@
 #![crate_name = "od"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -21,28 +20,28 @@ use std::path::Path;
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optopt("A", "address-radix",
-                        "Select the base in which file offsets are printed.", "RADIX"),
-        getopts::optopt("j", "skip-bytes",
-                        "Skip bytes input bytes before formatting and writing.", "BYTES"),
-        getopts::optopt("N", "read-bytes",
-                        "limit dump to BYTES input bytes", "BYTES"),
-        getopts::optopt("S", "strings",
-                        ("output strings of at least BYTES graphic chars. 3 is assumed when \
-                          BYTES is not specified."),
-                        "BYTES"),
-        getopts::optopt("t", "format", "select output format or formats", "TYPE"),
-        getopts::optflag("v", "output-duplicates", "do not use * to mark line suppression"),
-        getopts::optopt("w", "width",
-                        ("output BYTES bytes per output line. 32 is implied when BYTES is not \
-                          specified."),
-                        "BYTES"),
-        getopts::optflag("h", "help", "display this help and exit."),
-        getopts::optflag("", "version", "output version information and exit."),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optopt("A", "address-radix",
+                "Select the base in which file offsets are printed.", "RADIX");
+    opts.optopt("j", "skip-bytes",
+                "Skip bytes input bytes before formatting and writing.", "BYTES");
+    opts.optopt("N", "read-bytes",
+                "limit dump to BYTES input bytes", "BYTES");
+    opts.optopt("S", "strings",
+                ("output strings of at least BYTES graphic chars. 3 is assumed when \
+                 BYTES is not specified."),
+                "BYTES");
+    opts.optopt("t", "format", "select output format or formats", "TYPE");
+    opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
+    opts.optopt("w", "width",
+                ("output BYTES bytes per output line. 32 is implied when BYTES is not \
+                 specified."),
+                "BYTES");
+    opts.optflag("h", "help", "display this help and exit.");
+    opts.optflag("", "version", "output version information and exit.");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };

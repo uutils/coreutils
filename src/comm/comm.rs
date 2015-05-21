@@ -1,5 +1,4 @@
 #![crate_name = "comm"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,13 +11,14 @@
 
 extern crate getopts;
 
+use getopts::Options;
 use std::cmp::Ordering;
-use std::io::{self, stdin, Stdin, BufReader, BufRead, Read};
 use std::fs::File;
+use std::io::{self, BufRead, BufReader, Read, stdin, Stdin};
 use std::path::Path;
 
-static NAME : &'static str = "comm";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "comm";
+static VERSION: &'static str = "1.0.0";
 
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
@@ -117,16 +117,15 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("1", "", "suppress column 1 (lines uniq to FILE1)"),
-        getopts::optflag("2", "", "suppress column 2 (lines uniq to FILE2)"),
-        getopts::optflag("3", "", "suppress column 3 (lines that appear in both files)"),
-        getopts::optopt("", "output-delimiter", "separate columns with STR", "STR"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
+    opts.optflag("1", "", "suppress column 1 (lines uniq to FILE1)");
+    opts.optflag("2", "", "suppress column 2 (lines uniq to FILE2)");
+    opts.optflag("3", "", "suppress column 3 (lines that appear in both files)");
+    opts.optopt("", "output-delimiter", "separate columns with STR", "STR");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -137,18 +136,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("help") || matches.free.len() != 2 {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] FILE1 FILE2", NAME);
-        println!("");
-        print!("{}", getopts::usage("Compare sorted files line by line.", opts.as_ref()));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS] FILE1 FILE2
+
+Compare sorted files line by line.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
+
         if matches.free.len() != 2 {
             return 1;
         }
         return 0;
     }
-
 
     let mut f1 = open_file(matches.free[0].as_ref()).unwrap();
     let mut f2 = open_file(matches.free[1].as_ref()).unwrap();

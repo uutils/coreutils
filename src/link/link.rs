@@ -1,5 +1,4 @@
 #![crate_name = "link"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,24 +11,24 @@
 
 extern crate getopts;
 
-use std::io::Write;
 use std::fs::hard_link;
+use std::io::Write;
 use std::path::Path;
 
 #[path="../common/util.rs"]
 #[macro_use]
 mod util;
 
-static NAME : &'static str = "link";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "link";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -40,12 +39,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("help") || matches.free.len() != 2 {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] FILE1 FILE2", NAME);
-        println!("");
-        print!("{}", getopts::usage("Create a link named FILE2 to FILE1.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS] FILE1 FILE2
+  
+Create a link named FILE2 to FILE1.", NAME, VERSION);
+
+        println!("{}", opts.usage(&msg));
         if matches.free.len() != 2 {
             return 1;
         }

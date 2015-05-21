@@ -1,5 +1,4 @@
 #![crate_name = "factor"]
-#![feature(rustc_private)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -20,12 +19,12 @@ extern crate rand;
 
 use numeric::*;
 use prime_table::P_INVS_U64;
+use rand::weak_rng;
+use rand::distributions::{Range, IndependentSample};
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead, BufReader, Write};
 use std::num::Wrapping;
 use std::mem::swap;
-use rand::weak_rng;
-use rand::distributions::{Range, IndependentSample};
 
 #[path="../common/util.rs"]
 #[macro_use]
@@ -33,8 +32,8 @@ mod util;
 mod numeric;
 mod prime_table;
 
-static VERSION: &'static str = "1.0.0";
 static NAME: &'static str = "factor";
+static VERSION: &'static str = "1.0.0";
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {
@@ -157,33 +156,31 @@ fn print_factors_str(num_str: &str) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "show this help message"),
-        getopts::optflag("v", "version", "print the version and exit"),
-    ];
+    let mut opts = getopts::Options::new();
+    opts.optflag("h", "help", "show this help message");
+    opts.optflag("v", "version", "print the version and exit");
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        print!("{program} {version}\n\
-                \n\
-                Usage:\n\
-                \t{program} [NUMBER]...\n\
-                \t{program} [OPTION]\n\
-                \n\
-                {usage}",
-                program = &args[0][..],
-                version = VERSION, 
-                usage = getopts::usage("Print the prime factors of the given number(s). \
-                                        If none are specified, read from standard input.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+\t{0} [NUMBER]...
+\t{0} [OPTION]
+
+Print the prime factors of the given number(s). If none are specified,
+read from standard input.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 1;
     }
 
     if matches.opt_present("version") {
-        println!("{} {}", &args[0][..], VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

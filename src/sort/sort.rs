@@ -1,5 +1,4 @@
 #![crate_name = "sort"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -29,35 +28,40 @@ use std::str::Chars;
 mod util;
 
 static NAME: &'static str = "sort";
-static VERSION:  &'static str = "0.0.1";
+static VERSION: &'static str = "0.0.1";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("n", "numeric-sort", "compare according to string numerical value"),
-        getopts::optflag("r", "reverse", "reverse the output"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("n", "numeric-sort", "compare according to string numerical value");
+    opts.optflag("r", "reverse", "reverse the output");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("Usage: {0} [OPTION]... [FILE]...", args[0]);
-        println!("Write the sorted concatenation of all FILE(s) to standard output.");
-        println!("");
-        print!("{}", getopts::usage("Mandatory arguments for long options are mandatory for short options too.", &opts));
-        println!("");
-        println!("With no FILE, or when FILE is -, read standard input.");
+        let msg = format!("{0} {1}
+
+Usage:
+ {0} [OPTION]... [FILE]...
+
+Write the sorted concatenation of all FILE(s) to standard output.
+
+Mandatory arguments for long options are mandatory for short options too.
+
+With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+        print!("{}", opts.usage(&msg));
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("sort 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
@@ -172,4 +176,3 @@ fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
         },
     }
 }
-

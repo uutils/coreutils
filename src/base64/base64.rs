@@ -1,5 +1,4 @@
 #![crate_name = "base64"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,50 +12,43 @@
 extern crate rustc_serialize as serialize;
 extern crate getopts;
 extern crate libc;
-#[macro_use] extern crate log;
 
+use getopts::Options;
+use serialize::base64::{self, FromBase64, ToBase64};
 use std::ascii::AsciiExt;
 use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read, stdin, stdout, Write};
 use std::path::Path;
 
-use getopts::{
-    getopts,
-    optflag,
-    optopt,
-    usage
-};
-use serialize::base64;
-use serialize::base64::{FromBase64, ToBase64};
-
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
+enum Mode {
+    Decode,
+    Encode,
+    Help,
+    Version
+}
+
 static NAME: &'static str = "base64";
+static VERSION: &'static str = "1.0.0";
 
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        optflag("d", "decode", "decode data"),
-        optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
-        optopt("w", "wrap",
-            "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS"
-        ),
-        optflag("h", "help", "display this help text and exit"),
-        optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+    opts.optflag("d", "decode", "decode data");
+    opts.optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters");
+    opts.optopt("w", "wrap", "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS");
+    opts.optflag("h", "help", "display this help text and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => {
-            crash!(1, "error: {}", e);
-        }
+        Err(e) => { crash!(1, "error: {}", e) }
     };
 
-    let progname = args[0].clone();
-    let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", &opts);
     let mode = if matches.opt_present("help") {
         Mode::Help
     } else if matches.opt_present("version") {
@@ -90,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     match mode {
         Mode::Decode  => decode(&mut input, ignore_garbage),
         Mode::Encode  => encode(&mut input, line_wrap),
-        Mode::Help    => help(&progname[..], &usage[..]),
+        Mode::Help    => help(opts),
         Mode::Version => version()
     }
 
@@ -152,28 +144,19 @@ fn encode(input: &mut FileOrStdReader, line_wrap: usize) {
     println!("{}", &encoded[..]);
 }
 
-fn help(progname: &str, usage: &str) {
-    println!("Usage: {} [OPTION]... [FILE]", progname);
-    println!("");
-    println!("{}", usage);
+fn help(opts: Options) {
+    let msg = format!("Usage: {} [OPTION]... [FILE]\n\n\
+    Base64 encode or decode FILE, or standard input, to standard output.\n\
+    With no FILE, or when FILE is -, read standard input.\n\n\
+    The data are encoded as described for the base64 alphabet in RFC \
+    3548. When\ndecoding, the input may contain newlines in addition \
+    to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
+    to attempt to recover from any other\nnon-alphabet bytes in the \
+    encoded stream.", NAME);
 
-    let msg = "With no FILE, or when FILE is -, read standard input.\n\n\
-        The data are encoded as described for the base64 alphabet in RFC \
-        3548. When\ndecoding, the input may contain newlines in addition \
-        to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
-        to attempt to recover from any other\nnon-alphabet bytes in the \
-        encoded stream.";
-
-    println!("{}", msg);
+    print!("{}", opts.usage(&msg));
 }
 
 fn version() {
-    println!("base64 1.0.0");
-}
-
-enum Mode {
-    Decode,
-    Encode,
-    Help,
-    Version
+    println!("{} {}", NAME, VERSION);
 }

@@ -1,5 +1,4 @@
 #![crate_name = "mkfifo"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,25 +12,25 @@
 extern crate getopts;
 extern crate libc;
 
+use libc::funcs::posix88::stat_::mkfifo;
 use std::ffi::CString;
 use std::io::{Error, Write};
-use libc::funcs::posix88::stat_::mkfifo;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
-static NAME : &'static str = "mkfifo";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "mkfifo";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optopt("m", "mode", "file permissions for the fifo", "(default 0666)"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optopt("m", "mode", "file permissions for the fifo", "(default 0666)");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -42,12 +41,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("help") || matches.free.is_empty() {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] NAME...", NAME);
-        println!("");
-        print!("{}", getopts::usage("Create a FIFO with the given name.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS] NAME...
+
+Create a FIFO with the given name.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         if matches.free.is_empty() {
             return 1;
         }

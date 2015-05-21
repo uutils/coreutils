@@ -1,5 +1,4 @@
 #![crate_name = "echo"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -79,11 +78,10 @@ fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
 
 fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<String>> {
     let mut echo_args = vec!();
-    let program = args[0].clone();
     'argloop: for arg in args.into_iter().skip(1) {
         match arg.as_ref() {
             "--help" | "-h" => {
-                print_help(&program);
+                print_help();
                 return None;
             }
             "--version" | "-V" => {
@@ -99,7 +97,7 @@ fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<Str
                     for ch in arg.chars().skip(1) {
                         match ch {
                             'h' => {
-                                print_help(&program);
+                                print_help();
                                 return None;
                             }
                             'V' => {
@@ -125,22 +123,22 @@ fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<Str
     Some(echo_args)
 }
 
-fn print_help(program: &String) {
-    let opts = [
-        getopts::optflag("n", "", "do not output the trailing newline"),
-        getopts::optflag("e", "", "enable interpretation of backslash escapes"),
-        getopts::optflag("E", "", "disable interpretation of backslash escapes (default)"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    println!("echo {} - display a line of text", VERSION);
-    println!("");
-    println!("Usage:");
-    println!("  {0} [SHORT-OPTION]... [STRING]...", *program);
-    println!("  {0} LONG-OPTION", *program);
-    println!("");
-    println!("{}", getopts::usage("Echo the STRING(s) to standard output.", &opts));
-    println!("{}", "If -e is in effect, the following sequences are recognized:
+fn print_help() {
+    let mut opts = getopts::Options::new();
+    opts.optflag("n", "", "do not output the trailing newline");
+    opts.optflag("e", "", "enable interpretation of backslash escapes");
+    opts.optflag("E", "", "disable interpretation of backslash escapes (default)");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let msg = format!("{0} {1} - display a line of text
+
+Usage:
+  {0} [SHORT-OPTION]... [STRING]...
+  {0} LONG-OPTION
+
+Echo the STRING(s) to standard output.
+If -e is in effect, the following sequences are recognized:
 
 \\\\      backslash
 \\a      alert (BEL)
@@ -153,11 +151,13 @@ fn print_help(program: &String) {
 \\t      horizontal tab
 \\v      vertical tab
 \\0NNN   byte with octal value NNN (1 to 3 digits)
-\\xHH    byte with hexadecimal value HH (1 to 2 digits)");
+\\xHH    byte with hexadecimal value HH (1 to 2 digits)", NAME, VERSION);
+
+    print!("{}", opts.usage(&msg));
 }
 
 fn print_version() {
-    println!("echo version: {}", VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {

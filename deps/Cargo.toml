@@ -7,6 +7,7 @@ name = "null"
 
 [dependencies]
 libc = "0.1.7"
+getopts = "0.2.11"
 num_cpus = "*"
 rand = "0.3.8"
 regex = "0.1.30"

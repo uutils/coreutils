@@ -1,5 +1,5 @@
 #![crate_name = "chmod"]
-#![feature(fs_walk, path_ext, rustc_private)]
+#![feature(fs_walk, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,12 +16,13 @@ extern crate getopts;
 extern crate libc;
 extern crate regex;
 
+use getopts::Options;
+use regex::Regex;
 use std::ffi::CString;
 use std::fs::{self, PathExt};
-use std::path::Path;
 use std::io::{Error, Write};
 use std::mem;
-use regex::Regex;
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -31,45 +32,41 @@ const NAME: &'static str = "chmod";
 const VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-
-    let opts = [
-        getopts::optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)"),
-        getopts::optflag("f", "quiet", "suppress most error messages (unimplemented)"), // TODO: support --silent
-        getopts::optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)"),
-        getopts::optflag("", "no-preserve-root", "do not treat '/' specially (the default)"),
-        getopts::optflag("", "preserve-root", "fail to operate recursively on '/'"),
-        getopts::optflagopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE"),
-        getopts::optflag("R", "recursive", "change files and directories recursively"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
+    let mut opts = Options::new();
+    opts.optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)");
+    opts.optflag("f", "quiet", "suppress most error messages (unimplemented)"); // TODO: support --silent
+    opts.optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)");
+    opts.optflag("", "no-preserve-root", "do not treat '/' specially (the default)");
+    opts.optflag("", "preserve-root", "fail to operate recursively on '/'");
+    opts.optflagopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE");
+    opts.optflag("R", "recursive", "change files and directories recursively");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
     // TODO: sanitize input for - at beginning (e.g. chmod -x testfile).  Solution is to add a to -x, making a-x
-    let mut matches = match getopts::getopts(&args[1..], &opts) {
+    let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "{}", f)
-        }
+        Err(f) => { crash!(1, "{}", f) }
     };
     if matches.opt_present("help") {
-        println!("{name} v{version}
+        let msg = format!("{name} v{version}
 
 Usage:
   {program} [OPTION]... MODE[,MODE]... FILE...
   {program} [OPTION]... OCTAL-MODE FILE...
   {program} [OPTION]... --reference=RFILE FILE...
 
-{usage}
+Change the mode of each FILE to MODE.
+With --reference, change the mode of each FILE to that of RFILE.
 Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
-               name = NAME, version = VERSION, program = program,
-               usage = getopts::usage("Change the mode of each FILE to MODE. \
-                                       \nWith --reference, change the mode of \
-                                       each FILE to that of RFILE.", &opts));
+            name = NAME, version = VERSION, program = NAME);
+
+        print!("{}", opts.usage(&msg));
+        return 0;
     } else if matches.opt_present("version") {
         println!("{} v{}", NAME, VERSION);
     } else if matches.free.is_empty() && matches.opt_present("reference") || matches.free.len() < 2 {
         show_error!("missing an argument");
-        show_error!("for help, try '{} --help'", program);
+        show_error!("for help, try '{} --help'", NAME);
         return 1;
     } else {
         let changes = matches.opt_present("changes");

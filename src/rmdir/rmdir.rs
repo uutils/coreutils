@@ -1,5 +1,4 @@
 #![crate_name = "rmdir"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,27 +12,27 @@
 extern crate getopts;
 extern crate libc;
 
-use std::path::Path;
-use std::io::Write;
 use std::fs;
+use std::io::Write;
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
 static NAME: &'static str = "rmdir";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty"),
-        getopts::optflag("p", "parents", "remove DIRECTORY and its ancestors; e.g., 'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a"),
-        getopts::optflag("v", "verbose", "output a diagnostic for every directory processed"),
-        getopts::optflag("h", "help", "print this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty");
+    opts.optflag("p", "parents", "remove DIRECTORY and its ancestors; e.g., 'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a");
+    opts.optflag("v", "verbose", "output a diagnostic for every directory processed");
+    opts.optflag("h", "help", "print this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
@@ -42,17 +41,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("help") {
-        println!("rmdir 1.0.0");
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... DIRECTORY...", program);
-        println!("");
-        println!("{}", &getopts::usage("Remove the DIRECTORY(ies), if they are empty.", &opts)[..]);
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]... DIRECTORY...
+
+Remove the DIRECTORY(ies), if they are empty.", NAME, VERSION);
+        print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
-        println!("rmdir 1.0.0");
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", program);
+        show_error!("for help, try '{0} --help'", NAME);
         return 1;
     } else {
         let ignore = matches.opt_present("ignore-fail-on-non-empty");
