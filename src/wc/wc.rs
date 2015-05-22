@@ -1,5 +1,5 @@
 #![crate_name = "wc"]
-#![feature(rustc_private, path_ext)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,8 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::Matches;
-
+use getopts::{Matches, Options};
 use std::ascii::AsciiExt;
 use std::fs::{File, PathExt};
 use std::io::{stdin, BufRead, BufReader, Read, Write};
@@ -36,37 +35,37 @@ struct Result {
 }
 
 static NAME: &'static str = "wc";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0][..];
-    let opts = [
-        getopts::optflag("c", "bytes", "print the byte counts"),
-        getopts::optflag("m", "chars", "print the character counts"),
-        getopts::optflag("l", "lines", "print the newline counts"),
-        getopts::optflag("L", "max-line-length", "print the length of the longest line"),
-        getopts::optflag("w", "words", "print the word counts"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
 
-    let mut matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("c", "bytes", "print the byte counts");
+    opts.optflag("m", "chars", "print the character counts");
+    opts.optflag("l", "lines", "print the newline counts");
+    opts.optflag("L", "max-line-length", "print the length of the longest line");
+    opts.optflag("w", "words", "print the word counts");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "Invalid options\n{}", f)
-        }
+        Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
+        println!("{} {}", NAME, VERSION);
         println!("");
-        println!("{}", getopts::usage("Print newline, word and byte counts for each FILE", &opts));
+        println!("Usage:");
+        println!("  {0} [OPTION]... [FILE]...", NAME);
+        println!("");
+        println!("{}", opts.usage("Print newline, word and byte counts for each FILE"));
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("wc 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

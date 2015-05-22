@@ -1,5 +1,5 @@
 #![crate_name = "cut"]
-#![feature(collections, path_ext, rustc_private)]
+#![feature(collections, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -16,7 +16,6 @@ extern crate libc;
 use std::fs::{File, PathExt};
 use std::io::{stdout, stdin, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
-use getopts::{optopt, optflag, getopts, usage};
 
 use ranges::Range;
 use searcher::Searcher;
@@ -405,20 +404,20 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        optopt("b", "bytes", "select only these bytes", "LIST"),
-        optopt("c", "characters", "select only these characters", "LIST"),
-        optopt("d", "delimiter", "use DELIM instead of TAB for field delimiter", "DELIM"),
-        optopt("f", "fields", "select only these fields;  also print any line that contains no delimiter character, unless the -s option is specified", "LIST"),
-        optflag("n", "", "(ignored)"),
-        optflag("", "complement", "complement the set of selected bytes, characters or fields"),
-        optflag("s", "only-delimited", "do not print lines not containing delimiters"),
-        optopt("", "output-delimiter", "use STRING as the output delimiter the default is to use the input delimiter", "STRING"),
-        optflag("", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts(&args[1..], &opts) {
+    opts.optopt("b", "bytes", "select only these bytes", "LIST");
+    opts.optopt("c", "characters", "select only these characters", "LIST");
+    opts.optopt("d", "delimiter", "use DELIM instead of TAB for field delimiter", "DELIM");
+    opts.optopt("f", "fields", "select only these fields;  also print any line that contains no delimiter character, unless the -s option is specified", "LIST");
+    opts.optflag("n", "", "(ignored)");
+    opts.optflag("", "complement", "complement the set of selected bytes, characters or fields");
+    opts.optflag("s", "only-delimited", "do not print lines not containing delimiters");
+    opts.optopt("", "output-delimiter", "use STRING as the output delimiter the default is to use the input delimiter", "STRING");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
@@ -427,10 +426,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("help") {
-        println!("Usage:");
-        println!("  {0} OPTION... [FILE]...", args[0]);
+        println!("{} {}", NAME, VERSION);
         println!("");
-        println!("{}", &usage("Print selected parts of lines from each FILE to standard output.", &opts)[..]);
+        println!("Usage:");
+        println!("  {0} OPTION... [FILE]...", NAME);
+        println!("");
+        println!("{}", opts.usage("Print selected parts of lines from each FILE to standard output."));
         println!("");
         println!("Use one, and only one of -b, -c or -f.  Each LIST is made up of one");
         println!("range, or many ranges separated by commas.  Selected input is written");

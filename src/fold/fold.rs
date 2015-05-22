@@ -1,5 +1,5 @@
 #![crate_name = "fold"]
-#![feature(collections, rustc_private)]
+#![feature(collections)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -26,17 +26,15 @@ static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let program = args[0].clone();
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)"),
-        getopts::optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off"),
-        getopts::optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
+    opts.optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)");
+    opts.optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off");
+    opts.optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -45,9 +43,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{} v{}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {} [OPTION]... [FILE]...", program);
+        println!("  {} [OPTION]... [FILE]...", NAME);
         println!("");
-        print!("{}", getopts::usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines", &opts));
+        print!("{}", opts.usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines"));
     } else if matches.opt_present("V") {
         println!("{} v{}", NAME, VERSION);
     } else {

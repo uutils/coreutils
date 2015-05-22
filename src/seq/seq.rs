@@ -1,5 +1,4 @@
 #![crate_name = "seq"]
-#![feature(rustc_private)]
 
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
@@ -15,6 +14,7 @@ use std::io::Write;
 mod util;
 
 static NAME: &'static str = "seq";
+static VERSION: &'static str = "1.0.0";
 
 #[derive(Clone)]
 struct SeqOptions {
@@ -34,19 +34,18 @@ fn parse_float(mut s: &str) -> Result<f64, String> {
 }
 
 fn escape_sequences(s: &str) -> String {
-    s.replace("\\n", "\n").
-        replace("\\t", "\t")
+    s.replace("\\n", "\n")
+     .replace("\\t", "\t")
 }
 
 fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, i32> {
     let mut seq_args = vec!();
-    let program = args[0].clone();
     let mut iter = args.into_iter().skip(1);
     loop {
         match iter.next() {
             Some(arg) => match &arg[..] {
                 "--help" | "-h" => {
-                    print_help(&program);
+                    print_help();
                     return Err(0);
                 }
                 "--version" | "-V" => {
@@ -80,7 +79,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                         while match chiter.next() { Some(m) => { ch = m; true } None => false } {
                             match ch {
                                 'h' => {
-                                    print_help(&program);
+                                    print_help();
                                     return Err(0);
                                 }
                                 'V' => {
@@ -130,25 +129,25 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
     Ok(seq_args)
 }
 
-fn print_help(program: &String) {
-    let opts = [
-        getopts::optopt("s", "separator", "Separator character (defaults to \\n)", ""),
-        getopts::optopt("t", "terminator", "Terminator character (defaults to separator)", ""),
-        getopts::optflag("w", "widths", "Equalize widths of all numbers by padding with zeros"),
-        getopts::optflag("h", "help", "print this help text and exit"),
-        getopts::optflag("V", "version", "print version and exit"),
-    ];
-    println!("seq 1.0.0\n");
-    println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n", *program);
-    println!("{}", getopts::usage("Print sequences of numbers", &opts));
+fn print_help() {
+    let mut opts = getopts::Options::new();
+
+    opts.optopt("s", "separator", "Separator character (defaults to \\n)", "");
+    opts.optopt("t", "terminator", "Terminator character (defaults to separator)", "");
+    opts.optflag("w", "widths", "Equalize widths of all numbers by padding with zeros");
+    opts.optflag("h", "help", "print this help text and exit");
+    opts.optflag("V", "version", "print version and exit");
+
+    println!("{} {}\n", NAME, VERSION);
+    println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n", NAME);
+    println!("{}", opts.usage("Print sequences of numbers"));
 }
 
 fn print_version() {
-    println!("seq 1.0.0\n");
+    println!("{} {}", NAME, VERSION);
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
     let mut options = SeqOptions {
         separator: "\n".to_string(),
         terminator: None,
@@ -160,7 +159,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     if free.len() < 1 || free.len() > 3 {
         crash!(1, "too {} operands.\nTry '{} --help' for more information.",
-               if free.len() < 1 { "few" } else { "many" }, program);
+               if free.len() < 1 { "few" } else { "many" }, NAME);
     }
     let mut largest_dec = 0;
     let mut padding = 0;

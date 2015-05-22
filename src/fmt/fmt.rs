@@ -1,5 +1,5 @@
 #![crate_name = "fmt"]
-#![feature(rustc_private,str_char,unicode,core)]
+#![feature(core, str_char, unicode)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.
@@ -60,38 +60,37 @@ pub struct FmtOptions {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line."),
-        getopts::optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs."),
-        getopts::optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p."),
-        getopts::optflag("s", "split-only", "Split lines only, do not reflow."),
-        getopts::optflag("u", "uniform-spacing", "Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break."),
+    opts.optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.");
+    opts.optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.");
+    opts.optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.");
+    opts.optflag("s", "split-only", "Split lines only, do not reflow.");
+    opts.optflag("u", "uniform-spacing", "Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.");
 
-        getopts::optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX"),
-        getopts::optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP"),
+    opts.optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX");
+    opts.optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP");
 
-        getopts::optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace."),
-        getopts::optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace."),
+    opts.optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace.");
+    opts.optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace.");
 
-        getopts::optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH"),
-        getopts::optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL"),
+    opts.optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH");
+    opts.optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL");
 
-        getopts::optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance."),
+    opts.optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance.");
 
-        getopts::optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH"),
+    opts.optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH");
 
-        getopts::optflag("V", "version", "Output version information and exit."),
-        getopts::optflag("h", "help", "Display this help message and exit.")
-            ];
+    opts.optflag("V", "version", "Output version information and exit.");
+    opts.optflag("h", "help", "Display this help message and exit.");
 
-    let matches = match getopts::getopts(&args[1..], &opts[..]) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, args[0])
+        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, NAME)
     };
 
     if matches.opt_present("h") {
-        print_usage(&(args[0])[..], &opts[..], "");
+        println!("Usage: {} [OPTION]... [FILE]...\n\n{}", NAME, opts.usage("Reformat paragraphs from input files (or stdin) to stdout."));
     }
 
     if matches.opt_present("V") || matches.opt_present("h") {
@@ -219,8 +218,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     0
-}
-
-fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
-    println!("Usage: {} [OPTION]... [FILE]...\n\n{}{}", arg0, getopts::usage("Reformat paragraphs from input files (or stdin) to stdout.", opts), errmsg);
 }

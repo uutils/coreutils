@@ -1,5 +1,5 @@
 #![crate_name = "unexpand"]
-#![feature(rustc_private, unicode)]
+#![feature(unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -84,26 +84,27 @@ impl Options {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("a", "all", "convert all blanks, instead of just initial blanks"),
-        getopts::optflag("", "first-only", "convert only leading sequences of blanks (overrides -a)"),
-        getopts::optopt("t", "tabs", "have tabs N characters apart instead of 8 (enables -a)", "N"),
-        getopts::optopt("t", "tabs", "use comma separated LIST of tab positions (enables -a)", "LIST"),
-        getopts::optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("a", "all", "convert all blanks, instead of just initial blanks");
+    opts.optflag("", "first-only", "convert only leading sequences of blanks (overrides -a)");
+    opts.optopt("t", "tabs", "have tabs N characters apart instead of 8 (enables -a)", "N");
+    opts.optopt("t", "tabs", "use comma separated LIST of tab positions (enables -a)", "LIST");
+    opts.optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("help") {
-        println!("Usage: {} [OPTION]... [FILE]...", NAME);
-        println!("{}", getopts::usage(
+        println!("{} v{}\n", NAME, VERSION);
+        println!("Usage: {} [OPTION]... [FILE]...\n", NAME);
+        println!("{}", opts.usage(
             "Convert blanks in each FILE to tabs, writing to standard output.\n\
-            With no FILE, or when FILE is -, read standard input.", &opts));
+            With no FILE, or when FILE is -, read standard input."));
         return 0;
     }
 

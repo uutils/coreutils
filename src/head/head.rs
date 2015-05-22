@@ -1,5 +1,4 @@
 #![crate_name = "head"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,13 +17,13 @@ use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
-use getopts::{optopt, optflag, getopts, usage};
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
 static NAME: &'static str = "head";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut line_count = 10usize;
@@ -38,23 +37,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let args = options;
 
-    let possible_options = [
-        optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K"),
-        optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K"),
-        optflag("h", "help", "help"),
-        optflag("V", "version", "version")
-    ];
+    let mut opts = getopts::Options::new();
 
-    let given_options = match getopts(args.as_ref(), &possible_options) {
+    opts.optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K");
+    opts.optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K");
+    opts.optflag("h", "help", "help");
+    opts.optflag("V", "version", "version");
+
+    let given_options = match opts.parse(&args) {
         Ok (m) => { m }
         Err(_) => {
-            println!("{}", usage(NAME, &possible_options));
+            println!("{}", opts.usage(""));
             return 1;
         }
     };
 
     if given_options.opt_present("h") {
-        println!("{}", usage(NAME, &possible_options));
+        println!("{}", opts.usage(""));
         return 0;
     }
     if given_options.opt_present("V") { version(); return 0 }
@@ -180,5 +179,5 @@ fn head<T: Read>(reader: &mut BufReader<T>, count: usize, use_bytes: bool) -> bo
 }
 
 fn version() {
-    println!("head version 1.0.0");
+    println!("{} version {}", NAME, VERSION);
 }

@@ -1,5 +1,5 @@
 #![crate_name = "tr"]
-#![feature(io, rustc_private)]
+#![feature(io)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,9 +14,10 @@
 
 extern crate getopts;
 
-use getopts::OptGroup;
+use getopts::Options;
 use std::collections::{BitSet, VecMap};
 use std::io::{stdin, stdout, BufReader, Read, Write};
+
 use expand::ExpandSet;
 
 #[path="../common/util.rs"]
@@ -25,8 +26,8 @@ mod util;
 
 mod expand;
 
-static NAME : &'static str = "tr";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "tr";
+static VERSION: &'static str = "1.0.0";
 const BUFFER_LEN: usize = 1024;
 
 fn delete<'a>(set: ExpandSet<'a>, complement: bool) {
@@ -96,25 +97,25 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
     }
 }
 
-fn usage(opts: &[OptGroup]) {
+fn usage(opts: &Options) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
     println!("  {} [OPTIONS] SET1 [SET2]", NAME);
     println!("");
-    println!("{}", getopts::usage("Translate or delete characters.", opts));
+    println!("{}", opts.usage("Translate or delete characters."));
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("c", "complement", "use the complement of SET1"),
-        getopts::optflag("C", "", "same as -c"),
-        getopts::optflag("d", "delete", "delete characters in SET1"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("c", "complement", "use the complement of SET1");
+    opts.optflag("C", "", "same as -c");
+    opts.optflag("d", "delete", "delete characters in SET1");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => {
             show_error!("{}", err);

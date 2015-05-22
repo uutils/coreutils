@@ -1,5 +1,5 @@
 #![crate_name = "cp"]
-#![feature(rustc_private, path_ext)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,13 +11,15 @@
  */
 
 extern crate getopts;
-#[macro_use] extern crate log;
 
-use getopts::{getopts, optflag, usage};
-use std::fs;
-use std::fs::{PathExt};
-use std::io::{ErrorKind, Result};
+use getopts::Options;
+use std::fs::{self, PathExt};
+use std::io::{ErrorKind, Result, Write};
 use std::path::Path;
+
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -30,20 +32,20 @@ static NAME: &'static str = "cp";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        optflag("h", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit"),
-    ];
-    let matches = match getopts(&args[1..], &opts) {
+    let mut opts = Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(e) => {
-            error!("error: {}", e);
+            show_error!("{}", e);
             panic!()
         },
     };
 
-    let progname = &args[0];
-    let usage = usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", &opts);
+    let usage = opts.usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
     let mode = if matches.opt_present("version") {
         Mode::Version
     } else if matches.opt_present("help") {
@@ -54,7 +56,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     match mode {
         Mode::Copy    => copy(matches),
-        Mode::Help    => help(&progname, &usage),
+        Mode::Help    => help(&usage),
         Mode::Version => version(),
     }
 
@@ -65,25 +67,26 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-fn help(progname: &String, usage: &String) {
-    let msg = format!("Usage: {0} SOURCE DEST\n  \
+fn help(usage: &String) {
+    let msg = format!("{0} {1}\n\n\
+                       Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY\n  \
                          or:  {0} -t DIRECTORY SOURCE\n\
                        \n\
-                       {1}", progname, usage);
+                       {2}", NAME, VERSION, usage);
     println!("{}", msg);
 }
 
 fn copy(matches: getopts::Matches) {
     let sources: Vec<String> = if matches.free.is_empty() {
-        error!("error: Missing SOURCE argument. Try --help.");
+        show_error!("Missing SOURCE argument. Try --help.");
         panic!()
     } else {
         // All but the last argument:
         matches.free[..matches.free.len() - 1].iter().map(|arg| arg.clone()).collect()
     };
     let dest = if matches.free.len() < 2 {
-        error!("error: Missing DEST argument. Try --help.");
+        show_error!("Missing DEST argument. Try --help.");
         panic!()
     } else {
         // Only the last argument:
@@ -98,26 +101,26 @@ fn copy(matches: getopts::Matches) {
             match err.kind() {
                 ErrorKind::NotFound => false,
                 _ => {
-                    error!("error: {}", err);
+                    show_error!("{}", err);
                     panic!()
                 }
             }
         });
 
         if same_file {
-            error!("error: \"{}\" and \"{}\" are the same file",
+            show_error!("\"{}\" and \"{}\" are the same file",
                 source.display(),
                 dest.display());
             panic!();
         }
 
         if let Err(err) = fs::copy(source, dest) {
-            error!("error: {}", err);
+            show_error!("{}", err);
             panic!();
         }
     } else {
         if !fs::metadata(dest).unwrap().is_dir() {
-            error!("error: TARGET must be a directory");
+            show_error!("TARGET must be a directory");
             panic!();
         }
 
@@ -125,7 +128,7 @@ fn copy(matches: getopts::Matches) {
             let source = Path::new(&src);
 
             if !fs::metadata(source).unwrap().is_file() {
-                error!("error: \"{}\" is not a file", source.display());
+                show_error!("\"{}\" is not a file", source.display());
                 continue;
             }
 
@@ -138,7 +141,7 @@ fn copy(matches: getopts::Matches) {
             let io_result = fs::copy(source, full_dest);
 
             if let Err(err) = io_result {
-                error!("error: {}", err);
+                show_error!("{}", err);
                 panic!()
             }
         }

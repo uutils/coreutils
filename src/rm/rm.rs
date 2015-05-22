@@ -1,5 +1,5 @@
 #![crate_name = "rm"]
-#![feature(file_type, dir_entry_ext, path_ext, rustc_private)]
+#![feature(file_type, dir_entry_ext, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -31,36 +31,36 @@ enum InteractiveMode {
 }
 
 static NAME: &'static str = "rm";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // TODO: make getopts support -R in addition to -r
-    let opts = [
-        getopts::optflag("f", "force", "ignore nonexistent files and arguments, never prompt"),
-        getopts::optflag("i", "", "prompt before every removal"),
-        getopts::optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"),
-        getopts::optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN"),
-        getopts::optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)"),
-        getopts::optflag("", "no-preserve-root", "do not treat '/' specially"),
-        getopts::optflag("", "preserve-root", "do not remove '/' (default)"),
-        getopts::optflag("r", "recursive", "remove directories and their contents recursively"),
-        getopts::optflag("d", "dir", "remove empty directories"),
-        getopts::optflag("v", "verbose", "explain what is being done"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    let mut opts = getopts::Options::new();
+
+    opts.optflag("f", "force", "ignore nonexistent files and arguments, never prompt");
+    opts.optflag("i", "", "prompt before every removal");
+    opts.optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes");
+    opts.optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN");
+    opts.optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)");
+    opts.optflag("", "no-preserve-root", "do not treat '/' specially");
+    opts.optflag("", "preserve-root", "do not remove '/' (default)");
+    opts.optflag("r", "recursive", "remove directories and their contents recursively");
+    opts.optflag("d", "dir", "remove empty directories");
+    opts.optflag("v", "verbose", "explain what is being done");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "{}", f)
-        }
+        Err(f) => crash!(1, "{}", f)
     };
     if matches.opt_present("help") {
-        println!("rm 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", &args[0][..]);
+        println!("  {0} [OPTION]... [FILE]...", NAME);
         println!("");
-        println!("{}", &getopts::usage("Remove (unlink) the FILE(s).", &opts)[..]);
+        println!("{}", opts.usage("Remove (unlink) the FILE(s)."));
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
         println!("");
@@ -74,10 +74,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("some of its contents, given sufficient expertise and/or time.  For greater");
         println!("assurance that the contents are truly unrecoverable, consider using shred.");
     } else if matches.opt_present("version") {
-        println!("rm 1.0.0");
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", &args[0][..]);
+        show_error!("for help, try '{0} --help'", NAME);
         return 1;
     } else {
         let force = matches.opt_present("force");

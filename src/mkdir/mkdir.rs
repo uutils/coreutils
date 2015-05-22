@@ -1,5 +1,5 @@
 #![crate_name = "mkdir"]
-#![feature(path_ext, rustc_private)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -29,23 +29,20 @@ static VERSION: &'static str = "1.0.0";
  * Handles option parsing
  */
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        // Linux-specific options, not implemented
-        // getopts::optflag("Z", "context", "set SELinux secutiry context" +
-        // " of each created directory to CTX"),
-        getopts::optopt("m", "mode", "set file mode", "755"),
-        getopts::optflag("p", "parents", "make parent directories as needed"),
-        getopts::optflag("v", "verbose",
-                        "print a message for each printed directory"),
-        getopts::optflag("h", "help", "display this help"),
-        getopts::optflag("V", "version", "display this version")
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    // Linux-specific options, not implemented
+    // opts.optflag("Z", "context", "set SELinux secutiry context" +
+    // " of each created directory to CTX"),
+    opts.optopt("m", "mode", "set file mode", "755");
+    opts.optflag("p", "parents", "make parent directories as needed");
+    opts.optflag("v", "verbose", "print a message for each printed directory");
+    opts.optflag("h", "help", "display this help");
+    opts.optflag("V", "version", "display this version");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "Invalid options\n{}", f);
-        }
+        Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if args.len() == 1 || matches.opt_present("help") {
@@ -53,7 +50,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
     if matches.opt_present("version") {
-        println!("mkdir v{}", VERSION);
+        println!("{} v{}", NAME, VERSION);
         return 0;
     }
     let verbose = matches.opt_present("verbose");
@@ -81,11 +78,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     exec(dirs, recursive, mode, verbose)
 }
 
-fn print_help(opts: &[getopts::OptGroup]) {
-    println!("mkdir v{} - make a new directory with the given path", VERSION);
+fn print_help(opts: &getopts::Options) {
+    println!("{} v{} - make a new directory with the given path", NAME, VERSION);
     println!("");
     println!("Usage:");
-    print!("{}", getopts::usage("Create the given DIRECTORY(ies) if they do not exist", opts));
+    print!("{}", opts.usage("Create the given DIRECTORY(ies) if they do not exist"));
 }
 
 /**

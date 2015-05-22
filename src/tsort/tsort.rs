@@ -1,5 +1,4 @@
 #![crate_name = "tsort"]
-#![feature(collections, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -27,12 +26,12 @@ static NAME: &'static str = "tsort";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
@@ -43,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTIONS] FILE", NAME);
         println!("");
-        println!("{}", getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", &opts));
+        println!("{}", opts.usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead."));
         return 0;
     }
 

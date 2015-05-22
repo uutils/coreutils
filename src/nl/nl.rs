@@ -1,5 +1,5 @@
 #![crate_name = "nl"]
-#![feature(collections, rustc_private, slice_patterns)]
+#![feature(collections, slice_patterns)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +14,6 @@
 extern crate getopts;
 extern crate regex;
 
-use getopts::{getopts, optflag, OptGroup, optopt, usage};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::iter::repeat;
@@ -26,6 +25,7 @@ mod util;
 mod helper;
 
 static NAME: &'static str = "nl";
+static VERSION: &'static str = "1.0.0";
 static USAGE: &'static str = "nl [OPTION]... [FILE]...";
 // A regular expression matching everything.
 
@@ -73,21 +73,21 @@ enum NumberFormat {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let possible_options = [
-        optopt("b", "body-numbering", "use STYLE for numbering body lines", "STYLE"),
-        optopt("d", "section-delimiter", "use CC for separating logical pages", "CC"),
-        optopt("f", "footer-numbering", "use STYLE for numbering footer lines", "STYLE"),
-        optopt("h", "header-numbering", "use STYLE for numbering header lines", "STYLE"),
-        optopt("i", "line-increment", "line number increment at each line", ""),
-        optopt("l", "join-blank-lines", "group of NUMBER empty lines counted as one", "NUMBER"),
-        optopt("n", "number-format", "insert line numbers according to FORMAT", "FORMAT"),
-        optflag("p", "no-renumber", "do not reset line numbers at logical pages"),
-        optopt("s", "number-separator", "add STRING after (possible) line number", "STRING"),
-        optopt("v", "starting-line-number", "first line number on each logical page", "NUMBER"),
-        optopt("w", "number-width", "use NUMBER columns for line numbers", "NUMBER"),
-        optflag("", "help", "display this help and exit"),
-        optflag("V", "version", "version"),
-    ];
+    let mut opts = getopts::Options::new();
+
+    opts.optopt("b", "body-numbering", "use STYLE for numbering body lines", "STYLE");
+    opts.optopt("d", "section-delimiter", "use CC for separating logical pages", "CC");
+    opts.optopt("f", "footer-numbering", "use STYLE for numbering footer lines", "STYLE");
+    opts.optopt("h", "header-numbering", "use STYLE for numbering header lines", "STYLE");
+    opts.optopt("i", "line-increment", "line number increment at each line", "");
+    opts.optopt("l", "join-blank-lines", "group of NUMBER empty lines counted as one", "NUMBER");
+    opts.optopt("n", "number-format", "insert line numbers according to FORMAT", "FORMAT");
+    opts.optflag("p", "no-renumber", "do not reset line numbers at logical pages");
+    opts.optopt("s", "number-separator", "add STRING after (possible) line number", "STRING");
+    opts.optopt("v", "starting-line-number", "first line number on each logical page", "NUMBER");
+    opts.optopt("w", "number-width", "use NUMBER columns for line numbers", "NUMBER");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("V", "version", "version");
 
     // A mutable settings object, initialized with the defaults.
     let mut settings = Settings {
@@ -104,17 +104,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
         number_separator: String::from_str("\t"),
     };
 
-    let given_options = match getopts(&args[1..], &possible_options) {
+    let given_options = match opts.parse(&args[1..]) {
         Ok (m) => { m }
         Err(f) => {
             show_error!("{}", f);
-            print_usage(&possible_options);
+            print_usage(&opts);
             return 1
         }
     };
 
     if given_options.opt_present("help") {
-        print_usage(&possible_options);
+        print_usage(&opts);
         return 0;
     }
     if given_options.opt_present("version") { version(); return 0; }
@@ -282,7 +282,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
         if settings.number_width > line_no_width {
             w = settings.number_width - line_no_width;
         }
-        let fill : String = repeat(fill_char).take(w).collect();
+        let fill: String = repeat(fill_char).take(w).collect();
         match settings.number_format {
             NumberFormat::Left => {
                 println!("{1}{0}{2}{3}", fill, line_no, settings.number_separator, line)
@@ -319,10 +319,10 @@ fn pass_all(_: &str, _: &regex::Regex) -> bool {
     true
 }
 
-fn print_usage(opts: &[OptGroup]) {
-    println!("{}", usage(USAGE, opts));
+fn print_usage(opts: &getopts::Options) {
+    println!("{}", opts.usage(USAGE));
 }
 
-fn version () {
-    println!("{} version 1.0.0", NAME);
+fn version() {
+    println!("{} version {}", NAME, VERSION);
 }
