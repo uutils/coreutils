@@ -58,13 +58,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let mut number_mode = NumberingMode::NumberNone;
-    if matches.opt_present("n") {
-        number_mode = NumberingMode::NumberAll;
-    }
-    if matches.opt_present("b") {
-        number_mode = NumberingMode::NumberNonEmpty;
-    }
+    let number_mode = if matches.opt_present("b") {
+        NumberingMode::NumberNonEmpty
+    } else if matches.opt_present("n") {
+        NumberingMode::NumberAll
+    } else {
+        NumberingMode::NumberNone
+    };
     let show_nonprint = matches.opts_present(&["A".to_string(), "e".to_string(),
                                               "t".to_string(), "v".to_string()]);
     let show_ends = matches.opts_present(&["E".to_string(), "A".to_string(),
