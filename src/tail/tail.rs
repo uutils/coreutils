@@ -1,5 +1,4 @@
 #![crate_name = "tail"]
-#![feature(rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +12,6 @@
 
 extern crate getopts;
 
-use getopts::{optopt, optflag, getopts, usage};
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, stdout, Write};
@@ -43,25 +41,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let args = options;
 
-    let possible_options = [
-        optopt("c", "bytes", "Number of bytes to print", "k"),
-        optopt("n", "lines", "Number of lines to print", "k"),
-        optflag("f", "follow", "Print the file as it grows"),
-        optopt("s", "sleep-interval", "Number or seconds to sleep between polling the file when running with -f", "n"),
-        optflag("h", "help", "help"),
-        optflag("V", "version", "version"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let given_options = match getopts(args.as_ref(), &possible_options) {
+    opts.optopt("c", "bytes", "Number of bytes to print", "k");
+    opts.optopt("n", "lines", "Number of lines to print", "k");
+    opts.optflag("f", "follow", "Print the file as it grows");
+    opts.optopt("s", "sleep-interval", "Number or seconds to sleep between polling the file when running with -f", "n");
+    opts.optflag("h", "help", "help");
+    opts.optflag("V", "version", "version");
+
+    let given_options = match opts.parse(&args) {
         Ok (m) => { m }
         Err(_) => {
-            println!("{}", usage(NAME, &possible_options));
+            println!("{}", opts.usage(""));
             return 1;
         }
     };
 
     if given_options.opt_present("h") {
-        println!("{}", usage(NAME, &possible_options));
+        println!("{}", opts.usage(""));
         return 0;
     }
     if given_options.opt_present("V") { version(); return 0 }

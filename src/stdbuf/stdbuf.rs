@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![feature(negate_unsigned, path_ext, rustc_private)]
+#![feature(negate_unsigned, path_ext)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{getopts, Matches, optflag, OptGroup, optopt, usage};
+use getopts::{Matches, Options};
 use std::env;
 use std::fs::PathExt;
 use std::io::{self, Write};
@@ -71,10 +71,9 @@ fn print_version() {
     println!("{} version {}", NAME, VERSION);
 }
 
-fn print_usage(opts: &[OptGroup]) {
+fn print_usage(opts: &Options) {
     let brief = 
-        "Usage: stdbuf OPTION... COMMAND\n \
-        Run COMMAND, with modified buffering operations for its standard streams\n \
+        "Run COMMAND, with modified buffering operations for its standard streams\n \
         Mandatory arguments to long options are mandatory for short options too.";
     let explanation = 
         "If MODE is 'L' the corresponding stream will be line buffered.\n \
@@ -87,7 +86,11 @@ fn print_usage(opts: &[OptGroup]) {
         corresponding settings changed by 'stdbuf'.\n \
         Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
         and are thus unaffected by 'stdbuf' settings.\n";
-    println!("{}\n{}", getopts::usage(brief, opts), explanation);
+    println!("{} {}", NAME, VERSION);
+    println!("");
+    println!("Usage: stdbuf OPTION... COMMAND");
+    println!("");
+    println!("{}\n{}", opts.usage(brief), explanation);
 }
 
 fn parse_size(size: &str) -> Option<u64> {
@@ -151,8 +154,8 @@ fn check_option(matches: &Matches, name: &str, modified: &mut bool) -> Option<Bu
     }
 }
 
-fn parse_options(args: &[String], options: &mut ProgramOptions, optgrps: &[OptGroup]) -> Result<OkMsg, ErrMsg> {
-    let matches = match getopts(args, optgrps) {
+fn parse_options(args: &[String], options: &mut ProgramOptions, optgrps: &Options) -> Result<OkMsg, ErrMsg> {
+    let matches = match optgrps.parse(args) {
         Ok(m) => m,
         Err(_) => return Err(ErrMsg::Retry)
     };
@@ -212,23 +215,24 @@ fn get_preload_env() -> (String, String) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let optgrps = [
-        optopt("i", "input", "adjust standard input stream buffering", "MODE"),
-        optopt("o", "output", "adjust standard output stream buffering", "MODE"),
-        optopt("e", "error", "adjust standard error stream buffering", "MODE"),
-        optflag("", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
+
+    opts.optopt("i", "input", "adjust standard input stream buffering", "MODE");
+    opts.optopt("o", "output", "adjust standard output stream buffering", "MODE");
+    opts.optopt("e", "error", "adjust standard error stream buffering", "MODE");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
     let mut options = ProgramOptions {stdin: BufferType::Default, stdout: BufferType::Default, stderr: BufferType::Default};
     let mut command_idx = -1;
     for i in 1 .. args.len()-1 {
-        match parse_options(&args[1 .. i], &mut options, &optgrps) {
+        match parse_options(&args[1 .. i], &mut options, &opts) {
             Ok(OkMsg::Buffering) => {
                 command_idx = i - 1;
                 break;
             },
             Ok(OkMsg::Help) => {
-                print_usage(&optgrps);
+                print_usage(&opts);
                 return 0;
             },
             Ok(OkMsg::Version) => {

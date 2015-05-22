@@ -1,5 +1,5 @@
 #![crate_name = "mv"]
-#![feature(collections, fs_time, path_ext, rustc_private, slice_patterns, str_char)]
+#![feature(collections, fs_time, path_ext, slice_patterns, str_char)]
 #![allow(deprecated)]
 
 /*
@@ -15,7 +15,6 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{getopts, optflag, optflagopt, optopt, usage};
 use std::fs::{self, PathExt};
 use std::io::{BufRead, BufReader, Result, stdin, Write};
 use std::path::PathBuf;
@@ -53,35 +52,34 @@ pub enum BackupMode {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let opts = [
-        optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL"),
-        optflag("b", "", "like --backup but does not accept an argument"),
-        optflag("f", "force", "do not prompt before overwriting"),
-        optflag("i", "interactive", "prompt before override"),
-        optflag("n", "no-clobber", "do not overwrite an existing file"),
-        // I have yet to find a use-case (and thereby write a test) where this option is useful.
-        //optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
-        //                                        argument"),
-        optopt("S", "suffix", "override the usual backup suffix", "SUFFIX"),
-        optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY"),
-        optflag("T", "no-target-directory", "treat DEST as a normal file"),
-        optflag("u", "update", "move only when the SOURCE file is newer\n \
-                                  than the destination file or when the\n \
-                                  destination file is missing"),
-        optflag("v", "verbose", "explain what is being done"),
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts(&args[1..], &opts) {
+    opts.optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL");
+    opts.optflag("b", "", "like --backup but does not accept an argument");
+    opts.optflag("f", "force", "do not prompt before overwriting");
+    opts.optflag("i", "interactive", "prompt before override");
+    opts.optflag("n", "no-clobber", "do not overwrite an existing file");
+    // I have yet to find a use-case (and thereby write a test) where this option is useful.
+    //opts.optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
+    //                                        argument");
+    opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
+    opts.optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY");
+    opts.optflag("T", "no-target-directory", "treat DEST as a normal file");
+    opts.optflag("u", "update", "move only when the SOURCE file is newer\n \
+                                than the destination file or when the\n \
+                                destination file is missing");
+    opts.optflag("v", "verbose", "explain what is being done");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
             return 1;
         }
     };
-    let usage = usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", &opts);
+    let usage = opts.usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
 
     /* This does not exactly match the GNU implementation:
      * The GNU mv defaults to Force, but if more than one of the
@@ -155,25 +153,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
 
     if matches.opt_present("version") {
-        version();
+        println!("{} {}", NAME, VERSION);
         0
     } else if matches.opt_present("help") {
-        help(program, &usage);
+        help(&usage);
         0
     } else {
         exec(&paths[..], behaviour)
     }
 }
 
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help(progname: &str, usage: &str) {
-    let msg = format!("Usage: {0} SOURCE DEST\n  \
+fn help(usage: &str) {
+    let msg = format!("a0{} {1}\n\n \
+                       Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY \
                        \n\
-                       {1}", progname, usage);
+                       {2}", NAME, VERSION, usage);
     println!("{}", msg);
 }
 

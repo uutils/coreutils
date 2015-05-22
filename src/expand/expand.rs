@@ -1,5 +1,5 @@
 #![crate_name = "expand"]
-#![feature(rustc_private, unicode)]
+#![feature(unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -94,25 +94,25 @@ impl Options {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("i", "initial", "do not convert tabs after non blanks"),
-        getopts::optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER"),
-        getopts::optopt("t", "tabs", "use comma separated list of explicit tab positions", "LIST"),
-        getopts::optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(&args[1..], &opts) {
+    opts.optflag("i", "initial", "do not convert tabs after non blanks");
+    opts.optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER");
+    opts.optopt("t", "tabs", "use comma separated list of explicit tab positions", "LIST");
+    opts.optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("help") {
         println!("Usage: {} [OPTION]... [FILE]...", NAME);
-        println!("{}", getopts::usage(
+        println!("{}", opts.usage(
             "Convert tabs in each FILE to spaces, writing to standard output.\n\
-            With no FILE, or when FILE is -, read standard input.", &opts));
+            With no FILE, or when FILE is -, read standard input."));
         return 0;
     }
 

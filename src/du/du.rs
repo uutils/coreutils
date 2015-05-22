@@ -1,5 +1,5 @@
 #![crate_name = "du"]
-#![feature(collections, fs_time, metadata_ext, rustc_private, std_misc)]
+#![feature(fs_time, metadata_ext, std_misc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -115,73 +115,72 @@ fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) ->
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let opts = [
-        // In task
-        getopts::optflag("a", "all", " write counts for all files, not just directories"),
-        // In main
-        getopts::optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
-            although  the apparent  size is usually smaller, it may be larger due to holes
-            in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"),
-        // In main
-        getopts::optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
-            E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
-            "SIZE"),
-        // In main
-        getopts::optflag("b", "bytes", "equivalent to '--apparent-size --block-size=1'"),
-        // In main
-        getopts::optflag("c", "total", "produce a grand total"),
-        // In task
-        // getopts::optflag("D", "dereference-args", "dereference only symlinks that are listed
-        //     on the command line"),
-        // In main
-        // getopts::optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
-        //                   names specified in file F;
-        //                   If F is - then read names from standard input", "F"),
-        // // In task
-        // getopts::optflag("H", "", "equivalent to --dereference-args (-D)"),
-        // In main
-        getopts::optflag("h", "human-readable", "print sizes in human readable format (e.g., 1K 234M 2G)"),
-        // In main
-        getopts::optflag("", "si", "like -h, but use powers of 1000 not 1024"),
-        // In main
-        getopts::optflag("k", "", "like --block-size=1K"),
-        // In task
-        getopts::optflag("l", "count-links", "count sizes many times if hard linked"),
-        // // In main
-        getopts::optflag("m", "", "like --block-size=1M"),
-        // // In task
-        // getopts::optflag("L", "dereference", "dereference all symbolic links"),
-        // // In task
-        // getopts::optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
-        // // In main
-        getopts::optflag("0", "null", "end each output line with 0 byte rather than newline"),
-        // In main
-        getopts::optflag("S", "separate-dirs", "do not include size of subdirectories"),
-        // In main
-        getopts::optflag("s", "summarize", "display only a total for each argument"),
-        // // In task
-        // getopts::optflag("x", "one-file-system", "skip directories on different file systems"),
-        // // In task
-        // getopts::optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
-        // // In task
-        // getopts::optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
-        // In main
-        getopts::optopt("d", "max-depth", "print the total for a directory (or file, with --all)
-            only if it is N or fewer levels below the command
-            line argument;  --max-depth=0 is the same as --summarize", "N"),
-        // In main
-        getopts::optflagopt("", "time", "show time of the last modification of any file in the
-            directory, or any of its subdirectories.  If WORD is given, show time as WORD instead of modification time:
-            atime, access, use, ctime or status", "WORD"),
-        // In main
-        getopts::optopt("", "time-style", "show times using style STYLE:
-            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE"),
-        getopts::optflag("", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    // In task
+    opts.optflag("a", "all", " write counts for all files, not just directories");
+    // In main
+    opts.optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
+            although  the apparent  size is usually smaller, it may be larger due to holes
+            in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like");
+    // In main
+    opts.optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
+            E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
+            "SIZE");
+    // In main
+    opts.optflag("b", "bytes", "equivalent to '--apparent-size --block-size=1'");
+    // In main
+    opts.optflag("c", "total", "produce a grand total");
+    // In task
+    // opts.optflag("D", "dereference-args", "dereference only symlinks that are listed
+    //     on the command line"),
+    // In main
+    // opts.optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
+    //                   names specified in file F;
+    //                   If F is - then read names from standard input", "F"),
+    // // In task
+    // opts.optflag("H", "", "equivalent to --dereference-args (-D)"),
+    // In main
+    opts.optflag("h", "human-readable", "print sizes in human readable format (e.g., 1K 234M 2G)");
+    // In main
+    opts.optflag("", "si", "like -h, but use powers of 1000 not 1024");
+    // In main
+    opts.optflag("k", "", "like --block-size=1K");
+    // In task
+    opts.optflag("l", "count-links", "count sizes many times if hard linked");
+    // // In main
+    opts.optflag("m", "", "like --block-size=1M");
+    // // In task
+    // opts.optflag("L", "dereference", "dereference all symbolic links"),
+    // // In task
+    // opts.optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
+    // // In main
+    opts.optflag("0", "null", "end each output line with 0 byte rather than newline");
+    // In main
+    opts.optflag("S", "separate-dirs", "do not include size of subdirectories");
+    // In main
+    opts.optflag("s", "summarize", "display only a total for each argument");
+    // // In task
+    // opts.optflag("x", "one-file-system", "skip directories on different file systems"),
+    // // In task
+    // opts.optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
+    // // In task
+    // opts.optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
+    // In main
+    opts.optopt("d", "max-depth", "print the total for a directory (or file, with --all)
+            only if it is N or fewer levels below the command
+            line argument;  --max-depth=0 is the same as --summarize", "N");
+    // In main
+    opts.optflagopt("", "time", "show time of the last modification of any file in the
+            directory, or any of its subdirectories.  If WORD is given, show time as WORD instead of modification time:
+            atime, access, use, ctime or status", "WORD");
+    // In main
+    opts.optopt("", "time-style", "show times using style STYLE:
+            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
@@ -206,12 +205,12 @@ POSIXLY_CORRECT is set).
 SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
 ers of 1000).",
-                 program = program,
+                 program = NAME,
                  version = VERSION,
-                 usage = getopts::usage("Summarize disk usage of each FILE, recursively for directories.", &opts));
+                 usage = opts.usage("Summarize disk usage of each FILE, recursively for directories."));
         return 0;
     } else if matches.opt_present("version") {
-        println!("{} version: {}", program, VERSION);
+        println!("{} version: {}", NAME, VERSION);
         return 0;
     }
 
@@ -233,7 +232,7 @@ ers of 1000).",
 
     let options = Options {
         all: matches.opt_present("all"),
-        program_name: program.to_string(),
+        program_name: NAME.to_string(),
         max_depth: max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
@@ -320,7 +319,7 @@ Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
-Try '{} --help' for more information.", s, program);
+Try '{} --help' for more information.", s, NAME);
                     return 1;
                 }
             }
@@ -358,7 +357,7 @@ Try '{} --help' for more information.", s, program);
                                     show_error!("invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
-    Try '{} --help' for more information.", program);
+    Try '{} --help' for more information.", NAME);
                                     return 1;
                                 }
                             },

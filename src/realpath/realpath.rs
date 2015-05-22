@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(file_type, path_ext, rustc_private)]
+#![feature(file_type, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,6 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{getopts, optflag, usage};
 use std::fs::PathExt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -24,38 +23,37 @@ static NAME: &'static str = "realpath";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let options = [
-        optflag("h", "help", "Show help and exit"),
-        optflag("V", "version", "Show version and exit"),
-        optflag("s", "strip", "Only strip '.' and '..' components, but don't resolve symbolic links"),
-        optflag("z", "zero", "Separate output filenames with \\0 rather than newline"),
-        optflag("q", "quiet", "Do not print warnings for invalid paths"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let opts = match getopts(&args[1..], &options) {
+    opts.optflag("h", "help", "Show help and exit");
+    opts.optflag("V", "version", "Show version and exit");
+    opts.optflag("s", "strip", "Only strip '.' and '..' components, but don't resolve symbolic links");
+    opts.optflag("z", "zero", "Separate output filenames with \\0 rather than newline");
+    opts.optflag("q", "quiet", "Do not print warnings for invalid paths");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            show_usage(program, &options);
+            show_usage(&opts);
             return 1
         }
     };
 
-    if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { show_usage(program, &options); return 0 }
+    if matches.opt_present("V") { version(); return 0 }
+    if matches.opt_present("h") { show_usage(&opts); return 0 }
 
-    if opts.free.len() == 0 {
+    if matches.free.len() == 0 {
         show_error!("Missing operand: FILENAME, at least one is required");
-        println!("Try `{} --help` for more information.", program);
+        println!("Try `{} --help` for more information.", NAME);
         return 1
     }
 
-    let strip = opts.opt_present("s");
-    let zero = opts.opt_present("z");
-    let quiet = opts.opt_present("q");
+    let strip = matches.opt_present("s");
+    let zero = matches.opt_present("z");
+    let quiet = matches.opt_present("q");
     let mut retcode = 0;
-    for path in opts.free.iter() {
+    for path in matches.free.iter() {
         if !resolve_path(path, strip, zero, quiet) {
             retcode = 1
         };
@@ -121,17 +119,18 @@ fn version() {
     println!("{} v{}", NAME, VERSION)
 }
 
-fn show_usage(program: &str, options: &[getopts::OptGroup]) {
+fn show_usage(opts: &getopts::Options) {
     version();
-    println!("Usage:");
-    println!("  {} [-s|--strip] [-z|--zero] FILENAME…", program);
-    println!("  {} -V|--version", program);
-    println!("  {} -h|--help", program);
     println!("");
-    print!("{}", usage(
+    println!("Usage:");
+    println!("  {} [-s|--strip] [-z|--zero] FILENAME…", NAME);
+    println!("  {} -V|--version", NAME);
+    println!("  {} -h|--help", NAME);
+    println!("");
+    print!("{}", opts.usage(
             "Convert each FILENAME to the absolute path.\n\
             All the symbolic links will be resolved, resulting path will contain no special components like '.' or '..'.\n\
             Each path component must exist or resolution will fail and non-zero exit status returned.\n\
-            Each resolved FILENAME will be written to the standard output, one per line.", options)
+            Each resolved FILENAME will be written to the standard output, one per line.")
     );
 }

@@ -1,5 +1,5 @@
 #![crate_name = "readlink"]
-#![feature(file_type, rustc_private)]
+#![feature(file_type)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,7 +12,6 @@
 
 extern crate getopts;
 
-use getopts::{getopts, optflag, OptGroup, usage};
 use std::env;
 use std::fs::{metadata, read_link};
 use std::io::{Error, ErrorKind, Result, Write};
@@ -128,32 +127,31 @@ fn canonicalize(original: &PathBuf, can_mode: &CanonicalizeMode) -> Result<PathB
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let opts = [
-        optflag("f", "canonicalize",
-                "canonicalize by following every symlink in every component of the \
-                 given name recursively; all but the last component must exist"),
-        optflag("e", "canonicalize-existing",
-                "canonicalize by following every symlink in every component of the \
-                 given name recursively, all components must exist"),
-        optflag("m", "canonicalize-missing",
-                "canonicalize by following every symlink in every component of the \
-                 given name recursively, without requirements on components existence"),
-        optflag("n", "no-newline", "do not output the trailing delimiter"),
-        optflag("q", "quiet", "suppress most error messages"),
-        optflag("s", "silent", "suppress most error messages"),
-        optflag("v", "verbose", "report error message"),
-        optflag("z", "zero", "separate output with NUL rather than newline"),
-        optflag("", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts(&args[1..], &opts) {
+    opts.optflag("f", "canonicalize",
+                 "canonicalize by following every symlink in every component of the \
+                  given name recursively; all but the last component must exist");
+    opts.optflag("e", "canonicalize-existing",
+                 "canonicalize by following every symlink in every component of the \
+                  given name recursively, all components must exist");
+    opts.optflag("m", "canonicalize-missing",
+                 "canonicalize by following every symlink in every component of the \
+                  given name recursively, without requirements on components existence");
+    opts.optflag("n", "no-newline", "do not output the trailing delimiter");
+    opts.optflag("q", "quiet", "suppress most error messages");
+    opts.optflag("s", "silent", "suppress most error messages");
+    opts.optflag("v", "verbose", "report error message");
+    opts.optflag("z", "zero", "separate output with NUL rather than newline");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        show_usage(program, &opts);
+        show_usage(&opts);
         return 0;
     }
 
@@ -182,12 +180,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let files = matches.free;
     if files.len() == 0 {
-        crash!(1, "missing operand\nTry {} --help for more information", program);
+        crash!(1, "missing operand\nTry {} --help for more information", NAME);
     }
 
     if no_newline && files.len() > 1 {
         if !silent {
-            eprintln!("{}: ignoring --no-newline with multiple arguments", program);
+            eprintln!("{}: ignoring --no-newline with multiple arguments", NAME);
             no_newline = false;
         }
     }
@@ -231,8 +229,10 @@ fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
     }
 }
 
-fn show_usage(program: &str, opts: &[OptGroup]) {
-    println!("Usage: {0} [OPTION]... [FILE]...", program);
+fn show_usage(opts: &getopts::Options) {
+    println!("{} {}", NAME, VERSION);
+    println!("");
+    println!("Usage: {0} [OPTION]... [FILE]...", NAME);
     print!("Print value of a symbolic link or canonical file name");
-    print!("{}", usage("", opts));
+    print!("{}", opts.usage(""));
 }

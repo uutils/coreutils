@@ -1,5 +1,5 @@
 #![crate_name = "relpath"]
-#![feature(path_ext, rustc_private)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,6 @@
 extern crate getopts;
 extern crate libc;
 
-use getopts::{getopts, optflag, optopt, usage};
 use std::env;
 use std::fs::PathExt;
 use std::io::Write;
@@ -25,42 +24,41 @@ static NAME: &'static str = "relpath";
 static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-    let options = [
-        optflag("h", "help", "Show help and exit"),
-        optflag("V", "version", "Show version and exit"),
-        optopt("d", "", "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative", "DIR"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let opts = match getopts(&args[1..], &options) {
+    opts.optflag("h", "help", "Show help and exit");
+    opts.optflag("V", "version", "Show version and exit");
+    opts.optopt("d", "", "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative", "DIR");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
-            show_usage(program, &options);
+            show_usage(&opts);
             return 1
         }
     };
 
-    if opts.opt_present("V") { version(); return 0 }
-    if opts.opt_present("h") { show_usage(program, &options); return 0 }
+    if matches.opt_present("V") { version(); return 0 }
+    if matches.opt_present("h") { show_usage(&opts); return 0 }
 
-    if opts.free.len() == 0 {
+    if matches.free.len() == 0 {
         show_error!("Missing operand: TO");
-        println!("Try `{} --help` for more information.", program);
+        println!("Try `{} --help` for more information.", NAME);
         return 1
     }
 
-    let to = Path::new(&opts.free[0]);
-    let from = if opts.free.len() > 1 {
-        Path::new(&opts.free[1]).to_path_buf()
+    let to = Path::new(&matches.free[0]);
+    let from = if matches.free.len() > 1 {
+        Path::new(&matches.free[1]).to_path_buf()
     } else {
         env::current_dir().unwrap()
     };
     let absto = to.canonicalize().unwrap();
     let absfrom = from.canonicalize().unwrap();
 
-    if opts.opt_present("d") {
-        let base = Path::new(&opts.opt_str("d").unwrap()).to_path_buf();
+    if matches.opt_present("d") {
+        let base = Path::new(&matches.opt_str("d").unwrap()).to_path_buf();
         let absbase = base.canonicalize().unwrap();
         if !absto.as_path().starts_with(absbase.as_path()) || !absfrom.as_path().starts_with(absbase.as_path()) {
             println!("{}", absto.display());
@@ -89,15 +87,16 @@ fn version() {
     println!("{} v{}", NAME, VERSION)
 }
 
-fn show_usage(program: &str, options: &[getopts::OptGroup]) {
+fn show_usage(opts: &getopts::Options) {
     version();
-    println!("Usage:");
-    println!("  {} [-d DIR] TO [FROM]", program);
-    println!("  {} -V|--version", program);
-    println!("  {} -h|--help", program);
     println!("");
-    print!("{}", usage(
+    println!("Usage:");
+    println!("  {} [-d DIR] TO [FROM]", NAME);
+    println!("  {} -V|--version", NAME);
+    println!("  {} -h|--help", NAME);
+    println!("");
+    print!("{}", opts.usage(
             "Convert TO destination to the relative path from the FROM dir.\n\
-            If FROM path is omitted, current working dir will be used.", options)
+            If FROM path is omitted, current working dir will be used.")
     );
 }
