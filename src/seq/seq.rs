@@ -256,4 +256,5 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
     if (first >= last && step < 0f64) || (first <= last && step > 0f64) {
         pipe_print!("{}", terminator);
     }
+    pipe_flush!();
 }

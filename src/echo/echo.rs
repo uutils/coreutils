@@ -12,10 +12,11 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{stdout, Write};
+use std::io::Write;
 use std::str::from_utf8;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[allow(dead_code)]
@@ -244,7 +245,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if options.newline {
-        let _ = stdout().flush();
+        pipe_flush!();
     } else {
         println!("")
     }

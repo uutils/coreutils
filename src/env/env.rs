@@ -14,7 +14,12 @@
 #![allow(non_camel_case_types)]
 
 use std::env;
+use std::io::Write;
 use std::process::Command;
+
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
 
 struct options {
     ignore_env: bool,
@@ -194,6 +199,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         // no program provided
         print_env(opts.null);
+        pipe_flush!();
     }
 
     0
