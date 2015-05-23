@@ -12,6 +12,7 @@
 extern crate getopts;
 extern crate libc;
 
+use std::io::{stdout, Write};
 use std::str::from_utf8;
 
 #[path = "../common/util.rs"]
@@ -242,7 +243,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
 
-    if !options.newline {
+    if options.newline {
+        let _ = stdout().flush();
+    } else {
         println!("")
     }
 
