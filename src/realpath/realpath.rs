@@ -123,7 +123,7 @@ fn show_usage(opts: &getopts::Options) {
     version();
     println!("");
     println!("Usage:");
-    println!("  {} [-s|--strip] [-z|--zero] FILENAME…", NAME);
+    println!("  {} [-s|--strip] [-z|--zero] FILENAME...", NAME);
     println!("  {} -V|--version", NAME);
     println!("  {} -h|--help", NAME);
     println!("");
