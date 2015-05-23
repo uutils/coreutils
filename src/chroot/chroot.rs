@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optopt("u", "user", "User (ID or name) to switch before running the program", "USER");
     opts.optopt("g", "group", "Group (ID or name) to switch to", "GROUP");
-    opts.optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2…");
+    opts.optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2...");
     opts.optopt("", "userspec", "Colon-separated user and group to switch to. \
         Same as -u USER -g GROUP. \
         Userspec has higher preference than -u and/or -g", "USER:GROUP");
@@ -209,7 +209,7 @@ fn help_menu(options: Options) {
     let msg = format!("{0} v{1}
 
 Usage:
-  {0} [OPTION]… NEWROOT [COMMAND [ARG]…]
+  {0} [OPTION]... NEWROOT [COMMAND [ARG]...]
 
 Run COMMAND with root directory set to NEWROOT.
 If COMMAND is not specified, it defaults to '$(SHELL) -i'.
