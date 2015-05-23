@@ -163,6 +163,34 @@ macro_rules! pipe_writeln(
 );
 
 #[macro_export]
+macro_rules! pipe_flush(
+    () => (
+        match ::std::io::stdout().flush() {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
+                    false
+                } else {
+                    panic!("{}", f)
+                }
+            }
+        }
+    );
+    ($fd:expr) => (
+        match $fd.flush() {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
+                    false
+                } else {
+                    panic!("{}", f)
+                }
+            }
+        }
+    )
+);
+
+#[macro_export]
 macro_rules! safe_write(
     ($fd:expr, $($args:tt)+) => (
         match write!($fd, $($args)+) {
