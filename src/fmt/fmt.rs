@@ -94,7 +94,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("V") || matches.opt_present("h") {
-        println!("uutils {} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0
     }
 

@@ -50,7 +50,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
     if matches.opt_present("help") {
-        let msg = format!("{0} v{1}
+        let msg = format!("{0} {1}
 
 Usage:
   {0} [OPTION]... [FILE]
@@ -61,7 +61,7 @@ Write a random permutation of the input lines to standard output.
 With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else {
         let echo = matches.opt_present("echo");
         let mode = match matches.opt_str("input-range") {

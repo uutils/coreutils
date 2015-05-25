@@ -100,7 +100,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("help") {
-        println!("{} v{}\n", NAME, VERSION);
+        println!("{} {}\n", NAME, VERSION);
         println!("Usage: {} [OPTION]... [FILE]...\n", NAME);
         println!("{}", opts.usage(
             "Convert blanks in each FILE to tabs, writing to standard output.\n\
@@ -109,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("V") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

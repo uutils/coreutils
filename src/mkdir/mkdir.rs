@@ -50,7 +50,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
     if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
     let verbose = matches.opt_present("verbose");
@@ -79,7 +79,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn print_help(opts: &getopts::Options) {
-    println!("{} v{} - make a new directory with the given path", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
     print!("{}", opts.usage("Create the given DIRECTORY(ies) if they do not exist"));

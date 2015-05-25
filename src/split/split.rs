@@ -42,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("h") {
-        let msg = format!("{0} v{1}
+        let msg = format!("{0} {1}
 
 Usage:
   {0} [OPTION]... [INPUT [PREFIX]]
@@ -56,7 +56,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     }
 
     if matches.opt_present("V") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

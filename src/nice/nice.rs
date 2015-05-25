@@ -47,12 +47,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
     if matches.opt_present("help") {
-        let msg = format!("{0} v{1}
+        let msg = format!("{0} {1}
 
 Usage:
   {0} [OPTIONS] [COMMAND [ARGS]]

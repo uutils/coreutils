@@ -53,14 +53,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
     if matches.opt_present("help") {
-        print!("{} v{}
+        print!("{} {}
 
 Usage:
   {} [OPTION] DURATION COMMAND [ARG]...
 
 {}", NAME, VERSION, program, getopts::usage("Start COMMAND, and kill it if still running after DURATION.", &opts));
     } else if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.len() < 2 {
         show_error!("missing an argument");
         show_error!("for help, try '{0} --help'", program);

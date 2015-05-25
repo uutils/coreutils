@@ -34,9 +34,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else if matches.opt_present("help") {
-        let msg = format!("{0} v{1}
+        let msg = format!("{0} {1}
 
 Usage:
   {0} [OPTION]... [USER]...
