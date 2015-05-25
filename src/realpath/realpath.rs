@@ -116,7 +116,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
 }
 
 fn version() {
-    println!("{} v{}", NAME, VERSION)
+    println!("{} {}", NAME, VERSION)
 }
 
 fn show_usage(opts: &getopts::Options) {

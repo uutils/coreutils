@@ -324,5 +324,5 @@ fn print_usage(opts: &getopts::Options) {
 }
 
 fn version() {
-    println!("{} version {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }

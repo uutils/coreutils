@@ -202,11 +202,11 @@ fn set_user(user: &str) {
 }
 
 fn version() {
-    println!("{} v{}", NAME, VERSION)
+    println!("{} {}", NAME, VERSION)
 }
 
 fn help_menu(options: Options) {
-    let msg = format!("{0} v{1}
+    let msg = format!("{0} {1}
 
 Usage:
   {0} [OPTION]... NEWROOT [COMMAND [ARG]...]

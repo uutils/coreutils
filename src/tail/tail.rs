@@ -296,5 +296,5 @@ fn print_string<T: Write>(_: &mut T, s: &String) {
 }
 
 fn version () {
-    println!("{} v{}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }

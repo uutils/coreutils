@@ -68,7 +68,7 @@ fn preload_strings() -> (&'static str, &'static str) {
 }
 
 fn print_version() {
-    println!("{} version {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 fn print_usage(opts: &Options) {

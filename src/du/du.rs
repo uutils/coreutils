@@ -210,7 +210,7 @@ ers of 1000).",
                  usage = opts.usage("Summarize disk usage of each FILE, recursively for directories."));
         return 0;
     } else if matches.opt_present("version") {
-        println!("{} version: {}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

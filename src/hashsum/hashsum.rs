@@ -138,7 +138,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn version() {
-    pipe_println!("{} v{}", NAME, VERSION);
+    pipe_println!("{} {}", NAME, VERSION);
 }
 
 fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
@@ -148,7 +148,7 @@ fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
         format!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program)
     };
 
-    let msg = format!("{} v{}
+    let msg = format!("{} {}
 
 Usage:
 {}

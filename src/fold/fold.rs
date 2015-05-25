@@ -40,14 +40,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("h") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
         println!("  {} [OPTION]... [FILE]...", NAME);
         println!("");
         print!("{}", opts.usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines"));
     } else if matches.opt_present("V") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else {
         let bytes = matches.opt_present("b");
         let spaces = matches.opt_present("s");

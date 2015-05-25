@@ -179,5 +179,5 @@ fn head<T: Read>(reader: &mut BufReader<T>, count: usize, use_bytes: bool) -> bo
 }
 
 fn version() {
-    println!("{} version {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }

@@ -53,7 +53,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if matches.opt_present("V") { println!("{} v{}", NAME, VERSION); return 0 }
+    if matches.opt_present("V") { println!("{} {}", NAME, VERSION); return 0 }
     if matches.opt_present("h") { show_usage(&opts); return 0 }
 
     if matches.free.len() == 0 {
@@ -133,7 +133,7 @@ fn find_stdout() -> File {
 }
 
 fn show_usage(opts: &getopts::Options) {
-    let msg = format!("{0} v{1}
+    let msg = format!("{0} {1}
 
 Usage:
   {0} COMMAND [ARG]...

@@ -84,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn version() {
-    println!("{} v{}", NAME, VERSION)
+    println!("{} {}", NAME, VERSION)
 }
 
 fn show_usage(opts: &getopts::Options) {

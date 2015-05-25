@@ -44,7 +44,7 @@ Usage:
 Print the full filename of the current working directory.", NAME, VERSION);
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
-        println!("{} version: {}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else {
         println!("{}", env::current_dir().unwrap().display());
     }

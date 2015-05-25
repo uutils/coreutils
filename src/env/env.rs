@@ -21,6 +21,9 @@ use std::process::Command;
 #[macro_use]
 mod util;
 
+static NAME: &'static str = "env";
+static VERSION: &'static str = "1.0.0";
+
 struct options {
     ignore_env: bool,
     null: bool,
@@ -29,8 +32,8 @@ struct options {
     program: Vec<String>
 }
 
-fn usage(prog: &str) {
-    println!("Usage: {} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", prog);
+fn usage() {
+    println!("Usage: {} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", NAME);
     println!("Set each NAME to VALUE in the environment and run COMMAND\n");
     println!("Possible options are:");
     println!("  -i --ignore-environment\t start with an empty environment");
@@ -42,7 +45,7 @@ fn usage(prog: &str) {
 }
 
 fn version() {
-    println!("env 1.0.0");
+    println!("{} {}", NAME, VERSION);
 }
 
 // print name=value env pairs on screen
@@ -54,8 +57,6 @@ fn print_env(null: bool) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let prog = &args[0];
-
     // to handle arguments the same way than GNU env, we can't use getopts
     let mut opts = Box::new(options {
         ignore_env: false,
@@ -94,7 +95,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else if opt.starts_with("--") {
             match opt.as_ref() {
-                "--help" => { usage(prog); return 0; }
+                "--help" => { usage(); return 0; }
                 "--version" => { version(); return 0; }
 
                 "--ignore-environment" => opts.ignore_env = true,
@@ -103,14 +104,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     let var = iter.next();
 
                     match var {
-                        None => println!("{}: this option requires an argument: {}", prog, opt),
+                        None => println!("{}: this option requires an argument: {}", NAME, opt),
                         Some(s) => opts.unsets.push(s.to_string())
                     }
                 }
 
                 _ => {
-                    println!("{}: invalid option \"{}\"", prog, *opt);
-                    println!("Type \"{} --help\" for detailed informations", prog);
+                    println!("{}: invalid option \"{}\"", NAME, *opt);
+                    println!("Type \"{} --help\" for detailed informations", NAME);
                     return 1;
                 }
             }
@@ -128,7 +129,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             for c in chars {
                 // short versions of options
                 match c {
-                    'h' => { usage(prog); return 0; }
+                    'h' => { usage(); return 0; }
                     'V' => { version(); return 0; }
                     'i' => opts.ignore_env = true,
                     '0' => opts.null = true,
@@ -136,13 +137,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         let var = iter.next();
 
                         match var {
-                            None => println!("{}: this option requires an argument: {}", prog, opt),
+                            None => println!("{}: this option requires an argument: {}", NAME, opt),
                             Some(s) => opts.unsets.push(s.to_string())
                         }
                     }
                     _ => {
-                        println!("{}: illegal option -- {}", prog, c);
-                        println!("Type \"{} --help\" for detailed informations", prog);
+                        println!("{}: illegal option -- {}", NAME, c);
+                        println!("Type \"{} --help\" for detailed informations", NAME);
                         return 1;
                     }
                 }

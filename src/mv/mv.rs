@@ -106,7 +106,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 "none" | "off"     => BackupMode::NoBackup,
                 x => {
                     show_error!("invalid argument ‘{}’ for ‘backup type’\n\
-                                Try 'mv --help' for more information.", x);
+                                Try '{} --help' for more information.", x, NAME);
                     return 1;
                 }
             }
@@ -117,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
         show_error!("options --backup and --no-clobber are mutually exclusive\n\
-                    Try 'mv --help' for more information.");
+                    Try '{} --help' for more information.", NAME);
         return 1;
     }
 
@@ -126,7 +126,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Some(x) => x,
             None => {
                 show_error!("option '--suffix' requires an argument\n\
-                            Try 'mv --help' for more information.");
+                            Try '{} --help' for more information.", NAME);
                 return 1;
             }
         }
@@ -180,7 +180,7 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
     match files {
         [] | [_] => {
             show_error!("missing file operand\n\
-                        Try 'mv --help' for more information.");
+                        Try '{} --help' for more information.", NAME);
             return 1;
         },
         [ref source, ref target] => {
@@ -220,7 +220,7 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
         fs => {
             if b.no_target_dir {
                 show_error!("mv: extra operand ‘{}’\n\
-                            Try 'mv --help' for more information.", fs[2].display());
+                            Try '{} --help' for more information.", fs[2].display(), NAME);
                 return 1;
             }
             let target_dir = fs.last().unwrap();

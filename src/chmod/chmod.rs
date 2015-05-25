@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(f) => { crash!(1, "{}", f) }
     };
     if matches.opt_present("help") {
-        let msg = format!("{name} v{version}
+        let msg = format!("{name} {version}
 
 Usage:
   {program} [OPTION]... MODE[,MODE]... FILE...
@@ -63,7 +63,7 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         print!("{}", opts.usage(&msg));
         return 0;
     } else if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() && matches.opt_present("reference") || matches.free.len() < 2 {
         show_error!("missing an argument");
         show_error!("for help, try '{} --help'", NAME);
