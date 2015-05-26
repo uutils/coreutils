@@ -35,6 +35,14 @@ fn test_ignore_environment() {
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
     assert_eq!(out, "");
+
+    let po = Command::new(PROGNAME)
+        .arg("-")
+        .output()
+        .unwrap_or_else(|err| panic!("{}", err));
+
+    let out = str::from_utf8(&po.stdout[..]).unwrap();
+    assert_eq!(out, "");
 }
 
 #[test]

@@ -116,7 +116,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         } else if opt.starts_with("-") {
-            if opt.len() == 0 {
+            if opt.len() == 1 {
                 // implies -i and stop parsing opts
                 wait_cmd = true;
                 opts.ignore_env = true;
