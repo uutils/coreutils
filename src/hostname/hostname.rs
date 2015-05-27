@@ -1,5 +1,5 @@
 #![crate_name = "hostname"]
-#![feature(collections, core, old_io, rustc_private)]
+#![feature(collections)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,10 +18,11 @@ extern crate getopts;
 extern crate libc;
 
 use std::collections::hash_set::HashSet;
-use std::old_io::net::addrinfo;
 use std::iter::repeat;
 use std::str;
-use getopts::{optflag, getopts, usage};
+use std::io::Write;
+use std::net::ToSocketAddrs;
+use getopts::Options;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -46,22 +47,21 @@ extern {
 pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
 
-    let options = [
-        optflag("d", "domain", "Display the name of the DNS domain if possible"),
-        optflag("i", "ip-address", "Display the network address(es) of the host"),
-        optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)"),   // TODO: support --long
-        optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible"),
-        optflag("h", "help", "Show help"),
-        optflag("V", "version", "Show program's version")
-    ];
+    let mut opts = Options::new();
+    opts.optflag("d", "domain", "Display the name of the DNS domain if possible");
+    opts.optflag("i", "ip-address", "Display the network address(es) of the host");
+    opts.optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)");   // TODO: support --long
+    opts.optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible");
+    opts.optflag("h", "help", "Show help");
+    opts.optflag("V", "version", "Show program's version");
 
-    let matches = match getopts(args.tail(), &options) {
+    let matches = match opts.parse(args.tail()) {
         Ok(m) => { m }
-        _ => { help_menu(program.as_slice(), &options); return 0; }
+        _ => { help_menu(program, opts); return 0; }
     };
 
     if matches.opt_present("h") {
-        help_menu(program.as_slice(), &options);
+        help_menu(program, opts);
         return 0
     }
     if matches.opt_present("V") { version(); return 0 }
@@ -71,21 +71,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let hostname = xgethostname();
 
             if matches.opt_present("i") {
-                match addrinfo::get_host_addresses(hostname.as_slice()) {
+                match hostname.to_socket_addrs() {
                     Ok(addresses) => {
                         let mut hashset = HashSet::new();
                         let mut output = String::new();
-                        for addr in addresses.iter() {
+                        for addr in addresses {
                             // XXX: not sure why this is necessary...
-                            if !hashset.contains(addr) {
-                                output.push_str(addr.to_string().as_slice());
+                            if !hashset.contains(&addr) {
+                                output.push_str(&format!("{}", addr));
                                 output.push_str(" ");
                                 hashset.insert(addr.clone());
                             }
                         }
                         let len = output.len();
                         if len > 0 {
-                            println!("{}", output.as_slice().slice_to(len - 1));
+                            println!("{}", &output[0 .. len - 1]);
                         }
                     }
                     Err(f) => {
@@ -95,15 +95,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             } else {
                 if matches.opt_present("s") {
-                    let pos = hostname.as_slice().find_str(".");
-                    if pos.is_some() {
-                        println!("{}", hostname.as_slice().slice_to(pos.unwrap()));
+                    let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
+                    let ci = it.next();
+                    if ci.is_some() {
+                        println!("{}", &hostname[0 .. ci.unwrap().0]);
                         return 0;
                     }
                 } else if matches.opt_present("d") {
-                    let pos = hostname.as_slice().find_str(".");
-                    if pos.is_some() {
-                        println!("{}", hostname.as_slice().slice_from(pos.unwrap() + 1));
+                    let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
+                    let ci = it.next();
+                    if ci.is_some() {
+                        println!("{}", &hostname[ci.unwrap().0 + 1 .. ]);
                         return 0;
                     }
                 }
@@ -111,8 +113,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 println!("{}", hostname);
             }
         }
-        1 => xsethostname(matches.free.last().unwrap().as_slice()),
-        _ => help_menu(program.as_slice(), &options)
+        1 => xsethostname(matches.free.last().unwrap()),
+        _ => help_menu(program, opts)
     };
 
     0
@@ -122,13 +124,13 @@ fn version() {
     println!("hostname 1.0.0");
 }
 
-fn help_menu(program: &str, options: &[getopts::OptGroup]) {
+fn help_menu(program: &str, options: Options) {
     version();
     println!("");
     println!("Usage:");
     println!("  {} [OPTION]... [HOSTNAME]", program);
     println!("");
-    print!("{}", usage("Print or set the system's host name.", options));
+    print!("{}", options.usage("Print or set the system's host name."));
 }
 
 fn xgethostname() -> String {
