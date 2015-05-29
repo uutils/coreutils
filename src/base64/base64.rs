@@ -46,7 +46,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("V", "version", "output version information and exit");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => { crash!(1, "error: {}", e) }
+        Err(e) => { crash!(1, "{}", e) }
     };
 
     let mode = if matches.opt_present("help") {
@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Some(s) => match s.parse() {
             Ok(s) => s,
             Err(e)=> {
-                crash!(1, "error: Argument to option 'wrap' improperly formatted: {}", e);
+                crash!(1, "Argument to option 'wrap' improperly formatted: {}", e);
             }
         },
         None => 76
@@ -122,7 +122,7 @@ fn decode(input: &mut FileOrStdReader, ignore_garbage: bool) {
             }
         }
         Err(s) => {
-            crash!(1, "error: {} ({:?})", s.description(), s);
+            crash!(1, "{} ({:?})", s.description(), s);
         }
     }
 }

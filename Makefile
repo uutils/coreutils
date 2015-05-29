@@ -158,6 +158,7 @@ endif
 
 # Programs with usable tests
 TEST_PROGS  := \
+  base64 \
   basename \
   cat \
   cp \
