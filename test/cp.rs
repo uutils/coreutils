@@ -1,26 +1,21 @@
-#![feature(path_ext)]
-
-use std::fs::{File, PathExt, remove_file};
+use std::fs::File;
 use std::io::Read;
-use std::path::{Path};
+use std::path::Path;
 use std::process::Command;
+use util::*;
 
-static EXE: &'static str = "./cp";
+static PROGNAME: &'static str = "./cp";
 static TEST_HELLO_WORLD_SOURCE: &'static str = "hello_world.txt";
 static TEST_HELLO_WORLD_DEST: &'static str = "copy_of_hello_world.txt";
 
-fn cleanup(filename: &'static str) {
-    let path = Path::new(filename);
-    if path.exists() {
-        remove_file(&path).unwrap();
-    }
-}
-
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_cp_cp() {
     // Invoke our binary to make the copy.
-    let prog = Command::new(EXE)
+    let prog = Command::new(PROGNAME)
                             .arg(TEST_HELLO_WORLD_SOURCE)
                             .arg(TEST_HELLO_WORLD_DEST)
                             .status();

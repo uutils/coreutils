@@ -2,66 +2,16 @@
 
 extern crate libc;
 
-use std::fs::{self, File, PathExt};
-use std::io::Write;
+use std::fs::PathExt;
 use std::path::Path;
-use std::process::{Command, Stdio};
-use std::str::from_utf8;
+use std::process::Command;
+use util::*;
 
 static PROGNAME: &'static str = "./rm";
 
-macro_rules! assert_empty_stderr(
-    ($cond:expr) => (
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
-
-struct CmdResult {
-    success: bool,
-    stderr: String,
-    stdout: String,
-}
-
-fn run(cmd: &mut Command) -> CmdResult {
-    let prog = cmd.output().unwrap();
-    CmdResult {
-        success: prog.status.success(),
-        stderr: from_utf8(&prog.stderr).unwrap().to_string(),
-        stdout: from_utf8(&prog.stdout).unwrap().to_string(),
-    }
-}
-
-fn run_interactive(cmd: &mut Command, input: &[u8])-> CmdResult {
-    let mut command = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    command.stdin
-        .take()
-        .unwrap_or_else(|| panic!("Could not take child process stdin"))
-        .write_all(input)
-        .unwrap_or_else(|e| panic!("{}", e));
-
-    let prog = command.wait_with_output().unwrap();
-    CmdResult {
-        success: prog.status.success(),
-        stderr: from_utf8(&prog.stderr).unwrap().to_string(),
-        stdout: from_utf8(&prog.stdout).unwrap().to_string(),
-    }
-}
-
-fn mkdir(dir: &str) {
-    fs::create_dir(dir).unwrap();
-}
-
-fn touch(file: &str) {
-    File::create(file).unwrap();
-}
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_rm_one_file() {
@@ -100,14 +50,14 @@ fn test_rm_interactive() {
     touch(file_a);
     touch(file_b);
 
-    let result1 = run_interactive(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"n");
+    let result1 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"n");
 
     assert!(result1.success);
 
     assert!(Path::new(file_a).exists());
     assert!(Path::new(file_b).exists());
 
-    let result2 = run_interactive(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
+    let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
 
     assert!(result2.success);
 

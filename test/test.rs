@@ -9,17 +9,17 @@
 
 use std::process::Command;
 
-static EXE: &'static str = "./test";
+static PROGNAME: &'static str = "./test";
 
 #[test]
 fn test_op_prec_and_or_1() {
-    let status = Command::new(EXE).arg(" ").arg("-o").arg("").arg("-a").arg("").status();
+    let status = Command::new(PROGNAME).arg(" ").arg("-o").arg("").arg("-a").arg("").status();
     assert_eq!(true, status.unwrap().success());
 }
 
 #[test]
 fn test_op_prec_and_or_2() {
-    let status = Command::new(EXE).arg("")
+    let status = Command::new(PROGNAME).arg("")
                                    .arg("-a")
                                    .arg("")
                                    .arg("-o")
@@ -32,6 +32,6 @@ fn test_op_prec_and_or_2() {
 
 #[test]
 fn test_or_as_filename() {
-    let status = Command::new(EXE).arg("x").arg("-a").arg("-z").arg("-o").status();
+    let status = Command::new(PROGNAME).arg("x").arg("-a").arg("-z").arg("-o").status();
     assert_eq!(status.unwrap().code(), Some(1));
 }

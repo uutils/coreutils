@@ -1,44 +1,11 @@
-use std::io::{Read, Write};
-use std::process::{Command, Stdio};
-use std::str::from_utf8;
+use std::process::Command;
+use util::*;
 
 static PROGNAME: &'static str = "./base64";
 
-struct CmdResult {
-    success: bool,
-    stdout: String,
-    stderr: String,
-}
-
-fn run_piped_stdin(cmd: &mut Command, input: &[u8])-> CmdResult {
-    let mut command = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    command.stdin
-        .take()
-        .unwrap_or_else(|| panic!("Could not take child process stdin"))
-        .write_all(input)
-        .unwrap_or_else(|e| panic!("{}", e));
-
-    let prog = command.wait_with_output().unwrap();
-    CmdResult {
-        success: prog.status.success(),
-        stdout: from_utf8(&prog.stdout).unwrap().to_string(),
-        stderr: from_utf8(&prog.stderr).unwrap().to_string(),
-    }
-}
-
-macro_rules! assert_empty_stderr(
-    ($cond:expr) => (
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_encode() {

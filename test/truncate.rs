@@ -1,18 +1,16 @@
-use std::fs::{File, remove_file};
+use std::fs;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::Command;
+use util::*;
 
 static PROGNAME: &'static str = "./truncate";
 static TFILE1: &'static str = "truncate_test_1";
 static TFILE2: &'static str = "truncate_test_2";
 
-fn make_file(name: &str) -> File {
-    match File::create(Path::new(name)) {
-        Ok(f) => f,
-        Err(_) => panic!()
-    }
-}
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_increase_file_size() {
@@ -24,7 +22,7 @@ fn test_increase_file_size() {
     if file.seek(SeekFrom::Current(0)).unwrap() != 5 * 1024 {
         panic!();
     }
-    remove_file(Path::new(TFILE1)).unwrap();
+    fs::remove_file(Path::new(TFILE1)).unwrap();
 }
 
 #[test]
@@ -39,5 +37,5 @@ fn test_decrease_file_size() {
         println!("{:?}", file.seek(SeekFrom::Current(0)));
         panic!();
     }
-    remove_file(Path::new(TFILE2)).unwrap();
+    fs::remove_file(Path::new(TFILE2)).unwrap();
 }
