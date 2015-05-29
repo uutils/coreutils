@@ -22,6 +22,10 @@ use libc::consts::os::posix88::STDIN_FILENO;
 use libc::funcs::posix88::unistd::isatty;
 use libc::types::os::arch::c95::c_int;
 
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
+
 static NAME: &'static str = "cat";
 static VERSION: &'static str = "1.0.0";
 
@@ -252,6 +256,7 @@ fn exec(files: Vec<String>, number: NumberingMode, show_nonprint: bool,
     } else {
         write_fast(files);
     }
+    pipe_flush!();
 }
 
 fn open(path: &str) -> Option<(Box<Read>, bool)> {

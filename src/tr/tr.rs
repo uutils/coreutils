@@ -59,6 +59,7 @@ fn delete<'a>(set: ExpandSet<'a>, complement: bool) {
     }
     if buf.len() > 0 {
         safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
+        pipe_flush!();
     }
 }
 
@@ -94,6 +95,7 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
     }
     if buf.len() > 0 {
         safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
+        pipe_flush!();
     }
 }
 

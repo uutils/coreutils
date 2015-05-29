@@ -279,4 +279,5 @@ fn unexpand(options: Options) {
             buf.truncate(0);    // clear out the buffer
         }
     }
+    pipe_flush!(output);
 }

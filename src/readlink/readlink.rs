@@ -227,6 +227,7 @@ fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
     } else {
         println!("{}", path);
     }
+    pipe_flush!();
 }
 
 fn show_usage(opts: &getopts::Options) {
