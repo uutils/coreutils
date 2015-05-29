@@ -15,6 +15,7 @@
 extern crate getopts;
 extern crate libc;
 extern crate regex;
+extern crate regex_syntax;
 
 use getopts::Options;
 use regex::Regex;
