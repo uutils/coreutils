@@ -41,8 +41,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K");
     opts.optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K");
-    opts.optflag("h", "help", "help");
-    opts.optflag("V", "version", "version");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
     let given_options = match opts.parse(&args) {
         Ok (m) => { m }
