@@ -133,7 +133,7 @@ struct WordRef {
 }
 
 fn print_version() {
-    println!("{} version {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 fn print_usage(opts: &Options) {
@@ -408,7 +408,6 @@ fn tex_mapper(x: char) -> String {
     match x {
         '\\' => "\\backslash{}".to_string(),
         '$' | '%' | '#' | '&' | '_' => format!("\\{}", x),
-        '^' | '~' => format!("{}\\{}{}", x, "{", "}"),
         '}' | '{' => format!("$\\{}$", x),
         _ => x.to_string()
     }
@@ -441,7 +440,8 @@ fn format_tex_line(config: &Config, word_ref: &WordRef, line: &String,
     output.push_str(format!("{5}{0}{6}{5}{1}{6}{5}{2}{6}{5}{3}{6}{5}{4}{6}", 
         tail, before, keyword, after, head, "{", "}").as_str());
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!("{}{}{}", "{", reference, "}"));
+        output.push_str(
+            &format!("{}{}{}", "{", adjust_tex_str(&reference), "}"));
     }
     output
 }
@@ -470,7 +470,7 @@ fn format_roff_line(config: &Config, word_ref: &WordRef, line: &str,
     output.push_str(format!(" \"{}\" \"{}\" \"{}{}\" \"{}\"", 
         tail, before, keyword, after, head).as_str());
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!(" \"{}\"", reference));
+        output.push_str(&format!(" \"{}\"", adjust_roff_str(&reference)));
     }
     output
 }

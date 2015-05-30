@@ -174,6 +174,7 @@ TEST_PROGS  := \
   mv \
   nl \
   paste \
+  ptx \
   pwd \
   readlink \
   rm \
