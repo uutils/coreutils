@@ -67,6 +67,7 @@ PROGS       := \
   od \
   paste \
   printenv \
+  ptx \
   pwd \
   readlink \
   realpath \
@@ -173,6 +174,7 @@ TEST_PROGS  := \
   mv \
   nl \
   paste \
+  ptx \
   pwd \
   readlink \
   rm \
