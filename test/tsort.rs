@@ -1,16 +1,11 @@
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
 use std::process::Command;
+use util::*;
 
 static PROGNAME: &'static str = "./tsort";
 
-fn get_file_contents(name: &str) -> Vec<u8> {
-    let mut f = File::open(Path::new(name)).unwrap();
-    let mut contents: Vec<u8> = vec!();
-    let _ = f.read_to_end(&mut contents);
-    contents
-}
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_sort_call_graph() {
@@ -22,5 +17,5 @@ fn test_sort_call_graph() {
         .output()
         .unwrap_or_else(|err| panic!("{}", err));
 
-    assert_eq!(String::from_utf8(po.stdout).unwrap(), String::from_utf8(get_file_contents(output)).unwrap());
+    assert_eq!(String::from_utf8(po.stdout).unwrap(), String::from_utf8(get_file_contents(output).into_bytes()).unwrap());
 }

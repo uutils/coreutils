@@ -8,18 +8,16 @@ use std::path::Path;
 use std::process::Command;
 use rand::{Rng, thread_rng};
 use regex::Regex;
+use util::*;
 
 static PROGNAME: &'static str = "./split";
 
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
+
 fn random_chars(n: usize) -> String {
     thread_rng().gen_ascii_chars().take(n).collect::<String>()
-}
-
-fn get_file_contents(name: &str) -> Vec<u8> {
-    let mut f = File::open(Path::new(name)).unwrap();
-    let mut contents: Vec<u8> = vec!();
-    let _ = f.read_to_end(&mut contents);
-    contents
 }
 
 struct Glob {
