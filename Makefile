@@ -170,6 +170,7 @@ TEST_PROGS  := \
   false \
   fold \
   hashsum \
+  head \
   mkdir \
   mv \
   nl \
