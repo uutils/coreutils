@@ -30,7 +30,7 @@ pub fn run(cmd: &mut Command) -> CmdResult {
     }
 }
 
-pub fn run_piped_stdin(cmd: &mut Command, input: &[u8])-> CmdResult {
+pub fn run_piped_stdin<T: AsRef<[u8]>>(cmd: &mut Command, input: T)-> CmdResult {
     let mut command = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -41,7 +41,7 @@ pub fn run_piped_stdin(cmd: &mut Command, input: &[u8])-> CmdResult {
     command.stdin
         .take()
         .unwrap_or_else(|| panic!("Could not take child process stdin"))
-        .write_all(input)
+        .write_all(input.as_ref())
         .unwrap_or_else(|e| panic!("{}", e));
 
     let prog = command.wait_with_output().unwrap();
