@@ -170,7 +170,7 @@ fn head<T: Read>(reader: &mut BufReader<T>, count: usize, use_bytes: bool) -> bo
         }
     } else {
         for line in reader.lines().take(count) {
-            if !pipe_print!("{}", line.unwrap()) {
+            if !pipe_println!("{}", line.unwrap()) {
                 return false;
             }
         }
