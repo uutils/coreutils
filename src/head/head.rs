@@ -25,13 +25,29 @@ mod util;
 static NAME: &'static str = "head";
 static VERSION: &'static str = "1.0.0";
 
+enum FilterMode {
+    Bytes(usize),
+    Lines(usize),
+}
+
+struct Settings {
+    mode: FilterMode,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            mode: FilterMode::Lines(10),
+        }
+    }
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut line_count = 10usize;
-    let mut byte_count = 0usize;
+    let mut settings: Settings = Default::default();
 
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
-        (args, Some(n)) => { line_count = n; args },
+        (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
         (args, None) => args
     };
 
@@ -68,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
             match n.parse::<usize>() {
-                Ok(m) => { line_count = m }
+                Ok(m) => { settings.mode = FilterMode::Lines(m) }
                 Err(e) => {
                     show_error!("invalid line count '{}': {}", n, e);
                     return 1;
@@ -77,7 +93,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
         None => match given_options.opt_str("c") {
             Some(count) => match count.parse::<usize>() {
-                Ok(m) => byte_count = m,
+                Ok(m) => settings.mode = FilterMode::Bytes(m),
                 Err(e)=> {
                     show_error!("invalid byte count '{}': {}", count, e);
                     return 1;
@@ -89,16 +105,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let files = given_options.free;
 
-    let count =
-        if use_bytes {
-            byte_count
-        } else {
-            line_count
-        };
-
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
-        head(&mut buffer, count, use_bytes);
+        head(&mut buffer, &settings);
     } else {
         let mut multiple = false;
         let mut firstime = true;
@@ -117,7 +126,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let path = Path::new(file);
             let reader = File::open(&path).unwrap();
             let mut buffer = BufReader::new(reader);
-            if !head(&mut buffer, count, use_bytes) {
+            if !head(&mut buffer, &settings) {
                 break;
             }
         }
@@ -161,17 +170,20 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 }
 
 // TODO: handle errors on read
-fn head<T: Read>(reader: &mut BufReader<T>, count: usize, use_bytes: bool) -> bool {
-    if use_bytes {
-        for byte in reader.bytes().take(count) {
-            if !pipe_print!("{}", byte.unwrap() as char) {
-                return false;
+fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
+    match settings.mode {
+        FilterMode::Bytes(count) => {
+            for byte in reader.bytes().take(count) {
+                if !pipe_print!("{}", byte.unwrap() as char) {
+                    return false;
+                }
             }
-        }
-    } else {
-        for line in reader.lines().take(count) {
-            if !pipe_println!("{}", line.unwrap()) {
-                return false;
+        },
+        FilterMode::Lines(count) => {
+            for line in reader.lines().take(count) {
+                if !pipe_println!("{}", line.unwrap()) {
+                    return false;
+                }
             }
         }
     }
