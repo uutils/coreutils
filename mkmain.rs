@@ -5,11 +5,21 @@ use std::fs::File;
 static TEMPLATE: &'static str = "\
 extern crate @UTIL_CRATE@ as uu@UTIL_CRATE@;
 
-use std::env;
+use std::io::Write;
 use uu@UTIL_CRATE@::uumain;
 
 fn main() {
-    std::process::exit(uumain(env::args().collect()));
+    let code = uumain(std::env::args().collect());
+
+    // Since stdout is line-buffered by default, we need to ensure any pending
+    // writes are flushed before exiting. Ideally, this should be enforced by
+    // each utility.
+    //
+    // See: https://github.com/rust-lang/rust/issues/23818
+    //
+    std::io::stdout().flush().unwrap();
+
+    std::process::exit(code);
 }
 ";
 
