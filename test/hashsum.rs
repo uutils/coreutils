@@ -34,7 +34,7 @@ macro_rules! test_digest {
         fn test_stdin() {
             let input = get_file_contents("input.txt");
             let mut cmd = Command::new(::PROGNAME);
-            let result = run_piped_stdin(&mut cmd.arg(DIGEST_ARG), input.as_ref());
+            let result = run_piped_stdin(&mut cmd.arg(DIGEST_ARG), input);
 
             assert_empty_stderr!(result);
             assert!(result.success);
