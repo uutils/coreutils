@@ -32,12 +32,14 @@ enum FilterMode {
 
 struct Settings {
     mode: FilterMode,
+    verbose: bool,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
             mode: FilterMode::Lines(10),
+            verbose: false,
         }
     }
 }
@@ -57,10 +59,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K");
     opts.optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K");
+    opts.optflag("q", "quiet", "never print headers giving file names");
+    opts.optflag("v", "verbose", "always print headers giving file names");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
-    let given_options = match opts.parse(&args) {
+    let matches = match opts.parse(&args) {
         Ok (m) => { m }
         Err(_) => {
             println!("{}", opts.usage(""));
@@ -68,16 +72,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if given_options.opt_present("h") {
+    if matches.opt_present("h") {
         println!("{}", opts.usage(""));
         return 0;
     }
-    if given_options.opt_present("V") { version(); return 0 }
+    if matches.opt_present("V") { version(); return 0 }
 
-    let use_bytes = given_options.opt_present("c");
+    let use_bytes = matches.opt_present("c");
 
     // TODO: suffixes (e.g. b, kB, etc.)
-    match given_options.opt_str("n") {
+    match matches.opt_str("n") {
         Some(n) => {
             if use_bytes {
                 show_error!("cannot specify both --bytes and --lines.");
@@ -91,7 +95,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         }
-        None => match given_options.opt_str("c") {
+        None => match matches.opt_str("c") {
             Some(count) => match count.parse::<usize>() {
                 Ok(m) => settings.mode = FilterMode::Bytes(m),
                 Err(e)=> {
@@ -103,21 +107,32 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    let files = given_options.free;
+    let quiet = matches.opt_present("q");
+    let verbose = matches.opt_present("v");
+    let files = matches.free;
+
+    // GNU implementation allows multiple declarations of "-q" and "-v" with the
+    // last flag winning. This can't be simulated with the getopts cargo unless
+    // we manually parse the arguments. Given the declaration of both flags,
+    // verbose mode always wins. This is a potential future improvement.
+    if files.len() > 1 && !quiet && !verbose {
+        settings.verbose = true;
+    }
+    if quiet {
+        settings.verbose = false;
+    }
+    if verbose {
+        settings.verbose = true;
+    }
 
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
         head(&mut buffer, &settings);
     } else {
-        let mut multiple = false;
         let mut firstime = true;
 
-        if files.len() > 1 {
-            multiple = true;
-        }
-
         for file in files.iter() {
-            if multiple {
+            if settings.verbose {
                 if !firstime { pipe_println!(""); }
                 pipe_println!("==> {} <==", file);
             }
