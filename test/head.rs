@@ -63,3 +63,10 @@ fn test_single_5_chars() {
     let result = run(&mut cmd.args(&["-c", "5", INPUT]));
     assert_eq!(result.stdout, get_file_contents("lorem_ipsum_5_chars.expected"));
 }
+
+#[test]
+fn test_verbose() {
+    let mut cmd = Command::new(PROGNAME);
+    let result = run(&mut cmd.args(&["-v", INPUT]));
+    assert_eq!(result.stdout, get_file_contents("lorem_ipsum_verbose.expected"));
+}
