@@ -160,7 +160,6 @@ To do
 - pinky
 - pr
 - printf
-- ptx
 - remove
 - runcon
 - setuidgid
