@@ -25,8 +25,44 @@ use std::str::from_utf8;
 #[macro_use]
 mod util;
 
+struct Settings {
+    show_bytes: bool,
+    show_chars: bool,
+    show_lines: bool,
+    show_words: bool,
+    show_max_line_length: bool,
+}
+
+impl Settings {
+    fn new(matches: &Matches) -> Settings {
+        let settings = Settings {
+            show_bytes: matches.opt_present("bytes"),
+            show_chars: matches.opt_present("chars"),
+            show_lines: matches.opt_present("lines"),
+            show_words: matches.opt_present("words"),
+            show_max_line_length: matches.opt_present("L"),
+        };
+
+        if settings.show_bytes
+            || settings.show_chars
+            || settings.show_lines
+            || settings.show_words
+            || settings.show_max_line_length {
+            return settings;
+        }
+
+        Settings {
+            show_bytes: true,
+            show_chars: false,
+            show_lines: true,
+            show_words: true,
+            show_max_line_length: false,
+        }
+    }
+}
+
 struct Result {
-    filename: String,
+    title: String,
     bytes: usize,
     chars: usize,
     lines: usize,
@@ -73,7 +109,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         matches.free.push("-".to_string());
     }
 
-    match wc(&matches) {
+    let settings = Settings::new(&matches);
+
+    match wc(matches.free, &settings) {
         Ok(()) => ( /* pass */ ),
         Err(e) => return e
     }
@@ -93,7 +131,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(matches: &Matches) -> StdResult<(), i32> {
+fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
     let mut total_char_count: usize = 0;
@@ -101,9 +139,9 @@ pub fn wc(matches: &Matches) -> StdResult<(), i32> {
     let mut total_longest_line_length: usize = 0;
 
     let mut results = vec!();
-    let mut max_str_len: usize = 0;
+    let mut max_width: usize = 0;
 
-    for path in matches.free.iter() {
+    for path in files.iter() {
         let mut reader = try!(open(&path[..]));
 
         let mut line_count: usize = 0;
@@ -154,7 +192,7 @@ pub fn wc(matches: &Matches) -> StdResult<(), i32> {
         }
 
         results.push(Result {
-            filename: path.to_string(),
+            title: path.to_string(),
             bytes: byte_count,
             chars: char_count,
             lines: line_count,
@@ -172,51 +210,47 @@ pub fn wc(matches: &Matches) -> StdResult<(), i32> {
         }
 
         // used for formatting
-        max_str_len = total_byte_count.to_string().len();
+        max_width = total_byte_count.to_string().len() + 1;
     }
 
     for result in results.iter() {
-        print_stats(&result.filename[..], result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
+        print_stats(settings, &result, max_width);
     }
 
-    if matches.free.len() > 1 {
-        print_stats("total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
+    if files.len() > 1 {
+        let result = Result {
+            title: "total".to_string(),
+            bytes: total_byte_count,
+            chars: total_char_count,
+            lines: total_line_count,
+            words: total_word_count,
+            max_line_length: total_longest_line_length,
+        };
+        print_stats(settings, &result, max_width);
     }
 
     Ok(())
 }
 
-fn print_stats(filename: &str, line_count: usize, word_count: usize, char_count: usize,
-    byte_count: usize, longest_line_length: usize, matches: &Matches, max_str_len: usize) {
-    if matches.opt_present("lines") {
-        print!("{:1$}", line_count, max_str_len);
+fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
+    if settings.show_lines {
+        print!("{:1$}", result.lines, max_width);
     }
-    if matches.opt_present("words") {
-        print!("{:1$}", word_count, max_str_len);
+    if settings.show_words {
+        print!("{:1$}", result.words, max_width);
     }
-    if matches.opt_present("bytes") {
-        print!("{:1$}", byte_count, max_str_len);
+    if settings.show_bytes {
+        print!("{:1$}", result.bytes, max_width);
     }
-    if matches.opt_present("chars") {
-        print!("{:1$}", char_count, max_str_len);
+    if settings.show_chars {
+        print!("{:1$}", result.chars, max_width);
     }
-    if matches.opt_present("max-line-length") {
-        print!("{:1$}", longest_line_length, max_str_len);
-    }
-
-    // defaults
-    if !matches.opt_present("bytes")
-        && !matches.opt_present("chars")
-        && !matches.opt_present("lines")
-        && !matches.opt_present("words")
-        && !matches.opt_present("max-line-length") {
-        print!("{:1$}", line_count, max_str_len);
-        print!("{:1$}", word_count, max_str_len + 1);
-        print!("{:1$}", byte_count, max_str_len + 1);
+    if settings.show_max_line_length {
+        print!("{:1$}", result.max_line_length, max_width);
     }
 
-    if filename != "-" {
-        println!(" {}", filename);
+    if result.title != "-" {
+        println!(" {}", result.title);
     }
     else {
         println!("");

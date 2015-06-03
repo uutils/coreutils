@@ -188,7 +188,8 @@ TEST_PROGS  := \
   truncate \
   tsort \
   unlink \
-  unexpand
+  unexpand \
+  wc
 
 TEST        ?= $(TEST_PROGS)
 
