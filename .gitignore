@@ -11,3 +11,4 @@
 .*.swp
 .*.swo
 Cargo.lock
+lib*.a
