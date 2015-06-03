@@ -139,7 +139,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut total_longest_line_length: usize = 0;
 
     let mut results = vec!();
-    let mut max_str_len: usize = 0;
+    let mut max_width: usize = 0;
 
     for path in files.iter() {
         let mut reader = try!(open(&path[..]));
@@ -210,11 +210,11 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         }
 
         // used for formatting
-        max_str_len = total_byte_count.to_string().len();
+        max_width = total_byte_count.to_string().len() + 1;
     }
 
     for result in results.iter() {
-        print_stats(settings, &result, max_str_len);
+        print_stats(settings, &result, max_width);
     }
 
     if files.len() > 1 {
@@ -226,27 +226,27 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             words: total_word_count,
             max_line_length: total_longest_line_length,
         };
-        print_stats(settings, &result, max_str_len);
+        print_stats(settings, &result, max_width);
     }
 
     Ok(())
 }
 
-fn print_stats(settings: &Settings, result: &Result, max_str_len: usize) {
+fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     if settings.show_lines {
-        print!("{:1$}", result.lines, max_str_len);
+        print!("{:1$}", result.lines, max_width);
     }
     if settings.show_words {
-        print!("{:1$}", result.words, max_str_len);
+        print!("{:1$}", result.words, max_width);
     }
     if settings.show_bytes {
-        print!("{:1$}", result.bytes, max_str_len);
+        print!("{:1$}", result.bytes, max_width);
     }
     if settings.show_chars {
-        print!("{:1$}", result.chars, max_str_len);
+        print!("{:1$}", result.chars, max_width);
     }
     if settings.show_max_line_length {
-        print!("{:1$}", result.max_line_length, max_str_len);
+        print!("{:1$}", result.max_line_length, max_width);
     }
 
     if result.title != "-" {
