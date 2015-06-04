@@ -2,6 +2,10 @@
 
 use std::fs::{self, File};
 use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use std::os::windows::fs::symlink_file;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str::from_utf8;
@@ -72,6 +76,10 @@ pub fn make_file(name: &str) -> File {
 
 pub fn touch(file: &str) {
     File::create(Path::new(file)).unwrap();
+}
+
+pub fn symlink(src: &str, dst: &str) {
+    symlink_file(src, dst).unwrap();
 }
 
 pub fn cleanup(path: &'static str) {
