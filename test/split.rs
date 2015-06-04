@@ -1,5 +1,6 @@
 extern crate libc;
 extern crate rand;
+extern crate regex_syntax;
 extern crate regex;
 
 use std::fs::{File, read_dir, remove_file};
@@ -50,7 +51,7 @@ impl Glob {
         files.sort();
         let mut data: Vec<u8> = vec!();
         for name in files.iter() {
-            data.extend(get_file_contents(name));
+            data.extend(get_file_contents(name).into_bytes());
         }
         data
     }
@@ -100,7 +101,7 @@ fn test_split_default() {
         panic!();
     }
     assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), get_file_contents(name));
+    assert_eq!(glob.collate(), get_file_contents(name).into_bytes());
     glob.remove_all();
 }
 
@@ -113,7 +114,7 @@ fn test_split_num_prefixed_chunks_by_bytes() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
-    assert_eq!(glob.collate(), get_file_contents(name));
+    assert_eq!(glob.collate(), get_file_contents(name).into_bytes());
     glob.remove_all();
 }
 
@@ -126,7 +127,7 @@ fn test_split_str_prefixed_chunks_by_bytes() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
-    assert_eq!(glob.collate(), get_file_contents(name));
+    assert_eq!(glob.collate(), get_file_contents(name).into_bytes());
     glob.remove_all();
 }
 
@@ -139,7 +140,7 @@ fn test_split_num_prefixed_chunks_by_lines() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
-    assert_eq!(glob.collate(), get_file_contents(name));
+    assert_eq!(glob.collate(), get_file_contents(name).into_bytes());
     glob.remove_all();
 }
 
@@ -152,6 +153,6 @@ fn test_split_str_prefixed_chunks_by_lines() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
-    assert_eq!(glob.collate(), get_file_contents(name));
+    assert_eq!(glob.collate(), get_file_contents(name).into_bytes());
     glob.remove_all();
 }
