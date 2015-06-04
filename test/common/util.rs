@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 #[cfg(unix)]
@@ -92,4 +93,16 @@ pub fn cleanup(path: &'static str) {
         },
         Err(_) => {}
     }
+}
+
+pub fn current_directory() -> String {
+    env::current_dir().unwrap().into_os_string().into_string().unwrap()
+}
+
+pub fn repeat_str(s: &str, n: u32) -> String {
+    let mut repeated = String::new();
+    for _ in 0 .. n {
+        repeated.push_str(s);
+    }
+    repeated
 }

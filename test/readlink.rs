@@ -1,21 +1,13 @@
-use std::env;
 use std::process::Command;
 use std::str;
+use util::*;
 
 static PROGNAME: &'static str = "./readlink";
 static GIBBERISH: &'static str = "supercalifragilisticexpialidocious";
 
-fn current_directory() -> String {
-    env::current_dir().unwrap().into_os_string().into_string().unwrap()
-}
-
-fn repeat_str(s: &str, n: u32) -> String {
-    let mut repeated = String::new();
-    for _ in 0 .. n {
-        repeated.push_str(s);
-    }
-    repeated
-}
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_canonicalize() {
