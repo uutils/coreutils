@@ -1,1 +1,1 @@
-DEPLIBS += rand regex
+DEPLIBS += rand regex regex-syntax
