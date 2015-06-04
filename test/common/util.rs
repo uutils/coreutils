@@ -1,7 +1,12 @@
 #![allow(dead_code)]
 
+use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use std::os::windows::fs::symlink_file;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str::from_utf8;
@@ -74,6 +79,10 @@ pub fn touch(file: &str) {
     File::create(Path::new(file)).unwrap();
 }
 
+pub fn symlink(src: &str, dst: &str) {
+    symlink_file(src, dst).unwrap();
+}
+
 pub fn cleanup(path: &'static str) {
     let p = Path::new(path);
     match fs::metadata(p) {
@@ -84,4 +93,16 @@ pub fn cleanup(path: &'static str) {
         },
         Err(_) => {}
     }
+}
+
+pub fn current_directory() -> String {
+    env::current_dir().unwrap().into_os_string().into_string().unwrap()
+}
+
+pub fn repeat_str(s: &str, n: u32) -> String {
+    let mut repeated = String::new();
+    for _ in 0 .. n {
+        repeated.push_str(s);
+    }
+    repeated
 }

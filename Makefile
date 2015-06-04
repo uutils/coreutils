@@ -178,6 +178,7 @@ TEST_PROGS  := \
   ptx \
   pwd \
   readlink \
+  realpath \
   rm \
   seq \
   sort \
