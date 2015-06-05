@@ -10,6 +10,7 @@
  * file that was distributed with this source code.
  */
 extern crate getopts;
+extern crate regex_syntax;
 extern crate regex;
  
 use std::collections::{HashMap, HashSet, BTreeSet};
