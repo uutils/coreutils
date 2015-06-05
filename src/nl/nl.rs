@@ -12,6 +12,7 @@
  */
 
 extern crate getopts;
+extern crate regex_syntax;
 extern crate regex;
 
 use std::fs::File;

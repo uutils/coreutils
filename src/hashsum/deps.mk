@@ -1,1 +1,1 @@
-DEPLIBS += regex crypto rand rustc-serialize time
+DEPLIBS += regex regex-syntax crypto rand rustc-serialize time
