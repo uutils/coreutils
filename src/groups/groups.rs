@@ -1,4 +1,5 @@
 #![crate_name = "groups"]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -8,32 +9,23 @@
  * file that was distributed with this source code.
  *
  */
-#![feature(macro_rules)]
-
 extern crate getopts;
 
-use getopts::{
-    optflag,
-    getopts,
-    usage
-};
 use c_types::{get_pw_from_args, group};
+use std::io::Write;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use]  mod util;
 #[path = "../common/c_types.rs"] mod c_types;
 
 static NAME: &'static str = "groups";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].clone();
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
+    opts.optflag("h", "help", "display this help menu and exit");
+    opts.optflag("V", "version", "display version information and exit");
 
-    let options = [
-        optflag("h", "help", "display this help menu and exit"),
-        optflag("V", "version", "display version information and exit")
-    ];
-
-    let matches = match getopts(args.tail(), &options) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(f) => {
             show_error!("{}", f);
@@ -42,12 +34,16 @@ pub fn uumain(args: Vec<String>) -> int {
     };
 
     if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else if matches.opt_present("help") {
-        print!("{} v{}\n\n\
-                Usage:\n  \
-                  {} [OPTION]... [USER]...\n\n\
-                {}", NAME, VERSION, program, usage("Prints the groups a user is in to standard output.", &options));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]... [USER]...
+
+Prints the groups a user is in to standard output.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
     } else {
         group(get_pw_from_args(&matches.free), true);
     }

@@ -1,4 +1,5 @@
 #![crate_name = "timeout"]
+#![feature(collections, core, io, old_io, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,15 +10,14 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io::{PathDoesntExist, FileNotFound};
-use std::io::process::{Command, ExitStatus, ExitSignal, InheritFd};
+use std::old_io::{PathDoesntExist, FileNotFound};
+use std::old_io::process::{Command, ExitStatus, ExitSignal, InheritFd};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[path = "../common/time.rs"]
@@ -33,9 +33,9 @@ extern {
 static NAME: &'static str = "timeout";
 static VERSION: &'static str = "1.0.0";
 
-static ERR_EXIT_STATUS: int = 125;
+static ERR_EXIT_STATUS: i32 = 125;
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
     let opts = [
@@ -53,14 +53,14 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     };
     if matches.opt_present("help") {
-        print!("{} v{}
+        print!("{} {}
 
 Usage:
   {} [OPTION] DURATION COMMAND [ARG]...
 
 {}", NAME, VERSION, program, getopts::usage("Start COMMAND, and kill it if still running after DURATION.", &opts));
     } else if matches.opt_present("version") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.len() < 2 {
         show_error!("missing an argument");
         show_error!("for help, try '{0} --help'", program);
@@ -95,13 +95,13 @@ Usage:
                 return ERR_EXIT_STATUS;
             }
         };
-        return timeout(matches.free[1].as_slice(), matches.free.slice_from(2), duration, signal, kill_after, foreground, status);
+        return timeout(matches.free[1].as_slice(), &matches.free[2..], duration, signal, kill_after, foreground, status);
     }
 
     0
 }
 
-fn timeout(cmdname: &str, args: &[String], duration: f64, signal: uint, kill_after: f64, foreground: bool, preserve_status: bool) -> int {
+fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_after: f64, foreground: bool, preserve_status: bool) -> i32 {
     if !foreground {
         unsafe { setpgid(0, 0) };
     }
@@ -125,18 +125,18 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: uint, kill_aft
     process.set_timeout(Some((duration * 1000f64) as u64));  // FIXME: this ignores the f64...
     match process.wait() {
         Ok(status) => match status {
-            ExitStatus(stat) => stat,
-            ExitSignal(stat) => stat
+            ExitStatus(stat) => stat as i32,
+            ExitSignal(stat) => stat as i32
         },
         Err(_) => {
-            return_if_err!(ERR_EXIT_STATUS, process.signal(signal as int));
+            return_if_err!(ERR_EXIT_STATUS, process.signal(signal as isize));
             process.set_timeout(Some((kill_after * 1000f64) as u64));
             match process.wait() {
                 Ok(status) => {
                     if preserve_status {
                         match status {
-                            ExitStatus(stat) => stat,
-                            ExitSignal(stat) => stat
+                            ExitStatus(stat) => stat as i32,
+                            ExitSignal(stat) => stat as i32
                         }
                     } else {
                         124
@@ -147,7 +147,7 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: uint, kill_aft
                         // XXX: this may not be right
                         return 124;
                     }
-                    return_if_err!(ERR_EXIT_STATUS, process.signal(signals::signal_by_name_or_value("KILL").unwrap() as int));
+                    return_if_err!(ERR_EXIT_STATUS, process.signal(signals::signal_by_name_or_value("KILL").unwrap() as isize));
                     process.set_timeout(None);
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137

@@ -1,4 +1,5 @@
-#![crate_name = "uutest"]
+#![crate_name = "test"]
+#![feature(convert)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,33 +13,34 @@
 extern crate libc;
 
 use std::collections::HashMap;
-use std::os::{args_as_bytes};
+use std::ffi::{CString, OsString};
+use std::env::{args_os};
 use std::str::{from_utf8};
 
 static NAME: &'static str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
-pub fn uumain(_: Vec<String>) -> int {
-    let args = args_as_bytes();
-    let args: Vec<&[u8]> = args.iter().map(|a| a.as_slice()).collect();
+pub fn uumain(_: Vec<String>) -> i32 {
+    let args = args_os().collect::<Vec<OsString>>();
+    let args = args.iter().map(|a| a.to_bytes().unwrap()).collect::<Vec<&[u8]>>();
     if args.len() == 0 {
         return 2;
     }
     let args =
         if !args[0].ends_with(NAME.as_bytes()) {
-            args.slice_from(1)
+            &args[1..]
         } else {
-            args.as_slice()
+            &args[..]
         };
     let args = match args[0] {
         b"[" => match args[args.len() - 1] {
-            b"]" => args.slice(1, args.len() - 1),
+            b"]" => &args[1..args.len() - 1],
             _ => return 2,
         },
-        _ => args.slice(1, args.len()),
+        _ => &args[1..args.len()],
     };
     let mut error = false;
-    let retval = 1 - parse_expr(args, &mut error) as int;
+    let retval = 1 - parse_expr(args, &mut error) as i32;
     if error {
         2
     } else {
@@ -52,7 +54,7 @@ fn one(args: &[&[u8]]) -> bool {
 
 fn two(args: &[&[u8]], error: &mut bool) -> bool {
     match args[0] {
-        b"!" => !one(args.slice_from(1)),
+        b"!" => !one(&args[1..]),
         b"-b" => path(args[1], PathCondition::BlockSpecial),
         b"-c" => path(args[1], PathCondition::CharacterSpecial),
         b"-d" => path(args[1], PathCondition::Directory),
@@ -61,7 +63,7 @@ fn two(args: &[&[u8]], error: &mut bool) -> bool {
         b"-g" => path(args[1], PathCondition::GroupIDFlag),
         b"-h" => path(args[1], PathCondition::SymLink),
         b"-L" => path(args[1], PathCondition::SymLink),
-        b"-n" => one(args.slice_from(1)),
+        b"-n" => one(&args[1..]),
         b"-p" => path(args[1], PathCondition::FIFO),
         b"-r" => path(args[1], PathCondition::Readable),
         b"-S" => path(args[1], PathCondition::Socket),
@@ -70,7 +72,7 @@ fn two(args: &[&[u8]], error: &mut bool) -> bool {
         b"-u" => path(args[1], PathCondition::UserIDFlag),
         b"-w" => path(args[1], PathCondition::Writable),
         b"-x" => path(args[1], PathCondition::Executable),
-        b"-z" => !one(args.slice_from(1)),
+        b"-z" => !one(&args[1..]),
         _ => {
             *error = true;
             false
@@ -81,6 +83,7 @@ fn two(args: &[&[u8]], error: &mut bool) -> bool {
 fn three(args: &[&[u8]], error: &mut bool) -> bool {
     match args[1] {
         b"=" => args[0] == args[2],
+        b"==" => args[0] == args[2],
         b"!=" => args[0] != args[2],
         b"-eq" => integers(args[0], args[2], IntegerCondition::Equal),
         b"-ne" => integers(args[0], args[2], IntegerCondition::Unequal),
@@ -89,7 +92,7 @@ fn three(args: &[&[u8]], error: &mut bool) -> bool {
         b"-lt" => integers(args[0], args[2], IntegerCondition::Less),
         b"-le" => integers(args[0], args[2], IntegerCondition::LessEqual),
         _ => match args[0] {
-            b"!" => !two(args.slice_from(1), error),
+            b"!" => !two(&args[1..], error),
             _ => {
                 *error = true;
                 false
@@ -101,7 +104,7 @@ fn three(args: &[&[u8]], error: &mut bool) -> bool {
 fn four(args: &[&[u8]], error: &mut bool) -> bool {
     match args[0] {
         b"!" => {
-            !three(args.slice_from(1), error)
+            !three(&args[1..], error)
         }
         _ => {
             *error = true;
@@ -121,11 +124,11 @@ enum IntegerCondition {
 
 fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
     let (a, b): (&str, &str) = match (from_utf8(a), from_utf8(b)) {
-        (Some(a), Some(b)) => (a, b),
+        (Ok(a), Ok(b)) => (a, b),
         _ => return false,
     };
-    let (a, b): (i64, i64) = match (from_str(a), from_str(b)) {
-        (Some(a), Some(b)) => (a, b),
+    let (a, b): (i64, i64) = match (a.parse(), b.parse()) {
+        (Ok(a), Ok(b)) => (a, b),
         _ => return false,
     };
     match cond {
@@ -140,7 +143,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
 
 fn isatty(fd: &[u8]) -> bool {
     use libc::{isatty};
-    from_utf8(fd).and_then(|s| from_str(s))
+    from_utf8(fd).ok().and_then(|s| s.parse().ok())
             .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
 }
 
@@ -155,11 +158,11 @@ fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
         3 => dispatch_three(args, error),
         _ => dispatch_four(args, error)
     };
-    *args = (*args).slice_from(idx);
+    *args = &(*args)[idx..];
     val
 }
 
-fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     let val = two(*args, error);
     if *error {
         *error = false;
@@ -169,7 +172,7 @@ fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
     }
 }
 
-fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     let val = three(*args, error);
     if *error {
         *error = false;
@@ -179,7 +182,7 @@ fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
     }
 }
 
-fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
+fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
     let val = four(*args, error);
     if *error {
         *error = false;
@@ -189,6 +192,7 @@ fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, uint) {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Precedence {
     Unknown = 0,
     Paren,     // FIXME: this is useless (parentheses have not been implemented)
@@ -198,8 +202,6 @@ enum Precedence {
     BinOp,
     UnOp
 }
-
-impl Copy for Precedence {}
 
 fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
     if args.len() == 0 {
@@ -225,16 +227,16 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
         *error = true;
         &min_prec
     });
-    while !*error && args.len() > 0 && prec as uint >= min_prec as uint {
+    while !*error && args.len() > 0 && prec as usize >= min_prec as usize {
         let op = args[0];
-        *args = (*args).slice_from(1);
+        *args = &(*args)[1..];
         let mut rhs = dispatch(args, error);
         while args.len() > 0 {
             let subprec = *hashmap.get(&args[0]).unwrap_or_else(|| {
                 *error = true;
                 &min_prec
             });
-            if subprec as uint <= prec as uint || *error {
+            if subprec as usize <= prec as usize || *error {
                 break;
             }
             rhs = parse_expr_helper(hashmap, args, rhs, subprec, error);
@@ -303,7 +305,7 @@ fn setup_hashmap<'a>() -> HashMap<&'a [u8], Precedence> {
     hashmap
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum PathCondition {
     BlockSpecial,
     CharacterSpecial,
@@ -338,15 +340,15 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         use libc::{getgid, getuid};
         let (uid, gid) = unsafe { (getuid(), getgid()) };
         if uid == stat.st_uid {
-            stat.st_mode & (p as mode_t << 6) != 0
+            stat.st_mode & ((p as mode_t) << 6) != 0
         } else if gid == stat.st_gid {
-            stat.st_mode & (p as mode_t << 3) != 0
+            stat.st_mode & ((p as mode_t) << 3) != 0
         } else {
-            stat.st_mode & (p as mode_t << 0) != 0
+            stat.st_mode & ((p as mode_t) << 0) != 0
         }
     };
 
-    let path = unsafe { path.to_c_str_unchecked() };
+    let path = CString::new(path).unwrap();
     let mut stat = unsafe { std::mem::zeroed() };
     if cond == PathCondition::SymLink {
         if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {
@@ -380,9 +382,9 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &[u8], cond: PathCondition) -> bool {
-    use std::io::{TypeFile, TypeDirectory, TypeBlockSpecial, TypeNamedPipe};
-    use std::io::fs::{stat};
-    use std::path::{Path};
+    use std::old_io::{TypeFile, TypeDirectory, TypeBlockSpecial, TypeNamedPipe};
+    use std::old_io::fs::{stat};
+    use std::old_path::{Path};
 
     let path = match Path::new_opt(path) {
         Some(p) => p,

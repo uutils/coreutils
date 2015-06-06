@@ -9,50 +9,54 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io;
-use std::num::Int;
 use std::char;
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "split";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let opts = [
-        getopts::optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N"),
-        getopts::optopt("b", "bytes", "put SIZE bytes per output file", "SIZE"),
-        getopts::optopt("C", "line-bytes", "put at most SIZE bytes of lines per output file", "SIZE"),
-        getopts::optflag("d", "numeric-suffixes", "use numeric suffixes instead of alphabetic"),
-        getopts::optopt("l", "lines", "put NUMBER lines per output file", "NUMBER"),
-        getopts::optflag("", "verbose", "print a diagnostic just before each output file is opened"),
-        getopts::optflag("h", "help", "display help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N");
+    opts.optopt("b", "bytes", "put SIZE bytes per output file", "SIZE");
+    opts.optopt("C", "line-bytes", "put at most SIZE bytes of lines per output file", "SIZE");
+    opts.optflag("d", "numeric-suffixes", "use numeric suffixes instead of alphabetic");
+    opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
+    opts.optflag("", "verbose", "print a diagnostic just before each output file is opened");
+    opts.optflag("h", "help", "display help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("h") {
-        println!("{} v{}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [INPUT [PREFIX]]", NAME);
-        println!("");
-        io::print(getopts::usage("Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is -, read standard input." , &opts).as_slice());
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]... [INPUT [PREFIX]]
+
+Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
+size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
+-, read standard input.", NAME, VERSION);
+
+        println!("{}\nSIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.", opts.usage(&msg));
         return 0;
     }
 
     if matches.opt_present("V") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
@@ -69,9 +73,9 @@ pub fn uumain(args: Vec<String>) -> int {
     settings.numeric_suffix = if matches.opt_present("d") { true } else { false };
 
     settings.suffix_length = match matches.opt_str("a") {
-        Some(n) => match from_str(n.as_slice()) {
-            Some(m) => m,
-            None => crash!(1, "cannot parse num")
+        Some(n) => match n.parse() {
+            Ok(m) => m,
+            Err(e) => crash!(1, "cannot parse num: {}", e)
         },
         None => 2
     };
@@ -84,7 +88,7 @@ pub fn uumain(args: Vec<String>) -> int {
     for e in strategies.iter() {
         match matches.opt_str(*e) {
             Some(a) => {
-                if settings.strategy.as_slice() == "l" {
+                if settings.strategy == "l" {
                     settings.strategy = e.to_string();
                     settings.strategy_param = a;
                 } else {
@@ -110,7 +114,7 @@ pub fn uumain(args: Vec<String>) -> int {
 struct Settings {
     prefix: String,
     numeric_suffix: bool,
-    suffix_length: uint,
+    suffix_length: usize,
     input: String,
     strategy: String,
     strategy_param: String,
@@ -123,30 +127,30 @@ struct SplitControl {
 }
 
 trait Splitter {
-    // Factory pattern
-    fn new(_hint: Option<Self>, &Settings) -> Box<Splitter>;
-
     // Consume the current_line and return the consumed string
     fn consume(&mut self, &mut SplitControl) -> String;
 }
 
 struct LineSplitter {
-    saved_lines_to_write: uint,
-    lines_to_write: uint,
+    saved_lines_to_write: usize,
+    lines_to_write: usize,
+}
+
+impl LineSplitter {
+    fn new(settings: &Settings) -> Box<Splitter> {
+        let n = match settings.strategy_param.parse() {
+            Ok(a) => a,
+            Err(e) => crash!(1, "invalid number of lines: {}", e)
+        };
+        Box::new(LineSplitter {
+            saved_lines_to_write: n,
+            lines_to_write: n,
+        }) as Box<Splitter>
+    }
+
 }
 
 impl Splitter for LineSplitter {
-    fn new(_: Option<LineSplitter>, settings: &Settings) -> Box<Splitter> {
-        let n = match from_str(settings.strategy_param.as_slice()) {
-            Some(a) => a,
-            _ => crash!(1, "invalid number of lines")
-        };
-        box LineSplitter {
-            saved_lines_to_write: n,
-            lines_to_write: n,
-        } as Box<Splitter>
-    }
-
     fn consume(&mut self, control: &mut SplitControl) -> String {
         self.lines_to_write -= 1;
         if self.lines_to_write == 0 {
@@ -158,42 +162,73 @@ impl Splitter for LineSplitter {
 }
 
 struct ByteSplitter {
-    saved_bytes_to_write: uint,
-    bytes_to_write: uint,
+    saved_bytes_to_write: usize,
+    bytes_to_write: usize,
+    break_on_line_end: bool,
+    require_whole_line: bool,
+}
+
+impl ByteSplitter {
+    fn new(settings: &Settings) -> Box<Splitter> {
+        let mut strategy_param : Vec<char> = settings.strategy_param.chars().collect();
+        let suffix = strategy_param.pop().unwrap();
+        let multiplier = match suffix {
+            '0'...'9' => 1usize,
+            'b' => 512usize,
+            'k' => 1024usize,
+            'm' => 1024usize * 1024usize,
+            _ => crash!(1, "invalid number of bytes")
+        };
+        let n = if suffix.is_alphabetic() {
+            match strategy_param.iter().map(|c| *c).collect::<String>().parse::<usize>() {
+                Ok(a) => a,
+                Err(e) => crash!(1, "invalid number of bytes: {}", e)
+            }
+        } else {
+            match settings.strategy_param.parse::<usize>() {
+                Ok(a) => a,
+                Err(e) => crash!(1, "invalid number of bytes: {}", e)
+            }
+        };
+        Box::new(ByteSplitter {
+            saved_bytes_to_write: n * multiplier,
+            bytes_to_write: n * multiplier,
+            break_on_line_end: if settings.strategy == "b" { false } else { true },
+            require_whole_line: false,
+        }) as Box<Splitter>
+    }
 }
 
 impl Splitter for ByteSplitter {
-    fn new(_: Option<ByteSplitter>, settings: &Settings) -> Box<Splitter> {
-        let n = match from_str(settings.strategy_param.as_slice()) {
-            Some(a) => a,
-            _ => crash!(1, "invalid number of lines")
-        };
-        box ByteSplitter {
-            saved_bytes_to_write: n,
-            bytes_to_write: n,
-        } as Box<Splitter>
-    }
-
     fn consume(&mut self, control: &mut SplitControl) -> String {
         let line = control.current_line.clone();
-        let n = std::cmp::min(line.as_slice().char_len(), self.bytes_to_write);
+        let n = std::cmp::min(line.chars().count(), self.bytes_to_write);
+        if self.require_whole_line && n < line.chars().count() {
+            self.bytes_to_write = self.saved_bytes_to_write;
+            control.request_new_file = true;
+            self.require_whole_line = false;
+            return line[0..0].to_string();
+        }
         self.bytes_to_write -= n;
         if n == 0 {
             self.bytes_to_write = self.saved_bytes_to_write;
             control.request_new_file = true;
         }
-        line.as_slice().slice(0, n).to_string()
+        if self.break_on_line_end && n == line.chars().count() {
+            self.require_whole_line = self.break_on_line_end;
+        }
+        line[..n].to_string()
     }
 }
 
 // (1, 3) -> "aab"
-fn str_prefix(i: uint, width: uint) -> String {
+fn str_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_string();
     let mut n = i;
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = Int::pow(26 as uint, w);
+        let div = 26usize.pow(w as u32);
         let r = n / div;
         n -= r * div;
         c.push(char::from_u32((r as u32) + 97).unwrap());
@@ -202,36 +237,37 @@ fn str_prefix(i: uint, width: uint) -> String {
 }
 
 // (1, 3) -> "001"
-fn num_prefix(i: uint, width: uint) -> String {
+fn num_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_string();
     let mut n = i;
     let mut w = width;
     while w > 0 {
         w -= 1;
-        let div = Int::pow(10 as uint, w);
+        let div = 10usize.pow(w as u32);
         let r = n / div;
         n -= r * div;
-        c.push(char::from_digit(r, 10).unwrap());
+        c.push(char::from_digit(r as u32, 10).unwrap());
     }
     c
 }
 
-fn split(settings: &Settings) -> int {
-    let mut reader = io::BufferedReader::new(
-        if settings.input.as_slice() == "-" {
-            box io::stdio::stdin_raw() as Box<Reader>
+fn split(settings: &Settings) -> i32 {
+    let mut reader = BufReader::new(
+        if settings.input == "-" {
+            Box::new(stdin()) as Box<Read>
         } else {
-            box match io::File::open(&Path::new(settings.input.clone())) {
+            let r = match File::open(Path::new(&settings.input)) {
                 Ok(a) => a,
                 Err(_) => crash!(1, "cannot open '{}' for reading: No such file or directory", settings.input)
-            } as Box<Reader>
+            };
+            Box::new(r) as Box<Read>
         }
     );
 
     let mut splitter: Box<Splitter> =
-        match settings.strategy.as_slice() {
-            "l" => Splitter::new(None::<LineSplitter>, settings),
-            "b" => Splitter::new(None::<ByteSplitter>, settings),
+        match settings.strategy.as_ref() {
+            "l" => LineSplitter::new(settings),
+            "b" | "C" => ByteSplitter::new(settings),
             a @ _ => crash!(1, "strategy {} not supported", a)
         };
 
@@ -240,39 +276,42 @@ fn split(settings: &Settings) -> int {
         request_new_file: true, // Request new file
     };
 
-    let mut writer = io::BufferedWriter::new(box io::stdio::stdout_raw() as Box<Writer>);
+    let mut writer = BufWriter::new(Box::new(stdout()) as Box<Write>);
     let mut fileno = 0;
     loop {
-        if control.current_line.as_slice().char_len() == 0 {
-            match reader.read_line() {
-                Ok(a) => { control.current_line = a; }
-                Err(_) =>  { break; }
+        if control.current_line.chars().count() == 0 {
+            match reader.read_line(&mut control.current_line) {
+                Ok(0) | Err(_) => break,
+                _ => {}
             }
         }
 
         if control.request_new_file {
-            let mut filename = settings.prefix.to_string();
+            let mut filename = settings.prefix.clone();
             filename.push_str(if settings.numeric_suffix {
                 num_prefix(fileno, settings.suffix_length)
             } else {
                 str_prefix(fileno, settings.suffix_length)
-            }.as_slice());
+            }.as_ref());
 
             if fileno != 0 {
                 crash_if_err!(1, writer.flush());
             }
             fileno += 1;
-            writer = io::BufferedWriter::new(box io::File::open_mode(&Path::new(filename.as_slice()), io::Open, io::Write) as Box<Writer>);
+            writer = BufWriter::new(Box::new(OpenOptions::new().write(true).create(true).open(Path::new(&filename)).unwrap()) as Box<Write>);
             control.request_new_file = false;
+            if settings.verbose {
+                println!("creating file '{}'", filename);
+            }
         }
 
         let consumed = splitter.consume(&mut control);
-        crash_if_err!(1, writer.write_str(consumed.as_slice()));
+        crash_if_err!(1, writer.write_all(consumed.as_bytes()));
 
-        let advance = consumed.as_slice().char_len();
+        let advance = consumed.chars().count();
         let clone = control.current_line.clone();
-        let sl = clone.as_slice();
-        control.current_line = sl.slice(advance, sl.char_len()).to_string();
+        let sl = clone;
+        control.current_line = sl[advance..sl.chars().count()].to_string();
     }
     0
 }

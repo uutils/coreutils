@@ -1,5 +1,10 @@
 language: rust
-
+rust:
+  - 1.0.0
+  - nightly
+sudo: false
 script:
   - make
   - make test
+  - make build-check
+  - make test-check

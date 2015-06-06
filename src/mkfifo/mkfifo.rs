@@ -1,5 +1,4 @@
 #![crate_name = "mkfifo"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,24 +12,25 @@
 extern crate getopts;
 extern crate libc;
 
-use std::num::FromStrRadix;
-use std::os;
 use libc::funcs::posix88::stat_::mkfifo;
+use std::ffi::CString;
+use std::io::{Error, Write};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
-static NAME : &'static str = "mkfifo";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "mkfifo";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let opts = [
-        getopts::optopt("m", "mode", "file permissions for the fifo", "(default 0666)"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optopt("m", "mode", "file permissions for the fifo", "(default 0666)");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -41,12 +41,14 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if matches.opt_present("help") || matches.free.is_empty() {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] NAME...", NAME);
-        println!("");
-        print!("{}", getopts::usage("Create a FIFO with the given name.", opts.as_slice()).as_slice());
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS] NAME...
+
+Create a FIFO with the given name.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         if matches.free.is_empty() {
             return 1;
         }
@@ -54,10 +56,10 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     let mode = match matches.opt_str("m") {
-        Some(m) => match FromStrRadix::from_str_radix(m.as_slice(), 8) {
-            Some(m) => m,
-            None => {
-                show_error!("invalid mode");
+        Some(m) => match usize::from_str_radix(&m, 8) {
+            Ok(m) => m,
+            Err(e)=> {
+                show_error!("invalid mode: {}", e);
                 return 1;
             }
         },
@@ -66,13 +68,11 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let mut exit_status = 0;
     for f in matches.free.iter() {
-        f.with_c_str(|name| {
-            let err = unsafe { mkfifo(name, mode) };
-            if err == -1 {
-                show_error!("creating '{}': {}", f, os::error_string(os::errno()));
-                exit_status = 1;
-            }
-        });
+        let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode as libc::mode_t) };
+        if err == -1 {
+            show_error!("creating '{}': {}", f, Error::last_os_error().raw_os_error().unwrap());
+            exit_status = 1;
+        }
     }
 
     exit_status

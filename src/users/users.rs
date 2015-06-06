@@ -12,19 +12,19 @@
 /* last synced with: whoami (GNU coreutils) 8.22 */
 
 // Allow dead code here in order to keep all fields, constants here, for consistency.
-#![allow(dead_code, non_camel_case_types)]
-
-#![feature(macro_rules, globs)]
+#![allow(dead_code)]
 
 extern crate getopts;
 extern crate libc;
 
-use std::io::print;
+use getopts::Options;
+use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
 use utmpx::*;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 #[path = "../common/utmpx.rs"]
@@ -50,38 +50,39 @@ unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 }
 
 static NAME: &'static str = "users";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].as_slice();
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("{}", f),
     };
 
     if matches.opt_present("help") {
-        println!("users 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {} [OPTION]... [FILE]", program);
+        println!("  {} [OPTION]... [FILE]", NAME);
         println!("");
-        print(getopts::usage("Output who is currently logged in according to FILE.", &opts).as_slice());
+        println!("{}", opts.usage("Output who is currently logged in according to FILE."));
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("users 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
-    let mut filename = DEFAULT_FILE;
-    if matches.free.len() > 0 {
-        filename = matches.free[0].as_slice();
-    }
+    let filename = if matches.free.len() > 0 {
+        matches.free[0].as_ref()
+    } else {
+        DEFAULT_FILE
+    };
 
     exec(filename);
 
@@ -89,11 +90,9 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn exec(filename: &str) {
-    filename.with_c_str(|filename| {
-        unsafe {
-            utmpxname(filename);
-        }
-    });
+    unsafe {
+        utmpxname(CString::new(filename).unwrap().as_ptr());
+    }
 
     let mut users = vec!();
 
@@ -108,7 +107,7 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = String::from_raw_buf(mem::transmute(&(*line).ut_user));
+                let user = String::from_utf8_lossy(CStr::from_ptr(mem::transmute(&(*line).ut_user)).to_bytes()).to_string();
                 users.push(user);
             }
         }

@@ -1,5 +1,4 @@
 #![crate_name = "cat"]
-#![feature(unsafe_destructor)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,57 +12,63 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 extern crate getopts;
+extern crate libc;
 
-use std::io::{print, File};
-use std::io::stdio::{stdout_raw, stdin_raw, stderr};
-use std::io::{IoResult};
-use std::ptr::{copy_nonoverlapping_memory};
+use getopts::Options;
+use std::fs::File;
+use std::intrinsics::{copy_nonoverlapping};
+use std::io::{stdout, stdin, stderr, Write, Read, Result};
+use libc::consts::os::posix88::STDIN_FILENO;
+use libc::funcs::posix88::unistd::isatty;
+use libc::types::os::arch::c95::c_int;
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].as_slice();
-    let opts = [
-        getopts::optflag("A", "show-all", "equivalent to -vET"),
-        getopts::optflag("b", "number-nonblank",
-                         "number nonempty output lines, overrides -n"),
-        getopts::optflag("e", "", "equivalent to -vE"),
-        getopts::optflag("E", "show-ends", "display $ at end of each line"),
-        getopts::optflag("n", "number", "number all output lines"),
-        getopts::optflag("s", "squeeze-blank", "suppress repeated empty output lines"),
-        getopts::optflag("t", "", "equivalent to -vT"),
-        getopts::optflag("T", "show-tabs", "display TAB characters as ^I"),
-        getopts::optflag("v", "show-nonprinting",
-                         "use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
+
+static NAME: &'static str = "cat";
+static VERSION: &'static str = "1.0.0";
+
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = Options::new();
+    opts.optflag("A", "show-all", "equivalent to -vET");
+    opts.optflag("b", "number-nonblank",
+                 "number nonempty output lines, overrides -n");
+    opts.optflag("e", "", "equivalent to -vE");
+    opts.optflag("E", "show-ends", "display $ at end of each line");
+    opts.optflag("n", "number", "number all output lines");
+    opts.optflag("s", "squeeze-blank", "suppress repeated empty output lines");
+    opts.optflag("t", "", "equivalent to -vT");
+    opts.optflag("T", "show-tabs", "display TAB characters as ^I");
+    opts.optflag("v", "show-nonprinting",
+                 "use ^ and M- notation, except for LF (\\n) and TAB (\\t)");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("cat 1.0.0");
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
-        println!("");
-        print(getopts::usage("Concatenate FILE(s), or standard input, to \
-                             standard output.", &opts).as_slice());
-        println!("");
-        println!("With no FILE, or when FILE is -, read standard input.");
+        let msg = format!("{} {}\n\n\
+        Usage:\n  {0} [OPTION]... [FILE]...\n\n\
+        Concatenate FILE(s), or standard input, to standard output.\n\n\
+        With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("cat 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
-    let mut number_mode = NumberingMode::NumberNone;
-    if matches.opt_present("n") {
-        number_mode = NumberingMode::NumberAll;
-    }
-    if matches.opt_present("b") {
-        number_mode = NumberingMode::NumberNonEmpty;
-    }
+    let number_mode = if matches.opt_present("b") {
+        NumberingMode::NumberNonEmpty
+    } else if matches.opt_present("n") {
+        NumberingMode::NumberAll
+    } else {
+        NumberingMode::NumberNone
+    };
     let show_nonprint = matches.opts_present(&["A".to_string(), "e".to_string(),
                                               "t".to_string(), "v".to_string()]);
     let show_ends = matches.opts_present(&["E".to_string(), "A".to_string(),
@@ -81,7 +86,7 @@ pub fn uumain(args: Vec<String>) -> int {
     0
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum NumberingMode {
     NumberNone,
     NumberNonEmpty,
@@ -91,25 +96,19 @@ enum NumberingMode {
 fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                show_ends: bool) {
 
-    let mut line_counter: uint = 1;
+    let mut line_counter: usize = 1;
 
-    for path in files.iter() {
-        let (mut reader, interactive) = match open(path.as_slice()) {
-            Some(f) => f,
-            None => continue,
-        };
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
 
-        let mut in_buf  = [0, .. 1024 * 31];
-        let mut out_buf = [0, .. 1024 * 64];
-        let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
+        let mut in_buf  = [0; 1024 * 31];
+        let mut out_buf = [0; 1024 * 64];
+        let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
         let mut at_line_start = true;
-        loop {
-            let n = match reader.read(&mut in_buf) {
-                Ok(n) if n != 0 => n,
-                _ => break,
-            };
-            let in_buf = in_buf.slice_to(n);
-            let mut buf_pos = range(0, n);
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 { break }
+
+            let in_buf = &in_buf[..n];
+            let mut buf_pos = 0..n;
             loop {
                 writer.possibly_flush();
                 let pos = match buf_pos.next() {
@@ -123,9 +122,9 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                             line_counter += 1;
                         }
                         if show_ends {
-                            writer.write_u8('$' as u8).unwrap();
+                            writer.write_all(&['$' as u8]).unwrap();
                         }
-                        writer.write_u8('\n' as u8).unwrap();
+                        writer.write_all(&['\n' as u8]).unwrap();
                         if interactive {
                             writer.flush().unwrap();
                         }
@@ -137,21 +136,21 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                     line_counter += 1;
                 }
-                match in_buf.slice_from(pos).iter().position(|c| *c == '\n' as u8) {
+                match in_buf[pos..].iter().position(|c| *c == '\n' as u8) {
                     Some(p) => {
-                        writer.write(in_buf.slice(pos, pos + p)).unwrap();
+                        writer.write_all(&in_buf[pos..pos + p]).unwrap();
                         if show_ends {
-                            writer.write_u8('$' as u8).unwrap();
+                            writer.write_all(&['$' as u8]).unwrap();
                         }
-                        writer.write_u8('\n' as u8).unwrap();
+                        writer.write_all(&['\n' as u8]).unwrap();
                         if interactive {
                             writer.flush().unwrap();
                         }
-                        buf_pos = range(pos + p + 1, n);
+                        buf_pos = pos + p + 1..n;
                         at_line_start = true;
                     },
                     None => {
-                        writer.write(in_buf.slice_from(pos)).unwrap();
+                        writer.write_all(&in_buf[pos..]).unwrap();
                         at_line_start = false;
                         break;
                     }
@@ -164,30 +163,24 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                show_ends: bool, show_nonprint: bool, show_tabs: bool) {
 
-    let mut line_counter: uint = 1;
+    let mut line_counter: usize = 1;
 
-    for path in files.iter() {
-        let (mut reader, interactive) = match open(path.as_slice()) {
-            Some(f) => f,
-            None => continue,
-        };
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
 
         // Flush all 1024 iterations.
-        let mut flush_counter = range(0u, 1024);
+        let mut flush_counter = 0usize..1024;
 
-        let mut in_buf  = [0, .. 1024 * 32];
-        let mut out_buf = [0, .. 1024 * 64];
-        let mut writer = UnsafeWriter::new(out_buf.as_mut_slice(), stdout_raw());
+        let mut in_buf  = [0; 1024 * 32];
+        let mut out_buf = [0; 1024 * 64];
+        let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
         let mut at_line_start = true;
-        loop {
-            let n = match reader.read(&mut in_buf) {
-                Ok(n) if n != 0 => n,
-                _ => break,
-            };
-            for &byte in in_buf.slice_to(n).iter() {
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 { break }
+
+            for &byte in in_buf[..n].iter() {
                 if flush_counter.next().is_none() {
                     writer.possibly_flush();
-                    flush_counter = range(0u, 1024);
+                    flush_counter = 0usize..1024;
                 }
                 if byte == '\n' as u8 {
                     if !at_line_start || !squeeze_blank {
@@ -196,9 +189,9 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                             line_counter += 1;
                         }
                         if show_ends {
-                            writer.write_u8('$' as u8).unwrap();
+                            writer.write_all(&['$' as u8]).unwrap();
                         }
-                        writer.write_u8('\n' as u8).unwrap();
+                        writer.write_all(&['\n' as u8]).unwrap();
                         if interactive {
                             writer.flush().unwrap();
                         }
@@ -215,25 +208,25 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                 // this by having the whole loop inside show_nonprint.
                 if byte == '\t' as u8 {
                     if show_tabs {
-                        writer.write_str("^I")
+                        writer.write_all("^I".as_bytes())
                     } else {
-                        writer.write_u8(byte)
+                        writer.write_all(&[byte])
                     }
                 } else if show_nonprint {
                     let byte = match byte {
                         128 ... 255 => {
-                            writer.write_str("M-").unwrap();
+                            writer.write_all("M-".as_bytes()).unwrap();
                             byte - 128
                         },
                         _ => byte,
                     };
                     match byte {
-                        0 ... 31 => writer.write(&['^' as u8, byte + 64]),
-                        127      => writer.write(&['^' as u8, byte - 64]),
-                        _        => writer.write_u8(byte),
+                        0 ... 31 => writer.write_all(&['^' as u8, byte + 64]),
+                        127      => writer.write_all(&['^' as u8, byte - 64]),
+                        _        => writer.write_all(&[byte]),
                     }
                 } else {
-                    writer.write_u8(byte)
+                    writer.write_all(&[byte])
                 }.unwrap();
             }
         }
@@ -241,23 +234,14 @@ fn write_bytes(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
 }
 
 fn write_fast(files: Vec<String>) {
-    let mut writer = stdout_raw();
-    let mut in_buf = [0, .. 1024 * 64];
+    let mut writer = stdout();
+    let mut in_buf = [0; 1024 * 64];
 
-    for path in files.iter() {
-        let (mut reader, _) = match open(path.as_slice()) {
-            Some(x) => x,
-            None => continue,
-        };
-
-        loop {
-            match reader.read(&mut in_buf) {
-                Ok(n) if n != 0 => {
-                    // This interface is completely broken.
-                    writer.write(in_buf.slice_to(n)).unwrap();
-                },
-                _ => break
-            }
+    for (mut reader, _) in files.iter().filter_map(|p| open(&p[..])) {
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 { break }
+            // This interface is completely broken.
+            writer.write_all(&in_buf[..n]).unwrap();
         }
     }
 }
@@ -272,17 +256,18 @@ fn exec(files: Vec<String>, number: NumberingMode, show_nonprint: bool,
     } else {
         write_fast(files);
     }
+    pipe_flush!();
 }
 
-fn open(path: &str) -> Option<(Box<Reader>, bool)> {
+fn open(path: &str) -> Option<(Box<Read>, bool)> {
     if path == "-" {
-        let stdin = stdin_raw();
-        let interactive = stdin.isatty();
-        return Some((box stdin as Box<Reader>, interactive));
+        let stdin = stdin();
+        let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
+        return Some((Box::new(stdin) as Box<Read>, interactive));
     }
 
-    match File::open(&std::path::Path::new(path)) {
-        Ok(f) => Some((box f as Box<Reader>, false)),
+    match File::open(path) {
+        Ok(f) => Some((Box::new(f) as Box<Read>, false)),
         Err(e) => {
             (writeln!(&mut stderr(), "cat: {0}: {1}", path, e.to_string())).unwrap();
             None
@@ -290,14 +275,14 @@ fn open(path: &str) -> Option<(Box<Reader>, bool)> {
     }
 }
 
-struct UnsafeWriter<'a, W> {
+struct UnsafeWriter<'a, W: Write> {
     inner: W,
     buf: &'a mut [u8],
-    pos: uint,
-    threshold: uint,
+    pos: usize,
+    threshold: usize,
 }
 
-impl<'a, W: Writer> UnsafeWriter<'a, W> {
+impl<'a, W: Write> UnsafeWriter<'a, W> {
     fn new(buf: &'a mut [u8], inner: W) -> UnsafeWriter<'a, W> {
         let threshold = buf.len()/2;
         UnsafeWriter {
@@ -308,11 +293,14 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
         }
     }
 
-    fn flush_buf(&mut self) -> IoResult<()> {
+    fn flush_buf(&mut self) -> Result<()> {
         if self.pos != 0 {
-            let ret = self.inner.write(self.buf.slice_to(self.pos));
+            let ret = self.inner.write(&self.buf[..self.pos]);
             self.pos = 0;
-            ret
+            match ret {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e),
+            }
         } else {
             Ok(())
         }
@@ -320,7 +308,7 @@ impl<'a, W: Writer> UnsafeWriter<'a, W> {
 
     fn possibly_flush(&mut self) {
         if self.pos > self.threshold {
-            self.inner.write(self.buf.slice_to(self.pos)).unwrap();
+            self.inner.write_all(&self.buf[..self.pos]).unwrap();
             self.pos = 0;
         }
     }
@@ -331,26 +319,26 @@ fn fail() -> ! {
     panic!("assertion failed");
 }
 
-impl<'a, W: Writer> Writer for UnsafeWriter<'a, W> {
-    fn write(&mut self, buf: &[u8]) -> IoResult<()> {
-        let dst = self.buf.slice_from_mut(self.pos);
-        if buf.len() > dst.len() {
+impl<'a, W: Write> Write for UnsafeWriter<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let dst = &mut self.buf[self.pos..];
+        let len = buf.len();
+        if len > dst.len() {
             fail();
         }
         unsafe {
-            copy_nonoverlapping_memory(dst.as_mut_ptr(), buf.as_ptr(), buf.len())
+            copy_nonoverlapping(buf.as_ptr(), dst.as_mut_ptr(), len)
         }
-        self.pos += buf.len();
-        Ok(())
+        self.pos += len;
+        Ok(len)
     }
 
-    fn flush(&mut self) -> IoResult<()> {
+    fn flush(&mut self) -> Result<()> {
         self.flush_buf().and_then(|()| self.inner.flush())
     }
 }
 
-#[unsafe_destructor]
-impl<'a, W: Writer> Drop for UnsafeWriter<'a, W> {
+impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
     fn drop(&mut self) {
         let _ = self.flush_buf();
     }

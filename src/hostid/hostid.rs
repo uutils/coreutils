@@ -1,6 +1,4 @@
 #![crate_name = "hostid"]
-#![feature(macro_rules)]
-#![feature(phase)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,30 +9,19 @@
  * that was distributed with this source code.
  */
 
-
 extern crate getopts;
-extern crate collections;
-extern crate serialize;
 extern crate libc;
 
-
-#[phase(plugin, link)] extern crate log;
-
-use getopts::{
-    getopts,
-    optflag,
-    usage,
-};
-
-use libc::{c_long};
+use libc::c_long;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
-static NAME:     &'static str = "hostid";
-static VERSION:  &'static str = "0.0.1";
+static NAME: &'static str = "hostid";
+static VERSION: &'static str = "0.0.1";
 
-static EXIT_ERR: int = 1;
+static EXIT_ERR: i32 = 1;
 
 pub enum Mode {
     HostId,
@@ -42,27 +29,20 @@ pub enum Mode {
     Version,
 }
 
-impl Copy for Mode {}
-
-//currently rust libc interface doesn't include gethostid
+// currently rust libc interface doesn't include gethostid
 extern {
     pub fn gethostid() -> c_long;
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
 
-    let opts = [
-        optflag("", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit"),
-    ];
-
-    let usage = usage("[options]", &opts);
-
-
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => {
-            show_error!("{}\n{}", e,  get_help_text(NAME, usage.as_slice()));
+        Err(_) => {
+            help(&opts);
             return EXIT_ERR;
         },
     };
@@ -77,7 +57,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     match mode {
         Mode::HostId  => hostid(),
-        Mode::Help    => help(NAME, usage.as_slice()),
+        Mode::Help    => help(&opts),
         Mode::Version => version(),
     }
 
@@ -88,19 +68,17 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-fn get_help_text(progname: &str, usage: &str) -> String {
-    format!("Usage: \n {0} {1}", progname, usage)
-}
-
-fn help(progname: &str, usage: &str) {
-    println!("{}", get_help_text(progname, usage));
+fn help(opts: &getopts::Options) {
+    let msg = format!("Usage:\n {} [options]", NAME);
+    print!("{}", opts.usage(&msg));
 }
 
 fn hostid() {
-
-  /* POSIX says gethostid returns a "32-bit identifier" but is silent
-     whether it's sign-extended.  Turn off any sign-extension.  This
-     is a no-op unless unsigned int is wider than 32 bits.  */
+  /*
+   * POSIX says gethostid returns a "32-bit identifier" but is silent
+   * whether it's sign-extended.  Turn off any sign-extension.  This
+   * is a no-op unless unsigned int is wider than 32 bits.
+   */
 
     let mut result:c_long;
     unsafe {

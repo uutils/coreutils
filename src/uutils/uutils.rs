@@ -9,23 +9,24 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
-
 @CRATES@
 
-use std::os;
+use std::env;
 use std::collections::hash_map::HashMap;
+use std::path::Path;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = "1.0.0";
 
-fn util_map() -> HashMap<&'static str, fn(Vec<String>) -> int> {
-    let mut map = HashMap::new();
+type UtilityMap = HashMap<&'static str, fn(Vec<String>) -> i32>;
+
+fn util_map() -> UtilityMap {
+    let mut map: UtilityMap = HashMap::new();
     @UTIL_MAP@
     map
 }
 
-fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> int>) {
+fn usage(cmap: &UtilityMap) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
@@ -40,16 +41,16 @@ fn usage(cmap: &HashMap<&'static str, fn(Vec<String>) -> int>) {
 
 fn main() {
     let umap = util_map();
-    let mut args = os::args();
+    let mut args : Vec<String> = env::args().collect();
 
     // try binary name as util name.
-    let binary = Path::new(args[0].as_slice());
-    let binary_as_util = binary.filename_str().unwrap();
+    let args0 = args[0].clone();
+    let binary = Path::new(&args0[..]);
+    let binary_as_util = binary.file_name().unwrap().to_str().unwrap();
 
     match umap.get(binary_as_util) {
         Some(&uumain) => {
-            os::set_exit_status(uumain(args));
-            return
+            std::process::exit(uumain(args));
         }
         None => (),
     }
@@ -61,51 +62,44 @@ fn main() {
             // what busybox uses the -suffix pattern for.
     } else {
         println!("{}: applet not found", binary_as_util);
-        os::set_exit_status(1);
-        return
+        std::process::exit(1);
     }
 
     // try first arg as util name.
     if args.len() >= 2 {
         args.remove(0);
-        let util = args[0].as_slice();
+        let util = &args[0][..];
 
         match umap.get(util) {
             Some(&uumain) => {
-                os::set_exit_status(uumain(args.clone()));
-                return
+                std::process::exit(uumain(args.clone()));
             }
             None => {
-                if args[0].as_slice() == "--help" {
+                if &args[0][..] == "--help" {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
-                        let util = args[1].as_slice();
+                        let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                os::set_exit_status(uumain(vec![util.to_string(), "--help".to_string()]));
-                                return
+                                std::process::exit(uumain(vec![util.to_string(), "--help".to_string()]));
                             }
                             None => {
                                 println!("{}: applet not found", util);
-                                os::set_exit_status(1);
-                                return
+                                std::process::exit(1);
                             }
                         }
                     }
                     usage(&umap);
-                    os::set_exit_status(0);
-                    return
+                    std::process::exit(0);
                 } else {
                     println!("{}: applet not found", util);
-                    os::set_exit_status(1);
-                    return
+                    std::process::exit(1);
                 }
             }
         }
     } else {
         // no arguments provided
         usage(&umap);
-        os::set_exit_status(0);
-        return
+        std::process::exit(0);
     }
 }

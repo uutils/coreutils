@@ -1,6 +1,7 @@
-use std::io::process::Command;
-use std::io::File;
-use std::string::String;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+use std::process::Command;
 
 static PROGNAME: &'static str = "./sort";
 
@@ -29,18 +30,22 @@ fn numeric5() {
     numeric_helper(5);
 }
 
-fn numeric_helper(test_num: int) {
+fn numeric_helper(test_num: isize) {
     let mut cmd = Command::new(PROGNAME);
     cmd.arg("-n");
-    let po = match cmd.clone().arg(format!("{}{}{}", "numeric", test_num, ".txt")).output() {
+    let po = match cmd.arg(format!("{}{}{}", "numeric", test_num, ".txt")).output() {
         Ok(p) => p,
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!("{}", err)
     };
 
-    let answer = match File::open(&Path::new(format!("{}{}{}", "numeric", test_num, ".ans")))
-            .read_to_end() {
-        Ok(answer) => answer,
-        Err(err) => panic!("{}", err),
-    };
-    assert_eq!(String::from_utf8(po.output), String::from_utf8(answer));
+    let filename = format!("{}{}{}", "numeric", test_num, ".ans");
+    let mut f = File::open(Path::new(&filename)).unwrap_or_else(|err| {
+        panic!("{}", err)
+    });
+    let mut answer = vec!();
+    match f.read_to_end(&mut answer) {
+        Ok(_) => {},
+        Err(err) => panic!("{}", err)
+    }
+    assert_eq!(String::from_utf8(po.stdout).unwrap(), String::from_utf8(answer).unwrap());
 }

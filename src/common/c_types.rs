@@ -1,4 +1,4 @@
-#![allow(dead_code, non_camel_case_types)]
+#![allow(dead_code, non_camel_case_types, raw_pointer_derive)]
 
 extern crate libc;
 
@@ -15,13 +15,16 @@ use self::libc::int32_t;
 
 use self::libc::funcs::posix88::unistd::getgroups;
 
+use std::ffi::{CStr, CString};
+use std::io::{Error, Write};
+use std::iter::repeat;
 use std::vec::Vec;
 
-use std::os;
 use std::ptr::{null_mut, read};
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
     pub pw_passwd:  *const c_char,    /* user name */
@@ -37,6 +40,7 @@ pub struct c_passwd {
 
 #[cfg(target_os = "linux")]
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
     pub pw_passwd:  *const c_char,    /* user name */
@@ -47,30 +51,26 @@ pub struct c_passwd {
     pub pw_shell:   *const c_char,
 }
 
-impl Copy for c_passwd {}
-
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
 pub struct utsname {
-    pub sysname: [c_char, ..256],
-    pub nodename: [c_char, ..256],
-    pub release: [c_char, ..256],
-    pub version: [c_char, ..256],
-    pub machine: [c_char, ..256]
+    pub sysname: [c_char; 256],
+    pub nodename: [c_char; 256],
+    pub release: [c_char; 256],
+    pub version: [c_char; 256],
+    pub machine: [c_char; 256]
 }
 
 #[cfg(target_os = "linux")]
 #[repr(C)]
 pub struct utsname {
-    pub sysname: [c_char, ..65],
-    pub nodename: [c_char, ..65],
-    pub release: [c_char, ..65],
-    pub version: [c_char, ..65],
-    pub machine: [c_char, ..65],
-    pub domainame: [c_char, ..65]
+    pub sysname: [c_char; 65],
+    pub nodename: [c_char; 65],
+    pub release: [c_char; 65],
+    pub version: [c_char; 65],
+    pub machine: [c_char; 65],
+    pub domainame: [c_char; 65]
 }
-
-impl Copy for utsname {}
 
 #[repr(C)]
 pub struct c_group {
@@ -79,8 +79,6 @@ pub struct c_group {
     pub gr_gid:    gid_t,    // group id
     pub gr_mem:    *const *const c_char, // member list
 }
-
-impl Copy for c_group {}
 
 #[repr(C)]
 pub struct c_tm {
@@ -94,8 +92,6 @@ pub struct c_tm {
     pub tm_yday: c_int,        /* day in the year */
     pub tm_isdst: c_int       /* daylight saving time */
 }
-
-impl Copy for c_tm {}
 
 extern {
     pub fn getpwuid(uid: uid_t) -> *const c_passwd;
@@ -115,14 +111,14 @@ extern {
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
     if free.len() == 1 {
-        let username = free[0].as_slice();
+        let username = &free[0][..];
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit(10)) {
-            let id = from_str::<u32>(username).unwrap();
+            let id = username.parse::<u32>().unwrap();
             let pw_pointer = unsafe { getpwuid(id as uid_t) };
 
-            if pw_pointer.is_not_null() {
+            if !pw_pointer.is_null() {
                 Some(unsafe { read(pw_pointer) })
             } else {
                 crash!(1, "{}: no such user", username);
@@ -131,9 +127,10 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         // Passed the username as a string
         } else {
             let pw_pointer = unsafe {
-                getpwnam(username.as_slice().to_c_str().into_inner() as *const libc::c_char)
+                let cstr = CString::new(username).unwrap();
+                getpwnam(cstr.as_bytes_with_nul().as_ptr() as *const i8)
             };
-            if pw_pointer.is_not_null() {
+            if !pw_pointer.is_null() {
                 Some(unsafe { read(pw_pointer) })
             } else {
                 crash!(1, "{}: no such user", username);
@@ -146,12 +143,15 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
 
 pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit(10)) {
-        unsafe { getgrgid(from_str::<gid_t>(groupname).unwrap()) }
+        unsafe { getgrgid(groupname.parse().unwrap()) }
     } else {
-        unsafe { getgrnam(groupname.to_c_str().into_inner() as *const c_char) }
+        unsafe { 
+            let cstr = CString::new(groupname).unwrap();
+            getgrnam(cstr.as_bytes_with_nul().as_ptr() as *const c_char)
+        }
     };
 
-    if group.is_not_null() {
+    if !group.is_null() {
         Some(unsafe { read(group) })
     }
     else {
@@ -161,15 +161,15 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
 
 pub fn get_group_list(name: *const c_char, gid: gid_t) -> Vec<gid_t> {
     let mut ngroups: c_int = 32;
-    let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as uint);
+    let mut groups: Vec<gid_t> = Vec::with_capacity(ngroups as usize);
 
     if unsafe { get_group_list_internal(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
-        groups.reserve(ngroups as uint);
+        groups.reserve(ngroups as usize);
         unsafe { get_group_list_internal(name, gid, groups.as_mut_ptr(), &mut ngroups); }
     } else {
-        groups.truncate(ngroups as uint);
+        groups.truncate(ngroups as usize);
     }
-    unsafe { groups.set_len(ngroups as uint); }
+    unsafe { groups.set_len(ngroups as usize); }
 
     groups
 }
@@ -193,18 +193,18 @@ unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut 
     }
 }
 
-pub fn get_groups() -> Result<Vec<gid_t>, uint> {
+pub fn get_groups() -> Result<Vec<gid_t>, i32> {
     let ngroups = unsafe { getgroups(0, null_mut()) };
     if ngroups == -1 {
-        return Err(os::errno());
+        return Err(Error::last_os_error().raw_os_error().unwrap())
     }
 
-    let mut groups = Vec::from_elem(ngroups as uint, 0 as gid_t);
+    let mut groups : Vec<gid_t>= repeat(0).take(ngroups as usize).collect();
     let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
     if ngroups == -1 {
-        Err(os::errno())
+        Err(Error::last_os_error().raw_os_error().unwrap())
     } else {
-        groups.truncate(ngroups as uint);
+        groups.truncate(ngroups as usize);
         Ok(groups)
     }
 }
@@ -222,9 +222,11 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
             for &g in groups.iter() {
                 if nflag {
                     let group = unsafe { getgrgid(g) };
-                    if group.is_not_null() {
+                    if !group.is_null() {
                         let name = unsafe {
-                            String::from_raw_buf(read(group).gr_name as *const u8)
+                            let gname = read(group).gr_name;
+                            let bytes= CStr::from_ptr(gname).to_bytes();
+                            String::from_utf8_lossy(bytes).to_string()
                         };
                         print!("{} ", name);
                     }

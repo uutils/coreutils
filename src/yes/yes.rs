@@ -11,57 +11,53 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io::print;
+use getopts::Options;
+use std::io::Write;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "yes";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].clone();
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "invalid options\n{}", f)
-        }
+        Err(f) => crash!(1, "invalid options\n{}", f)
     };
     if matches.opt_present("help") {
-        println!("yes 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", program);
+        println!("  {0} [STRING]... [OPTION]...", NAME);
         println!("");
-        print(getopts::usage("Repeatedly output a line with all specified STRING(s), or 'y'.", &opts).as_slice());
+        print!("{}", opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'."));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("yes 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
-    let mut string = "y".to_string();
-    if !matches.free.is_empty() {
-        string = matches.free.connect(" ");
-    }
+    let string = if matches.free.is_empty() {
+        "y".to_string()
+    } else {
+        matches.free.connect(" ")
+    };
 
-    exec(string.as_slice());
+    exec(&string[..]);
 
     0
 }
 
 pub fn exec(string: &str) {
-    loop {
-        if !pipe_println!("{}", string) {
-            break;
-        }
-    }
+    while pipe_println!("{}", string) { }
 }

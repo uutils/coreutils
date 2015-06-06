@@ -1,4 +1,5 @@
 #![crate_name = "fold"]
+#![feature(collections)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,47 +10,44 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io;
-use std::io::fs::File;
-use std::io::BufferedReader;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "fold";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let (args, obs_width) = handle_obsolete(args.as_slice());
-    let program = args[0].clone();
+pub fn uumain(args: Vec<String>) -> i32 {
+    let (args, obs_width) = handle_obsolete(&args[..]);
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)"),
-        getopts::optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off"),
-        getopts::optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
+    opts.optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)");
+    opts.optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off");
+    opts.optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("h") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {} [OPTION]... [FILE]...", program);
+        println!("  {} [OPTION]... [FILE]...", NAME);
         println!("");
-        print!("{}", getopts::usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines", &opts));
+        print!("{}", opts.usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines"));
     } else if matches.opt_present("V") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
     } else {
         let bytes = matches.opt_present("b");
         let spaces = matches.opt_present("s");
@@ -63,9 +61,9 @@ pub fn uumain(args: Vec<String>) -> int {
                 }
             };
         let width = match poss_width {
-            Some(inp_width) => match from_str(inp_width.as_slice()) {
-                Some(width) => width,
-                None => crash!(1, "illegal width value (\"{}\")", inp_width)
+            Some(inp_width) => match inp_width.parse::<usize>() {
+                Ok(width) => width,
+                Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e)
             },
             None => 80
         };
@@ -82,28 +80,29 @@ pub fn uumain(args: Vec<String>) -> int {
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
-        let slice = arg.as_slice();
-        if slice.char_at(0) == '-' && slice.len() > 1 && slice.char_at(1).is_digit(10) {
-            return (args.slice_to(i).to_vec() + args.slice_from(i + 1),
-                    Some(slice.slice_from(1).to_string()));
+        let slice = &arg;
+        if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
+            let mut v = args.to_vec();
+            v.remove(i);
+            return (v, Some(slice[1..].to_string()));
         }
     }
     (args.to_vec(), None)
 }
 
 #[inline]
-fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
+fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
     for filename in filenames.iter() {
-        let filename: &str = filename.as_slice();
+        let filename: &str = &filename;
         let mut stdin_buf;
         let mut file_buf;
-        let buffer = BufferedReader::new(
+        let buffer = BufReader::new(
             if filename == "-" {
-                stdin_buf = io::stdio::stdin_raw();
-                &mut stdin_buf as &mut Reader
+                stdin_buf = stdin();
+                &mut stdin_buf as &mut Read
             } else {
-                file_buf = safe_unwrap!(File::open(&Path::new(filename)));
-                &mut file_buf as &mut Reader
+                file_buf = safe_unwrap!(File::open(Path::new(filename)));
+                &mut file_buf as &mut Read
             }
         );
         fold_file(buffer, bytes, spaces, width);
@@ -111,21 +110,19 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: uint) {
 }
 
 #[inline]
-fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, width: uint) {
-    let mut file = file;
-    for line in file.lines() {
-        let line_string = safe_unwrap!(line);
-        let mut line = line_string.as_slice();
+fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: usize) {
+    let mut line = String::new();
+    while safe_unwrap!(file.read_line(&mut line)) > 0 {
         if bytes {
             let len = line.len();
             let mut i = 0;
             while i < len {
                 let width = if len - i >= width { width } else { len - i };
                 let slice = {
-                    let slice = line.slice(i, i + width);
+                    let slice = &line[i..i + width];
                     if spaces && i + width < len {
                         match slice.rfind(|ch: char| ch.is_whitespace()) {
-                            Some(m) => slice.slice_to(m + 1),
+                            Some(m) => &slice[..m + 1],
                             None => slice
                         }
                     } else {
@@ -136,28 +133,28 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                 i += slice.len();
             }
         } else {
-            let mut len = line.char_len();
+            let mut len = line.chars().count();
             let newline = line.ends_with("\n");
             if newline {
                 if len == 1 {
                     println!("");
                     continue;
                 }
-                line = line.slice_to(line.len() - 1);
                 len -= 1;
+                line.truncate(len);
             }
             let mut output = String::new();
             let mut count = 0;
             for (i, ch) in line.chars().enumerate() {
                 if count >= width {
                     let (val, ncount) = {
-                        let slice = output.as_slice();
+                        let slice = &output[..];
                         let (out, val, ncount) =
                             if spaces && i + 1 < len {
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
-                                        let routput = slice.slice_chars(m + 1, slice.char_len());
-                                        let ncount = routput.chars().fold(0u, |out, ch: char| {
+                                        let routput = slice.slice_chars(m + 1, slice.chars().count());
+                                        let ncount = routput.chars().fold(0usize, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
                                                 '\x08' => if out > 0 { -1 } else { 0 },
@@ -173,7 +170,7 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
                                 (slice, "", 0)
                             };
                         println!("{}", out);
-                        (val.into_string(), ncount)
+                        (val.to_string(), ncount)
                     };
                     output = val;
                     count = ncount;
@@ -216,10 +213,10 @@ fn fold_file<T: io::Reader>(file: BufferedReader<T>, bytes: bool, spaces: bool, 
 }
 
 #[inline]
-fn rfind_whitespace(slice: &str) -> Option<uint> {
+fn rfind_whitespace(slice: &str) -> Option<usize> {
     for (i, ch) in slice.chars().rev().enumerate() {
         if ch.is_whitespace() {
-            return Some(slice.char_len() - (i + 1));
+            return Some(slice.chars().count() - (i + 1));
         }
     }
     None

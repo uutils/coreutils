@@ -1,4 +1,5 @@
-#![crate_name = "uusync"]
+#![crate_name = "sync"]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -10,14 +11,10 @@
 
  /* Last synced with: sync (GNU coreutils) 8.13 */
 
- #![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use getopts::{optflag, getopts, usage};
-
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 static NAME: &'static str = "sync";
 static VERSION: &'static str = "1.0.0";
@@ -30,7 +27,7 @@ mod platform {
         fn sync() -> libc::c_void;
     }
 
-    pub unsafe fn do_sync() -> int {
+    pub unsafe fn do_sync() -> isize {
         sync();
         0
     }
@@ -65,7 +62,7 @@ mod platform {
     unsafe fn flush_volume(name: &str) {
         let name_buffer = name.to_c_str().as_ptr();
         if 0x00000003 == GetDriveTypeA(name_buffer) { // DRIVE_FIXED
-            let sliced_name = name.slice_to(name.len() - 1); // eliminate trailing backslash
+            let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             let sliced_name_buffer = sliced_name.to_c_str().as_ptr();
             match CreateFileA(sliced_name_buffer,
                               0xC0000000, // GENERIC_WRITE
@@ -74,10 +71,10 @@ mod platform {
                               0x00000003, // OPEN_EXISTING
                               0,
                               null()) {
-                _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
+                -1 => { // INVALID_HANDLE_VALUE
                     crash!(GetLastError(), "failed to create volume handle");
                 }
-                handle @ _ => {
+                handle => {
                     if FlushFileBuffers(handle) == 0 {
                         crash!(GetLastError(), "failed to flush file buffer");
                     }
@@ -88,13 +85,13 @@ mod platform {
 
     #[allow(unused_unsafe)]
     unsafe fn find_first_volume() -> (String, *const libc::c_void) {
-        let mut name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
+        let mut name: [libc::c_char; 260] = mem::uninitialized(); // MAX_PATH
         match FindFirstVolumeA(name.as_mut_ptr(),
                                name.len() as libc::uint32_t) {
-            _x if _x == -1 as *const libc::c_void => { // INVALID_HANDLE_VALUE
+            -1 => { // INVALID_HANDLE_VALUE
                 crash!(GetLastError(), "failed to find first volume");
             }
-            handle @ _ => {
+            handle => {
                 (string::raw::from_buf(name.as_ptr() as *const u8), handle)
             }
         }
@@ -104,9 +101,9 @@ mod platform {
     unsafe fn find_all_volumes() -> Vec<String> {
         match find_first_volume() {
             (first_volume, next_volume_handle) => {
-                let mut volumes = Vec::from_elem(1, first_volume);
+                let mut volumes = vec![first_volume];
                 loop {
-                    let mut name: [libc::c_char, ..260] = mem::uninitialized(); // MAX_PATH
+                    let mut name: [libc::c_char; 260] = mem::uninitialized(); // MAX_PATH
                     match FindNextVolumeA(next_volume_handle,
                                           name.as_mut_ptr(),
                                           name.len() as libc::uint32_t) {
@@ -116,7 +113,7 @@ mod platform {
                                     FindVolumeClose(next_volume_handle); // ignore FindVolumeClose() failures
                                     break;
                                 }
-                                err @ _ => {
+                                err => {
                                     crash!(err, "failed to find next volume");
                                 }
                             }
@@ -134,27 +131,25 @@ mod platform {
     pub unsafe fn do_sync() -> int {
         let volumes = find_all_volumes();
         for vol in volumes.iter() {
-            flush_volume(vol.as_slice());
+            flush_volume(&vol);
         }
         0
     }
 }
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = &args[0];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let options = [
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit")
-    ];
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts(args.tail(), &options) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
-        _ => { help(program.as_slice(), &options); return 1 }
+        _ => { help(&opts); return 1 }
     };
 
     if matches.opt_present("h") {
-        help(program.as_slice(), &options);
+        help(&opts);
         return 0
     }
 
@@ -163,7 +158,7 @@ pub fn uumain(args: Vec<String>) -> int {
         return 0
     }
 
-    uusync();
+    sync();
     0
 }
 
@@ -174,12 +169,18 @@ fn version() {
     println!("Author -- Alexander Fomin.");
 }
 
-fn help(program: &str, options: &[getopts::OptGroup]) {
-    println!("Usage: {} [OPTION]", program);
-    print!("{}", usage("Force changed blocks to disk, update the super block.", options));
+fn help(opts: &getopts::Options) {
+    let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTION]
+
+Force changed blocks to disk, update the super block.", NAME, VERSION);
+
+    print!("{}", opts.usage(&msg));
 }
 
-fn uusync() -> int {
+fn sync() -> isize {
     unsafe {
         platform::do_sync()
     }

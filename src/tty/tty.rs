@@ -1,6 +1,5 @@
 #![crate_name = "tty"]
 
-
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -12,18 +11,14 @@
  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
  */
 
-#![allow(dead_code)]
-
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io::println;
-use std::io::stdio::stderr;
-use getopts::{optflag,getopts};
+use std::ffi::CStr;
+use std::io::Write;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 extern {
@@ -32,44 +27,57 @@ extern {
 }
 
 static NAME: &'static str = "tty";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let options = [
-        optflag("s", "silent", "print nothing, only return an exit status")
-    ];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let silent = match getopts(args.tail(), &options) {
-        Ok(m) => {
-            m.opt_present("s")
-        },
-        Err(f) => {
-            println!("{}", f);
-            usage();
-            return 2;
-        }
+    opts.optflag("s", "silent", "print nothing, only return an exit status");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => { crash!(2, "{}", f) }
     };
 
-    let tty = unsafe { String::from_raw_buf(ttyname(libc::STDIN_FILENO) as *const u8) };
+    if matches.opt_present("help") {
+        println!("{} {}", NAME, VERSION);
+        println!("");
+        println!("Usage:");
+        println!("  {} [OPTION]...", NAME);
+        println!("");
+        print!("{}", opts.usage("Print the file name of the terminal connected to standard input."));
+    } else if matches.opt_present("version") {
+        println!("{} {}", NAME, VERSION);
+    } else {
+        let silent = matches.opt_present("s");
 
-    if !silent {
-        if !tty.as_slice().is_whitespace() {
-            println(tty.as_slice());
-        } else {
-            println!("not a tty");
+        let tty = unsafe {
+            let ptr = ttyname(libc::STDIN_FILENO);
+            if !ptr.is_null() {
+                String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
+            } else {
+                "".to_string()
+            }
+        };
+
+        if !silent {
+            if !tty.chars().all(|c| c.is_whitespace()) {
+                println!("{}", tty);
+            } else {
+                println!("not a tty");
+            }
         }
+
+        return unsafe {
+            if isatty(libc::STDIN_FILENO) == 1 {
+                libc::EXIT_SUCCESS
+            } else {
+                libc::EXIT_FAILURE
+            }
+        };
     }
 
-    let exit_code = unsafe {
-        if isatty(libc::STDIN_FILENO) == 1 {
-            libc::EXIT_SUCCESS
-        } else {
-            libc::EXIT_FAILURE
-        }
-    };
-
-    exit_code as int
-}
-
-fn usage () {
-    safe_writeln!(&mut stderr(), "usage: tty [-s]");
+    0
 }

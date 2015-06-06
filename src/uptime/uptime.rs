@@ -11,27 +11,27 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-#![allow(non_camel_case_types)]
-#![feature(macro_rules, globs)]
-
 extern crate getopts;
 extern crate libc;
-extern crate "time" as rtime;
+extern crate time as rtime;
 
-use std::mem::transmute;
-use std::io::{print, File};
-use std::ptr::null;
-use std::str::from_str;
+use getopts::Options;
 use libc::{time_t, c_double, c_int, c_char};
+use std::ffi::CString;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::mem::transmute;
+use std::ptr::null;
 use utmpx::*;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 
 #[path = "../common/c_types.rs"] mod c_types;
 
 #[path = "../common/utmpx.rs"] mod utmpx;
 
 static NAME: &'static str = "uptime";
+static VERSION: &'static str = "1.0.0";
 
 #[cfg(unix)]
 extern {
@@ -55,27 +55,29 @@ unsafe extern fn utmpxname(_file: *const c_char) -> c_int {
     0
 }
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].clone();
-    let opts = [
-        getopts::optflag("v", "version", "output version information and exit"),
-        getopts::optflag("h", "help", "display this help and exit"),
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = Options::new();
+
+    opts.optflag("v", "version", "output version information and exit");
+    opts.optflag("h", "help", "display this help and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
     if matches.opt_present("version") {
-        println!("uptime 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
     if matches.opt_present("help") || matches.free.len() > 0 {
-        println!("Usage:");
-        println!("  {0} [OPTION]", program);
+        println!("{} {}", NAME, VERSION);
         println!("");
-        print(getopts::usage("Print the current time, the length of time the system has been up,\n\
+        println!("Usage:");
+        println!("  {0} [OPTION]", NAME);
+        println!("");
+        println!("{}", opts.usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes.", &opts).as_slice());
+                              in the run queue over the last 1, 5 and 15 minutes."));
         return 0;
     }
 
@@ -90,28 +92,26 @@ pub fn uumain(args: Vec<String>) -> int {
 }
 
 fn print_loadavg() {
-    let mut avg: [c_double, ..3] = [0.0, ..3];
+    let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
     if loads == -1 {
         print!("\n");
     }
     else {
-        print!("load average: ")
-        for n in range(0, loads) {
-            print!("{:.2}{}", avg[n as uint], if n == loads - 1 { "\n" }
+        print!("load average: ");
+        for n in 0..loads {
+            print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
                                    else { ", " } );
         }
     }
 }
 
 #[cfg(unix)]
-fn process_utmpx() -> (Option<time_t>, uint) {
-    DEFAULT_FILE.with_c_str(|filename| {
-        unsafe {
-            utmpxname(filename);
-        }
-    });
+fn process_utmpx() -> (Option<time_t>, usize) {
+    unsafe {
+        utmpxname(CString::new(DEFAULT_FILE).unwrap().as_ptr());
+    }
 
     let mut nusers = 0;
     let mut boot_time = None;
@@ -145,11 +145,11 @@ fn process_utmpx() -> (Option<time_t>, uint) {
 }
 
 #[cfg(windows)]
-fn process_utmpx() -> (Option<time_t>, uint) {
+fn process_utmpx() -> (Option<time_t>, usize) {
     (None, 0) // TODO: change 0 to number of users
 }
 
-fn print_nusers(nusers: uint) {
+fn print_nusers(nusers: usize) {
     if nusers == 1 {
         print!("1 user, ");
     } else if nusers > 1 {
@@ -166,27 +166,23 @@ fn print_time() {
 
 #[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
-    let proc_uptime = File::open(&Path::new("/proc/uptime"))
-                            .read_to_string();
+    let mut proc_uptime = String::new();
 
-    let uptime_text = match proc_uptime {
-        Ok(s) => s,
-        _ => return match boot_time {
-                Some(t) => {
-                    let now = rtime::get_time().sec;
-                    let time = t.to_i64().unwrap();
-                    ((now - time) * 100) as i64 // Return in ms
-                },
-                _ => -1
-             }
-    };
-
-    match uptime_text.as_slice().words().next() {
-        Some(s) => match from_str(s.replace(".", "").as_slice()) {
-                    Some(n) => n,
-                    None => -1
-                   },
-        None => -1
+    if let Some(n) =
+        File::open("/proc/uptime").ok()
+            .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
+            .and_then(|_| proc_uptime.split_whitespace().next())
+            .and_then(|s| s.replace(".", "").parse().ok()) {
+        n
+    } else {
+        match boot_time {
+            Some(t) => {
+                let now = rtime::get_time().sec;
+                let time = t as i64;
+                ((now - time) * 100)
+            },
+            _ => -1,
+        }
     }
 }
 
@@ -200,12 +196,12 @@ fn print_uptime(upsecs: i64) {
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
-        print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins);
+        print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
     }
     else if updays > 1 {
-        print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
+        print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
     }
     else {
-        print!("up  {:2}:{:02},  ", uphours, upmins);
+        print!("up  {:2}:{:02}, ", uphours, upmins);
     }
 }

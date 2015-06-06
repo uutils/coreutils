@@ -11,80 +11,39 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-#![allow(non_camel_case_types)]
-
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io::print;
+use getopts::Options;
+use std::io::Write;
 
-#[path = "../common/util.rs"] mod util;
-
-#[cfg(unix)]
-mod platform {
-    use super::libc;
-    use self::c_types::{c_passwd, getpwuid};
-
-    #[path = "../../common/c_types.rs"] mod c_types;
-
-    extern {
-        pub fn geteuid() -> libc::uid_t;
-    }
-
-    pub unsafe fn getusername() -> String {
-        let passwd: *const c_passwd = getpwuid(geteuid());
-
-        let pw_name: *const libc::c_char = (*passwd).pw_name;
-        let name = String::from_raw_buf(pw_name as *const u8);
-
-        name
-    }
-}
-
-#[cfg(windows)]
-mod platform {
-    pub use super::libc;
-    use std::mem;
-
-    extern "system" {
-        pub fn GetUserNameA(out: *mut libc::c_char, len: *mut libc::uint32_t) -> libc::uint8_t;
-    }
-
-    #[allow(unused_unsafe)]
-    pub unsafe fn getusername() -> String {
-        let mut buffer: [libc::c_char, ..2048] = mem::uninitialized();   // XXX: it may be possible that this isn't long enough.  I don't know
-        if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
-            crash!(1, "username is too long");
-        }
-        String::from_raw_buf(buffer.as_ptr() as *const u8)
-    }
-}
+#[path = "../common/util.rs"] #[macro_use] mod util;
+mod platform;
 
 static NAME: &'static str = "whoami";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].as_slice();
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
-        println!("whoami 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {}", program);
+        println!("  {} [OPTIONS]", NAME);
         println!("");
-        print(getopts::usage("print effective userid", &opts).as_slice());
+        println!("{}", opts.usage("print effective userid"));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("whoami 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 

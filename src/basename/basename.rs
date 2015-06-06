@@ -1,4 +1,3 @@
-#![feature(macro_rules)]
 #![crate_name = "basename"]
 
 /*
@@ -13,56 +12,55 @@
 extern crate getopts;
 extern crate libc;
 
-use std::io::{print, println};
+use getopts::Options;
+use std::io::Write;
+use std::path::{is_separator, PathBuf};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = strip_dir(args[0].as_slice());
-
+pub fn uumain(args: Vec<String>) -> i32 {
     //
     // Argument parsing
     //
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m)  => m,
         Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
-        println!("Usage: {0} NAME [SUFFIX]", program);
-        println!("  or: {0} OPTION", program);
-        println!("Print NAME with any leading directory components removed.");
-        println!("If specified, also remove a trailing SUFFIX.");
+        let msg = format!("Usage: {0} NAME [SUFFIX]\n   or: {0} OPTION\n\n\
+        Print NAME with any leading directory components removed.\n\
+        If specified, also remove a trailing SUFFIX.", NAME);
 
-        print(getopts::usage("", &opts).as_slice());
+        print!("{}", opts.usage(&msg));
 
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("{} {}", program, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
     // too few arguments
     if args.len() < 2 {
-        println!("{}: {}", program, "missing operand");
-        println!("Try '{} --help' for more information.", program);
+        println!("{}: {}", NAME, "missing operand");
+        println!("Try '{} --help' for more information.", NAME);
         return 1;
     }
     // too many arguments
     else if args.len() > 3 {
-        println!("{}: extra operand '{}'", program, args[3]);
-        println!("Try '{} --help' for more information.", program);
+        println!("{}: extra operand '{}'", NAME, args[3]);
+        println!("Try '{} --help' for more information.", NAME);
         return 1;
     }
 
@@ -70,41 +68,41 @@ pub fn uumain(args: Vec<String>) -> int {
     // Main Program Processing
     //
 
-    let fullname = &args[1];
-
-    let mut name = strip_dir(fullname.as_slice());
+    let mut name = strip_dir(&args[1]);
 
     if args.len() > 2 {
         let suffix = args[2].clone();
-        name = strip_suffix(name.as_slice(), suffix.as_slice());
+        name = strip_suffix(name.as_ref(), suffix.as_ref());
     }
 
-    println(name.as_slice());
+    println!("{}", name);
 
     0
 }
 
 fn strip_dir(fullname: &str) -> String {
-    let mut name = String::new();
+    // Remove all platform-specific path separators from the end
+    let mut path: String = fullname.chars().rev().skip_while(|&ch| is_separator(ch)).collect();
 
-    for c in fullname.chars().rev() {
-        if c == '/' || c == '\\' {
-            break;
-        }
-        name.push(c);
+    // Undo reverse
+    path = path.chars().rev().collect();
+
+    // Convert to path buffer and get last path component
+    let pb = PathBuf::from(path);
+    match pb.components().last() {
+        Some(c) => c.as_os_str().to_str().unwrap().to_string(),
+        None => "".to_string()
     }
-
-    name.as_slice().chars().rev().collect()
 }
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
-        return name.into_string();
+        return name.to_string();
     }
 
     if name.ends_with(suffix) {
-        return name.slice_to(name.len() - suffix.len()).into_string();
+        return name[..name.len() - suffix.len()].to_string();
     }
 
-    name.into_string()
+    name.to_string()
 }

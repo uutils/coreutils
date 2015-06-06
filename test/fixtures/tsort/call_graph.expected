@@ -1,0 +1,17 @@
+main
+parse_options
+tail_file
+tail_forever
+tail
+recheck
+write_header
+tail_lines
+tail_bytes
+pretty_name
+start_lines
+file_lines
+pipe_lines
+xlseek
+start_bytes
+pipe_bytes
+dump_remainder

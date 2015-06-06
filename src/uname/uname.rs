@@ -11,20 +11,18 @@
 
 /* last synced with: uname (GNU coreutils) 8.21 */
 
-#![allow(non_camel_case_types)]
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::mem::uninitialized;
-use std::io::print;
 use c_types::utsname;
+use std::ffi::CStr;
+use std::io::Write;
+use std::mem::uninitialized;
 
-#[path = "../common/util.rs"] mod util;
+#[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
 
-struct utsrust {
+struct Uts {
     sysname: String,
     nodename: String,
     release: String,
@@ -36,71 +34,75 @@ extern {
     fn uname(uts: *mut utsname);
 }
 
-unsafe fn getuname() -> utsrust {
+unsafe fn string_from_c_str(ptr: *const i8) -> String {
+    String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
+}
+
+unsafe fn getuname() -> Uts {
     let mut uts: utsname = uninitialized();
     uname(&mut uts);
-    utsrust {
-        sysname:  String::from_raw_buf(uts.sysname.as_ptr()  as *const u8), 
-        nodename: String::from_raw_buf(uts.nodename.as_ptr() as *const u8),
-        release:  String::from_raw_buf(uts.release.as_ptr()  as *const u8), 
-        version:  String::from_raw_buf(uts.version.as_ptr()  as *const u8),
-        machine:  String::from_raw_buf(uts.machine.as_ptr()  as *const u8)
+    Uts {
+        sysname:  string_from_c_str(uts.sysname.as_ptr()  as *const i8), 
+        nodename: string_from_c_str(uts.nodename.as_ptr() as *const i8),
+        release:  string_from_c_str(uts.release.as_ptr()  as *const i8), 
+        version:  string_from_c_str(uts.version.as_ptr()  as *const i8),
+        machine:  string_from_c_str(uts.machine.as_ptr()  as *const i8)
     }
 }
 
-
 static NAME: &'static str = "uname";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].as_slice();
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("a", "all", "Behave as though all of the options -mnrsv were specified."),
-        getopts::optflag("m", "machine", "print the machine hardware name."),
-        getopts::optflag("n", "nodename", "print the nodename (the nodename may be a name that the system is known by to a communications network)."),
-        getopts::optflag("p", "processor", "print the machine processor architecture name."),
-        getopts::optflag("r", "release", "print the operating system release."),
-        getopts::optflag("s", "sysname", "print the operating system name."),
-        getopts::optflag("v", "version", "print the operating system version."),
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("a", "all", "Behave as though all of the options -mnrsv were specified.");
+    opts.optflag("m", "machine", "print the machine hardware name.");
+    opts.optflag("n", "nodename", "print the nodename (the nodename may be a name that the system is known by to a communications network).");
+    opts.optflag("p", "processor", "print the machine processor architecture name.");
+    opts.optflag("r", "release", "print the operating system release.");
+    opts.optflag("s", "sysname", "print the operating system name.");
+    opts.optflag("v", "version", "print the operating system version.");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
-        println!("uname 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {}", program);
+        println!("  {} [OPTIONS]", NAME);
         println!("");
-        print(getopts::usage("The uname utility writes symbols representing one or more system characteristics to the standard output.", &opts).as_slice());
+        print!("{}", opts.usage("The uname utility writes symbols representing one or more system characteristics to the standard output."));
         return 0;
     }
     let uname = unsafe { getuname() };
     let mut output = String::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
         || !matches.opts_present(&["nodename".to_string(), "release".to_string(), "version".to_string(), "machine".to_string()]) {
-            output.push_str(uname.sysname.as_slice());
+            output.push_str(uname.sysname.as_ref());
             output.push_str(" ");
     }
 
     if matches.opt_present("nodename") || matches.opt_present("all") {
-        output.push_str(uname.nodename.as_slice());
+        output.push_str(uname.nodename.as_ref());
         output.push_str(" ");
     }
     if matches.opt_present("release") || matches.opt_present("all") {
-        output.push_str(uname.release.as_slice());
+        output.push_str(uname.release.as_ref());
         output.push_str(" ");
     }
     if matches.opt_present("version") || matches.opt_present("all") {
-        output.push_str(uname.version.as_slice());
+        output.push_str(uname.version.as_ref());
         output.push_str(" ");
     }
     if matches.opt_present("machine") || matches.opt_present("all") {
-        output.push_str(uname.machine.as_slice());
+        output.push_str(uname.machine.as_ref());
         output.push_str(" ");
     }
-    println!("{}", output.as_slice().trim_left());
+    println!("{}", output.trim());
 
     0
 }

@@ -1,4 +1,6 @@
 #![crate_name = "mv"]
+#![feature(collections, fs_time, path_ext, slice_patterns, str_char)]
+#![allow(deprecated)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -10,27 +12,19 @@
  * that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
+extern crate libc;
 
-use std::io::{BufferedReader, IoResult, fs};
-use std::io::stdio::stdin_raw;
-use std::io::fs::PathExtensions;
-use std::path::GenericPath;
-use getopts::{
-    getopts,
-    optflag,
-    optflagopt,
-    optopt,
-    usage,
-};
+use std::fs::{self, PathExt};
+use std::io::{BufRead, BufReader, Result, stdin, Write};
+use std::path::PathBuf;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "mv";
-static VERSION:  &'static str = "0.0.1";
+static VERSION: &'static str = "0.0.1";
 
 pub struct Behaviour {
     overwrite: OverwriteMode,
@@ -42,16 +36,14 @@ pub struct Behaviour {
     verbose: bool,
 }
 
-#[deriving(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum OverwriteMode {
     NoClobber,
     Interactive,
     Force,
 }
 
-impl Copy for OverwriteMode {}
-
-#[deriving(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum BackupMode {
     NoBackup,
     SimpleBackup,
@@ -59,38 +51,35 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
-impl Copy for BackupMode {}
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-pub fn uumain(args: Vec<String>) -> int {
-    let program = args[0].as_slice();
-    let opts = [
-        optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL"),
-        optflag("b", "", "like --backup but does not accept an argument"),
-        optflag("f", "force", "do not prompt before overwriting"),
-        optflag("i", "interactive", "prompt before override"),
-        optflag("n", "no-clobber", "do not overwrite an existing file"),
-        // I have yet to find a use-case (and thereby write a test) where this option is useful.
-        //optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
-        //                                        argument"),
-        optopt("S", "suffix", "override the usual backup suffix", "SUFFIX"),
-        optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY"),
-        optflag("T", "no-target-directory", "treat DEST as a normal file"),
-        optflag("u", "update", "move only when the SOURCE file is newer\n \
-                                  than the destination file or when the\n \
-                                  destination file is missing"),
-        optflag("v", "verbose", "explain what is being done"),
-        optflag("h", "help", "display this help and exit"),
-        optflag("V", "version", "output version information and exit"),
-    ];
+    opts.optflagopt("",  "backup", "make a backup of each existing destination file", "CONTROL");
+    opts.optflag("b", "", "like --backup but does not accept an argument");
+    opts.optflag("f", "force", "do not prompt before overwriting");
+    opts.optflag("i", "interactive", "prompt before override");
+    opts.optflag("n", "no-clobber", "do not overwrite an existing file");
+    // I have yet to find a use-case (and thereby write a test) where this option is useful.
+    //opts.optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
+    //                                        argument");
+    opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
+    opts.optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY");
+    opts.optflag("T", "no-target-directory", "treat DEST as a normal file");
+    opts.optflag("u", "update", "move only when the SOURCE file is newer\n \
+                                than the destination file or when the\n \
+                                destination file is missing");
+    opts.optflag("v", "verbose", "explain what is being done");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match getopts(args.tail(), &opts) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("Invalid options\n{}", f);
             return 1;
         }
     };
-    let usage = usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.", &opts);
+    let usage = opts.usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
 
     /* This does not exactly match the GNU implementation:
      * The GNU mv defaults to Force, but if more than one of the
@@ -110,14 +99,14 @@ pub fn uumain(args: Vec<String>) -> int {
     } else if matches.opt_present("backup") {
         match matches.opt_str("backup") {
             None => BackupMode::SimpleBackup,
-            Some(mode) => match mode.as_slice() {
+            Some(mode) => match &mode[..] {
                 "simple" | "never" => BackupMode::SimpleBackup,
                 "numbered" | "t"   => BackupMode::NumberedBackup,
                 "existing" | "nil" => BackupMode::ExistingBackup,
                 "none" | "off"     => BackupMode::NoBackup,
                 x => {
                     show_error!("invalid argument ‘{}’ for ‘backup type’\n\
-                                Try 'mv --help' for more information.", x);
+                                Try '{} --help' for more information.", x, NAME);
                     return 1;
                 }
             }
@@ -128,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> int {
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
         show_error!("options --backup and --no-clobber are mutually exclusive\n\
-                    Try 'mv --help' for more information.");
+                    Try '{} --help' for more information.", NAME);
         return 1;
     }
 
@@ -137,12 +126,12 @@ pub fn uumain(args: Vec<String>) -> int {
             Some(x) => x,
             None => {
                 show_error!("option '--suffix' requires an argument\n\
-                            Try 'mv --help' for more information.");
+                            Try '{} --help' for more information.", NAME);
                 return 1;
             }
         }
     } else {
-        "~".into_string()
+        "~".to_string()
     };
 
     if matches.opt_present("T") && matches.opt_present("t") {
@@ -160,41 +149,38 @@ pub fn uumain(args: Vec<String>) -> int {
         verbose: matches.opt_present("v"),
     };
 
-    let string_to_path = |s: &String| { Path::new(s.as_slice()) };
-    let paths: Vec<Path> = matches.free.iter().map(string_to_path).collect();
+    let string_to_path = |s: &String| { PathBuf::from(s) };
+    let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
 
     if matches.opt_present("version") {
-        version();
+        println!("{} {}", NAME, VERSION);
         0
     } else if matches.opt_present("help") {
-        help(program.as_slice(), usage.as_slice());
+        help(&usage);
         0
     } else {
-        exec(paths.as_slice(), behaviour)
+        exec(&paths[..], behaviour)
     }
 }
 
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help(progname: &str, usage: &str) {
-    let msg = format!("Usage: {0} SOURCE DEST\n  \
+fn help(usage: &str) {
+    let msg = format!("a0{} {1}\n\n \
+                       Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY \
                        \n\
-                       {1}", progname, usage);
+                       {2}", NAME, VERSION, usage);
     println!("{}", msg);
 }
 
-fn exec(files: &[Path], b: Behaviour) -> int {
+fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
     match b.target_dir {
-        Some(ref name) => return move_files_into_dir(files, &Path::new(name.as_slice()), &b),
+        Some(ref name) => return move_files_into_dir(files, &PathBuf::from(name), &b),
         None => {}
     }
     match files {
         [] | [_] => {
             show_error!("missing file operand\n\
-                        Try 'mv --help' for more information.");
+                        Try '{} --help' for more information.", NAME);
             return 1;
         },
         [ref source, ref target] => {
@@ -234,7 +220,7 @@ fn exec(files: &[Path], b: Behaviour) -> int {
         fs => {
             if b.no_target_dir {
                 show_error!("mv: extra operand ‘{}’\n\
-                            Try 'mv --help' for more information.", fs[2].display());
+                            Try '{} --help' for more information.", fs[2].display(), NAME);
                 return 1;
             }
             let target_dir = fs.last().unwrap();
@@ -244,7 +230,7 @@ fn exec(files: &[Path], b: Behaviour) -> int {
     0
 }
 
-fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> int {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
@@ -252,7 +238,7 @@ fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> int 
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.filename_str() {
+        let targetpath = match sourcepath.as_os_str().to_str() {
             Some(name) => target_dir.join(name),
             None => {
                 show_error!("cannot stat ‘{}’: No such file or directory",
@@ -275,7 +261,7 @@ fn move_files_into_dir(files: &[Path], target_dir: &Path, b: &Behaviour) -> int 
     if all_successful { 0 } else { 1 }
 }
 
-fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
+fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -301,7 +287,7 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
         }
 
         if b.update {
-            if try!(from.stat()).modified <= try!(to.stat()).modified {
+            if try!(fs::metadata(from)).modified() <= try!(fs::metadata(to)).modified() {
                 return Ok(());
             }
         }
@@ -320,8 +306,9 @@ fn rename(from: &Path, to: &Path, b: &Behaviour) -> IoResult<()> {
 }
 
 fn read_yes() -> bool {
-    match BufferedReader::new(stdin_raw()).read_line() {
-        Ok(s) => match s.as_slice().slice_shift_char() {
+    let mut s = String::new();
+    match BufReader::new(stdin()).read_line(&mut s) {
+        Ok(_) => match s.slice_shift_char() {
             Some((x, _)) => x == 'y' || x == 'Y',
             _ => false
         },
@@ -329,13 +316,13 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &Path, suffix: &String) -> Path {
-    let mut p = path.clone().into_vec();
-    p.push_all(suffix.as_slice().as_bytes());
-    return Path::new(p);
+fn simple_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
+    let mut p = path.as_os_str().to_str().unwrap().to_string();
+    p.push_str(suffix);
+    return PathBuf::from(p);
 }
 
-fn numbered_backup_path(path: &Path) -> Path {
+fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
@@ -346,10 +333,10 @@ fn numbered_backup_path(path: &Path) -> Path {
     }
 }
 
-fn existing_backup_path(path: &Path, suffix: &String) -> Path {
-    let test_path = simple_backup_path(path, &".~1~".into_string());
+fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
+    let test_path = simple_backup_path(path, &".~1~".to_string());
     if test_path.exists() {
         return numbered_backup_path(path);
     }
-    return simple_backup_path(path, suffix);
+    simple_backup_path(path, suffix)
 }

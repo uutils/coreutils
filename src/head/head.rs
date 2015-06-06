@@ -1,4 +1,5 @@
 #![crate_name = "head"]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -10,78 +11,95 @@
  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 
-use std::char::UnicodeChar;
-use std::io::{stdin};
-use std::io::{BufferedReader, BytesReader};
-use std::io::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
-use getopts::{optopt, optflag, getopts, usage};
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "head";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let mut line_count = 10u;
-    let mut byte_count = 0u;
+enum FilterMode {
+    Bytes(usize),
+    Lines(usize),
+}
+
+struct Settings {
+    mode: FilterMode,
+    verbose: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            mode: FilterMode::Lines(10),
+            verbose: false,
+        }
+    }
+}
+
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut settings: Settings = Default::default();
 
     // handle obsolete -number syntax
-    let options = match obsolete(args.tail()) {
-        (args, Some(n)) => { line_count = n; args },
+    let options = match obsolete(&args[1..]) {
+        (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
         (args, None) => args
     };
 
     let args = options;
 
-    let possible_options = [
-        optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K"),
-        optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K"),
-        optflag("h", "help", "help"),
-        optflag("V", "version", "version")
-    ];
+    let mut opts = getopts::Options::new();
 
-    let given_options = match getopts(args.as_slice(), &possible_options) {
+    opts.optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K");
+    opts.optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K");
+    opts.optflag("q", "quiet", "never print headers giving file names");
+    opts.optflag("v", "verbose", "always print headers giving file names");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args) {
         Ok (m) => { m }
         Err(_) => {
-            println!("{}", usage(NAME, &possible_options));
+            println!("{}", opts.usage(""));
             return 1;
         }
     };
 
-    if given_options.opt_present("h") {
-        println!("{}", usage(NAME, &possible_options));
+    if matches.opt_present("h") {
+        println!("{}", opts.usage(""));
         return 0;
     }
-    if given_options.opt_present("V") { version(); return 0 }
+    if matches.opt_present("V") { version(); return 0 }
 
-    let use_bytes = given_options.opt_present("c");
+    let use_bytes = matches.opt_present("c");
 
     // TODO: suffixes (e.g. b, kB, etc.)
-    match given_options.opt_str("n") {
+    match matches.opt_str("n") {
         Some(n) => {
             if use_bytes {
                 show_error!("cannot specify both --bytes and --lines.");
                 return 1;
             }
-            match from_str(n.as_slice()) {
-                Some(m) => { line_count = m }
-                None => {
-                    show_error!("invalid line count '{}'", n);
+            match n.parse::<usize>() {
+                Ok(m) => { settings.mode = FilterMode::Lines(m) }
+                Err(e) => {
+                    show_error!("invalid line count '{}': {}", n, e);
                     return 1;
                 }
             }
         }
-        None => match given_options.opt_str("c") {
-            Some(count) => match from_str(count.as_slice()) {
-                Some(m) => byte_count = m,
-                None => {
-                    show_error!("invalid byte count '{}'", count);
+        None => match matches.opt_str("c") {
+            Some(count) => match count.parse::<usize>() {
+                Ok(m) => settings.mode = FilterMode::Bytes(m),
+                Err(e)=> {
+                    show_error!("invalid byte count '{}': {}", count, e);
                     return 1;
                 }
             },
@@ -89,37 +107,41 @@ pub fn uumain(args: Vec<String>) -> int {
         }
     };
 
-    let files = given_options.free;
+    let quiet = matches.opt_present("q");
+    let verbose = matches.opt_present("v");
+    let files = matches.free;
 
-    let count =
-        if use_bytes {
-            byte_count
-        } else {
-            line_count
-        };
+    // GNU implementation allows multiple declarations of "-q" and "-v" with the
+    // last flag winning. This can't be simulated with the getopts cargo unless
+    // we manually parse the arguments. Given the declaration of both flags,
+    // verbose mode always wins. This is a potential future improvement.
+    if files.len() > 1 && !quiet && !verbose {
+        settings.verbose = true;
+    }
+    if quiet {
+        settings.verbose = false;
+    }
+    if verbose {
+        settings.verbose = true;
+    }
 
     if files.is_empty() {
-        let mut buffer = BufferedReader::new(stdin());
-        head(&mut buffer, count, use_bytes);
+        let mut buffer = BufReader::new(stdin());
+        head(&mut buffer, &settings);
     } else {
-        let mut multiple = false;
         let mut firstime = true;
 
-        if files.len() > 1 {
-            multiple = true;
-        }
-
         for file in files.iter() {
-            if multiple {
+            if settings.verbose {
                 if !firstime { pipe_println!(""); }
-                pipe_println!("==> {} <==", file.as_slice());
+                pipe_println!("==> {} <==", file);
             }
             firstime = false;
 
-            let path = Path::new(file.as_slice());
+            let path = Path::new(file);
             let reader = File::open(&path).unwrap();
-            let mut buffer = BufferedReader::new(reader);
-            if !head(&mut buffer, count, use_bytes) {
+            let mut buffer = BufReader::new(reader);
+            if !head(&mut buffer, &settings) {
                 break;
             }
         }
@@ -132,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> int {
 //
 // In case is found, the options vector will get rid of that object so that
 // getopts works correctly.
-fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
+fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     let mut options: Vec<String> = options.to_vec();
     let mut a = 0;
     let b = options.len();
@@ -143,14 +165,14 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in range(1, len) {
+            for pos in (1 .. len) {
                 // Ensure that the argument is only made out of digits
-                if !UnicodeChar::is_numeric(current[pos] as char) { break; }
+                if !(current[pos] as char).is_numeric() { break; }
 
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<uint> = from_str(from_utf8(current.slice(1,len)).unwrap());
+                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse::<usize>().ok();
                     return (options, Some(number.unwrap()));
                 }
             }
@@ -163,17 +185,20 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<uint>) {
 }
 
 // TODO: handle errors on read
-fn head<T: Reader>(reader: &mut BufferedReader<T>, count: uint, use_bytes: bool) -> bool {
-    if use_bytes {
-        for byte in reader.bytes().take(count) {
-            if !pipe_print!("{}", byte.unwrap() as char) {
-                return false;
+fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
+    match settings.mode {
+        FilterMode::Bytes(count) => {
+            for byte in reader.bytes().take(count) {
+                if !pipe_print!("{}", byte.unwrap() as char) {
+                    return false;
+                }
             }
-        }
-    } else {
-        for line in reader.lines().take(count) {
-            if !pipe_print!("{}", line.unwrap()) {
-                return false;
+        },
+        FilterMode::Lines(count) => {
+            for line in reader.lines().take(count) {
+                if !pipe_println!("{}", line.unwrap()) {
+                    return false;
+                }
             }
         }
     }
@@ -181,5 +206,5 @@ fn head<T: Reader>(reader: &mut BufferedReader<T>, count: uint, use_bytes: bool)
 }
 
 fn version() {
-    println!("head version 1.0.0");
+    println!("{} {}", NAME, VERSION);
 }

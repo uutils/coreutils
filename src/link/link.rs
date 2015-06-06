@@ -1,5 +1,4 @@
 #![crate_name = "link"]
-#![feature(macro_rules)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,22 +11,24 @@
 
 extern crate getopts;
 
-use std::io::fs::link;
+use std::fs::hard_link;
+use std::io::Write;
 use std::path::Path;
 
 #[path="../common/util.rs"]
+#[macro_use]
 mod util;
 
-static NAME : &'static str = "link";
-static VERSION : &'static str = "1.0.0";
+static NAME: &'static str = "link";
+static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => panic!("{}", err),
     };
@@ -38,22 +39,24 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     if matches.opt_present("help") || matches.free.len() != 2 {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] FILE1 FILE2", NAME);
-        println!("");
-        print!("{}", getopts::usage("Create a link named FILE2 to FILE1.", opts.as_slice()).as_slice());
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS] FILE1 FILE2
+  
+Create a link named FILE2 to FILE1.", NAME, VERSION);
+
+        println!("{}", opts.usage(&msg));
         if matches.free.len() != 2 {
             return 1;
         }
         return 0;
     }
 
-    let old = Path::new(matches.free[0].as_slice());
-    let new = Path::new(matches.free[1].as_slice());
+    let old = Path::new(&matches.free[0]);
+    let new = Path::new(&matches.free[1]);
 
-    match link(&old, &new) {
+    match hard_link(old, new) {
         Ok(_) => 0,
         Err(err) => {
             show_error!("{}", err);

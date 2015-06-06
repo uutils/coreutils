@@ -10,10 +10,10 @@ mod utmpx {
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmp";
 
-    pub const UT_LINESIZE: uint = 32;
-    pub const UT_NAMESIZE: uint = 32;
-    pub const UT_IDSIZE: uint = 4;
-    pub const UT_HOSTSIZE: uint = 256;
+    pub const UT_LINESIZE: usize = 32;
+    pub const UT_NAMESIZE: usize = 32;
+    pub const UT_IDSIZE: usize = 4;
+    pub const UT_HOSTSIZE: usize = 256;
 
     pub const EMPTY: libc::c_short = 0;
     pub const RUN_LVL: libc::c_short = 1;
@@ -36,17 +36,17 @@ mod utmpx {
     pub struct c_utmp {
         pub ut_type: libc::c_short,
         pub ut_pid: libc::pid_t,
-        pub ut_line: [libc::c_char, ..UT_LINESIZE],
-        pub ut_id: [libc::c_char, ..UT_IDSIZE],
+        pub ut_line: [libc::c_char; UT_LINESIZE],
+        pub ut_id: [libc::c_char; UT_IDSIZE],
 
-        pub ut_user: [libc::c_char, ..UT_NAMESIZE],
-        pub ut_host: [libc::c_char, ..UT_HOSTSIZE],
+        pub ut_user: [libc::c_char; UT_NAMESIZE],
+        pub ut_host: [libc::c_char; UT_HOSTSIZE],
         pub ut_exit: c_exit_status,
         pub ut_session: libc::c_long,
         pub ut_tv: libc::timeval,
 
-        pub ut_addr_v6: [libc::int32_t, ..4],
-        pub __unused: [libc::c_char, ..20],
+        pub ut_addr_v6: [libc::int32_t; 4],
+        pub __unused: [libc::c_char; 20],
     }
 }
 
@@ -56,10 +56,10 @@ mod utmpx {
 
     pub static DEFAULT_FILE: &'static str = "/var/run/utmpx";
 
-    pub const UT_LINESIZE: uint = 32;
-    pub const UT_NAMESIZE: uint = 256;
-    pub const UT_IDSIZE: uint = 4;
-    pub const UT_HOSTSIZE: uint = 256;
+    pub const UT_LINESIZE: usize = 32;
+    pub const UT_NAMESIZE: usize = 256;
+    pub const UT_IDSIZE: usize = 4;
+    pub const UT_HOSTSIZE: usize = 256;
 
     pub const EMPTY: libc::c_short = 0;
     pub const RUN_LVL: libc::c_short = 1;
@@ -80,14 +80,14 @@ mod utmpx {
 
     #[repr(C)]
     pub struct c_utmp {
-        pub ut_user: [libc::c_char, ..UT_NAMESIZE],
-        pub ut_id: [libc::c_char, ..UT_IDSIZE],
-        pub ut_line: [libc::c_char, ..UT_LINESIZE],
+        pub ut_user: [libc::c_char; UT_NAMESIZE],
+        pub ut_id: [libc::c_char; UT_IDSIZE],
+        pub ut_line: [libc::c_char; UT_LINESIZE],
         pub ut_pid: libc::pid_t,
         pub ut_type: libc::c_short,
         pub ut_tv: libc::timeval,
-        pub ut_host: [libc::c_char, ..UT_HOSTSIZE],
-        pub __unused: [libc::c_char, ..16]
+        pub ut_host: [libc::c_char; UT_HOSTSIZE],
+        pub __unused: [libc::c_char; 16]
     }
 }
 
@@ -97,10 +97,10 @@ mod utmpx {
 
     pub static DEFAULT_FILE : &'static str = "";
 
-    pub const UT_LINESIZE : uint = 16;
-    pub const UT_NAMESIZE : uint = 32;
-    pub const UT_IDSIZE   : uint = 8;
-    pub const UT_HOSTSIZE : uint = 128;
+    pub const UT_LINESIZE : usize = 16;
+    pub const UT_NAMESIZE : usize = 32;
+    pub const UT_IDSIZE   : usize = 8;
+    pub const UT_HOSTSIZE : usize = 128;
 
     pub const EMPTY         : libc::c_short = 0;
     pub const BOOT_TIME     : libc::c_short = 1;
@@ -116,11 +116,11 @@ mod utmpx {
     pub struct c_utmp {
         pub ut_type : libc::c_short,
         pub ut_tv   : libc::timeval,
-        pub ut_id   : [libc::c_char, ..UT_IDSIZE],
+        pub ut_id   : [libc::c_char; UT_IDSIZE],
         pub ut_pid  : libc::pid_t,
-        pub ut_user : [libc::c_char, ..UT_NAMESIZE],
-        pub ut_line : [libc::c_char, ..UT_LINESIZE],
-        pub ut_host : [libc::c_char, ..UT_HOSTSIZE],
-        pub ut_spare : [libc::c_char, ..64],
+        pub ut_user : [libc::c_char; UT_NAMESIZE],
+        pub ut_line : [libc::c_char; UT_LINESIZE],
+        pub ut_host : [libc::c_char; UT_HOSTSIZE],
+        pub ut_spare : [libc::c_char; 64],
     }
 }

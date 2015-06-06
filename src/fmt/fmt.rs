@@ -1,4 +1,6 @@
 #![crate_name = "fmt"]
+#![feature(core, str_char, unicode)]
+
 /*
  * This file is part of `fmt` from the uutils coreutils package.
  *
@@ -8,18 +10,17 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
-extern crate core;
 extern crate getopts;
+extern crate rustc_unicode;
+extern crate unicode_width;
 
 use std::cmp;
-use std::io::{BufferedReader, BufferedWriter, File, IoResult};
-use std::io::stdio::{stdin_raw, stdout_raw};
+use std::io::{Read, BufReader, BufWriter};
+use std::fs::File;
+use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
 
-#[macro_export]
 macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
@@ -27,8 +28,10 @@ macro_rules! silent_unwrap(
             Err(_) => unsafe { ::util::libc::exit(1) }
         }
     )
-)
+);
+
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 mod linebreak;
 mod parasplit;
@@ -37,7 +40,8 @@ mod parasplit;
 static NAME: &'static str = "fmt";
 static VERSION: &'static str = "0.0.3";
 
-struct FmtOptions {
+pub type FileOrStdReader = BufReader<Box<Read+'static>>;
+pub struct FmtOptions {
     crown           : bool,
     tagged          : bool,
     mail            : bool,
@@ -50,48 +54,47 @@ struct FmtOptions {
     xanti_prefix    : bool,
     uniform         : bool,
     quick           : bool,
-    width           : uint,
-    goal            : uint,
-    tabwidth        : uint,
+    width           : usize,
+    goal            : usize,
+    tabwidth        : usize,
 }
 
-pub fn uumain(args: Vec<String>) -> int {
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line."),
-        getopts::optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs."),
-        getopts::optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p."),
-        getopts::optflag("s", "split-only", "Split lines only, do not reflow."),
-        getopts::optflag("u", "uniform-spacing", "Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break."),
+    opts.optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.");
+    opts.optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.");
+    opts.optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.");
+    opts.optflag("s", "split-only", "Split lines only, do not reflow.");
+    opts.optflag("u", "uniform-spacing", "Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.");
 
-        getopts::optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX"),
-        getopts::optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP"),
+    opts.optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX");
+    opts.optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP");
 
-        getopts::optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace."),
-        getopts::optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace."),
+    opts.optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace.");
+    opts.optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace.");
 
-        getopts::optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH"),
-        getopts::optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL"),
+    opts.optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH");
+    opts.optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL");
 
-        getopts::optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance."),
+    opts.optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance.");
 
-        getopts::optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH"),
+    opts.optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH");
 
-        getopts::optflag("V", "version", "Output version information and exit."),
-        getopts::optflag("h", "help", "Display this help message and exit.")
-            ];
+    opts.optflag("V", "version", "Output version information and exit.");
+    opts.optflag("h", "help", "Display this help message and exit.");
 
-    let matches = match getopts::getopts(args.tail(), opts.as_slice()) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, args[0])
+        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, NAME)
     };
 
     if matches.opt_present("h") {
-        print_usage(args[0].as_slice(), opts.as_slice(), "");
+        println!("Usage: {} [OPTION]... [FILE]...\n\n{}", NAME, opts.usage("Reformat paragraphs from input files (or stdin) to stdout."));
     }
 
     if matches.opt_present("V") || matches.opt_present("h") {
-        println!("uutils {} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0
     }
 
@@ -141,9 +144,9 @@ pub fn uumain(args: Vec<String>) -> int {
     match matches.opt_str("w") {
         Some(s) => {
             fmt_opts.width =
-                match from_str(s.as_slice()) {
-                    Some(t) => t,
-                    None => { crash!(1, "Invalid WIDTH specification: `{}'", s); }
+                match s.parse::<usize>() {
+                    Ok(t) => t,
+                    Err(e) => { crash!(1, "Invalid WIDTH specification: `{}': {}", s, e); }
                 };
             fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
         }
@@ -153,9 +156,9 @@ pub fn uumain(args: Vec<String>) -> int {
     match matches.opt_str("g") {
         Some(s) => {
             fmt_opts.goal =
-                match from_str(s.as_slice()) {
-                    Some(t) => t,
-                    None => { crash!(1, "Invalid GOAL specification: `{}'", s); }
+                match s.parse::<usize>() {
+                    Ok(t) => t,
+                    Err(e) => { crash!(1, "Invalid GOAL specification: `{}': {}", s, e); }
                 };
             if !matches.opt_present("w") {
                 fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
@@ -169,9 +172,9 @@ pub fn uumain(args: Vec<String>) -> int {
     match matches.opt_str("T") {
         Some(s) => {
             fmt_opts.tabwidth =
-                match from_str(s.as_slice()) {
-                    Some(t) => t,
-                    None => { crash!(1, "Invalid TABWIDTH specification: `{}'", s); }
+                match s.parse::<usize>() {
+                    Ok(t) => t,
+                    Err(e) => { crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e); }
                 };
         }
         None => ()
@@ -189,21 +192,23 @@ pub fn uumain(args: Vec<String>) -> int {
         files.push("-".to_string());
     }
 
-    let mut ostream = box BufferedWriter::new(stdout_raw()) as Box<Writer>;
+    let mut ostream = BufWriter::new(stdout());
 
-    for i in files.iter().map(|x| x.as_slice()) {
-        let mut fp =
-            match open_file(i) {
+    for i in files.iter().map(|x| &x[..]) {
+        let mut fp = match i {
+            "-" => BufReader::new(Box::new(stdin()) as Box<Read+'static>),
+            _ => match File::open(i) {
+                Ok(f) => BufReader::new(Box::new(f) as Box<Read+'static>),
                 Err(e) => {
                     show_warning!("{}: {}", i, e);
                     continue;
-                }
-                Ok(f) => f
-            };
-        let mut p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
+                },
+            },
+        };
+        let p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
         for para_result in p_stream {
             match para_result {
-                Err(s) => silent_unwrap!(ostream.write(s.as_bytes())),
+                Err(s) => silent_unwrap!(ostream.write_all(s.as_bytes())),
                 Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
             }
         }
@@ -213,23 +218,4 @@ pub fn uumain(args: Vec<String>) -> int {
     }
 
     0
-}
-
-fn print_usage(arg0: &str, opts: &[getopts::OptGroup], errmsg: &str) {
-    println!("Usage: {} [OPTION]... [FILE]...\n\n{}{}", arg0, getopts::usage("Reformat paragraphs from input files (or stdin) to stdout.", opts), errmsg);
-}
-
-// uniform interface for opening files
-// since we don't need seeking
-type FileOrStdReader = BufferedReader<Box<Reader+'static>>;
-
-fn open_file(filename: &str) -> IoResult<FileOrStdReader> {
-    if filename == "-" {
-        Ok(BufferedReader::new(box stdin_raw() as Box<Reader>))
-    } else {
-        match File::open(&Path::new(filename)) {
-            Ok(f) => Ok(BufferedReader::new(box f as Box<Reader>)),
-            Err(e) => return Err(e)
-        }
-    }
 }

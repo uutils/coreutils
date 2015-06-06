@@ -10,43 +10,44 @@
  * file that was distributed with this source code.
  */
 
-#![feature(macro_rules)]
-
 extern crate getopts;
 extern crate libc;
 
-use std::io;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
+#[macro_use]
 mod util;
 
 static NAME: &'static str = "tsort";
 static VERSION: &'static str = "1.0.0";
 
-pub fn uumain(args: Vec<String>) -> int {
-    let opts = [
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
 
     if matches.opt_present("h") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
         println!("  {} [OPTIONS] FILE", NAME);
         println!("");
-        io::print(getopts::usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead.", &opts).as_slice());
+        println!("{}", opts.usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead."));
         return 0;
     }
 
     if matches.opt_present("V") {
-        println!("{} v{}", NAME, VERSION);
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
@@ -61,31 +62,37 @@ pub fn uumain(args: Vec<String>) -> int {
 
     let mut stdin_buf;
     let mut file_buf;
-    let mut reader = io::BufferedReader::new(
-        if input.as_slice() == "-" {
-            stdin_buf = io::stdio::stdin_raw();
-            &mut stdin_buf as &mut Reader
+    let mut reader = BufReader::new(
+        if input == "-" {
+            stdin_buf = stdin();
+            &mut stdin_buf as &mut Read
         } else {
-            file_buf = match io::File::open(&Path::new(input.as_slice())) {
+            file_buf = match File::open(Path::new(&input)) {
                 Ok(a) => a,
                 _ => {
                     show_error!("{}: No such file or directory", input);
                     return 1;
                 }
             };
-            &mut file_buf as &mut Reader
+            &mut file_buf as &mut Read
         }
     );
 
     let mut g = Graph::new();
     loop {
-        match reader.read_line() {
-            Ok(line) => {
-                let ab: Vec<&str> = line.as_slice().trim_right_chars('\n').split(' ').collect();
-                if ab.len() > 2 {
-                    crash!(1, "{}: input contains an odd number of tokens", input);
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(_) => {
+                let tokens: Vec<String> = line.trim_right().split_whitespace().map(|s| s.to_string()).collect();
+                if tokens.len() == 0 {
+                    break
                 }
-                g.add_edge(&ab[0].to_string(), &ab[1].to_string());
+                for ab in tokens.chunks(2) {
+                    match ab.len() {
+                        2 => g.add_edge(&ab[0], &ab[1]),
+                        _ => crash!(1, "{}: input contains an odd number of tokens", input)
+                    }
+                }
             },
             _ => break
         }
@@ -101,7 +108,7 @@ pub fn uumain(args: Vec<String>) -> int {
         println!("{}", x);
     }
 
-    return 0
+    0
 }
 
 // We use String as a representation of node here
@@ -160,7 +167,7 @@ impl Graph {
         }
 
         while !start_nodes.is_empty() {
-            let n = start_nodes.remove(0).unwrap();
+            let n = start_nodes.remove(0);
 
             self.result.push(n.clone());
 
