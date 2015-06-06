@@ -1,57 +1,18 @@
-#![allow(unstable)]
+#![feature(fs_time, path_ext)]
 
+extern crate libc;
 extern crate time;
 
-use std::old_io::{process, fs, FilePermission};
-use std::old_io::process::Command;
-use std::old_io::fs::PathExtensions;
-use std::str::from_utf8;
-use std::borrow::ToOwned;
+use std::fs::{self, PathExt};
+use std::path::Path;
+use std::process::Command;
+use util::*;
 
-static EXE: &'static str = "./mv";
+static PROGNAME: &'static str = "./mv";
 
-
-macro_rules! assert_empty_stderr(
-    ($cond:expr) => (
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
-struct CmdResult {
-    success: bool,
-    stderr: String,
-    stdout: String,
-}
-fn run(cmd: &mut Command) -> CmdResult {
-    let prog = cmd.spawn().unwrap().wait_with_output().unwrap();
-    CmdResult {
-        success: prog.status.success(),
-        stderr: from_utf8(prog.error.as_slice()).unwrap().to_owned(),
-        stdout: from_utf8(prog.output.as_slice()).unwrap().to_owned(),
-    }
-}
-fn run_interactive(cmd: &mut Command, input: &[u8])-> CmdResult {
-    let stdin_cfg = process::CreatePipe(true, false);
-    let mut command = cmd.stdin(stdin_cfg).spawn().unwrap();
-
-    command.stdin.as_mut().unwrap().write_all(input);
-
-    let prog = command.wait_with_output().unwrap();
-    CmdResult {
-        success: prog.status.success(),
-        stderr: from_utf8(prog.error.as_slice()).unwrap().to_owned(),
-        stdout: from_utf8(prog.output.as_slice()).unwrap().to_owned(),
-    }
-}
-
-fn mkdir(dir: &str) {
-    fs::mkdir(&Path::new(dir), FilePermission::from_bits_truncate(0o755 as u32)).unwrap();
-}
-fn touch(file: &str) {
-    fs::File::create(&Path::new(file)).unwrap();
-}
-
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_mv_rename_dir() {
@@ -60,7 +21,7 @@ fn test_mv_rename_dir() {
 
     mkdir(dir1);
 
-    let result = run(Command::new(EXE).arg(dir1).arg(dir2));
+    let result = run(Command::new(PROGNAME).arg(dir1).arg(dir2));
     assert_empty_stderr!(result);
     assert!(result.success);
 
@@ -74,7 +35,7 @@ fn test_mv_rename_file() {
 
     touch(file1);
 
-    let result = run(Command::new(EXE).arg(file1).arg(file2));
+    let result = run(Command::new(PROGNAME).arg(file1).arg(file2));
     assert_empty_stderr!(result);
     assert!(result.success);
 
@@ -89,11 +50,11 @@ fn test_mv_move_file_into_dir() {
     mkdir(dir);
     touch(file);
 
-    let result = run(Command::new(EXE).arg(file).arg(dir));
+    let result = run(Command::new(PROGNAME).arg(file).arg(dir));
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(format!("{}/{}", dir, file)).is_file());
+    assert!(Path::new(&format!("{}/{}", dir, file)).is_file());
 }
 
 #[test]
@@ -106,12 +67,12 @@ fn test_mv_multiple_files() {
     touch(file_a);
     touch(file_b);
 
-    let result = run(Command::new(EXE).arg(file_a).arg(file_b).arg(target_dir));
+    let result = run(Command::new(PROGNAME).arg(file_a).arg(file_b).arg(target_dir));
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(format!("{}/{}", target_dir, file_a)).is_file());
-    assert!(Path::new(format!("{}/{}", target_dir, file_b)).is_file());
+    assert!(Path::new(&format!("{}/{}", target_dir, file_a)).is_file());
+    assert!(Path::new(&format!("{}/{}", target_dir, file_b)).is_file());
 }
 
 #[test]
@@ -124,12 +85,12 @@ fn test_mv_multiple_folders() {
     mkdir(dir_a);
     mkdir(dir_b);
 
-    let result = run(Command::new(EXE).arg(dir_a).arg(dir_b).arg(target_dir));
+    let result = run(Command::new(PROGNAME).arg(dir_a).arg(dir_b).arg(target_dir));
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(format!("{}/{}", target_dir, dir_a)).is_dir());
-    assert!(Path::new(format!("{}/{}", target_dir, dir_b)).is_dir());
+    assert!(Path::new(&format!("{}/{}", target_dir, dir_a)).is_dir());
+    assert!(Path::new(&format!("{}/{}", target_dir, dir_b)).is_dir());
 }
 
 #[test]
@@ -141,7 +102,7 @@ fn test_mv_interactive() {
     touch(file_b);
 
 
-    let result1 = run_interactive(Command::new(EXE).arg("-i").arg(file_a).arg(file_b), b"n");
+    let result1 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"n");
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -150,7 +111,7 @@ fn test_mv_interactive() {
     assert!(Path::new(file_b).is_file());
 
 
-    let result2 = run_interactive(Command::new(EXE).arg("-i").arg(file_a).arg(file_b), b"Yesh");
+    let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
 
     assert_empty_stderr!(result2);
     assert!(result2.success);
@@ -167,7 +128,7 @@ fn test_mv_no_clobber() {
     touch(file_a);
     touch(file_b);
 
-    let result = run(Command::new(EXE).arg("-n").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("-n").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
     assert!(result.success);
 
@@ -183,7 +144,7 @@ fn test_mv_replace_file() {
     touch(file_a);
     touch(file_b);
 
-    let result = run(Command::new(EXE).arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
     assert!(result.success);
 
@@ -199,7 +160,7 @@ fn test_mv_force_replace_file() {
     touch(file_a);
     touch(file_b);
 
-    let result = run(Command::new(EXE).arg("--force").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("--force").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
     assert!(result.success);
 
@@ -214,14 +175,14 @@ fn test_mv_simple_backup() {
 
     touch(file_a);
     touch(file_b);
-    let result = run(Command::new(EXE).arg("-b").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("-b").arg(file_a).arg(file_b));
 
     assert_empty_stderr!(result);
     assert!(result.success);
 
     assert!(!Path::new(file_a).is_file());
     assert!(Path::new(file_b).is_file());
-    assert!(Path::new(format!("{}~", file_b)).is_file());
+    assert!(Path::new(&format!("{}~", file_b)).is_file());
 }
 
 #[test]
@@ -232,7 +193,7 @@ fn test_mv_custom_backup_suffix() {
 
     touch(file_a);
     touch(file_b);
-    let result = run(Command::new(EXE)
+    let result = run(Command::new(PROGNAME)
             .arg("-b").arg(format!("--suffix={}", suffix))
             .arg(file_a).arg(file_b));
 
@@ -241,7 +202,7 @@ fn test_mv_custom_backup_suffix() {
 
     assert!(!Path::new(file_a).is_file());
     assert!(Path::new(file_b).is_file());
-    assert!(Path::new(format!("{}{}", file_b, suffix)).is_file());
+    assert!(Path::new(&format!("{}{}", file_b, suffix)).is_file());
 }
 
 #[test]
@@ -251,14 +212,14 @@ fn test_mv_backup_numbering() {
 
     touch(file_a);
     touch(file_b);
-    let result = run(Command::new(EXE).arg("--backup=t").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("--backup=t").arg(file_a).arg(file_b));
 
     assert_empty_stderr!(result);
     assert!(result.success);
 
     assert!(!Path::new(file_a).is_file());
     assert!(Path::new(file_b).is_file());
-    assert!(Path::new(format!("{}.~1~", file_b)).is_file());
+    assert!(Path::new(&format!("{}.~1~", file_b)).is_file());
 }
 
 #[test]
@@ -271,7 +232,7 @@ fn test_mv_existing_backup() {
     touch(file_a);
     touch(file_b);
     touch(file_b_backup);
-    let result = run(Command::new(EXE).arg("--backup=nil").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("--backup=nil").arg(file_a).arg(file_b));
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -290,10 +251,10 @@ fn test_mv_update_option() {
     touch(file_a);
     touch(file_b);
     let now = (time::get_time().sec * 1000) as u64;
-    fs::change_file_times(&Path::new(file_a), now, now).unwrap();
-    fs::change_file_times(&Path::new(file_b), now, now+3600).unwrap();
+    fs::set_file_times(Path::new(file_a), now, now).unwrap();
+    fs::set_file_times(Path::new(file_b), now, now+3600).unwrap();
 
-    let result1 = run(Command::new(EXE).arg("--update").arg(file_a).arg(file_b));
+    let result1 = run(Command::new(PROGNAME).arg("--update").arg(file_a).arg(file_b));
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -301,7 +262,7 @@ fn test_mv_update_option() {
     assert!(Path::new(file_a).is_file());
     assert!(Path::new(file_b).is_file());
 
-    let result2 = run(Command::new(EXE).arg("--update").arg(file_b).arg(file_a));
+    let result2 = run(Command::new(PROGNAME).arg("--update").arg(file_b).arg(file_a));
 
     assert_empty_stderr!(result2);
     assert!(result2.success);
@@ -319,15 +280,15 @@ fn test_mv_target_dir() {
     touch(file_a);
     touch(file_b);
     mkdir(dir);
-    let result = run(Command::new(EXE).arg("-t").arg(dir).arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("-t").arg(dir).arg(file_a).arg(file_b));
 
     assert_empty_stderr!(result);
     assert!(result.success);
 
     assert!(!Path::new(file_a).is_file());
     assert!(!Path::new(file_b).is_file());
-    assert!(Path::new(format!("{}/{}", dir, file_a)).is_file());
-    assert!(Path::new(format!("{}/{}", dir, file_b)).is_file());
+    assert!(Path::new(&format!("{}/{}", dir, file_a)).is_file());
+    assert!(Path::new(&format!("{}/{}", dir, file_b)).is_file());
 }
 
 #[test]
@@ -337,7 +298,7 @@ fn test_mv_overwrite_dir() {
 
     mkdir(dir_a);
     mkdir(dir_b);
-    let result = run(Command::new(EXE).arg("-T").arg(dir_a).arg(dir_b));
+    let result = run(Command::new(PROGNAME).arg("-T").arg(dir_a).arg(dir_b));
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -355,7 +316,7 @@ fn test_mv_overwrite_nonempty_dir() {
     mkdir(dir_a);
     mkdir(dir_b);
     touch(dummy);
-    let result = run(Command::new(EXE).arg("-vT").arg(dir_a).arg(dir_b));
+    let result = run(Command::new(PROGNAME).arg("-vT").arg(dir_a).arg(dir_b));
 
     // Not same error as GNU; the error message is a rust builtin
     // TODO: test (and implement) correct error message (or at least decide whether to do so)
@@ -378,16 +339,16 @@ fn test_mv_backup_dir() {
 
     mkdir(dir_a);
     mkdir(dir_b);
-    let result = run(Command::new(EXE).arg("-vbT").arg(dir_a).arg(dir_b));
+    let result = run(Command::new(PROGNAME).arg("-vbT").arg(dir_a).arg(dir_b));
 
     assert_empty_stderr!(result);
-    assert_eq!(result.stdout.as_slice(),
-        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b).as_slice());
+    assert_eq!(result.stdout,
+        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b));
     assert!(result.success);
 
     assert!(!Path::new(dir_a).is_dir());
     assert!(Path::new(dir_b).is_dir());
-    assert!(Path::new(format!("{}~", dir_b)).is_dir());
+    assert!(Path::new(&format!("{}~", dir_b)).is_dir());
 }
 
 #[test]
@@ -401,8 +362,8 @@ fn test_mv_errors() {
 
     // $ mv -T -t a b
     // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    let result = run(Command::new(EXE).arg("-T").arg("-t").arg(dir).arg(file_a).arg(file_b));
-    assert_eq!(result.stderr.as_slice(),
+    let result = run(Command::new(PROGNAME).arg("-T").arg("-t").arg(dir).arg(file_a).arg(file_b));
+    assert_eq!(result.stderr,
         "mv: error: cannot combine --target-directory (-t) and --no-target-directory (-T)\n");
     assert!(!result.success);
 
@@ -410,15 +371,15 @@ fn test_mv_errors() {
     // $ touch file && mkdir dir
     // $ mv -T file dir
     // err == mv: cannot overwrite directory ‘dir’ with non-directory
-    let result = run(Command::new(EXE).arg("-T").arg(file_a).arg(dir));
-    assert_eq!(result.stderr.as_slice(),
-        format!("mv: error: cannot overwrite directory ‘{}’ with non-directory\n", dir).as_slice());
+    let result = run(Command::new(PROGNAME).arg("-T").arg(file_a).arg(dir));
+    assert_eq!(result.stderr,
+        format!("mv: error: cannot overwrite directory ‘{}’ with non-directory\n", dir));
     assert!(!result.success);
 
     // $ mkdir dir && touch file
     // $ mv dir file
     // err == mv: cannot overwrite non-directory ‘file’ with directory ‘dir’
-    let result = run(Command::new(EXE).arg(dir).arg(file_a));
+    let result = run(Command::new(PROGNAME).arg(dir).arg(file_a));
     assert!(result.stderr.len() > 0);
     assert!(!result.success);
 }
@@ -432,21 +393,20 @@ fn test_mv_verbose() {
     touch(file_a);
     touch(file_b);
 
-    let result = run(Command::new(EXE).arg("-v").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("-v").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
-    assert_eq!(result.stdout.as_slice(),
-        format!("‘{}’ -> ‘{}’\n", file_a, file_b).as_slice());
+    assert_eq!(result.stdout,
+        format!("‘{}’ -> ‘{}’\n", file_a, file_b));
     assert!(result.success);
 
 
     touch(file_a);
-    let result = run(Command::new(EXE).arg("-vb").arg(file_a).arg(file_b));
+    let result = run(Command::new(PROGNAME).arg("-vb").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
-    assert_eq!(result.stdout.as_slice(),
-        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", file_a, file_b, file_b).as_slice());
+    assert_eq!(result.stdout,
+        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", file_a, file_b, file_b));
     assert!(result.success);
 }
-
 
 // Todo:
 
@@ -460,5 +420,3 @@ fn test_mv_verbose() {
 // $ mv -v a b
 // mv: try to overwrite ‘b’, overriding mode 0444 (r--r--r--)? y
 // ‘a’ -> ‘b’
-
-

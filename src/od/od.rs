@@ -1,5 +1,4 @@
 #![crate_name = "od"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,37 +10,38 @@
  */
 
 extern crate getopts;
-extern crate collections;
 
-use collections::string::String;
-use std::old_io::File;
+use std::fs::File;
+use std::io::Read;
+use std::mem;
+use std::path::Path;
 
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optopt("A", "address-radix",
-                        "Select the base in which file offsets are printed.", "RADIX"),
-        getopts::optopt("j", "skip-bytes",
-                        "Skip bytes input bytes before formatting and writing.", "BYTES"),
-        getopts::optopt("N", "read-bytes",
-                        "limit dump to BYTES input bytes", "BYTES"),
-        getopts::optopt("S", "strings",
-                        ("output strings of at least BYTES graphic chars. 3 is assumed when \
-                          BYTES is not specified."),
-                        "BYTES"),
-        getopts::optopt("t", "format", "select output format or formats", "TYPE"),
-        getopts::optflag("v", "output-duplicates", "do not use * to mark line suppression"),
-        getopts::optopt("w", "width",
-                        ("output BYTES bytes per output line. 32 is implied when BYTES is not \
-                          specified."),
-                        "BYTES"),
-        getopts::optflag("h", "help", "display this help and exit."),
-        getopts::optflag("", "version", "output version information and exit."),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optopt("A", "address-radix",
+                "Select the base in which file offsets are printed.", "RADIX");
+    opts.optopt("j", "skip-bytes",
+                "Skip bytes input bytes before formatting and writing.", "BYTES");
+    opts.optopt("N", "read-bytes",
+                "limit dump to BYTES input bytes", "BYTES");
+    opts.optopt("S", "strings",
+                ("output strings of at least BYTES graphic chars. 3 is assumed when \
+                 BYTES is not specified."),
+                "BYTES");
+    opts.optopt("t", "format", "select output format or formats", "TYPE");
+    opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
+    opts.optopt("w", "width",
+                ("output BYTES bytes per output line. 32 is implied when BYTES is not \
+                 specified."),
+                "BYTES");
+    opts.optflag("h", "help", "display this help and exit.");
+    opts.optflag("", "version", "output version information and exit.");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
@@ -56,13 +56,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         None => { panic!("Need fname for now") ; }
     };
 
-    main(&input_offset_base, fname.as_slice());
+    main(&input_offset_base, &fname);
 
     0
 }
 
 fn main(input_offset_base: &Radix, fname: &str) {
-    let mut f = match File::open(&Path::new(fname)) {
+    let mut f = match File::open(Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
     };
@@ -73,12 +73,12 @@ fn main(input_offset_base: &Radix, fname: &str) {
         match f.read(bytes) {
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
-                for b in range(0, n / std::u16::BYTES as usize) {
+                for b in 0 .. n / mem::size_of::<u16>() {
                     let bs = &bytes[(2 * b) .. (2 * b + 2)];
                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                     print!(" {:06o}", p);
                 }
-                if n % std::u16::BYTES as usize == 1 {
+                if n % mem::size_of::<u16>() == 1 {
                     print!(" {:06o}", bytes[n - 1]);
                 }
                 print!("\n");

@@ -1,5 +1,5 @@
 #![crate_name = "wc"]
-#![feature(collections, old_io, old_path, rustc_private, str_words)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,21 +13,56 @@
 extern crate getopts;
 extern crate libc;
 
+use getopts::{Matches, Options};
 use std::ascii::AsciiExt;
-use std::str::from_utf8;
-use std::old_io::{print, File, BufferedReader};
-use std::old_io::fs::PathExtensions;
-use std::old_io::stdio::stdin_raw;
+use std::fs::{File, PathExt};
+use std::io::{stdin, BufRead, BufReader, Read, Write};
+use std::path::Path;
 use std::result::Result as StdResult;
-use std::borrow::IntoCow;
-use getopts::Matches;
+use std::str::from_utf8;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
+struct Settings {
+    show_bytes: bool,
+    show_chars: bool,
+    show_lines: bool,
+    show_words: bool,
+    show_max_line_length: bool,
+}
+
+impl Settings {
+    fn new(matches: &Matches) -> Settings {
+        let settings = Settings {
+            show_bytes: matches.opt_present("bytes"),
+            show_chars: matches.opt_present("chars"),
+            show_lines: matches.opt_present("lines"),
+            show_words: matches.opt_present("words"),
+            show_max_line_length: matches.opt_present("L"),
+        };
+
+        if settings.show_bytes
+            || settings.show_chars
+            || settings.show_lines
+            || settings.show_words
+            || settings.show_max_line_length {
+            return settings;
+        }
+
+        Settings {
+            show_bytes: true,
+            show_chars: false,
+            show_lines: true,
+            show_words: true,
+            show_max_line_length: false,
+        }
+    }
+}
+
 struct Result {
-    filename: String,
+    title: String,
     bytes: usize,
     chars: usize,
     lines: usize,
@@ -36,48 +71,47 @@ struct Result {
 }
 
 static NAME: &'static str = "wc";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0][..];
-    let opts = [
-        getopts::optflag("c", "bytes", "print the byte counts"),
-        getopts::optflag("m", "chars", "print the character counts"),
-        getopts::optflag("l", "lines", "print the newline counts"),
-        getopts::optflag("L", "max-line-length", "print the length of the longest line"),
-        getopts::optflag("w", "words", "print the word counts"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("c", "bytes", "print the byte counts");
+    opts.optflag("m", "chars", "print the character counts");
+    opts.optflag("l", "lines", "print the newline counts");
+    opts.optflag("L", "max-line-length", "print the length of the longest line");
+    opts.optflag("w", "words", "print the word counts");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "Invalid options\n{}", f)
-        }
+        Err(f) => crash!(1, "Invalid options\n{}", f)
     };
 
     if matches.opt_present("help") {
+        println!("{} {}", NAME, VERSION);
+        println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", NAME);
         println!("");
-        print(&getopts::usage("Print newline, word and byte counts for each FILE", &opts)[..]);
-        println!("");
+        println!("{}", opts.usage("Print newline, word and byte counts for each FILE"));
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
     }
 
     if matches.opt_present("version") {
-        println!("wc 1.0.0");
+        println!("{} {}", NAME, VERSION);
         return 0;
     }
 
-    let files = if matches.free.is_empty() {
-        vec!["-".to_string()].into_cow()
-    } else {
-        matches.free[..].into_cow()
-    };
+    if matches.free.is_empty() {
+        matches.free.push("-".to_string());
+    }
 
-    match wc(&files[..], &matches) {
+    let settings = Settings::new(&matches);
+
+    match wc(matches.free, &settings) {
         Ok(()) => ( /* pass */ ),
         Err(e) => return e
     }
@@ -97,7 +131,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
+fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
     let mut total_char_count: usize = 0;
@@ -105,7 +139,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
     let mut total_longest_line_length: usize = 0;
 
     let mut results = vec!();
-    let mut max_str_len: usize = 0;
+    let mut max_width: usize = 0;
 
     for path in files.iter() {
         let mut reader = try!(open(&path[..]));
@@ -115,10 +149,18 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
         let mut byte_count: usize = 0;
         let mut char_count: usize = 0;
         let mut longest_line_length: usize = 0;
+        let mut raw_line = Vec::new();
 
         // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
         // hence the option wrapped in a result here
-        while let Ok(raw_line) = reader.read_until(LF) {
+        while match reader.read_until(LF, &mut raw_line) {
+            Ok(n) if n > 0 => true,
+            Err(ref e) if raw_line.len() > 0 => {
+                show_warning!("Error while reading {}: {}", path, e);
+                raw_line.len() > 0
+            },
+            _ => false,
+        } {
             // GNU 'wc' only counts lines that end in LF as lines
             if *raw_line.last().unwrap() == LF {
                 line_count += 1;
@@ -130,7 +172,7 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
             let current_char_count;
             match from_utf8(&raw_line[..]) {
                 Ok(line) => {
-                    word_count += line.words().count();
+                    word_count += line.split_whitespace().count();
                     current_char_count = line.chars().count();
                 },
                 Err(..) => {
@@ -145,10 +187,12 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
                 // matches GNU 'wc' behaviour
                 longest_line_length = current_char_count - 1;
             }
+
+            raw_line.truncate(0);
         }
 
         results.push(Result {
-            filename: path.to_string(),
+            title: path.to_string(),
             bytes: byte_count,
             chars: char_count,
             lines: line_count,
@@ -166,61 +210,57 @@ pub fn wc(files: &[String], matches: &Matches) -> StdResult<(), i32> {
         }
 
         // used for formatting
-        max_str_len = total_byte_count.to_string().len();
+        max_width = total_byte_count.to_string().len() + 1;
     }
 
     for result in results.iter() {
-        print_stats(&result.filename[..], result.lines, result.words, result.chars, result.bytes, result.max_line_length, matches, max_str_len);
+        print_stats(settings, &result, max_width);
     }
 
     if files.len() > 1 {
-        print_stats("total", total_line_count, total_word_count, total_char_count, total_byte_count, total_longest_line_length, matches, max_str_len);
+        let result = Result {
+            title: "total".to_string(),
+            bytes: total_byte_count,
+            chars: total_char_count,
+            lines: total_line_count,
+            words: total_word_count,
+            max_line_length: total_longest_line_length,
+        };
+        print_stats(settings, &result, max_width);
     }
 
     Ok(())
 }
 
-fn print_stats(filename: &str, line_count: usize, word_count: usize, char_count: usize,
-    byte_count: usize, longest_line_length: usize, matches: &Matches, max_str_len: usize) {
-    if matches.opt_present("lines") {
-        print!("{:1$}", line_count, max_str_len);
+fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
+    if settings.show_lines {
+        print!("{:1$}", result.lines, max_width);
     }
-    if matches.opt_present("words") {
-        print!("{:1$}", word_count, max_str_len);
+    if settings.show_words {
+        print!("{:1$}", result.words, max_width);
     }
-    if matches.opt_present("bytes") {
-        print!("{:1$}", byte_count, max_str_len);
+    if settings.show_bytes {
+        print!("{:1$}", result.bytes, max_width);
     }
-    if matches.opt_present("chars") {
-        print!("{:1$}", char_count, max_str_len);
+    if settings.show_chars {
+        print!("{:1$}", result.chars, max_width);
     }
-    if matches.opt_present("max-line-length") {
-        print!("{:1$}", longest_line_length, max_str_len);
-    }
-
-    // defaults
-    if !matches.opt_present("bytes")
-        && !matches.opt_present("chars")
-        && !matches.opt_present("lines")
-        && !matches.opt_present("words")
-        && !matches.opt_present("max-line-length") {
-        print!("{:1$}", line_count, max_str_len);
-        print!("{:1$}", word_count, max_str_len + 1);
-        print!("{:1$}", byte_count, max_str_len + 1);
+    if settings.show_max_line_length {
+        print!("{:1$}", result.max_line_length, max_width);
     }
 
-    if filename != "-" {
-        println!(" {}", filename);
+    if result.title != "-" {
+        println!(" {}", result.title);
     }
     else {
         println!("");
     }
 }
 
-fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, i32> {
+fn open(path: &str) -> StdResult<BufReader<Box<Read+'static>>, i32> {
     if "-" == path {
-        let reader = Box::new(stdin_raw()) as Box<Reader>;
-        return Ok(BufferedReader::new(reader));
+        let reader = Box::new(stdin()) as Box<Read>;
+        return Ok(BufReader::new(reader));
     }
 
     let fpath = Path::new(path);
@@ -229,8 +269,8 @@ fn open(path: &str) -> StdResult<BufferedReader<Box<Reader+'static>>, i32> {
     }
     match File::open(&fpath) {
         Ok(fd) => {
-            let reader = Box::new(fd) as Box<Reader>;
-            Ok(BufferedReader::new(reader))
+            let reader = Box::new(fd) as Box<Read>;
+            Ok(BufReader::new(reader))
         }
         Err(e) => {
             show_error!("wc: {}: {}", path, e);

@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![feature(core, old_io, os, old_path, rustc_private, unicode)]
+#![feature(negate_unsigned, path_ext)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -12,12 +12,14 @@
 
 extern crate getopts;
 extern crate libc;
-use getopts::{optopt, optflag, getopts, usage, Matches, OptGroup};
-use std::old_io::process::{Command, StdioContainer, ProcessExit};
-use std::old_io::fs::PathExtensions;
-use std::iter::range_inclusive;
-use std::num::Int;
-use std::os;
+
+use getopts::{Matches, Options};
+use std::env;
+use std::fs::PathExt;
+use std::io::{self, Write};
+use std::os::unix::process::ExitStatusExt;
+use std::path::PathBuf;
+use std::process::Command;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -65,15 +67,13 @@ fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
 
-
 fn print_version() {
-    println!("{} version {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
-fn print_usage(opts: &[OptGroup]) {
+fn print_usage(opts: &Options) {
     let brief = 
-        "Usage: stdbuf OPTION... COMMAND\n \
-        Run COMMAND, with modified buffering operations for its standard streams\n \
+        "Run COMMAND, with modified buffering operations for its standard streams\n \
         Mandatory arguments to long options are mandatory for short options too.";
     let explanation = 
         "If MODE is 'L' the corresponding stream will be line buffered.\n \
@@ -86,7 +86,11 @@ fn print_usage(opts: &[OptGroup]) {
         corresponding settings changed by 'stdbuf'.\n \
         Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
         and are thus unaffected by 'stdbuf' settings.\n";
-    println!("{}\n{}", getopts::usage(brief, opts), explanation);
+    println!("{} {}", NAME, VERSION);
+    println!("");
+    println!("Usage: stdbuf OPTION... COMMAND");
+    println!("");
+    println!("{}\n{}", opts.usage(brief), explanation);
 }
 
 fn parse_size(size: &str) -> Option<u64> {
@@ -94,7 +98,7 @@ fn parse_size(size: &str) -> Option<u64> {
     let num = size.trim_right_matches(|c: char| c.is_alphabetic());
     let mut recovered = num.to_string();
     recovered.push_str(ext);
-    if recovered.as_slice() != size {
+    if recovered != size {
         return None;
     }
     let buf_size: u64 = match num.parse().ok() {
@@ -128,7 +132,7 @@ fn check_option(matches: &Matches, name: &str, modified: &mut bool) -> Option<Bu
     match matches.opt_str(name) {
         Some(value) => {
             *modified = true;
-            match value.as_slice() {
+            match &value[..] {
                 "L" => {
                     if name == "input" {
                         show_info!("line buffering stdin is meaningless");
@@ -150,8 +154,8 @@ fn check_option(matches: &Matches, name: &str, modified: &mut bool) -> Option<Bu
     }
 }
 
-fn parse_options(args: &[String], options: &mut ProgramOptions, optgrps: &[OptGroup]) -> Result<OkMsg, ErrMsg> {
-    let matches = match getopts(args, optgrps) {
+fn parse_options(args: &[String], options: &mut ProgramOptions, optgrps: &Options) -> Result<OkMsg, ErrMsg> {
+    let matches = match optgrps.parse(args) {
         Ok(m) => m,
         Err(_) => return Err(ErrMsg::Retry)
     };
@@ -184,18 +188,24 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
     }
 }
 
+fn exe_path() -> io::Result<PathBuf> {
+    let exe_path = try!(env::current_exe());
+    let absolute_path = try!(exe_path.as_path().canonicalize());
+    Ok(match absolute_path.parent() {
+        Some(p) => p.to_path_buf(),
+        None => absolute_path.clone()
+    })
+}
+
 fn get_preload_env() -> (String, String) {
     let (preload, extension) = preload_strings();
     let mut libstdbuf = LIBSTDBUF.to_string();
     libstdbuf.push_str(extension);
     // First search for library in directory of executable.
-    let mut path = match os::self_exe_path() {
-        Some(exe_path) => exe_path,
-        None => crash!(1, "Impossible to fetch the path of this executable.")
-    };
-    path.push(libstdbuf.as_slice());
+    let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
+    path.push(libstdbuf.clone());
     if path.exists() {
-        match path.as_str() {
+        match path.as_os_str().to_str() {
             Some(s) => { return (preload.to_string(), s.to_string()); },
             None => crash!(1, "Error while converting path.")
         };
@@ -204,25 +214,25 @@ fn get_preload_env() -> (String, String) {
     (preload.to_string(), libstdbuf)
 }
 
-
 pub fn uumain(args: Vec<String>) -> i32 {
-    let optgrps = [
-        optopt("i", "input", "adjust standard input stream buffering", "MODE"),
-        optopt("o", "output", "adjust standard output stream buffering", "MODE"),
-        optopt("e", "error", "adjust standard error stream buffering", "MODE"),
-        optflag("", "help", "display this help and exit"),
-        optflag("", "version", "output version information and exit"),
-    ];
+    let mut opts = Options::new();
+
+    opts.optopt("i", "input", "adjust standard input stream buffering", "MODE");
+    opts.optopt("o", "output", "adjust standard output stream buffering", "MODE");
+    opts.optopt("e", "error", "adjust standard error stream buffering", "MODE");
+    opts.optflag("", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
     let mut options = ProgramOptions {stdin: BufferType::Default, stdout: BufferType::Default, stderr: BufferType::Default};
     let mut command_idx = -1;
-    for i in range_inclusive(1, args.len()) {
-        match parse_options(&args[1 .. i], &mut options, &optgrps) {
+    for i in 1 .. args.len()-1 {
+        match parse_options(&args[1 .. i], &mut options, &opts) {
             Ok(OkMsg::Buffering) => {
                 command_idx = i - 1;
                 break;
             },
             Ok(OkMsg::Help) => {
-                print_usage(&optgrps);
+                print_usage(&opts);
                 return 0;
             },
             Ok(OkMsg::Version) => {
@@ -239,8 +249,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let ref command_name = args[command_idx];
     let mut command = Command::new(command_name);
     let (preload_env, libstdbuf) = get_preload_env();
-    command.args(&args[command_idx + 1 ..]).env(preload_env.as_slice(), libstdbuf.as_slice());
-    command.stdin(StdioContainer::InheritFd(0)).stdout(StdioContainer::InheritFd(1)).stderr(StdioContainer::InheritFd(2));
+    command.args(&args[command_idx + 1 ..]).env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
@@ -250,9 +259,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     match process.wait() {
         Ok(status) => {
-            match status {
-                ProcessExit::ExitStatus(i) => return i as i32,
-                ProcessExit::ExitSignal(i) => crash!(1, "process killed by signal {}", i),
+            match status.code() {
+                Some(i) => return i,
+                None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
             }
         },
         Err(e) => crash!(1, "{}", e)

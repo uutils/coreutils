@@ -8,8 +8,8 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
         ['t'] => { Ok(::NumberingStyle::NumberForNonEmpty) },
         ['n'] => { Ok(::NumberingStyle::NumberForNone) },
         ['p', rest..] => {
-            let s : String = rest.iter().map(|c| *c).collect();
-            match regex::Regex::new(s.as_slice()) {
+            let s: String = rest.iter().map(|c| *c).collect();
+            match regex::Regex::new(&s) {
                 Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
                 Err(_) => Err(String::from_str("Illegal regular expression")),
             }
@@ -32,7 +32,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     }
     match opts.opt_str("n") {
         None => {},
-        Some(val) => match val.as_slice() {
+        Some(val) => match val.as_ref() {
             "ln" => { settings.number_format = ::NumberFormat::Left; },
             "rn" => { settings.number_format = ::NumberFormat::Right; },
             "rz" => { settings.number_format = ::NumberFormat::RightZero; },
@@ -42,8 +42,8 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("b") {
         None => {},
         Some(val) => {
-            let chars: Vec<char> = val.as_slice().chars().collect();
-            match parse_style(chars.as_slice()) {
+            let chars: Vec<char> = val.chars().collect();
+            match parse_style(&chars) {
                 Ok(s) => { settings.body_numbering = s; }
                 Err(message) => { errs.push(message); }
             }
@@ -52,8 +52,8 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("f") {
         None => {},
         Some(val) => {
-            let chars: Vec<char> = val.as_slice().chars().collect();
-            match parse_style(chars.as_slice()) {
+            let chars: Vec<char> = val.chars().collect();
+            match parse_style(&chars) {
                 Ok(s) => { settings.footer_numbering = s; }
                 Err(message) => { errs.push(message); }
             }
@@ -62,8 +62,8 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("h") {
         None => {},
         Some(val) => {
-            let chars: Vec<char> = val.as_slice().chars().collect();
-            match parse_style(chars.as_slice()) {
+            let chars: Vec<char> = val.chars().collect();
+            match parse_style(&chars) {
                 Ok(s) => { settings.header_numbering = s; }
                 Err(message) => { errs.push(message); }
             }
@@ -72,7 +72,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("i") {
         None => {}
         Some(val) => {
-            let conv: Option<u64> = val.as_slice().parse().ok();
+            let conv: Option<u64> = val.parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -i"));
@@ -84,7 +84,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("w") {
         None => {}
         Some(val) => {
-            let conv: Option<usize> = val.as_slice().parse().ok();
+            let conv: Option<usize> = val.parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -w"));
@@ -96,7 +96,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("v") {
         None => {}
         Some(val) => {
-            let conv: Option<u64> = val.as_slice().parse().ok();
+            let conv: Option<u64> = val.parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -v"));
@@ -108,7 +108,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
     match opts.opt_str("l") {
         None => {}
         Some(val) => {
-            let conv: Option<u64> = val.as_slice().parse().ok();
+            let conv: Option<u64> = val.parse().ok();
             match conv {
               None => {
                   errs.push(String::from_str("Illegal value for -l"));

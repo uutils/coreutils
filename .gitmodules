@@ -1,9 +1,0 @@
-[submodule "deps/rust-crypto"]
-	path = deps/rust-crypto
-	url = git://github.com/DaGenix/rust-crypto.git
-[submodule "deps/time"]
-	path = deps/time
-	url = https://github.com/rust-lang/time
-[submodule "deps/regex"]
-	path = deps/regex
-	url = https://github.com/rust-lang/regex

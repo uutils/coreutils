@@ -1,5 +1,5 @@
 #![crate_name = "rm"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
+#![feature(file_type, dir_entry_ext, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,56 +13,54 @@
 extern crate getopts;
 extern crate libc;
 
-use std::old_io::{print, stdin, stdio, fs, BufferedReader};
-use std::old_io::fs::PathExtensions;
+use std::collections::VecDeque;
+use std::fs::{self, PathExt};
+use std::io::{stdin, stderr, BufRead, Write};
+use std::ops::BitOr;
+use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,
     InteractiveAlways
 }
 
-impl Copy for InteractiveMode {}
-
 static NAME: &'static str = "rm";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
-
     // TODO: make getopts support -R in addition to -r
-    let opts = [
-        getopts::optflag("f", "force", "ignore nonexistent files and arguments, never prompt"),
-        getopts::optflag("i", "", "prompt before every removal"),
-        getopts::optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"),
-        getopts::optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN"),
-        getopts::optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)"),
-        getopts::optflag("", "no-preserve-root", "do not treat '/' specially"),
-        getopts::optflag("", "preserve-root", "do not remove '/' (default)"),
-        getopts::optflag("r", "recursive", "remove directories and their contents recursively"),
-        getopts::optflag("d", "dir", "remove empty directories"),
-        getopts::optflag("v", "verbose", "explain what is being done"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let mut opts = getopts::Options::new();
+
+    opts.optflag("f", "force", "ignore nonexistent files and arguments, never prompt");
+    opts.optflag("i", "", "prompt before every removal");
+    opts.optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes");
+    opts.optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN");
+    opts.optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)");
+    opts.optflag("", "no-preserve-root", "do not treat '/' specially");
+    opts.optflag("", "preserve-root", "do not remove '/' (default)");
+    opts.optflag("r", "recursive", "remove directories and their contents recursively");
+    opts.optflag("d", "dir", "remove empty directories");
+    opts.optflag("v", "verbose", "explain what is being done");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "{}", f)
-        }
+        Err(f) => crash!(1, "{}", f)
     };
     if matches.opt_present("help") {
-        println!("rm 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", program);
+        println!("  {0} [OPTION]... [FILE]...", NAME);
         println!("");
-        print(getopts::usage("Remove (unlink) the FILE(s).", &opts).as_slice());
-        println!("");
+        println!("{}", opts.usage("Remove (unlink) the FILE(s)."));
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
         println!("");
@@ -76,10 +74,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("some of its contents, given sufficient expertise and/or time.  For greater");
         println!("assurance that the contents are truly unrecoverable, consider using shred.");
     } else if matches.opt_present("version") {
-        println!("rm 1.0.0");
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", program);
+        show_error!("for help, try '{0} --help'", NAME);
         return 1;
     } else {
         let force = matches.opt_present("force");
@@ -89,7 +87,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             } else if matches.opt_present("I") {
                 InteractiveMode::InteractiveOnce
             } else if matches.opt_present("interactive") {
-                match matches.opt_str("interactive").unwrap().as_slice() {
+                match &matches.opt_str("interactive").unwrap()[..] {
                     "none" => InteractiveMode::InteractiveNone,
                     "once" => InteractiveMode::InteractiveOnce,
                     "always" => InteractiveMode::InteractiveAlways,
@@ -116,9 +114,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 0;
             }
         }
-        if let Err(e) = remove(matches.free, force, interactive, one_fs, preserve_root,
-                               recursive, dir, verbose) {
-            return e;
+
+        if remove(matches.free, force, interactive, one_fs, preserve_root, recursive, dir, verbose) {
+            return 1;
         }
     }
 
@@ -126,114 +124,165 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 // TODO: implement one-file-system
-fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> Result<(), i32> {
-    let mut r = Ok(());
+#[allow(unused_variables)]
+fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> bool {
+    let mut had_err = false;
 
     for filename in files.iter() {
-        let filename = filename.as_slice();
+        let filename = &filename[..];
         let file = Path::new(filename);
         if file.exists() {
             if file.is_dir() {
                 if recursive && (filename != "/" || !preserve_root) {
-                    let walk_dir = match fs::walk_dir(&file) {
-                        Ok(m) => m,
-                        Err(f) => {
-                            crash!(1, "{}", f.to_string());
+                    if interactive != InteractiveMode::InteractiveAlways {
+                        match fs::remove_dir_all(file) {
+                            Err(e) => {
+                                had_err = true;
+                                show_error!("could not remove '{}': {}", filename, e);
+                            },
+                            _ => (),
+                        };
+                    } else {
+                        let mut dirs: VecDeque<PathBuf> = VecDeque::new();
+                        let mut files: Vec<PathBuf> = Vec::new();
+                        let mut rmdirstack: Vec<PathBuf> = Vec::new();
+                        dirs.push_back(file.to_path_buf());
+
+                        while !dirs.is_empty() {
+                            let dir = dirs.pop_front().unwrap();
+                            if !prompt(&(format!("rm: descend into directory '{}'? ", dir.display()))[..]) {
+                                continue;
+                            }
+
+                            // iterate over items in this directory, adding to either file or
+                            // directory queue
+                            match fs::read_dir(dir.as_path()) {
+                                Ok(rdir) => {
+                                    for ent in rdir {
+                                        match ent {
+                                            Ok(ref f) => match f.file_type() {
+                                                Ok(t) => {
+                                                    if t.is_dir() {
+                                                        dirs.push_back(f.path());
+                                                    } else {
+                                                        files.push(f.path());
+                                                    }
+                                                },
+                                                Err(e) => {
+                                                    had_err = true;
+                                                    show_error!("reading '{}': {}", f.path().display(), e);
+                                                },
+                                            },
+                                            Err(ref e) => {
+                                                had_err = true;
+                                                show_error!("recursing into '{}': {}", filename, e);
+                                            },
+                                        };
+                                    }
+                                },
+                                Err(e) => {
+                                    had_err = true;
+                                    show_error!("could not recurse into '{}': {}", dir.display(), e);
+                                    continue;
+                                },
+                            };
+
+                            for f in files.iter() {
+                                had_err = remove_file(f.as_path(), interactive, verbose).bitor(had_err);
+                            }
+
+                            files.clear();
+                            rmdirstack.push(dir);
                         }
-                    };
-                    r = remove(walk_dir.map(|x| x.as_str().unwrap().to_string()).collect(), force, interactive, one_fs, preserve_root, recursive, dir, verbose).and(r);
-                    r = remove_dir(&file, filename, interactive, verbose).and(r);
+
+                        for d in rmdirstack.iter().rev() {
+                            had_err = remove_dir(d.as_path(), interactive, verbose).bitor(had_err);
+                        }
+                    }
                 } else if dir && (filename != "/" || !preserve_root) {
-                    r = remove_dir(&file, filename, interactive, verbose).and(r);
+                    had_err = remove_dir(&file, interactive, verbose).bitor(had_err);
                 } else {
                     if recursive {
-                        show_error!("could not remove directory '{}'",
-                                       filename);
-                        r = Err(1);
+                        show_error!("could not remove directory '{}'", filename);
+                        had_err = true;
                     } else {
-                        show_error!("could not remove directory '{}' (did you mean to pass '-r'?)",
-                                    filename);
-                        r = Err(1);
+                        show_error!("could not remove directory '{}' (did you mean to pass '-r'?)", filename);
+                        had_err = true;
                     }
                 }
             } else {
-                r = remove_file(&file, filename.as_slice(), interactive, verbose).and(r);
+                had_err = remove_file(&file, interactive, verbose).bitor(had_err);
             }
         } else if !force {
             show_error!("no such file or directory '{}'", filename);
-            r = Err(1);
+            had_err = true;
         }
     }
 
-    r
+    had_err
 }
 
-fn remove_dir(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), i32> {
+fn remove_dir(path: &Path, interactive: InteractiveMode, verbose: bool) -> bool {
     let response =
         if interactive == InteractiveMode::InteractiveAlways {
-            prompt_file(path, name)
+            prompt_file(path, true)
         } else {
             true
         };
     if response {
-        match fs::rmdir(path) {
-            Ok(_) => if verbose { println!("Removed '{}'", name); },
-            Err(f) => {
-                show_error!("{}", f.to_string());
-                return Err(1);
+        match fs::remove_dir(path) {
+            Ok(_) => if verbose { println!("removed '{}'", path.display()); },
+            Err(e) => {
+                show_error!("removing '{}': {}", path.display(), e);
+                return true;
             }
         }
     }
 
-    Ok(())
+    false
 }
 
-fn remove_file(path: &Path, name: &str, interactive: InteractiveMode, verbose: bool) -> Result<(), i32> {
+fn remove_file(path: &Path, interactive: InteractiveMode, verbose: bool) -> bool {
     let response =
         if interactive == InteractiveMode::InteractiveAlways {
-            prompt_file(path, name)
+            prompt_file(path, false)
         } else {
             true
         };
     if response {
-        match fs::unlink(path) {
-            Ok(_) => if verbose { println!("Removed '{}'", name); },
-            Err(f) => {
-                show_error!("{}", f.to_string());
-                return Err(1);
+        match fs::remove_file(path) {
+            Ok(_) => if verbose { println!("removed '{}'", path.display()); },
+            Err(e) => {
+                show_error!("removing '{}': {}", path.display(), e);
+                return true;
             }
         }
     }
 
-    Ok(())
+    false
 }
 
-fn prompt_file(path: &Path, name: &str) -> bool {
-    if path.is_dir() {
-        prompt(format!("Remove directory '{}'? ", name).as_slice())
+fn prompt_file(path: &Path, is_dir: bool) -> bool {
+    if is_dir {
+        prompt(&(format!("rm: remove directory '{}'? ", path.display()))[..])
     } else {
-        prompt(format!("Remove file '{}'? ", name).as_slice())
+        prompt(&(format!("rm: remove file '{}'? ", path.display()))[..])
     }
 }
 
 fn prompt(msg: &str) -> bool {
-    print(msg);
-    read_prompt()
-}
-
-fn read_prompt() -> bool {
-    stdio::flush();
-    match BufferedReader::new(stdin()).read_line() {
-        Ok(line) => {
-            match line.as_slice().char_at(0) {
-                'y' | 'Y' => true,
-                'n' | 'N' => false,
-                _ => {
-                    print!("Please enter either Y or N: ");
-                    read_prompt()
-                }
+    stderr().write_all(msg.as_bytes()).unwrap_or(());
+    stderr().flush().unwrap_or(());
+    let mut buf = Vec::new();
+    let stdin = stdin();
+    let mut stdin = stdin.lock();
+    match stdin.read_until('\n' as u8, &mut buf) {
+        Ok(x) if x > 0 => {
+            match buf[0] {
+                0x59 | 0x79 => true,
+                _ => false,
             }
         }
-        Err(_) => true
+        _ => false,
     }
 }

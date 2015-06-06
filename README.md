@@ -41,6 +41,16 @@ To build with LTO and stripping:
 make ENABLE_LTO=y ENABLE_STRIP=y
 ```
 
+To check all available utilities for build errors:
+```
+make build-check
+```
+
+To check all available tests for errors:
+```
+make test-check
+```
+
 Installation Instructions
 -------------------------
 
@@ -150,7 +160,6 @@ To do
 - pinky
 - pr
 - printf
-- ptx
 - remove
 - runcon
 - setuidgid

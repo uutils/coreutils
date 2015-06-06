@@ -1,5 +1,4 @@
 #![crate_name = "nproc"]
-#![feature(collections, os, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,8 +10,10 @@
  */
 
 extern crate getopts;
+extern crate num_cpus;
 
-use std::os;
+use std::env;
+use std::io::Write;
 
 static NAME : &'static str = "nproc";
 static VERSION : &'static str = "0.0.0";
@@ -22,14 +23,14 @@ static VERSION : &'static str = "0.0.0";
 mod util;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        getopts::optflag("", "all", "print the number of cores available to the system"),
-        getopts::optopt("", "ignore", "ignore up to N cores", "N"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit"),
-    ];
+    let mut opts = getopts::Options::new();
 
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("", "all", "print the number of cores available to the system");
+    opts.optopt("", "ignore", "ignore up to N cores", "N");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(err) => {
             show_error!("{}", err);
@@ -43,12 +44,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS] NAME...", NAME);
-        println!("");
-        print!("{}", getopts::usage("Print the number of cores available to the current process.", &opts));
+        let msg = format!("{0} {1}
+
+Usage:
+  {0} [OPTIONS]...
+
+Print the number of cores available to the current process.", NAME, VERSION);
+
+        print!("{}", opts.usage(&msg));
         return 0;
     }
 
@@ -64,22 +67,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if !matches.opt_present("all") {
-        ignore += match os::getenv("OMP_NUM_THREADS") {
-            Some(threadstr) => match threadstr.parse() {
+        ignore += match env::var("OMP_NUM_THREADS") {
+            Ok(threadstr) => match threadstr.parse() {
                 Ok(num) => num,
                 Err(_)=> 0
             },
-            None => 0
+            Err(_) => 0
         };
     }
 
-    let mut cores = os::num_cpus();
+    let mut cores = num_cpus::get();
     if cores <= ignore {
         cores = 1;
     } else {
         cores -= ignore;
     }
     println!("{}", cores);
-
-    return 0
+    0
 }

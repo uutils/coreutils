@@ -11,35 +11,35 @@ extern crate libc;
 
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::old_io::stderr(), "{}: error: ", ::NAME);
-        pipe_writeln!(&mut ::std::old_io::stderr(), $($args)+);
+        pipe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
 
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::old_io::stderr(), "{}: warning: ", ::NAME);
-        pipe_writeln!(&mut ::std::old_io::stderr(), $($args)+);
+        pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
 
 #[macro_export]
 macro_rules! show_info(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::old_io::stderr(), "{}: ", ::NAME);
-        pipe_writeln!(&mut ::std::old_io::stderr(), $($args)+);
+        pipe_write!(&mut ::std::io::stderr(), "{}: ", ::NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
 
 #[macro_export]
 macro_rules! eprint(
-    ($($args:tt)+) => (pipe_write!(&mut ::std::old_io::stderr(), $($args)+))
+    ($($args:tt)+) => (pipe_write!(&mut ::std::io::stderr(), $($args)+))
 );
 
 #[macro_export]
 macro_rules! eprintln(
-    ($($args:tt)+) => (pipe_writeln!(&mut ::std::old_io::stderr(), $($args)+))
+    ($($args:tt)+) => (pipe_writeln!(&mut ::std::io::stderr(), $($args)+))
 );
 
 #[macro_export]
@@ -62,7 +62,23 @@ macro_rules! crash_if_err(
     ($exitcode:expr, $exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!($exitcode, "{}", f.to_string())
+            Err(f) => crash!($exitcode, "{}", f),
+        }
+    )
+);
+
+#[macro_export]
+macro_rules! pipe_crash_if_err(
+    ($exitcode:expr, $exp:expr) => (
+        match $exp {
+            Ok(_) => (),
+            Err(f) => {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
+                    ()
+                } else {
+                    crash!($exitcode, "{}", f)
+                }
+            },
         }
     )
 );
@@ -85,10 +101,10 @@ macro_rules! return_if_err(
 #[macro_export]
 macro_rules! pipe_print(
     ($($args:tt)+) => (
-        match write!(&mut ::std::old_io::stdout(), $($args)+) {
+        match write!(&mut ::std::io::stdout(), $($args)+) {
             Ok(_) => true,
             Err(f) => {
-                if f.kind == ::std::old_io::BrokenPipe {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
                     false
                 } else {
                     panic!("{}", f)
@@ -101,10 +117,10 @@ macro_rules! pipe_print(
 #[macro_export]
 macro_rules! pipe_println(
     ($($args:tt)+) => (
-        match writeln!(&mut ::std::old_io::stdout(), $($args)+) {
+        match writeln!(&mut ::std::io::stdout(), $($args)+) {
             Ok(_) => true,
             Err(f) => {
-                if f.kind == ::std::old_io::BrokenPipe {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
                     false
                 } else {
                     panic!("{}", f)
@@ -120,7 +136,7 @@ macro_rules! pipe_write(
         match write!($fd, $($args)+) {
             Ok(_) => true,
             Err(f) => {
-                if f.kind == ::std::old_io::BrokenPipe {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
                     false
                 } else {
                     panic!("{}", f)
@@ -136,7 +152,35 @@ macro_rules! pipe_writeln(
         match writeln!($fd, $($args)+) {
             Ok(_) => true,
             Err(f) => {
-                if f.kind == ::std::old_io::BrokenPipe {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
+                    false
+                } else {
+                    panic!("{}", f)
+                }
+            }
+        }
+    )
+);
+
+#[macro_export]
+macro_rules! pipe_flush(
+    () => (
+        match ::std::io::stdout().flush() {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
+                    false
+                } else {
+                    panic!("{}", f)
+                }
+            }
+        }
+    );
+    ($fd:expr) => (
+        match $fd.flush() {
+            Ok(_) => true,
+            Err(f) => {
+                if f.kind() == ::std::io::ErrorKind::BrokenPipe {
                     false
                 } else {
                     panic!("{}", f)

@@ -1,4 +1,4 @@
-#![allow(dead_code, non_camel_case_types)]
+#![allow(dead_code, non_camel_case_types, raw_pointer_derive)]
 
 extern crate libc;
 
@@ -16,14 +16,15 @@ use self::libc::int32_t;
 use self::libc::funcs::posix88::unistd::getgroups;
 
 use std::ffi::{CStr, CString};
+use std::io::{Error, Write};
 use std::iter::repeat;
 use std::vec::Vec;
 
-use std::os;
 use std::ptr::{null_mut, read};
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
     pub pw_passwd:  *const c_char,    /* user name */
@@ -39,6 +40,7 @@ pub struct c_passwd {
 
 #[cfg(target_os = "linux")]
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct c_passwd {
     pub pw_name:    *const c_char,    /* user name */
     pub pw_passwd:  *const c_char,    /* user name */
@@ -48,8 +50,6 @@ pub struct c_passwd {
     pub pw_dir:     *const c_char,
     pub pw_shell:   *const c_char,
 }
-
-impl Copy for c_passwd {}
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
@@ -72,8 +72,6 @@ pub struct utsname {
     pub domainame: [c_char; 65]
 }
 
-impl Copy for utsname {}
-
 #[repr(C)]
 pub struct c_group {
     pub gr_name:   *const c_char,  // group name
@@ -81,8 +79,6 @@ pub struct c_group {
     pub gr_gid:    gid_t,    // group id
     pub gr_mem:    *const *const c_char, // member list
 }
-
-impl Copy for c_group {}
 
 #[repr(C)]
 pub struct c_tm {
@@ -96,8 +92,6 @@ pub struct c_tm {
     pub tm_yday: c_int,        /* day in the year */
     pub tm_isdst: c_int       /* daylight saving time */
 }
-
-impl Copy for c_tm {}
 
 extern {
     pub fn getpwuid(uid: uid_t) -> *const c_passwd;
@@ -117,7 +111,7 @@ extern {
 
 pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
     if free.len() == 1 {
-        let username = free[0].as_slice();
+        let username = &free[0][..];
 
         // Passed user as id
         if username.chars().all(|c| c.is_digit(10)) {
@@ -202,13 +196,13 @@ unsafe fn get_group_list_internal(name: *const c_char, gid: gid_t, groups: *mut 
 pub fn get_groups() -> Result<Vec<gid_t>, i32> {
     let ngroups = unsafe { getgroups(0, null_mut()) };
     if ngroups == -1 {
-        return Err(os::errno());
+        return Err(Error::last_os_error().raw_os_error().unwrap())
     }
 
     let mut groups : Vec<gid_t>= repeat(0).take(ngroups as usize).collect();
     let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
     if ngroups == -1 {
-        Err(os::errno())
+        Err(Error::last_os_error().raw_os_error().unwrap())
     } else {
         groups.truncate(ngroups as usize);
         Ok(groups)

@@ -1,5 +1,4 @@
 #![crate_name = "base64"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -10,50 +9,46 @@
  * that was distributed with this source code.
  */
 
-extern crate serialize;
+extern crate rustc_serialize as serialize;
 extern crate getopts;
 extern crate libc;
-#[macro_use] extern crate log;
 
+use getopts::Options;
+use serialize::base64::{self, FromBase64, ToBase64};
 use std::ascii::AsciiExt;
 use std::error::Error;
-use std::old_io::{println, File, stdout};
-use std::old_io::stdio::stdin_raw;
-
-use getopts::{
-    getopts,
-    optflag,
-    optopt,
-    usage
-};
-use serialize::base64;
-use serialize::base64::{FromBase64, ToBase64};
+use std::fs::File;
+use std::io::{BufReader, Read, stdin, stdout, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
+enum Mode {
+    Decode,
+    Encode,
+    Help,
+    Version
+}
+
 static NAME: &'static str = "base64";
+static VERSION: &'static str = "1.0.0";
+
+pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = [
-        optflag("d", "decode", "decode data"),
-        optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters"),
-        optopt("w", "wrap",
-            "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS"
-        ),
-        optflag("h", "help", "display this help text and exit"),
-        optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts(args.tail(), &opts) {
+    let mut opts = Options::new();
+    opts.optflag("d", "decode", "decode data");
+    opts.optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters");
+    opts.optopt("w", "wrap", "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS");
+    opts.optflag("h", "help", "display this help text and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => {
-            crash!(1, "error: {}", e);
-        }
+        Err(e) => { crash!(1, "{}", e) }
     };
 
-    let progname = args[0].clone();
-    let usage = usage("Base64 encode or decode FILE, or standard input, to standard output.", &opts);
     let mode = if matches.opt_present("help") {
         Mode::Help
     } else if matches.opt_present("version") {
@@ -68,37 +63,35 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Some(s) => match s.parse() {
             Ok(s) => s,
             Err(e)=> {
-                crash!(1, "error: Argument to option 'wrap' improperly formatted: {}", e);
+                crash!(1, "Argument to option 'wrap' improperly formatted: {}", e);
             }
         },
         None => 76
     };
     let mut stdin_buf;
     let mut file_buf;
-    let input = if matches.free.is_empty() || matches.free[0].as_slice() == "-" {
-        stdin_buf = stdin_raw();
-        &mut stdin_buf as &mut Reader
+    let mut input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
+        stdin_buf = stdin();
+        BufReader::new(Box::new(stdin_buf) as Box<Read+'static>)
     } else {
-        let path = Path::new(matches.free[0].as_slice());
-        file_buf = File::open(&path);
-        &mut file_buf as &mut Reader
+        let path = Path::new(&matches.free[0][..]);
+        file_buf = safe_unwrap!(File::open(&path));
+        BufReader::new(Box::new(file_buf) as Box<Read+'static>)
     };
 
     match mode {
-        Mode::Decode  => decode(input, ignore_garbage),
-        Mode::Encode  => encode(input, line_wrap),
-        Mode::Help    => help(progname.as_slice(), usage.as_slice()),
+        Mode::Decode  => decode(&mut input, ignore_garbage),
+        Mode::Encode  => encode(&mut input, line_wrap),
+        Mode::Help    => help(opts),
         Mode::Version => version()
     }
 
     0
 }
 
-fn decode(input: &mut Reader, ignore_garbage: bool) {
-    let mut to_decode = match input.read_to_string() {
-        Ok(m) => m,
-        Err(f) => panic!(f)
-    };
+fn decode(input: &mut FileOrStdReader, ignore_garbage: bool) {
+    let mut to_decode = String::new();
+    input.read_to_string(&mut to_decode).unwrap();
 
     if ignore_garbage {
         let mut clean = String::new();
@@ -115,11 +108,11 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
         to_decode = clean;
     }
 
-    match to_decode.as_slice().from_base64() {
+    match to_decode[..].from_base64() {
         Ok(bytes) => {
             let mut out = stdout();
 
-            match out.write_all(bytes.as_slice()) {
+            match out.write_all(&bytes[..]) {
                 Ok(_) => {}
                 Err(f) => { crash!(1, "{}", f); }
             }
@@ -129,12 +122,12 @@ fn decode(input: &mut Reader, ignore_garbage: bool) {
             }
         }
         Err(s) => {
-            crash!(1, "error: {} ({:?})", s.description(), s);
+            crash!(1, "{} ({:?})", s.description(), s);
         }
     }
 }
 
-fn encode(input: &mut Reader, line_wrap: usize) {
+fn encode(input: &mut FileOrStdReader, line_wrap: usize) {
     let b64_conf = base64::Config {
         char_set: base64::Standard,
         newline: base64::Newline::LF,
@@ -144,37 +137,26 @@ fn encode(input: &mut Reader, line_wrap: usize) {
             _ => Some(line_wrap)
         }
     };
-    let to_encode = match input.read_to_end() {
-        Ok(m) => m,
-        Err(err) => crash!(1, "{}", err)
-    };
-    let encoded = to_encode.as_slice().to_base64(b64_conf);
+    let mut to_encode: Vec<u8> = vec!();
+    input.read_to_end(&mut to_encode).unwrap();
+    let encoded = to_encode.to_base64(b64_conf);
 
-    println(encoded.as_slice());
+    println!("{}", &encoded[..]);
 }
 
-fn help(progname: &str, usage: &str) {
-    println!("Usage: {} [OPTION]... [FILE]", progname);
-    println!("");
-    println(usage);
+fn help(opts: Options) {
+    let msg = format!("Usage: {} [OPTION]... [FILE]\n\n\
+    Base64 encode or decode FILE, or standard input, to standard output.\n\
+    With no FILE, or when FILE is -, read standard input.\n\n\
+    The data are encoded as described for the base64 alphabet in RFC \
+    3548. When\ndecoding, the input may contain newlines in addition \
+    to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
+    to attempt to recover from any other\nnon-alphabet bytes in the \
+    encoded stream.", NAME);
 
-    let msg = "With no FILE, or when FILE is -, read standard input.\n\n\
-        The data are encoded as described for the base64 alphabet in RFC \
-        3548. When\ndecoding, the input may contain newlines in addition \
-        to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
-        to attempt to recover from any other\nnon-alphabet bytes in the \
-        encoded stream.";
-
-    println(msg);
+    print!("{}", opts.usage(&msg));
 }
 
 fn version() {
-    println!("base64 1.0.0");
-}
-
-enum Mode {
-    Decode,
-    Encode,
-    Help,
-    Version
+    println!("{} {}", NAME, VERSION);
 }

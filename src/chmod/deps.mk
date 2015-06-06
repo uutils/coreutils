@@ -1,0 +1,1 @@
+DEPLIBS += regex regex-syntax

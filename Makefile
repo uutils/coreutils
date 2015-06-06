@@ -30,7 +30,7 @@ RUSTCTESTFLAGS := $(RUSTCFLAGS)
 
 # Handle config setup
 ifeq ($(ENABLE_LTO),y)
-RUSTCBINFLAGS  := $(RUSTCLIBFLAGS) -Z lto
+RUSTCBINFLAGS  := $(RUSTCLIBFLAGS) -C lto
 else
 RUSTCBINFLAGS  := $(RUSTCLIBFLAGS)
 endif
@@ -68,6 +68,7 @@ PROGS       := \
   od \
   paste \
   printenv \
+  ptx \
   pwd \
   readlink \
   realpath \
@@ -159,22 +160,66 @@ endif
 
 # Programs with usable tests
 TEST_PROGS  := \
+  base64 \
+  basename \
   cat \
   cp \
+  env \
+  dirname \
+  echo \
+  factor \
+  false \
+  fold \
+  hashsum \
+  head \
   mkdir \
   mv \
   nl \
+  paste \
+  ptx \
+  pwd \
+  readlink \
+  realpath \
+  rm \
   seq \
   sort \
+  split \
   test \
   tr \
+  true \
   truncate \
-  unexpand
+  tsort \
+  unlink \
+  unexpand \
+  wc
 
 TEST        ?= $(TEST_PROGS)
 
 TESTS       := \
   $(filter $(TEST),$(filter-out $(DONT_TEST),$(filter $(BUILD),$(filter-out $(DONT_BUILD),$(TEST_PROGS)))))
+
+# figure out what dependencies we need based on which programs we're building
+define DEP_INCLUDE
+-include $(SRCDIR)/$(1)/deps.mk
+endef
+# we always depend on libc because common/util does
+# we also depend on getopts since all utilities support command-line arguments
+DEPLIBS := libc getopts
+DEPPLUGS :=
+# now, add in deps in src/utilname/deps.mk
+# if we're testing, only consider the TESTS variable,
+# otherwise consider the EXES variable
+ifeq ($(MAKECMDGOALS),test)
+$(foreach build,$(TESTS),$(eval $(call DEP_INCLUDE,$(build))))
+else
+$(foreach build,$(sort $(TESTS) $(EXES)),$(eval $(call DEP_INCLUDE,$(build))))
+endif
+# uniqify deps
+DEPLIBS := $(sort $(DEPLIBS))
+DEPPLUGS := $(sort $(DEPPLUGS))
+# build --extern commandline for rustc
+DEP_EXTERN := $(foreach lib,$(subst -,_,$(DEPLIBS)),--extern $(lib)=$(BUILDDIR)/lib$(lib).rlib)
+DEP_EXTERN += $(foreach plug,$(subst -,_,$(DEPPLUGS)),--extern $(plug)=$(BUILDDIR)/lib$(plug).$(DYLIB_EXT))
 
 # Setup for building crates
 define BUILD_SETUP
@@ -188,6 +233,7 @@ $(foreach crate,$(EXES),$(eval $(call BUILD_SETUP,$(crate))))
 EXES_PATHS  := $(addprefix $(BUILDDIR)/,$(EXES))
 RLIB_PATHS  := $(addprefix $(BUILDDIR)/,$(CRATE_RLIBS))
 command     = sh -c '$(1)'
+RESERVED_EXTERNS := --extern uufalse=$(BUILDDIR)/libfalse.rlib --extern uutrue=$(BUILDDIR)/libtrue.rlib --extern uutest=$(BUILDDIR)/libtest.rlib
 
 # Main exe build rule
 define EXE_BUILD
@@ -195,15 +241,26 @@ $(BUILDDIR)/gen/$(1).rs: $(BUILDDIR)/mkmain
 	$(BUILDDIR)/mkmain $(1) $$@
 
 $(BUILDDIR)/$(1): $(BUILDDIR)/gen/$(1).rs $(BUILDDIR)/$($(1)_RLIB) | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCBINFLAGS) --extern test=$(BUILDDIR)/libtest.rlib -o $$@ $$<
+	$(RUSTC) $(RUSTCBINFLAGS) $(RESERVED_EXTERNS) -o $$@ $$<
 	$(if $(ENABLE_STRIP),strip $$@,)
+endef
+
+# GRRR rust-crypto makes a crate called "crypto".
+# This should NOT be allowed by crates.io. GRRRR.
+define DEP_BUILD
+DEP_$(1):
+ifeq ($(1),crypto)
+	cd $(BASEDIR)/deps && $(CARGO) build --package rust-crypto --release
+else
+	cd $(BASEDIR)/deps && $(CARGO) build --package $(1) --release
+endif
 endef
 
 define CRATE_BUILD
 -include $(BUILDDIR)/$(1).d
 
 $(BUILDDIR)/$($(1)_RLIB): $(SRCDIR)/$(1)/$(1).rs | $(BUILDDIR) deps
-	$(RUSTC) $(RUSTCLIBFLAGS) --extern libc=$(BUILDDIR)/liblibc.rlib --extern time=$(BUILDDIR)/libtime.rlib --extern rand=$(BUILDDIR)/librand.rlib --extern regex=$(BUILDDIR)/libregex.rlib --extern serialize=$(BUILDDIR)/librustc-serialize.rlib --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCLIBFLAGS) $(DEP_EXTERN) --crate-type rlib --emit link,dep-info $$< --out-dir $(BUILDDIR)
 endef
 
 # Aliases build rule
@@ -221,11 +278,11 @@ endef
 
 # Test exe built rules
 define TEST_BUILD
-test_$(1): $(TEMPDIR)/$(1)/$(1)_test $(BUILDDIR)/$(1)
-	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $$<)
+test_$(1): $(BUILDDIR)/$(1) $(TEMPDIR)/$(1)/$(1)_test
+	$(call command,cp $(BUILDDIR)/$(1) $(TEMPDIR)/$(1) && cd $(TEMPDIR)/$(1) && $(TEMPDIR)/$(1)/$(1)_test)
 
 $(TEMPDIR)/$(1)/$(1)_test: $(TESTDIR)/$(1).rs | $(TEMPDIR)/$(1)
-	$(call command,$(RUSTC) $(RUSTCTESTFLAGS) --extern time=$(BUILDDIR)/libtime.rlib --extern regex=$(BUILDDIR)/libregex.rlib --test -o $$@ $$<)
+	$(call command,$(RUSTC) $(RUSTCTESTFLAGS) $(DEP_EXTERN) --test -o $$@ $$<)
 
 $(TEMPDIR)/$(1): | $(TEMPDIR)
 	$(call command,cp -r $(TESTDIR)/fixtures/$(1) $$@ || mkdir $$@)
@@ -239,11 +296,12 @@ $(foreach crate,$(EXES),$(eval $(call CRATE_BUILD,$(crate))))
 $(foreach exe,$(EXES),$(eval $(call EXE_BUILD,$(exe))))
 $(foreach alias,$(ALIASES),$(eval $(call MAKE_ALIAS,$(alias))))
 $(foreach test,$(TESTS),$(eval $(call TEST_BUILD,$(test))))
+$(foreach dep,$(sort $(DEPLIBS) $(DEPPLUGS)),$(eval $(call DEP_BUILD,$(dep))))
 
 -include $(BUILDDIR)/uutils.d
 $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS)
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
-	$(RUSTC) $(RUSTCBINFLAGS) --extern test=$(BUILDDIR)/libtest.rlib --emit link,dep-info $(BUILDDIR)/gen/uutils.rs --out-dir $(BUILDDIR)
+	$(RUSTC) $(RUSTCBINFLAGS) $(RESERVED_EXTERNS) --emit link,dep-info $(BUILDDIR)/gen/uutils.rs --out-dir $(BUILDDIR)
 	$(if $(ENABLE_STRIP),strip $@)
 	
 # Library for stdbuf
@@ -256,26 +314,9 @@ $(BUILDDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdb
 	
 $(BUILDDIR)/stdbuf: $(BUILDDIR)/libstdbuf.$(DYLIB_EXT)
 
-# Dependencies
-$(BUILDDIR)/.rust-crypto: | $(BUILDDIR)
-	cd $(BASEDIR)/deps/rust-crypto && $(CARGO) build --release
-	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/librand*.rlib $(BUILDDIR)/librand.rlib
-	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/librustc-serialize*.rlib $(BUILDDIR)/librustc-serialize.rlib
-	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/libtime*.rlib $(BUILDDIR)/libtime.rlib
-	cp -r $(BASEDIR)/deps/rust-crypto/target/release/deps/liblibc*.rlib $(BUILDDIR)/liblibc.rlib
-	cp -r $(BASEDIR)/deps/rust-crypto/target/release/libcrypto*.rlib $(BUILDDIR)/libcrypto.rlib
-	@touch $@
-
-#$(BUILDDIR)/.rust-time: | $(BUILDDIR)
-#	cd $(BASEDIR)/deps/time && $(CARGO) build --release
-#	cp -r $(BASEDIR)/deps/time/target/release/libtime*.rlib $(BUILDDIR)/libtime.rlib
-#	@touch $@
-
-$(BUILDDIR)/.rust-regex: | $(BUILDDIR)
-	cd $(BASEDIR)/deps/regex/regex_macros && $(CARGO) build --release
-	cp -r $(BASEDIR)/deps/regex/regex_macros/target/release/libregex_macros* $(BUILDDIR)
-	cp -r $(BASEDIR)/deps/regex/regex_macros/target/release/deps/libregex*.rlib $(BUILDDIR)/libregex.rlib
-	@touch $@
+deps: $(BUILDDIR) $(SRCDIR)/cksum/crc_table.rs $(addprefix DEP_,$(DEPLIBS) $(DEPPLUGS))
+	$(foreach lib,$(subst -,_,$(DEPLIBS)),$(shell cp $(BASEDIR)/deps/target/release/deps/lib$(lib)-*.rlib $(BUILDDIR)/lib$(lib).rlib))
+	$(foreach plug,$(subst -,_,$(DEPPLUGS)),$(shell cp $(BASEDIR)/deps/target/release/deps/lib$(plug)-*.$(DYLIB_EXT) $(BUILDDIR)/lib$(plug).$(DYLIB_EXT)))
 
 $(BUILDDIR)/mkmain: mkmain.rs | $(BUILDDIR)
 	$(RUSTC) $(RUSTCFLAGS) $< -o $@
@@ -286,7 +327,8 @@ $(BUILDDIR)/mkuutils: mkuutils.rs | $(BUILDDIR)
 $(SRCDIR)/cksum/crc_table.rs: $(SRCDIR)/cksum/gen_table.rs
 	cd $(SRCDIR)/cksum && $(RUSTC) $(RUSTCBINFLAGS) gen_table.rs && ./gen_table && $(RM) gen_table
 
-deps: $(BUILDDIR)/.rust-crypto $(BUILDDIR)/.rust-regex $(SRCDIR)/cksum/crc_table.rs
+$(SRCDIR)/factor/prime_table.rs: $(SRCDIR)/factor/gen_table.rs
+	cd $(SRCDIR)/factor && $(RUSTC) $(RUSTCBINFLAGS) gen_table.rs && ./gen_table > $@ && $(RM) gen_table
 
 crates:
 	echo $(EXES)
@@ -295,10 +337,12 @@ test: $(TEMPDIR) $(addprefix test_,$(TESTS))
 	$(RM) -rf $(TEMPDIR)
 
 clean:
-	$(RM) -rf $(BUILDDIR) $(TEMPDIR) $(BASEDIR)/deps/time/target
+	$(RM) -rf $(BUILDDIR) $(TEMPDIR)
+
+distclean: clean
+	cd $(BASEDIR)/deps && $(CARGO) clean && $(CARGO) update
 
 $(BUILDDIR):
-	git submodule update --init
 	mkdir -p $(BUILDDIR)/gen
 
 $(TEMPDIR):
@@ -357,4 +401,26 @@ busytest: $(BUILDDIR)/busybox $(BUILDDIR)/.config
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS))
 endif
 
-.PHONY: $(TEMPDIR) all deps test clean busytest install uninstall
+# This rule will build each program, ignore all output, and return pass
+# or fail depending on whether the build has errors.
+build-check:
+	@for prog in $(sort $(PROGS)); do \
+		make BUILD="$$prog" >/dev/null 2>&1; status=$$?; \
+		if [ $$status -eq 0 ]; \
+		then printf "%-10s\t\033[1;32mpass\033[00;m\n" $$prog; \
+		else printf "%-10s\t\033[1;31mfail\033[00;m\n" $$prog; \
+		fi; \
+	done
+
+# This rule will test each program, ignore all output, and return pass
+# or fail depending on whether the test has errors.
+test-check:
+	@for prog in $(sort $(TEST_PROGS)); do \
+		make TEST="$$prog" test >/dev/null 2>&1; status=$$?; \
+		if [ $$status -eq 0 ]; \
+		then printf "%-10s\t\033[1;32mpass\033[00;m\n" $$prog; \
+		else printf "%-10s\t\033[1;31mfail\033[00;m\n" $$prog; \
+		fi; \
+	done
+
+.PHONY: $(TEMPDIR) all deps test distclean clean busytest install uninstall

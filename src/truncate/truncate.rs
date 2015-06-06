@@ -1,5 +1,4 @@
 #![crate_name = "truncate"]
-#![feature(collections, core, old_io, old_path, rustc_private)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,8 +13,9 @@ extern crate getopts;
 extern crate libc;
 
 use std::ascii::AsciiExt;
-use std::old_io::{File, Open, ReadWrite, fs};
-use std::old_io::fs::PathExtensions;
+use std::fs::{File, metadata, OpenOptions};
+use std::io::{Result, Write};
+use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -33,32 +33,30 @@ enum TruncateMode {
 }
 
 static NAME: &'static str = "truncate";
+static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = args[0].clone();
+    let mut opts = getopts::Options::new();
 
-    let opts = [
-        getopts::optflag("c", "no-create", "do not create files that do not exist"),
-        getopts::optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)"),
-        getopts::optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE"),
-        getopts::optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    opts.optflag("c", "no-create", "do not create files that do not exist");
+    opts.optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)");
+    opts.optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE");
+    opts.optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "{}", f)
-        }
+        Err(f) => { crash!(1, "{}", f) }
     };
 
     if matches.opt_present("help") {
-        println!("truncate 1.0.0");
+        println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");
-        println!("  {0} [OPTION]... FILE...", program);
+        println!("  {} [OPTION]... FILE...", NAME);
         println!("");
-        print!("{}", getopts::usage("Shrink or extend the size of each file to the specified size.", &opts));
+        print!("{}", opts.usage("Shrink or extend the size of each file to the specified size."));
         print!("
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -78,7 +76,7 @@ file based on its current size:
     '%'  => round up to multiple of
 ");
     } else if matches.opt_present("version") {
-        println!("truncate 1.0.0");
+        println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() {
         show_error!("missing an argument");
         return 1;
@@ -92,7 +90,7 @@ file based on its current size:
         } else {
             match truncate(no_create, io_blocks, reference, size, matches.free) {
                 Ok(()) => ( /* pass */ ),
-                Err(e) => return e
+                Err(_) => return 1
             }
         }
     }
@@ -100,59 +98,53 @@ file based on its current size:
     0
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<(), i32> {
+fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<()> {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
-            let rfile = match File::open(&Path::new(rfilename.clone())) {
+            let _ = match File::open(Path::new(&rfilename)) {
                 Ok(m) => m,
                 Err(f) => {
                     crash!(1, "{}", f.to_string())
                 }
             };
-            match fs::stat(rfile.path()) {
-                Ok(stat) => (stat.size, TruncateMode::Reference),
+            match metadata(rfilename) {
+                Ok(meta) => (meta.len(), TruncateMode::Reference),
                 Err(f) => {
-                    show_error!("{}", f.to_string());
-                    return Err(1);
+                    crash!(1, "{}", f.to_string())
                 }
             }
         }
-        None => parse_size(size.unwrap().as_slice())
+        None => parse_size(size.unwrap().as_ref())
     };
     for filename in filenames.iter() {
-        let filename = filename.as_slice();
         let path = Path::new(filename);
-        if path.exists() || !no_create {
-            match File::open_mode(&path, Open, ReadWrite) {
-                Ok(mut file) => {
-                    let fsize = match fs::stat(file.path()) {
-                        Ok(stat) => stat.size,
-                        Err(f) => {
-                            show_warning!("{}", f.to_string());
-                            continue;
-                        }
-                    };
-                    let tsize = match mode {
-                        TruncateMode::Reference => refsize,
-                        TruncateMode::Extend => fsize + refsize,
-                        TruncateMode::Reduce => fsize - refsize,
-                        TruncateMode::AtMost => if fsize > refsize { refsize } else { fsize },
-                        TruncateMode::AtLeast => if fsize < refsize { refsize } else { fsize },
-                        TruncateMode::RoundDown => fsize - fsize % refsize,
-                        TruncateMode::RoundUp => fsize + fsize % refsize
-                    };
-                    match file.truncate(tsize as i64) {
-                        Ok(_) => {}
-                        Err(f) => {
-                            show_error!("{}", f.to_string());
-                            return Err(1);
-                        }
+        match OpenOptions::new().read(true).write(true).create(!no_create).open(path) {
+            Ok(file) => {
+                let fsize = match metadata(filename) {
+                    Ok(meta) => meta.len(),
+                    Err(f) => {
+                        show_warning!("{}", f.to_string());
+                        continue;
                     }
-                }
-                Err(f) => {
-                    show_error!("{}", f.to_string());
-                    return Err(1);
-                }
+                };
+                let tsize: u64 = match mode {
+                    TruncateMode::Reference => refsize,
+                    TruncateMode::Extend => fsize + refsize,
+                    TruncateMode::Reduce => fsize - refsize,
+                    TruncateMode::AtMost => if fsize > refsize { refsize } else { fsize },
+                    TruncateMode::AtLeast => if fsize < refsize { refsize } else { fsize },
+                    TruncateMode::RoundDown => fsize - fsize % refsize,
+                    TruncateMode::RoundUp => fsize + fsize % refsize
+                };
+                let _ = match file.set_len(tsize) {
+                    Ok(_) => {},
+                    Err(f) => {
+                        crash!(1, "{}", f.to_string())
+                    }
+                };
+            }
+            Err(f) => {
+                crash!(1, "{}", f.to_string())
             }
         }
     }
@@ -160,7 +152,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
 }
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {
-    let mode = match size.char_at(0) {
+    let mode = match size.chars().next().unwrap() {
         '+' => TruncateMode::Extend,
         '-' => TruncateMode::Reduce,
         '<' => TruncateMode::AtMost,
@@ -177,43 +169,43 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
             } else {
                 &size[1..]
             };
-        if slice.char_at(slice.len() - 1).is_alphabetic() {
+        if slice.chars().last().unwrap().is_alphabetic() {
             slice = &slice[..slice.len() - 1];
-            if slice.len() > 0 && slice.char_at(slice.len() - 1).is_alphabetic() {
+            if slice.len() > 0 && slice.chars().last().unwrap().is_alphabetic() {
                 slice = &slice[..slice.len() - 1];
             }
         }
         slice
     }.to_string();
-    let mut number: u64 = match bytes.as_slice().parse() {
+    let mut number: u64 = match bytes.parse() {
         Ok(num) => num,
         Err(e) => {
             crash!(1, "'{}' is not a valid number: {}", size, e)
         }
     };
-    if size.char_at(size.len() - 1).is_alphabetic() {
-        number *= match size.char_at(size.len() - 1).to_ascii_uppercase() {
-            'B' => match size.char_at(size.len() - 2).to_ascii_uppercase() {
-                'K' => 1000,
-                'M' => 1000 * 1000,
-                'G' => 1000 * 1000 * 1000,
-                'T' => 1000 * 1000 * 1000 * 1000,
-                'P' => 1000 * 1000 * 1000 * 1000 * 1000,
-                'E' => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-                'Z' => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-                'Y' => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
+    if size.chars().last().unwrap().is_alphabetic() {
+        number *= match size.chars().last().unwrap().to_ascii_uppercase() {
+            'B' => match size.chars().nth(size.len() - 2).unwrap().to_ascii_uppercase() {
+                'K' => 1000u64,
+                'M' => 1000u64.pow(2),
+                'G' => 1000u64.pow(3),
+                'T' => 1000u64.pow(4),
+                'P' => 1000u64.pow(5),
+                'E' => 1000u64.pow(6),
+                'Z' => 1000u64.pow(7),
+                'Y' => 1000u64.pow(8),
                 letter => {
                     crash!(1, "'{}B' is not a valid suffix.", letter)
                 }
             },
-            'K' => 1024,
-            'M' => 1024 * 1024,
-            'G' => 1024 * 1024 * 1024,
-            'T' => 1024 * 1024 * 1024 * 1024,
-            'P' => 1024 * 1024 * 1024 * 1024 * 1024,
-            'E' => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-            'Z' => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-            'Y' => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+            'K' => 1024u64,
+            'M' => 1024u64.pow(2),
+            'G' => 1024u64.pow(3),
+            'T' => 1024u64.pow(4),
+            'P' => 1024u64.pow(5),
+            'E' => 1024u64.pow(6),
+            'Z' => 1024u64.pow(7),
+            'Y' => 1024u64.pow(8),
             letter => {
                 crash!(1, "'{}' is not a valid suffix.", letter)
             }

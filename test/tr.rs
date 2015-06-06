@@ -1,49 +1,43 @@
-#![allow(unstable)]
-
-use std::old_io::process::Command;
+use std::process::Command;
+use util::*;
 
 static PROGNAME: &'static str = "./tr";
 
-fn run(input: &str, args: &[&'static str]) -> Vec<u8> {
-    let mut process = Command::new(PROGNAME).args(args).spawn().unwrap();
-
-    process.stdin.take().unwrap().write_str(input).unwrap();
-
-    let po = match process.wait_with_output() {
-        Ok(p) => p,
-        Err(err) => panic!("{}", err),
-    };
-    po.output
-}
+#[path = "common/util.rs"]
+#[macro_use]
+mod util;
 
 #[test]
 fn test_toupper() {
-    let out = run("!abcd!", &["a-z", "A-Z"]);
-    assert_eq!(out.as_slice(), b"!ABCD!");
+    let mut cmd = Command::new(PROGNAME);
+    let result = run_piped_stdin(&mut cmd.args(&["a-z", "A-Z"]), b"!abcd!");
+    assert_eq!(result.stdout, "!ABCD!");
 }
 
 #[test]
 fn test_small_set2() {
-    let out = run("@0123456789", &["0-9", "X"]);
-    assert_eq!(out.as_slice(), b"@XXXXXXXXXX");
+    let mut cmd = Command::new(PROGNAME);
+    let result = run_piped_stdin(&mut cmd.args(&["0-9", "X"]), b"@0123456789");
+    assert_eq!(result.stdout, "@XXXXXXXXXX");
 }
 
 #[test]
 fn test_unicode() {
-    let out = run("(,°□°）, ┬─┬", &[", ┬─┬", "╯︵┻━┻"]);
-    assert_eq!(out.as_slice(), "(╯°□°）╯︵┻━┻".as_bytes());
+    let mut cmd = Command::new(PROGNAME);
+    let result = run_piped_stdin(&mut cmd.args(&[", ┬─┬", "╯︵┻━┻"]), "(,°□°）, ┬─┬".as_bytes());
+    assert_eq!(result.stdout, "(╯°□°）╯︵┻━┻");
 }
 
 #[test]
 fn test_delete() {
-    let out = run("aBcD", &["-d", "a-z"]);
-    assert_eq!(out.as_slice(), b"BD");
+    let mut cmd = Command::new(PROGNAME);
+    let result = run_piped_stdin(&mut cmd.args(&["-d", "a-z"]), b"aBcD");
+    assert_eq!(result.stdout, "BD");
 }
 
 #[test]
 fn test_delete_complement() {
-    let out = run("aBcD", &["-d", "-c", "a-z"]);
-    assert_eq!(out.as_slice(), b"ac");
+    let mut cmd = Command::new(PROGNAME);
+    let result = run_piped_stdin(&mut cmd.args(&["-d", "-c", "a-z"]), b"aBcD");
+    assert_eq!(result.stdout, "ac");
 }
-
-

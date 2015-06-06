@@ -9,7 +9,7 @@
 
 use FmtOptions;
 use parasplit::{Paragraph, ParaWords, WordInfo};
-use std::num::{Float, Int, SignedInt};
+use std::io::{Write, BufWriter, Stdout};
 use std::i64;
 use std::cmp;
 use std::mem;
@@ -20,7 +20,7 @@ struct BreakArgs<'a> {
     indent_str : &'a str,
     indent_len : usize,
     uniform    : bool,
-    ostream    : &'a mut Box<Writer+'static>
+    ostream    : &'a mut BufWriter<Stdout>
 }
 
 impl<'a> BreakArgs<'a> {
@@ -38,9 +38,9 @@ impl<'a> BreakArgs<'a> {
     }
 }
 
-pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer+'static>) {
+pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<Stdout>) {
     // indent
-    let p_indent = para.indent_str.as_slice();
+    let p_indent = &para.indent_str[..];
     let p_indent_len = para.indent_len;
 
     // words
@@ -52,7 +52,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
     let (w, w_len) = match p_words_words.next() {
         Some(winfo) => (winfo.word, winfo.word_nchars),
         None => {
-            silent_unwrap!(ostream.write_char('\n'));
+            silent_unwrap!(ostream.write_all("\n".as_bytes()));
             return;
         }
     };
@@ -79,7 +79,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
     let mut break_args = BreakArgs {
         opts       : opts,
         init_len   : p_init_len,
-        indent_str : p_indent,
+        indent_str : &p_indent[..],
         indent_len : p_indent_len,
         uniform    : uniform,
         ostream    : ostream
@@ -96,7 +96,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut Box<Writer
 // maxlength would be exceeded, then print a linebreak and indent and continue.
 fn break_simple<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &mut BreakArgs<'a>) {
     iter.fold((args.init_len, false), |l, winfo| accum_words_simple(args, l, winfo));
-    silent_unwrap!(args.ostream.write_char('\n'));
+    silent_unwrap!(args.ostream.write_all("\n".as_bytes()));
 }
 
 #[inline(always)]
@@ -131,7 +131,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item=&'a WordInfo<'a>>>(mut iter: T
                 write_newline(args.indent_str, args.ostream);
             }
             // at each breakpoint, keep emitting words until we find the word matching this breakpoint
-            for winfo in iter {
+            for winfo in &mut iter {
                 let (slen, word) = slice_if_fresh(fresh, winfo.word, winfo.word_start, args.uniform,
                                                   winfo.new_line, winfo.sentence_start, prev_punct);
                 fresh = false;
@@ -170,7 +170,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item=&'a WordInfo<'a>>>(mut iter: T
         fresh = false;
         write_with_spaces(word, slen, args.ostream);
     }
-    silent_unwrap!(args.ostream.write_char('\n'));
+    silent_unwrap!(args.ostream.write_all("\n".as_bytes()));
 }
 
 struct LineBreak<'a> {
@@ -372,7 +372,7 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     // we penalize lines that have very different ratios from previous lines
     let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powf(3f32)).abs()) as i64;
 
-    let demerits = Int::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
+    let demerits = i64::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
     (demerits, ratio)
 }
@@ -435,18 +435,18 @@ fn slice_if_fresh<'a>(fresh: bool, word: &'a str, start: usize, uniform: bool, n
 
 // Write a newline and add the indent.
 #[inline(always)]
-fn write_newline(indent: &str, ostream: &mut Box<Writer>) {
-    silent_unwrap!(ostream.write_char('\n'));
+fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) {
+    silent_unwrap!(ostream.write_all("\n".as_bytes()));
     silent_unwrap!(ostream.write_all(indent.as_bytes()));
 }
 
 // Write the word, along with slen spaces.
 #[inline(always)]
-fn write_with_spaces(word: &str, slen: usize, ostream: &mut Box<Writer>) {
+fn write_with_spaces(word: &str, slen: usize, ostream: &mut BufWriter<Stdout>) {
     if slen == 2 {
         silent_unwrap!(ostream.write_all("  ".as_bytes()));
     } else if slen == 1 {
-        silent_unwrap!(ostream.write_char(' '));
+        silent_unwrap!(ostream.write_all(" ".as_bytes()));
     }
     silent_unwrap!(ostream.write_all(word.as_bytes()));
 }

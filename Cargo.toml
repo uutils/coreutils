@@ -276,3 +276,4 @@ git = "https://github.com/dagenix/rust-crypto"
 
 [dependencies]
 getopts = "0.2.10"
+
