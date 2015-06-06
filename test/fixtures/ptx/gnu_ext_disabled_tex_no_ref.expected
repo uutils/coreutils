@@ -1,0 +1,24 @@
+\xx {}{}{"quotes",}{ for roff}{}
+\xx {}{and some other like}{\%a,}{ b\#, c\$c}{}
+\xx {}{maybe}{also~or^}{}{}
+\xx {}{}{and}{ some other like \%a, b\#, c\$c}{}
+\xx {}{oh,}{and}{ back\backslash{}slash}{}
+\xx {}{and some other like \%a,}{b\#,}{ c\$c}{}
+\xx {}{oh, and}{back\backslash{}slash}{}{}
+\xx {}{and some other like \%a, b\#,}{c\$c}{}{}
+\xx {}{let's check special}{characters:}{}{}
+\xx {}{let's}{check}{ special characters:}{}
+\xx {}{"quotes",}{for}{ roff}{}
+\xx {}{$\{$brackets$\}$}{for}{ tex}{}
+\xx {}{}{hello}{ world!}{}
+\xx {}{}{let's}{ check special characters:}{}
+\xx {}{and some other}{like}{ \%a, b\#, c\$c}{}
+\xx {}{}{maybe}{ also~or^}{}
+\xx {}{}{oh,}{ and back\backslash{}slash}{}
+\xx {}{and some}{other}{ like \%a, b\#, c\$c}{}
+\xx {}{"quotes", for}{roff}{}{}
+\xx {}{and}{some}{ other like \%a, b\#, c\$c}{}
+\xx {}{let's check}{special}{ characters:}{}
+\xx {}{$\{$brackets$\}$ for}{tex}{}{}
+\xx {}{hello}{world!}{}{}
+\xx {}{}{$\{$brackets$\}$}{ for tex}{}
