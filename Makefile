@@ -183,6 +183,7 @@ TEST_PROGS  := \
   seq \
   sort \
   split \
+  tac \
   test \
   tr \
   true \
