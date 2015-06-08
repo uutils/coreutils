@@ -23,6 +23,7 @@ extern crate regex;
 extern crate log;
 extern crate rustc;
 
+use std::io::Write;
 use std::os::unix::prelude::PermissionsExt;
 use std::env::current_dir;
 use std::ffi::OsString;
@@ -40,6 +41,7 @@ use std::path::Path;
 #[macro_use]
 mod util;
 
+const NAME: &'static str = "install";
 
 mod user {
     pub const USER  : u32 = 0b1;
@@ -105,14 +107,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let dest = Path::new(&dest_str);
     let sources: Vec<Box<&Path>> = if free.len() <= 0 {
-        println!("Missing SOURCE argument. Try --help.");
         show_error!("Missing SOURCE argument. Try --help.");
         return 1;
     } else {
         let mut tmp : Vec<Box<&Path>> = Vec::new();
         for i in 0..free.len() {
             if fs::metadata(Path::new(&free[i].clone())).is_err() {
-                println!("cannot stat ‘{}’: No such file or directory {}", free[i], fs::metadata(Path::new(&free[i].clone())).is_err());
                 show_error!("cannot stat ‘{}’: No such file or directory", free[i]);
                 return 1;
             }
@@ -132,13 +132,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(_) => false
     };
     
-    println!("is dest dir {}", is_dest_dir);
-    
     if matches.opt_present("target-directory") || sources.len() > 1  || is_dest_dir {
-        println!("many files");
         files_to_directory(sources, dest, mode);
     } else {
-        println!("one file {} {}", (*sources[0]).display(), dest.display());
         file_to_file(&*sources[0], dest, mode);
     }
     0
@@ -147,8 +143,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn file_to_file(source: &Path, dest: &Path, mode: u32) {
     let real_source = real(source);
     let real_dest = real(dest);
-    
-    println!("realll {:?} {:?} {}", real_source, real_dest, real_source==real_dest);
     
     if real_source == real_dest {
         crash!(1, "{0} and {1} are the same file", source.display(), dest.display());
@@ -175,7 +169,7 @@ fn file_to_file(source: &Path, dest: &Path, mode: u32) {
 fn files_to_directory(sources : Vec<Box<&Path>>, dest : &Path, mode: u32) {
     match fs::metadata(dest) {
         Ok(m) => if !m.is_dir() {
-            crash!(1, "failed to access ‘{}’: No such file or directory", dest.to_str());
+            crash!(1, "failed to access ‘{}’: No such file or directory", dest.display());
         },
         Err(_) => {
             crash!(1, "target ‘{}’ is not a directory", dest.display());
@@ -204,8 +198,6 @@ fn files_to_directory(sources : Vec<Box<&Path>>, dest : &Path, mode: u32) {
         
         let real_source = real(&tmp_dest);
         let real_dest = real(&*sources[i]);
-        
-        println!("realll  {:?}   {:?}", real_source, real_dest);
         
         if real_source == real_dest {
             println!("install: {0} and {1} are the same file", sources[i].display(), tmp_dest.display());
@@ -239,8 +231,6 @@ fn files_to_directory(sources : Vec<Box<&Path>>, dest : &Path, mode: u32) {
 }
 
 fn parse_mode(s : String) -> u32 {
-    println!("mode parsing");
-    
     let mut out : u32 = 0;
     let split: Vec<&str> = s.split(',').collect();
     let regexp = Regex::new(r"^[ugoa]*[-=+][rwx]*$").unwrap();
@@ -272,7 +262,6 @@ fn parse_mode(s : String) -> u32 {
             };
         }
         
-        println!("user {}, perm {}", user, permission);
         let mut cap = match re.captures(i) {
             Some(s) => s.at(0).unwrap().chars(),
             None => unreachable!(),
@@ -317,12 +306,10 @@ fn real(path: & Path) -> Box<PathBuf> {
     	real_path_clone.push(component.as_os_str());
     	
     	let next : OsString = match fs::read_link(&real_path_clone) {
-    	    Ok(m) => {  println!("here");
-    	                m.file_name().unwrap().to_owned()},
+    	    Ok(m) => m.file_name().unwrap().to_owned(),
     	    Err(_) => (*component.as_os_str()).to_os_string()  
     	};
     	real_path.push(next);
-    	println!("pav {} {}", real_path.display(), real_path_clone.display());
     }
 
     let bbox = Box::new(Path::new(real_path.as_path()).to_owned());
