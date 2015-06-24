@@ -1,4 +1,6 @@
 extern crate libc;
+extern crate memchr;
+extern crate aho_corasick;
 extern crate rand;
 extern crate regex_syntax;
 extern crate regex;

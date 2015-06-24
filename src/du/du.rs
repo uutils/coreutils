@@ -1,5 +1,5 @@
 #![crate_name = "du"]
-#![feature(fs_time, metadata_ext, std_misc)]
+#![feature(future)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -57,11 +57,11 @@ impl Stat {
             path: path.clone(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
-            blocks: metadata.as_raw().blocks() as u64,
-            nlink: metadata.as_raw().nlink() as u64,
-            created: metadata.modified(),
-            accessed: metadata.accessed(),
-            modified: metadata.modified()
+            blocks: metadata.blocks() as u64,
+            nlink: metadata.nlink() as u64,
+            created: metadata.mtime() as u64,
+            accessed: metadata.atime() as u64,
+            modified: metadata.mtime() as u64
         }
     }
 }

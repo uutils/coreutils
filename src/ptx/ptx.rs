@@ -1,5 +1,5 @@
 #![crate_name = "ptx"]
-#![feature(convert, collections)]
+#![feature(convert, slice_chars, vec_push_all)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -9,7 +9,10 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
+
+extern crate aho_corasick;
 extern crate getopts;
+extern crate memchr;
 extern crate regex_syntax;
 extern crate regex;
  

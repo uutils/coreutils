@@ -1,5 +1,4 @@
 #![crate_name = "readlink"]
-#![feature(file_type)]
 
 /*
  * This file is part of the uutils coreutils package.

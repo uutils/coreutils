@@ -1,5 +1,5 @@
 #![crate_name = "nl"]
-#![feature(collections, slice_patterns)]
+#![feature(slice_patterns)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,7 +11,9 @@
  *
  */
 
+extern crate aho_corasick;
 extern crate getopts;
+extern crate memchr;
 extern crate regex_syntax;
 extern crate regex;
 
@@ -102,7 +104,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         number_width: 6,
         number_format: NumberFormat::Right,
         renumber: true,
-        number_separator: String::from_str("\t"),
+        number_separator: String::from("\t"),
     };
 
     let given_options = match opts.parse(&args[1..]) {
