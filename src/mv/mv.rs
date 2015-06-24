@@ -1,5 +1,5 @@
 #![crate_name = "mv"]
-#![feature(collections, fs_time, path_ext, slice_patterns, str_char)]
+#![feature(path_ext, slice_extras, slice_patterns, str_char)]
 #![allow(deprecated)]
 
 /*
@@ -17,6 +17,7 @@ extern crate libc;
 
 use std::fs::{self, PathExt};
 use std::io::{BufRead, BufReader, Result, stdin, Write};
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 #[path = "../common/util.rs"]
@@ -287,7 +288,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         }
 
         if b.update {
-            if try!(fs::metadata(from)).modified() <= try!(fs::metadata(to)).modified() {
+            if try!(fs::metadata(from)).mtime() <= try!(fs::metadata(to)).mtime() {
                 return Ok(());
             }
         }

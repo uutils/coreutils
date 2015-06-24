@@ -1,5 +1,5 @@
 #![crate_name = "rm"]
-#![feature(file_type, dir_entry_ext, path_ext)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.

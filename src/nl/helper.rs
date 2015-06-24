@@ -11,11 +11,11 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
             let s: String = rest.iter().map(|c| *c).collect();
             match regex::Regex::new(&s) {
                 Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
-                Err(_) => Err(String::from_str("Illegal regular expression")),
+                Err(_) => Err(String::from("Illegal regular expression")),
             }
         }
         _ => {
-            Err(String::from_str("Illegal style encountered"))
+            Err(String::from("Illegal style encountered"))
         },
     }
 }
@@ -36,7 +36,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
             "ln" => { settings.number_format = ::NumberFormat::Left; },
             "rn" => { settings.number_format = ::NumberFormat::Right; },
             "rz" => { settings.number_format = ::NumberFormat::RightZero; },
-            _ => { errs.push(String::from_str("Illegal value for -n")); },
+            _ => { errs.push(String::from("Illegal value for -n")); },
         }
     }
     match opts.opt_str("b") {
@@ -75,7 +75,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
             let conv: Option<u64> = val.parse().ok();
             match conv {
               None => {
-                  errs.push(String::from_str("Illegal value for -i"));
+                  errs.push(String::from("Illegal value for -i"));
               }
               Some(num) => { settings.line_increment = num }
             }
@@ -87,7 +87,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
             let conv: Option<usize> = val.parse().ok();
             match conv {
               None => {
-                  errs.push(String::from_str("Illegal value for -w"));
+                  errs.push(String::from("Illegal value for -w"));
               }
               Some(num) => { settings.number_width = num }
             }
@@ -99,7 +99,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
             let conv: Option<u64> = val.parse().ok();
             match conv {
               None => {
-                  errs.push(String::from_str("Illegal value for -v"));
+                  errs.push(String::from("Illegal value for -v"));
               }
               Some(num) => { settings.starting_line_number = num }
             }
@@ -111,7 +111,7 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
             let conv: Option<u64> = val.parse().ok();
             match conv {
               None => {
-                  errs.push(String::from_str("Illegal value for -l"));
+                  errs.push(String::from("Illegal value for -l"));
               }
               Some(num) => { settings.join_blank_lines = num }
             }

@@ -1,5 +1,5 @@
 #![crate_name = "fmt"]
-#![feature(core, str_char, unicode)]
+#![feature(iter_cmp, str_char, unicode)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.

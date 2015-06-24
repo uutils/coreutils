@@ -1,1 +1,1 @@
-DEPLIBS += rand regex regex-syntax
+DEPLIBS += aho-corasick memchr rand regex regex-syntax

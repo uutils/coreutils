@@ -1,5 +1,5 @@
 #![crate_name = "fold"]
-#![feature(collections)]
+#![feature(slice_chars)]
 
 /*
  * This file is part of the uutils coreutils package.

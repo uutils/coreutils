@@ -12,8 +12,10 @@
 
 #![allow(unused_variables)]  // only necessary while the TODOs still exist
 
+extern crate aho_corasick;
 extern crate getopts;
 extern crate libc;
+extern crate memchr;
 extern crate regex;
 extern crate regex_syntax;
 

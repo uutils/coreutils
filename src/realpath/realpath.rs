@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(file_type, path_ext)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
