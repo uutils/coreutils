@@ -60,6 +60,7 @@ PROGS       := \
   fold \
   link \
   hashsum \
+  install \
   mkdir \
   mv \
   nl \
