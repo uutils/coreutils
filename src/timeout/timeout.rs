@@ -22,8 +22,8 @@ use std::os::unix::process::ExitStatusExt;
 #[macro_use]
 mod util;
 
-#[path = "../common/time.rs"]
-mod time;
+#[path = "../common/parse_time.rs"]
+mod parse_time;
 
 #[path = "../common/signals.rs"]
 mod signals;
@@ -70,7 +70,7 @@ Usage:
         let status = matches.opt_present("preserve-status");
         let foreground = matches.opt_present("foreground");
         let kill_after = match matches.opt_str("kill-after") {
-            Some(tstr) => match time::from_str(&tstr) {
+            Some(tstr) => match parse_time::from_str(&tstr) {
                 Ok(time) => time,
                 Err(f) => {
                     show_error!("{}", f);
@@ -89,7 +89,7 @@ Usage:
             },
             None => signals::signal_by_name_or_value("TERM").unwrap()
         };
-        let duration = match time::from_str(&matches.free[0]) {
+        let duration = match parse_time::from_str(&matches.free[0]) {
             Ok(time) => time,
             Err(f) => {
                 show_error!("{}", f);
