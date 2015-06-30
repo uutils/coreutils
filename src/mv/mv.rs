@@ -18,7 +18,7 @@ extern crate libc;
 use std::fs::{self, PathExt};
 use std::io::{BufRead, BufReader, Result, stdin, Write};
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -60,9 +60,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("f", "force", "do not prompt before overwriting");
     opts.optflag("i", "interactive", "prompt before override");
     opts.optflag("n", "no-clobber", "do not overwrite an existing file");
-    // I have yet to find a use-case (and thereby write a test) where this option is useful.
-    //opts.optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
-    //                                        argument");
+    opts.optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
+                                                 argument");
     opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
     opts.optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY");
     opts.optflag("T", "no-target-directory", "treat DEST as a normal file");
@@ -150,8 +149,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         verbose: matches.opt_present("v"),
     };
 
-    let string_to_path = |s: &String| { PathBuf::from(s) };
-    let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
+    let paths: Vec<PathBuf> = {
+        fn string_to_path<'a>(s: &'a String) -> &'a Path {
+            Path::new(s)
+        };
+        fn strip_slashes<'a>(p: &'a Path) -> &'a Path {
+            p.components().as_path()
+        }
+        let to_owned = |p: &Path| p.to_owned();
+        let arguments = matches.free.iter().map(string_to_path);
+        if matches.opt_present("strip-trailing-slashes") {
+            arguments.map(strip_slashes).map(to_owned).collect()
+        } else {
+            arguments.map(to_owned).collect()
+        }
+    };
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
