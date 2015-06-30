@@ -128,31 +128,33 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
             }
         }
     };
-    process.set_timeout(Some((duration * 1000f64) as u64));  // FIXME: this ignores the f64...
-    match process.wait() {
-        Ok(status) => status.code().unwrap_or_else(|| status.signal().unwrap()),
-        Err(_) => {
+    match process.wait_or_timeout(duration) {
+        Ok(Some(status)) => status.code().unwrap_or_else(|| status.signal().unwrap()),
+        Ok(None) => {
             return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
-            process.set_timeout(Some((kill_after * 1000f64) as u64));
-            match process.wait() {
-                Ok(status) => {
+            match process.wait_or_timeout(kill_after) {
+                Ok(Some(status)) => {
                     if preserve_status {
                         status.code().unwrap_or_else(|| status.signal().unwrap())
                     } else {
                         124
                     }
-                }
-                Err(_) => {
+                },
+                Ok(None) => {
                     if kill_after == 0f64 {
                         // XXX: this may not be right
                         return 124;
                     }
                     return_if_err!(ERR_EXIT_STATUS, process.send_signal(signals::signal_by_name_or_value("KILL").unwrap()));
-                    process.set_timeout(None);
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137
-                }
+                },
+                Err(_) => return 124,
             }
-        }
+        },
+        Err(_) => {
+            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            ERR_EXIT_STATUS
+        },
     }
 }
