@@ -73,7 +73,7 @@ pub trait ChildExt {
     fn send_signal(&mut self, signal: usize) -> io::Result<()>;
 
     /// Wait for a process to finish or return after the specified duration.
-    fn wait_or_timeout(&mut self, timeout_ms: usize) -> io::Result<Option<ExitStatus>>;
+    fn wait_or_timeout(&mut self, timeout: f64) -> io::Result<Option<ExitStatus>>;
 }
 
 impl ChildExt for Child {
@@ -86,7 +86,7 @@ impl ChildExt for Child {
         }
     }
 
-    fn wait_or_timeout(&mut self, timeout_ms: usize) -> io::Result<Option<ExitStatus>> {
+    fn wait_or_timeout(&mut self, timeout: f64) -> io::Result<Option<ExitStatus>> {
         // The result will be written to that Option, protected by a Mutex
         // Then the Condvar will be signaled
         let state = Arc::new((
@@ -118,7 +118,9 @@ impl ChildExt for Child {
         let &(ref lock, ref cvar) = &*state;
         let mut exitstatus = lock.lock().unwrap();
         // Condvar::wait_timeout_ms() can wake too soon, in this case wait again
-        let target = get_time() + Duration::milliseconds(timeout_ms as i64);
+        let target = get_time() +
+            Duration::seconds(timeout as i64) +
+            Duration::nanoseconds((timeout * 1.0e-6) as i64);
         while exitstatus.is_none() {
             let now = get_time();
             if now >= target {
