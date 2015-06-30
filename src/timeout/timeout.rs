@@ -12,6 +12,7 @@
 
 extern crate getopts;
 extern crate libc;
+extern crate time;
 
 use libc::pid_t;
 use std::io::{ErrorKind, Write};
@@ -27,6 +28,10 @@ mod parse_time;
 
 #[path = "../common/signals.rs"]
 mod signals;
+
+#[path = "../common/process.rs"]
+mod process;
+use process::ChildExt;
 
 extern {
     pub fn setpgid(_: libc::pid_t, _: libc::pid_t) -> libc::c_int;
@@ -127,9 +132,7 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
     match process.wait() {
         Ok(status) => status.code().unwrap_or_else(|| status.signal().unwrap()),
         Err(_) => {
-            if unsafe { libc::funcs::posix88::signal::kill(process.id() as pid_t, signal as i32) } != 0 {
-                return ERR_EXIT_STATUS;
-            }
+            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
             process.set_timeout(Some((kill_after * 1000f64) as u64));
             match process.wait() {
                 Ok(status) => {
@@ -144,9 +147,7 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
                         // XXX: this may not be right
                         return 124;
                     }
-                    if unsafe { libc::funcs::posix88::signal::kill(process.id() as pid_t, signals::signal_by_name_or_value("KILL").unwrap() as i32) } != 0 {
-                        return ERR_EXIT_STATUS;
-                    }
+                    return_if_err!(ERR_EXIT_STATUS, process.send_signal(signals::signal_by_name_or_value("KILL").unwrap()));
                     process.set_timeout(None);
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137
