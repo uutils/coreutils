@@ -1,4 +1,5 @@
 #![crate_name = "timeout"]
+#![feature(process_id)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,6 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
+use libc::pid_t;
 use std::io::{ErrorKind, Write};
 use std::process::{Command, Stdio};
 use std::os::unix::process::ExitStatusExt;
@@ -125,7 +127,9 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
     match process.wait() {
         Ok(status) => status.code().unwrap_or_else(|| status.signal().unwrap()),
         Err(_) => {
-            return_if_err!(ERR_EXIT_STATUS, process.signal(signal as isize));
+            if unsafe { libc::funcs::posix88::signal::kill(process.id() as pid_t, signal as i32) } != 0 {
+                return ERR_EXIT_STATUS;
+            }
             process.set_timeout(Some((kill_after * 1000f64) as u64));
             match process.wait() {
                 Ok(status) => {
@@ -140,7 +144,9 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
                         // XXX: this may not be right
                         return 124;
                     }
-                    return_if_err!(ERR_EXIT_STATUS, process.signal(signals::signal_by_name_or_value("KILL").unwrap() as isize));
+                    if unsafe { libc::funcs::posix88::signal::kill(process.id() as pid_t, signals::signal_by_name_or_value("KILL").unwrap() as i32) } != 0 {
+                        return ERR_EXIT_STATUS;
+                    }
                     process.set_timeout(None);
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137
