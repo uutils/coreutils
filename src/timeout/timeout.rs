@@ -1,5 +1,5 @@
 #![crate_name = "timeout"]
-#![feature(collections, core, io, old_io, rustc_private)]
+#![feature(process_id)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,19 +12,26 @@
 
 extern crate getopts;
 extern crate libc;
+extern crate time;
 
-use std::old_io::{PathDoesntExist, FileNotFound};
-use std::old_io::process::{Command, ExitStatus, ExitSignal, InheritFd};
+use libc::pid_t;
+use std::io::{ErrorKind, Write};
+use std::process::{Command, Stdio};
+use std::os::unix::process::ExitStatusExt;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
-#[path = "../common/time.rs"]
-mod time;
+#[path = "../common/parse_time.rs"]
+mod parse_time;
 
 #[path = "../common/signals.rs"]
 mod signals;
+
+#[path = "../common/process.rs"]
+mod process;
+use process::ChildExt;
 
 extern {
     pub fn setpgid(_: libc::pid_t, _: libc::pid_t) -> libc::c_int;
@@ -38,15 +45,14 @@ static ERR_EXIT_STATUS: i32 = 125;
 pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();
 
-    let opts = [
-        getopts::optflag("", "preserve-status", "exit with the same status as COMMAND, even when the command times out"),
-        getopts::optflag("", "foreground", "when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out"),
-        getopts::optopt("k", "kill-after", "also send a KILL signal if COMMAND is still running this long after the initial signal was sent", "DURATION"),
-        getopts::optflag("s", "signal", "specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals"),
-        getopts::optflag("h", "help", "display this help and exit"),
-        getopts::optflag("V", "version", "output version information and exit")
-    ];
-    let matches = match getopts::getopts(args.tail(), &opts) {
+    let mut opts = getopts::Options::new();
+    opts.optflag("", "preserve-status", "exit with the same status as COMMAND, even when the command times out");
+    opts.optflag("", "foreground", "when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out");
+    opts.optopt("k", "kill-after", "also send a KILL signal if COMMAND is still running this long after the initial signal was sent", "DURATION");
+    opts.optflag("s", "signal", "specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             crash!(ERR_EXIT_STATUS, "{}", f)
@@ -58,7 +64,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {} [OPTION] DURATION COMMAND [ARG]...
 
-{}", NAME, VERSION, program, getopts::usage("Start COMMAND, and kill it if still running after DURATION.", &opts));
+{}", NAME, VERSION, program, &opts.usage("Start COMMAND, and kill it if still running after DURATION."));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else if matches.free.len() < 2 {
@@ -69,7 +75,7 @@ Usage:
         let status = matches.opt_present("preserve-status");
         let foreground = matches.opt_present("foreground");
         let kill_after = match matches.opt_str("kill-after") {
-            Some(tstr) => match time::from_str(tstr.as_slice()) {
+            Some(tstr) => match parse_time::from_str(&tstr) {
                 Ok(time) => time,
                 Err(f) => {
                     show_error!("{}", f);
@@ -79,7 +85,7 @@ Usage:
             None => 0f64
         };
         let signal = match matches.opt_str("signal") {
-            Some(sigstr) => match signals::signal_by_name_or_value(sigstr.as_slice()) {
+            Some(sigstr) => match signals::signal_by_name_or_value(&sigstr) {
                 Some(sig) => sig,
                 None => {
                     show_error!("invalid signal '{}'", sigstr);
@@ -88,14 +94,14 @@ Usage:
             },
             None => signals::signal_by_name_or_value("TERM").unwrap()
         };
-        let duration = match time::from_str(matches.free[0].as_slice()) {
+        let duration = match parse_time::from_str(&matches.free[0]) {
             Ok(time) => time,
             Err(f) => {
                 show_error!("{}", f);
                 return ERR_EXIT_STATUS;
             }
         };
-        return timeout(matches.free[1].as_slice(), &matches.free[2..], duration, signal, kill_after, foreground, status);
+        return timeout(&matches.free[1], &matches.free[2..], duration, signal, kill_after, foreground, status);
     }
 
     0
@@ -106,14 +112,14 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
         unsafe { setpgid(0, 0) };
     }
     let mut process = match Command::new(cmdname).args(args)
-                                                 .stdin(InheritFd(0))
-                                                 .stdout(InheritFd(1))
-                                                 .stderr(InheritFd(2))
+                                                 .stdin(Stdio::inherit())
+                                                 .stdout(Stdio::inherit())
+                                                 .stderr(Stdio::inherit())
                                                  .spawn() {
         Ok(p) => p,
         Err(err) => {
             show_error!("failed to execute process: {}", err);
-            if err.kind == FileNotFound || err.kind == PathDoesntExist {
+            if err.kind() == ErrorKind::NotFound {
                 // XXX: not sure which to use
                 return 127;
             } else {
@@ -122,37 +128,33 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
             }
         }
     };
-    process.set_timeout(Some((duration * 1000f64) as u64));  // FIXME: this ignores the f64...
-    match process.wait() {
-        Ok(status) => match status {
-            ExitStatus(stat) => stat as i32,
-            ExitSignal(stat) => stat as i32
-        },
-        Err(_) => {
-            return_if_err!(ERR_EXIT_STATUS, process.signal(signal as isize));
-            process.set_timeout(Some((kill_after * 1000f64) as u64));
-            match process.wait() {
-                Ok(status) => {
+    match process.wait_or_timeout(duration) {
+        Ok(Some(status)) => status.code().unwrap_or_else(|| status.signal().unwrap()),
+        Ok(None) => {
+            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            match process.wait_or_timeout(kill_after) {
+                Ok(Some(status)) => {
                     if preserve_status {
-                        match status {
-                            ExitStatus(stat) => stat as i32,
-                            ExitSignal(stat) => stat as i32
-                        }
+                        status.code().unwrap_or_else(|| status.signal().unwrap())
                     } else {
                         124
                     }
-                }
-                Err(_) => {
+                },
+                Ok(None) => {
                     if kill_after == 0f64 {
                         // XXX: this may not be right
                         return 124;
                     }
-                    return_if_err!(ERR_EXIT_STATUS, process.signal(signals::signal_by_name_or_value("KILL").unwrap() as isize));
-                    process.set_timeout(None);
+                    return_if_err!(ERR_EXIT_STATUS, process.send_signal(signals::signal_by_name_or_value("KILL").unwrap()));
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137
-                }
+                },
+                Err(_) => return 124,
             }
-        }
+        },
+        Err(_) => {
+            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            ERR_EXIT_STATUS
+        },
     }
 }
