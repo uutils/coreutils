@@ -8,3 +8,6 @@ script:
   - make test
   - make build-check
   - make test-check
+matrix:
+  allow_failures:
+    - rust: 1.0.0
