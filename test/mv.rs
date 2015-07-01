@@ -58,6 +58,28 @@ fn test_mv_move_file_into_dir() {
 }
 
 #[test]
+fn test_mv_strip_slashes() {
+    let dir = "test_mv_strip_slashes_dir";
+    let file = "test_mv_strip_slashes_file";
+    let mut source = file.to_owned();
+    source.push_str("/");
+
+    mkdir(dir);
+    touch(file);
+
+    let result = run(Command::new(PROGNAME).arg(&source).arg(dir));
+    assert!(!result.success);
+
+    assert!(!Path::new(&format!("{}/{}", dir, file)).is_file());
+
+    let result = run(Command::new(PROGNAME).arg("--strip-trailing-slashes").arg(source).arg(dir));
+    assert_empty_stderr!(result);
+    assert!(result.success);
+
+    assert!(Path::new(&format!("{}/{}", dir, file)).is_file());
+}
+
+#[test]
 fn test_mv_multiple_files() {
     let target_dir = "test_mv_multiple_files_dir";
     let file_a = "test_mv_multiple_file_a";
