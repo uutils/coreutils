@@ -177,11 +177,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn help(usage: &str) {
-    println!("a0{} {1}\n\n \
-                       Usage: {0} SOURCE DEST\n  \
-                         or:  {0} SOURCE... DIRECTORY \
-                       \n\
-                       {2}", NAME, VERSION, usage);
+    println!("{0} {1}\n\n\
+    Usage: {0} SOURCE DEST\n   \
+       or: {0} SOURCE... DIRECTORY\n\n\
+    {2}", NAME, VERSION, usage);
 }
 
 fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
