@@ -149,7 +149,6 @@ To do
 - getlimits
 - install
 - join
-- ln
 - ls
 - mknod
 - mktemp

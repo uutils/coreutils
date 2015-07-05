@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::env;
-use std::fs::{self, File};
+use std::fs::{self, File, PathExt};
 use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
@@ -81,6 +81,34 @@ pub fn touch(file: &str) {
 
 pub fn symlink(src: &str, dst: &str) {
     symlink_file(src, dst).unwrap();
+}
+
+pub fn is_symlink(path: &str) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(m) => m.file_type().is_symlink(),
+        Err(_) => false
+    }
+}
+
+pub fn resolve_link(path: &str) -> String {
+    match fs::read_link(path) {
+        Ok(p) => p.to_str().unwrap().to_owned(),
+        Err(_) => "".to_string()
+    }
+}
+
+pub fn file_exists(path: &str) -> bool {
+    match fs::metadata(path) {
+        Ok(m) => m.is_file(),
+        Err(_) => false
+    }
+}
+
+pub fn dir_exists(path: &str) -> bool {
+    match fs::metadata(path) {
+        Ok(m) => m.is_dir(),
+        Err(_) => false
+    }
 }
 
 pub fn cleanup(path: &'static str) {
