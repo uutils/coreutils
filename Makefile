@@ -60,6 +60,7 @@ PROGS       := \
   fold \
   link \
   hashsum \
+  ln \
   mkdir \
   mv \
   nl \
@@ -171,6 +172,7 @@ TEST_PROGS  := \
   fold \
   hashsum \
   head \
+  ln \
   mkdir \
   mv \
   nl \
