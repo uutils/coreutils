@@ -7,8 +7,6 @@
  * that was distributed with this source code.
  */
 
-#![feature(process_id)]
-
 extern crate libc;
 extern crate time;
 
