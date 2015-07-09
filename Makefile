@@ -147,9 +147,11 @@ SYSTEM := $(shell uname)
 DYLIB_EXT := 
 ifeq ($(SYSTEM),Linux)
 	DYLIB_EXT    := so
+	DYLIB_FLAGS  := -shared
 endif
 ifeq ($(SYSTEM),Darwin)
 	DYLIB_EXT    := dylib
+	DYLIB_FLAGS  := -dynamiclib
 endif
 
 # Libaries to install
@@ -311,8 +313,8 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 $(BUILDDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdbuf/libstdbuf.c $(SRCDIR)/stdbuf/libstdbuf.h | $(BUILDDIR)
 	cd $(SRCDIR)/stdbuf && \
 	$(RUSTC) libstdbuf.rs && \
-	$(CC) -c -Wall -Werror -fpic libstdbuf.c -L. -llibstdbuf.a && \
-	$(CC) -shared -o libstdbuf.$(DYLIB_EXT) -Wl,--whole-archive liblibstdbuf.a -Wl,--no-whole-archive libstdbuf.o -lpthread && \
+	$(CC) -c -Wall -Werror -fPIC libstdbuf.c && \
+	$(CC) $(DYLIB_FLAGS) -o libstdbuf.$(DYLIB_EXT) liblibstdbuf.a libstdbuf.o && \
 	mv *.$(DYLIB_EXT) $(BUILDDIR) && $(RM) *.o && $(RM) *.a
 	
 $(BUILDDIR)/stdbuf: $(BUILDDIR)/libstdbuf.$(DYLIB_EXT)

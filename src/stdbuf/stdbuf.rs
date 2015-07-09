@@ -59,7 +59,7 @@ fn preload_strings() -> (&'static str, &'static str) {
 
 #[cfg(target_os = "macos")]
 fn preload_strings() -> (&'static str, &'static str) { 
-    ("DYLD_INSERT_LIBRARIES", ".dylib")
+    ("DYLD_LIBRARY_PATH", ".dylib")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
