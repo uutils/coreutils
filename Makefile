@@ -151,7 +151,7 @@ ifeq ($(SYSTEM),Linux)
 endif
 ifeq ($(SYSTEM),Darwin)
 	DYLIB_EXT    := dylib
-	DYLIB_FLAGS  := -dynamiclib
+	DYLIB_FLAGS  := -dynamiclib -undefined dynamic_lookup
 endif
 
 # Libaries to install
