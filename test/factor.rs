@@ -35,7 +35,7 @@ fn test_random() {
         let mut factors = Vec::new();
         while product < min {
             // log distribution---higher probability for lower numbers
-            let mut factor;
+            let factor;
             loop {
                 let next = rng.gen_range(0f64, LOG_PRIMES).exp2().floor() as usize;
                 if next < NUM_PRIMES {
