@@ -185,6 +185,7 @@ TEST_PROGS  := \
   seq \
   sort \
   split \
+  stdbuf \
   tac \
   test \
   tr \
