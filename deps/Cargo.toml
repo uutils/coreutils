@@ -8,7 +8,7 @@ name = "null"
 [dependencies]
 libc = "0.1.8"
 getopts = "0.2.11"
-bit-vec = "0.3.0"
+bit-vec = "0.4.0"
 bit-set = "0.2.0"
 num_cpus = "*"
 rand = "0.3.8"
