@@ -1,0 +1,30 @@
+COMMANDS:
+ * status=WHICH
+ * CONV=
+    * ascii/ebcdic/ibm - Do we really need EBCDIC in a modern dd?
+    * block
+    * unblock
+    * lcase
+    * ucase
+    * sparse
+    * swab
+    * sync
+    * excl
+    * nocreat
+    * notrunc
+ * FLAG=
+    * direct - These are very implementation specific. It might be better to
+               noop these than attempt to match the implementation details of
+               GNU dd.
+    * directory
+    * dsync
+    * sync
+    * fullblock
+    * nonblock
+    * noatime
+    * nocache
+    * noctty
+    * nofollow
+    * count_bytes
+    * skip_bytes
+    * seek_bytes
