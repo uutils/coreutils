@@ -20,8 +20,10 @@ use std::str::{from_utf8};
 static NAME: &'static str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
+// Definitely don't use [u8], try keeping it as OsStr or OsString instead
 pub fn uumain(_: Vec<String>) -> i32 {
     let args = args_os().collect::<Vec<OsString>>();
+    // This is completely disregarding valid windows paths that aren't valid unicode
     let args = args.iter().map(|a| a.to_bytes().unwrap()).collect::<Vec<&[u8]>>();
     if args.len() == 0 {
         return 2;
@@ -382,32 +384,26 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &[u8], cond: PathCondition) -> bool {
-    use std::old_io::{TypeFile, TypeDirectory, TypeBlockSpecial, TypeNamedPipe};
-    use std::old_io::fs::{stat};
-    use std::old_path::{Path};
-
-    let path = match Path::new_opt(path) {
-        Some(p) => p,
-        None => return false,
-    };
-    let stat = match stat(&path) {
+    use std::fs::metadata;
+    let path = from_utf8(path).unwrap();
+    let stat = match metadata(path) {
         Ok(s) => s,
         _ => return false,
     };
     match cond {
-        BlockSpecial     => stat.kind == TypeBlockSpecial,
-        CharacterSpecial => false,
-        Directory        => stat.kind == TypeDirectory,
-        Exists           => true,
-        Regular          => stat.kind == TypeFile,
-        GroupIDFlag      => false,
-        SymLink          => false,
-        FIFO             => stat.kind == TypeNamedPipe,
-        Readable         => false, // TODO
-        Socket           => false, // TODO?
-        NonEmpty         => stat.size > 0,
-        UserIDFlag       => false,
-        Writable         => false, // TODO
-        Executable       => false, // TODO
+        PathCondition::BlockSpecial     => false,
+        PathCondition::CharacterSpecial => false,
+        PathCondition::Directory        => stat.is_dir(),
+        PathCondition::Exists           => true,
+        PathCondition::Regular          => stat.is_file(),
+        PathCondition::GroupIDFlag      => false,
+        PathCondition::SymLink          => false,
+        PathCondition::FIFO             => false,
+        PathCondition::Readable         => false, // TODO
+        PathCondition::Socket           => false,
+        PathCondition::NonEmpty         => stat.len() > 0,
+        PathCondition::UserIDFlag       => false,
+        PathCondition::Writable         => false, // TODO
+        PathCondition::Executable       => false, // TODO
     }
 }

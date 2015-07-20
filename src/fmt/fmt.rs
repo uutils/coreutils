@@ -25,7 +25,7 @@ macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
             Ok(_) => (),
-            Err(_) => unsafe { ::util::libc::exit(1) }
+            Err(_) => ::std::process::exit(1),
         }
     )
 );

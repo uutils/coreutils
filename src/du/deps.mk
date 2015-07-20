@@ -1,1 +1,1 @@
-DEPLIBS += time
+DEPLIBS += time kernel32 winapi

@@ -52,7 +52,6 @@ PROGS       := \
   dirname \
   echo \
   env \
-  du \
   expand \
   factor \
   false \
@@ -62,7 +61,6 @@ PROGS       := \
   hashsum \
   ln \
   mkdir \
-  mv \
   nl \
   nproc \
   od \
@@ -85,13 +83,11 @@ PROGS       := \
   tac \
   tee \
   test \
-  touch \
   tr \
   true \
   truncate \
   tsort \
   unexpand \
-  unlink \
   uniq \
   wc \
   yes \
@@ -101,6 +97,7 @@ PROGS       := \
 
 UNIX_PROGS := \
   chroot \
+  du \
   groups \
   hostid \
   hostname \
@@ -108,12 +105,15 @@ UNIX_PROGS := \
   kill \
   logname \
   mkfifo \
+  mv \
   nice \
   nohup \
   stdbuf \
   timeout \
+  touch \
   tty \
   uname \
+  unlink \
   uptime \
   users
 
@@ -256,6 +256,10 @@ define DEP_BUILD
 DEP_$(1):
 ifeq ($(1),crypto)
 	cd $(BASEDIR)/deps && $(CARGO) build --package rust-crypto --release
+else ifeq ($(1),kernel32)
+	cd $(BASEDIR)/deps && $(CARGO) build --package kernel32-sys --release
+else ifeq ($(1),advapi32)
+	cd $(BASEDIR)/deps && $(CARGO) build --package advapi32-sys --release
 else
 	cd $(BASEDIR)/deps && $(CARGO) build --package $(1) --release
 endif

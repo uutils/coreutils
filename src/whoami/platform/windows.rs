@@ -7,21 +7,22 @@
  * file that was distributed with this source code.
  */
 
-use ::libc;
+extern crate winapi;
+extern crate advapi32;
+
+#[path = "../../common/wide.rs"] #[macro_use] mod wide;
+
 use std::mem;
 use std::io::Write;
+use std::ffi::OsString;
+use std::os::windows::ffi::OsStringExt;
+use self::wide::FromWide;
 
-extern "system" {
-    pub fn GetUserNameA(out: *mut libc::c_char, len: *mut libc::uint32_t) -> libc::uint8_t;
-}
-
-#[allow(unused_unsafe)]
 pub unsafe fn getusername() -> String {
-    // usernames can only be up to 104 characters in windows
-    let mut buffer: [libc::c_char; 105] = mem::uninitialized();
-
-    if !GetUserNameA(buffer.as_mut_ptr(), &mut (buffer.len() as libc::uint32_t)) == 0 {
-        crash!(1, "username is too long");
+    let mut buffer: [winapi::WCHAR; winapi::UNLEN as usize + 1] = mem::uninitialized();
+    let mut len = buffer.len() as winapi::DWORD;
+    if advapi32::GetUserNameW(buffer.as_mut_ptr(), &mut len) == 0 {
+        crash!(1, "failed to get username");
     }
-    String::from_utf8_lossy(::std::ffi::CStr::from_ptr(buffer.as_ptr()).to_bytes()).to_string()
+    String::from_wide(&buffer[..len as usize - 1])
 }
