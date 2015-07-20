@@ -124,17 +124,17 @@ fn verify_mode(modes: &str) -> Result<(), String> {
 #[cfg(windows)]
 #[inline]
 // XXX: THIS IS NOT TESTED!!!
-fn verify_mode(mode: &str) -> Result<(), String> {
+fn verify_mode(modes: &str) -> Result<(), String> {
     let re: regex::Regex = Regex::new(r"^[ugoa]*(?:[-+=](?:([rwxXst]*)|[ugo]))+|[-+=]?([0-7]+)$").unwrap();
     for mode in modes.split(',') {
         match re.captures(mode) {
             Some(cap) => {
-                let symbols = cap.at(1);
-                let numbers = cap.at(2);
+                let symbols = cap.at(1).unwrap();
+                let numbers = cap.at(2).unwrap();
                 if symbols.contains("s") || symbols.contains("t") {
-                    return Err("The 's' and 't' modes are not supported on Windows".to_string());
-                } else if numbers.len() >= 4 && numbers.slice_to(num_len - 3).find(|ch| ch != '0').is_some() {
-                    return Err("Setuid, setgid, and sticky modes are not supported on Windows".to_string());
+                    return Err("The 's' and 't' modes are not supported on Windows".into());
+                } else if numbers.len() >= 4 && numbers[..numbers.len() - 3].find(|ch| ch != '0').is_some() {
+                    return Err("Setuid, setgid, and sticky modes are not supported on Windows".into());
                 }
             }
             None => return Err(format!("invalid mode '{}'", mode))
@@ -191,6 +191,14 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     r
 }
 
+#[cfg(windows)]
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
+    // chmod is useless on Windows
+    // it doesn't set any permissions at all
+    // instead it just sets the readonly attribute on the file
+    Err(0)
+}
+#[cfg(unix)]
 fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
     let path = CString::new(name).unwrap_or_else(|e| panic!("{}", e));
     match fmode {

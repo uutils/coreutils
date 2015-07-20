@@ -7,8 +7,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate libc;
-
 macro_rules! show_error(
     ($($args:tt)+) => ({
         pipe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
@@ -46,14 +44,14 @@ macro_rules! eprintln(
 macro_rules! crash(
     ($exitcode:expr, $($args:tt)+) => ({
         show_error!($($args)+);
-        unsafe { ::util::libc::exit($exitcode as ::util::libc::c_int); }
+        ::std::process::exit($exitcode)
     })
 );
 
 #[macro_export]
 macro_rules! exit(
     ($exitcode:expr) => ({
-        unsafe { ::util::libc::exit($exitcode); }
+        ::std::process::exit($exitcode)
     })
 );
 
