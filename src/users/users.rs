@@ -117,6 +117,6 @@ fn exec(filename: &str) {
 
     if users.len() > 0 {
         users.sort();
-        println!("{}", users.connect(" "));
+        println!("{}", users.join(" "));
     }
 }
