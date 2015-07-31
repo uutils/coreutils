@@ -1,5 +1,4 @@
 #![crate_name = "hostname"]
-#![feature(slice_extras)]
 
 /*
  * This file is part of the uutils coreutils package.

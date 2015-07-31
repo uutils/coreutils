@@ -1,5 +1,5 @@
 #![crate_name = "cut"]
-#![feature(path_ext, slice_position_elem)]
+#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.

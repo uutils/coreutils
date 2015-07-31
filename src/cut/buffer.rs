@@ -77,7 +77,7 @@ impl<R: Read> ByteReader<R> {
                     Err(e) => crash!(1, "read error: {}", e),
                 };
 
-                match filled_buf.position_elem(&b'\n') {
+                match filled_buf.iter().position(|byte| *byte == b'\n') {
                     Some(idx) => {
                         consume_val = idx + 1;
                         bytes_consumed += consume_val;
@@ -121,13 +121,13 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
                     // segments check if the byte after bytes is a newline
                     let buf_slice = &buffer[0..bytes + 1];
 
-                    match buf_slice.position_elem(&b'\n') {
+                    match buf_slice.iter().position(|byte| *byte == b'\n') {
                         Some(idx) => (SRes::Newl, idx+1),
                         None => (SRes::Comp, bytes),
                     }
                 },
                 _ => {
-                    match buffer.position_elem(&b'\n') {
+                    match buffer.iter().position(|byte| *byte == b'\n') {
                         Some(idx) => (SRes::Newl, idx+1),
                         None => (SRes::Part, buffer.len()),
                     }
