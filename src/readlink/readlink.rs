@@ -11,119 +11,21 @@
 
 extern crate getopts;
 
-use std::env;
-use std::fs::{metadata, read_link};
-use std::io::{Error, ErrorKind, Result, Write};
-use std::path::{Component, PathBuf};
-
-use CanonicalizeMode::{None, Normal, Existing, Missing};
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
 
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::{canonicalize, CanonicalizeMode};
+
 const NAME: &'static str = "readlink";
 const VERSION: &'static str = "0.0.1";
-
-#[derive(PartialEq)]
-enum CanonicalizeMode {
-    None,
-    Normal,
-    Existing,
-    Missing,
-}
-
-fn resolve(original: &PathBuf) -> Result<PathBuf> {
-    const MAX_LINKS_FOLLOWED: u32 = 255;
-    let mut followed = 0;
-    let mut result = original.clone();
-    loop {
-        if followed == MAX_LINKS_FOLLOWED {
-            return Err(Error::new(ErrorKind::InvalidInput, "maximum links followed"));
-        }
-
-        match metadata(&result) {
-            Err(e) => return Err(e),
-            Ok(ref m) if !m.file_type().is_symlink() => break,
-            Ok(..) => {
-                followed += 1;
-                match read_link(&result) {
-                    Ok(path) => {
-                        result.pop();
-                        result.push(path);
-                    },
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
-            }
-        }
-    }
-    Ok(result)
-}
-
-fn canonicalize(original: &PathBuf, can_mode: &CanonicalizeMode) -> Result<PathBuf> {
-    // Create an absolute path
-    let original = if original.as_path().is_absolute() {
-        original.clone()
-    } else {
-        env::current_dir().unwrap().join(original)
-    };
-
-    let mut result = PathBuf::new();
-    let mut parts = vec!();
-
-    // Split path by directory separator; add prefix (Windows-only) and root
-    // directory to final path buffer; add remaining parts to temporary
-    // vector for canonicalization.
-    for part in original.components() {
-        match part {
-            Component::Prefix(_) | Component::RootDir => {
-                result.push(part.as_os_str());
-            },
-            Component::CurDir => {},
-            Component::ParentDir => {
-                parts.pop();
-            },
-            Component::Normal(_) => {
-                parts.push(part.as_os_str());
-            }
-        }
-    }
-
-    // Resolve the symlinks where possible
-    if parts.len() > 0 {
-        for part in parts[..parts.len()-1].iter() {
-            result.push(part);
-
-            if *can_mode == None {
-                continue;
-            }
-
-            match resolve(&result) {
-                Err(e) => match *can_mode {
-                    Missing => continue,
-                    _ => return Err(e)
-                },
-                Ok(path) => {
-                    result.pop();
-                    result.push(path);
-                }
-            }
-        }
-
-        result.push(parts.last().unwrap());
-
-        match resolve(&result) {
-            Err(e) => { if *can_mode == Existing { return Err(e); } },
-            Ok(path) => {
-                result.pop();
-                result.push(path);
-            }
-        }
-    }
-    Ok(result)
-}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -164,17 +66,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let silent = matches.opt_present("silent") || matches.opt_present("quiet");
     let verbose = matches.opt_present("verbose");
 
-    let mut can_mode = None;
+    let mut can_mode = CanonicalizeMode::None;
     if matches.opt_present("canonicalize") {
-        can_mode = Normal;
+        can_mode = CanonicalizeMode::Normal;
     }
 
     if matches.opt_present("canonicalize-existing") {
-        can_mode = Existing;
+        can_mode = CanonicalizeMode::Existing;
     }
 
     if matches.opt_present("canonicalize-missing") {
-        can_mode = Missing;
+        can_mode = CanonicalizeMode::Missing;
     }
 
     let files = matches.free;
@@ -191,8 +93,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     for f in files.iter() {
         let p = PathBuf::from(f);
-        if can_mode == None {
-            match read_link(&p) {
+        if can_mode == CanonicalizeMode::None {
+            match fs::read_link(&p) {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
@@ -202,7 +104,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         } else {
-            match canonicalize(&p, &can_mode) {
+            match canonicalize(&p, can_mode) {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {

@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![feature(fs_canonicalize, negate_unsigned)]
+#![feature(negate_unsigned)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -15,7 +15,6 @@ extern crate libc;
 
 use getopts::{Matches, Options};
 use std::env;
-use std::fs;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -28,7 +27,7 @@ mod util;
 #[path = "../common/filesystem.rs"]
 mod filesystem;
 
-use filesystem::UUPathExt;
+use filesystem::{canonicalize, CanonicalizeMode, UUPathExt};
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";
@@ -195,7 +194,7 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
 
 fn exe_path() -> io::Result<PathBuf> {
     let exe_path = try!(env::current_exe());
-    let absolute_path = try!(fs::canonicalize(exe_path.as_path()));
+    let absolute_path = try!(canonicalize(exe_path, CanonicalizeMode::Normal));
     Ok(match absolute_path.parent() {
         Some(p) => p.to_path_buf(),
         None => absolute_path.clone()

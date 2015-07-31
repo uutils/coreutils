@@ -1,5 +1,4 @@
 #![crate_name = "relpath"]
-#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,11 +13,17 @@ extern crate getopts;
 extern crate libc;
 
 use std::env;
-use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "relpath";
 static VERSION: &'static str = "1.0.0";
@@ -54,12 +59,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         env::current_dir().unwrap()
     };
-    let absto = fs::canonicalize(to).unwrap();
-    let absfrom = fs::canonicalize(from).unwrap();
+    let absto = canonicalize(to, CanonicalizeMode::Normal).unwrap();
+    let absfrom = canonicalize(from, CanonicalizeMode::Normal).unwrap();
 
     if matches.opt_present("d") {
         let base = Path::new(&matches.opt_str("d").unwrap()).to_path_buf();
-        let absbase = fs::canonicalize(base).unwrap();
+        let absbase = canonicalize(base, CanonicalizeMode::Normal).unwrap();
         if !absto.as_path().starts_with(absbase.as_path()) || !absfrom.as_path().starts_with(absbase.as_path()) {
             println!("{}", absto.display());
             return 0
