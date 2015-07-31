@@ -1,5 +1,5 @@
 #![crate_name = "mv"]
-#![feature(slice_extras, slice_patterns, str_char)]
+#![feature(slice_patterns, str_char)]
 #![allow(deprecated)]
 
 /*
