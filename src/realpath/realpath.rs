@@ -1,5 +1,4 @@
 #![crate_name= "realpath"]
-#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +16,14 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "realpath";
 static VERSION: &'static str = "1.0.0";
@@ -63,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
     let p = Path::new(path).to_path_buf();
-    let abs = fs::canonicalize(p).unwrap();
+    let abs = canonicalize(p, CanonicalizeMode::Normal).unwrap();
 
     if strip {
         if zero {

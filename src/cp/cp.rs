@@ -1,5 +1,4 @@
 #![crate_name = "cp"]
-#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,7 +23,7 @@ mod util;
 #[path = "../common/filesystem.rs"]
 mod filesystem;
 
-use filesystem::UUPathExt;
+use filesystem::{canonicalize, CanonicalizeMode, UUPathExt};
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -155,8 +154,8 @@ fn copy(matches: getopts::Matches) {
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = try!(fs::canonicalize(p1));
-    let pathbuf2 = try!(fs::canonicalize(p2));
+    let pathbuf1 = try!(canonicalize(p1, CanonicalizeMode::Normal));
+    let pathbuf2 = try!(canonicalize(p2, CanonicalizeMode::Normal));
 
     Ok(pathbuf1 == pathbuf2)
 }
