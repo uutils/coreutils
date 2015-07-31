@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(path_ext)]
+#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::fs::PathExt;
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
     let p = Path::new(path).to_path_buf();
-    let abs = p.canonicalize().unwrap();
+    let abs = fs::canonicalize(p).unwrap();
 
     if strip {
         if zero {

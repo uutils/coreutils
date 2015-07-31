@@ -1,5 +1,5 @@
 #![crate_name = "relpath"]
-#![feature(path_ext)]
+#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +14,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::env;
-use std::fs::PathExt;
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -54,12 +54,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         env::current_dir().unwrap()
     };
-    let absto = to.canonicalize().unwrap();
-    let absfrom = from.canonicalize().unwrap();
+    let absto = fs::canonicalize(to).unwrap();
+    let absfrom = fs::canonicalize(from).unwrap();
 
     if matches.opt_present("d") {
         let base = Path::new(&matches.opt_str("d").unwrap()).to_path_buf();
-        let absbase = base.canonicalize().unwrap();
+        let absbase = fs::canonicalize(base).unwrap();
         if !absto.as_path().starts_with(absbase.as_path()) || !absfrom.as_path().starts_with(absbase.as_path()) {
             println!("{}", absto.display());
             return 0

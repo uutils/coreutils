@@ -1,5 +1,5 @@
 #![crate_name = "cp"]
-#![feature(path_ext)]
+#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -155,8 +155,8 @@ fn copy(matches: getopts::Matches) {
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = try!(p1.canonicalize());
-    let pathbuf2 = try!(p2.canonicalize());
+    let pathbuf1 = try!(fs::canonicalize(p1));
+    let pathbuf2 = try!(fs::canonicalize(p2));
 
     Ok(pathbuf1 == pathbuf2)
 }
