@@ -1,6 +1,5 @@
 #![crate_name = "mv"]
 #![feature(slice_patterns, str_char)]
-#![allow(deprecated)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -240,7 +239,7 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 return 1;
             }
             let target_dir = fs.last().unwrap();
-            move_files_into_dir(fs.init(), target_dir, &b);
+            move_files_into_dir(&fs[0..fs.len()-1], target_dir, &b);
         }
     }
     0
