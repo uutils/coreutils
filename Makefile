@@ -166,6 +166,7 @@ TEST_PROGS  := \
   basename \
   cat \
   cp \
+  cut \
   env \
   dirname \
   echo \
