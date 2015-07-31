@@ -1,5 +1,5 @@
 #![crate_name = "ptx"]
-#![feature(convert, slice_chars, vec_push_all)]
+#![feature(convert, vec_push_all)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -247,7 +247,7 @@ fn create_word_set(config: &Config, filter: &WordFilter,
                 if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;
                 }
-                let mut word = line.slice_chars(beg, end).to_string();
+                let mut word = line[beg .. end].to_string();
                 if filter.only_specified && 
                    !(filter.only_set.contains(&word)) {
                     continue;
@@ -284,7 +284,7 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &String) ->
             Some(x) => x,
             None => (0,0)
         };
-        format!("{}", line.slice_chars(beg, end))
+        format!("{}", &line[beg .. end])
     } else {
         String::new()
     }
@@ -359,14 +359,14 @@ fn get_output_chunks(all_before: &String, keyword: &String, all_after: &String,
     bb_tmp = trim_broken_word_left(&all_before_vec, bb_tmp, all_before.len());
     let (before_beg, before_end) = 
         trim_idx(&all_before_vec, bb_tmp, all_before.len());
-    before.push_str(all_before.slice_chars(before_beg, before_end));
+    before.push_str(&all_before[before_beg .. before_end]);
     assert!(max_before_size >= before.len());
     
     // get after
     let mut ae_tmp = cmp::min(max_after_size, all_after.len());
     ae_tmp = trim_broken_word_right(&all_after_vec, 0, ae_tmp);
     let (after_beg, after_end) = trim_idx(&all_after_vec, 0, ae_tmp);
-    after.push_str(all_after.slice_chars(after_beg, after_end));
+    after.push_str(&all_after[after_beg .. after_end]);
     assert!(max_after_size >= after.len()); 
     
     // get tail
@@ -375,7 +375,7 @@ fn get_output_chunks(all_before: &String, keyword: &String, all_after: &String,
     let mut te_tmp = cmp::min(tb + max_tail_size, all_after.len()); 
     te_tmp = trim_broken_word_right(&all_after_vec, tb, te_tmp);
     let (tail_beg, tail_end) = trim_idx(&all_after_vec, tb, te_tmp);
-    tail.push_str(all_after.slice_chars(tail_beg, tail_end));
+    tail.push_str(&all_after[tail_beg .. tail_end]);
     
     // get head
     let max_head_size = max_after_size - after.len();
@@ -384,7 +384,7 @@ fn get_output_chunks(all_before: &String, keyword: &String, all_after: &String,
         cmp::max(he as isize - max_head_size as isize, 0) as usize;
     hb_tmp = trim_broken_word_left(&all_before_vec, hb_tmp, he);
     let (head_beg, head_end) = trim_idx(&all_before_vec, hb_tmp, he);
-    head.push_str(all_before.slice_chars(head_beg, head_end));
+    head.push_str(&all_before[head_beg .. head_end]);
     
     // put right context truncation string if needed
     if after_end != all_after.len() && tail_beg == tail_end {
@@ -430,15 +430,15 @@ fn format_tex_line(config: &Config, word_ref: &WordRef, line: &String,
     let mut output = String::new();
     output.push_str(&format!("\\{} ", config.macro_name));
     let all_before = if config.input_ref {
-        let before = line.slice_chars(0, word_ref.position);
+        let before = &line[0 .. word_ref.position];
         adjust_tex_str(before.trim().trim_left_matches(reference))
     } else {
-        adjust_tex_str(line.slice_chars(0, word_ref.position))
+        adjust_tex_str(&line[0 .. word_ref.position])
     };
     let keyword = adjust_tex_str(
-        line.slice_chars(word_ref.position, word_ref.position_end));
+        &line[word_ref.position .. word_ref.position_end]);
     let all_after = adjust_tex_str(
-        line.slice_chars(word_ref.position_end, line.len()));
+        &line[word_ref.position_end .. line.len()]);
     let (tail, before, after, head) = 
         get_output_chunks(&all_before, &keyword, &all_after, &config);
     output.push_str(format!("{5}{0}{6}{5}{1}{6}{5}{2}{6}{5}{3}{6}{5}{4}{6}", 
@@ -460,15 +460,15 @@ fn format_roff_line(config: &Config, word_ref: &WordRef, line: &str,
     let mut output = String::new();
     output.push_str(&format!(".{}", config.macro_name));
     let all_before = if config.input_ref {
-        let before = line.slice_chars(0, word_ref.position);
+        let before = &line[0 .. word_ref.position];
         adjust_roff_str(before.trim().trim_left_matches(reference))
     } else {
-        adjust_roff_str(line.slice_chars(0, word_ref.position))
+        adjust_roff_str(&line[0 .. word_ref.position])
     };
     let keyword = adjust_roff_str(
-        line.slice_chars(word_ref.position, word_ref.position_end));
+        &line[word_ref.position .. word_ref.position_end]);
     let all_after = adjust_roff_str(
-        line.slice_chars(word_ref.position_end, line.len()));
+        &line[word_ref.position_end .. line.len()]);
     let (tail, before, after, head) = 
         get_output_chunks(&all_before, &keyword, &all_after, &config);
     output.push_str(format!(" \"{}\" \"{}\" \"{}{}\" \"{}\"", 
