@@ -1,5 +1,4 @@
 #![crate_name = "chmod"]
-#![feature(fs_walk)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,14 +17,15 @@ extern crate libc;
 extern crate memchr;
 extern crate regex;
 extern crate regex_syntax;
+extern crate walker;
 
 use getopts::Options;
 use regex::Regex;
 use std::ffi::CString;
-use std::fs;
 use std::io::{Error, Write};
 use std::mem;
 use std::path::Path;
+use walker::Walker;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -158,7 +158,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
             if file.uu_is_dir() {
                 if !preserve_root || filename != "/" {
                     if recursive {
-                        let walk_dir = match fs::walk_dir(&file) {
+                        let walk_dir = match Walker::new(&file) {
                             Ok(m) => m,
                             Err(f) => {
                                 crash!(1, "{}", f.to_string());
