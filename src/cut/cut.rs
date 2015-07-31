@@ -1,5 +1,4 @@
 #![crate_name = "cut"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +12,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::fs::{File, PathExt};
+use std::fs::File;
 use std::io::{stdout, stdin, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
 
@@ -23,6 +22,12 @@ use searcher::Searcher;
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
+
 mod buffer;
 mod ranges;
 mod searcher;
@@ -379,7 +384,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
         } else {
             let path = Path::new(&filename[..]);
 
-            if ! path.exists() {
+            if !path.uu_exists() {
                 show_error!("{}: No such file or directory", filename);
                 continue
             }

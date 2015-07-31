@@ -1,5 +1,5 @@
 #![crate_name= "realpath"]
-#![feature(path_ext)]
+#![feature(fs_canonicalize)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::fs::PathExt;
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
     let p = Path::new(path).to_path_buf();
-    let abs = p.canonicalize().unwrap();
+    let abs = fs::canonicalize(p).unwrap();
 
     if strip {
         if zero {
@@ -84,12 +84,12 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
                 if !quiet { show_error!("Too many symbolic links: {}", path) };
                 return false
             }
-            match result.as_path().metadata() {
+            match fs::metadata(result.as_path()) {
                 Err(_) => break,
                 Ok(ref m) if !m.file_type().is_symlink() => break,
                 Ok(_) => {
                     links_left -= 1;
-                    match result.as_path().read_link() {
+                    match fs::read_link(result.as_path()) {
                         Ok(x) => {
                             result.pop();
                             result.push(x.as_path());

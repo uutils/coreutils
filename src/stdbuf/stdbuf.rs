@@ -1,5 +1,5 @@
 #![crate_name = "stdbuf"]
-#![feature(negate_unsigned, path_ext)]
+#![feature(fs_canonicalize, negate_unsigned)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -15,7 +15,7 @@ extern crate libc;
 
 use getopts::{Matches, Options};
 use std::env;
-use std::fs::PathExt;
+use std::fs;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -24,6 +24,11 @@ use std::process::Command;
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";
@@ -190,7 +195,7 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
 
 fn exe_path() -> io::Result<PathBuf> {
     let exe_path = try!(env::current_exe());
-    let absolute_path = try!(exe_path.as_path().canonicalize());
+    let absolute_path = try!(fs::canonicalize(exe_path.as_path()));
     Ok(match absolute_path.parent() {
         Some(p) => p.to_path_buf(),
         None => absolute_path.clone()
@@ -204,7 +209,7 @@ fn get_preload_env() -> (String, String) {
     // First search for library in directory of executable.
     let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
     path.push(libstdbuf.clone());
-    if path.exists() {
+    if path.uu_exists() {
         match path.as_os_str().to_str() {
             Some(s) => { return (preload.to_string(), s.to_string()); },
             None => crash!(1, "Error while converting path.")

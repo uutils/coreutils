@@ -1,9 +1,5 @@
-#![feature(path_ext)]
-
 extern crate libc;
 
-use std::fs::PathExt;
-use std::path::Path;
 use std::process::Command;
 use util::*;
 
@@ -23,7 +19,7 @@ fn test_unlink_file() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file).exists());
+    assert!(!file_exists(file));
 }
 
 #[test]

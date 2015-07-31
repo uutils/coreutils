@@ -1,5 +1,5 @@
 #![crate_name = "touch"]
-#![feature(fs_time, path_ext)]
+#![feature(fs_time)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,7 +18,7 @@ use libc::types::os::arch::c95::c_char;
 use libc::types::os::arch::posix01::stat as stat_t;
 use libc::funcs::posix88::stat_::stat as c_stat;
 use libc::funcs::posix01::stat_::lstat as c_lstat;
-use std::fs::{set_file_times, File, PathExt};
+use std::fs::{set_file_times, File};
 use std::io::{Error, Write};
 use std::mem::uninitialized;
 use std::path::Path;
@@ -26,6 +26,11 @@ use std::path::Path;
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 static NAME: &'static str = "touch";
 static VERSION: &'static str = "1.0.0";
@@ -95,7 +100,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     for filename in matches.free.iter() {
         let path = &filename[..];
 
-        if ! Path::new(path).exists() {
+        if !Path::new(path).uu_exists() {
             // no-dereference included here for compatibility
             if matches.opts_present(&["no-create".to_string(), "no-dereference".to_string()]) {
                 continue;

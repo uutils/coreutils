@@ -1,5 +1,4 @@
 #![crate_name = "chmod"]
-#![feature(fs_walk, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -18,18 +17,24 @@ extern crate libc;
 extern crate memchr;
 extern crate regex;
 extern crate regex_syntax;
+extern crate walker;
 
 use getopts::Options;
 use regex::Regex;
 use std::ffi::CString;
-use std::fs::{self, PathExt};
 use std::io::{Error, Write};
 use std::mem;
 use std::path::Path;
+use walker::Walker;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 const NAME: &'static str = "chmod";
 const VERSION: &'static str = "1.0.0";
@@ -149,11 +154,11 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     for filename in files.iter() {
         let filename = &filename[..];
         let file = Path::new(filename);
-        if file.exists() {
-            if file.is_dir() {
+        if file.uu_exists() {
+            if file.uu_is_dir() {
                 if !preserve_root || filename != "/" {
                     if recursive {
-                        let walk_dir = match fs::walk_dir(&file) {
+                        let walk_dir = match Walker::new(&file) {
                             Ok(m) => m,
                             Err(f) => {
                                 crash!(1, "{}", f.to_string());
@@ -273,7 +278,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                             'w' => rwx |= 0o002,
                             'x' => rwx |= 0o001,
                             'X' => {
-                                if file.is_dir() || (fperm & 0o0111) != 0 {
+                                if file.uu_is_dir() || (fperm & 0o0111) != 0 {
                                     rwx |= 0o001;
                                 }
                             }

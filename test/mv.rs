@@ -1,9 +1,9 @@
-#![feature(fs_time, path_ext)]
+#![feature(fs_time)]
 
 extern crate libc;
 extern crate time;
 
-use std::fs::{self, PathExt};
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 use util::*;
@@ -25,7 +25,7 @@ fn test_mv_rename_dir() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(dir2).is_dir());
+    assert!(dir_exists(dir2));
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_mv_rename_file() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(file2).is_file());
+    assert!(file_exists(file2));
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn test_mv_move_file_into_dir() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(&format!("{}/{}", dir, file)).is_file());
+    assert!(file_exists(&format!("{}/{}", dir, file)));
 }
 
 #[test]
@@ -70,13 +70,13 @@ fn test_mv_strip_slashes() {
     let result = run(Command::new(PROGNAME).arg(&source).arg(dir));
     assert!(!result.success);
 
-    assert!(!Path::new(&format!("{}/{}", dir, file)).is_file());
+    assert!(!file_exists(&format!("{}/{}", dir, file)));
 
     let result = run(Command::new(PROGNAME).arg("--strip-trailing-slashes").arg(source).arg(dir));
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(&format!("{}/{}", dir, file)).is_file());
+    assert!(file_exists(&format!("{}/{}", dir, file)));
 }
 
 #[test]
@@ -93,8 +93,8 @@ fn test_mv_multiple_files() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(&format!("{}/{}", target_dir, file_a)).is_file());
-    assert!(Path::new(&format!("{}/{}", target_dir, file_b)).is_file());
+    assert!(file_exists(&format!("{}/{}", target_dir, file_a)));
+    assert!(file_exists(&format!("{}/{}", target_dir, file_b)));
 }
 
 #[test]
@@ -111,8 +111,8 @@ fn test_mv_multiple_folders() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(&format!("{}/{}", target_dir, dir_a)).is_dir());
-    assert!(Path::new(&format!("{}/{}", target_dir, dir_b)).is_dir());
+    assert!(dir_exists(&format!("{}/{}", target_dir, dir_a)));
+    assert!(dir_exists(&format!("{}/{}", target_dir, dir_b)));
 }
 
 #[test]
@@ -129,8 +129,8 @@ fn test_mv_interactive() {
     assert_empty_stderr!(result1);
     assert!(result1.success);
 
-    assert!(Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
+    assert!(file_exists(file_a));
+    assert!(file_exists(file_b));
 
 
     let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
@@ -138,8 +138,8 @@ fn test_mv_interactive() {
     assert_empty_stderr!(result2);
     assert!(result2.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
 }
 
 #[test]
@@ -154,8 +154,8 @@ fn test_mv_no_clobber() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
+    assert!(file_exists(file_a));
+    assert!(file_exists(file_b));
 }
 
 #[test]
@@ -170,8 +170,8 @@ fn test_mv_replace_file() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
 }
 
 #[test]
@@ -186,8 +186,8 @@ fn test_mv_force_replace_file() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
 }
 
 #[test]
@@ -202,9 +202,9 @@ fn test_mv_simple_backup() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
-    assert!(Path::new(&format!("{}~", file_b)).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
+    assert!(file_exists(&format!("{}~", file_b)));
 }
 
 #[test]
@@ -222,9 +222,9 @@ fn test_mv_custom_backup_suffix() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
-    assert!(Path::new(&format!("{}{}", file_b, suffix)).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
+    assert!(file_exists(&format!("{}{}", file_b, suffix)));
 }
 
 #[test]
@@ -239,9 +239,9 @@ fn test_mv_backup_numbering() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
-    assert!(Path::new(&format!("{}.~1~", file_b)).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
+    assert!(file_exists(&format!("{}.~1~", file_b)));
 }
 
 #[test]
@@ -259,10 +259,10 @@ fn test_mv_existing_backup() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
-    assert!(Path::new(file_b_backup).is_file());
-    assert!(Path::new(resulting_backup).is_file());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
+    assert!(file_exists(file_b_backup));
+    assert!(file_exists(resulting_backup));
 }
 
 #[test]
@@ -281,16 +281,16 @@ fn test_mv_update_option() {
     assert_empty_stderr!(result1);
     assert!(result1.success);
 
-    assert!(Path::new(file_a).is_file());
-    assert!(Path::new(file_b).is_file());
+    assert!(file_exists(file_a));
+    assert!(file_exists(file_b));
 
     let result2 = run(Command::new(PROGNAME).arg("--update").arg(file_b).arg(file_a));
 
     assert_empty_stderr!(result2);
     assert!(result2.success);
 
-    assert!(Path::new(file_a).is_file());
-    assert!(!Path::new(file_b).is_file());
+    assert!(file_exists(file_a));
+    assert!(!file_exists(file_b));
 }
 
 #[test]
@@ -307,10 +307,10 @@ fn test_mv_target_dir() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).is_file());
-    assert!(!Path::new(file_b).is_file());
-    assert!(Path::new(&format!("{}/{}", dir, file_a)).is_file());
-    assert!(Path::new(&format!("{}/{}", dir, file_b)).is_file());
+    assert!(!file_exists(file_a));
+    assert!(!file_exists(file_b));
+    assert!(file_exists(&format!("{}/{}", dir, file_a)));
+    assert!(file_exists(&format!("{}/{}", dir, file_b)));
 }
 
 #[test]
@@ -325,8 +325,8 @@ fn test_mv_overwrite_dir() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(dir_a).is_dir());
-    assert!(Path::new(dir_b).is_dir());
+    assert!(!dir_exists(dir_a));
+    assert!(dir_exists(dir_b));
 }
 
 #[test]
@@ -350,8 +350,8 @@ fn test_mv_overwrite_nonempty_dir() {
     assert!(result.stdout.len() == 0);
 
     assert!(!result.success);
-    assert!(Path::new(dir_a).is_dir());
-    assert!(Path::new(dir_b).is_dir());
+    assert!(dir_exists(dir_a));
+    assert!(dir_exists(dir_b));
 }
 
 #[test]
@@ -368,9 +368,9 @@ fn test_mv_backup_dir() {
         format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b));
     assert!(result.success);
 
-    assert!(!Path::new(dir_a).is_dir());
-    assert!(Path::new(dir_b).is_dir());
-    assert!(Path::new(&format!("{}~", dir_b)).is_dir());
+    assert!(!dir_exists(dir_a));
+    assert!(dir_exists(dir_b));
+    assert!(dir_exists(&format!("{}~", dir_b)));
 }
 
 #[test]
