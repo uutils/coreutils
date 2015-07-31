@@ -13,13 +13,18 @@
 extern crate getopts;
 
 use getopts::Options;
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{ErrorKind, Result, Write};
 use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -119,7 +124,7 @@ fn copy(matches: getopts::Matches) {
             panic!();
         }
     } else {
-        if !fs::metadata(dest).unwrap().is_dir() {
+        if !dest.uu_is_dir() {
             show_error!("TARGET must be a directory");
             panic!();
         }
@@ -127,7 +132,7 @@ fn copy(matches: getopts::Matches) {
         for src in sources.iter() {
             let source = Path::new(&src);
 
-            if !fs::metadata(source).unwrap().is_file() {
+            if !source.uu_is_file() {
                 show_error!("\"{}\" is not a file", source.display());
                 continue;
             }

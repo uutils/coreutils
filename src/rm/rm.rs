@@ -1,5 +1,4 @@
 #![crate_name = "rm"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +13,7 @@ extern crate getopts;
 extern crate libc;
 
 use std::collections::VecDeque;
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{stdin, stderr, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
@@ -22,6 +21,11 @@ use std::path::{Path, PathBuf};
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
@@ -131,8 +135,8 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
     for filename in files.iter() {
         let filename = &filename[..];
         let file = Path::new(filename);
-        if file.exists() {
-            if file.is_dir() {
+        if file.uu_exists() {
+            if file.uu_is_dir() {
                 if recursive && (filename != "/" || !preserve_root) {
                     if interactive != InteractiveMode::InteractiveAlways {
                         match fs::remove_dir_all(file) {

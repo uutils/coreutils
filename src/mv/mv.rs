@@ -1,5 +1,5 @@
 #![crate_name = "mv"]
-#![feature(path_ext, slice_extras, slice_patterns, str_char)]
+#![feature(slice_extras, slice_patterns, str_char)]
 #![allow(deprecated)]
 
 /*
@@ -15,7 +15,7 @@
 extern crate getopts;
 extern crate libc;
 
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -23,6 +23,11 @@ use std::path::{Path, PathBuf};
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 static NAME: &'static str = "mv";
 static VERSION: &'static str = "0.0.1";
@@ -195,14 +200,14 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
             return 1;
         },
         [ref source, ref target] => {
-            if !source.exists() {
+            if !source.uu_exists() {
                 show_error!("cannot stat ‘{}’: No such file or directory", source.display());
                 return 1;
             }
 
-            if target.is_dir() {
+            if target.uu_is_dir() {
                 if b.no_target_dir {
-                    if !source.is_dir() {
+                    if !source.uu_is_dir() {
                         show_error!("cannot overwrite directory ‘{}’ with non-directory",
                             target.display());
                         return 1;
@@ -242,7 +247,7 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
 }
 
 fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
-    if !target_dir.is_dir() {
+    if !target_dir.uu_is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
     }
@@ -275,7 +280,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
     let mut backup_path = None;
 
-    if to.exists() {
+    if to.uu_exists() {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -337,7 +342,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
-        if !new_path.exists() {
+        if !new_path.uu_exists() {
             return new_path;
         }
         i = i + 1;
@@ -346,7 +351,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
 
 fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
     let test_path = simple_backup_path(path, &".~1~".to_string());
-    if test_path.exists() {
+    if test_path.uu_exists() {
         return numbered_backup_path(path);
     }
     simple_backup_path(path, suffix)

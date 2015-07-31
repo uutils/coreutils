@@ -25,6 +25,11 @@ use std::process::Command;
 #[macro_use]
 mod util;
 
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
+
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";
 static LIBSTDBUF: &'static str = "libstdbuf"; 
@@ -204,7 +209,7 @@ fn get_preload_env() -> (String, String) {
     // First search for library in directory of executable.
     let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
     path.push(libstdbuf.clone());
-    if path.exists() {
+    if path.uu_exists() {
         match path.as_os_str().to_str() {
             Some(s) => { return (preload.to_string(), s.to_string()); },
             None => crash!(1, "Error while converting path.")

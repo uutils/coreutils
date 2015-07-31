@@ -84,12 +84,12 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
                 if !quiet { show_error!("Too many symbolic links: {}", path) };
                 return false
             }
-            match result.as_path().metadata() {
+            match fs::metadata(result.as_path()) {
                 Err(_) => break,
                 Ok(ref m) if !m.file_type().is_symlink() => break,
                 Ok(_) => {
                     links_left -= 1;
-                    match result.as_path().read_link() {
+                    match fs::read_link(result.as_path()) {
                         Ok(x) => {
                             result.pop();
                             result.push(x.as_path());

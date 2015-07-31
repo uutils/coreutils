@@ -1,5 +1,4 @@
 #![crate_name = "mkdir"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,13 +13,18 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::CString;
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{Error, Write};
 use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 static NAME: &'static str = "mkdir";
 static VERSION: &'static str = "1.0.0";
@@ -102,7 +106,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
         } else {
             match path.parent() {
                 Some(parent) => {
-                    if parent != empty && !parent.exists() {
+                    if parent != empty && !parent.uu_exists() {
                         show_info!("cannot create directory '{}': No such file or directory", path.display());
                         status = 1;
                     } else {
@@ -122,7 +126,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
-    if path.exists() {
+    if path.uu_exists() {
         show_info!("cannot create directory '{}': File exists", path.display());
         return 1;
     }
