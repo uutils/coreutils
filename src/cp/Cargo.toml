@@ -1,0 +1,13 @@
+
+[package]
+name = "cp"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "cp"
+path = "cp.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

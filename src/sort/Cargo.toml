@@ -1,0 +1,13 @@
+
+[package]
+name = "sort"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "sort"
+path = "sort.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

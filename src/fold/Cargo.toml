@@ -1,0 +1,13 @@
+
+[package]
+name = "fold"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "fold"
+path = "fold.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

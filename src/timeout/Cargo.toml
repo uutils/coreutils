@@ -1,0 +1,14 @@
+
+[package]
+name = "timeout"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "timeout"
+path = "timeout.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+time = "*"

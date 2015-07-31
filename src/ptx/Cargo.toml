@@ -1,0 +1,17 @@
+
+[package]
+name = "ptx"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "ptx"
+path = "ptx.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+aho-corasick = "*"
+memchr = "*"
+regex-syntax = "*"
+regex = "*"

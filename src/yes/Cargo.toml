@@ -1,0 +1,13 @@
+
+[package]
+name = "yes"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "yes"
+path = "yes.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

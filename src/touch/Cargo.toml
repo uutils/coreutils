@@ -1,0 +1,14 @@
+
+[package]
+name = "touch"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "touch"
+path = "touch.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+time = "*"

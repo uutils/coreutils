@@ -1,0 +1,13 @@
+
+[package]
+name = "tail"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "tail"
+path = "tail.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

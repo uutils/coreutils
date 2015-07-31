@@ -1,0 +1,13 @@
+
+[package]
+name = "nohup"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "nohup"
+path = "nohup.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

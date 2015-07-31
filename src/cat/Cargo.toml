@@ -1,0 +1,13 @@
+
+[package]
+name = "cat"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "cat"
+path = "cat.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

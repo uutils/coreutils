@@ -1,0 +1,13 @@
+
+[package]
+name = "tsort"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "tsort"
+path = "tsort.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

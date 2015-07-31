@@ -1,0 +1,13 @@
+
+[package]
+name = "mkdir"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "mkdir"
+path = "mkdir.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

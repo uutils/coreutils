@@ -1,0 +1,13 @@
+
+[package]
+name = "basename"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "basename"
+path = "basename.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

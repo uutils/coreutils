@@ -1,0 +1,14 @@
+
+[package]
+name = "unexpand"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "unexpand"
+path = "unexpand.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+unicode-width = "*"
