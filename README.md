@@ -19,6 +19,8 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 Build Instructions
 ------------------
 
+NOTE: This currently requires the most current nightly build.
+
 To simply build all available utilities:
 ```
 make
