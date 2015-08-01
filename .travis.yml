@@ -1,6 +1,7 @@
 language: rust
 rust:
   - 1.1.0
+  - beta
   - nightly
 sudo: false
 script:
@@ -11,3 +12,4 @@ script:
 matrix:
   allow_failures:
     - rust: 1.1.0
+    - rust: beta
