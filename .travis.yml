@@ -12,3 +12,4 @@ script:
 matrix:
   allow_failures:
     - rust: 1.1.0
+    - rust: beta
