@@ -3,20 +3,20 @@ extern crate regex;
 
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
-    match chars {
-        ['a'] => { Ok(::NumberingStyle::NumberForAll) },
-        ['t'] => { Ok(::NumberingStyle::NumberForNonEmpty) },
-        ['n'] => { Ok(::NumberingStyle::NumberForNone) },
-        ['p', rest..] => {
-            let s: String = rest.iter().map(|c| *c).collect();
-            match regex::Regex::new(&s) {
-                Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
-                Err(_) => Err(String::from("Illegal regular expression")),
-            }
+    if chars.len() == 1 && chars[0] == 'a' {
+        Ok(::NumberingStyle::NumberForAll)
+    } else if chars.len() == 1 && chars[0] == 't' {
+        Ok(::NumberingStyle::NumberForNonEmpty)
+    } else if chars.len() == 1 && chars[0] == 'n' {
+        Ok(::NumberingStyle::NumberForNone)
+    } else if chars.len() > 1 && chars[0] == 'p' {
+        let s: String = chars[1..].iter().map(|c| *c).collect();
+        match regex::Regex::new(&s) {
+            Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
+            Err(_) => Err(String::from("Illegal regular expression")),
         }
-        _ => {
-            Err(String::from("Illegal style encountered"))
-        },
+    } else {
+        Err(String::from("Illegal style encountered"))
     }
 }
 

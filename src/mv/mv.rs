@@ -1,5 +1,4 @@
 #![crate_name = "mv"]
-#![feature(slice_patterns, str_char)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -192,13 +191,15 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
         Some(ref name) => return move_files_into_dir(files, &PathBuf::from(name), &b),
         None => {}
     }
-    match files {
-        [] | [_] => {
+    match files.len() {
+        0 | 1 => {
             show_error!("missing file operand\n\
                         Try '{} --help' for more information.", NAME);
             return 1;
         },
-        [ref source, ref target] => {
+        2 => {
+            let ref source = files[0];
+            let ref target = files[1];
             if !source.uu_exists() {
                 show_error!("cannot stat ‘{}’: No such file or directory", source.display());
                 return 1;
@@ -232,14 +233,14 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 _ => {}
             }
         }
-        fs => {
+        _ => {
             if b.no_target_dir {
                 show_error!("mv: extra operand ‘{}’\n\
-                            Try '{} --help' for more information.", fs[2].display(), NAME);
+                            Try '{} --help' for more information.", files[2].display(), NAME);
                 return 1;
             }
-            let target_dir = fs.last().unwrap();
-            move_files_into_dir(&fs[0..fs.len()-1], target_dir, &b);
+            let target_dir = files.last().unwrap();
+            move_files_into_dir(&files[0..files.len()-1], target_dir, &b);
         }
     }
     0
@@ -323,8 +324,8 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
 fn read_yes() -> bool {
     let mut s = String::new();
     match BufReader::new(stdin()).read_line(&mut s) {
-        Ok(_) => match s.slice_shift_char() {
-            Some((x, _)) => x == 'y' || x == 'Y',
+        Ok(_) => match s.char_indices().nth(0) {
+            Some((_, x)) => x == 'y' || x == 'Y',
             _ => false
         },
         _ => false

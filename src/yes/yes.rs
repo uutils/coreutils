@@ -50,7 +50,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let string = if matches.free.is_empty() {
         "y".to_string()
     } else {
-        matches.free.join(" ")
+        matches.free.connect(" ")
     };
 
     exec(&string[..]);
