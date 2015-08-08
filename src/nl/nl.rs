@@ -1,5 +1,4 @@
 #![crate_name = "nl"]
-#![feature(slice_patterns)]
 
 /*
  * This file is part of the uutils coreutils package.

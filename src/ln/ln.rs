@@ -1,5 +1,4 @@
 #![crate_name = "ln"]
-#![feature(slice_patterns, str_char)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -172,33 +171,33 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
         Some(ref name) => return link_files_in_dir(files, &PathBuf::from(name), &settings),
         None => {}
     }
-    match files {
-        [] => {
+    match files.len() {
+        0 => {
             show_error!("missing file operand\nTry '{} --help' for more information.", NAME);
             1
         },
-        [ref target] => match link(target, target, settings) {
+        1 => match link(&files[0], &files[0], settings) {
             Ok(_) => 0,
             Err(e) => {
                 show_error!("{}", e);
                 1
             }
         },
-        [ref target, ref linkname] => match link(target, linkname, settings) {
+        2 => match link(&files[0], &files[1], settings) {
             Ok(_) => 0,
             Err(e) => {
                 show_error!("{}", e);
                 1
             }
         },
-        fs => {
+        _ => {
             if settings.no_target_dir {
-                show_error!("extra operand '{}'\nTry '{} --help' for more information.", fs[2].display(), NAME);
+                show_error!("extra operand '{}'\nTry '{} --help' for more information.", files[2].display(), NAME);
                 return 1;
             }
             let (targets, dir) = match settings.target_dir {
-                Some(ref dir) => (fs, PathBuf::from(dir.clone())),
-                None => (&fs[0..fs.len()-1], fs[fs.len()-1].clone())
+                Some(ref dir) => (files, PathBuf::from(dir.clone())),
+                None => (&files[0..files.len()-1], files[files.len()-1].clone())
             };
             link_files_in_dir(targets, &dir, settings)
         }
@@ -289,8 +288,8 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
 fn read_yes() -> bool {
     let mut s = String::new();
     match BufReader::new(stdin()).read_line(&mut s) {
-        Ok(_) => match s.slice_shift_char() {
-            Some((x, _)) => x == 'y' || x == 'Y',
+        Ok(_) => match s.char_indices().nth(0) {
+            Some((_, x)) => x == 'y' || x == 'Y',
             _ => false
         },
         _ => false
