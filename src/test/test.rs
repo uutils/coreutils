@@ -1,5 +1,4 @@
 #![crate_name = "test"]
-#![feature(convert)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -24,7 +23,7 @@ static NAME: &'static str = "test";
 pub fn uumain(_: Vec<String>) -> i32 {
     let args = args_os().collect::<Vec<OsString>>();
     // This is completely disregarding valid windows paths that aren't valid unicode
-    let args = args.iter().map(|a| a.to_bytes().unwrap()).collect::<Vec<&[u8]>>();
+    let args = args.iter().map(|a| a.to_str().unwrap().as_bytes()).collect::<Vec<&[u8]>>();
     if args.len() == 0 {
         return 2;
     }
