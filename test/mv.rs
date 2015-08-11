@@ -1,10 +1,10 @@
-#![feature(fs_time)]
-
 extern crate libc;
 extern crate time;
+extern crate kernel32;
+extern crate winapi;
+extern crate filetime;
 
-use std::fs;
-use std::path::Path;
+use filetime::*;
 use std::process::Command;
 use util::*;
 
@@ -272,9 +272,11 @@ fn test_mv_update_option() {
 
     touch(file_a);
     touch(file_b);
-    let now = (time::get_time().sec * 1000) as u64;
-    fs::set_file_times(Path::new(file_a), now, now).unwrap();
-    fs::set_file_times(Path::new(file_b), now, now+3600).unwrap();
+    let ts = time::now().to_timespec();
+    let now = FileTime::from_seconds_since_1970(ts.sec as u64, ts.nsec as u32);
+    let later = FileTime::from_seconds_since_1970(ts.sec as u64 + 3600, ts.nsec as u32);
+    filetime::set_file_times(file_a, now, now).unwrap();
+    filetime::set_file_times(file_b, now, later).unwrap();
 
     let result1 = run(Command::new(PROGNAME).arg("--update").arg(file_a).arg(file_b));
 
