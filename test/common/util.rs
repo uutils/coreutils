@@ -97,6 +97,13 @@ pub fn resolve_link(path: &str) -> String {
     }
 }
 
+pub fn metadata(path: &str) -> fs::Metadata {
+    match fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) => panic!("{}", e)
+    }
+}
+
 pub fn file_exists(path: &str) -> bool {
     match fs::metadata(path) {
         Ok(m) => m.is_file(),

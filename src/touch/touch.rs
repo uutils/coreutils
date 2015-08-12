@@ -1,5 +1,4 @@
 #![crate_name = "touch"]
-#![feature(fs_time)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,14 +12,11 @@
 extern crate getopts;
 extern crate libc;
 extern crate time;
+extern crate filetime;
 
-use libc::types::os::arch::c95::c_char;
-use libc::types::os::arch::posix01::stat as stat_t;
-use libc::funcs::posix88::stat_::stat as c_stat;
-use libc::funcs::posix01::stat_::lstat as c_lstat;
-use std::fs::{set_file_times, File};
+use filetime::*;
+use std::fs::{self, File};
 use std::io::{Error, Write};
-use std::mem::uninitialized;
 use std::path::Path;
 
 #[path = "../common/util.rs"]
@@ -34,6 +30,24 @@ use filesystem::UUPathExt;
 
 static NAME: &'static str = "touch";
 static VERSION: &'static str = "1.0.0";
+
+// Since touch's date/timestamp parsing doesn't account for timezone, the
+// returned value from time::strptime() is UTC. We get system's timezone to
+// localize the time.
+macro_rules! to_local(
+    ($exp:expr) => ({
+        let mut tm = $exp;
+        tm.tm_utcoff = time::now().tm_utcoff;
+        tm
+    })
+);
+
+macro_rules! local_tm_to_filetime(
+    ($exp:expr) => ({
+        let ts = $exp.to_timespec();
+        FileTime::from_seconds_since_1970(ts.sec as u64, ts.nsec as u32)
+    })
+);
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -92,8 +106,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             };
             (timestamp, timestamp)
         } else {
-            // FIXME: Should use Timespec. https://github.com/mozilla/rust/issues/10301
-            let now = (time::get_time().sec * 1000) as u64;
+            let now = local_tm_to_filetime!(time::now());
             (now, now)
         };
 
@@ -142,7 +155,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         // this follows symlinks and thus does not work correctly for the -h flag
         // need to use lutimes() c function on supported platforms
-        match set_file_times(path, atime, mtime) {
+        match filetime::set_file_times(path, atime, mtime) {
             Err(e) => show_warning!("cannot touch '{}': {}", path, e),
             _ => (),
         };
@@ -151,60 +164,47 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn stat(path: &str, follow: bool) -> (u64, u64) {
-    let stat_fn = if follow {
-        c_stat
+fn stat(path: &str, follow: bool) -> (FileTime, FileTime) {
+    let metadata = if follow {
+        fs::symlink_metadata(path)
     } else {
-        c_lstat
+        fs::metadata(path)
     };
-    let mut st: stat_t = unsafe { uninitialized() };
-    let result = unsafe { stat_fn(path.as_ptr() as *const c_char, &mut st as *mut stat_t) };
 
-    if result < 0 {
-        crash!(1, "failed to get attributes of '{}': {}", path, Error::last_os_error());
+    match metadata {
+        Ok(m) => (
+            FileTime::from_last_access_time(&m),
+            FileTime::from_last_modification_time(&m)
+            ),
+        Err(_) => crash!(1, "failed to get attributes of '{}': {}", path, Error::last_os_error())
     }
-
-    // set_file_times expects milliseconds
-    let atime = if st.st_atime_nsec == 0 {
-        st.st_atime * 1000
-    } else {
-        st.st_atime_nsec / 1000
-    } as u64;
-
-    // set_file_times expects milliseconds
-    let mtime = if st.st_mtime_nsec == 0 {
-        st.st_mtime * 1000
-    } else {
-        st.st_mtime_nsec / 1000
-    } as u64;
-
-    (atime, mtime)
 }
 
-fn parse_date(str: &str) -> u64 {
+fn parse_date(str: &str) -> FileTime {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
     match time::strptime(str, "%c") {
-        Ok(tm) => (tm.to_timespec().sec * 1000) as u64,
+        Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
         Err(e) => panic!("Unable to parse date\n{}", e)
     }
 }
 
-fn parse_timestamp(str: &str) -> u64 {
-    let format = match str.chars().count() {
-        15 => "%Y%m%d%H%M.%S",
-        12 => "%Y%m%d%H%M",
-        13 => "%y%m%d%H%M.%S",
-        10 => "%y%m%d%H%M",
-        11 => "%m%d%H%M.%S",
-         8 => "%m%d%H%M",
+fn parse_timestamp(s: &str) -> FileTime {
+    let now = time::now();
+    let (format, ts) = match s.chars().count() {
+        15 => ("%Y%m%d%H%M.%S", s.to_string()),
+        12 => ("%Y%m%d%H%M", s.to_string()),
+        13 => ("%y%m%d%H%M.%S", s.to_string()),
+        10 => ("%y%m%d%H%M", s.to_string()),
+        11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
+         8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
          _ => panic!("Unknown timestamp format")
     };
 
-    match time::strptime(str, format) {
-        Ok(tm) => (tm.to_timespec().sec * 1000) as u64,
+    match time::strptime(&ts, format) {
+        Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
         Err(e) => panic!("Unable to parse timestamp\n{}", e)
     }
 }

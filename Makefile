@@ -191,6 +191,7 @@ TEST_PROGS  := \
   stdbuf \
   tac \
   test \
+  touch \
   tr \
   true \
   truncate \
