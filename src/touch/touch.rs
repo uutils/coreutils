@@ -191,18 +191,19 @@ fn parse_date(str: &str) -> FileTime {
     }
 }
 
-fn parse_timestamp(str: &str) -> FileTime {
-    let format = match str.chars().count() {
-        15 => "%Y%m%d%H%M.%S",
-        12 => "%Y%m%d%H%M",
-        13 => "%y%m%d%H%M.%S",
-        10 => "%y%m%d%H%M",
-        11 => "%m%d%H%M.%S",
-         8 => "%m%d%H%M",
+fn parse_timestamp(s: &str) -> FileTime {
+    let now = time::now();
+    let (format, ts) = match s.chars().count() {
+        15 => ("%Y%m%d%H%M.%S", s.to_string()),
+        12 => ("%Y%m%d%H%M", s.to_string()),
+        13 => ("%y%m%d%H%M.%S", s.to_string()),
+        10 => ("%y%m%d%H%M", s.to_string()),
+        11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
+         8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
          _ => panic!("Unknown timestamp format")
     };
 
-    match time::strptime(str, format) {
+    match time::strptime(&ts, format) {
         Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
         Err(e) => panic!("Unable to parse timestamp\n{}", e)
     }
