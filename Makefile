@@ -165,6 +165,7 @@ TEST_PROGS  := \
   base64 \
   basename \
   cat \
+  cksum \
   cp \
   cut \
   env \
@@ -189,6 +190,7 @@ TEST_PROGS  := \
   sort \
   split \
   stdbuf \
+  sum \
   tac \
   test \
   touch \
