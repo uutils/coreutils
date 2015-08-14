@@ -112,7 +112,11 @@ Checksum and count the blocks in a file.", NAME, VERSION);
         matches.free
     };
 
-    let print_names = sysv || files.len() > 1;
+    let print_names = if sysv {
+        files.len() > 1 || files[0] != "-"
+    } else {
+        files.len() > 1
+    };
 
     for file in files.iter() {
         let reader = match open(file) {
