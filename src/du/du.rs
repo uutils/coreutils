@@ -1,5 +1,4 @@
 #![crate_name = "du"]
-#![feature(future)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -20,8 +19,10 @@ use std::fs;
 use std::io::{stderr, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::sync::{Arc, Future};
+use std::sync::Arc;
 use time::Timespec;
+use std::sync::mpsc::channel;
+use std::thread;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -85,7 +86,12 @@ fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) ->
             let this_stat = Stat::new(&entry.path());
             if this_stat.is_dir {
                 let oa_clone = options.clone();
-                futures.push(Future::spawn(move || { du(&entry.path(), this_stat, oa_clone, depth + 1) }))
+                let (tx, rx) = channel();
+                thread::spawn(move || {
+                    let result = du(&entry.path(), this_stat, oa_clone, depth + 1);
+                    tx.send(result)
+                });
+                futures.push(rx);
             } else {
                 my_stat.size += this_stat.size;
                 my_stat.blocks += this_stat.blocks;
@@ -96,8 +102,8 @@ fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) ->
         }
     }
 
-    for future in futures.iter_mut() {
-        for stat in future.get().into_iter().rev() {
+    for rx in futures.iter_mut() {
+        for stat in rx.recv().unwrap().into_iter().rev() {
             if !options.separate_dirs && stat.path.parent().unwrap().to_path_buf() == my_stat.path {
                 my_stat.size += stat.size;
                 my_stat.blocks += stat.blocks;
