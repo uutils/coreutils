@@ -1,5 +1,4 @@
 #![crate_name = "stdbuf"]
-#![feature(negate_unsigned)]
 
 /*
 * This file is part of the uutils coreutils package.

@@ -50,8 +50,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let string = if matches.free.is_empty() {
         "y".to_string()
     } else {
-        // NB: Using deprecated connect() until Rust 1.3 becomes stable.
-        matches.free.connect(" ")
+        matches.free.join(" ")
     };
 
     exec(&string[..]);

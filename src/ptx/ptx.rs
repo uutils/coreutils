@@ -420,9 +420,7 @@ fn adjust_tex_str(context: &str) -> String {
     let ws_reg = Regex::new(r"[\t\n\v\f\r ]").unwrap();
     let mut fix: String = ws_reg.replace_all(context, " ").trim().to_string();
     let mapped_chunks: Vec<String> = fix.chars().map(tex_mapper).collect();
-    // NB: Using deprecated connect() until Rust 1.3 becomes stable.
-    //     When 1.3 is released, replace connect() with join().
-    fix = mapped_chunks.connect("");
+    fix = mapped_chunks.join("");
     fix
 }
 

@@ -316,11 +316,11 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
 	$(RUSTC) $(RUSTCBINFLAGS) $(RESERVED_EXTERNS) --emit link,dep-info $(BUILDDIR)/gen/uutils.rs --out-dir $(BUILDDIR)
 	$(if $(ENABLE_STRIP),strip $@)
-	
+
 # Library for stdbuf
 $(BUILDDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdbuf/libstdbuf.c $(SRCDIR)/stdbuf/libstdbuf.h | $(BUILDDIR)
 	cd $(SRCDIR)/stdbuf && \
-	$(RUSTC) libstdbuf.rs && \
+	$(RUSTC) libstdbuf.rs --extern libc=$(BUILDDIR)/liblibc.rlib && \
 	$(CC) -c -Wall -Werror -fPIC libstdbuf.c && \
 	$(CC) $(DYLIB_FLAGS) -o libstdbuf.$(DYLIB_EXT) liblibstdbuf.a libstdbuf.o && \
 	mv *.$(DYLIB_EXT) $(BUILDDIR) && $(RM) *.o && $(RM) *.a

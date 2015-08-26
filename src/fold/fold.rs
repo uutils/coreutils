@@ -153,7 +153,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
                                         let routput = &slice[m + 1 .. slice.chars().count()];
-                                        let ncount = routput.chars().fold(0usize, |out, ch: char| {
+                                        let ncount = routput.chars().fold(0, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
                                                 '\x08' => if out > 0 { -1 } else { 0 },
