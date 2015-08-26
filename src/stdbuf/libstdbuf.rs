@@ -1,6 +1,5 @@
 #![crate_name = "libstdbuf"]
 #![crate_type = "staticlib"]
-#![feature(libc)]
 
 extern crate libc;
 

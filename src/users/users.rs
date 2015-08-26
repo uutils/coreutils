@@ -117,7 +117,6 @@ fn exec(filename: &str) {
 
     if users.len() > 0 {
         users.sort();
-        // NB: Using deprecated connect() until Rust 1.3 becomes stable.
-        println!("{}", users.connect(" "));
+        println!("{}", users.join(" "));
     }
 }

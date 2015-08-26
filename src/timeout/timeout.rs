@@ -1,5 +1,4 @@
 #![crate_name = "timeout"]
-#![feature(process_id)]
 
 /*
  * This file is part of the uutils coreutils package.
