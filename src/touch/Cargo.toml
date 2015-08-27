@@ -9,6 +9,7 @@ name = "touch"
 path = "touch.rs"
 
 [dependencies]
+filetime = "*"
 getopts = "*"
 libc = "*"
 time = "*"
