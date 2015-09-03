@@ -17,8 +17,8 @@ use std::cmp::Ordering;
 extern crate getopts;
 use getopts::Options;
 
-//extern crate regex;
-//use regex::Regex;
+extern crate regex;
+use regex::Regex;
 
 static VERSION: &'static str = "1.0.0";
 static AUTHOR: &'static str = "Gianpaolo Branca";
@@ -28,93 +28,112 @@ static AUTHOR: &'static str = "Gianpaolo Branca";
     check-order,
     no-check-order,
 }*/
+#[derive(Clone)]
+enum Field {
+    Index,
+    File1(usize),
+    File2(usize),
+}
 
 // constructor of the output
 enum Format {
     Default,
-    Custom(String), // option -o given
+    Custom(Vec<Field>), // option -o given
 }
+
 // generic struct to manage variables from file1 and file2
+#[derive(Clone)]
 struct Couple<F> {
     f1: F,
     f2: F,
 }
 
 impl Format {
-    pub fn build(&self, s1: String, s2: String, t: char) -> String {
 
-        let mut iters = Couple {
-            f1: s1.split(t),
-            f2: s2.split(t)
-        };
+    pub fn build<'a>(&self,
+                 mut line_tok1: Vec<&'a str>,
+                 mut line_tok2: Vec<&'a str>,
+                 t: char,
+                 e: Option<String>,
+                 i: Couple<usize>)     -> String {
 
         let mut buf = String::new();
-
         match *self {
 
             Format::Default => {
 
-                for token in iters.f1 {
-                    buf.push_str(token);
-                    buf.push(t); }
-
-                if  iters.f2.next().is_some() {
-
-                    for token in iters.f2 {
-                        buf.push_str(token);
-                        buf.push(t); }
+                if i.f1 != 1 {
+                    let b = line_tok1.remove(i.f1-1);
+                    line_tok1.insert(0, b);
                 }
 
+                if i.f2 != 1 {
+                    let b = line_tok2.remove(i.f2-1);
+                    line_tok2.insert(0, b);
+                }
+
+
+                if line_tok1.first().is_some() {
+                    buf.push_str(line_tok1.first().as_ref().unwrap());
+                } else {
+                    buf.push_str(line_tok2.first().as_ref().unwrap());
+                };
+
+                if line_tok1.len() > 1 {
+                    for token in line_tok1.into_iter().skip(1) {
+                        buf.push(t);
+                        buf.push_str(token);
+                    }
+                } else if e.is_some() {
+                    buf.push(t);
+                    buf.push_str(&e.clone().unwrap());
+                }
+
+                if line_tok2.len() > 1 {
+                    for token in line_tok2.into_iter().skip(1) {
+                        buf.push(t);
+                        buf.push_str(token);
+                    }
+                } else if e.is_some() {
+                    buf.push(t);
+                    buf.push_str(&e.clone().unwrap());
+                }
 
             }
 
             Format::Custom(ref rule) => {
+                // implementation for -j,-1,-2 still required
+                for field in rule.clone() {
+                    match field {
 
-                let tokens = Couple {
-                    f1: iters.f1.collect::<Vec<&str>>(),
-                    f2: iters.f2.collect::<Vec<&str>>()
-                };
-
-                for item in rule.split(',') {
-
-                    let item_buf = item.split('.');
-
-    			    match item_buf.clone().count() {
-                        // fields should be formatted as "X.Y" or "0"
-                        1 => { if item != "0" {
-                                panic!("invalid field {}", item); }
-
-                               if tokens.f1.len() > 0 {
-                                   buf.push_str(tokens.f1[0]);
-                                   buf.push(t); }
-                               else {
-                                   buf.push_str(tokens.f2[0]);
-                                   buf.push(t); }
-                             },
-
-                        2 => match item_buf.clone().nth(0).unwrap() {
-                                 "1" => { match item_buf.clone().nth(1).unwrap().parse::<usize>() {
-                                              Ok(f)   => {
-                                                  if tokens.f1.len() >= f {
-                                                     buf.push_str(tokens.f1[f-1]);
-                                                     buf.push(t); };
-                                                  }
-                                              Err(e)  => panic!(e.to_string()), };
-                                        },
-
-                                 "2" => { match item_buf.clone().nth(1).unwrap().parse::<usize>() {
-                                                Ok(f)   => {
-                                                    if tokens.f2.len() >= f {
-                                                       buf.push_str(tokens.f2[f-1]);
-                                                       buf.push(t); };
-                                                    }
-                                                Err(e)  => panic!(e.to_string()), };
-                                        },
-
-                                  _  => { panic!("invalid field in {}", item) },
+                        Field::Index => {
+                            if line_tok1.len() > 0 {
+                                buf.push_str(line_tok1[0]);
+                                buf.push(t); }
+                            else {
+                                buf.push_str(line_tok2[0]);
+                                buf.push(t); }
                         },
 
-                        _ => { panic!("invalid file number {}", item); },
+                        Field::File1(n) => {
+                            if line_tok1.len() > n {
+                                buf.push_str(line_tok1[n]);
+                                buf.push(t);
+                            } else if e.is_some() {
+                               buf.push_str(&e.clone().unwrap());
+                               buf.push(t);
+                            }
+                        },
+
+                        Field::File2(n) => {
+                            if line_tok2.len() > n {
+                                buf.push_str(line_tok2[n]);
+                                buf.push(t);
+                            } else if e.is_some() {
+                               buf.push_str(&e.clone().unwrap());
+                               buf.push(t);
+                            }
+                        },
                     }
                 }
             }
@@ -137,12 +156,11 @@ pub fn main() {
     opts.optflag("h",
                  "help",
                  "print this help menu");
-// waiting for implementation in standard libray.
-// to_uppercase() and to_lowercase() are not yet s
+// working
     opts.optflag("i",
                  "ignore-case",
                  "ignore differences in case when comparing fields");
-// to do
+// working
 	opts.optflag("",
 				 "header",
 				 "treat the first line in each file as field headers, print them without trying to pair them");
@@ -171,7 +189,7 @@ pub fn main() {
                 "tabulator",
                 "use CHAR as an input and output filed separator",
                 "-t CHAR");
-// to do
+// working
 	opts.optopt("e",
 				"empty",
 				"replace missing input fields with EMPTY",
@@ -181,6 +199,21 @@ pub fn main() {
 				"obey",
 				"obey FORMAT while constructing output file",
 				"-o FORMAT");
+// working?
+    opts.optopt("j",
+                "",
+                "equivalent to '-1 FIELD -2 FIELD'",
+                "-j FIELD");
+// working?
+    opts.optopt("1",
+                "",
+                "join on this FIELD of file 1",
+                "-1 FIELD");
+// working?
+    opts.optopt("2",
+                "",
+                "join on this FIELD of file 2",
+                "-2 FIELD");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -214,9 +247,9 @@ pub fn main() {
 					 flag_v = true },
 
              _  => { println!("invalid argument");
-                     return}, } }
+                     return}, } };
 // Option tabulator
-    let flag_t: char = match matches.opt_str("t").as_ref() {
+    let flag_t = match matches.opt_str("t").as_ref() {
 
         Some(t) => {
             if t.len() > 1 {
@@ -227,10 +260,135 @@ pub fn main() {
         None => ' ', };
 // Option obey
 	let format: Format = match matches.opt_str("o") {
-
-		Some(f) => { Format::Custom(f) },
 		None => Format::Default,
+        Some(rule) => {
+
+            let mut buf: Vec<Field> = Vec::new();
+            for item in rule.split(',') {
+
+                let sub_item = item.split('.');
+                match sub_item.clone().count() {
+
+                    1 => {
+                        if item != "0" {
+                            panic!("invalid field {}", item); }
+                        buf.push(Field::Index);
+                    },
+
+                    2 => {
+
+                        match sub_item.clone().nth(0).unwrap() {
+
+                            "1" => {
+                                match sub_item.clone().nth(1).unwrap().parse::<usize>() {
+
+                                    Ok(f) => buf.push(Field::File1(f-1)),
+                                    Err(e) => panic!(e.to_string()),
+                                };
+                            },
+
+                            "2" => {
+                                match sub_item.clone().nth(1).unwrap().parse::<usize>() {
+
+                                    Ok(f) => buf.push(Field::File2(f-1)),
+                                    Err(e) => panic!(e.to_string()),
+                                };
+                            },
+
+                            _  => {
+
+                                panic!("invalid field in {}", item)
+                            },
+                        };
+                    },
+
+                    _ => panic!("invalid file number {}", item),
+
+                }
+            };
+            // buf returned
+            Format::Custom(buf)        }
     };
+
+// Option empty
+    let opt_e = matches.opt_str("e");
+// Option -1, -2, j
+    let mut index_pos = Couple {
+
+        f1: match matches.opt_str("1") {
+
+            None    => 0, // 0 means "not yet initialized"
+
+            Some(i) => {
+
+                if i == "0" {
+                    println!("invalid field: 0");
+                    return
+                } else {
+                    match i.parse::<usize>() {
+                        Ok(u)   => u,
+                        Err(e)  => panic!(e.to_string()),
+                    }
+                }
+            }
+        },
+
+        f2: match matches.opt_str("2") {
+
+            None    => 0,
+
+            Some(i) => {
+                if i == "0" {
+                    println!("invalid field: 0");
+                    return
+                } else {
+                    match i.parse::<usize>() {
+                        Ok(u)   => u,
+                        Err(e)  => panic!(e.to_string()),
+                    }
+                }
+            }
+        }
+    };
+
+    if matches.opt_str("j").is_some() {
+
+        let t =  match matches.opt_str("j").unwrap().parse::<usize>() {
+            Ok(u)   => u,
+            Err(e)  => panic!(e.to_string()),
+        };
+
+        if t == 0 {
+            println!("invalid field: 0");
+            return
+        }
+
+        if index_pos.f1 == 0 {
+            index_pos.f1 = t;
+        } else if index_pos.f1 != t {
+            println!("non compatible fields: {}, {}", index_pos.f1, t);
+            return
+        }
+
+        if index_pos.f2 == 0 {
+            index_pos.f2 = t;
+        } else if index_pos.f1 != t {
+            println!("non compatible fields: {}, {}", index_pos.f1, t);
+            return
+        }
+    }
+
+    if index_pos.f1 == 0 {
+        index_pos.f1 = 1;
+    }
+
+    if index_pos.f2 == 0 {
+        index_pos.f2 = 1;
+    }
+// Option header
+let mut flag_h: bool = matches.opt_present("header");
+// Option ignore-case
+let flag_i: bool = matches.opt_present("i");
 // stuff begins
     let files = Couple {
 
@@ -245,64 +403,154 @@ pub fn main() {
         }
     };
 
-    let mut iters = Couple {
-        f1: BufReader::new(files.f1).lines(),
-        f2: BufReader::new(files.f2).lines()
+    let mut lines = Couple {
+        f1: Vec::new(),
+        f2: Vec::new()
     };
 
-    let mut opts = Couple {
-        f1: iters.f1.next(),
-        f2: iters.f2.next()
+    let mut to_print = Couple {
+        f1: Vec::new(),
+        f2: Vec::new()
     };
 
-    while opts.f1.is_some() && opts.f2.is_some() {
+    for item in BufReader::new(files.f1).lines() {
+        if let Ok(line) = item {
+            lines.f1.push(line);
+            to_print.f1.push(true);
+        }
+    }
 
-        let strs = Couple {
+    for item in BufReader::new(files.f2).lines() {
+        if let Ok(line) = item {
+            lines.f2.push(line);
+            to_print.f2.push(true);
+        }
+    }
 
-            f1: opts.f1.as_ref().unwrap()
-                       .as_ref().unwrap().clone(),
+    /*let mut to_print = Couple {
+        f1: Vec::with_capacity(lines.f1.len()),
+        f2: Vec::with_capacity(lines.f2.len())
+    };
 
-            f2: opts.f2.as_ref().unwrap()
-                       .as_ref().unwrap().clone()
-        };
+    for i in 0..lines.f1.len() {
+        to_print.f1[i] = true;
+    }
 
-        match  strs.f1.split(flag_t).nth(0).unwrap()
-                      .cmp(strs.f2.split(flag_t).nth(0).unwrap()) {
-            Ordering::Equal   => {
+    for i in 0..lines.f2.len() {
+        to_print.f2[i] = true;
+    }*/
 
-                if !flag_v { println!("{}",format.build(strs.f1, strs.f2, flag_t)) };
+    let mut checked = 0;
 
-                opts.f1 = iters.f1.next();
-                opts.f2 = iters.f2.next(); }
+    for (i1, str1) in lines.f1.iter().enumerate() {
 
-            Ordering::Less    => {
+        let aux_check = checked;
 
-                if flag_a.f1 { println!("{}",format.build(strs.f1, "".to_string(), flag_t)) };
-                opts.f1 = iters.f1.next(); }
+        for (i2, str2) in lines.f2.iter().skip(checked).enumerate() {
 
-            Ordering::Greater => {
+            let tokens = if flag_t != ' ' {
+                Couple {
+                    f1: str1.split(flag_t).collect::<Vec<&str>>(),
+                    f2: str2.split(flag_t).collect::<Vec<&str>>()
+                }
+            } else {
+                let re = Regex::new(r"[ \t]+").unwrap();
+                Couple {
+                    f1: re.split(&str1).collect::<Vec<&str>>(),
+                    f2: re.split(&str2).collect::<Vec<&str>>()
+                }
+            };
 
-                if flag_a.f2 { println!("{}",format.build("".to_string(), strs.f1, flag_t)) };
-                opts.f2 = iters.f2.next(); }
-		}
-	}
-// the following part is written because one of the files may be longer,
-// and opt.is_some() may be still something
-    while flag_a.f1 && opts.f1.is_some() {
+            if flag_h {
+                println!("{}",format.build(tokens.f1, tokens.f2, flag_t, opt_e.clone(), index_pos.clone()));
+                flag_h = false;
+                checked += 1;
+                break;
+            }
 
-        let str1 = opts.f1.as_ref().unwrap()
-                       .as_ref().unwrap().clone();
+            let indexes = if flag_i {
+                Couple {
+                    f1: tokens.f1[index_pos.f1-1].to_lowercase(),
+                    f2: tokens.f2[index_pos.f2-1].to_lowercase()
+                }
+            } else {
+                Couple {
+                    f1: tokens.f1[index_pos.f1-1].to_string(),
+                    f2: tokens.f2[index_pos.f2-1].to_string()
+                }
+            };
+            match indexes.f1.cmp(&indexes.f2) {
+                Ordering::Equal   => {
+                    if !flag_v {
+                        println!("{}",format.build(tokens.f1, tokens.f2, flag_t, opt_e.clone(), index_pos.clone()));
+                    };
+                    to_print.f1[i1] = false;
+                    to_print.f2[i2 + aux_check] = false;
+                }
 
-        println!("{}",format.build(str1, "".to_string(), flag_t));
+                Ordering::Less    => {
 
-        opts.f1 = iters.f1.next(); }
+                    if flag_a.f1 && to_print.f1[i1] {
+                        println!("{}",format.build(tokens.f1, Vec::new(), flag_t, opt_e.clone(), index_pos.clone()));
+                        to_print.f1[i1] = false;
+                    }
+                    break
+                }
 
-    while flag_a.f2 && opts.f2.is_some() {
+                Ordering::Greater => {
 
-        let str2 = opts.f2.as_ref().unwrap()
-                       .as_ref().unwrap().clone();
+                    if flag_a.f2 && to_print.f2[i2 + aux_check] {
+                        println!("{}",format.build(Vec::new(), tokens.f2, flag_t, opt_e.clone(), index_pos.clone()));
+                        to_print.f2[i2 + aux_check] = false;
+                    }
+                    checked += 1;
+                    continue
+                }
+            }
+        }
+    }
 
-        println!("{}",format.build("".to_string(), str2, flag_t));
+    if flag_a.f1 {
+        for (i1,str1) in lines.f1.iter().enumerate() {
 
-        opts.f2 = iters.f2.next(); }
+            if to_print.f1[i1] == false {
+                continue
+            }
+
+            if str1.is_empty() {
+                continue
+            }
+
+            let tokens = if flag_t != ' ' {
+                str1.split(flag_t).collect::<Vec<&str>>()
+            } else {
+                let re = Regex::new(r"[ \t]+").unwrap();
+                re.split(&str1).collect::<Vec<&str>>()
+            };
+
+            println!("{}",format.build(tokens, Vec::new(), flag_t, opt_e.clone(), index_pos.clone()));
+
+        }
+    }
+
+    if flag_a.f2 {
+        for (i2,str2) in lines.f2.iter().enumerate() {
+
+            if to_print.f2[i2] == false {
+                continue
+            }
+
+            if str2.is_empty() {
+                continue
+            }
+
+            let tokens = if flag_t != ' ' {
+                str2.split(flag_t).collect::<Vec<&str>>()
+            } else {
+                let re = Regex::new(r"[ \t]+").unwrap();
+                re.split(&str2).collect::<Vec<&str>>()
+            };
+            println!("{}",format.build(Vec::new(), tokens, flag_t, opt_e.clone(), index_pos.clone()));
+        }
+    }
 }
