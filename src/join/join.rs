@@ -23,11 +23,12 @@ use regex::Regex;
 static VERSION: &'static str = "1.0.0";
 static AUTHOR: &'static str = "Gianpaolo Branca";
 
-/*enum CheckOrder {
-    default,
-    check-order,
-    no-check-order,
-}*/
+enum CheckType {
+    Default,
+    CheckOrder,
+    NoCheckOrder,
+}
+
 #[derive(Clone)]
 enum Field {
     Index,
@@ -62,25 +63,20 @@ impl Format {
 
             Format::Default => {
 
-                if i.f1 != 1 {
-                    let b = line_tok1.remove(i.f1-1);
-                    line_tok1.insert(0, b);
+                if let Some(_) = line_tok1.get(i.f1-1) {
+                    buf.push_str(line_tok1.remove(i.f1-1));
                 }
 
-                if i.f2 != 1 {
-                    let b = line_tok2.remove(i.f2-1);
-                    line_tok2.insert(0, b);
+                if let Some(_) = line_tok2.get(i.f2-1) {
+                    if buf.len() == 0 {
+                        buf.push_str(line_tok2.remove(i.f2-1));
+                    } else {
+                        line_tok2.remove(i.f2-1);
+                    }
                 }
 
-
-                if line_tok1.first().is_some() {
-                    buf.push_str(line_tok1.first().as_ref().unwrap());
-                } else {
-                    buf.push_str(line_tok2.first().as_ref().unwrap());
-                };
-
-                if line_tok1.len() > 1 {
-                    for token in line_tok1.into_iter().skip(1) {
+                if line_tok1.len() > 0 {
+                    for token in line_tok1.into_iter() {
                         buf.push(t);
                         buf.push_str(token);
                     }
@@ -89,8 +85,8 @@ impl Format {
                     buf.push_str(&e.clone().unwrap());
                 }
 
-                if line_tok2.len() > 1 {
-                    for token in line_tok2.into_iter().skip(1) {
+                if line_tok2.len() > 0 {
+                    for token in line_tok2.into_iter() {
                         buf.push(t);
                         buf.push_str(token);
                     }
@@ -102,17 +98,22 @@ impl Format {
             }
 
             Format::Custom(ref rule) => {
-                // implementation for -j,-1,-2 still required
                 for field in rule.clone() {
                     match field {
 
                         Field::Index => {
                             if line_tok1.len() > 0 {
-                                buf.push_str(line_tok1[0]);
-                                buf.push(t); }
+                                if let Some(get) = line_tok1.get(i.f1) {
+                                    buf.push_str(get);
+                                    buf.push(t);
+                                }
+                            }
                             else {
-                                buf.push_str(line_tok2[0]);
-                                buf.push(t); }
+                                if let Some(get) = line_tok2.get(i.f2) {
+                                    buf.push_str(get);
+                                    buf.push(t);
+                                }
+                            }
                         },
 
                         Field::File1(n) => {
@@ -199,17 +200,17 @@ pub fn main() {
 				"obey",
 				"obey FORMAT while constructing output file",
 				"-o FORMAT");
-// working?
+// working without -o
     opts.optopt("j",
                 "",
                 "equivalent to '-1 FIELD -2 FIELD'",
                 "-j FIELD");
-// working?
+// working without -o
     opts.optopt("1",
                 "",
                 "join on this FIELD of file 1",
                 "-1 FIELD");
-// working?
+// working without -o
     opts.optopt("2",
                 "",
                 "join on this FIELD of file 2",
@@ -386,9 +387,20 @@ pub fn main() {
         index_pos.f2 = 1;
     }
 // Option header
-let mut flag_h: bool = matches.opt_present("header");
+    let mut flag_h: bool = matches.opt_present("header");
+
 // Option ignore-case
-let flag_i: bool = matches.opt_present("i");
+    let flag_i: bool = matches.opt_present("i");
+
+// Option CheckOrder
+    let check_order: CheckType = if matches.opt_present("check-order") {
+        CheckType::CheckOrder
+    } else if matches.opt_present("nocheck-order") {
+        CheckType::NoCheckOrder
+    } else {
+        CheckType::Default
+    };
+
 // stuff begins
     let files = Couple {
 
@@ -475,8 +487,14 @@ let flag_i: bool = matches.opt_present("i");
                 }
             } else {
                 Couple {
-                    f1: tokens.f1[index_pos.f1-1].to_string(),
-                    f2: tokens.f2[index_pos.f2-1].to_string()
+                    f1: match tokens.f1.get(index_pos.f1-1) {
+                        Some(i) => i.to_string(),
+                        None    => "".to_string()
+                    },
+                    f2: match tokens.f2.get(index_pos.f2-1) {
+                        Some(i) => i.to_string(),
+                        None    => "".to_string()
+                    }
                 }
             };
             match indexes.f1.cmp(&indexes.f2) {
