@@ -1,0 +1,13 @@
+
+[package]
+name = "rm"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "rm"
+path = "rm.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

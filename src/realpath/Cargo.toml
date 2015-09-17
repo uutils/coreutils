@@ -1,0 +1,13 @@
+
+[package]
+name = "realpath"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "realpath"
+path = "realpath.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

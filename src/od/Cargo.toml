@@ -1,0 +1,13 @@
+
+[package]
+name = "od"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "od"
+path = "od.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

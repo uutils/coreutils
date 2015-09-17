@@ -1,0 +1,14 @@
+
+[package]
+name = "uptime"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uptime"
+path = "uptime.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+time = "*"

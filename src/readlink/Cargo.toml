@@ -1,0 +1,13 @@
+
+[package]
+name = "readlink"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "readlink"
+path = "readlink.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

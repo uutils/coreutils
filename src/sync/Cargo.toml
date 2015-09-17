@@ -1,0 +1,13 @@
+
+[package]
+name = "sync"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "sync"
+path = "sync.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

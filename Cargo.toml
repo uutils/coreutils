@@ -1,268 +1,162 @@
-[project]
-name = "uutils-coreutils"
+[package]
+name = "uutils"
 version = "0.0.1"
 authors = []
+build = "build.rs"
+
+[features]
+default = ["all"]
+all = [
+    "base64",
+    "basename",
+    "cat",
+    "chmod",
+    "chroot",
+    "cksum",
+    "comm",
+    "cp",
+    "cut",
+    "dirname",
+    "du",
+    "echo",
+    "env",
+    "expand",
+    "factor",
+    "false",
+    "fmt",
+    "fold",
+    "groups",
+    "hashsum",
+    "head",
+    "hostid",
+    "hostname",
+    "id",
+    "kill",
+    "link",
+    "ln",
+    "logname",
+    "mkdir",
+    "mkfifo",
+    "mv",
+    "nice",
+    "nl",
+    "nohup",
+    "nproc",
+    "od",
+    "paste",
+    "printenv",
+    "ptx",
+    "pwd",
+    "readlink",
+    "realpath",
+    "relpath",
+    "rm",
+    "rmdir",
+    "seq",
+    "shuf",
+    "sleep",
+    "sort",
+    "split",
+    "sum",
+    "sync",
+    "tac",
+    "tail",
+    "tee",
+    "test",
+    "timeout",
+    "touch",
+    "tr",
+    "true",
+    "truncate",
+    "tsort",
+    "tty",
+    "uname",
+    "unexpand",
+    "uniq",
+    "unlink",
+    "uptime",
+    "users",
+    "wc",
+    "whoami",
+    "yes",
+]
+
+[dependencies]
+base64   = { optional=true, path="src/base64" }
+basename = { optional=true, path="src/basename" }
+cat      = { optional=true, path="src/cat" }
+chmod    = { optional=true, path="src/chmod" }
+chroot   = { optional=true, path="src/chroot" }
+cksum    = { optional=true, path="src/cksum" }
+comm     = { optional=true, path="src/comm" }
+cp       = { optional=true, path="src/cp" }
+cut      = { optional=true, path="src/cut" }
+dirname  = { optional=true, path="src/dirname" }
+du       = { optional=true, path="src/du" }
+echo     = { optional=true, path="src/echo" }
+env      = { optional=true, path="src/env" }
+expand   = { optional=true, path="src/expand" }
+factor   = { optional=true, path="src/factor" }
+false    = { optional=true, path="src/false" }
+fmt      = { optional=true, path="src/fmt" }
+fold     = { optional=true, path="src/fold" }
+groups   = { optional=true, path="src/groups" }
+hashsum  = { optional=true, path="src/hashsum" }
+head     = { optional=true, path="src/head" }
+hostid   = { optional=true, path="src/hostid" }
+hostname = { optional=true, path="src/hostname" }
+id       = { optional=true, path="src/id" }
+kill     = { optional=true, path="src/kill" }
+link     = { optional=true, path="src/link" }
+ln       = { optional=true, path="src/ln" }
+logname  = { optional=true, path="src/logname" }
+mkdir    = { optional=true, path="src/mkdir" }
+mkfifo   = { optional=true, path="src/mkfifo" }
+mv       = { optional=true, path="src/mv" }
+nice     = { optional=true, path="src/nice" }
+nl       = { optional=true, path="src/nl" }
+nohup    = { optional=true, path="src/nohup" }
+nproc    = { optional=true, path="src/nproc" }
+od       = { optional=true, path="src/od" }
+paste    = { optional=true, path="src/paste" }
+printenv = { optional=true, path="src/printenv" }
+ptx      = { optional=true, path="src/ptx" }
+pwd      = { optional=true, path="src/pwd" }
+readlink = { optional=true, path="src/readlink" }
+realpath = { optional=true, path="src/realpath" }
+relpath  = { optional=true, path="src/relpath" }
+rm       = { optional=true, path="src/rm" }
+rmdir    = { optional=true, path="src/rmdir" }
+seq      = { optional=true, path="src/seq" }
+shuf     = { optional=true, path="src/shuf" }
+sleep    = { optional=true, path="src/sleep" }
+sort     = { optional=true, path="src/sort" }
+split    = { optional=true, path="src/split" }
+sum      = { optional=true, path="src/sum" }
+sync     = { optional=true, path="src/sync" }
+tac      = { optional=true, path="src/tac" }
+tail     = { optional=true, path="src/tail" }
+tee      = { optional=true, path="src/tee" }
+test     = { optional=true, path="src/test" }
+timeout  = { optional=true, path="src/timeout" }
+touch    = { optional=true, path="src/touch" }
+tr       = { optional=true, path="src/tr" }
+true     = { optional=true, path="src/true" }
+truncate = { optional=true, path="src/truncate" }
+tsort    = { optional=true, path="src/tsort" }
+tty      = { optional=true, path="src/tty" }
+uname    = { optional=true, path="src/uname" }
+unexpand = { optional=true, path="src/unexpand" }
+uniq     = { optional=true, path="src/uniq" }
+unlink   = { optional=true, path="src/unlink" }
+uptime   = { optional=true, path="src/uptime" }
+users    = { optional=true, path="src/users" }
+wc       = { optional=true, path="src/wc" }
+whoami   = { optional=true, path="src/whoami" }
+yes      = { optional=true, path="src/yes" }
+
+
+[[bin]]
+name="uutils"
+path="src/uutils/uutils_cargo.rs"
 
-[[bin]]
-name = "base64"
-path = "base64/base64.rs"
-
-[[bin]]
-name = "basename"
-path = "basename/basename.rs"
-
-[[bin]]
-name = "cat"
-path = "cat/cat.rs"
-
-[[bin]]
-name = "chmod"
-path = "chmod/chmod.rs"
-
-[[bin]]
-name = "chroot"
-path = "chroot/chroot.rs"
-
-[[bin]]
-name = "cksum"
-path = "cksum/cksum.rs"
-
-[[bin]]
-name = "comm"
-path = "comm/comm.rs"
-
-[[bin]]
-name = "cp"
-path = "cp/cp.rs"
-
-[[bin]]
-name = "cut"
-path = "cut/cut.rs"
-
-[[bin]]
-name = "dirname"
-path = "dirname/dirname.rs"
-
-[[bin]]
-name = "du"
-path = "du/du.rs"
-
-[[bin]]
-name = "echo"
-path = "echo/echo.rs"
-
-[[bin]]
-name = "env"
-path = "env/env.rs"
-
-[[bin]]
-name = "expand"
-path = "expand/expand.rs"
-
-[[bin]]
-name = "factor"
-path = "factor/factor.rs"
-
-[[bin]]
-name = "false"
-path = "false/false.rs"
-
-[[bin]]
-name = "fmt"
-path = "fmt/fmt.rs"
-
-[[bin]]
-name = "fold"
-path = "fold/fold.rs"
-
-[[bin]]
-name = "groups"
-path = "groups/groups.rs"
-
-[[bin]]
-name = "hashsum"
-path = "hashsum/hashsum.rs"
-
-[[bin]]
-name = "head"
-path = "head/head.rs"
-
-[[bin]]
-name = "hostid"
-path = "hostid/hostid.rs"
-
-[[bin]]
-name = "hostname"
-path = "hostname/hostname.rs"
-
-[[bin]]
-name = "id"
-path = "id/id.rs"
-
-[[bin]]
-name = "kill"
-path = "kill/kill.rs"
-
-[[bin]]
-name = "link"
-path = "link/link.rs"
-
-[[bin]]
-name = "logname"
-path = "logname/logname.rs"
-
-[[bin]]
-name = "mkdir"
-path = "mkdir/mkdir.rs"
-
-[[bin]]
-name = "mv"
-path = "mv/mv.rs"
-
-[[bin]]
-name = "mkfifo"
-path = "mkfifo/mkfifo.rs"
-
-[[bin]]
-name = "nl"
-path = "nl/nl.rs"
-
-[[bin]]
-name = "nohup"
-path = "nohup/nohup.rs"
-
-[[bin]]
-name = "paste"
-path = "paste/paste.rs"
-
-[[bin]]
-name = "printenv"
-path = "printenv/printenv.rs"
-
-[[bin]]
-name = "pwd"
-path = "pwd/pwd.rs"
-
-[[bin]]
-name = "realpath"
-path = "realpath/realpath.rs"
-
-[[bin]]
-name = "relpath"
-path = "relpath/relpath.rs"
-
-[[bin]]
-name = "rm"
-path = "rm/rm.rs"
-
-[[bin]]
-name = "rmdir"
-path = "rmdir/rmdir.rs"
-
-[[bin]]
-name = "seq"
-path = "seq/seq.rs"
-
-[[bin]]
-name = "shuf"
-path = "shuf/shuf.rs"
-
-[[bin]]
-name = "sleep"
-path = "sleep/sleep.rs"
-
-[[bin]]
-name = "sort"
-path = "sort/sort.rs"
-
-[[bin]]
-name = "split"
-path = "split/split.rs"
-
-[[bin]]
-name = "sum"
-path = "sum/sum.rs"
-
-[[bin]]
-name = "sync"
-path = "sync/sync.rs"
-
-[[bin]]
-name = "tac"
-path = "tac/tac.rs"
-
-[[bin]]
-name = "tail"
-path = "tail/tail.rs"
-
-[[bin]]
-name = "tee"
-path = "tee/tee.rs"
-
-[[bin]]
-name = "test"
-path = "test/test.rs"
-
-[[bin]]
-name = "timeout"
-path = "timeout/timeout.rs"
-
-[[bin]]
-name = "touch"
-path = "touch/touch.rs"
-
-[[bin]]
-name = "tr"
-path = "tr/tr.rs"
-
-[[bin]]
-name = "true"
-path = "true/true.rs"
-
-[[bin]]
-name = "truncate"
-path = "truncate/truncate.rs"
-
-[[bin]]
-name = "tsort"
-path = "tsort/tsort.rs"
-
-[[bin]]
-name = "tty"
-path = "tty/tty.rs"
-
-[[bin]]
-name = "uname"
-path = "uname/uname.rs"
-
-[[bin]]
-name = "unexpand"
-path = "unexpand/unexpand.rs"
-
-[[bin]]
-name = "uniq"
-path = "uniq/uniq.rs"
-
-[[bin]]
-name = "unlink"
-path = "unlink/unlink.rs"
-
-[[bin]]
-name = "uptime"
-path = "uptime/uptime.rs"
-
-[[bin]]
-name = "users"
-path = "users/users.rs"
-
-[[bin]]
-name = "wc"
-path = "wc/wc.rs"
-
-[[bin]]
-name = "whoami"
-path = "whoami/whoami.rs"
-
-[[bin]]
-name = "yes"
-path = "yes/yes.rs"

@@ -1,0 +1,13 @@
+
+[package]
+name = "tty"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "tty"
+path = "tty.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

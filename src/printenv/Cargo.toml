@@ -1,0 +1,13 @@
+
+[package]
+name = "printenv"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "printenv"
+path = "printenv.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

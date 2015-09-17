@@ -1,0 +1,14 @@
+
+[package]
+name = "fmt"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "fmt"
+path = "fmt.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+unicode-width = "*"

@@ -1,0 +1,13 @@
+
+[package]
+name = "true"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "true"
+path = "true.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

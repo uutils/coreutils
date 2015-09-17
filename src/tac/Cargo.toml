@@ -1,0 +1,13 @@
+
+[package]
+name = "tac"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "tac"
+path = "tac.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

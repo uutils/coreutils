@@ -1,0 +1,13 @@
+
+[package]
+name = "sum"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "sum"
+path = "sum.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

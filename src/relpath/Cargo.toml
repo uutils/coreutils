@@ -1,0 +1,13 @@
+
+[package]
+name = "relpath"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "relpath"
+path = "relpath.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

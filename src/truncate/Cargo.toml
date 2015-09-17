@@ -1,0 +1,13 @@
+
+[package]
+name = "truncate"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "truncate"
+path = "truncate.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

@@ -1,0 +1,13 @@
+
+[package]
+name = "seq"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "seq"
+path = "seq.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

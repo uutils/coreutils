@@ -1,0 +1,14 @@
+
+[package]
+name = "du"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "du"
+path = "du.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+time = "*"
