@@ -17,8 +17,16 @@ extern {
 }
 
 pub unsafe fn getusername() -> Result<String, String> {
-    let passwd: *const c_passwd = getpwuid(geteuid());
+    // Get effective user id
+    let uid = geteuid();
 
+    // Try to find username for uid
+    let passwd: *const c_passwd = getpwuid(uid);
+    if passwd.is_null() {
+        return Err(format!("cannot find name for user ID {}", uid))
+    }
+
+    // Extract username from passwd struct
     let pw_name: *const libc::c_char = (*passwd).pw_name;
     let username = String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes()).to_string();
     Ok(username)
