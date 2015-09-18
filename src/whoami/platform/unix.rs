@@ -16,9 +16,10 @@ extern {
     pub fn geteuid() -> libc::uid_t;
 }
 
-pub unsafe fn getusername() -> String {
+pub unsafe fn getusername() -> Result<String, String> {
     let passwd: *const c_passwd = getpwuid(geteuid());
 
     let pw_name: *const libc::c_char = (*passwd).pw_name;
-    String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes()).to_string()
+    let username = String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes()).to_string();
+    Ok(username)
 }

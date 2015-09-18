@@ -54,7 +54,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 pub fn exec() {
     unsafe {
-        let username = platform::getusername();
-        println!("{}", username);
+        match platform::getusername() {
+            Ok(username) => println!("{}", username),
+            Err(msg) => crash!(libc::EXIT_FAILURE, "{}", msg),
+        }
     }
 }
