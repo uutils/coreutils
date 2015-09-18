@@ -7,6 +7,7 @@
  * file that was distributed with this source code.
  */
 
+use std::io::{Result, Error};
 use ::libc;
 use self::c_types::{c_passwd, getpwuid};
 
@@ -16,14 +17,14 @@ extern {
     pub fn geteuid() -> libc::uid_t;
 }
 
-pub unsafe fn getusername() -> Result<String, String> {
+pub unsafe fn getusername() -> Result<String> {
     // Get effective user id
     let uid = geteuid();
 
     // Try to find username for uid
     let passwd: *const c_passwd = getpwuid(uid);
     if passwd.is_null() {
-        return Err(format!("cannot find name for user ID {}", uid))
+        return Err(Error::last_os_error())
     }
 
     // Extract username from passwd struct

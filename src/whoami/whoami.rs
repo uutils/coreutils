@@ -56,7 +56,10 @@ pub fn exec() {
     unsafe {
         match platform::getusername() {
             Ok(username) => println!("{}", username),
-            Err(msg) => crash!(libc::EXIT_FAILURE, "{}", msg),
+            Err(err) => match err.raw_os_error() {
+                Some(0) | None => crash!(1, "failed to get username"),
+                Some(_) => crash!(1, "failed to get username: {}", err),
+            }
         }
     }
 }
