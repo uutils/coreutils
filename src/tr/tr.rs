@@ -1,6 +1,5 @@
 #![crate_name = "tr"]
 #![feature(io)]
-
 /*
  * This file is part of the uutils coreutils package.
  *
