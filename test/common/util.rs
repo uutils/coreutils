@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::env;
-use std::fs::{self, File, PathExt};
+use std::fs::{self, File};
 use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
