@@ -22,7 +22,7 @@ mod sieve;
 const NUM_PRIMES: usize = 10000;
 const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))
 
-const NUM_TESTS: usize = 1000;
+const NUM_TESTS: usize = 100;
 const PROGNAME: &'static str = "./factor";
 
 #[test]
