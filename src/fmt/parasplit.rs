@@ -11,6 +11,7 @@ use std::iter::Peekable;
 use std::io::{BufRead, Lines};
 use std::slice::Iter;
 use std::str::CharRange;
+use rustc_unicode::str::UnicodeStr;
 use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
 use FmtOptions;
@@ -156,7 +157,7 @@ impl<'a> Iterator for FileLines<'a> {
         // emit a blank line
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
-        if n.chars().all(|c| c.is_whitespace()) {
+        if n.is_whitespace() {
             return Some(Line::NoFormatLine("\n".to_string(), true));
         }
 
@@ -165,7 +166,7 @@ impl<'a> Iterator for FileLines<'a> {
         let (pmatch, poffset) = self.match_prefix(&n[..]);
         if !pmatch {
             return Some(Line::NoFormatLine(n, false));
-        } else if n[poffset + self.opts.prefix.len()..].chars().all(|c| c.is_whitespace()) {
+        } else if n[poffset + self.opts.prefix.len()..].is_whitespace() {
             // if the line matches the prefix, but is blank after,
             // don't allow lines to be combined through it (that is,
             // treat it like a blank line, except that since it's

@@ -1,4 +1,6 @@
 #![crate_name = "expand"]
+#![feature(unicode)]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -12,12 +14,14 @@
 
 extern crate getopts;
 extern crate libc;
+extern crate rustc_unicode;
 extern crate unicode_width;
 
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::iter::repeat;
 use std::str::from_utf8;
+use rustc_unicode::str::utf8_char_width;
 use unicode_width::UnicodeWidthChar;
 
 #[path = "../common/util.rs"]
@@ -173,7 +177,7 @@ fn expand(options: Options) {
 
             while byte < buf.len() {
                 let (ctype, cwidth, nbytes) = if options.uflag {
-                    let nbytes = UnicodeWidthChar::width(buf[byte] as char).unwrap_or(0);
+                    let nbytes = utf8_char_width(buf[byte]);
 
                     if byte + nbytes > buf.len() {
                         // don't overrun buffer because of invalid UTF-8

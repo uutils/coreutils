@@ -227,11 +227,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "version", "output version information and exit");
 
     let mut options = ProgramOptions {stdin: BufferType::Default, stdout: BufferType::Default, stderr: BufferType::Default};
-    let mut command_idx: i32 = -1;
+    let mut command_idx = -1;
     for i in 1 .. args.len()+1 {
         match parse_options(&args[1 .. i], &mut options, &opts) {
             Ok(OkMsg::Buffering) => {
-                command_idx = (i as i32) - 1;
+                command_idx = i - 1;
                 break;
             },
             Ok(OkMsg::Help) => {
@@ -249,10 +249,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if command_idx == -1 {
         crash!(125, "Invalid options\nTry 'stdbuf --help' for more information.");
     }
-    let ref command_name = args[command_idx as usize];
+    let ref command_name = args[command_idx];
     let mut command = Command::new(command_name);
     let (preload_env, libstdbuf) = get_preload_env();
-    command.args(&args[(command_idx as usize) + 1 ..]).env(preload_env, libstdbuf);
+    command.args(&args[command_idx + 1 ..]).env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
