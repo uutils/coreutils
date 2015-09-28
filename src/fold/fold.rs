@@ -156,7 +156,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                                         let ncount = routput.chars().fold(0, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
-                                                '\x08' => if out > 0 { -1 } else { 0 },
+                                                '\x08' => if out > 0 { !0 } else { 0 },
                                                 '\r' => return 0,
                                                 _ => 1
                                             }
