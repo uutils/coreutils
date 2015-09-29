@@ -13,9 +13,10 @@ fn test_sort_call_graph() {
     let output = "call_graph.expected";
 
     let po = Command::new(PROGNAME)
-        .arg(input)
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg(input)
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
-    assert_eq!(String::from_utf8(po.stdout).unwrap(), String::from_utf8(get_file_contents(output).into_bytes()).unwrap());
+    assert_eq!(String::from_utf8(po.stdout).unwrap(),
+               String::from_utf8(get_file_contents(output).into_bytes()).unwrap());
 }

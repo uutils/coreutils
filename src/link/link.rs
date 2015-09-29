@@ -44,7 +44,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTIONS] FILE1 FILE2
   
-Create a link named FILE2 to FILE1.", NAME, VERSION);
+Create a link named FILE2 to FILE1.",
+                          NAME,
+                          VERSION);
 
         println!("{}", opts.usage(&msg));
         if matches.free.len() != 2 {

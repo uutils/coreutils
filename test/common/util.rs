@@ -35,19 +35,18 @@ pub fn run(cmd: &mut Command) -> CmdResult {
     }
 }
 
-pub fn run_piped_stdin<T: AsRef<[u8]>>(cmd: &mut Command, input: T)-> CmdResult {
-    let mut command = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+pub fn run_piped_stdin<T: AsRef<[u8]>>(cmd: &mut Command, input: T) -> CmdResult {
+    let mut command = cmd.stdin(Stdio::piped())
+                         .stdout(Stdio::piped())
+                         .stderr(Stdio::piped())
+                         .spawn()
+                         .unwrap();
 
     command.stdin
-        .take()
-        .unwrap_or_else(|| panic!("Could not take child process stdin"))
-        .write_all(input.as_ref())
-        .unwrap_or_else(|e| panic!("{}", e));
+           .take()
+           .unwrap_or_else(|| panic!("Could not take child process stdin"))
+           .write_all(input.as_ref())
+           .unwrap_or_else(|e| panic!("{}", e));
 
     let prog = command.wait_with_output().unwrap();
     CmdResult {
@@ -71,7 +70,7 @@ pub fn mkdir(dir: &str) {
 pub fn make_file(name: &str) -> File {
     match File::create(Path::new(name)) {
         Ok(f) => f,
-        Err(e) => panic!("{}", e)
+        Err(e) => panic!("{}", e),
     }
 }
 
@@ -86,35 +85,35 @@ pub fn symlink(src: &str, dst: &str) {
 pub fn is_symlink(path: &str) -> bool {
     match fs::symlink_metadata(path) {
         Ok(m) => m.file_type().is_symlink(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
 pub fn resolve_link(path: &str) -> String {
     match fs::read_link(path) {
         Ok(p) => p.to_str().unwrap().to_owned(),
-        Err(_) => "".to_string()
+        Err(_) => "".to_string(),
     }
 }
 
 pub fn metadata(path: &str) -> fs::Metadata {
     match fs::metadata(path) {
         Ok(m) => m,
-        Err(e) => panic!("{}", e)
+        Err(e) => panic!("{}", e),
     }
 }
 
 pub fn file_exists(path: &str) -> bool {
     match fs::metadata(path) {
         Ok(m) => m.is_file(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
 pub fn dir_exists(path: &str) -> bool {
     match fs::metadata(path) {
         Ok(m) => m.is_dir(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
@@ -136,7 +135,7 @@ pub fn current_directory() -> String {
 
 pub fn repeat_str(s: &str, n: u32) -> String {
     let mut repeated = String::new();
-    for _ in 0 .. n {
+    for _ in 0..n {
         repeated.push_str(s);
     }
     repeated

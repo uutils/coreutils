@@ -26,9 +26,13 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("", "ignore-fail-on-non-empty", "ignore each failure that is solely because a directory is non-empty");
+    opts.optflag("",
+                 "ignore-fail-on-non-empty",
+                 "ignore each failure that is solely because a directory is non-empty");
     opts.optflag("p", "parents", "remove DIRECTORY and its ancestors; e.g., 'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a");
-    opts.optflag("v", "verbose", "output a diagnostic for every directory processed");
+    opts.optflag("v",
+                 "verbose",
+                 "output a diagnostic for every directory processed");
     opts.optflag("h", "help", "print this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -46,7 +50,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTION]... DIRECTORY...
 
-Remove the DIRECTORY(ies), if they are empty.", NAME, VERSION);
+Remove the DIRECTORY(ies), if they are empty.",
+                          NAME,
+                          VERSION);
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -59,8 +65,8 @@ Remove the DIRECTORY(ies), if they are empty.", NAME, VERSION);
         let parents = matches.opt_present("parents");
         let verbose = matches.opt_present("verbose");
         match remove(matches.free, ignore, parents, verbose) {
-            Ok(()) => ( /* pass */ ),
-            Err(e) => return e
+            Ok(()) => (),
+            Err(e) => return e,
         }
     }
 
@@ -113,12 +119,13 @@ fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
             Err(e) => {
                 show_error!("removing directory '{}': {}", path.display(), e);
                 r = Err(1);
-            },
+            }
             Ok(_) if verbose => println!("Removed directory '{}'", path.display()),
             _ => (),
         }
     } else if !ignore {
-        show_error!("failed to remove '{}' Directory not empty", path.display());
+        show_error!("failed to remove '{}' Directory not empty",
+                    path.display());
         r = Err(1);
     }
 

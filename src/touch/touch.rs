@@ -52,23 +52,35 @@ macro_rules! local_tm_to_filetime(
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("a", "",               "change only the access time");
-    opts.optflag("c", "no-create",      "do not create any files");
-    opts.optopt( "d", "date",           "parse argument and use it instead of current time", "STRING");
+    opts.optflag("a", "", "change only the access time");
+    opts.optflag("c", "no-create", "do not create any files");
+    opts.optopt("d",
+                "date",
+                "parse argument and use it instead of current time",
+                "STRING");
     opts.optflag("h", "no-dereference", "affect each symbolic link instead of any referenced file \
                                          (only for systems that can change the timestamps of a symlink)");
-    opts.optflag("m", "",               "change only the modification time");
-    opts.optopt( "r", "reference",      "use this file's times instead of the current time", "FILE");
-    opts.optopt( "t", "",               "use [[CC]YY]MMDDhhmm[.ss] instead of the current time", "STAMP");
-    opts.optopt( "",  "time",           "change only the specified time: \"access\", \"atime\", or \
+    opts.optflag("m", "", "change only the modification time");
+    opts.optopt("r",
+                "reference",
+                "use this file's times instead of the current time",
+                "FILE");
+    opts.optopt("t",
+                "",
+                "use [[CC]YY]MMDDhhmm[.ss] instead of the current time",
+                "STAMP");
+    opts.optopt("",
+                "time",
+                "change only the specified time: \"access\", \"atime\", or \
                                          \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
-                                         equivalent to -m", "WORD");
-    opts.optflag("h", "help",           "display this help and exit");
-    opts.optflag("V", "version",        "output version information and exit");
+                                         equivalent to -m",
+                "WORD");
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m)  => m,
-        Err(e) => panic!("Invalid options\n{}", e)
+        Ok(m) => m,
+        Err(e) => panic!("Invalid options\n{}", e),
     };
 
     if matches.opt_present("version") {
@@ -81,7 +93,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("");
         println!("Usage: {} [OPTION]... FILE...", NAME);
         println!("");
-        println!("{}", opts.usage("Update the access and modification times of \
+        println!("{}",
+                 opts.usage("Update the access and modification times of \
                                    each FILE to the current time."));
         if matches.free.is_empty() {
             return 1;
@@ -89,26 +102,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    if matches.opt_present("date") && matches.opts_present(&["reference".to_string(), "t".to_string()]) ||
-       matches.opt_present("reference") && matches.opts_present(&["date".to_string(), "t".to_string()]) ||
-       matches.opt_present("t") && matches.opts_present(&["date".to_string(), "reference".to_string()]) {
+    if matches.opt_present("date") &&
+       matches.opts_present(&["reference".to_string(), "t".to_string()]) ||
+       matches.opt_present("reference") &&
+       matches.opts_present(&["date".to_string(), "t".to_string()]) ||
+       matches.opt_present("t") &&
+       matches.opts_present(&["date".to_string(), "reference".to_string()]) {
         panic!("Invalid options: cannot specify reference time from more than one source");
     }
 
-    let (mut atime, mut mtime) =
-        if matches.opt_present("reference") {
-            stat(&matches.opt_str("reference").unwrap()[..], !matches.opt_present("no-dereference"))
-        } else if matches.opts_present(&["date".to_string(), "t".to_string()]) {
-            let timestamp = if matches.opt_present("date") {
-                parse_date(matches.opt_str("date").unwrap().as_ref())
-            } else {
-                parse_timestamp(matches.opt_str("t").unwrap().as_ref())
-            };
-            (timestamp, timestamp)
+    let (mut atime, mut mtime) = if matches.opt_present("reference") {
+        stat(&matches.opt_str("reference").unwrap()[..],
+             !matches.opt_present("no-dereference"))
+    } else if matches.opts_present(&["date".to_string(), "t".to_string()]) {
+        let timestamp = if matches.opt_present("date") {
+            parse_date(matches.opt_str("date").unwrap().as_ref())
         } else {
-            let now = local_tm_to_filetime!(time::now());
-            (now, now)
+            parse_timestamp(matches.opt_str("t").unwrap().as_ref())
         };
+        (timestamp, timestamp)
+    } else {
+        let now = local_tm_to_filetime!(time::now());
+        (now, now)
+    };
 
     for filename in matches.free.iter() {
         let path = &filename[..];
@@ -123,12 +139,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 Err(e) => {
                     show_warning!("cannot touch '{}': {}", path, e);
                     continue;
-                },
+                }
                 _ => (),
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.opts_present(&["date".to_string(), "reference".to_string(), "t".to_string()]) {
+            if !matches.opts_present(&["date".to_string(),
+                                       "reference".to_string(),
+                                       "t".to_string()]) {
                 continue;
             }
         }
@@ -139,15 +157,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let st = stat(path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 
-            if !(matches.opt_present("a") ||
-                 time.contains(&"access".to_string()) ||
+            if !(matches.opt_present("a") || time.contains(&"access".to_string()) ||
                  time.contains(&"atime".to_string()) ||
                  time.contains(&"use".to_string())) {
                 atime = st.0;
             }
 
-            if !(matches.opt_present("m") ||
-                 time.contains(&"modify".to_string()) ||
+            if !(matches.opt_present("m") || time.contains(&"modify".to_string()) ||
                  time.contains(&"mtime".to_string())) {
                 mtime = st.1;
             }
@@ -172,11 +188,12 @@ fn stat(path: &str, follow: bool) -> (FileTime, FileTime) {
     };
 
     match metadata {
-        Ok(m) => (
-            FileTime::from_last_access_time(&m),
-            FileTime::from_last_modification_time(&m)
-            ),
-        Err(_) => crash!(1, "failed to get attributes of '{}': {}", path, Error::last_os_error())
+        Ok(m) => (FileTime::from_last_access_time(&m),
+                  FileTime::from_last_modification_time(&m)),
+        Err(_) => crash!(1,
+                         "failed to get attributes of '{}': {}",
+                         path,
+                         Error::last_os_error()),
     }
 }
 
@@ -187,7 +204,7 @@ fn parse_date(str: &str) -> FileTime {
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
     match time::strptime(str, "%c") {
         Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
-        Err(e) => panic!("Unable to parse date\n{}", e)
+        Err(e) => panic!("Unable to parse date\n{}", e),
     }
 }
 
@@ -198,14 +215,14 @@ fn parse_timestamp(s: &str) -> FileTime {
         12 => ("%Y%m%d%H%M", s.to_string()),
         13 => ("%y%m%d%H%M.%S", s.to_string()),
         10 => ("%y%m%d%H%M", s.to_string()),
-        11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
-         8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
-         _ => panic!("Unknown timestamp format")
+        11 => ("%Y%m%d%H%M.%S",
+               format!("{}{}", now.tm_year + 1900, s)),
+        8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
+        _ => panic!("Unknown timestamp format"),
     };
 
     match time::strptime(&ts, format) {
         Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
-        Err(e) => panic!("Unable to parse timestamp\n{}", e)
+        Err(e) => panic!("Unable to parse timestamp\n{}", e),
     }
 }
-

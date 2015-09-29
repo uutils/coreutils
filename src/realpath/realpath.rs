@@ -33,9 +33,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("h", "help", "Show help and exit");
     opts.optflag("V", "version", "Show version and exit");
-    opts.optflag("s", "strip", "Only strip '.' and '..' components, but don't resolve symbolic links");
-    opts.optflag("z", "zero", "Separate output filenames with \\0 rather than newline");
-    opts.optflag("q", "quiet", "Do not print warnings for invalid paths");
+    opts.optflag("s",
+                 "strip",
+                 "Only strip '.' and '..' components, but don't resolve symbolic links");
+    opts.optflag("z",
+                 "zero",
+                 "Separate output filenames with \\0 rather than newline");
+    opts.optflag("q",
+                 "quiet",
+                 "Do not print warnings for invalid paths");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -46,8 +52,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if matches.opt_present("V") { version(); return 0 }
-    if matches.opt_present("h") { show_usage(&opts); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0
+    }
+    if matches.opt_present("h") {
+        show_usage(&opts);
+        return 0
+    }
 
     if matches.free.len() == 0 {
         show_error!("Missing operand: FILENAME, at least one is required");
@@ -87,7 +99,9 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         result.push(part.as_ref());
         loop {
             if links_left == 0 {
-                if !quiet { show_error!("Too many symbolic links: {}", path) };
+                if !quiet {
+                    show_error!("Too many symbolic links: {}", path)
+                };
                 return false
             }
             match fs::metadata(result.as_path()) {
@@ -99,13 +113,13 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
                         Ok(x) => {
                             result.pop();
                             result.push(x.as_path());
-                        },
+                        }
                         _ => {
                             if !quiet {
                                 show_error!("Invalid path: {}", path)
                             };
                             return false
-                        },
+                        }
                     }
                 }
             }

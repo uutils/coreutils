@@ -27,14 +27,19 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("s", "serial", "paste one file at a time instead of in parallel");
-    opts.optopt("d", "delimiters", "reuse characters from LIST instead of TABs", "LIST");
+    opts.optflag("s",
+                 "serial",
+                 "paste one file at a time instead of in parallel");
+    opts.optopt("d",
+                "delimiters",
+                "reuse characters from LIST instead of TABs",
+                "LIST");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => crash!(1, "{}", e)
+        Err(e) => crash!(1, "{}", e),
     };
 
     if matches.opt_present("help") {
@@ -44,7 +49,9 @@ Usage:
   {0} [OPTION]... [FILE]...
 
 Write lines consisting of the sequentially corresponding lines from each
-FILE, separated by TABs, to standard output.", NAME, VERSION);
+FILE, separated by TABs, to standard output.",
+                          NAME,
+                          VERSION);
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -58,16 +65,17 @@ FILE, separated by TABs, to standard output.", NAME, VERSION);
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<BufReader<Box<Read>>> = filenames.into_iter().map(|name|
-        BufReader::new(
+    let mut files: Vec<BufReader<Box<Read>>> = filenames.into_iter()
+                                                        .map(|name| {
+                                                            BufReader::new(
             if name == "-" {
                 Box::new(stdin()) as Box<Read>
             } else {
                 let r = crash_if_err!(1, File::open(Path::new(&name)));
                 Box::new(r) as Box<Read>
             }
-        )
-    ).collect();
+        )                                                        })
+                                                        .collect();
 
     let delimiters: Vec<String> = unescape(delimiters).chars().map(|x| x.to_string()).collect();
     let mut delim_count = 0;
@@ -83,7 +91,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                         output.push_str(line.trim_right());
                         output.push_str(&delimiters[delim_count % delimiters.len()]);
                     }
-                    Err(e) => crash!(1, "{}", e.to_string())
+                    Err(e) => crash!(1, "{}", e.to_string()),
                 }
                 delim_count += 1;
             }
@@ -105,7 +113,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                             eof_count += 1;
                         }
                         Ok(_) => output.push_str(line.trim_right()),
-                        Err(e) => crash!(1, "{}", e.to_string())
+                        Err(e) => crash!(1, "{}", e.to_string()),
                     }
                 }
                 output.push_str(&delimiters[delim_count % delimiters.len()]);

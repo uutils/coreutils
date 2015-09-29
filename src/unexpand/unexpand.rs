@@ -32,11 +32,12 @@ fn tabstops_parse(s: String) -> Vec<usize> {
     let words = s.split(',').collect::<Vec<&str>>();
 
     let nums = words.into_iter()
-        .map(|sn| sn.parse()
-            .unwrap_or_else(
-                |_| crash!(1, "{}\n", "tab size contains invalid character(s)"))
-            )
-        .collect::<Vec<usize>>();
+                    .map(|sn| {
+                        sn.parse().unwrap_or_else(|_| {
+                            crash!(1, "{}\n", "tab size contains invalid character(s)")
+                        })
+                    })
+                    .collect::<Vec<usize>>();
 
     if nums.iter().any(|&n| n == 0) {
         crash!(1, "{}\n", "tab size cannot be 0");
@@ -61,45 +62,61 @@ impl Options {
     fn new(matches: getopts::Matches) -> Options {
         let tabstops = match matches.opt_str("t") {
             None => vec!(DEFAULT_TABSTOP),
-            Some(s) => tabstops_parse(s)
+            Some(s) => tabstops_parse(s),
         };
 
-        let aflag = (matches.opt_present("all") || matches.opt_present("tabs"))
-                    && !matches.opt_present("first-only");
+        let aflag = (matches.opt_present("all") || matches.opt_present("tabs")) &&
+                    !matches.opt_present("first-only");
         let uflag = !matches.opt_present("U");
 
-        let files =
-            if matches.free.is_empty() {
-                vec!("-".to_string())
-            } else {
-                matches.free
-            };
+        let files = if matches.free.is_empty() {
+            vec!("-".to_string())
+        } else {
+            matches.free
+        };
 
-        Options { files: files, tabstops: tabstops, aflag: aflag, uflag: uflag }
+        Options {
+            files: files,
+            tabstops: tabstops,
+            aflag: aflag,
+            uflag: uflag,
+        }
     }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("a", "all", "convert all blanks, instead of just initial blanks");
-    opts.optflag("", "first-only", "convert only leading sequences of blanks (overrides -a)");
-    opts.optopt("t", "tabs", "have tabs N characters apart instead of 8 (enables -a)", "N");
-    opts.optopt("t", "tabs", "use comma separated LIST of tab positions (enables -a)", "LIST");
-    opts.optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8");
+    opts.optflag("a",
+                 "all",
+                 "convert all blanks, instead of just initial blanks");
+    opts.optflag("",
+                 "first-only",
+                 "convert only leading sequences of blanks (overrides -a)");
+    opts.optopt("t",
+                "tabs",
+                "have tabs N characters apart instead of 8 (enables -a)",
+                "N");
+    opts.optopt("t",
+                "tabs",
+                "use comma separated LIST of tab positions (enables -a)",
+                "LIST");
+    opts.optflag("U",
+                 "no-utf8",
+                 "interpret input file as 8-bit ASCII rather than UTF-8");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("help") {
         println!("{} {}\n", NAME, VERSION);
         println!("Usage: {} [OPTION]... [FILE]...\n", NAME);
-        println!("{}", opts.usage(
-            "Convert blanks in each FILE to tabs, writing to standard output.\n\
+        println!("{}",
+                 opts.usage("Convert blanks in each FILE to tabs, writing to standard output.\n\
             With no FILE, or when FILE is -, read standard input."));
         return 0;
     }
@@ -114,7 +131,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open(path: String) -> BufReader<Box<Read+'static>> {
+fn open(path: String) -> BufReader<Box<Read + 'static>> {
     let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<Read>)
@@ -139,14 +156,18 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
     }
 }
 
-fn write_tabs(mut output: &mut BufWriter<Stdout>, tabstops: &[usize],
-              mut scol: usize, col: usize, prevtab: bool, init: bool, amode: bool) {
+fn write_tabs(mut output: &mut BufWriter<Stdout>,
+              tabstops: &[usize],
+              mut scol: usize,
+              col: usize,
+              prevtab: bool,
+              init: bool,
+              amode: bool) {
     // This conditional establishes the following:
     // We never turn a single space before a non-blank into
     // a tab, unless it's at the start of the line.
     let ai = init || amode;
-    if (ai && !prevtab && col > scol + 1) ||
-       (col > scol && (init || ai && prevtab)) {
+    if (ai && !prevtab && col > scol + 1) || (col > scol && (init || ai && prevtab)) {
         while let Some(nts) = next_tabstop(tabstops, scol) {
             if col < scol + nts {
                 break;
@@ -221,7 +242,7 @@ fn unexpand(options: Options) {
                             Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
                             None => {   // invalid char snuck past the utf8_validation_iterator somehow???
                                 (Other, 1, 1)
-                            },
+                            }
                         }
                     } else {
                         // otherwise, it's not valid
@@ -233,7 +254,9 @@ fn unexpand(options: Options) {
                         0x09 => Tab,
                         0x08 => Backspace,
                         _ => Other,
-                    }, 1, 1)
+                    },
+                     1,
+                     1)
                 };
 
                 // now figure out how many columns this char takes up, and maybe print it
@@ -250,8 +273,8 @@ fn unexpand(options: Options) {
                             safe_unwrap!(output.write_all(&buf[byte..byte+nbytes]));
                             scol = col;             // now printed up to this column
                         }
-                    },
-                    Other | Backspace => {  // always 
+                    }
+                    Other | Backspace => {  // always
                         write_tabs(&mut output, ts, scol, col, pctype == Tab, init, options.aflag);
                         init = false;               // no longer at the start of a line
                         col = if ctype == Other {   // use computed width
@@ -263,7 +286,7 @@ fn unexpand(options: Options) {
                         };
                         safe_unwrap!(output.write_all(&buf[byte..byte+nbytes]));
                         scol = col;                 // we've now printed up to this column
-                    },
+                    }
                 }
 
                 byte += nbytes; // move on to next char

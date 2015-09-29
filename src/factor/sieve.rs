@@ -59,13 +59,18 @@ impl Iterator for Sieve {
 
 impl Sieve {
     fn new() -> Sieve {
-        Sieve { inner: Wheel::new(), filts: PrimeHeap::new() }
+        Sieve {
+            inner: Wheel::new(),
+            filts: PrimeHeap::new(),
+        }
     }
 
     #[allow(dead_code)]
     #[inline]
     pub fn primes() -> PrimeSieve {
-        fn deref(x: &u64) -> u64 { *x }
+        fn deref(x: &u64) -> u64 {
+            *x
+        }
         let deref = deref as fn(&u64) -> u64;
         INIT_PRIMES.iter().map(deref).chain(Sieve::new())
     }
@@ -73,7 +78,9 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn odd_primes() -> PrimeSieve {
-        fn deref(x: &u64) -> u64 { *x }
+        fn deref(x: &u64) -> u64 {
+            *x
+        }
         let deref = deref as fn(&u64) -> u64;
         (&INIT_PRIMES[1..]).iter().map(deref).chain(Sieve::new())
     }
@@ -97,7 +104,7 @@ impl Iterator for Wheel {
     }
 
     #[inline]
-    fn next (&mut self) -> Option<u64> {
+    fn next(&mut self) -> Option<u64> {
         let increment = self.increment.next().unwrap(); // infinite iterator, no check necessary
         let ret = self.next;
         self.next = ret + increment;
@@ -108,13 +115,17 @@ impl Iterator for Wheel {
 impl Wheel {
     #[inline]
     fn new() -> Wheel {
-        Wheel { next: 11u64, increment: WHEEL_INCS.iter().cycle() }
+        Wheel {
+            next: 11u64,
+            increment: WHEEL_INCS.iter().cycle(),
+        }
     }
 }
 
 /// The increments of a wheel of circumference 210
 /// (i.e., a wheel that skips all multiples of 2, 3, 5, 7)
-const WHEEL_INCS: &'static [u64] = &[2,4,2,4,6,2,6,4,2,4,6,6,2,6,4,2,6,4,6,8,4,2,4,2,4,8,6,4,6,2,4,6,2,6,6,4,2,4,6,2,6,4,2,4,2,10,2,10];
+const WHEEL_INCS: &'static [u64] = &[2, 4, 2, 4, 6, 2, 6, 4, 2, 4, 6, 6, 2, 6, 4, 2, 6, 4, 6, 8, 4, 2, 4, 2, 4, 8, 6, 4, 6, 2, 4, 6, 2,
+  6, 6, 4, 2, 4, 6, 2, 6, 4, 2, 4, 2, 10, 2, 10];
 const INIT_PRIMES: &'static [u64] = &[2, 3, 5, 7];
 
 /// A min-heap of "infinite lists" of prime multiples, where a list is
@@ -169,8 +180,8 @@ impl PrimeHeap {
         let len = self.data.len();
         let (key, _) = self.data[0];
         loop {
-            let child1 = 2*idx + 1;
-            let child2 = 2*idx + 2;
+            let child1 = 2 * idx + 1;
+            let child2 = 2 * idx + 2;
 
             // no more children
             if child1 >= len {

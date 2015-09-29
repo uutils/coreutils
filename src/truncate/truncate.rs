@@ -29,7 +29,7 @@ enum TruncateMode {
     AtMost,
     AtLeast,
     RoundDown,
-    RoundUp
+    RoundUp,
 }
 
 static NAME: &'static str = "truncate";
@@ -38,16 +38,23 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("c", "no-create", "do not create files that do not exist");
+    opts.optflag("c",
+                 "no-create",
+                 "do not create files that do not exist");
     opts.optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)");
-    opts.optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE");
+    opts.optopt("r",
+                "reference",
+                "base the size of each file on the size of RFILE",
+                "RFILE");
     opts.optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => { crash!(1, "{}", f) }
+        Err(f) => {
+            crash!(1, "{}", f)
+        }
     };
 
     if matches.opt_present("help") {
@@ -56,7 +63,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTION]... FILE...", NAME);
         println!("");
-        print!("{}", opts.usage("Shrink or extend the size of each file to the specified size."));
+        print!("{}",
+               opts.usage("Shrink or extend the size of each file to the specified size."));
         print!("
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -89,8 +97,8 @@ file based on its current size:
             crash!(1, "you must specify either --reference or --size");
         } else {
             match truncate(no_create, io_blocks, reference, size, matches.free) {
-                Ok(()) => ( /* pass */ ),
-                Err(_) => return 1
+                Ok(()) => (),
+                Err(_) => return 1,
             }
         }
     }
@@ -98,7 +106,12 @@ file based on its current size:
     0
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<()> {
+fn truncate(no_create: bool,
+            _: bool,
+            reference: Option<String>,
+            size: Option<String>,
+            filenames: Vec<String>)
+            -> Result<()> {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let _ = match File::open(Path::new(&rfilename)) {
@@ -114,7 +127,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                 }
             }
         }
-        None => parse_size(size.unwrap().as_ref())
+        None => parse_size(size.unwrap().as_ref()),
     };
     for filename in filenames.iter() {
         let path = Path::new(filename);
@@ -131,13 +144,21 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     TruncateMode::Reference => refsize,
                     TruncateMode::Extend => fsize + refsize,
                     TruncateMode::Reduce => fsize - refsize,
-                    TruncateMode::AtMost => if fsize > refsize { refsize } else { fsize },
-                    TruncateMode::AtLeast => if fsize < refsize { refsize } else { fsize },
+                    TruncateMode::AtMost => if fsize > refsize {
+                        refsize
+                    } else {
+                        fsize
+                    },
+                    TruncateMode::AtLeast => if fsize < refsize {
+                        refsize
+                    } else {
+                        fsize
+                    },
                     TruncateMode::RoundDown => fsize - fsize % refsize,
-                    TruncateMode::RoundUp => fsize + fsize % refsize
+                    TruncateMode::RoundUp => fsize + fsize % refsize,
                 };
                 let _ = match file.set_len(tsize) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(f) => {
                         crash!(1, "{}", f.to_string())
                     }
@@ -159,16 +180,15 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         '>' => TruncateMode::AtLeast,
         '/' => TruncateMode::RoundDown,
         '*' => TruncateMode::RoundUp,
-        _ => TruncateMode::Reference /* assume that the size is just a number */
+        _ => TruncateMode::Reference, /* assume that the size is just a number */
     };
     let bytes = {
-        let mut slice =
-            if mode == TruncateMode::Reference {
-                let size: &str = size;
-                size
-            } else {
-                &size[1..]
-            };
+        let mut slice = if mode == TruncateMode::Reference {
+            let size: &str = size;
+            size
+        } else {
+            &size[1..]
+        };
         if slice.chars().last().unwrap().is_alphabetic() {
             slice = &slice[..slice.len() - 1];
             if slice.len() > 0 && slice.chars().last().unwrap().is_alphabetic() {
@@ -176,7 +196,8 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
             }
         }
         slice
-    }.to_string();
+    }
+                    .to_string();
     let mut number: u64 = match bytes.parse() {
         Ok(num) => num,
         Err(e) => {

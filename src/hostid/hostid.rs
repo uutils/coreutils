@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(_) => {
             help(&opts);
             return EXIT_ERR;
-        },
+        }
     };
 
     let mode = if matches.opt_present("version") {
@@ -56,8 +56,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::HostId  => hostid(),
-        Mode::Help    => help(&opts),
+        Mode::HostId => hostid(),
+        Mode::Help => help(&opts),
         Mode::Version => version(),
     }
 
@@ -80,11 +80,11 @@ fn hostid() {
    * is a no-op unless unsigned int is wider than 32 bits.
    */
 
-    let mut result:c_long;
+    let mut result: c_long;
     unsafe {
         result = gethostid();
     }
-    
-    result &= 0xffffffff; 
+
+    result &= 0xffffffff;
     println!("{:0>8x}", result);
 }

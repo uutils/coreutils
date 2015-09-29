@@ -17,7 +17,8 @@ fn unexpand_init_0() {
 #[test]
 fn unexpand_init_1() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-t4"]), "     5\n      6\n       7\n        8\n");
+    let result = run_piped_stdin(&mut cmd.args(&["-t4"]),
+                                 "     5\n      6\n       7\n        8\n");
     assert_eq!(result.stdout, "\t 5\n\t  6\n\t   7\n\t\t8\n");
 }
 
@@ -32,28 +33,34 @@ fn unexpand_init_list_0() {
 fn unexpand_init_list_1() {
     // Once the list is exhausted, spaces are not converted anymore
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-t2,4"]), "     5\n      6\n       7\n        8\n");
-    assert_eq!(result.stdout, "\t\t 5\n\t\t  6\n\t\t   7\n\t\t    8\n");
+    let result = run_piped_stdin(&mut cmd.args(&["-t2,4"]),
+                                 "     5\n      6\n       7\n        8\n");
+    assert_eq!(result.stdout,
+               "\t\t 5\n\t\t  6\n\t\t   7\n\t\t    8\n");
 }
 
 #[test]
 fn unexpand_aflag_0() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["--"]), "e     E\nf      F\ng       G\nh        H\n");
-    assert_eq!(result.stdout, "e     E\nf      F\ng       G\nh        H\n");
+    let result = run_piped_stdin(&mut cmd.args(&["--"]),
+                                 "e     E\nf      F\ng       G\nh        H\n");
+    assert_eq!(result.stdout,
+               "e     E\nf      F\ng       G\nh        H\n");
 }
 
 #[test]
 fn unexpand_aflag_1() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-a"]), "e     E\nf      F\ng       G\nh        H\n");
+    let result = run_piped_stdin(&mut cmd.args(&["-a"]),
+                                 "e     E\nf      F\ng       G\nh        H\n");
     assert_eq!(result.stdout, "e     E\nf      F\ng\tG\nh\t H\n");
 }
 
 #[test]
 fn unexpand_aflag_2() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-t8"]), "e     E\nf      F\ng       G\nh        H\n");
+    let result = run_piped_stdin(&mut cmd.args(&["-t8"]),
+                                 "e     E\nf      F\ng       G\nh        H\n");
     assert_eq!(result.stdout, "e     E\nf      F\ng\tG\nh\t H\n");
 }
 
@@ -67,7 +74,8 @@ fn unexpand_first_only_0() {
 #[test]
 fn unexpand_first_only_1() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-t3", "--first-only"]), "        A     B");
+    let result = run_piped_stdin(&mut cmd.args(&["-t3", "--first-only"]),
+                                 "        A     B");
     assert_eq!(result.stdout, "\t\t  A     B");
 }
 
@@ -76,7 +84,8 @@ fn unexpand_trailing_space_0() { // evil
     // Individual spaces before fields starting with non blanks should not be
     // converted, unless they are at the beginning of the line.
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-t4"]), "123 \t1\n123 1\n123 \n123 ");
+    let result = run_piped_stdin(&mut cmd.args(&["-t4"]),
+                                 "123 \t1\n123 1\n123 \n123 ");
     assert_eq!(result.stdout, "123\t\t1\n123 1\n123 \n123 ");
 }
 
@@ -110,6 +119,7 @@ fn unexpand_spaces_follow_tabs_1() { // evil
 #[test]
 fn unexpand_spaces_after_fields() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-a"]), "   \t        A B C D             A\t\n");
+    let result = run_piped_stdin(&mut cmd.args(&["-a"]),
+                                 "   \t        A B C D             A\t\n");
     assert_eq!(result.stdout, "\t\tA B C D\t\t    A\t\n");
 }

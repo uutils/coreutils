@@ -38,7 +38,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "invalid options\n{}", f)
+        Err(f) => crash!(1, "invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
@@ -57,17 +57,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.free.len() == 0 {
-        crash!(1, "missing operand\nTry '{0} --help' for more information.", NAME);
+        crash!(1,
+               "missing operand\nTry '{0} --help' for more information.",
+               NAME);
     } else if matches.free.len() > 1 {
-        crash!(1, "extra operand: '{1}'\nTry '{0} --help' for more information.", NAME, matches.free[1]);
+        crash!(1,
+               "extra operand: '{1}'\nTry '{0} --help' for more information.",
+               NAME,
+               matches.free[1]);
     }
 
     let st_mode = {
         let mut buf: stat = unsafe { uninitialized() };
-        let result = unsafe { lstat(matches.free[0].as_ptr() as *const c_char, &mut buf as *mut stat) };
+        let result = unsafe {
+            lstat(matches.free[0].as_ptr() as *const c_char,
+                  &mut buf as *mut stat)
+        };
 
         if result < 0 {
-            crash!(1, "Cannot stat '{}': {}", matches.free[0], Error::last_os_error());
+            crash!(1,
+                   "Cannot stat '{}': {}",
+                   matches.free[0],
+                   Error::last_os_error());
         }
 
         buf.st_mode & S_IFMT

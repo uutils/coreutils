@@ -16,9 +16,9 @@ mod util;
 fn test_cp_cp() {
     // Invoke our binary to make the copy.
     let prog = Command::new(PROGNAME)
-                            .arg(TEST_HELLO_WORLD_SOURCE)
-                            .arg(TEST_HELLO_WORLD_DEST)
-                            .status();
+                   .arg(TEST_HELLO_WORLD_SOURCE)
+                   .arg(TEST_HELLO_WORLD_DEST)
+                   .status();
 
     // Check that the exit code represents a successful copy.
     let exit_success = prog.unwrap().success();

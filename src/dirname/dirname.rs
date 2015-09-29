@@ -18,13 +18,15 @@ static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
-    opts.optflag("z", "zero", "separate output with NUL rather than newline");
+    opts.optflag("z",
+                 "zero",
+                 "separate output with NUL rather than newline");
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!("Invalid options\n{}", f)
+        Err(f) => panic!("Invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
@@ -35,7 +37,9 @@ Usage:
 
 Output each NAME with its last non-slash component and trailing slashes
 removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
-directory).", NAME, VERSION);
+directory).",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         return 0;
@@ -48,7 +52,7 @@ directory).", NAME, VERSION);
 
     let separator = match matches.opt_present("zero") {
         true => "\0",
-        false => "\n"
+        false => "\n",
     };
 
     if !matches.free.is_empty() {

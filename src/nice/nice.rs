@@ -34,7 +34,10 @@ extern {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("n", "adjustment", "add N to the niceness (default is 10)", "N");
+    opts.optopt("n",
+                "adjustment",
+                "add N to the niceness (default is 10)",
+                "N");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -60,7 +63,9 @@ Usage:
 Run COMMAND with an adjusted niceness, which affects process scheduling.
 With no COMMAND, print the current niceness.  Niceness values range from at
 least -20 (most favorable to the process) to 19 (least favorable to the
-process).", NAME, VERSION);
+process).",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         return 0;
@@ -76,17 +81,18 @@ process).", NAME, VERSION);
         Some(nstr) => {
             if matches.free.len() == 0 {
                 show_error!("A command must be given with an adjustment.
-                                Try \"{} --help\" for more information.", args[0]);
+                                Try \"{} --help\" for more information.",
+                            args[0]);
                 return 125;
             }
             match nstr.parse() {
                 Ok(num) => num,
-                Err(e)=> {
+                Err(e) => {
                     show_error!("\"{}\" is not a valid number: {}", nstr, e);
                     return 125;
                 }
             }
-        },
+        }
         None => {
             if matches.free.len() == 0 {
                 println!("{}", niceness);
@@ -97,16 +103,27 @@ process).", NAME, VERSION);
     };
 
     niceness += adjustment;
-    unsafe { setpriority(PRIO_PROCESS, 0, niceness); }
+    unsafe {
+        setpriority(PRIO_PROCESS, 0, niceness);
+    }
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
         show_warning!("{}", Error::last_os_error());
     }
 
-    let cstrs: Vec<CString> = matches.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
+    let cstrs: Vec<CString> = matches.free
+                                     .iter()
+                                     .map(|x| CString::new(x.as_bytes()).unwrap())
+                                     .collect();
     let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(0 as *const c_char);
-    unsafe { execvp(args[0], args.as_mut_ptr()); }
+    unsafe {
+        execvp(args[0], args.as_mut_ptr());
+    }
 
     show_error!("{}", Error::last_os_error());
-    if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT { 127 } else { 126 }
+    if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
+        127
+    } else {
+        126
+    }
 }

@@ -26,7 +26,7 @@ static VERSION: &'static str = "1.0.0";
 #[derive(Clone)]
 struct EchoOptions {
     newline: bool,
-    escape: bool
+    escape: bool,
 }
 
 #[inline(always)]
@@ -37,9 +37,23 @@ fn to_char(bytes: &Vec<u8>, base: u32) -> char {
 #[inline(always)]
 fn isxdigit(c: u8) -> bool {
     match c as char {
-        '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' |
-        '8' | '9' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' => true,
-        _ => false
+        '0' |
+        '1' |
+        '2' |
+        '3' |
+        '4' |
+        '5' |
+        '6' |
+        '7' |
+        '8' |
+        '9' |
+        'A' |
+        'B' |
+        'C' |
+        'D' |
+        'E' |
+        'F' => true,
+        _ => false,
     }
 }
 
@@ -47,19 +61,19 @@ fn isxdigit(c: u8) -> bool {
 fn isodigit(c: u8) -> bool {
     match c as char {
         '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' => true,
-        _ => false
+        _ => false,
     }
 }
 
 fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
-    let (max_digits, is_legal_digit) : (usize, fn(u8) -> bool) = match base {
+    let (max_digits, is_legal_digit): (usize, fn(u8) -> bool) = match base {
         8 => (3, isodigit),
         16 => (2, isxdigit),
         _ => panic!(),
     };
 
     let mut bytes = vec!();
-    for offset in (0usize .. max_digits) {
+    for offset in (0usize..max_digits) {
         if string.len() <= index + offset as usize {
             break;
         }
@@ -129,7 +143,9 @@ fn print_help() {
     let mut opts = getopts::Options::new();
     opts.optflag("n", "", "do not output the trailing newline");
     opts.optflag("e", "", "enable interpretation of backslash escapes");
-    opts.optflag("E", "", "disable interpretation of backslash escapes (default)");
+    opts.optflag("E",
+                 "",
+                 "disable interpretation of backslash escapes (default)");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -153,7 +169,9 @@ If -e is in effect, the following sequences are recognized:
 \\t      horizontal tab
 \\v      vertical tab
 \\0NNN   byte with octal value NNN (1 to 3 digits)
-\\xHH    byte with hexadecimal value HH (1 to 2 digits)", NAME, VERSION);
+\\xHH    byte with hexadecimal value HH (1 to 2 digits)",
+                      NAME,
+                      VERSION);
 
     print!("{}", opts.usage(&msg));
 }
@@ -165,12 +183,12 @@ fn print_version() {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut options = EchoOptions {
         newline: false,
-        escape: false
+        escape: false,
     };
 
     let free = match parse_options(args, &mut options) {
         Some(vec) => vec,
-        None => return 0
+        None => return 0,
     };
 
     if !free.is_empty() {
@@ -201,34 +219,40 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                 't' => print!("\t"),
                                 'v' => print!("\x0B"),
                                 'x' => {
-                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16);
+                                    let (c, num_char_used) = convert_str(string.as_bytes(),
+                                                                         index + 1,
+                                                                         16);
                                     if num_char_used == 0 {
                                         print!("\\x");
                                     } else {
                                         print!("{}", c);
-                                        for _ in (0 .. num_char_used) {
+                                        for _ in (0..num_char_used) {
                                             iter.next(); // consume used characters
                                         }
                                     }
-                                },
+                                }
                                 '0' => {
-                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8);
+                                    let (c, num_char_used) = convert_str(string.as_bytes(),
+                                                                         index + 1,
+                                                                         8);
                                     if num_char_used == 0 {
                                         print!("\0");
                                     } else {
                                         print!("{}", c);
-                                        for _ in (0 .. num_char_used) {
+                                        for _ in (0..num_char_used) {
                                             iter.next(); // consume used characters
                                         }
                                     }
                                 }
                                 _ => {
-                                    let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8);
+                                    let (esc_c, num_char_used) = convert_str(string.as_bytes(),
+                                                                             index,
+                                                                             8);
                                     if num_char_used == 0 {
                                         print!("\\{}", c);
                                     } else {
                                         print!("{}", esc_c);
-                                        for _ in (1 .. num_char_used) {
+                                        for _ in (1..num_char_used) {
                                             iter.next(); // consume used characters
                                         }
                                     }
@@ -236,7 +260,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                             }
                         }
                     }
-                    None => break
+                    None => break,
                 }
             }
         } else {

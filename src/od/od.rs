@@ -17,24 +17,39 @@ use std::mem;
 use std::path::Path;
 
 #[derive(Debug)]
-enum Radix { Decimal, Hexadecimal, Octal, Binary }
+enum Radix {
+    Decimal,
+    Hexadecimal,
+    Octal,
+    Binary,
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("A", "address-radix",
-                "Select the base in which file offsets are printed.", "RADIX");
-    opts.optopt("j", "skip-bytes",
-                "Skip bytes input bytes before formatting and writing.", "BYTES");
-    opts.optopt("N", "read-bytes",
-                "limit dump to BYTES input bytes", "BYTES");
-    opts.optopt("S", "strings",
+    opts.optopt("A",
+                "address-radix",
+                "Select the base in which file offsets are printed.",
+                "RADIX");
+    opts.optopt("j",
+                "skip-bytes",
+                "Skip bytes input bytes before formatting and writing.",
+                "BYTES");
+    opts.optopt("N",
+                "read-bytes",
+                "limit dump to BYTES input bytes",
+                "BYTES");
+    opts.optopt("S",
+                "strings",
                 ("output strings of at least BYTES graphic chars. 3 is assumed when \
                  BYTES is not specified."),
                 "BYTES");
     opts.optopt("t", "format", "select output format or formats", "TYPE");
-    opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
-    opts.optopt("w", "width",
+    opts.optflag("v",
+                 "output-duplicates",
+                 "do not use * to mark line suppression");
+    opts.optopt("w",
+                "width",
                 ("output BYTES bytes per output line. 32 is implied when BYTES is not \
                  specified."),
                 "BYTES");
@@ -43,17 +58,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!("Invalid options\n{}", f)
+        Err(f) => panic!("Invalid options\n{}", f),
     };
 
     let input_offset_base = match parse_radix(matches.opt_str("A")) {
         Ok(r) => r,
-        Err(f) => { panic!("Invalid -A/--address-radix\n{}", f) }
+        Err(f) => {
+            panic!("Invalid -A/--address-radix\n{}", f)
+        }
     };
 
     let fname = match args.last() {
         Some(n) => n,
-        None => { panic!("Need fname for now") ; }
+        None => {
+            panic!("Need fname for now") ;
+        }
     };
 
     main(&input_offset_base, &fname);
@@ -64,7 +83,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn main(input_offset_base: &Radix, fname: &str) {
     let mut f = match File::open(Path::new(fname)) {
         Ok(f) => f,
-        Err(e) => panic!("file error: {}", e)
+        Err(e) => panic!("file error: {}", e),
     };
 
     let mut addr = 0;
@@ -73,7 +92,7 @@ fn main(input_offset_base: &Radix, fname: &str) {
         match f.read(bytes) {
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
-                for b in 0 .. n / mem::size_of::<u16>() {
+                for b in 0..n / mem::size_of::<u16>() {
                     let bs = &bytes[(2 * b) .. (2 * b + 2)];
                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
                     print!(" {:06o}", p);
@@ -83,7 +102,7 @@ fn main(input_offset_base: &Radix, fname: &str) {
                 }
                 print!("\n");
                 addr += n;
-            },
+            }
             Err(_) => {
                 print_with_radix(input_offset_base, addr);
                 break;
@@ -107,7 +126,7 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
                     'x' => Ok(Radix::Hexadecimal),
                     'o' => Ok(Radix::Octal),
                     'b' => Ok(Radix::Binary),
-                    _ => Err("Radix must be one of [d, o, b, x]\n")
+                    _ => Err("Radix must be one of [d, o, b, x]\n"),
                 }
             }
         }
@@ -121,6 +140,6 @@ fn print_with_radix(r: &Radix, x: usize) {
         Radix::Decimal => print!("{:07}", x),
         Radix::Hexadecimal => print!("{:07X}", x),
         Radix::Octal => print!("{:07o}", x),
-        Radix::Binary => print!("{:07b}", x)
+        Radix::Binary => print!("{:07b}", x),
     }
 }

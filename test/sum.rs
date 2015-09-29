@@ -14,7 +14,8 @@ fn test_bsd_single_file() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("bsd_single_file.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("bsd_single_file.expected"));
 }
 
 #[test]
@@ -24,7 +25,8 @@ fn test_bsd_multiple_files() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("bsd_multiple_files.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("bsd_multiple_files.expected"));
 }
 
 #[test]
@@ -35,7 +37,8 @@ fn test_bsd_stdin() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("bsd_stdin.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("bsd_stdin.expected"));
 }
 
 #[test]
@@ -45,7 +48,8 @@ fn test_sysv_single_file() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("sysv_single_file.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("sysv_single_file.expected"));
 }
 
 #[test]
@@ -55,7 +59,8 @@ fn test_sysv_multiple_files() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("sysv_multiple_files.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("sysv_multiple_files.expected"));
 }
 
 #[test]
@@ -66,5 +71,6 @@ fn test_sysv_stdin() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("sysv_stdin.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("sysv_stdin.expected"));
 }

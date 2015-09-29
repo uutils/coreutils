@@ -49,17 +49,16 @@ fn test_helper(file_name: &String, args: &String) {
     cmd.arg(args);
     let po = match cmd.arg(format!("{}{}", file_name, ".txt")).output() {
         Ok(p) => p,
-        Err(err) => panic!("{}", err)
+        Err(err) => panic!("{}", err),
     };
 
     let filename = format!("{}{}", file_name, ".ans");
-    let mut f = File::open(Path::new(&filename)).unwrap_or_else(|err| {
-        panic!("{}", err)
-    });
+    let mut f = File::open(Path::new(&filename)).unwrap_or_else(|err| panic!("{}", err));
     let mut answer = vec!();
     match f.read_to_end(&mut answer) {
-        Ok(_) => {},
-        Err(err) => panic!("{}", err)
+        Ok(_) => {}
+        Err(err) => panic!("{}", err),
     }
-    assert_eq!(String::from_utf8(po.stdout).unwrap(), String::from_utf8(answer).unwrap());
+    assert_eq!(String::from_utf8(po.stdout).unwrap(),
+               String::from_utf8(answer).unwrap());
 }

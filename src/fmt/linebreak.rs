@@ -15,12 +15,12 @@ use std::cmp;
 use std::mem;
 
 struct BreakArgs<'a> {
-    opts       : &'a FmtOptions,
-    init_len   : usize,
-    indent_str : &'a str,
-    indent_len : usize,
-    uniform    : bool,
-    ostream    : &'a mut BufWriter<Stdout>
+    opts: &'a FmtOptions,
+    init_len: usize,
+    indent_str: &'a str,
+    indent_len: usize,
+    uniform: bool,
+    ostream: &'a mut BufWriter<Stdout>,
 }
 
 impl<'a> BreakArgs<'a> {
@@ -32,7 +32,8 @@ impl<'a> BreakArgs<'a> {
             let post = winfo.after_tab;
             match winfo.before_tab {
                 None => post,
-                Some(pre) => post + ((pre + posn) / self.opts.tabwidth + 1) * self.opts.tabwidth - posn
+                Some(pre) =>
+                    post + ((pre + posn) / self.opts.tabwidth + 1) * self.opts.tabwidth - posn,
             }
         }
     }
@@ -58,18 +59,18 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     };
     // print the init, if it exists, and get its length
     let p_init_len = w_len +
-        if opts.crown || opts.tagged {
+                     if opts.crown || opts.tagged {
             // handle "init" portion
-            silent_unwrap!(ostream.write_all(para.init_str.as_bytes()));
-            para.init_len
-        } else if !para.mail_header {
+        silent_unwrap!(ostream.write_all(para.init_str.as_bytes()));
+        para.init_len
+    } else if !para.mail_header {
             // for non-(crown, tagged) that's the same as a normal indent
-            silent_unwrap!(ostream.write_all(p_indent.as_bytes()));
-            p_indent_len
-        } else {
+        silent_unwrap!(ostream.write_all(p_indent.as_bytes()));
+        p_indent_len
+    } else {
             // except that mail headers get no indent at all
-            0
-        };
+        0
+    };
     // write first word after writing init
     silent_unwrap!(ostream.write_all(w.as_bytes()));
 
@@ -77,12 +78,12 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     let uniform = para.mail_header || opts.uniform;
 
     let mut break_args = BreakArgs {
-        opts       : opts,
-        init_len   : p_init_len,
-        indent_str : &p_indent[..],
-        indent_len : p_indent_len,
-        uniform    : uniform,
-        ostream    : ostream
+        opts: opts,
+        init_len: p_init_len,
+        indent_str: &p_indent[..],
+        indent_len: p_indent_len,
+        uniform: uniform,
+        ostream: ostream,
     };
 
     if opts.quick || para.mail_header {
@@ -94,22 +95,30 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
 
 // break_simple implements a "greedy" breaking algorithm: print words until
 // maxlength would be exceeded, then print a linebreak and indent and continue.
-fn break_simple<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &mut BreakArgs<'a>) {
-    iter.fold((args.init_len, false), |l, winfo| accum_words_simple(args, l, winfo));
+fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(iter: T, args: &mut BreakArgs<'a>) {
+    iter.fold((args.init_len, false),
+              |l, winfo| accum_words_simple(args, l, winfo));
     silent_unwrap!(args.ostream.write_all("\n".as_bytes()));
 }
 
 #[inline(always)]
-fn accum_words_simple<'a>(args: &mut BreakArgs<'a>, (l, prev_punct): (usize, bool), winfo: &'a WordInfo<'a>) -> (usize, bool) {
+fn accum_words_simple<'a>(args: &mut BreakArgs<'a>,
+                          (l, prev_punct): (usize, bool),
+                          winfo: &'a WordInfo<'a>)
+                          -> (usize, bool) {
     // compute the length of this word, considering how tabs will expand at this position on the line
     let wlen = winfo.word_nchars + args.compute_width(winfo, l, false);
 
-    let slen = compute_slen(args.uniform, winfo.new_line, winfo.sentence_start, prev_punct);
+    let slen = compute_slen(args.uniform,
+                            winfo.new_line,
+                            winfo.sentence_start,
+                            prev_punct);
 
     if l + wlen + slen > args.opts.width {
         write_newline(args.indent_str, args.ostream);
         write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream);
-        (args.indent_len + winfo.word_nchars, winfo.ends_punct)
+        (args.indent_len + winfo.word_nchars,
+         winfo.ends_punct)
     } else {
         write_with_spaces(winfo.word, slen, args.ostream);
         (l + wlen + slen, winfo.ends_punct)
@@ -120,7 +129,8 @@ fn accum_words_simple<'a>(args: &mut BreakArgs<'a>, (l, prev_punct): (usize, boo
 //    Knuth, D.E., and Plass, M.F. "Breaking Paragraphs into Lines." in Software,
 //    Practice and Experience. Vol. 11, No. 11, November 1981.
 //    http://onlinelibrary.wiley.com/doi/10.1002/spe.4380111102/pdf
-fn break_knuth_plass<'a, T: Clone + Iterator<Item=&'a WordInfo<'a>>>(mut iter: T, args: &mut BreakArgs<'a>) {
+fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(mut iter: T,
+                                                                       args: &mut BreakArgs<'a>) {
     // run the algorithm to get the breakpoints
     let breakpoints = find_kp_breakpoints(iter.clone(), args);
 
@@ -164,8 +174,13 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item=&'a WordInfo<'a>>>(mut iter: T
         if fresh {
             write_newline(args.indent_str, args.ostream);
         }
-        let (slen, word) = slice_if_fresh(fresh, winfo.word, winfo.word_start, args.uniform,
-                                          winfo.new_line, winfo.sentence_start, prev_punct);
+        let (slen, word) = slice_if_fresh(fresh,
+                                          winfo.word,
+                                          winfo.word_start,
+                                          args.uniform,
+                                          winfo.new_line,
+                                          winfo.sentence_start,
+                                          prev_punct);
         prev_punct = winfo.ends_punct;
         fresh = false;
         write_with_spaces(word, slen, args.ostream);
@@ -174,26 +189,29 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item=&'a WordInfo<'a>>>(mut iter: T
 }
 
 struct LineBreak<'a> {
-    prev         : usize,
-    linebreak    : Option<&'a WordInfo<'a>>,
-    break_before : bool,
-    demerits     : i64,
-    prev_rat     : f32,
-    length       : usize,
-    fresh        : bool
+    prev: usize,
+    linebreak: Option<&'a WordInfo<'a>>,
+    break_before: bool,
+    demerits: i64,
+    prev_rat: f32,
+    length: usize,
+    fresh: bool,
 }
 
-fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &BreakArgs<'a>) -> Vec<(&'a WordInfo<'a>, bool)> {
+fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>
+                                                                 (iter: T,
+                                                                  args: &BreakArgs<'a>)
+                                                                  -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut iter = iter.peekable();
     // set up the initial null linebreak
     let mut linebreaks = vec!(LineBreak {
-        prev         : 0,
-        linebreak    : None,
-        break_before : false,
-        demerits     : 0,
-        prev_rat     : 0.0f32,
-        length       : args.init_len,
-        fresh        : false
+        prev: 0,
+        linebreak: None,
+        break_before: false,
+        demerits: 0,
+        prev_rat: 0.0f32,
+        length: args.init_len,
+        fresh: false,
     });
     // this vec holds the current active linebreaks; next_ holds the breaks that will be active for the next word
     let active_breaks = &mut vec!(0);
@@ -205,18 +223,17 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
     loop {
-        let w =
-            match iter.next() {
-                None => break,
-                Some(w) => w
-            };
+        let w = match iter.next() {
+            None => break,
+            Some(w) => w,
+        };
 
         // if this is the last word, we don't add additional demerits for this break
-        let (is_last_word, is_sentence_end) =
-            match iter.peek() {
-                None => (true, true),
-                Some(&&WordInfo { sentence_start: st, new_line: nl, .. }) => (false, st || (nl && w.ends_punct))
-            };
+        let (is_last_word, is_sentence_end) = match iter.peek() {
+            None => (true, true),
+            Some(&&WordInfo { sentence_start: st, new_line: nl, .. }) =>
+                (false, st || (nl && w.ends_punct)),
+        };
 
         // should we be adding extra space at the beginning of the next sentence?
         let slen = compute_slen(args.uniform, w.new_line, is_sentence_start, false);
@@ -238,7 +255,8 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
             }
 
             // get the new length
-            let tlen = w.word_nchars + args.compute_width(w, active.length, active.fresh) + slen + active.length;
+            let tlen = w.word_nchars + args.compute_width(w, active.length, active.fresh) + slen +
+                       active.length;
 
             // if tlen is longer than args.opts.width, we drop this break from the active list
             // otherwise, we extend the break, and possibly add a new break at this point
@@ -251,27 +269,30 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
 
                 // if we're above the minlength, we can also consider breaking here
                 if tlen >= minlength {
-                    let (new_demerits, new_ratio) =
-                        if is_last_word {
+                    let (new_demerits, new_ratio) = if is_last_word {
                             // there is no penalty for the final line's length
-                            (0, 0.0)
-                        } else {
-                            compute_demerits((args.opts.goal - tlen) as isize, stretch, w.word_nchars as isize, active.prev_rat)
-                        };
+                        (0, 0.0)
+                    } else {
+                        compute_demerits((args.opts.goal - tlen) as isize,
+                                         stretch,
+                                         w.word_nchars as isize,
+                                         active.prev_rat)
+                    };
 
                     // do not even consider adding a line that has too many demerits
                     // also, try to detect overflow by checking signum
                     let total_demerits = new_demerits + active.demerits;
-                    if new_demerits < BAD_INFTY_SQ && total_demerits < ld_new && active.demerits.signum() <= new_demerits.signum() {
+                    if new_demerits < BAD_INFTY_SQ && total_demerits < ld_new &&
+                       active.demerits.signum() <= new_demerits.signum() {
                         ld_new = total_demerits;
                         new_linebreaks.push(LineBreak {
-                            prev         : i,
-                            linebreak    : Some(w),
-                            break_before : false,
-                            demerits     : total_demerits,
-                            prev_rat     : new_ratio,
-                            length       : args.indent_len,
-                            fresh        : true
+                            prev: i,
+                            linebreak: Some(w),
+                            break_before: false,
+                            demerits: total_demerits,
+                            prev_rat: new_ratio,
+                            length: args.indent_len,
+                            fresh: true,
                         });
                     }
                 }
@@ -291,7 +312,12 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
 
         if next_active_breaks.is_empty() {
             // every potential linebreak is too long! choose the linebreak with the least demerits, ld_idx
-            let new_break = restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w, slen, minlength);
+            let new_break = restart_active_breaks(args,
+                                                  &linebreaks[ld_idx],
+                                                  ld_idx,
+                                                  w,
+                                                  slen,
+                                                  minlength);
             next_active_breaks.push(linebreaks.len());
             linebreaks.push(new_break);
             least_demerits = 0;
@@ -311,12 +337,15 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
 }
 
 #[inline(always)]
-fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<usize>) -> Vec<(&'a WordInfo<'a>, bool)> {
+fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>,
+                       active: &Vec<usize>)
+                       -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut breakwords = vec!();
     // of the active paths, we select the one with the fewest demerits
     let mut best_idx = match active.iter().min_by(|&&a| paths[a].demerits) {
-        None => crash!(1, "Failed to find a k-p linebreak solution. This should never happen."),
-        Some(&s) => s
+        None => crash!(1,
+                       "Failed to find a k-p linebreak solution. This should never happen."),
+        Some(&s) => s,
     };
 
     // now, chase the pointers back through the break list, recording
@@ -346,28 +375,25 @@ const DL_MULT: f32 = 300.0;
 #[inline(always)]
 fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
-    let ratio =
-        if delta_len == 0 {
-            0.0f32
-        } else {
-            delta_len as f32 / stretch as f32
-        };
+    let ratio = if delta_len == 0 {
+        0.0f32
+    } else {
+        delta_len as f32 / stretch as f32
+    };
 
     // compute badness given the stretch ratio
-    let bad_linelen =
-        if ratio.abs() > 1.0f32 {
-            BAD_INFTY
-        } else {
-            (BAD_MULT * ratio.powf(3f32).abs()) as i64
-        };
+    let bad_linelen = if ratio.abs() > 1.0f32 {
+        BAD_INFTY
+    } else {
+        (BAD_MULT * ratio.powf(3f32).abs()) as i64
+    };
 
     // we penalize lines ending in really short words
-    let bad_wordlen =
-        if wlen >= stretch {
-            0
-        } else {
-            (DL_MULT * ((stretch - wlen) as f32 / (stretch - 1) as f32).powf(3f32).abs()) as i64
-        };
+    let bad_wordlen = if wlen >= stretch {
+        0
+    } else {
+        (DL_MULT * ((stretch - wlen) as f32 / (stretch - 1) as f32).powf(3f32).abs()) as i64
+    };
 
     // we penalize lines that have very different ratios from previous lines
     let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powf(3f32)).abs()) as i64;
@@ -378,33 +404,42 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
 }
 
 #[inline(always)]
-fn restart_active_breaks<'a>(args: &BreakArgs<'a>, active: &LineBreak<'a>, act_idx: usize, w: &'a WordInfo<'a>, slen: usize, min: usize) -> LineBreak<'a> {
-    let (break_before, line_length) =
-        if active.fresh {
+fn restart_active_breaks<'a>(args: &BreakArgs<'a>,
+                             active: &LineBreak<'a>,
+                             act_idx: usize,
+                             w: &'a WordInfo<'a>,
+                             slen: usize,
+                             min: usize)
+                             -> LineBreak<'a> {
+    let (break_before, line_length) = if active.fresh {
             // never break before a word if that word would be the first on a line
-            (false, args.indent_len)
-        } else {
+        (false, args.indent_len)
+    } else {
             // choose the lesser evil: breaking too early, or breaking too late
-            let wlen = w.word_nchars + args.compute_width(w, active.length, active.fresh);
-            let underlen = (min - active.length) as isize;
-            let overlen = ((wlen + slen + active.length) - args.opts.width) as isize;
-            if overlen > underlen {
+        let wlen = w.word_nchars + args.compute_width(w, active.length, active.fresh);
+        let underlen = (min - active.length) as isize;
+        let overlen = ((wlen + slen + active.length) - args.opts.width) as isize;
+        if overlen > underlen {
                 // break early, put this word on the next line
-                (true, args.indent_len + w.word_nchars)
-            } else {
-                (false, args.indent_len)
-            }
-        };
+            (true, args.indent_len + w.word_nchars)
+        } else {
+            (false, args.indent_len)
+        }
+    };
 
     // restart the linebreak. This will be our only active path.
     LineBreak {
-        prev         : act_idx,
-        linebreak    : Some(w),
-        break_before : break_before,
-        demerits     : 0, // this is the only active break, so we can reset the demerit count
-        prev_rat     : if break_before { 1.0 } else { -1.0 },
-        length       : line_length,
-        fresh        : !break_before
+        prev: act_idx,
+        linebreak: Some(w),
+        break_before: break_before,
+        demerits: 0, // this is the only active break, so we can reset the demerit count
+        prev_rat: if break_before {
+            1.0
+        } else {
+            -1.0
+        },
+        length: line_length,
+        fresh: !break_before,
     }
 }
 
@@ -425,7 +460,14 @@ fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize
 // If we're on a fresh line, slen=0 and we slice off leading whitespace.
 // Otherwise, compute slen and leave whitespace alone.
 #[inline(always)]
-fn slice_if_fresh<'a>(fresh: bool, word: &'a str, start: usize, uniform: bool, newline: bool, sstart: bool, punct: bool) -> (usize, &'a str) {
+fn slice_if_fresh<'a>(fresh: bool,
+                      word: &'a str,
+                      start: usize,
+                      uniform: bool,
+                      newline: bool,
+                      sstart: bool,
+                      punct: bool)
+                      -> (usize, &'a str) {
     if fresh {
         (0, &word[start..])
     } else {

@@ -16,7 +16,8 @@ mod util;
 
 fn get_file_times(path: &str) -> (FileTime, FileTime) {
     let m = metadata(path);
-    (FileTime::from_last_access_time(&m), FileTime::from_last_modification_time(&m))
+    (FileTime::from_last_access_time(&m),
+     FileTime::from_last_modification_time(&m))
 }
 
 fn set_file_times(path: &str, atime: FileTime, mtime: FileTime) {
@@ -80,8 +81,10 @@ fn test_touch_set_mdhm_time() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
 }
 
 #[test]
@@ -97,8 +100,10 @@ fn test_touch_set_mdhms_time() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", "201501010000.00");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45296);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45296);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45296);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45296);
 }
 
 #[test]
@@ -114,8 +119,10 @@ fn test_touch_set_ymdhm_time() {
     let start_of_year = str_to_filetime("%y%m%d%H%M", "1501010000");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
 }
 
 #[test]
@@ -131,8 +138,10 @@ fn test_touch_set_ymdhms_time() {
     let start_of_year = str_to_filetime("%y%m%d%H%M.%S", "1501010000.00");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45296);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45296);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45296);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45296);
 }
 
 #[test]
@@ -148,8 +157,10 @@ fn test_touch_set_cymdhm_time() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
 }
 
 #[test]
@@ -165,8 +176,10 @@ fn test_touch_set_cymdhms_time() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", "201501010000.00");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45296);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45296);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45296);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45296);
 }
 
 #[test]
@@ -182,7 +195,8 @@ fn test_touch_set_only_atime() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(file);
     assert!(atime != mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
 }
 
 #[test]
@@ -198,7 +212,8 @@ fn test_touch_set_only_mtime() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(file);
     assert!(atime != mtime);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
 }
 
 #[test]
@@ -214,8 +229,10 @@ fn test_touch_set_both() {
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
-    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(), 45240);
+    assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
+    assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
+               45240);
 }
 
 #[test]

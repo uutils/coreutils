@@ -124,7 +124,8 @@ fn test_mv_interactive() {
     touch(file_b);
 
 
-    let result1 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"n");
+    let result1 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b),
+                                  b"n");
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -133,7 +134,8 @@ fn test_mv_interactive() {
     assert!(file_exists(file_b));
 
 
-    let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
+    let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b),
+                                  b"Yesh");
 
     assert_empty_stderr!(result2);
     assert!(result2.success);
@@ -216,8 +218,10 @@ fn test_mv_custom_backup_suffix() {
     touch(file_a);
     touch(file_b);
     let result = run(Command::new(PROGNAME)
-            .arg("-b").arg(format!("--suffix={}", suffix))
-            .arg(file_a).arg(file_b));
+                         .arg("-b")
+                         .arg(format!("--suffix={}", suffix))
+                         .arg(file_a)
+                         .arg(file_b));
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -367,7 +371,10 @@ fn test_mv_backup_dir() {
 
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
-        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", dir_a, dir_b, dir_b));
+               format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
+                       dir_a,
+                       dir_b,
+                       dir_b));
     assert!(result.success);
 
     assert!(!dir_exists(dir_a));
@@ -397,7 +404,8 @@ fn test_mv_errors() {
     // err == mv: cannot overwrite directory ‘dir’ with non-directory
     let result = run(Command::new(PROGNAME).arg("-T").arg(file_a).arg(dir));
     assert_eq!(result.stderr,
-        format!("mv: error: cannot overwrite directory ‘{}’ with non-directory\n", dir));
+               format!("mv: error: cannot overwrite directory ‘{}’ with non-directory\n",
+                       dir));
     assert!(!result.success);
 
     // $ mkdir dir && touch file
@@ -420,7 +428,7 @@ fn test_mv_verbose() {
     let result = run(Command::new(PROGNAME).arg("-v").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
-        format!("‘{}’ -> ‘{}’\n", file_a, file_b));
+               format!("‘{}’ -> ‘{}’\n", file_a, file_b));
     assert!(result.success);
 
 
@@ -428,7 +436,10 @@ fn test_mv_verbose() {
     let result = run(Command::new(PROGNAME).arg("-vb").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
-        format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n", file_a, file_b, file_b));
+               format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
+                       file_a,
+                       file_b,
+                       file_b));
     assert!(result.success);
 }
 

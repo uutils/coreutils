@@ -25,7 +25,9 @@ mod util;
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("", "all", "print the number of cores available to the system");
+    opts.optflag("",
+                 "all",
+                 "print the number of cores available to the system");
     opts.optopt("", "ignore", "ignore up to N cores", "N");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
@@ -49,7 +51,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTIONS]...
 
-Print the number of cores available to the current process.", NAME, VERSION);
+Print the number of cores available to the current process.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         return 0;
@@ -63,16 +67,16 @@ Print the number of cores available to the current process.", NAME, VERSION);
                 return 1;
             }
         },
-        None => 0
+        None => 0,
     };
 
     if !matches.opt_present("all") {
         ignore += match env::var("OMP_NUM_THREADS") {
             Ok(threadstr) => match threadstr.parse() {
                 Ok(num) => num,
-                Err(_)=> 0
+                Err(_) => 0,
             },
-            Err(_) => 0
+            Err(_) => 0,
         };
     }
 

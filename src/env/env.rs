@@ -29,11 +29,12 @@ struct options {
     null: bool,
     unsets: Vec<String>,
     sets: Vec<(String, String)>,
-    program: Vec<String>
+    program: Vec<String>,
 }
 
 fn usage() {
-    println!("Usage: {} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", NAME);
+    println!("Usage: {} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]",
+             NAME);
     println!("Set each NAME to VALUE in the environment and run COMMAND\n");
     println!("Possible options are:");
     println!("  -i --ignore-environment\t start with an empty environment");
@@ -52,7 +53,14 @@ fn version() {
 // if null is true, separate pairs with a \0, \n otherwise
 fn print_env(null: bool) {
     for (n, v) in env::vars() {
-        print!("{}={}{}", n, v, if null { '\0' } else { '\n' });
+        print!("{}={}{}",
+               n,
+               v,
+               if null {
+                   '\0'
+               } else {
+                   '\n'
+               });
     }
 }
 
@@ -63,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         null: false,
         unsets: vec!(),
         sets: vec!(),
-        program: vec!()
+        program: vec!(),
     });
 
     let mut wait_cmd = false;
@@ -95,8 +103,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else if opt.starts_with("--") {
             match opt.as_ref() {
-                "--help" => { usage(); return 0; }
-                "--version" => { version(); return 0; }
+                "--help" => {
+                    usage();
+                    return 0;
+                }
+                "--version" => {
+                    version();
+                    return 0;
+                }
 
                 "--ignore-environment" => opts.ignore_env = true,
                 "--null" => opts.null = true,
@@ -105,7 +119,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                     match var {
                         None => println!("{}: this option requires an argument: {}", NAME, opt),
-                        Some(s) => opts.unsets.push(s.to_string())
+                        Some(s) => opts.unsets.push(s.to_string()),
                     }
                 }
 
@@ -129,8 +143,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
             for c in chars {
                 // short versions of options
                 match c {
-                    'h' => { usage(); return 0; }
-                    'V' => { version(); return 0; }
+                    'h' => {
+                        usage();
+                        return 0;
+                    }
+                    'V' => {
+                        version();
+                        return 0;
+                    }
                     'i' => opts.ignore_env = true,
                     '0' => opts.null = true,
                     'u' => {
@@ -138,7 +158,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                         match var {
                             None => println!("{}: this option requires an argument: {}", NAME, opt),
-                            Some(s) => opts.unsets.push(s.to_string())
+                            Some(s) => opts.unsets.push(s.to_string()),
                         }
                     }
                     _ => {
@@ -194,8 +214,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let prog = opts.program[0].clone();
         let args = &opts.program[1..];
         match Command::new(prog).args(args).status() {
-            Ok(exit) => return if exit.success() { 0 } else { exit.code().unwrap() },
-            Err(_) => return 1
+            Ok(exit) => return if exit.success() {
+                0
+            } else {
+                exit.code().unwrap()
+            },
+            Err(_) => return 1,
         }
     } else {
         // no program provided

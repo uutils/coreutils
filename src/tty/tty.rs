@@ -32,13 +32,17 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("s", "silent", "print nothing, only return an exit status");
+    opts.optflag("s",
+                 "silent",
+                 "print nothing, only return an exit status");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => { crash!(2, "{}", f) }
+        Err(f) => {
+            crash!(2, "{}", f)
+        }
     };
 
     if matches.opt_present("help") {
@@ -47,7 +51,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTION]...", NAME);
         println!("");
-        print!("{}", opts.usage("Print the file name of the terminal connected to standard input."));
+        print!("{}",
+               opts.usage("Print the file name of the terminal connected to standard input."));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {

@@ -26,7 +26,10 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("m", "mode", "file permissions for the fifo", "(default 0666)");
+    opts.optopt("m",
+                "mode",
+                "file permissions for the fifo",
+                "(default 0666)");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -46,7 +49,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTIONS] NAME...
 
-Create a FIFO with the given name.", NAME, VERSION);
+Create a FIFO with the given name.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         if matches.free.is_empty() {
@@ -58,7 +63,7 @@ Create a FIFO with the given name.", NAME, VERSION);
     let mode = match matches.opt_str("m") {
         Some(m) => match usize::from_str_radix(&m, 8) {
             Ok(m) => m,
-            Err(e)=> {
+            Err(e) => {
                 show_error!("invalid mode: {}", e);
                 return 1;
             }
@@ -68,9 +73,14 @@ Create a FIFO with the given name.", NAME, VERSION);
 
     let mut exit_status = 0;
     for f in matches.free.iter() {
-        let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode as libc::mode_t) };
+        let err = unsafe {
+            mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(),
+                   mode as libc::mode_t)
+        };
         if err == -1 {
-            show_error!("creating '{}': {}", f, Error::last_os_error().raw_os_error().unwrap());
+            show_error!("creating '{}': {}",
+                        f,
+                        Error::last_os_error().raw_os_error().unwrap());
             exit_status = 1;
         }
     }

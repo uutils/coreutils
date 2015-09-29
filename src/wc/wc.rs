@@ -47,11 +47,8 @@ impl Settings {
             show_max_line_length: matches.opt_present("L"),
         };
 
-        if settings.show_bytes
-            || settings.show_chars
-            || settings.show_lines
-            || settings.show_words
-            || settings.show_max_line_length {
+        if settings.show_bytes || settings.show_chars || settings.show_lines ||
+           settings.show_words || settings.show_max_line_length {
             return settings;
         }
 
@@ -83,14 +80,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("c", "bytes", "print the byte counts");
     opts.optflag("m", "chars", "print the character counts");
     opts.optflag("l", "lines", "print the newline counts");
-    opts.optflag("L", "max-line-length", "print the length of the longest line");
+    opts.optflag("L",
+                 "max-line-length",
+                 "print the length of the longest line");
     opts.optflag("w", "words", "print the word counts");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
@@ -99,7 +98,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
         println!("");
-        println!("{}", opts.usage("Print newline, word and byte counts for each FILE"));
+        println!("{}",
+                 opts.usage("Print newline, word and byte counts for each FILE"));
         println!("With no FILE, or when FILE is -, read standard input.");
         return 0;
     }
@@ -116,8 +116,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let settings = Settings::new(&matches);
 
     match wc(matches.free, &settings) {
-        Ok(()) => ( /* pass */ ),
-        Err(e) => return e
+        Ok(()) => (),
+        Err(e) => return e,
     }
 
     0
@@ -162,7 +162,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             Err(ref e) if raw_line.len() > 0 => {
                 show_warning!("Error while reading {}: {}", path, e);
                 raw_line.len() > 0
-            },
+            }
             _ => false,
         } {
             // GNU 'wc' only counts lines that end in LF as lines
@@ -178,10 +178,10 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
                 Ok(line) => {
                     word_count += line.split_whitespace().count();
                     current_char_count = line.chars().count();
-                },
+                }
                 Err(..) => {
                     word_count += raw_line.split(|&x| is_word_seperator(x)).count();
-                    current_char_count = raw_line.iter().filter(|c|c.is_ascii()).count()
+                    current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
                 }
             }
             char_count += current_char_count;
@@ -255,13 +255,12 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
 
     if result.title != "-" {
         println!(" {}", result.title);
-    }
-    else {
+    } else {
         println!("");
     }
 }
 
-fn open(path: &str) -> StdResult<BufReader<Box<Read+'static>>, i32> {
+fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
     if "-" == path {
         let reader = Box::new(stdin()) as Box<Read>;
         return Ok(BufReader::new(reader));

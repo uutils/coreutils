@@ -14,8 +14,8 @@ extern crate getopts;
 use c_types::{get_pw_from_args, group};
 use std::io::Write;
 
-#[path = "../common/util.rs"] #[macro_use]  mod util;
-#[path = "../common/c_types.rs"] mod c_types;
+#[path = "../common/util.rs"] #[macro_use]mod util;
+#[path = "../common/c_types.rs"]mod c_types;
 
 static NAME: &'static str = "groups";
 static VERSION: &'static str = "1.0.0";
@@ -26,7 +26,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("V", "version", "display version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m },
+        Ok(m) => {
+            m
+        }
         Err(f) => {
             show_error!("{}", f);
             return 1;
@@ -41,7 +43,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTION]... [USER]...
 
-Prints the groups a user is in to standard output.", NAME, VERSION);
+Prints the groups a user is in to standard output.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
     } else {

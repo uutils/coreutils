@@ -46,7 +46,8 @@ fn gnu_ext_disabled_tex_auto_ref() {
 #[test]
 fn gnu_ext_disabled_ignore_and_only_file() {
     let opts = vec!["-G", "-o", "only", "-i", "ignore"];
-    test_ptx(&opts, "gnu_ext_disabled_ignore_and_only_file.expected");
+    test_ptx(&opts,
+             "gnu_ext_disabled_ignore_and_only_file.expected");
 }
 
 fn test_ptx(opts: &Vec<&str>, expected: &str) {

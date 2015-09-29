@@ -31,7 +31,7 @@ use filesystem::UUPathExt;
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,
-    InteractiveAlways
+    InteractiveAlways,
 }
 
 static NAME: &'static str = "rm";
@@ -41,14 +41,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // TODO: make getopts support -R in addition to -r
     let mut opts = getopts::Options::new();
 
-    opts.optflag("f", "force", "ignore nonexistent files and arguments, never prompt");
+    opts.optflag("f",
+                 "force",
+                 "ignore nonexistent files and arguments, never prompt");
     opts.optflag("i", "", "prompt before every removal");
     opts.optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes");
     opts.optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN");
     opts.optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)");
     opts.optflag("", "no-preserve-root", "do not treat '/' specially");
     opts.optflag("", "preserve-root", "do not remove '/' (default)");
-    opts.optflag("r", "recursive", "remove directories and their contents recursively");
+    opts.optflag("r",
+                 "recursive",
+                 "remove directories and their contents recursively");
     opts.optflag("d", "dir", "remove empty directories");
     opts.optflag("v", "verbose", "explain what is being done");
     opts.optflag("h", "help", "display this help and exit");
@@ -56,7 +60,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
@@ -85,41 +89,47 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     } else {
         let force = matches.opt_present("force");
-        let interactive =
-            if matches.opt_present("i") {
-                InteractiveMode::InteractiveAlways
-            } else if matches.opt_present("I") {
-                InteractiveMode::InteractiveOnce
-            } else if matches.opt_present("interactive") {
-                match &matches.opt_str("interactive").unwrap()[..] {
-                    "none" => InteractiveMode::InteractiveNone,
-                    "once" => InteractiveMode::InteractiveOnce,
-                    "always" => InteractiveMode::InteractiveAlways,
-                    val => {
-                        crash!(1, "Invalid argument to interactive ({})", val)
-                    }
+        let interactive = if matches.opt_present("i") {
+            InteractiveMode::InteractiveAlways
+        } else if matches.opt_present("I") {
+            InteractiveMode::InteractiveOnce
+        } else if matches.opt_present("interactive") {
+            match &matches.opt_str("interactive").unwrap()[..] {
+                "none" => InteractiveMode::InteractiveNone,
+                "once" => InteractiveMode::InteractiveOnce,
+                "always" => InteractiveMode::InteractiveAlways,
+                val => {
+                    crash!(1, "Invalid argument to interactive ({})", val)
                 }
-            } else {
-                InteractiveMode::InteractiveNone
-            };
+            }
+        } else {
+            InteractiveMode::InteractiveNone
+        };
         let one_fs = matches.opt_present("one-file-system");
         let preserve_root = !matches.opt_present("no-preserve-root");
         let recursive = matches.opt_present("recursive");
         let dir = matches.opt_present("dir");
         let verbose = matches.opt_present("verbose");
-        if interactive == InteractiveMode::InteractiveOnce && (recursive || matches.free.len() > 3) {
-            let msg =
-                if recursive {
-                    "Remove all arguments recursively? "
-                } else {
-                    "Remove all arguments? "
-                };
+        if interactive == InteractiveMode::InteractiveOnce &&
+           (recursive || matches.free.len() > 3) {
+            let msg = if recursive {
+                "Remove all arguments recursively? "
+            } else {
+                "Remove all arguments? "
+            };
             if !prompt(msg) {
                 return 0;
             }
         }
 
-        if remove(matches.free, force, interactive, one_fs, preserve_root, recursive, dir, verbose) {
+        if remove(matches.free,
+                  force,
+                  interactive,
+                  one_fs,
+                  preserve_root,
+                  recursive,
+                  dir,
+                  verbose) {
             return 1;
         }
     }
@@ -129,7 +139,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 // TODO: implement one-file-system
 #[allow(unused_variables)]
-fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> bool {
+fn remove(files: Vec<String>,
+          force: bool,
+          interactive: InteractiveMode,
+          one_fs: bool,
+          preserve_root: bool,
+          recursive: bool,
+          dir: bool,
+          verbose: bool)
+          -> bool {
     let mut had_err = false;
 
     for filename in files.iter() {
@@ -143,7 +161,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                             Err(e) => {
                                 had_err = true;
                                 show_error!("could not remove '{}': {}", filename, e);
-                            },
+                            }
                             _ => (),
                         };
                     } else {
@@ -171,28 +189,33 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                                                     } else {
                                                         files.push(f.path());
                                                     }
-                                                },
+                                                }
                                                 Err(e) => {
                                                     had_err = true;
-                                                    show_error!("reading '{}': {}", f.path().display(), e);
-                                                },
+                                                    show_error!("reading '{}': {}",
+                                                                f.path().display(),
+                                                                e);
+                                                }
                                             },
                                             Err(ref e) => {
                                                 had_err = true;
                                                 show_error!("recursing into '{}': {}", filename, e);
-                                            },
+                                            }
                                         };
                                     }
-                                },
+                                }
                                 Err(e) => {
                                     had_err = true;
-                                    show_error!("could not recurse into '{}': {}", dir.display(), e);
+                                    show_error!("could not recurse into '{}': {}",
+                                                dir.display(),
+                                                e);
                                     continue;
-                                },
+                                }
                             };
 
                             for f in files.iter() {
-                                had_err = remove_file(f.as_path(), interactive, verbose).bitor(had_err);
+                                had_err = remove_file(f.as_path(), interactive, verbose)
+                                              .bitor(had_err);
                             }
 
                             files.clear();
@@ -210,7 +233,8 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                         show_error!("could not remove directory '{}'", filename);
                         had_err = true;
                     } else {
-                        show_error!("could not remove directory '{}' (did you mean to pass '-r'?)", filename);
+                        show_error!("could not remove directory '{}' (did you mean to pass '-r'?)",
+                                    filename);
                         had_err = true;
                     }
                 }
@@ -227,15 +251,16 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
 }
 
 fn remove_dir(path: &Path, interactive: InteractiveMode, verbose: bool) -> bool {
-    let response =
-        if interactive == InteractiveMode::InteractiveAlways {
-            prompt_file(path, true)
-        } else {
-            true
-        };
+    let response = if interactive == InteractiveMode::InteractiveAlways {
+        prompt_file(path, true)
+    } else {
+        true
+    };
     if response {
         match fs::remove_dir(path) {
-            Ok(_) => if verbose { println!("removed '{}'", path.display()); },
+            Ok(_) => if verbose {
+                println!("removed '{}'", path.display());
+            },
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -247,15 +272,16 @@ fn remove_dir(path: &Path, interactive: InteractiveMode, verbose: bool) -> bool 
 }
 
 fn remove_file(path: &Path, interactive: InteractiveMode, verbose: bool) -> bool {
-    let response =
-        if interactive == InteractiveMode::InteractiveAlways {
-            prompt_file(path, false)
-        } else {
-            true
-        };
+    let response = if interactive == InteractiveMode::InteractiveAlways {
+        prompt_file(path, false)
+    } else {
+        true
+    };
     if response {
         match fs::remove_file(path) {
-            Ok(_) => if verbose { println!("removed '{}'", path.display()); },
+            Ok(_) => if verbose {
+                println!("removed '{}'", path.display());
+            },
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;

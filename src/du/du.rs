@@ -61,7 +61,7 @@ impl Stat {
             nlink: metadata.nlink() as u64,
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
-            modified: metadata.mtime() as u64
+            modified: metadata.mtime() as u64,
         }
     }
 }
@@ -75,8 +75,11 @@ fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) ->
         let read = match fs::read_dir(path) {
             Ok(read) => read,
             Err(e) => {
-                safe_writeln!(stderr(), "{}: cannot read directory ‘{}‘: {}",
-                              options.program_name, path.display(), e);
+                safe_writeln!(stderr(),
+                              "{}: cannot read directory ‘{}‘: {}",
+                              options.program_name,
+                              path.display(),
+                              e);
                 return vec!(Arc::new(my_stat))
             }
         };
@@ -123,17 +126,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     // In task
-    opts.optflag("a", "all", " write counts for all files, not just directories");
+    opts.optflag("a",
+                 "all",
+                 " write counts for all files, not just directories");
     // In main
-    opts.optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage;
+    opts.optflag("",
+                 "apparent-size",
+                 "print apparent sizes,  rather  than  disk  usage;
             although  the apparent  size is usually smaller, it may be larger due to holes
             in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like");
     // In main
-    opts.optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
+    opts.optopt("B",
+                "block-size",
+                "scale sizes  by  SIZE before printing them.
             E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
-            "SIZE");
+                "SIZE");
     // In main
-    opts.optflag("b", "bytes", "equivalent to '--apparent-size --block-size=1'");
+    opts.optflag("b",
+                 "bytes",
+                 "equivalent to '--apparent-size --block-size=1'");
     // In main
     opts.optflag("c", "total", "produce a grand total");
     // In task
@@ -146,13 +157,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // // In task
     // opts.optflag("H", "", "equivalent to --dereference-args (-D)"),
     // In main
-    opts.optflag("h", "human-readable", "print sizes in human readable format (e.g., 1K 234M 2G)");
+    opts.optflag("h",
+                 "human-readable",
+                 "print sizes in human readable format (e.g., 1K 234M 2G)");
     // In main
     opts.optflag("", "si", "like -h, but use powers of 1000 not 1024");
     // In main
     opts.optflag("k", "", "like --block-size=1K");
     // In task
-    opts.optflag("l", "count-links", "count sizes many times if hard linked");
+    opts.optflag("l",
+                 "count-links",
+                 "count sizes many times if hard linked");
     // // In main
     opts.optflag("m", "", "like --block-size=1M");
     // // In task
@@ -160,11 +175,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // // In task
     // opts.optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
     // // In main
-    opts.optflag("0", "null", "end each output line with 0 byte rather than newline");
+    opts.optflag("0",
+                 "null",
+                 "end each output line with 0 byte rather than newline");
     // In main
-    opts.optflag("S", "separate-dirs", "do not include size of subdirectories");
+    opts.optflag("S",
+                 "separate-dirs",
+                 "do not include size of subdirectories");
     // In main
-    opts.optflag("s", "summarize", "display only a total for each argument");
+    opts.optflag("s",
+                 "summarize",
+                 "display only a total for each argument");
     // // In task
     // opts.optflag("x", "one-file-system", "skip directories on different file systems"),
     // // In task
@@ -172,16 +193,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // // In task
     // opts.optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
     // In main
-    opts.optopt("d", "max-depth", "print the total for a directory (or file, with --all)
+    opts.optopt("d",
+                "max-depth",
+                "print the total for a directory (or file, with --all)
             only if it is N or fewer levels below the command
-            line argument;  --max-depth=0 is the same as --summarize", "N");
+            line argument;  --max-depth=0 is the same as --summarize",
+                "N");
     // In main
     opts.optflagopt("", "time", "show time of the last modification of any file in the
             directory, or any of its subdirectories.  If WORD is given, show time as WORD instead of modification time:
             atime, access, use, ctime or status", "WORD");
     // In main
-    opts.optopt("", "time-style", "show times using style STYLE:
-            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE");
+    opts.optopt("",
+                "time-style",
+                "show times using style STYLE:
+            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'",
+                "STYLE");
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -212,7 +239,8 @@ Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
 ers of 1000).",
                  program = NAME,
                  version = VERSION,
-                 usage = opts.usage("Summarize disk usage of each FILE, recursively for directories."));
+                 usage =
+                     opts.usage("Summarize disk usage of each FILE, recursively for directories."));
         return 0;
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -232,7 +260,8 @@ ers of 1000).",
             show_error!("invalid maximum depth '{}'", *s);
             return 1;
         }
-        (Some(_), Some(_)) | (None, _) => { /* valid */ }
+        (Some(_), Some(_)) | (None, _) => { /* valid */
+        }
     }
 
     let options = Options {
@@ -243,7 +272,11 @@ ers of 1000).",
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {vec!("./".to_string())} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {
+        vec!("./".to_string())
+    } else {
+        matches.free.clone()
+    };
 
     let options_arc = Arc::new(options);
 
@@ -260,8 +293,8 @@ ers of 1000).",
         Some(s) => {
             let mut found_number = false;
             let mut found_letter = false;
-            let mut numbers = String::new(); 
-            let mut letters = String::new(); 
+            let mut numbers = String::new();
+            let mut letters = String::new();
             for c in s.chars() {
                 if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
                     show_error!("invalid --block-size argument '{}'", s);
@@ -276,22 +309,30 @@ ers of 1000).",
             }
             let number = numbers.parse::<u64>().unwrap();
             let multiple = match &letters[..] {
-                "K" => 1024u64.pow(1), "M" => 1024u64.pow(2),
-                "G" => 1024u64.pow(3), "T" => 1024u64.pow(4),
-                "P" => 1024u64.pow(5), "E" => 1024u64.pow(6),
-                "Z" => 1024u64.pow(7), "Y" => 1024u64.pow(8),
-                "KB" => 1000u64.pow(1), "MB" => 1000u64.pow(2),
-                "GB" => 1000u64.pow(3), "TB" => 1000u64.pow(4),
-                "PB" => 1000u64.pow(5), "EB" => 1000u64.pow(6),
-                "ZB" => 1000u64.pow(7), "YB" => 1000u64.pow(8),
+                "K" => 1024u64.pow(1),
+                "M" => 1024u64.pow(2),
+                "G" => 1024u64.pow(3),
+                "T" => 1024u64.pow(4),
+                "P" => 1024u64.pow(5),
+                "E" => 1024u64.pow(6),
+                "Z" => 1024u64.pow(7),
+                "Y" => 1024u64.pow(8),
+                "KB" => 1000u64.pow(1),
+                "MB" => 1000u64.pow(2),
+                "GB" => 1000u64.pow(3),
+                "TB" => 1000u64.pow(4),
+                "PB" => 1000u64.pow(5),
+                "EB" => 1000u64.pow(6),
+                "ZB" => 1000u64.pow(7),
+                "YB" => 1000u64.pow(8),
                 _ => {
                     show_error!("invalid --block-size argument '{}'", s);
                     return 1;
                 }
             };
             number * multiple
-        },
-        None => 1024
+        }
+        None => 1024,
     };
 
     let convert_size = |size: u64| -> String {
@@ -324,12 +365,14 @@ Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
-Try '{} --help' for more information.", s, NAME);
+Try '{} --help' for more information.",
+                                s,
+                                NAME);
                     return 1;
                 }
             }
-        },
-        None => "%Y-%m-%d %H:%M"
+        }
+        None => "%Y-%m-%d %H:%M",
     };
 
     let line_separator = match matches.opt_present("0") {
@@ -362,23 +405,31 @@ Try '{} --help' for more information.", s, NAME);
                                     show_error!("invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
-    Try '{} --help' for more information.", NAME);
+    Try '{} --help' for more information.",
+                                                NAME);
                                     return 1;
                                 }
                             },
-                            None => stat.modified
+                            None => stat.modified,
                         };
                         ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
                     time::at(Timespec::new(secs, nsecs))
                 };
-                if !summarize || (summarize && index == len-1) {
+                if !summarize || (summarize && index == len - 1) {
                     let time_str = tm.strftime(time_format_str).unwrap();
-                    print!("{}\t{}\t{}{}", convert_size(size), time_str, stat.path.display(), line_separator);
+                    print!("{}\t{}\t{}{}",
+                           convert_size(size),
+                           time_str,
+                           stat.path.display(),
+                           line_separator);
                 }
             } else {
-                if !summarize || (summarize && index == len-1) {
-                    print!("{}\t{}{}", convert_size(size), stat.path.display(), line_separator);
+                if !summarize || (summarize && index == len - 1) {
+                    print!("{}\t{}{}",
+                           convert_size(size),
+                           stat.path.display(),
+                           line_separator);
                 }
             }
             if options_arc.total && index == (len - 1) {

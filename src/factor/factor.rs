@@ -131,7 +131,7 @@ fn table_division(mut num: u64, factors: &mut Vec<u64>) {
         //trial_division_slow(num, factors);
     //} else if num > 1 {
         // number is still greater than 1, but not so big that we have to worry
-        rho_pollard_factor(num, factors);
+    rho_pollard_factor(num, factors);
     //}
 }
 
@@ -162,7 +162,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
@@ -173,7 +173,9 @@ Usage:
 \t{0} [OPTION]
 
 Print the prime factors of the given number(s). If none are specified,
-read from standard input.", NAME, VERSION);
+read from standard input.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         return 1;

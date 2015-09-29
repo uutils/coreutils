@@ -49,23 +49,36 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
-        (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
-        (args, None) => args
+        (args, Some(n)) => {
+            settings.mode = FilterMode::Lines(n);
+            args
+        }
+        (args, None) => args,
     };
 
     let args = options;
 
     let mut opts = getopts::Options::new();
 
-    opts.optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K");
-    opts.optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K");
+    opts.optopt("c",
+                "bytes",
+                "Print the first K bytes.  With the leading '-', print all but the last K bytes",
+                "[-]K");
+    opts.optopt("n",
+                "lines",
+                "Print the first K lines.  With the leading '-', print all but the last K lines",
+                "[-]K");
     opts.optflag("q", "quiet", "never print headers giving file names");
-    opts.optflag("v", "verbose", "always print headers giving file names");
+    opts.optflag("v",
+                 "verbose",
+                 "always print headers giving file names");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args) {
-        Ok (m) => { m }
+        Ok (m) => {
+            m
+        }
         Err(_) => {
             println!("{}", opts.usage(""));
             return 1;
@@ -76,7 +89,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{}", opts.usage(""));
         return 0;
     }
-    if matches.opt_present("V") { version(); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0
+    }
 
     let use_bytes = matches.opt_present("c");
 
@@ -88,7 +104,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
             match n.parse::<usize>() {
-                Ok(m) => { settings.mode = FilterMode::Lines(m) }
+                Ok(m) => {
+                    settings.mode = FilterMode::Lines(m)
+                }
                 Err(e) => {
                     show_error!("invalid line count '{}': {}", n, e);
                     return 1;
@@ -98,13 +116,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         None => match matches.opt_str("c") {
             Some(count) => match count.parse::<usize>() {
                 Ok(m) => settings.mode = FilterMode::Bytes(m),
-                Err(e)=> {
+                Err(e) => {
                     show_error!("invalid byte count '{}': {}", count, e);
                     return 1;
                 }
             },
             None => {}
-        }
+        },
     };
 
     let quiet = matches.opt_present("q");
@@ -133,7 +151,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         for file in files.iter() {
             if settings.verbose {
-                if !firstime { pipe_println!(""); }
+                if !firstime {
+                    pipe_println!("");
+                }
                 pipe_println!("==> {} <==", file);
             }
             firstime = false;
@@ -165,14 +185,19 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in (1 .. len) {
+            for pos in (1..len) {
                 // Ensure that the argument is only made out of digits
-                if !(current[pos] as char).is_numeric() { break; }
+                if !(current[pos] as char).is_numeric() {
+                    break;
+                }
 
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse::<usize>().ok();
+                    let number: Option<usize> = from_utf8(&current[1..len])
+                                                    .unwrap()
+                                                    .parse::<usize>()
+                                                    .ok();
                     return (options, Some(number.unwrap()));
                 }
             }
@@ -193,7 +218,7 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
                     return false;
                 }
             }
-        },
+        }
         FilterMode::Lines(count) => {
             for line in reader.lines().take(count) {
                 if !pipe_println!("{}", line.unwrap()) {

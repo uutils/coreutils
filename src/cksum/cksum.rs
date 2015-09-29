@@ -49,7 +49,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut size = 0usize;
 
     let file;
-    let mut rd : Box<Read> = match fname {
+    let mut rd: Box<Read> = match fname {
         "-" => {
             Box::new(stdin())
         }
@@ -71,7 +71,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
                 }
                 size += num_bytes;
             }
-            Err(err) => return Err(err)
+            Err(err) => return Err(err),
         }
     }
 }
@@ -92,7 +92,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTIONS] [FILE]...
 
-Print CRC and size for each file.", NAME, VERSION);
+Print CRC and size for each file.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         return 0;

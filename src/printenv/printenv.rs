@@ -26,7 +26,9 @@ static VERSION: &'static str = "1.0.0";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
-    opts.optflag("0", "null", "end each output line with 0 byte rather than newline");
+    opts.optflag("0",
+                 "null",
+                 "end each output line with 0 byte rather than newline");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
     let matches = match opts.parse(&args[1..]) {
@@ -41,8 +43,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [VARIABLE]... [OPTION]...
 
-Prints the given environment VARIABLE(s), otherwise prints them all.", NAME, VERSION);
-        print!("{}", opts.usage(&msg)); 
+Prints the given environment VARIABLE(s), otherwise prints them all.",
+                          NAME,
+                          VERSION);
+        print!("{}", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {
@@ -72,7 +76,7 @@ pub fn exec(args: Vec<String>, separator: &str) {
             Ok(var) => {
                 print!("{}{}", var, separator);
             }
-            _ => ()
+            _ => (),
         }
     }
 }

@@ -40,7 +40,7 @@ struct Options {
 }
 
 struct FieldOptions {
-    delimiter: String,  // one char long, String because of UTF8 representation
+    delimiter: String, // one char long, String because of UTF8 representation
     out_delimeter: Option<String>,
     only_delimited: bool,
 }
@@ -101,7 +101,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &Vec<Range>, opts: &Options) -> i32 {
                     }
                     print_delim = true;
                 }
-                None => ()
+                None => (),
             }
 
             // write out from low to high
@@ -144,7 +144,7 @@ fn cut_characters<R: Read>(reader: R, ranges: &Vec<Range>, opts: &Options) -> i3
                 if buffer.len() == 0 {
                     crash!(1, "read error: {}", e);
                 }
-            },
+            }
             _ => (),
         };
 
@@ -171,7 +171,7 @@ fn cut_characters<R: Read>(reader: R, ranges: &Vec<Range>, opts: &Options) -> i3
                     }
                     print_delim = true;
                 }
-                None => ()
+                None => (),
             }
 
             match char_indices.nth(high - low) {
@@ -201,7 +201,12 @@ fn cut_characters<R: Read>(reader: R, ranges: &Vec<Range>, opts: &Options) -> i3
     0
 }
 
-fn cut_fields_delimiter<R: Read>(reader: R, ranges: &Vec<Range>, delim: &String, only_delimited: bool, out_delim: &String) -> i32 {
+fn cut_fields_delimiter<R: Read>(reader: R,
+                                 ranges: &Vec<Range>,
+                                 delim: &String,
+                                 only_delimited: bool,
+                                 out_delim: &String)
+                                 -> i32 {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout();
     let mut buffer = Vec::new();
@@ -214,7 +219,7 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &Vec<Range>, delim: &String,
                 if buffer.len() == 0 {
                     crash!(1, "read error: {}", e);
                 }
-            },
+            }
             _ => (),
         }
 
@@ -225,7 +230,7 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &Vec<Range>, delim: &String,
         let mut print_delim = false;
 
         if delim_search.peek().is_none() {
-            if ! only_delimited {
+            if !only_delimited {
                 pipe_crash_if_err!(1, out.write_all(line));
                 if line[line.len() - 1] != b'\n' {
                     pipe_crash_if_err!(1, out.write_all(&[b'\n']));
@@ -239,7 +244,7 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &Vec<Range>, delim: &String,
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
                     Some((_, beyond_delim)) => beyond_delim,
-                    None => break
+                    None => break,
                 };
             }
 
@@ -282,10 +287,13 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &Vec<Range>, delim: &String,
 fn cut_fields<R: Read>(reader: R, ranges: &Vec<Range>, opts: &FieldOptions) -> i32 {
     match opts.out_delimeter {
         Some(ref o_delim) => {
-            return cut_fields_delimiter(reader, ranges, &opts.delimiter,
-                                        opts.only_delimited, o_delim);
+            return cut_fields_delimiter(reader,
+                                        ranges,
+                                        &opts.delimiter,
+                                        opts.only_delimited,
+                                        o_delim);
         }
-        None => ()
+        None => (),
     }
 
     let mut buf_in = BufReader::new(reader);
@@ -300,7 +308,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &Vec<Range>, opts: &FieldOptions) -> i
                 if buffer.len() == 0 {
                     crash!(1, "read error: {}", e);
                 }
-            },
+            }
             _ => (),
         }
 
@@ -311,7 +319,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &Vec<Range>, opts: &FieldOptions) -> i
         let mut print_delim = false;
 
         if delim_search.peek().is_none() {
-            if ! opts.only_delimited {
+            if !opts.only_delimited {
                 pipe_crash_if_err!(1, out.write_all(line));
                 if line[line.len() - 1] != b'\n' {
                     pipe_crash_if_err!(1, out.write_all(&[b'\n']));
@@ -325,7 +333,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &Vec<Range>, opts: &FieldOptions) -> i
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
                     Some((_, beyond_delim)) => beyond_delim,
-                    None => break
+                    None => break,
                 };
             }
 
@@ -368,11 +376,15 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
     let mut stdin_read = false;
     let mut exit_code = 0;
 
-    if filenames.len() == 0 { filenames.push("-".to_string()); }
+    if filenames.len() == 0 {
+        filenames.push("-".to_string());
+    }
 
     for filename in filenames.iter() {
         if filename == "-" {
-            if stdin_read { continue }
+            if stdin_read {
+                continue
+            }
 
             exit_code |= match mode {
                 Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
@@ -412,13 +424,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     opts.optopt("b", "bytes", "select only these bytes", "LIST");
-    opts.optopt("c", "characters", "select only these characters", "LIST");
-    opts.optopt("d", "delimiter", "use DELIM instead of TAB for field delimiter", "DELIM");
+    opts.optopt("c",
+                "characters",
+                "select only these characters",
+                "LIST");
+    opts.optopt("d",
+                "delimiter",
+                "use DELIM instead of TAB for field delimiter",
+                "DELIM");
     opts.optopt("f", "fields", "select only these fields;  also print any line that contains no delimiter character, unless the -s option is specified", "LIST");
     opts.optflag("n", "", "(ignored)");
-    opts.optflag("", "complement", "complement the set of selected bytes, characters or fields");
-    opts.optflag("s", "only-delimited", "do not print lines not containing delimiters");
-    opts.optopt("", "output-delimiter", "use STRING as the output delimiter the default is to use the input delimiter", "STRING");
+    opts.optflag("",
+                 "complement",
+                 "complement the set of selected bytes, characters or fields");
+    opts.optflag("s",
+                 "only-delimited",
+                 "do not print lines not containing delimiters");
+    opts.optopt("",
+                "output-delimiter",
+                "use STRING as the output delimiter the default is to use the input delimiter",
+                "STRING");
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
@@ -436,7 +461,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} OPTION... [FILE]...", NAME);
         println!("");
-        println!("{}", opts.usage("Print selected parts of lines from each FILE to standard output."));
+        println!("{}",
+                 opts.usage("Print selected parts of lines from each FILE to standard output."));
         println!("");
         println!("Use one, and only one of -b, -c or -f.  Each LIST is made up of one");
         println!("range, or many ranges separated by commas.  Selected input is written");
@@ -463,12 +489,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
                             matches.opt_str("characters"),
                             matches.opt_str("fields")) {
         (Some(byte_ranges), None, None) => {
-            list_to_ranges(&byte_ranges[..], complement)
-                .map(|ranges| Mode::Bytes(ranges, Options { out_delim: matches.opt_str("output-delimiter") }))
+            list_to_ranges(&byte_ranges[..], complement).map(|ranges| {
+                Mode::Bytes(ranges,
+                            Options { out_delim: matches.opt_str("output-delimiter") })
+            })
         }
         (None, Some(char_ranges), None) => {
-            list_to_ranges(&char_ranges[..], complement)
-                .map(|ranges| Mode::Characters(ranges, Options { out_delim: matches.opt_str("output-delimiter") }))
+            list_to_ranges(&char_ranges[..], complement).map(|ranges| {
+                Mode::Characters(ranges,
+                                 Options { out_delim: matches.opt_str("output-delimiter") })
+            })
         }
         (None, None, Some(field_ranges)) => {
             list_to_ranges(&field_ranges[..], complement).and_then(|ranges|
@@ -518,7 +548,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => {
             Err("only one type of list may be specified".to_string())
         }
-        _ => Err("you must specify a list of bytes, characters, or fields".to_string())
+        _ => Err("you must specify a list of bytes, characters, or fields".to_string()),
     };
 
     let mode_parse = match mode_parse {
@@ -526,9 +556,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(mode) => {
             match mode {
                 Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("delimiter") =>
-                    Err("an input delimiter may be specified only when operating on fields".to_string()),
-                Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("only-delimited") =>
-                    Err("suppressing non-delimited lines makes sense only when operating on fields".to_string()),
+                    Err("an input delimiter may be specified only when operating on fields"
+                            .to_string()),
+                Mode::Bytes(_, _) | Mode::Characters(_, _)
+                    if matches.opt_present("only-delimited") =>
+                    Err("suppressing non-delimited lines makes sense only when operating on fields"
+                            .to_string()),
                 _ => Ok(mode),
             }
         }
@@ -539,7 +572,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(err_msg) => {
             show_error!("{}\n\
                          Try '{} --help' for more information",
-                        err_msg, args[0]);
+                        err_msg,
+                        args[0]);
             1
         }
     }

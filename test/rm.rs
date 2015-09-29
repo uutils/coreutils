@@ -46,14 +46,16 @@ fn test_rm_interactive() {
     touch(file_a);
     touch(file_b);
 
-    let result1 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"n");
+    let result1 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b),
+                                  b"n");
 
     assert!(result1.success);
 
     assert!(file_exists(file_a));
     assert!(file_exists(file_b));
 
-    let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
+    let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b),
+                                  b"Yesh");
 
     assert!(result2.success);
 
@@ -135,6 +137,6 @@ fn test_rm_verbose() {
     let result = run(Command::new(PROGNAME).arg("-v").arg(file_a).arg(file_b));
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
-        format!("removed '{}'\nremoved '{}'\n", file_a, file_b));
+               format!("removed '{}'\nremoved '{}'\n", file_a, file_b));
     assert!(result.success);
 }

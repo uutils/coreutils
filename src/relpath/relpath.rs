@@ -44,8 +44,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if matches.opt_present("V") { version(); return 0 }
-    if matches.opt_present("h") { show_usage(&opts); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0
+    }
+    if matches.opt_present("h") {
+        show_usage(&opts);
+        return 0
+    }
 
     if matches.free.len() == 0 {
         show_error!("Missing operand: TO");
@@ -65,7 +71,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.opt_present("d") {
         let base = Path::new(&matches.opt_str("d").unwrap()).to_path_buf();
         let absbase = canonicalize(base, CanonicalizeMode::Normal).unwrap();
-        if !absto.as_path().starts_with(absbase.as_path()) || !absfrom.as_path().starts_with(absbase.as_path()) {
+        if !absto.as_path().starts_with(absbase.as_path()) ||
+           !absfrom.as_path().starts_with(absbase.as_path()) {
             println!("{}", absto.display());
             return 0
         }
@@ -100,8 +107,7 @@ fn show_usage(opts: &getopts::Options) {
     println!("  {} -V|--version", NAME);
     println!("  {} -h|--help", NAME);
     println!("");
-    print!("{}", opts.usage(
-            "Convert TO destination to the relative path from the FROM dir.\n\
-            If FROM path is omitted, current working dir will be used.")
-    );
+    print!("{}",
+           opts.usage("Convert TO destination to the relative path from the FROM dir.\n\
+            If FROM path is omitted, current working dir will be used."));
 }

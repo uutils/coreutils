@@ -32,14 +32,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m)  => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Ok(m) => m,
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
         let msg = format!("Usage: {0} NAME [SUFFIX]\n   or: {0} OPTION\n\n\
         Print NAME with any leading directory components removed.\n\
-        If specified, also remove a trailing SUFFIX.", NAME);
+        If specified, also remove a trailing SUFFIX.",
+                          NAME);
 
         print!("{}", opts.usage(&msg));
 
@@ -56,9 +57,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{}: {}", NAME, "missing operand");
         println!("Try '{} --help' for more information.", NAME);
         return 1;
-    }
-    // too many arguments
-    else if args.len() > 3 {
+    } else if args.len() > 3 {
         println!("{}: extra operand '{}'", NAME, args[3]);
         println!("Try '{} --help' for more information.", NAME);
         return 1;
@@ -91,7 +90,7 @@ fn strip_dir(fullname: &str) -> String {
     let pb = PathBuf::from(path);
     match pb.components().last() {
         Some(c) => c.as_os_str().to_str().unwrap().to_string(),
-        None => "".to_string()
+        None => "".to_string(),
     }
 }
 

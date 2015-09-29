@@ -21,9 +21,9 @@ use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
-#[path = "../common/filesystem.rs"] mod filesystem;
+#[path = "../common/util.rs"] #[macro_use]mod util;
+#[path = "../common/c_types.rs"]mod c_types;
+#[path = "../common/filesystem.rs"]mod filesystem;
 
 use filesystem::UUPathExt;
 
@@ -47,12 +47,21 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
-    opts.optopt("u", "user", "User (ID or name) to switch before running the program", "USER");
+    opts.optopt("u",
+                "user",
+                "User (ID or name) to switch before running the program",
+                "USER");
     opts.optopt("g", "group", "Group (ID or name) to switch to", "GROUP");
-    opts.optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2...");
-    opts.optopt("", "userspec", "Colon-separated user and group to switch to. \
+    opts.optopt("G",
+                "groups",
+                "Comma-separated list of groups to switch to",
+                "GROUP1,GROUP2...");
+    opts.optopt("",
+                "userspec",
+                "Colon-separated user and group to switch to. \
         Same as -u USER -g GROUP. \
-        Userspec has higher preference than -u and/or -g", "USER:GROUP");
+        Userspec has higher preference than -u and/or -g",
+                "USER:GROUP");
     opts.optflag("h", "help", "Show help");
     opts.optflag("V", "version", "Show program's version");
 
@@ -65,8 +74,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if matches.opt_present("V") { version(); return 0 }
-    if matches.opt_present("h") { help_menu(opts); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0
+    }
+    if matches.opt_present("h") {
+        help_menu(opts);
+        return 0
+    }
 
     if matches.free.len() == 0 {
         println!("Missing operand: NEWROOT");
@@ -80,7 +95,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let newroot = Path::new(&matches.free[0][..]);
     if !newroot.uu_is_dir() {
-        crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
+        crash!(1,
+               "cannot change root directory to `{}`: no such directory",
+               newroot.display());
     }
 
     let command: Vec<&str> = match matches.free.len() {
@@ -90,16 +107,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 Ok(ref s) => s.as_ref(),
             };
             vec!(shell, default_option)
-        },
-        _ => matches.free[1..].iter().map(|x| &x[..]).collect()
+        }
+        _ => matches.free[1..].iter().map(|x| &x[..]).collect(),
     };
 
     set_context(&newroot, &matches);
 
     let pstatus = Command::new(command[0])
-        .args(&command[1..])
-        .status()
-        .unwrap_or_else(|e| crash!(1, "Cannot exec: {}", e));
+                      .args(&command[1..])
+                      .status()
+                      .unwrap_or_else(|e| crash!(1, "Cannot exec: {}", e));
 
     if pstatus.success() {
         0
@@ -124,10 +141,18 @@ fn set_context(root: &Path, options: &getopts::Matches) {
             };
             s
         }
-        None => Vec::new()
+        None => Vec::new(),
     };
-    let user = if userspec.is_empty() { &user_str[..] } else { &userspec[0][..] };
-    let group = if userspec.is_empty() { &group_str[..] } else { &userspec[1][..] };
+    let user = if userspec.is_empty() {
+        &user_str[..]
+    } else {
+        &userspec[0][..]
+    };
+    let group = if userspec.is_empty() {
+        &group_str[..]
+    } else {
+        &userspec[1][..]
+    };
 
     enter_chroot(root);
 
@@ -143,7 +168,10 @@ fn enter_chroot(root: &Path) {
         chroot(CString::new(".".as_bytes()).unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
     };
     if err != 0 {
-        crash!(1, "cannot chroot to {}: {}", root_str, Error::last_os_error())
+        crash!(1,
+               "cannot chroot to {}: {}",
+               root_str,
+               Error::last_os_error())
     };
 }
 
@@ -151,40 +179,35 @@ fn set_main_group(group: &str) {
     if !group.is_empty() {
         let group_id = match get_group(group) {
             None => crash!(1, "no such group: {}", group),
-            Some(g) => g.gr_gid
+            Some(g) => g.gr_gid,
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
-            crash!(1, "cannot set gid to {}: {}", group_id, Error::last_os_error())
+            crash!(1,
+                   "cannot set gid to {}: {}",
+                   group_id,
+                   Error::last_os_error())
         }
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
-    unsafe {
-        setgroups(groups.len() as libc::c_int,
-                  groups.as_ptr())
-    }
+    unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
 #[cfg(target_os = "linux")]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
-    unsafe {
-        setgroups(groups.len() as libc::size_t,
-                  groups.as_ptr())
-    }
+    unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }
 
 fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
-        let groups_vec: Vec<libc::gid_t> = FromIterator::from_iter(
-            groups.split(',').map(
+        let groups_vec: Vec<libc::gid_t> = FromIterator::from_iter(groups.split(',').map(
                 |x| match get_group(x) {
                     None => crash!(1, "no such group: {}", x),
                     Some(g) => g.gr_gid
-                })
-            );
+                }));
         let err = set_groups(groups_vec);
         if err != 0 {
             crash!(1, "cannot set groups: {}", Error::last_os_error())
@@ -197,7 +220,10 @@ fn set_user(user: &str) {
         let user_id = get_pw_from_args(&vec!(user.to_string())).unwrap().pw_uid;
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
-            crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())
+            crash!(1,
+                   "cannot set user to {}: {}",
+                   user,
+                   Error::last_os_error())
         }
     }
 }
@@ -214,7 +240,9 @@ Usage:
 
 Run COMMAND with root directory set to NEWROOT.
 If COMMAND is not specified, it defaults to '$(SHELL) -i'.
-If $(SHELL) is not set, /bin/sh is used.", NAME, VERSION);
+If $(SHELL) is not set, /bin/sh is used.",
+                      NAME,
+                      VERSION);
 
     print!("{}", options.usage(&msg));
 }

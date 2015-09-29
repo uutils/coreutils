@@ -29,7 +29,7 @@ enum Mode {
     Decode,
     Encode,
     Help,
-    Version
+    Version,
 }
 
 static NAME: &'static str = "base64";
@@ -40,13 +40,20 @@ pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
     opts.optflag("d", "decode", "decode data");
-    opts.optflag("i", "ignore-garbage", "when decoding, ignore non-alphabetic characters");
-    opts.optopt("w", "wrap", "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)", "COLS");
+    opts.optflag("i",
+                 "ignore-garbage",
+                 "when decoding, ignore non-alphabetic characters");
+    opts.optopt("w",
+                "wrap",
+                "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
+                "COLS");
     opts.optflag("h", "help", "display this help text and exit");
     opts.optflag("V", "version", "output version information and exit");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => { crash!(1, "{}", e) }
+        Err(e) => {
+            crash!(1, "{}", e)
+        }
     };
 
     let mode = if matches.opt_present("help") {
@@ -62,11 +69,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let line_wrap = match matches.opt_str("wrap") {
         Some(s) => match s.parse() {
             Ok(s) => s,
-            Err(e)=> {
-                crash!(1, "Argument to option 'wrap' improperly formatted: {}", e);
+            Err(e) => {
+                crash!(1,
+                       "Argument to option 'wrap' improperly formatted: {}",
+                       e);
             }
         },
-        None => 76
+        None => 76,
     };
     let stdin_buf;
     let file_buf;
@@ -80,10 +89,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::Decode  => decode(&mut input, ignore_garbage),
-        Mode::Encode  => encode(&mut input, line_wrap),
-        Mode::Help    => help(opts),
-        Mode::Version => version()
+        Mode::Decode => decode(&mut input, ignore_garbage),
+        Mode::Encode => encode(&mut input, line_wrap),
+        Mode::Help => help(opts),
+        Mode::Version => version(),
     }
 
     0
@@ -99,10 +108,8 @@ fn decode(input: &mut FileOrStdReader, ignore_garbage: bool) {
             if !c.is_ascii() {
                 false
             } else {
-                c >= 'a' && c <= 'z' ||
-                c >= 'A' && c <= 'Z' ||
-                c >= '0' && c <= '9' ||
-                c == '+' || c == '/'
+                c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '+' ||
+                c == '/'
             }
         }));
         to_decode = clean;
@@ -114,11 +121,15 @@ fn decode(input: &mut FileOrStdReader, ignore_garbage: bool) {
 
             match out.write_all(&bytes[..]) {
                 Ok(_) => {}
-                Err(f) => { crash!(1, "{}", f); }
+                Err(f) => {
+                    crash!(1, "{}", f);
+                }
             }
             match out.flush() {
                 Ok(_) => {}
-                Err(f) => { crash!(1, "{}", f); }
+                Err(f) => {
+                    crash!(1, "{}", f);
+                }
             }
         }
         Err(s) => {
@@ -134,8 +145,8 @@ fn encode(input: &mut FileOrStdReader, line_wrap: usize) {
         pad: true,
         line_length: match line_wrap {
             0 => None,
-            _ => Some(line_wrap)
-        }
+            _ => Some(line_wrap),
+        },
     };
     let mut to_encode: Vec<u8> = vec!();
     input.read_to_end(&mut to_encode).unwrap();
@@ -152,7 +163,8 @@ fn help(opts: Options) {
     3548. When\ndecoding, the input may contain newlines in addition \
     to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
     to attempt to recover from any other\nnon-alphabet bytes in the \
-    encoded stream.", NAME);
+    encoded stream.",
+                      NAME);
 
     print!("{}", opts.usage(&msg));
 }

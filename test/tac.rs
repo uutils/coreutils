@@ -24,7 +24,8 @@ fn test_stdin_non_newline_separator() {
 #[test]
 fn test_stdin_non_newline_separator_before() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-b", "-s", ":"]), "100:200:300:400:500");
+    let result = run_piped_stdin(&mut cmd.args(&["-b", "-s", ":"]),
+                                 "100:200:300:400:500");
     assert_eq!(result.stdout, "500:400:300:200:100");
 }
 
@@ -32,19 +33,22 @@ fn test_stdin_non_newline_separator_before() {
 fn test_single_default() {
     let mut cmd = Command::new(PROGNAME);
     let result = run(&mut cmd.arg("prime_per_line.txt"));
-    assert_eq!(result.stdout, get_file_contents("prime_per_line.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("prime_per_line.expected"));
 }
 
 #[test]
 fn test_single_non_newline_separator() {
     let mut cmd = Command::new(PROGNAME);
     let result = run(&mut cmd.args(&["-s", ":", "delimited_primes.txt"]));
-    assert_eq!(result.stdout, get_file_contents("delimited_primes.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("delimited_primes.expected"));
 }
 
 #[test]
 fn test_single_non_newline_separator_before() {
     let mut cmd = Command::new(PROGNAME);
     let result = run(&mut cmd.args(&["-b", "-s", ":", "delimited_primes.txt"]));
-    assert_eq!(result.stdout, get_file_contents("delimited_primes_before.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("delimited_primes_before.expected"));
 }

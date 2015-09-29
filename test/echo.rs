@@ -6,8 +6,8 @@ static PROGNAME: &'static str = "./echo";
 #[test]
 fn test_default() {
     let po = Command::new(PROGNAME)
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
     assert_eq!(out, "\n");
@@ -16,10 +16,10 @@ fn test_default() {
 #[test]
 fn test_no_trailing_newline() {
     let po = Command::new(PROGNAME)
-        .arg("-n")
-        .arg("hello_world")
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg("-n")
+                 .arg("hello_world")
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
     assert_eq!(out, "hello_world");
@@ -28,10 +28,10 @@ fn test_no_trailing_newline() {
 #[test]
 fn test_enable_escapes() {
     let po = Command::new(PROGNAME)
-        .arg("-e")
-        .arg("\\\\\\t\\r")
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg("-e")
+                 .arg("\\\\\\t\\r")
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
     assert_eq!(out, "\\\t\r\n");
@@ -40,10 +40,10 @@ fn test_enable_escapes() {
 #[test]
 fn test_disable_escapes() {
     let po = Command::new(PROGNAME)
-        .arg("-E")
-        .arg("\\b\\c\\e")
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg("-E")
+                 .arg("\\b\\c\\e")
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
     assert_eq!(out, "\\b\\c\\e\n");

@@ -13,8 +13,10 @@ extern crate getopts;
 
 use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
-#[cfg(unix)] use std::os::unix::fs::symlink as symlink_file;
-#[cfg(windows)] use std::os::windows::fs::symlink_file;
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
 
 #[path="../common/util.rs"]
@@ -57,19 +59,36 @@ pub enum BackupMode {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("b", "", "make a backup of each file that would otherwise be overwritten or removed");
-    opts.optflagopt("", "backup", "make a backup of each file that would otherwise be overwritten or removed", "METHOD");
+    opts.optflag("b",
+                 "",
+                 "make a backup of each file that would otherwise be overwritten or removed");
+    opts.optflagopt("",
+                    "backup",
+                    "make a backup of each file that would otherwise be overwritten or removed",
+                    "METHOD");
     // TODO: opts.optflag("d", "directory", "allow users with appropriate privileges to attempt to make hard links to directories");
     opts.optflag("f", "force", "remove existing destination files");
-    opts.optflag("i", "interactive", "prompt whether to remove existing destination files");
+    opts.optflag("i",
+                 "interactive",
+                 "prompt whether to remove existing destination files");
     // TODO: opts.optflag("L", "logical", "dereference TARGETs that are symbolic links");
     // TODO: opts.optflag("n", "no-dereference", "treat LINK_NAME as a normal file if it is a symbolic link to a directory");
     // TODO: opts.optflag("P", "physical", "make hard links directly to symbolic links");
     // TODO: opts.optflag("r", "relative", "create symbolic links relative to link location");
-    opts.optflag("s", "symbolic", "make symbolic links instead of hard links");
-    opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
-    opts.optopt("t", "target-directory", "specify the DIRECTORY in which to create the links", "DIRECTORY");
-    opts.optflag("T", "no-target-directory", "treat LINK_NAME as a normal file always");
+    opts.optflag("s",
+                 "symbolic",
+                 "make symbolic links instead of hard links");
+    opts.optopt("S",
+                "suffix",
+                "override the usual backup suffix",
+                "SUFFIX");
+    opts.optopt("t",
+                "target-directory",
+                "specify the DIRECTORY in which to create the links",
+                "DIRECTORY");
+    opts.optflag("T",
+                 "no-target-directory",
+                 "treat LINK_NAME as a normal file always");
     opts.optflag("v", "verbose", "print name of each linked file");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
@@ -94,15 +113,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
             None => BackupMode::ExistingBackup,
             Some(mode) => match &mode[..] {
                 "simple" | "never" => BackupMode::SimpleBackup,
-                "numbered" | "t"   => BackupMode::NumberedBackup,
+                "numbered" | "t" => BackupMode::NumberedBackup,
                 "existing" | "nil" => BackupMode::ExistingBackup,
-                "none" | "off"     => BackupMode::NoBackup,
+                "none" | "off" => BackupMode::NoBackup,
                 x => {
                     show_error!("invalid argument '{}' for 'backup method'\n\
-                                Try '{} --help' for more information.", x, NAME);
+                                Try '{} --help' for more information.",
+                                x,
+                                NAME);
                     return 1;
                 }
-            }
+            },
         }
     } else {
         BackupMode::NoBackup
@@ -113,7 +134,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Some(x) => x,
             None => {
                 show_error!("option '--suffix' requires an argument\n\
-                            Try '{} --help' for more information.", NAME);
+                            Try '{} --help' for more information.",
+                            NAME);
                 return 1;
             }
         }
@@ -136,12 +158,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         verbose: matches.opt_present("v"),
     };
 
-    let string_to_path = |s: &String| { PathBuf::from(s) };
+    let string_to_path = |s: &String| PathBuf::from(s);
     let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-        0 
+        0
     } else if matches.opt_present("help") {
         let msg = format!("{0} {1}
 
@@ -157,7 +179,9 @@ Create hard links by default, symbolic links with --symbolic.
 By default, each destination (name of new link) should not already exist.
 When creating hard links, each TARGET must exist.  Symbolic links
 can hold arbitrary text; if later resolved, a relative link is
-interpreted in relation to its parent directory.", NAME, VERSION);
+interpreted in relation to its parent directory.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         0
@@ -173,9 +197,10 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     }
     match files.len() {
         0 => {
-            show_error!("missing file operand\nTry '{} --help' for more information.", NAME);
+            show_error!("missing file operand\nTry '{} --help' for more information.",
+                        NAME);
             1
-        },
+        }
         1 => match link(&files[0], &files[0], settings) {
             Ok(_) => 0,
             Err(e) => {
@@ -192,12 +217,15 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
         },
         _ => {
             if settings.no_target_dir {
-                show_error!("extra operand '{}'\nTry '{} --help' for more information.", files[2].display(), NAME);
+                show_error!("extra operand '{}'\nTry '{} --help' for more information.",
+                            files[2].display(),
+                            NAME);
                 return 1;
             }
             let (targets, dir) = match settings.target_dir {
                 Some(ref dir) => (files, PathBuf::from(dir.clone())),
-                None => (&files[0..files.len()-1], files[files.len()-1].clone())
+                None => (&files[0..files.len()-1],
+                         files[files.len()-1].clone()),
             };
             link_files_in_dir(targets, &dir, settings)
         }
@@ -206,7 +234,8 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
 
 fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Settings) -> i32 {
     if !target_dir.uu_is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
+        show_error!("target '{}' is not a directory",
+                    target_dir.display());
         return 1;
     }
 
@@ -225,13 +254,19 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
         match link(srcpath, &targetpath, settings) {
             Err(e) => {
                 show_error!("cannot link '{}' to '{}': {}",
-                            targetpath.display(), srcpath.display(), e);
+                            targetpath.display(),
+                            srcpath.display(),
+                            e);
                 all_successful = false;
-            },
+            }
             _ => {}
         }
     }
-    if all_successful { 0 } else { 1 }
+    if all_successful {
+        0
+    } else {
+        1
+    }
 }
 
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
@@ -245,14 +280,14 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
 
     if is_symlink(dst) || dst.uu_exists() {
         match settings.overwrite {
-            OverwriteMode::NoClobber => {},
+            OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
                 print!("{}: overwrite '{}'? ", NAME, dst.display());
                 if !read_yes() {
                     return Ok(());
                 }
                 try!(fs::remove_file(dst))
-            },
+            }
             OverwriteMode::Force => {
                 try!(fs::remove_file(dst))
             }
@@ -262,7 +297,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
             BackupMode::NoBackup => None,
             BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
             BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
-            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix))
+            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
         };
         if let Some(ref p) = backup_path {
             try!(fs::rename(dst, p));
@@ -279,7 +314,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         print!("'{}' -> '{}'", dst.display(), src.display());
         match backup_path {
             Some(path) => println!(" (backup: '{}')", path.display()),
-            None => println!("")
+            None => println!(""),
         }
     }
     Ok(())
@@ -290,9 +325,9 @@ fn read_yes() -> bool {
     match BufReader::new(stdin()).read_line(&mut s) {
         Ok(_) => match s.char_indices().nth(0) {
             Some((_, x)) => x == 'y' || x == 'Y',
-            _ => false
+            _ => false,
         },
-        _ => false
+        _ => false,
     }
 }
 
@@ -328,6 +363,6 @@ pub fn symlink<P: AsRef<Path>>(src: P, dst: P) -> Result<()> {
 pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
     match fs::symlink_metadata(path) {
         Ok(m) => m.file_type().is_symlink(),
-        Err(_) => false
+        Err(_) => false,
     }
 }

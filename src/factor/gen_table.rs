@@ -48,13 +48,13 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
             r
         } / newr;
 
-        let (tp, Wrapping(newtp)) =
-            (newt, Wrapping(t) - (Wrapping(quot) * Wrapping(newt)));
+        let (tp, Wrapping(newtp)) = (newt,
+                                     Wrapping(t) - (Wrapping(quot) * Wrapping(newt)));
         t = tp;
         newt = newtp;
 
-        let (rp, Wrapping(newrp)) =
-            (newr, Wrapping(r) - (Wrapping(quot) * Wrapping(newr)));
+        let (rp, Wrapping(newrp)) = (newr,
+                                     Wrapping(r) - (Wrapping(quot) * Wrapping(newr)));
         r = rp;
         newr = newrp;
     }
@@ -69,7 +69,13 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
-    let n = args().skip(1).next().unwrap_or("1027".to_string()).parse::<usize>().ok().unwrap_or(1027);
+    let n = args()
+                .skip(1)
+                .next()
+                .unwrap_or("1027".to_string())
+                .parse::<usize>()
+                .ok()
+                .unwrap_or(1027);
 
     print!("{}", PREAMBLE);
     let mut cols = 3;
@@ -95,7 +101,8 @@ fn main() {
         x = next;
     }
 
-    print!("\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n", x);
+    print!("\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n",
+           x);
 }
 
 #[test]

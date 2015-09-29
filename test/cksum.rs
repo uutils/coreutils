@@ -14,7 +14,8 @@ fn test_single_file() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("single_file.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("single_file.expected"));
 }
 
 #[test]
@@ -24,7 +25,8 @@ fn test_multiple_files() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, get_file_contents("multiple_files.expected"));
+    assert_eq!(result.stdout,
+               get_file_contents("multiple_files.expected"));
 }
 
 #[test]
