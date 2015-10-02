@@ -94,6 +94,9 @@ fn table_division(mut num: u64, factors: &mut Vec<u64>) {
         num /= 2;
         factors.push(2);
     }
+    if num == 1 {
+        return;
+    }
     if is_prime(num) {
         factors.push(num);
         return;
