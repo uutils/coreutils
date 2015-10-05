@@ -108,7 +108,6 @@ UNIX_PROGS := \
   mv \
   nice \
   nohup \
-  stat \
   stdbuf \
   timeout \
   touch \
