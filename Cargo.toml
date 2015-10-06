@@ -21,6 +21,7 @@ all = [
     "echo",
     "env",
     "expand",
+    "expr",
     "factor",
     "false",
     "fmt",
@@ -96,6 +97,7 @@ du       = { optional=true, path="src/du" }
 echo     = { optional=true, path="src/echo" }
 env      = { optional=true, path="src/env" }
 expand   = { optional=true, path="src/expand" }
+expr     = { optional=true, path="src/expr" }
 factor   = { optional=true, path="src/factor" }
 false    = { optional=true, path="src/false" }
 fmt      = { optional=true, path="src/fmt" }
