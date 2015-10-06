@@ -84,7 +84,7 @@ fn hostid() {
     unsafe {
         result = gethostid();
     }
-    
+
     result &= 0xffffffff; 
     println!("{:0>8x}", result);
 }

@@ -324,7 +324,7 @@ $(BUILDDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdb
 	$(CC) -c -Wall -Werror -fPIC libstdbuf.c && \
 	$(CC) $(DYLIB_FLAGS) -o libstdbuf.$(DYLIB_EXT) liblibstdbuf.a libstdbuf.o && \
 	mv *.$(DYLIB_EXT) $(BUILDDIR) && $(RM) *.o && $(RM) *.a
-	
+
 $(BUILDDIR)/stdbuf: $(BUILDDIR)/libstdbuf.$(DYLIB_EXT)
 
 deps: $(BUILDDIR) $(SRCDIR)/cksum/crc_table.rs $(addprefix DEP_,$(DEPLIBS) $(DEPPLUGS))
