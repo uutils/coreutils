@@ -7,9 +7,9 @@ static PROGNAME: &'static str = "./basename";
 fn test_directory() {
     let dir = "/root/alpha/beta/gamma/delta/epsilon/omega/";
     let po = Command::new(PROGNAME)
-        .arg(dir)
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg(dir)
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap().trim_right();
     assert_eq!(out, "omega");
@@ -19,9 +19,9 @@ fn test_directory() {
 fn test_file() {
     let file = "/etc/passwd";
     let po = Command::new(PROGNAME)
-        .arg(file)
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg(file)
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap().trim_right();
     assert_eq!(out, "passwd");
@@ -31,10 +31,10 @@ fn test_file() {
 fn test_remove_suffix() {
     let path = "/usr/local/bin/reallylongexecutable.exe";
     let po = Command::new(PROGNAME)
-        .arg(path)
-        .arg(".exe")
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg(path)
+                 .arg(".exe")
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap().trim_right();
     assert_eq!(out, "reallylongexecutable");
@@ -44,10 +44,10 @@ fn test_remove_suffix() {
 fn test_dont_remove_suffix() {
     let path = "/foo/bar/baz";
     let po = Command::new(PROGNAME)
-        .arg(path)
-        .arg("baz")
-        .output()
-        .unwrap_or_else(|err| panic!("{}", err));
+                 .arg(path)
+                 .arg("baz")
+                 .output()
+                 .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap().trim_right();
     assert_eq!(out, "baz");

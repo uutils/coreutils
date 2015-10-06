@@ -33,7 +33,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("h") {
@@ -62,39 +62,40 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut stdin_buf;
     let mut file_buf;
-    let mut reader = BufReader::new(
-        if input == "-" {
-            stdin_buf = stdin();
-            &mut stdin_buf as &mut Read
-        } else {
-            file_buf = match File::open(Path::new(&input)) {
-                Ok(a) => a,
-                _ => {
-                    show_error!("{}: No such file or directory", input);
-                    return 1;
-                }
-            };
-            &mut file_buf as &mut Read
-        }
-    );
+    let mut reader = BufReader::new(if input == "-" {
+        stdin_buf = stdin();
+        &mut stdin_buf as &mut Read
+    } else {
+        file_buf = match File::open(Path::new(&input)) {
+            Ok(a) => a,
+            _ => {
+                show_error!("{}: No such file or directory", input);
+                return 1;
+            }
+        };
+        &mut file_buf as &mut Read
+    });
 
     let mut g = Graph::new();
     loop {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line.trim_right().split_whitespace().map(|s| s.to_string()).collect();
+                let tokens: Vec<String> = line.trim_right()
+                                              .split_whitespace()
+                                              .map(|s| s.to_string())
+                                              .collect();
                 if tokens.len() == 0 {
                     break
                 }
                 for ab in tokens.chunks(2) {
                     match ab.len() {
                         2 => g.add_edge(&ab[0], &ab[1]),
-                        _ => crash!(1, "{}: input contains an odd number of tokens", input)
+                        _ => crash!(1, "{}: input contains an odd number of tokens", input),
                     }
                 }
-            },
-            _ => break
+            }
+            _ => break,
         }
     }
 
@@ -116,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 struct Graph {
     in_edges: HashMap<String, HashSet<String>>,
     out_edges: HashMap<String, Vec<String>>,
-    result: Vec<String>
+    result: Vec<String>,
 }
 
 impl Graph {
@@ -141,7 +142,7 @@ impl Graph {
         self.out_edges.insert(n.clone(), vec!());
     }
 
-    fn add_edge(&mut self, from: &String,  to: &String) {
+    fn add_edge(&mut self, from: &String, to: &String) {
         if !self.has_node(to) {
             self.init_node(to);
         }

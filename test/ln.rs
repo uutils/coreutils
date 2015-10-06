@@ -117,7 +117,8 @@ fn test_symlink_interactive() {
     touch(file);
     touch(link);
 
-    let result1 = run_piped_stdin(Command::new(PROGNAME).args(&["-i", "-s", file, link]), b"n");
+    let result1 = run_piped_stdin(Command::new(PROGNAME).args(&["-i", "-s", file, link]),
+                                  b"n");
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -125,7 +126,8 @@ fn test_symlink_interactive() {
     assert!(file_exists(file));
     assert!(!is_symlink(link));
 
-    let result2 = run_piped_stdin(Command::new(PROGNAME).args(&["-i", "-s", file, link]), b"Yesh");
+    let result2 = run_piped_stdin(Command::new(PROGNAME).args(&["-i", "-s", file, link]),
+                                  b"Yesh");
 
     assert_empty_stderr!(result2);
     assert!(result2.success);
@@ -341,7 +343,7 @@ fn test_symlink_verbose() {
     let result = run(Command::new(PROGNAME).args(&["-v", file_a, file_b]));
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
-        format!("'{}' -> '{}'\n", file_b, file_a));
+               format!("'{}' -> '{}'\n", file_b, file_a));
     assert!(result.success);
 
     touch(file_b);
@@ -349,6 +351,6 @@ fn test_symlink_verbose() {
     let result = run(Command::new(PROGNAME).args(&["-v", "-b", file_a, file_b]));
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
-        format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));
+               format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));
     assert!(result.success);
 }

@@ -37,11 +37,12 @@ fn tabstops_parse(s: String) -> Vec<usize> {
     let words = s.split(',').collect::<Vec<&str>>();
 
     let nums = words.into_iter()
-        .map(|sn| sn.parse::<usize>()
-            .unwrap_or_else(
-                |_| crash!(1, "{}\n", "tab size contains invalid character(s)"))
-            )
-        .collect::<Vec<usize>>();
+                    .map(|sn| {
+                        sn.parse::<usize>().unwrap_or_else(|_| {
+                            crash!(1, "{}\n", "tab size contains invalid character(s)")
+                        })
+                    })
+                    .collect::<Vec<usize>>();
 
     if nums.iter().any(|&n| n == 0) {
         crash!(1, "{}\n", "tab size cannot be 0");
@@ -67,7 +68,7 @@ impl Options {
     fn new(matches: getopts::Matches) -> Options {
         let tabstops = match matches.opt_str("t") {
             None => vec!(DEFAULT_TABSTOP),
-            Some(s) => tabstops_parse(s)
+            Some(s) => tabstops_parse(s),
         };
 
         let iflag = matches.opt_present("i");
@@ -75,21 +76,30 @@ impl Options {
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
-        let nspaces = tabstops.iter().scan(0, |pr,&it| {
-            let ret = Some(it - *pr);
-            *pr = it;
-            ret
-        }).max().unwrap();  // length of tabstops is guaranteed >= 1
+        let nspaces = tabstops.iter()
+                              .scan(0,
+                                    |pr, &it| {
+                                        let ret = Some(it - *pr);
+                                        *pr = it;
+                                        ret
+                                    })
+                              .max()
+                              .unwrap();  // length of tabstops is guaranteed >= 1
         let tspaces = repeat(' ').take(nspaces).collect();
 
-        let files =
-            if matches.free.is_empty() {
-                vec!("-".to_string())
-            } else {
-                matches.free
-            };
+        let files = if matches.free.is_empty() {
+            vec!("-".to_string())
+        } else {
+            matches.free
+        };
 
-        Options { files: files, tabstops: tabstops, tspaces: tspaces, iflag: iflag, uflag: uflag }
+        Options {
+            files: files,
+            tabstops: tabstops,
+            tspaces: tspaces,
+            iflag: iflag,
+            uflag: uflag,
+        }
     }
 }
 
@@ -97,21 +107,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     opts.optflag("i", "initial", "do not convert tabs after non blanks");
-    opts.optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER");
-    opts.optopt("t", "tabs", "use comma separated list of explicit tab positions", "LIST");
-    opts.optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8");
+    opts.optopt("t",
+                "tabs",
+                "have tabs NUMBER characters apart, not 8",
+                "NUMBER");
+    opts.optopt("t",
+                "tabs",
+                "use comma separated list of explicit tab positions",
+                "LIST");
+    opts.optflag("U",
+                 "no-utf8",
+                 "interpret input file as 8-bit ASCII rather than UTF-8");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("help") {
         println!("Usage: {} [OPTION]... [FILE]...", NAME);
-        println!("{}", opts.usage(
-            "Convert tabs in each FILE to spaces, writing to standard output.\n\
+        println!("{}",
+                 opts.usage("Convert tabs in each FILE to spaces, writing to standard output.\n\
             With no FILE, or when FILE is -, read standard input."));
         return 0;
     }
@@ -126,7 +144,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open(path: String) -> BufReader<Box<Read+'static>> {
+fn open(path: String) -> BufReader<Box<Read + 'static>> {
     let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<Read>)
@@ -189,7 +207,7 @@ fn expand(options: Options) {
                             Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
                             None => {   // no valid char at start of t, so take 1 byte
                                 (Other, 1, 1)
-                            },
+                            }
                         }
                     } else {
                         (Other, 1, 1)   // implicit assumption: non-UTF-8 char is 1 col wide
@@ -199,7 +217,9 @@ fn expand(options: Options) {
                         0x09 => Tab,
                         0x08 => Backspace,
                         _ => Other,
-                    }, 1, 1)
+                    },
+                     1,
+                     1)
                 };
 
                 // figure out how many columns this char takes up
@@ -215,7 +235,7 @@ fn expand(options: Options) {
                         } else {
                             safe_unwrap!(output.write_all(&buf[byte..byte+nbytes]));
                         }
-                    },
+                    }
                     _ => {
                         col = if ctype == Other {
                             col + cwidth
@@ -232,7 +252,7 @@ fn expand(options: Options) {
                         }
 
                         safe_unwrap!(output.write_all(&buf[byte..byte+nbytes]));
-                    },
+                    }
                 }
 
                 byte += nbytes; // advance the pointer

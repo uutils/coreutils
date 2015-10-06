@@ -24,7 +24,8 @@ fn test_small_set2() {
 #[test]
 fn test_unicode() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&[", ┬─┬", "╯︵┻━┻"]), "(,°□°）, ┬─┬".as_bytes());
+    let result = run_piped_stdin(&mut cmd.args(&[", ┬─┬", "╯︵┻━┻"]),
+                                 "(,°□°）, ┬─┬".as_bytes());
     assert_eq!(result.stdout, "(╯°□°）╯︵┻━┻");
 }
 

@@ -28,14 +28,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     opts.optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)");
-    opts.optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off");
-    opts.optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH");
+    opts.optflag("s",
+                 "spaces",
+                 "break lines at word boundaries rather than a hard cut-off");
+    opts.optopt("w",
+                "width",
+                "set WIDTH as the maximum line width rather than 80",
+                "WIDTH");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("h") {
@@ -50,21 +55,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         let bytes = matches.opt_present("b");
         let spaces = matches.opt_present("s");
-        let poss_width =
-            if matches.opt_present("w") {
-                matches.opt_str("w")
-            } else {
-                match obs_width {
-                    Some(v) => Some(v.to_string()),
-                    None => None,
-                }
-            };
+        let poss_width = if matches.opt_present("w") {
+            matches.opt_str("w")
+        } else {
+            match obs_width {
+                Some(v) => Some(v.to_string()),
+                None => None,
+            }
+        };
         let width = match poss_width {
             Some(inp_width) => match inp_width.parse::<usize>() {
                 Ok(width) => width,
-                Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e)
+                Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e),
             },
-            None => 80
+            None => 80,
         };
         let files = if matches.free.is_empty() {
             vec!("-".to_string())
@@ -80,7 +84,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
+        if slice.chars().next().unwrap() == '-' && slice.len() > 1 &&
+           slice.chars().nth(1).unwrap().is_digit(10) {
             let mut v = args.to_vec();
             v.remove(i);
             return (v, Some(slice[1..].to_string()));
@@ -95,15 +100,13 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
         let filename: &str = &filename;
         let mut stdin_buf;
         let mut file_buf;
-        let buffer = BufReader::new(
-            if filename == "-" {
-                stdin_buf = stdin();
-                &mut stdin_buf as &mut Read
-            } else {
-                file_buf = safe_unwrap!(File::open(Path::new(filename)));
-                &mut file_buf as &mut Read
-            }
-        );
+        let buffer = BufReader::new(if filename == "-" {
+            stdin_buf = stdin();
+            &mut stdin_buf as &mut Read
+        } else {
+            file_buf = safe_unwrap!(File::open(Path::new(filename)));
+            &mut file_buf as &mut Read
+        });
         fold_file(buffer, bytes, spaces, width);
     }
 }
@@ -116,13 +119,17 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
             let len = line.len();
             let mut i = 0;
             while i < len {
-                let width = if len - i >= width { width } else { len - i };
+                let width = if len - i >= width {
+                    width
+                } else {
+                    len - i
+                };
                 let slice = {
                     let slice = &line[i..i + width];
                     if spaces && i + width < len {
                         match slice.rfind(|ch: char| ch.is_whitespace()) {
                             Some(m) => &slice[..m + 1],
-                            None => slice
+                            None => slice,
                         }
                     } else {
                         slice
@@ -148,26 +155,32 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                 if count >= width {
                     let (val, ncount) = {
                         let slice = &output[..];
-                        let (out, val, ncount) =
-                            if spaces && i + 1 < len {
-                                match rfind_whitespace(slice) {
-                                    Some(m) => {
-                                        let routput = &slice[m + 1 .. slice.chars().count()];
-                                        let ncount = routput.chars().fold(0, |out, ch: char| {
-                                            out + match ch {
-                                                '\t' => 8,
-                                                '\x08' => if out > 0 { !0 } else { 0 },
-                                                '\r' => return 0,
-                                                _ => 1
-                                            }
-                                        });
-                                        (&slice[0 .. m + 1], routput, ncount)
-                                    },
-                                    None => (slice, "", 0)
+                        let (out, val, ncount) = if spaces && i + 1 < len {
+                            match rfind_whitespace(slice) {
+                                Some(m) => {
+                                    let routput = &slice[m + 1 .. slice.chars().count()];
+                                    let ncount = routput.chars().fold(0,
+                                                                      |out, ch: char| {
+                                                                          out +
+                                                                          match ch {
+                                                                              '\t' => 8,
+                                                                              '\x08' =>
+                                                                                  if out > 0 {
+                                                                                  !0
+                                                                              } else {
+                                                                                  0
+                                                                              },
+                                                                              '\r' => return 0,
+                                                                              _ => 1,
+                                                                          }
+                                                                      });
+                                    (&slice[0 .. m + 1], routput, ncount)
                                 }
-                            } else {
-                                (slice, "", 0)
-                            };
+                                None => (slice, "", 0),
+                            }
+                        } else {
+                            (slice, "", 0)
+                        };
                         println!("{}", out);
                         (val.to_string(), ncount)
                     };
@@ -196,7 +209,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                         count = 0;
                         continue;
                     }
-                    _ => count += 1
+                    _ => count += 1,
                 };
                 output.push(ch);
             }

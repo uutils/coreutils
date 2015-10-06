@@ -47,23 +47,39 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let program = &args[0];
 
     let mut opts = Options::new();
-    opts.optflag("d", "domain", "Display the name of the DNS domain if possible");
-    opts.optflag("i", "ip-address", "Display the network address(es) of the host");
-    opts.optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)");   // TODO: support --long
-    opts.optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible");
+    opts.optflag("d",
+                 "domain",
+                 "Display the name of the DNS domain if possible");
+    opts.optflag("i",
+                 "ip-address",
+                 "Display the network address(es) of the host");
+    opts.optflag("f",
+                 "fqdn",
+                 "Display the FQDN (Fully Qualified Domain Name) (default)");   // TODO: support --long
+    opts.optflag("s",
+                 "short",
+                 "Display the short hostname (the portion before the first dot) if possible");
     opts.optflag("h", "help", "Show help");
     opts.optflag("V", "version", "Show program's version");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        _ => { help_menu(program, opts); return 0; }
+        Ok(m) => {
+            m
+        }
+        _ => {
+            help_menu(program, opts);
+            return 0;
+        }
     };
 
     if matches.opt_present("h") {
         help_menu(program, opts);
         return 0
     }
-    if matches.opt_present("V") { version(); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0
+    }
 
     match matches.free.len() {
         0 => {
@@ -113,7 +129,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
         1 => xsethostname(matches.free.last().unwrap()),
-        _ => help_menu(program, opts)
+        _ => help_menu(program, opts),
     };
 
     0
@@ -129,15 +145,16 @@ fn help_menu(program: &str, options: Options) {
     println!("Usage:");
     println!("  {} [OPTION]... [HOSTNAME]", program);
     println!("");
-    print!("{}", options.usage("Print or set the system's host name."));
+    print!("{}",
+           options.usage("Print or set the system's host name."));
 }
 
 fn xgethostname() -> String {
     let namelen = 256usize;
-    let mut name : Vec<u8> = repeat(0).take(namelen).collect();
+    let mut name: Vec<u8> = repeat(0).take(namelen).collect();
     let err = unsafe {
-        gethostname (name.as_mut_ptr() as *mut libc::c_char,
-                                        namelen as libc::size_t)
+        gethostname(name.as_mut_ptr() as *mut libc::c_char,
+                    namelen as libc::size_t)
     };
 
     if err != 0 {
@@ -153,9 +170,7 @@ fn xgethostname() -> String {
 fn xsethostname(name: &str) {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
-    let err = unsafe {
-        sethostname (vec_name.as_ptr(), vec_name.len() as libc::c_int)
-    };
+    let err = unsafe { sethostname(vec_name.as_ptr(), vec_name.len() as libc::c_int) };
 
     if err != 0 {
         println!("Cannot set hostname to {}", name);
@@ -166,9 +181,7 @@ fn xsethostname(name: &str) {
 fn xsethostname(name: &str) {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
-    let err = unsafe {
-        sethostname (vec_name.as_ptr(), vec_name.len() as libc::size_t)
-    };
+    let err = unsafe { sethostname(vec_name.as_ptr(), vec_name.len() as libc::size_t) };
 
     if err != 0 {
         println!("Cannot set hostname to {}", name);

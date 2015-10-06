@@ -8,10 +8,10 @@
  */
 
 use std::io::{Result, Error};
-use ::libc;
+use libc;
 use self::c_types::{c_passwd, getpwuid};
 
-#[path = "../../common/c_types.rs"] mod c_types;
+#[path = "../../common/c_types.rs"]mod c_types;
 
 extern {
     pub fn geteuid() -> libc::uid_t;
@@ -29,6 +29,7 @@ pub unsafe fn getusername() -> Result<String> {
 
     // Extract username from passwd struct
     let pw_name: *const libc::c_char = (*passwd).pw_name;
-    let username = String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes()).to_string();
+    let username = String::from_utf8_lossy(::std::ffi::CStr::from_ptr(pw_name).to_bytes())
+                       .to_string();
     Ok(username)
 }

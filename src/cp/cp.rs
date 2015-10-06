@@ -46,7 +46,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(e) => {
             show_error!("{}", e);
             panic!()
-        },
+        }
     };
 
     let usage = opts.usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
@@ -59,8 +59,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::Copy    => copy(matches),
-        Mode::Help    => help(&usage),
+        Mode::Copy => copy(matches),
+        Mode::Help => help(&usage),
         Mode::Version => version(),
     }
 
@@ -77,7 +77,10 @@ fn help(usage: &String) {
                          or:  {0} SOURCE... DIRECTORY\n  \
                          or:  {0} -t DIRECTORY SOURCE\n\
                        \n\
-                       {2}", NAME, VERSION, usage);
+                       {2}",
+                      NAME,
+                      VERSION,
+                      usage);
     println!("{}", msg);
 }
 
@@ -113,8 +116,8 @@ fn copy(matches: getopts::Matches) {
 
         if same_file {
             show_error!("\"{}\" and \"{}\" are the same file",
-                source.display(),
-                dest.display());
+                        source.display(),
+                        dest.display());
             panic!();
         }
 

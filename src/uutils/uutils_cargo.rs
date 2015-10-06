@@ -35,7 +35,7 @@ fn usage(cmap: &UtilityMap) {
 
 fn main() {
     let umap = util_map();
-    let mut args : Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
 
     // try binary name as util name.
     let args0 = args[0].clone();
@@ -50,7 +50,7 @@ fn main() {
     }
 
     if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
-        binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox") {
+       binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox") {
             // uutils can be called as either "uutils", "busybox"
             // "uutils-suffix" or "busybox-suffix". Not sure
             // what busybox uses the -suffix pattern for.
@@ -75,7 +75,8 @@ fn main() {
                         let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                std::process::exit(uumain(vec![util.to_string(), "--help".to_string()]));
+                                std::process::exit(uumain(vec![util.to_string(),
+                                                               "--help".to_string()]));
                             }
                             None => {
                                 println!("{}: applet not found", util);

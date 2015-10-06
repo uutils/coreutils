@@ -41,7 +41,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTION]...
 
-Print the full filename of the current working directory.", NAME, VERSION);
+Print the full filename of the current working directory.",
+                          NAME,
+                          VERSION);
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);

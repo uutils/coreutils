@@ -12,7 +12,7 @@ extern crate advapi32;
 
 use std::io::{Result, Error};
 
-#[path = "../../common/wide.rs"] #[macro_use] mod wide;
+#[path = "../../common/wide.rs"] #[macro_use]mod wide;
 
 use std::mem;
 use std::io::Write;
@@ -21,7 +21,7 @@ use std::os::windows::ffi::OsStringExt;
 use self::wide::FromWide;
 
 pub unsafe fn getusername() -> Result<String> {
-    let mut buffer: [winapi::WCHAR; winapi::UNLEN as usize + 1] = mem::uninitialized();
+    let mut buffer: [winapi::WCHAR; (winapi::UNLEN as usize) + 1] = mem::uninitialized();
     let mut len = buffer.len() as winapi::DWORD;
     if advapi32::GetUserNameW(buffer.as_mut_ptr(), &mut len) == 0 {
         return Err(Error::last_os_error())

@@ -13,8 +13,8 @@ extern crate libc;
 
 use std::collections::HashMap;
 use std::ffi::{CString, OsString};
-use std::env::{args_os};
-use std::str::{from_utf8};
+use std::env::args_os;
+use std::str::from_utf8;
 
 static NAME: &'static str = "test";
 
@@ -27,12 +27,11 @@ pub fn uumain(_: Vec<String>) -> i32 {
     if args.len() == 0 {
         return 2;
     }
-    let args =
-        if !args[0].ends_with(NAME.as_bytes()) {
-            &args[1..]
-        } else {
-            &args[..]
-        };
+    let args = if !args[0].ends_with(NAME.as_bytes()) {
+        &args[1..]
+    } else {
+        &args[..]
+    };
     let args = match args[0] {
         b"[" => match args[args.len() - 1] {
             b"]" => &args[1..args.len() - 1],
@@ -98,7 +97,7 @@ fn three(args: &[&[u8]], error: &mut bool) -> bool {
                 *error = true;
                 false
             }
-        }
+        },
     }
 }
 
@@ -133,19 +132,22 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
         _ => return false,
     };
     match cond {
-        IntegerCondition::Equal        => a == b,
-        IntegerCondition::Unequal      => a != b,
-        IntegerCondition::Greater      => a >  b,
+        IntegerCondition::Equal => a == b,
+        IntegerCondition::Unequal => a != b,
+        IntegerCondition::Greater => a > b,
         IntegerCondition::GreaterEqual => a >= b,
-        IntegerCondition::Less         => a <  b,
-        IntegerCondition::LessEqual    => a <= b,
+        IntegerCondition::Less => a < b,
+        IntegerCondition::LessEqual => a <= b,
     }
 }
 
 fn isatty(fd: &[u8]) -> bool {
-    use libc::{isatty};
-    from_utf8(fd).ok().and_then(|s| s.parse().ok())
-            .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
+    use libc::isatty;
+    from_utf8(fd)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .map(|i| unsafe { isatty(i) == 1 })
+        .unwrap_or(false)
 }
 
 fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
@@ -157,7 +159,7 @@ fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
         1 => (one(*args), 1),
         2 => dispatch_two(args, error),
         3 => dispatch_three(args, error),
-        _ => dispatch_four(args, error)
+        _ => dispatch_four(args, error),
     };
     *args = &(*args)[idx..];
     val
@@ -201,7 +203,7 @@ enum Precedence {
     And,
     BUnOp,
     BinOp,
-    UnOp
+    UnOp,
 }
 
 fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
@@ -223,7 +225,8 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
                          args: &mut &[&'a [u8]],
                          mut lhs: bool,
                          min_prec: Precedence,
-                         error: &mut bool) -> bool {
+                         error: &mut bool)
+                         -> bool {
     let mut prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
         *error = true;
         &min_prec
@@ -249,9 +252,20 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
             }
             Precedence::And => lhs && rhs,
             Precedence::Or => lhs || rhs,
-            Precedence::BinOp => three(&[if lhs { b" " } else { b"" }, op, if rhs { b" " } else { b"" }], error),
+            Precedence::BinOp => three(&[if lhs {
+                                           b" "
+                                       } else {
+                                           b""
+                                       },
+                                         op,
+                                         if rhs {
+                                           b" "
+                                       } else {
+                                           b""
+                                       }],
+                                       error),
             Precedence::Paren => unimplemented!(),  // TODO: implement parentheses
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         if args.len() > 0 {
             prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
@@ -333,8 +347,8 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
     static S_IFSOCK: mode_t = 0o140000;
 
     enum Permission {
-        Read    = 0o4,
-        Write   = 0o2,
+        Read = 0o4,
+        Write = 0o2,
         Execute = 0o1,
     }
     let perm = |stat: stat, p: Permission| {
@@ -364,20 +378,20 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
     }
     let file_type = stat.st_mode & S_IFMT;
     match cond {
-        PathCondition::BlockSpecial     => file_type == S_IFBLK,
+        PathCondition::BlockSpecial => file_type == S_IFBLK,
         PathCondition::CharacterSpecial => file_type == S_IFCHR,
-        PathCondition::Directory        => file_type == S_IFDIR,
-        PathCondition::Exists           => true,
-        PathCondition::Regular          => file_type == S_IFREG,
-        PathCondition::GroupIDFlag      => stat.st_mode & S_ISGID != 0,
-        PathCondition::SymLink          => true,
-        PathCondition::FIFO             => file_type == S_IFIFO,
-        PathCondition::Readable         => perm(stat, Permission::Read),
-        PathCondition::Socket           => file_type == S_IFSOCK,
-        PathCondition::NonEmpty         => stat.st_size > 0,
-        PathCondition::UserIDFlag       => stat.st_mode & S_ISUID != 0,
-        PathCondition::Writable         => perm(stat, Permission::Write),
-        PathCondition::Executable       => perm(stat, Permission::Execute),
+        PathCondition::Directory => file_type == S_IFDIR,
+        PathCondition::Exists => true,
+        PathCondition::Regular => file_type == S_IFREG,
+        PathCondition::GroupIDFlag => stat.st_mode & S_ISGID != 0,
+        PathCondition::SymLink => true,
+        PathCondition::FIFO => file_type == S_IFIFO,
+        PathCondition::Readable => perm(stat, Permission::Read),
+        PathCondition::Socket => file_type == S_IFSOCK,
+        PathCondition::NonEmpty => stat.st_size > 0,
+        PathCondition::UserIDFlag => stat.st_mode & S_ISUID != 0,
+        PathCondition::Writable => perm(stat, Permission::Write),
+        PathCondition::Executable => perm(stat, Permission::Execute),
     }
 }
 
@@ -390,19 +404,19 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         _ => return false,
     };
     match cond {
-        PathCondition::BlockSpecial     => false,
+        PathCondition::BlockSpecial => false,
         PathCondition::CharacterSpecial => false,
-        PathCondition::Directory        => stat.is_dir(),
-        PathCondition::Exists           => true,
-        PathCondition::Regular          => stat.is_file(),
-        PathCondition::GroupIDFlag      => false,
-        PathCondition::SymLink          => false,
-        PathCondition::FIFO             => false,
-        PathCondition::Readable         => false, // TODO
-        PathCondition::Socket           => false,
-        PathCondition::NonEmpty         => stat.len() > 0,
-        PathCondition::UserIDFlag       => false,
-        PathCondition::Writable         => false, // TODO
-        PathCondition::Executable       => false, // TODO
+        PathCondition::Directory => stat.is_dir(),
+        PathCondition::Exists => true,
+        PathCondition::Regular => stat.is_file(),
+        PathCondition::GroupIDFlag => false,
+        PathCondition::SymLink => false,
+        PathCondition::FIFO => false,
+        PathCondition::Readable => false, // TODO
+        PathCondition::Socket => false,
+        PathCondition::NonEmpty => stat.len() > 0,
+        PathCondition::UserIDFlag => false,
+        PathCondition::Writable => false, // TODO
+        PathCondition::Executable => false, // TODO
     }
 }

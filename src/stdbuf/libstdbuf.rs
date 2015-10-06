@@ -27,7 +27,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         input => {
             let buff_size: usize = match input.parse() {
                 Ok(num) => num,
-                Err(e) => crash!(1, "incorrect size of buffer!: {}", e)
+                Err(e) => crash!(1, "incorrect size of buffer!: {}", e),
             };
             (_IOFBF, buff_size as size_t)
         }
@@ -44,7 +44,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 }
 
 #[no_mangle]
-pub extern fn stdbuf() {
+pub extern "C" fn stdbuf() {
     if let Ok(val) = env::var("_STDBUF_E") {
         set_buffer(stderr, &val);
     }

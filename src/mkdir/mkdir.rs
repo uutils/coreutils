@@ -40,13 +40,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // " of each created directory to CTX"),
     opts.optopt("m", "mode", "set file mode", "755");
     opts.optflag("p", "parents", "make parent directories as needed");
-    opts.optflag("v", "verbose", "print a message for each printed directory");
+    opts.optflag("v",
+                 "verbose",
+                 "print a message for each printed directory");
     opts.optflag("h", "help", "display this help");
     opts.optflag("V", "version", "display this version");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if args.len() == 1 || matches.opt_present("help") {
@@ -86,7 +88,8 @@ fn print_help(opts: &getopts::Options) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
-    print!("{}", opts.usage("Create the given DIRECTORY(ies) if they do not exist"));
+    print!("{}",
+           opts.usage("Create the given DIRECTORY(ies) if they do not exist"));
 }
 
 /**
@@ -107,12 +110,13 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
             match path.parent() {
                 Some(parent) => {
                     if parent != empty && !parent.uu_exists() {
-                        show_info!("cannot create directory '{}': No such file or directory", path.display());
+                        show_info!("cannot create directory '{}': No such file or directory",
+                                   path.display());
                         status = 1;
                     } else {
                         status |= mkdir(path, mode, verbose);
                     }
-                },
+                }
                 None => {
                     status |= mkdir(path, mode, verbose);
                 }
@@ -127,7 +131,8 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  */
 fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
     if path.uu_exists() {
-        show_info!("cannot create directory '{}': File exists", path.display());
+        show_info!("cannot create directory '{}': File exists",
+                   path.display());
         return 1;
     }
 
@@ -142,11 +147,14 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
 
     #[cfg(unix)]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        let directory = CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
+        let directory = CString::new(path.as_os_str().to_str().unwrap())
+                            .unwrap_or_else(|e| crash!(1, "{}", e));
         let mode = mode as libc::mode_t;
 
         if unsafe { libc::chmod(directory.as_ptr(), mode) } != 0 {
-            show_info!("{}: errno {}", path.display(), Error::last_os_error().raw_os_error().unwrap());
+            show_info!("{}: errno {}",
+                       path.display(),
+                       Error::last_os_error().raw_os_error().unwrap());
             return 1;
         }
         0

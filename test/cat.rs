@@ -8,10 +8,11 @@ static PROGNAME: &'static str = "./cat";
 #[test]
 fn test_output_multi_files_print_all_chars() {
     let po = match Command::new(PROGNAME)
-                                .arg("alpha.txt")
-                                .arg("256.txt")
-                                .arg("-A")
-                                .arg("-n").output() {
+                       .arg("alpha.txt")
+                       .arg("256.txt")
+                       .arg("-A")
+                       .arg("-n")
+                       .output() {
 
         Ok(p) => p,
         Err(err) => panic!("{}", err),
@@ -25,14 +26,17 @@ fn test_output_multi_files_print_all_chars() {
 #[test]
 fn test_stdin_squeeze() {
     let mut process = Command::new(PROGNAME)
-                                .arg("-A")
-                                .stdin(Stdio::piped())
-                                .stdout(Stdio::piped())
-                                .spawn()
-                                .unwrap_or_else(|e| panic!("{}", e));
+                          .arg("-A")
+                          .stdin(Stdio::piped())
+                          .stdout(Stdio::piped())
+                          .spawn()
+                          .unwrap_or_else(|e| panic!("{}", e));
 
-    process.stdin.take().unwrap_or_else(|| panic!("Could not grab child process stdin"))
-        .write_all("\x00\x01\x02".as_bytes()).unwrap_or_else(|e| panic!("{}", e));
+    process.stdin
+           .take()
+           .unwrap_or_else(|| panic!("Could not grab child process stdin"))
+           .write_all("\x00\x01\x02".as_bytes())
+           .unwrap_or_else(|e| panic!("{}", e));
 
     let po = process.wait_with_output().unwrap_or_else(|e| panic!("{}", e));
     let out = str::from_utf8(&po.stdout[..]).unwrap_or_else(|e| panic!("{}", e));
@@ -43,15 +47,18 @@ fn test_stdin_squeeze() {
 #[test]
 fn test_stdin_number_non_blank() {
     let mut process = Command::new(PROGNAME)
-                                .arg("-b")
-                                .arg("-")
-                                .stdin(Stdio::piped())
-                                .stdout(Stdio::piped())
-                                .spawn()
-                                .unwrap_or_else(|e| panic!("{}", e));
+                          .arg("-b")
+                          .arg("-")
+                          .stdin(Stdio::piped())
+                          .stdout(Stdio::piped())
+                          .spawn()
+                          .unwrap_or_else(|e| panic!("{}", e));
 
-    process.stdin.take().unwrap_or_else(|| panic!("Could not grab child process stdin"))
-        .write_all("\na\nb\n\n\nc".as_bytes()).unwrap_or_else(|e| panic!("{}", e));
+    process.stdin
+           .take()
+           .unwrap_or_else(|| panic!("Could not grab child process stdin"))
+           .write_all("\na\nb\n\n\nc".as_bytes())
+           .unwrap_or_else(|e| panic!("{}", e));
 
     let po = process.wait_with_output().unwrap_or_else(|e| panic!("{}", e));
     let out = str::from_utf8(&po.stdout[..]).unwrap_or_else(|e| panic!("{}", e));

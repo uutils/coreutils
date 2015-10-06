@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 fn main() {
-    let args : Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("usage: mkuutils <outfile> <crates>");
         std::process::exit(1);
@@ -14,7 +14,13 @@ fn main() {
     let mut hashsum = false;
     for prog in args[2..].iter() {
         match &prog[..] {
-            "hashsum" | "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
+            "hashsum" |
+            "md5sum" |
+            "sha1sum" |
+            "sha224sum" |
+            "sha256sum" |
+            "sha384sum" |
+            "sha512sum" => {
                 if !hashsum {
                     crates.push_str("extern crate hashsum;\n");
                     util_map.push_str("map.insert(\"hashsum\", hashsum::uumain);\n");
@@ -26,15 +32,15 @@ fn main() {
                     util_map.push_str("map.insert(\"sha512sum\", hashsum::uumain);\n");
                     hashsum = true;
                 }
-            },
+            }
             "true" => {
                 util_map.push_str("fn uutrue(_: Vec<String>) -> i32 { 0 }\n");
                 util_map.push_str("map.insert(\"true\", uutrue as fn(Vec<String>) -> i32);\n");
-            },
+            }
             "false" => {
                 util_map.push_str("fn uufalse(_: Vec<String>) -> i32 { 1 }\n");
                 util_map.push_str("map.insert(\"false\", uufalse as fn(Vec<String>) -> i32);\n");
-            },
+            }
             _ => {
                 if prog == "test" {
                     crates.push_str(&(format!("extern crate uu{0} as uu{0};\n", prog))[..]);

@@ -17,7 +17,7 @@ extern crate libc;
 use std::ffi::CStr;
 use std::io::Write;
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
+#[path = "../common/util.rs"] #[macro_use]mod util;
 
 extern {
     // POSIX requires using getlogin (or equivalent code)
@@ -49,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
@@ -58,7 +58,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0}
 
-Print user's login name.", NAME, VERSION);
+Print user's login name.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
         return 0;
@@ -76,6 +78,6 @@ Print user's login name.", NAME, VERSION);
 fn exec() {
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
-        None => println!("{}: no login name", NAME)
+        None => println!("{}: no login name", NAME),
     }
 }

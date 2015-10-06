@@ -36,7 +36,8 @@ fn test_garbage() {
     let result = run_piped_stdin(&mut cmd.arg("-d"), input.as_bytes());
 
     assert!(!result.success);
-    assert_eq!(result.stderr, "base64: error: invalid character (Invalid character '0' at position 20)\n");
+    assert_eq!(result.stderr,
+               "base64: error: invalid character (Invalid character '0' at position 20)\n");
 }
 
 #[test]
@@ -58,5 +59,6 @@ fn test_wrap() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, "VGhlIHF1aWNrIGJyb3du\nIGZveCBqdW1wcyBvdmVy\nIHRoZSBsYXp5IGRvZy4=\n");
+    assert_eq!(result.stdout,
+               "VGhlIHF1aWNrIGJyb3du\nIGZveCBqdW1wcyBvdmVy\nIHRoZSBsYXp5IGRvZy4=\n");
 }

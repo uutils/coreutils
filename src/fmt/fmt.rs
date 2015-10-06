@@ -42,21 +42,21 @@ static VERSION: &'static str = "0.0.3";
 
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 pub struct FmtOptions {
-    crown           : bool,
-    tagged          : bool,
-    mail            : bool,
-    split_only      : bool,
-    use_prefix      : bool,
-    prefix          : String,
-    xprefix         : bool,
-    use_anti_prefix : bool,
-    anti_prefix     : String,
-    xanti_prefix    : bool,
-    uniform         : bool,
-    quick           : bool,
-    width           : usize,
-    goal            : usize,
-    tabwidth        : usize,
+    crown: bool,
+    tagged: bool,
+    mail: bool,
+    split_only: bool,
+    use_prefix: bool,
+    prefix: String,
+    xprefix: bool,
+    use_anti_prefix: bool,
+    anti_prefix: String,
+    xanti_prefix: bool,
+    uniform: bool,
+    quick: bool,
+    width: usize,
+    goal: usize,
+    tabwidth: usize,
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -71,11 +71,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX");
     opts.optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP");
 
-    opts.optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace.");
-    opts.optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace.");
+    opts.optflag("x",
+                 "exact-prefix",
+                 "PREFIX must match at the beginning of the line with no preceding whitespace.");
+    opts.optflag("X",
+                 "exact-skip-prefix",
+                 "PSKIP must match at the beginning of the line with no preceding whitespace.");
 
-    opts.optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH");
-    opts.optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL");
+    opts.optopt("w",
+                "width",
+                "Fill output lines up to a maximum of WIDTH columns, default 79.",
+                "WIDTH");
+    opts.optopt("g",
+                "goal",
+                "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.",
+                "GOAL");
 
     opts.optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance.");
 
@@ -86,11 +96,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, NAME)
+        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, NAME),
     };
 
     if matches.opt_present("h") {
-        println!("Usage: {} [OPTION]... [FILE]...\n\n{}", NAME, opts.usage("Reformat paragraphs from input files (or stdin) to stdout."));
+        println!("Usage: {} [OPTION]... [FILE]...\n\n{}",
+                 NAME,
+                 opts.usage("Reformat paragraphs from input files (or stdin) to stdout."));
     }
 
     if matches.opt_present("V") || matches.opt_present("h") {
@@ -99,38 +111,57 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let mut fmt_opts = FmtOptions {
-        crown           : false,
-        tagged          : false,
-        mail            : false,
-        uniform         : false,
-        quick           : false,
-        split_only      : false,
-        use_prefix      : false,
-        prefix          : String::new(),
-        xprefix         : false,
-        use_anti_prefix : false,
-        anti_prefix     : String::new(),
-        xanti_prefix    : false,
-        width           : 79,
-        goal            : 74,
-        tabwidth        : 8,
+        crown: false,
+        tagged: false,
+        mail: false,
+        uniform: false,
+        quick: false,
+        split_only: false,
+        use_prefix: false,
+        prefix: String::new(),
+        xprefix: false,
+        use_anti_prefix: false,
+        anti_prefix: String::new(),
+        xanti_prefix: false,
+        width: 79,
+        goal: 74,
+        tabwidth: 8,
     };
 
-    if matches.opt_present("t") { fmt_opts.tagged       = true; }
-    if matches.opt_present("c") { fmt_opts.crown        = true; fmt_opts.tagged = false; }
-    if matches.opt_present("m") { fmt_opts.mail         = true; }
-    if matches.opt_present("u") { fmt_opts.uniform      = true; }
-    if matches.opt_present("q") { fmt_opts.quick        = true; }
-    if matches.opt_present("s") { fmt_opts.split_only   = true; fmt_opts.crown  = false; fmt_opts.tagged = false; }
-    if matches.opt_present("x") { fmt_opts.xprefix      = true; }
-    if matches.opt_present("X") { fmt_opts.xanti_prefix = true; }
+    if matches.opt_present("t") {
+        fmt_opts.tagged = true;
+    }
+    if matches.opt_present("c") {
+        fmt_opts.crown = true;
+        fmt_opts.tagged = false;
+    }
+    if matches.opt_present("m") {
+        fmt_opts.mail = true;
+    }
+    if matches.opt_present("u") {
+        fmt_opts.uniform = true;
+    }
+    if matches.opt_present("q") {
+        fmt_opts.quick = true;
+    }
+    if matches.opt_present("s") {
+        fmt_opts.split_only = true;
+        fmt_opts.crown = false;
+        fmt_opts.tagged = false;
+    }
+    if matches.opt_present("x") {
+        fmt_opts.xprefix = true;
+    }
+    if matches.opt_present("X") {
+        fmt_opts.xanti_prefix = true;
+    }
 
     match matches.opt_str("p") {
         Some(s) => {
             fmt_opts.prefix = s;
             fmt_opts.use_prefix = true;
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("P") {
@@ -138,46 +169,49 @@ pub fn uumain(args: Vec<String>) -> i32 {
             fmt_opts.anti_prefix = s;
             fmt_opts.use_anti_prefix = true;
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("w") {
         Some(s) => {
-            fmt_opts.width =
-                match s.parse::<usize>() {
-                    Ok(t) => t,
-                    Err(e) => { crash!(1, "Invalid WIDTH specification: `{}': {}", s, e); }
-                };
+            fmt_opts.width = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    crash!(1, "Invalid WIDTH specification: `{}': {}", s, e);
+                }
+            };
             fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("g") {
         Some(s) => {
-            fmt_opts.goal =
-                match s.parse::<usize>() {
-                    Ok(t) => t,
-                    Err(e) => { crash!(1, "Invalid GOAL specification: `{}': {}", s, e); }
-                };
+            fmt_opts.goal = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    crash!(1, "Invalid GOAL specification: `{}': {}", s, e);
+                }
+            };
             if !matches.opt_present("w") {
                 fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
             } else if fmt_opts.goal > fmt_opts.width {
                 crash!(1, "GOAL cannot be greater than WIDTH.");
             }
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("T") {
         Some(s) => {
-            fmt_opts.tabwidth =
-                match s.parse::<usize>() {
-                    Ok(t) => t,
-                    Err(e) => { crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e); }
-                };
+            fmt_opts.tabwidth = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e);
+                }
+            };
         }
-        None => ()
+        None => (),
     };
 
     if fmt_opts.tabwidth < 1 {
@@ -202,14 +236,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 Err(e) => {
                     show_warning!("{}: {}", i, e);
                     continue;
-                },
+                }
             },
         };
         let p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
         for para_result in p_stream {
             match para_result {
                 Err(s) => silent_unwrap!(ostream.write_all(s.as_bytes())),
-                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
+                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream),
             }
         }
 

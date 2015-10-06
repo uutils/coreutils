@@ -17,7 +17,7 @@ extern crate libc;
 use getopts::Options;
 use std::io::Write;
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
+#[path = "../common/util.rs"] #[macro_use]mod util;
 mod platform;
 
 static NAME: &'static str = "whoami";
@@ -59,7 +59,7 @@ pub fn exec() {
             Err(err) => match err.raw_os_error() {
                 Some(0) | None => crash!(1, "failed to get username"),
                 Some(_) => crash!(1, "failed to get username: {}", err),
-            }
+            },
         }
     }
 }

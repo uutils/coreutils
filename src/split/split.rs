@@ -27,18 +27,31 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("a", "suffix-length", "use suffixes of length N (default 2)", "N");
+    opts.optopt("a",
+                "suffix-length",
+                "use suffixes of length N (default 2)",
+                "N");
     opts.optopt("b", "bytes", "put SIZE bytes per output file", "SIZE");
-    opts.optopt("C", "line-bytes", "put at most SIZE bytes of lines per output file", "SIZE");
-    opts.optflag("d", "numeric-suffixes", "use numeric suffixes instead of alphabetic");
-    opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
-    opts.optflag("", "verbose", "print a diagnostic just before each output file is opened");
+    opts.optopt("C",
+                "line-bytes",
+                "put at most SIZE bytes of lines per output file",
+                "SIZE");
+    opts.optflag("d",
+                 "numeric-suffixes",
+                 "use numeric suffixes instead of alphabetic");
+    opts.optopt("l",
+                "lines",
+                "put NUMBER lines per output file",
+                "NUMBER");
+    opts.optflag("",
+                 "verbose",
+                 "print a diagnostic just before each output file is opened");
     opts.optflag("h", "help", "display help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("h") {
@@ -49,9 +62,12 @@ Usage:
 
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
--, read standard input.", NAME, VERSION);
+-, read standard input.",
+                          NAME,
+                          VERSION);
 
-        println!("{}\nSIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.", opts.usage(&msg));
+        println!("{}\nSIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.",
+                 opts.usage(&msg));
         return 0;
     }
 
@@ -70,17 +86,25 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         verbose: false,
     };
 
-    settings.numeric_suffix = if matches.opt_present("d") { true } else { false };
+    settings.numeric_suffix = if matches.opt_present("d") {
+        true
+    } else {
+        false
+    };
 
     settings.suffix_length = match matches.opt_str("a") {
         Some(n) => match n.parse() {
             Ok(m) => m,
-            Err(e) => crash!(1, "cannot parse num: {}", e)
+            Err(e) => crash!(1, "cannot parse num: {}", e),
         },
-        None => 2
+        None => 2,
     };
 
-    settings.verbose = if matches.opt_present("verbose") { true } else { false };
+    settings.verbose = if matches.opt_present("verbose") {
+        true
+    } else {
+        false
+    };
 
     settings.strategy = "l".to_string();
     settings.strategy_param = "1000".to_string();
@@ -94,7 +118,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
                 } else {
                     crash!(1, "{}: cannot split in more than one way", NAME)
                 }
-            },
+            }
             None => {}
         }
     }
@@ -140,7 +164,7 @@ impl LineSplitter {
     fn new(settings: &Settings) -> Box<Splitter> {
         let n = match settings.strategy_param.parse() {
             Ok(a) => a,
-            Err(e) => crash!(1, "invalid number of lines: {}", e)
+            Err(e) => crash!(1, "invalid number of lines: {}", e),
         };
         Box::new(LineSplitter {
             saved_lines_to_write: n,
@@ -170,24 +194,24 @@ struct ByteSplitter {
 
 impl ByteSplitter {
     fn new(settings: &Settings) -> Box<Splitter> {
-        let mut strategy_param : Vec<char> = settings.strategy_param.chars().collect();
+        let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
             '0'...'9' => 1usize,
             'b' => 512usize,
             'k' => 1024usize,
             'm' => 1024usize * 1024usize,
-            _ => crash!(1, "invalid number of bytes")
+            _ => crash!(1, "invalid number of bytes"),
         };
         let n = if suffix.is_alphabetic() {
             match strategy_param.iter().map(|c| *c).collect::<String>().parse::<usize>() {
                 Ok(a) => a,
-                Err(e) => crash!(1, "invalid number of bytes: {}", e)
+                Err(e) => crash!(1, "invalid number of bytes: {}", e),
             }
         } else {
             match settings.strategy_param.parse::<usize>() {
                 Ok(a) => a,
-                Err(e) => crash!(1, "invalid number of bytes: {}", e)
+                Err(e) => crash!(1, "invalid number of bytes: {}", e),
             }
         };
         Box::new(ByteSplitter {
@@ -252,28 +276,27 @@ fn num_prefix(i: usize, width: usize) -> String {
 }
 
 fn split(settings: &Settings) -> i32 {
-    let mut reader = BufReader::new(
-        if settings.input == "-" {
-            Box::new(stdin()) as Box<Read>
-        } else {
-            let r = match File::open(Path::new(&settings.input)) {
-                Ok(a) => a,
-                Err(_) => crash!(1, "cannot open '{}' for reading: No such file or directory", settings.input)
-            };
-            Box::new(r) as Box<Read>
-        }
-    );
-
-    let mut splitter: Box<Splitter> =
-        match settings.strategy.as_ref() {
-            "l" => LineSplitter::new(settings),
-            "b" | "C" => ByteSplitter::new(settings),
-            a @ _ => crash!(1, "strategy {} not supported", a)
+    let mut reader = BufReader::new(if settings.input == "-" {
+        Box::new(stdin()) as Box<Read>
+    } else {
+        let r = match File::open(Path::new(&settings.input)) {
+            Ok(a) => a,
+            Err(_) => crash!(1,
+                             "cannot open '{}' for reading: No such file or directory",
+                             settings.input),
         };
+        Box::new(r) as Box<Read>
+    });
+
+    let mut splitter: Box<Splitter> = match settings.strategy.as_ref() {
+        "l" => LineSplitter::new(settings),
+        "b" | "C" => ByteSplitter::new(settings),
+        a @ _ => crash!(1, "strategy {} not supported", a),
+    };
 
     let mut control = SplitControl {
         current_line: "".to_string(), // Request new line
-        request_new_file: true, // Request new file
+        request_new_file: true, /* Request new file */
     };
 
     let mut writer = BufWriter::new(Box::new(stdout()) as Box<Write>);
@@ -292,7 +315,8 @@ fn split(settings: &Settings) -> i32 {
                 num_prefix(fileno, settings.suffix_length)
             } else {
                 str_prefix(fileno, settings.suffix_length)
-            }.as_ref());
+            }
+                                  .as_ref());
 
             if fileno != 0 {
                 crash_if_err!(1, writer.flush());

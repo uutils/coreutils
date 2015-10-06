@@ -16,7 +16,8 @@ fn test_stdin_nonewline() {
 #[test]
 fn test_stdin_newline() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run_piped_stdin(&mut cmd.args(&["-s", "-", "-w", "1"]), "Line One\nLine Two\n".as_bytes());
+    let result = run_piped_stdin(&mut cmd.args(&["-s", "-", "-w", "1"]),
+                                 "Line One\nLine Two\n".as_bytes());
     assert_eq!(result.stdout, "1-Line One\n2-Line Two\n");
 }
 
@@ -30,7 +31,15 @@ fn test_padding_without_overflow() {
 #[test]
 fn test_padding_with_overflow() {
     let mut cmd = Command::new(PROGNAME);
-    let result = run(&mut cmd.args(&["-i", "1000", "-s", "x", "-n", "rz", "-w", "4", "simple.txt"]));
+    let result = run(&mut cmd.args(&["-i",
+                                     "1000",
+                                     "-s",
+                                     "x",
+                                     "-n",
+                                     "rz",
+                                     "-w",
+                                     "4",
+                                     "simple.txt"]));
     assert_eq!(result.stdout, "0001xL1\n1001xL2\n2001xL3\n3001xL4\n4001xL5\n5001xL6\n6001xL7\n7001xL8\n8001xL9\n9001xL10\n10001xL11\n11001xL12\n12001xL13\n13001xL14\n14001xL15\n");
 }
 
@@ -38,7 +47,7 @@ fn test_padding_with_overflow() {
 fn test_sections_and_styles() {
     for &(fixture, output) in [
         (
-            "section.txt", 
+            "section.txt",
             "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  |BODY2\n\nFOOTER1\nFOOTER2\n\nNEXTHEADER1\nNEXTHEADER2\n\n1  |NEXTBODY1\n2  |NEXTBODY2\n\nNEXTFOOTER1\nNEXTFOOTER2\n"
         ),
         (

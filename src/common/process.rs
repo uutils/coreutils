@@ -76,8 +76,7 @@ pub trait ChildExt {
 
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        if unsafe { libc::funcs::posix88::signal::kill(self.id() as pid_t,
-                                                       signal as i32) } != 0 {
+        if unsafe { libc::funcs::posix88::signal::kill(self.id() as pid_t, signal as i32) } != 0 {
             Err(io::Error::last_os_error())
         } else {
             Ok(())
@@ -87,10 +86,8 @@ impl ChildExt for Child {
     fn wait_or_timeout(&mut self, timeout: f64) -> io::Result<Option<ExitStatus>> {
         // The result will be written to that Option, protected by a Mutex
         // Then the Condvar will be signaled
-        let state = Arc::new((
-            Mutex::new(Option::None::<io::Result<ExitStatus>>),
-            Condvar::new(),
-        ));
+        let state = Arc::new((Mutex::new(Option::None::<io::Result<ExitStatus>>),
+                              Condvar::new()));
 
         // Start the waiting thread
         let state_th = state.clone();
@@ -116,9 +113,8 @@ impl ChildExt for Child {
         let &(ref lock, ref cvar) = &*state;
         let mut exitstatus = lock.lock().unwrap();
         // Condvar::wait_timeout_ms() can wake too soon, in this case wait again
-        let target = get_time() +
-            Duration::seconds(timeout as i64) +
-            Duration::nanoseconds((timeout * 1.0e-6) as i64);
+        let target = get_time() + Duration::seconds(timeout as i64) +
+                     Duration::nanoseconds((timeout * 1.0e-6) as i64);
         while exitstatus.is_none() {
             let now = get_time();
             if now >= target {

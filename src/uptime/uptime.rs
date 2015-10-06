@@ -24,11 +24,11 @@ use std::mem::transmute;
 use std::ptr::null;
 use utmpx::*;
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
+#[path = "../common/util.rs"] #[macro_use]mod util;
 
-#[path = "../common/c_types.rs"] mod c_types;
+#[path = "../common/c_types.rs"]mod c_types;
 
-#[path = "../common/utmpx.rs"] mod utmpx;
+#[path = "../common/utmpx.rs"]mod utmpx;
 
 static NAME: &'static str = "uptime";
 static VERSION: &'static str = "1.0.0";
@@ -51,7 +51,7 @@ extern {
 }
 
 #[cfg(target_os = "freebsd")]
-unsafe extern fn utmpxname(_file: *const c_char) -> c_int {
+unsafe extern "C" fn utmpxname(_file: *const c_char) -> c_int {
     0
 }
 
@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -75,7 +75,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]", NAME);
         println!("");
-        println!("{}", opts.usage("Print the current time, the length of time the system has been up,\n\
+        println!("{}",
+                 opts.usage("Print the current time, the length of time the system has been up,\n\
                               the number of users on the system, and the average number of jobs\n\
                               in the run queue over the last 1, 5 and 15 minutes."));
         return 0;
@@ -97,12 +98,16 @@ fn print_loadavg() {
 
     if loads == -1 {
         print!("\n");
-    }
-    else {
+    } else {
         print!("load average: ");
         for n in 0..loads {
-            print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
-                                   else { ", " } );
+            print!("{:.2}{}",
+                   avg[n as usize],
+                   if n == loads - 1 {
+                       "\n"
+                   } else {
+                       ", "
+                   });
         }
     }
 }
@@ -133,8 +138,8 @@ fn process_utmpx() -> (Option<time_t>, usize) {
                     if t.tv_sec > 0 {
                         boot_time = Some(t.tv_sec);
                     }
-                },
-                _ => continue
+                }
+                _ => continue,
             }
         }
 
@@ -160,19 +165,21 @@ fn print_nusers(nusers: usize) {
 fn print_time() {
     let local_time = rtime::now();
 
-    print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
-           local_time.tm_min, local_time.tm_sec);
+    print!(" {:02}:{:02}:{:02} ",
+           local_time.tm_hour,
+           local_time.tm_min,
+           local_time.tm_sec);
 }
 
 #[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
     let mut proc_uptime = String::new();
 
-    if let Some(n) =
-        File::open("/proc/uptime").ok()
-            .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
-            .and_then(|_| proc_uptime.split_whitespace().next())
-            .and_then(|s| s.replace(".", "").parse().ok()) {
+    if let Some(n) = File::open("/proc/uptime")
+                         .ok()
+                         .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
+                         .and_then(|_| proc_uptime.split_whitespace().next())
+                         .and_then(|s| s.replace(".", "").parse().ok()) {
         n
     } else {
         match boot_time {
@@ -180,7 +187,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
                 let now = rtime::get_time().sec;
                 let time = t as i64;
                 ((now - time) * 100)
-            },
+            }
             _ => -1,
         }
     }
@@ -197,11 +204,9 @@ fn print_uptime(upsecs: i64) {
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
         print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
-    }
-    else if updays > 1 {
+    } else if updays > 1 {
         print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
-    }
-    else {
+    } else {
         print!("up  {:2}:{:02}, ", uphours, upmins);
     }
 }

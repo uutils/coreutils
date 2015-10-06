@@ -19,14 +19,15 @@ fn test_op_prec_and_or_1() {
 
 #[test]
 fn test_op_prec_and_or_2() {
-    let status = Command::new(PROGNAME).arg("")
-                                   .arg("-a")
-                                   .arg("")
-                                   .arg("-o")
-                                   .arg(" ")
-                                   .arg("-a")
-                                   .arg(" ")
-                                   .status();
+    let status = Command::new(PROGNAME)
+                     .arg("")
+                     .arg("-a")
+                     .arg("")
+                     .arg("-o")
+                     .arg(" ")
+                     .arg("-a")
+                     .arg(" ")
+                     .status();
     assert_eq!(true, status.unwrap().success());
 }
 

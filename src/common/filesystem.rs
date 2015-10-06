@@ -70,7 +70,7 @@ fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf> {
                     Ok(path) => {
                         result.pop();
                         result.push(path);
-                    },
+                    }
                     Err(e) => {
                         return Err(e);
                     }
@@ -101,11 +101,11 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         match part {
             Component::Prefix(_) | Component::RootDir => {
                 result.push(part.as_os_str());
-            },
-            Component::CurDir => {},
+            }
+            Component::CurDir => {}
             Component::ParentDir => {
                 parts.pop();
-            },
+            }
             Component::Normal(_) => {
                 parts.push(part.as_os_str());
             }
@@ -124,7 +124,7 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
             match resolve(&result) {
                 Err(e) => match can_mode {
                     CanonicalizeMode::Missing => continue,
-                    _ => return Err(e)
+                    _ => return Err(e),
                 },
                 Ok(path) => {
                     result.pop();
@@ -136,7 +136,11 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         result.push(parts.last().unwrap());
 
         match resolve(&result) {
-            Err(e) => { if can_mode == CanonicalizeMode::Existing { return Err(e); } },
+            Err(e) => {
+                if can_mode == CanonicalizeMode::Existing {
+                    return Err(e);
+                }
+            }
             Ok(path) => {
                 result.pop();
                 result.push(path);

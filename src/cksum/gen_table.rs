@@ -15,20 +15,24 @@ static CRC_TABLE_LEN: usize = 256;
 
 fn main() {
     let mut table = Vec::with_capacity(CRC_TABLE_LEN);
-    for num in (0 .. CRC_TABLE_LEN) {
+    for num in (0..CRC_TABLE_LEN) {
         table.push(crc_entry(num as u8) as u32);
     }
     let file = File::create("crc_table.rs").unwrap_or_else(|e| panic!("{}", e));
-    write!(&file, "/* auto-generated (DO NOT EDIT) */
+    write!(&file,
+           "/* auto-generated (DO NOT EDIT) */
 
-pub static CRC_TABLE: [u32; {}] = {:?};", CRC_TABLE_LEN, table).unwrap();
+pub static CRC_TABLE: [u32; {}] = {:?};",
+           CRC_TABLE_LEN,
+           table)
+        .unwrap();
 }
 
 #[inline]
 fn crc_entry(input: u8) -> u32 {
     let mut crc = (input as u32) << 24;
 
-    for _ in (0 .. 8) {
+    for _ in (0..8) {
         if crc & 0x80000000 != 0 {
             crc <<= 1;
             crc ^= 0x04c11db7;

@@ -20,7 +20,7 @@ static VERSION: &'static str = "1.0.0";
 struct SeqOptions {
     separator: String,
     terminator: Option<String>,
-    widths: bool
+    widths: bool,
 }
 
 fn parse_float(mut s: &str) -> Result<f64, String> {
@@ -29,13 +29,12 @@ fn parse_float(mut s: &str) -> Result<f64, String> {
     }
     match s.parse() {
         Ok(n) => Ok(n),
-        Err(e) => Err(format!("seq: invalid floating point argument `{}`: {}", s, e))
+        Err(e) => Err(format!("seq: invalid floating point argument `{}`: {}", s, e)),
     }
 }
 
 fn escape_sequences(s: &str) -> String {
-    s.replace("\\n", "\n")
-     .replace("\\t", "\t")
+    s.replace("\\n", "\n").replace("\\t", "\t")
 }
 
 fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, i32> {
@@ -70,13 +69,19 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                 "--" => {
                     seq_args.extend(iter);
                     break;
-                },
+                }
                 _ => {
                     if arg.len() > 1 && arg.chars().next().unwrap() == '-' {
                         let argptr: *const String = &arg;  // escape from the borrow checker
                         let mut chiter = unsafe { &(*argptr)[..] }.chars().skip(1);
                         let mut ch = ' ';
-                        while match chiter.next() { Some(m) => { ch = m; true } None => false } {
+                        while match chiter.next() {
+                            Some(m) => {
+                                ch = m;
+                                true
+                            }
+                            None => false,
+                        } {
                             match ch {
                                 'h' => {
                                     print_help();
@@ -91,7 +96,8 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                         options.separator = sep;
                                         let next = chiter.next();
                                         if next.is_some() {
-                                            show_error!("unexpected character ('{}')", next.unwrap());
+                                            show_error!("unexpected character ('{}')",
+                                                        next.unwrap());
                                             return Err(1);
                                         }
                                     }
@@ -105,7 +111,8 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                         options.terminator = Some(term);
                                         let next = chiter.next();
                                         if next.is_some() {
-                                            show_error!("unexpected character ('{}')", next.unwrap());
+                                            show_error!("unexpected character ('{}')",
+                                                        next.unwrap());
                                             return Err(1);
                                         }
                                     }
@@ -115,7 +122,10 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                     }
                                 },
                                 'w' => options.widths = true,
-                                _ => { seq_args.push(arg); break }
+                                _ => {
+                                    seq_args.push(arg);
+                                    break
+                                }
                             }
                         }
                     } else {
@@ -123,7 +133,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                     }
                 }
             },
-            None => break
+            None => break,
         }
     }
     Ok(seq_args)
@@ -132,14 +142,23 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
 fn print_help() {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("s", "separator", "Separator character (defaults to \\n)", "");
-    opts.optopt("t", "terminator", "Terminator character (defaults to separator)", "");
-    opts.optflag("w", "widths", "Equalize widths of all numbers by padding with zeros");
+    opts.optopt("s",
+                "separator",
+                "Separator character (defaults to \\n)",
+                "");
+    opts.optopt("t",
+                "terminator",
+                "Terminator character (defaults to separator)",
+                "");
+    opts.optflag("w",
+                 "widths",
+                 "Equalize widths of all numbers by padding with zeros");
     opts.optflag("h", "help", "print this help text and exit");
     opts.optflag("V", "version", "print version and exit");
 
     println!("{} {}\n", NAME, VERSION);
-    println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n", NAME);
+    println!("Usage:\n  {} [-w] [-s string] [-t string] [first [step]] last\n",
+             NAME);
     println!("{}", opts.usage("Print sequences of numbers"));
 }
 
@@ -151,15 +170,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut options = SeqOptions {
         separator: "\n".to_string(),
         terminator: None,
-        widths: false
+        widths: false,
     };
     let free = match parse_options(args, &mut options) {
         Ok(m) => m,
-        Err(f) => return f
+        Err(f) => return f,
     };
     if free.len() < 1 || free.len() > 3 {
-        crash!(1, "too {} operands.\nTry '{} --help' for more information.",
-               if free.len() < 1 { "few" } else { "many" }, NAME);
+        crash!(1,
+               "too {} operands.\nTry '{} --help' for more information.",
+               if free.len() < 1 {
+                   "few"
+               } else {
+                   "many"
+               },
+               NAME);
     }
     let mut largest_dec = 0;
     let mut padding = 0;
@@ -171,7 +196,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         padding = dec;
         match parse_float(slice) {
             Ok(n) => n,
-            Err(s) => { show_error!("{}", s); return 1; }
+            Err(s) => {
+                show_error!("{}", s);
+                return 1;
+            }
         }
     } else {
         1.0
@@ -184,7 +212,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         padding = cmp::max(padding, dec);
         match parse_float(slice) {
             Ok(n) => n,
-            Err(s) => { show_error!("{}", s); return 1; }
+            Err(s) => {
+                show_error!("{}", s);
+                return 1;
+            }
         }
     } else {
         1.0
@@ -194,15 +225,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
         padding = cmp::max(padding, slice.find('.').unwrap_or(slice.len()));
         match parse_float(slice) {
             Ok(n) => n,
-            Err(s) => { show_error!("{}", s); return 1; }
+            Err(s) => {
+                show_error!("{}", s);
+                return 1;
+            }
         }
     };
     let separator = escape_sequences(&options.separator[..]);
     let terminator = match options.terminator {
         Some(term) => escape_sequences(&term[..]),
-        None => separator.clone()
+        None => separator.clone(),
     };
-    print_seq(first, step, last, largest_dec, separator, terminator, options.widths, padding);
+    print_seq(first,
+              step,
+              last,
+              largest_dec,
+              separator,
+              terminator,
+              options.widths,
+              padding);
 
     0
 }
@@ -216,7 +257,14 @@ fn done_printing(next: f64, step: f64, last: f64) -> bool {
     }
 }
 
-fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: String, terminator: String, pad: bool, padding: usize) {
+fn print_seq(first: f64,
+             step: f64,
+             last: f64,
+             largest_dec: usize,
+             separator: String,
+             terminator: String,
+             pad: bool,
+             padding: usize) {
     let mut i = 0isize;
     let mut value = first + i as f64 * step;
     while !done_printing(value, step, last) {

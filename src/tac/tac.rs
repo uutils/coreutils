@@ -25,15 +25,22 @@ static VERSION: &'static str = "1.0.0";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("b", "before", "attach the separator before instead of after");
-    opts.optflag("r", "regex", "interpret the sequence as a regular expression (NOT IMPLEMENTED)");
-    opts.optopt("s", "separator", "use STRING as the separator instead of newline", "STRING");
+    opts.optflag("b",
+                 "before",
+                 "attach the separator before instead of after");
+    opts.optflag("r",
+                 "regex",
+                 "interpret the sequence as a regular expression (NOT IMPLEMENTED)");
+    opts.optopt("s",
+                "separator",
+                "use STRING as the separator instead of newline",
+                "STRING");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
         let msg = format!("{0} {1}
@@ -41,7 +48,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 Usage:
   {0} [OPTION]... [FILE]...
 
-Write each file to standard output, last line first.", NAME, VERSION);
+Write each file to standard output, last line first.",
+                          NAME,
+                          VERSION);
 
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
@@ -57,7 +66,7 @@ Write each file to standard output, last line first.", NAME, VERSION);
                     m
                 }
             }
-            None => "\n".to_string()
+            None => "\n".to_string(),
         };
         let files = if matches.free.is_empty() {
             vec!("-".to_string())
@@ -76,25 +85,24 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
     let slen = sbytes.len();
 
     for filename in filenames.iter() {
-        let mut file = BufReader::new(
-            if filename == "-" {
-                Box::new(stdin()) as Box<Read>
-            } else {
-                match File::open(filename) {
-                    Ok(f) => Box::new(f) as Box<Read>,
-                    Err(e) => {
-                        show_warning!("failed to open '{}' for reading: {}", filename, e);
-                        continue;
-                    },
+        let mut file = BufReader::new(if filename == "-" {
+            Box::new(stdin()) as Box<Read>
+        } else {
+            match File::open(filename) {
+                Ok(f) => Box::new(f) as Box<Read>,
+                Err(e) => {
+                    show_warning!("failed to open '{}' for reading: {}", filename, e);
+                    continue;
                 }
-            });
+            }
+        });
 
         let mut data = Vec::new();
         match file.read_to_end(&mut data) {
             Err(e) => {
                 show_warning!("failed to read '{}': {}", filename, e);
                 continue;
-            },
+            }
             Ok(_) => (),
         };
 

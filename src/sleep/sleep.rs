@@ -50,7 +50,9 @@ Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.", NAME, VERSION);
+specified by the sum of their values.",
+                          NAME,
+                          VERSION);
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -66,15 +68,17 @@ specified by the sum of their values.", NAME, VERSION);
 }
 
 fn sleep(args: Vec<String>) {
-    let sleep_time = args.iter().fold(0.0, |result, arg|
-        match parse_time::from_str(&arg[..]) {
-            Ok(m) => m + result,
-            Err(f) => crash!(1, "{}", f),
-        });
+    let sleep_time = args.iter().fold(0.0,
+                                      |result, arg| {
+                                          match parse_time::from_str(&arg[..]) {
+                                              Ok(m) => m + result,
+                                              Err(f) => crash!(1, "{}", f),
+                                          }
+                                      });
 
-    let sleep_dur = if sleep_time > (U32_MAX as f64) { 
+    let sleep_dur = if sleep_time > (U32_MAX as f64) {
         U32_MAX
-    } else { 
+    } else {
         (1000.0 * sleep_time) as u32
     };
     sleep_ms(sleep_dur);

@@ -3,7 +3,7 @@
 
 extern crate libc;
 
-pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,BOOT_TIME,c_utmp};
+pub use self::utmpx::{DEFAULT_FILE, USER_PROCESS, BOOT_TIME, c_utmp};
 #[cfg(target_os = "linux")]
 mod utmpx {
     use super::libc;
@@ -87,7 +87,7 @@ mod utmpx {
         pub ut_type: libc::c_short,
         pub ut_tv: libc::timeval,
         pub ut_host: [libc::c_char; UT_HOSTSIZE],
-        pub __unused: [libc::c_char; 16]
+        pub __unused: [libc::c_char; 16],
     }
 }
 
@@ -114,13 +114,13 @@ mod utmpx {
 
     #[repr(C)]
     pub struct c_utmp {
-        pub ut_type : libc::c_short,
-        pub ut_tv   : libc::timeval,
-        pub ut_id   : [libc::c_char; UT_IDSIZE],
-        pub ut_pid  : libc::pid_t,
-        pub ut_user : [libc::c_char; UT_NAMESIZE],
-        pub ut_line : [libc::c_char; UT_LINESIZE],
-        pub ut_host : [libc::c_char; UT_HOSTSIZE],
-        pub ut_spare : [libc::c_char; 64],
+        pub ut_type: libc::c_short,
+        pub ut_tv: libc::timeval,
+        pub ut_id: [libc::c_char; UT_IDSIZE],
+        pub ut_pid: libc::pid_t,
+        pub ut_user: [libc::c_char; UT_NAMESIZE],
+        pub ut_line: [libc::c_char; UT_LINESIZE],
+        pub ut_host: [libc::c_char; UT_HOSTSIZE],
+        pub ut_spare: [libc::c_char; 64],
     }
 }

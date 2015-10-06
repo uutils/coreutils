@@ -24,13 +24,13 @@ fn main() {
 ";
 
 fn main() {
-    let args : Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         println!("usage: mkbuild <crate> <outfile>");
         std::process::exit(1);
     }
 
-    let crat    = match &args[1][..] {
+    let crat = match &args[1][..] {
         "false" => "uufalse",
         "test" => "uutest",
         "true" => "uutrue",

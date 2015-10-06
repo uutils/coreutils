@@ -35,15 +35,19 @@ static THOUSANDS_SEP: char = ',';
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("n", "numeric-sort", "compare according to string numerical value");
-    opts.optflag("H", "human-readable-sort", "compare according to human readable sizes, eg 1M > 100k");
+    opts.optflag("n",
+                 "numeric-sort",
+                 "compare according to string numerical value");
+    opts.optflag("H",
+                 "human-readable-sort",
+                 "compare according to human readable sizes, eg 1M > 100k");
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("help") {
         let msg = format!("{0} {1}
@@ -55,7 +59,9 @@ Write the sorted concatenation of all FILE(s) to standard output.
 
 Mandatory arguments for long options are mandatory for short options too.
 
-With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+With no FILE, or when FILE is -, read standard input.",
+                          NAME,
+                          VERSION);
         print!("{}", opts.usage(&msg));
         return 0;
     }
@@ -74,9 +80,9 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         /* if no file, default to stdin */
         files.push("-".to_string());
     }
-    
+
     exec(files, numeric, human_readable, reverse);
-    
+
     0
 }
 
@@ -86,7 +92,7 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) 
             Some(x) => x,
             None => continue,
         };
-        
+
         let buf_reader = BufReader::new(reader);
         let mut lines = Vec::new();
 
@@ -94,8 +100,8 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) 
             match line {
                 Ok(n) => {
                     lines.push(n);
-                },
-                _ => break
+                }
+                _ => break,
             }
         }
 
@@ -117,7 +123,7 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) 
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_f64_parse(a: &String) -> f64{
+fn permissive_f64_parse(a: &String) -> f64 {
     //Maybe should be split on non-digit, but then 10e100 won't parse properly.
     //On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
     //because there's no way to handle both CSV and thousands separators without a new flag.
@@ -125,7 +131,7 @@ fn permissive_f64_parse(a: &String) -> f64{
     let sa: &str = a.split_whitespace().next().unwrap();
     match sa.parse::<f64>() {
         Ok(a) => a,
-        Err(_) => std::f64::NEG_INFINITY
+        Err(_) => std::f64::NEG_INFINITY,
     }
 }
 
@@ -139,11 +145,9 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     //but we sidestep that with permissive_f64_parse so just fake it
     if fa > fb {
         return Ordering::Greater;
-    }
-    else if fa < fb {
+    } else if fa < fb {
         return Ordering::Less;
-    }
-    else {
+    } else {
         return Ordering::Equal;
     }
 }
@@ -163,7 +167,7 @@ fn human_readable_convert(a: &String) -> f64 {
         'G' => 1E9,
         'T' => 1E12,
         'P' => 1E15,
-        _ => 1f64
+        _ => 1f64,
     };
     return int_part * suffix;
 }
@@ -175,25 +179,25 @@ fn human_readable_size_compare(a: &String, b: &String) -> Ordering {
     let fb = human_readable_convert(b);
     if fa > fb {
         return Ordering::Greater;
-    }
-    else if fa < fb {
+    } else if fa < fb {
         return Ordering::Less;
-    }
-    else {
+    } else {
         return Ordering::Equal;
     }
 
 }
 
 #[inline(always)]
-fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
+fn print_sorted<S, T: Iterator<Item = S>>(iter: T)
+    where S: std::fmt::Display
+{
     for line in iter {
         println!("{}", line);
     }
 }
 
 // from cat.rs
-fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
+fn open<'a>(path: &str) -> Option<(Box<Read+ 'a>, bool)> {
     if path == "-" {
         let stdin = stdin();
         let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
@@ -205,6 +209,6 @@ fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
         Err(e) => {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
-        },
+        }
     }
 }

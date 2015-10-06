@@ -35,14 +35,17 @@ static VERSION: &'static str = "1.0.0";
 
 fn is_custom_binary(program: &str) -> bool {
     match program {
-        "md5sum" | "sha1sum"
-            | "sha224sum" | "sha256sum"
-            | "sha384sum" | "sha512sum" => true,
-        _ => false
+        "md5sum" |
+        "sha1sum" |
+        "sha224sum" |
+        "sha256sum" |
+        "sha384sum" |
+        "sha512sum" => true,
+        _ => false,
     }
 }
 
-fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<Digest+'static>) {
+fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<Digest+ 'static>) {
     let mut alg: Option<Box<Digest>> = None;
     let mut name: &'static str = "";
     match program {
@@ -55,18 +58,34 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
         _ => {
             {
                 let mut set_or_crash = |n, val| -> () {
-                    if alg.is_some() { crash!(1, "You cannot combine multiple hash algorithms!") };
+                    if alg.is_some() {
+                        crash!(1, "You cannot combine multiple hash algorithms!")
+                    };
                     name = n;
                     alg = Some(val);
                 };
-                if matches.opt_present("md5") { set_or_crash("MD5", Box::new(Md5::new())) };
-                if matches.opt_present("sha1") { set_or_crash("SHA1", Box::new(Sha1::new())) };
-                if matches.opt_present("sha224") { set_or_crash("SHA224", Box::new(Sha224::new())) };
-                if matches.opt_present("sha256") { set_or_crash("SHA256", Box::new(Sha256::new())) };
-                if matches.opt_present("sha384") { set_or_crash("SHA384", Box::new(Sha384::new())) };
-                if matches.opt_present("sha512") { set_or_crash("SHA512", Box::new(Sha512::new())) };
+                if matches.opt_present("md5") {
+                    set_or_crash("MD5", Box::new(Md5::new()))
+                };
+                if matches.opt_present("sha1") {
+                    set_or_crash("SHA1", Box::new(Sha1::new()))
+                };
+                if matches.opt_present("sha224") {
+                    set_or_crash("SHA224", Box::new(Sha224::new()))
+                };
+                if matches.opt_present("sha256") {
+                    set_or_crash("SHA256", Box::new(Sha256::new()))
+                };
+                if matches.opt_present("sha384") {
+                    set_or_crash("SHA384", Box::new(Sha384::new()))
+                };
+                if matches.opt_present("sha512") {
+                    set_or_crash("SHA512", Box::new(Sha512::new()))
+                };
             }
-            if alg.is_none() { crash!(1, "You must specify hash algorithm!") };
+            if alg.is_none() {
+                crash!(1, "You must specify hash algorithm!")
+            };
             (name, alg.unwrap())
         }
     }
@@ -80,14 +99,38 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let binary_flag_default = cfg!(windows);
 
     let mut opts = getopts::Options::new();
-    opts.optflag("b", "binary", &format!("read in binary mode{}", if binary_flag_default { " (default)" } else { "" }));
-    opts.optflag("c", "check", "read hashsums from the FILEs and check them");
+    opts.optflag("b",
+                 "binary",
+                 &format!("read in binary mode{}",
+                          if binary_flag_default {
+                              " (default)"
+                          } else {
+                              ""
+                          }));
+    opts.optflag("c",
+                 "check",
+                 "read hashsums from the FILEs and check them");
     opts.optflag("", "tag", "create a BSD-style checksum");
-    opts.optflag("t", "text", &format!("read in text mode{}", if binary_flag_default { "" } else { " (default)" }));
-    opts.optflag("q", "quiet", "don't print OK for each successfully verified file");
-    opts.optflag("s", "status", "don't output anything, status code shows success");
-    opts.optflag("", "strict", "exit non-zero for improperly formatted checksum lines");
-    opts.optflag("w", "warn", "warn about improperly formatted checksum lines");
+    opts.optflag("t",
+                 "text",
+                 &format!("read in text mode{}",
+                          if binary_flag_default {
+                              ""
+                          } else {
+                              " (default)"
+                          }));
+    opts.optflag("q",
+                 "quiet",
+                 "don't print OK for each successfully verified file");
+    opts.optflag("s",
+                 "status",
+                 "don't output anything, status code shows success");
+    opts.optflag("",
+                 "strict",
+                 "exit non-zero for improperly formatted checksum lines");
+    opts.optflag("w",
+                 "warn",
+                 "warn about improperly formatted checksum lines");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -102,7 +145,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("help") {
@@ -115,9 +158,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let binary_flag = matches.opt_present("binary");
         let text_flag = matches.opt_present("text");
         if binary_flag && text_flag {
-            crash!(1, "cannot set binary and text mode at the same time");
+            crash!(1,
+                   "cannot set binary and text mode at the same time");
         }
-        let binary = if binary_flag { true } else if text_flag { false } else { binary_flag_default };
+        let binary = if binary_flag {
+            true
+        } else if text_flag {
+            false
+        } else {
+            binary_flag_default
+        };
         let check = matches.opt_present("check");
         let tag = matches.opt_present("tag");
         let status = matches.opt_present("status");
@@ -131,7 +181,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         };
         match hashsum(name, algo, files, binary, check, tag, status, quiet, strict, warn) {
             Ok(()) => return 0,
-            Err(e) => return e
+            Err(e) => return e,
         }
     }
 
@@ -146,7 +196,8 @@ fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
     let spec = if is_custom_binary(binary_name) {
         format!("  {} [OPTION]... [FILE]...", program)
     } else {
-        format!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program)
+        format!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...",
+                program)
     };
 
     let msg = format!("{} {}
@@ -154,12 +205,25 @@ fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
 Usage:
 {}
 
-Compute and check message digests.", NAME, VERSION, spec);
+Compute and check message digests.",
+                      NAME,
+                      VERSION,
+                      spec);
 
     pipe_print!("{}", opts.usage(&msg));
 }
 
-fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {
+fn hashsum<'a>(algoname: &str,
+               mut digest: Box<Digest + 'a>,
+               files: Vec<String>,
+               binary: bool,
+               check: bool,
+               tag: bool,
+               status: bool,
+               quiet: bool,
+               strict: bool,
+               warn: bool)
+               -> Result<(), i32> {
     let mut bad_format = 0;
     let mut failed = 0;
     let binary_marker = if binary {
@@ -171,26 +235,20 @@ fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, b
         let filename: &str = filename;
         let stdin_buf;
         let file_buf;
-        let mut file = BufReader::new(
-            if filename == "-" {
-                stdin_buf = stdin();
-                Box::new(stdin_buf) as Box<Read>
-            } else {
-                file_buf = safe_unwrap!(File::open(filename));
-                Box::new(file_buf) as Box<Read>
-            }
-        );
+        let mut file = BufReader::new(if filename == "-" {
+            stdin_buf = stdin();
+            Box::new(stdin_buf) as Box<Read>
+        } else {
+            file_buf = safe_unwrap!(File::open(filename));
+            Box::new(file_buf) as Box<Read>
+        });
         if check {
             // Set up Regexes for line validation and parsing
             let bytes = digest.output_bits() / 4;
-            let gnu_re = safe_unwrap!(
-                Regex::new(
-                    &format!(
+            let gnu_re = safe_unwrap!(Regex::new(&format!(
                         r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
                         bytes
-                    )
-                )
-            );
+                    )));
             let bsd_re = safe_unwrap!(
                 Regex::new(
                     &format!(
@@ -218,16 +276,19 @@ fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, b
                                 return Err(1);
                             }
                             if warn {
-                                show_warning!("{}: {}: improperly formatted {} checksum line", filename, i + 1, algoname);
+                                show_warning!("{}: {}: improperly formatted {} checksum line",
+                                              filename,
+                                              i + 1,
+                                              algoname);
                             }
                             continue;
                         }
-                    }
+                    },
                 };
                 let f = safe_unwrap!(File::open(ck_filename));
                 let mut ckf = BufReader::new(Box::new(f) as Box<Read>);
                 let real_sum = safe_unwrap!(digest_reader(&mut digest, &mut ckf, binary_check))
-                    .to_ascii_lowercase();
+                                   .to_ascii_lowercase();
                 if sum == real_sum {
                     if !quiet {
                         pipe_println!("{}: OK", ck_filename);
@@ -262,7 +323,10 @@ fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, b
     Ok(())
 }
 
-fn digest_reader<'a, T: Read>(digest: &mut Box<Digest+'a>, reader: &mut BufReader<T>, binary: bool) -> io::Result<String> {
+fn digest_reader<'a, T: Read>(digest: &mut Box<Digest + 'a>,
+                              reader: &mut BufReader<T>,
+                              binary: bool)
+                              -> io::Result<String> {
     digest.reset();
 
     // Digest file, do not hold too much in memory at any given moment
@@ -272,11 +336,13 @@ fn digest_reader<'a, T: Read>(digest: &mut Box<Digest+'a>, reader: &mut BufReade
     let mut looking_for_newline = false;
     loop {
         match reader.read_to_end(&mut buffer) {
-            Ok(0) => { break; },
+            Ok(0) => {
+                break;
+            }
             Ok(nread) => {
                 if windows && !binary {
                     // Windows text mode returns '\n' when reading '\r\n'
-                    for i in 0 .. nread {
+                    for i in 0..nread {
                         if looking_for_newline {
                             if buffer[i] != ('\n' as u8) {
                                 vec.push('\r' as u8);
@@ -296,8 +362,8 @@ fn digest_reader<'a, T: Read>(digest: &mut Box<Digest+'a>, reader: &mut BufReade
                 } else {
                     digest.input(&buffer[..nread]);
                 }
-            },
-            Err(e) => return Err(e)
+            }
+            Err(e) => return Err(e),
         }
     }
     if windows && looking_for_newline {

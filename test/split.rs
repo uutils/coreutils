@@ -25,14 +25,14 @@ fn random_chars(n: usize) -> String {
 
 struct Glob {
     directory: String,
-    regex: Regex
+    regex: Regex,
 }
 
 impl Glob {
     fn new(directory: &str, regex: &str) -> Glob {
         Glob {
             directory: directory.to_string(),
-            regex: Regex::new(regex).unwrap()
+            regex: Regex::new(regex).unwrap(),
         }
     }
 
@@ -41,11 +41,18 @@ impl Glob {
     }
 
     fn collect(&self) -> Vec<String> {
-        read_dir(Path::new(&self.directory)).unwrap().filter_map(|entry| {
-            let path = entry.unwrap().path();
-            let name = path.as_path().to_str().unwrap_or("");
-            if self.regex.is_match(name) { Some(name.to_string()) } else { None }
-        }).collect()
+        read_dir(Path::new(&self.directory))
+            .unwrap()
+            .filter_map(|entry| {
+                let path = entry.unwrap().path();
+                let name = path.as_path().to_str().unwrap_or("");
+                if self.regex.is_match(name) {
+                    Some(name.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     fn collate(&self) -> Vec<u8> {
@@ -66,7 +73,7 @@ impl Glob {
 }
 
 struct RandomFile {
-    inner: File
+    inner: File,
 }
 
 impl RandomFile {
@@ -75,7 +82,11 @@ impl RandomFile {
     }
 
     fn add_bytes(&mut self, bytes: usize) {
-        let chunk_size: usize = if bytes >= 1024 { 1024 } else { bytes };
+        let chunk_size: usize = if bytes >= 1024 {
+            1024
+        } else {
+            bytes
+        };
         let mut n = bytes;
         while n > chunk_size {
             let _ = write!(self.inner, "{}", random_chars(chunk_size));

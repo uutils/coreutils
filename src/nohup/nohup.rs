@@ -24,8 +24,8 @@ use std::io::{Error, Write};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
+#[path = "../common/util.rs"] #[macro_use]mod util;
+#[path = "../common/c_types.rs"]mod c_types;
 
 static NAME: &'static str = "nohup";
 static VERSION: &'static str = "1.0.0";
@@ -36,7 +36,9 @@ extern {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int { std::ptr::null() }
+unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
+    std::ptr::null()
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -53,8 +55,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if matches.opt_present("V") { println!("{} {}", NAME, VERSION); return 0 }
-    if matches.opt_present("h") { show_usage(&opts); return 0 }
+    if matches.opt_present("V") {
+        println!("{} {}", NAME, VERSION);
+        return 0
+    }
+    if matches.opt_present("h") {
+        show_usage(&opts);
+        return 0
+    }
 
     if matches.free.len() == 0 {
         show_error!("Missing operand: COMMAND");
@@ -65,12 +73,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     unsafe { signal(SIGHUP, SIG_IGN) };
 
-    if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() { crash!(2, "Cannot detach from console")};
+    if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() {
+        crash!(2, "Cannot detach from console")
+    };
 
-    let cstrs: Vec<CString> = matches.free.iter().map(|x| CString::new(x.as_bytes()).unwrap()).collect();
+    let cstrs: Vec<CString> = matches.free
+                                     .iter()
+                                     .map(|x| CString::new(x.as_bytes()).unwrap())
+                                     .collect();
     let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(std::ptr::null());
-    unsafe { execvp(args[0], args.as_mut_ptr())}
+    unsafe { execvp(args[0], args.as_mut_ptr()) }
 }
 
 fn replace_fds() {
@@ -111,11 +124,11 @@ fn find_stdout() -> File {
         Ok(t) => {
             show_warning!("Output is redirected to: nohup.out");
             t
-        },
+        }
         Err(e) => {
             let home = match env::var("HOME") {
                 Err(_) => crash!(2, "Cannot replace STDOUT: {}", e),
-                Ok(h) => h
+                Ok(h) => h,
             };
             let mut homeout = PathBuf::from(home);
             homeout.push("nohup.out");
@@ -123,7 +136,7 @@ fn find_stdout() -> File {
                 Ok(t) => {
                     show_warning!("Output is redirected to: {:?}", homeout);
                     t
-                },
+                }
                 Err(e) => {
                     crash!(2, "Cannot replace STDOUT: {}", e)
                 }
@@ -143,7 +156,9 @@ Run COMMAND ignoring hangup signals.
 If standard input is terminal, it'll be replaced with /dev/null.
 If standard output is terminal, it'll be appended to nohup.out instead,
 or $HOME/nohup.out, if nohup.out open failed.
-If standard error is terminal, it'll be redirected to stdout.", NAME, VERSION);
+If standard error is terminal, it'll be redirected to stdout.",
+                      NAME,
+                      VERSION);
 
     print!("{}", opts.usage(&msg));
 }

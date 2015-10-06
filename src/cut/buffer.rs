@@ -31,15 +31,15 @@ pub mod Bytes {
 }
 
 #[derive(Debug)]
-pub struct ByteReader<R> where R: Read {
+pub struct ByteReader<R>
+    where R: Read
+{
     inner: BufReader<R>,
 }
 
 impl<R: Read> ByteReader<R> {
     pub fn new(read: R) -> ByteReader<R> {
-        ByteReader {
-            inner: BufReader::with_capacity(4096, read),
-        }
+        ByteReader { inner: BufReader::with_capacity(4096, read) }
     }
 }
 
@@ -73,7 +73,7 @@ impl<R: Read> ByteReader<R> {
                         } else {
                             b
                         }
-                    },
+                    }
                     Err(e) => crash!(1, "read error: {}", e),
                 };
 
@@ -83,7 +83,7 @@ impl<R: Read> ByteReader<R> {
                         bytes_consumed += consume_val;
                         break;
                     }
-                    _ => ()
+                    _ => (),
                 }
 
                 consume_val = filled_buf.len();
@@ -122,16 +122,16 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
                     let buf_slice = &buffer[0..bytes + 1];
 
                     match buf_slice.iter().position(|byte| *byte == b'\n') {
-                        Some(idx) => (SRes::Newl, idx+1),
+                        Some(idx) => (SRes::Newl, idx + 1),
                         None => (SRes::Comp, bytes),
                     }
-                },
+                }
                 _ => {
                     match buffer.iter().position(|byte| *byte == b'\n') {
-                        Some(idx) => (SRes::Newl, idx+1),
+                        Some(idx) => (SRes::Newl, idx + 1),
                         None => (SRes::Part, buffer.len()),
                     }
-                },
+                }
             };
 
             match out {

@@ -45,7 +45,7 @@ extern {
 }
 
 #[cfg(target_os = "freebsd")]
-unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
+unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
@@ -69,7 +69,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTION]... [FILE]", NAME);
         println!("");
-        println!("{}", opts.usage("Output who is currently logged in according to FILE."));
+        println!("{}",
+                 opts.usage("Output who is currently logged in according to FILE."));
         return 0;
     }
 
@@ -107,7 +108,10 @@ fn exec(filename: &str) {
             }
 
             if (*line).ut_type == USER_PROCESS {
-                let user = String::from_utf8_lossy(CStr::from_ptr(mem::transmute(&(*line).ut_user)).to_bytes()).to_string();
+                let user = String::from_utf8_lossy(CStr::from_ptr(mem::transmute(&(*line)
+                                                                                      .ut_user))
+                                                       .to_bytes())
+                               .to_string();
                 users.push(user);
             }
         }
