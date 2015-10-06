@@ -74,9 +74,9 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         /* if no file, default to stdin */
         files.push("-".to_string());
     }
-    
+
     exec(files, numeric, human_readable, reverse);
-    
+
     0
 }
 
@@ -86,7 +86,7 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) 
             Some(x) => x,
             None => continue,
         };
-        
+
         let buf_reader = BufReader::new(reader);
         let mut lines = Vec::new();
 

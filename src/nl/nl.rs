@@ -209,7 +209,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             }
             odd = !odd;
         }
- 
+
         // See how many groups we matched. That will tell us if this is
         // a line starting a new segment, and the number of groups
         // indicates what type of segment.
@@ -301,7 +301,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             line_no_threshold *= 10;
             line_no_width += 1;
         }
-    
+
     }
 }
 
