@@ -103,6 +103,9 @@ impl ASTNode {
                                     |a: &String, b: &String| Ok( bool_as_string(a >= b) ),
                                     &operand_values
                                 ),
+                            "length" => prefix_operator_length( &operand_values ),
+                            "index" => prefix_operator_index( &operand_values ),
+                            "substr" => prefix_operator_substr( &operand_values ),
 
                             _ => Err(format!("operation not implemented: {}", op_type))
                         }
@@ -328,6 +331,55 @@ fn infix_operator_two_ints_or_two_strings<FI, FS>( fi: FI, fs: FS, values: &Vec<
     }
 }
 
+fn prefix_operator_length( values: &Vec<String> ) -> Result<String, String> {
+    assert!( values.len() == 1 );
+    Ok( values[0].len().to_string() )
+}
+
+fn prefix_operator_index( values: &Vec<String> ) -> Result<String, String> {
+    assert!( values.len() == 2 );
+    let haystack = &values[0];
+    let needles = &values[1];
+
+    let mut current_idx = 0;
+    for ch_h in haystack.chars() {
+        current_idx += 1;
+
+        for ch_n in needles.chars() {
+            if ch_n == ch_h {
+                return Ok( current_idx.to_string() )
+            }
+        }
+    }
+    Ok( "0".to_string() )
+}
+
+fn prefix_operator_substr( values: &Vec<String> ) -> Result<String, String> {
+    assert!( values.len() == 3 );
+    let subj = &values[0];
+    let mut idx = match values[1].parse::<i64>() {
+        Ok( i ) => i,
+        Err( _ ) => return Err( "expected integer as POS arg to 'substr'".to_string() ),
+    };
+    let mut len = match values[2].parse::<i64>() {
+        Ok( i ) => i,
+        Err( _ ) => return Err( "expected integer as LENGTH arg to 'substr'".to_string() ),
+    };
+
+    if idx <= 0 || len <= 0 { return Ok( "".to_string() ) }
+
+    let mut out_str = String::new();
+    for ch in subj.chars() {
+        idx -= 1;
+        if idx <= 0 {
+            if len <= 0 { break; }
+            len -= 1;
+
+            out_str.push( ch );
+        }
+    }
+    Ok( out_str )
+}
 
 fn bool_as_int( b: bool ) -> i64 { if b { 1 } else { 0 } }
 fn bool_as_string( b: bool ) -> String { if b { "1".to_string() } else { "0".to_string() } }

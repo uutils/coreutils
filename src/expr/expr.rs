@@ -105,9 +105,9 @@ separates increasing precedence groups.  EXPRESSION may be:
   STRING : REGEXP   [NOT IMPLEMENTED] anchored pattern match of REGEXP in STRING
 
   match STRING REGEXP        [NOT IMPLEMENTED] same as STRING : REGEXP
-  substr STRING POS LENGTH   [NOT IMPLEMENTED] substring of STRING, POS counted from 1
-  index STRING CHARS         [NOT IMPLEMENTED] index in STRING where any CHARS is found, or 0
-  length STRING              [NOT IMPLEMENTED] length of STRING
+  substr STRING POS LENGTH   substring of STRING, POS counted from 1
+  index STRING CHARS         index in STRING where any CHARS is found, or 0
+  length STRING              length of STRING
   + TOKEN                    interpret TOKEN as a string, even if it is a
                                keyword like 'match' or an operator like '/'
 

@@ -110,6 +110,7 @@ pub fn strings_to_tokens( strings: &Vec<String> ) -> Result< Vec<(usize, Token)>
                 "match" => Token::PrefixOp{ arity: 2, value: s.clone() },
                 "substr" => Token::PrefixOp{ arity: 3, value: s.clone() },
                 "index" => Token::PrefixOp{ arity: 2, value: s.clone() },
+                "length" => Token::PrefixOp{ arity: 1, value: s.clone() },
 
                 _ => Token::new_value( &s ),
             };
