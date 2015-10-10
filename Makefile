@@ -53,6 +53,7 @@ PROGS       := \
   echo \
   env \
   expand \
+  expr \
   factor \
   false \
   fmt \
@@ -144,7 +145,7 @@ INSTALLEES  := \
 
 # Shared library extension
 SYSTEM := $(shell uname)
-DYLIB_EXT := 
+DYLIB_EXT :=
 ifeq ($(SYSTEM),Linux)
 	DYLIB_EXT    := so
 	DYLIB_FLAGS  := -shared
