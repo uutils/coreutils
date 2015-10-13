@@ -1,0 +1,12 @@
+[package]
+name = "chroot"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "chroot"
+path = "chroot.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

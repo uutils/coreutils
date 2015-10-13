@@ -1,5 +1,4 @@
 #![crate_name = "wc"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,7 +14,7 @@ extern crate libc;
 
 use getopts::{Matches, Options};
 use std::ascii::AsciiExt;
-use std::fs::{File, PathExt};
+use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::result::Result as StdResult;
@@ -24,6 +23,11 @@ use std::str::from_utf8;
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 struct Settings {
     show_bytes: bool,
@@ -264,7 +268,7 @@ fn open(path: &str) -> StdResult<BufReader<Box<Read+'static>>, i32> {
     }
 
     let fpath = Path::new(path);
-    if fpath.is_dir() {
+    if fpath.uu_is_dir() {
         show_info!("{}: is a directory", path);
     }
     match File::open(&fpath) {

@@ -1,0 +1,13 @@
+[package]
+name = "base64"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "base64"
+path = "base64.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+rustc-serialize = "*"

@@ -1,0 +1,12 @@
+[package]
+name = "echo"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "echo"
+path = "echo.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

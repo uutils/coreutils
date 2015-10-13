@@ -1,0 +1,12 @@
+[package]
+name = "groups"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "groups"
+path = "groups.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

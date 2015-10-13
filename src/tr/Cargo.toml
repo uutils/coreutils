@@ -1,0 +1,14 @@
+[package]
+name = "tr"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "tr"
+path = "tr.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+bit-set = "*"
+vec_map = "*"

@@ -1,0 +1,12 @@
+[package]
+name = "hostid"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "hostid"
+path = "hostid.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

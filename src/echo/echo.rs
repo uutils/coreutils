@@ -174,7 +174,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if !free.is_empty() {
-        let string = free.connect(" ");
+        let string = free.join(" ");
         if options.escape {
             let mut prev_was_slash = false;
             let mut iter = string.chars().enumerate();

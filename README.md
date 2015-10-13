@@ -1,5 +1,8 @@
-uutils coreutils [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
+uutils coreutils
 ================
+
+[![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
+[![Build status](https://ci.appveyor.com/api/projects/status/xhlsa439de5ogodp?svg=true)](https://ci.appveyor.com/project/jbcrail/coreutils-o0l0r)
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utils in [Rust](http://www.rust-lang.org). This repo is to aggregate the GNU
@@ -18,6 +21,8 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 
 Build Instructions
 ------------------
+
+NOTE: This currently requires the most current nightly build.
 
 To simply build all available utilities:
 ```
@@ -149,7 +154,6 @@ To do
 - getlimits
 - install
 - join
-- ln
 - ls
 - mknod
 - mktemp

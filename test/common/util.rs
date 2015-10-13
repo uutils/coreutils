@@ -83,6 +83,41 @@ pub fn symlink(src: &str, dst: &str) {
     symlink_file(src, dst).unwrap();
 }
 
+pub fn is_symlink(path: &str) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(m) => m.file_type().is_symlink(),
+        Err(_) => false
+    }
+}
+
+pub fn resolve_link(path: &str) -> String {
+    match fs::read_link(path) {
+        Ok(p) => p.to_str().unwrap().to_owned(),
+        Err(_) => "".to_string()
+    }
+}
+
+pub fn metadata(path: &str) -> fs::Metadata {
+    match fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) => panic!("{}", e)
+    }
+}
+
+pub fn file_exists(path: &str) -> bool {
+    match fs::metadata(path) {
+        Ok(m) => m.is_file(),
+        Err(_) => false
+    }
+}
+
+pub fn dir_exists(path: &str) -> bool {
+    match fs::metadata(path) {
+        Ok(m) => m.is_dir(),
+        Err(_) => false
+    }
+}
+
 pub fn cleanup(path: &'static str) {
     let p = Path::new(path);
     match fs::metadata(p) {

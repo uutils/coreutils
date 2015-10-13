@@ -169,8 +169,8 @@ fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, b
     };
     for filename in files.iter() {
         let filename: &str = filename;
-        let mut stdin_buf;
-        let mut file_buf;
+        let stdin_buf;
+        let file_buf;
         let mut file = BufReader::new(
             if filename == "-" {
                 stdin_buf = stdin();

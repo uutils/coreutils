@@ -1,0 +1,12 @@
+[package]
+name = "dirname"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "dirname"
+path = "dirname.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

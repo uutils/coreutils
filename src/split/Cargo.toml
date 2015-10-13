@@ -1,0 +1,12 @@
+[package]
+name = "split"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "split"
+path = "split.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

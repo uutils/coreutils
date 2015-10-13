@@ -1,9 +1,5 @@
-#![feature(path_ext)]
-
 extern crate libc;
 
-use std::fs::PathExt;
-use std::path::Path;
 use std::process::Command;
 use util::*;
 
@@ -23,7 +19,7 @@ fn test_rm_one_file() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file).exists());
+    assert!(!file_exists(file));
 }
 
 #[test]
@@ -38,8 +34,8 @@ fn test_rm_multiple_files() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).exists());
-    assert!(!Path::new(file_b).exists());
+    assert!(!file_exists(file_a));
+    assert!(!file_exists(file_b));
 }
 
 #[test]
@@ -54,15 +50,15 @@ fn test_rm_interactive() {
 
     assert!(result1.success);
 
-    assert!(Path::new(file_a).exists());
-    assert!(Path::new(file_b).exists());
+    assert!(file_exists(file_a));
+    assert!(file_exists(file_b));
 
     let result2 = run_piped_stdin(Command::new(PROGNAME).arg("-i").arg(file_a).arg(file_b), b"Yesh");
 
     assert!(result2.success);
 
-    assert!(!Path::new(file_a).exists());
-    assert!(Path::new(file_b).exists());
+    assert!(!file_exists(file_a));
+    assert!(file_exists(file_b));
 }
 
 #[test]
@@ -74,8 +70,8 @@ fn test_rm_force() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(file_a).exists());
-    assert!(!Path::new(file_b).exists());
+    assert!(!file_exists(file_a));
+    assert!(!file_exists(file_b));
 }
 
 #[test]
@@ -88,7 +84,7 @@ fn test_rm_empty_directory() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(dir).exists());
+    assert!(!dir_exists(dir));
 }
 
 #[test]
@@ -105,9 +101,9 @@ fn test_rm_recursive() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!Path::new(dir).exists());
-    assert!(!Path::new(file_a).exists());
-    assert!(!Path::new(file_b).exists());
+    assert!(!dir_exists(dir));
+    assert!(!file_exists(file_a));
+    assert!(!file_exists(file_b));
 }
 
 #[test]

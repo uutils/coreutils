@@ -1,0 +1,12 @@
+[package]
+name = "false"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "false"
+path = "false.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

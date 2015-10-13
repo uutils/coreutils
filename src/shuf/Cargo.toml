@@ -1,0 +1,13 @@
+[package]
+name = "shuf"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "shuf"
+path = "shuf.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+rand = "*"

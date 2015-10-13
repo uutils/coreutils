@@ -32,6 +32,7 @@ struct Uniq {
     all_repeated: bool,
     delimiters: String,
     show_counts: bool,
+    skip_fields: Option<usize>,
     slice_start: Option<usize>,
     slice_stop: Option<usize>,
     ignore_case: bool,
@@ -45,7 +46,7 @@ impl Uniq {
 
         for io_line in reader.lines() {
             let line = crash_if_err!(1, io_line);
-            if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
+            if !lines.is_empty() && self.cmp_key(&self.skip_fields(&lines[0])) != self.cmp_key(&self.skip_fields(&line)) {
                 let print_delimiter = delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
                 lines.truncate(0);
@@ -55,6 +56,29 @@ impl Uniq {
         if !lines.is_empty() {
             let print_delimiter = delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
             self.print_lines(writer, &lines, print_delimiter);
+        }
+    }
+
+    fn skip_fields(&self, line: &String) -> String {
+        match self.skip_fields {
+            Some(skip_fields) =>
+                if line.split_whitespace().count() > skip_fields {
+                    let mut field = 0;
+                    let mut i = 0;
+                    while field < skip_fields && i < line.len() {
+                        while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
+                            i = i + 1;
+                        }
+                        while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
+                            i = i + 1;
+                        }
+                        field = field + 1;
+                    }
+                    line[i..].to_string()
+                } else {
+                    "".to_string()
+                },
+            None => line[..].to_string()
         }
     }
 
@@ -132,6 +156,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "print all duplicate lines delimit-method={none(default),prepend,separate} Delimiting is done with blank lines",
         "delimit-method"
     );
+    opts.optopt("f", "skip-fields", "avoid comparing the first N fields", "N");
     opts.optopt("s", "skip-chars", "avoid comparing the first N characters", "N");
     opts.optopt("w", "check-chars", "compare no more than N characters in lines", "N");
     opts.optflag("i", "ignore-case", "ignore differences in case when comparing");
@@ -181,6 +206,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 _ => "".to_string()
             },
             show_counts: matches.opt_present("count"),
+            skip_fields: opt_parsed("skip-fields", &matches),
             slice_start: opt_parsed("skip-chars", &matches),
             slice_stop: opt_parsed("check-chars", &matches),
             ignore_case: matches.opt_present("ignore-case"),

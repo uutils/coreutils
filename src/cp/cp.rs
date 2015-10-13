@@ -1,5 +1,4 @@
 #![crate_name = "cp"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,13 +12,18 @@
 extern crate getopts;
 
 use getopts::Options;
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{ErrorKind, Result, Write};
 use std::path::Path;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::{canonicalize, CanonicalizeMode, UUPathExt};
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -119,7 +123,7 @@ fn copy(matches: getopts::Matches) {
             panic!();
         }
     } else {
-        if !fs::metadata(dest).unwrap().is_dir() {
+        if !dest.uu_is_dir() {
             show_error!("TARGET must be a directory");
             panic!();
         }
@@ -127,7 +131,7 @@ fn copy(matches: getopts::Matches) {
         for src in sources.iter() {
             let source = Path::new(&src);
 
-            if !fs::metadata(source).unwrap().is_file() {
+            if !source.uu_is_file() {
                 show_error!("\"{}\" is not a file", source.display());
                 continue;
             }
@@ -150,8 +154,8 @@ fn copy(matches: getopts::Matches) {
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = try!(p1.canonicalize());
-    let pathbuf2 = try!(p2.canonicalize());
+    let pathbuf1 = try!(canonicalize(p1, CanonicalizeMode::Normal));
+    let pathbuf2 = try!(canonicalize(p2, CanonicalizeMode::Normal));
 
     Ok(pathbuf1 == pathbuf2)
 }

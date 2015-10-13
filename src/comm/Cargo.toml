@@ -1,0 +1,12 @@
+[package]
+name = "comm"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "comm"
+path = "comm.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

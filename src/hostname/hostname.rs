@@ -1,5 +1,4 @@
 #![crate_name = "hostname"]
-#![feature(collections)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -55,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("h", "help", "Show help");
     opts.optflag("V", "version", "Show program's version");
 
-    let matches = match opts.parse(args.tail()) {
+    let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m }
         _ => { help_menu(program, opts); return 0; }
     };

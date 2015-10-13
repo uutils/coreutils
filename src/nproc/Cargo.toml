@@ -1,0 +1,13 @@
+[package]
+name = "nproc"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "nproc"
+path = "nproc.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+num_cpus = "*"

@@ -1,6 +1,4 @@
 #![crate_name = "mv"]
-#![feature(collections, fs_time, path_ext, slice_patterns, str_char)]
-#![allow(deprecated)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -15,13 +13,19 @@
 extern crate getopts;
 extern crate libc;
 
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
-use std::path::PathBuf;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 static NAME: &'static str = "mv";
 static VERSION: &'static str = "0.0.1";
@@ -59,9 +63,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("f", "force", "do not prompt before overwriting");
     opts.optflag("i", "interactive", "prompt before override");
     opts.optflag("n", "no-clobber", "do not overwrite an existing file");
-    // I have yet to find a use-case (and thereby write a test) where this option is useful.
-    //opts.optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
-    //                                        argument");
+    opts.optflag("",  "strip-trailing-slashes", "remove any trailing slashes from each SOURCE\n \
+                                                 argument");
     opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
     opts.optopt("t", "target-directory", "move all SOURCE arguments into DIRECTORY", "DIRECTORY");
     opts.optflag("T", "no-target-directory", "treat DEST as a normal file");
@@ -149,8 +152,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         verbose: matches.opt_present("v"),
     };
 
-    let string_to_path = |s: &String| { PathBuf::from(s) };
-    let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
+    let paths: Vec<PathBuf> = {
+        fn string_to_path<'a>(s: &'a String) -> &'a Path {
+            Path::new(s)
+        };
+        fn strip_slashes<'a>(p: &'a Path) -> &'a Path {
+            p.components().as_path()
+        }
+        let to_owned = |p: &Path| p.to_owned();
+        let arguments = matches.free.iter().map(string_to_path);
+        if matches.opt_present("strip-trailing-slashes") {
+            arguments.map(strip_slashes).map(to_owned).collect()
+        } else {
+            arguments.map(to_owned).collect()
+        }
+    };
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -164,12 +180,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn help(usage: &str) {
-    let msg = format!("a0{} {1}\n\n \
-                       Usage: {0} SOURCE DEST\n  \
-                         or:  {0} SOURCE... DIRECTORY \
-                       \n\
-                       {2}", NAME, VERSION, usage);
-    println!("{}", msg);
+    println!("{0} {1}\n\n\
+    Usage: {0} SOURCE DEST\n   \
+       or: {0} SOURCE... DIRECTORY\n\n\
+    {2}", NAME, VERSION, usage);
 }
 
 fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
@@ -177,21 +191,23 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
         Some(ref name) => return move_files_into_dir(files, &PathBuf::from(name), &b),
         None => {}
     }
-    match files {
-        [] | [_] => {
+    match files.len() {
+        0 | 1 => {
             show_error!("missing file operand\n\
                         Try '{} --help' for more information.", NAME);
             return 1;
         },
-        [ref source, ref target] => {
-            if !source.exists() {
+        2 => {
+            let ref source = files[0];
+            let ref target = files[1];
+            if !source.uu_exists() {
                 show_error!("cannot stat ‘{}’: No such file or directory", source.display());
                 return 1;
             }
 
-            if target.is_dir() {
+            if target.uu_is_dir() {
                 if b.no_target_dir {
-                    if !source.is_dir() {
+                    if !source.uu_is_dir() {
                         show_error!("cannot overwrite directory ‘{}’ with non-directory",
                             target.display());
                         return 1;
@@ -217,21 +233,21 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 _ => {}
             }
         }
-        fs => {
+        _ => {
             if b.no_target_dir {
                 show_error!("mv: extra operand ‘{}’\n\
-                            Try '{} --help' for more information.", fs[2].display(), NAME);
+                            Try '{} --help' for more information.", files[2].display(), NAME);
                 return 1;
             }
-            let target_dir = fs.last().unwrap();
-            move_files_into_dir(fs.init(), target_dir, &b);
+            let target_dir = files.last().unwrap();
+            move_files_into_dir(&files[0..files.len()-1], target_dir, &b);
         }
     }
     0
 }
 
 fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
-    if !target_dir.is_dir() {
+    if !target_dir.uu_is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
     }
@@ -264,7 +280,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
     let mut backup_path = None;
 
-    if to.exists() {
+    if to.uu_exists() {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -287,7 +303,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         }
 
         if b.update {
-            if try!(fs::metadata(from)).modified() <= try!(fs::metadata(to)).modified() {
+            if try!(fs::metadata(from)).mtime() <= try!(fs::metadata(to)).mtime() {
                 return Ok(());
             }
         }
@@ -308,8 +324,8 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
 fn read_yes() -> bool {
     let mut s = String::new();
     match BufReader::new(stdin()).read_line(&mut s) {
-        Ok(_) => match s.slice_shift_char() {
-            Some((x, _)) => x == 'y' || x == 'Y',
+        Ok(_) => match s.char_indices().nth(0) {
+            Some((_, x)) => x == 'y' || x == 'Y',
             _ => false
         },
         _ => false
@@ -326,7 +342,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
-        if !new_path.exists() {
+        if !new_path.uu_exists() {
             return new_path;
         }
         i = i + 1;
@@ -335,7 +351,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
 
 fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
     let test_path = simple_backup_path(path, &".~1~".to_string());
-    if test_path.exists() {
+    if test_path.uu_exists() {
         return numbered_backup_path(path);
     }
     simple_backup_path(path, suffix)

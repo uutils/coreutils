@@ -1,1 +1,1 @@
-DEPLIBS += regex regex-syntax
+DEPLIBS += aho-corasick memchr regex regex-syntax walker

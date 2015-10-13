@@ -119,7 +119,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn open(path: String) -> BufReader<Box<Read+'static>> {
-    let mut file_buf;
+    let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<Read>)
     } else {
