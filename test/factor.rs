@@ -22,7 +22,7 @@ mod sieve;
 const NUM_PRIMES: usize = 10000;
 const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))
 
-const NUM_TESTS: usize = 1000;
+const NUM_TESTS: usize = 100;
 const PROGNAME: &'static str = "./factor";
 
 #[test]
@@ -35,7 +35,7 @@ fn test_random() {
         let mut factors = Vec::new();
         while product < min {
             // log distribution---higher probability for lower numbers
-            let mut factor;
+            let factor;
             loop {
                 let next = rng.gen_range(0f64, LOG_PRIMES).exp2().floor() as usize;
                 if next < NUM_PRIMES {

@@ -1,0 +1,12 @@
+[package]
+name = "link"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "link"
+path = "link.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

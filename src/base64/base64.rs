@@ -68,8 +68,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         },
         None => 76
     };
-    let mut stdin_buf;
-    let mut file_buf;
+    let stdin_buf;
+    let file_buf;
     let mut input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
         stdin_buf = stdin();
         BufReader::new(Box::new(stdin_buf) as Box<Read+'static>)

@@ -1,5 +1,4 @@
 #![crate_name = "fold"]
-#![feature(collections)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -153,16 +152,16 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                             if spaces && i + 1 < len {
                                 match rfind_whitespace(slice) {
                                     Some(m) => {
-                                        let routput = slice.slice_chars(m + 1, slice.chars().count());
-                                        let ncount = routput.chars().fold(0usize, |out, ch: char| {
+                                        let routput = &slice[m + 1 .. slice.chars().count()];
+                                        let ncount = routput.chars().fold(0, |out, ch: char| {
                                             out + match ch {
                                                 '\t' => 8,
-                                                '\x08' => if out > 0 { -1 } else { 0 },
+                                                '\x08' => if out > 0 { !0 } else { 0 },
                                                 '\r' => return 0,
                                                 _ => 1
                                             }
                                         });
-                                        (slice.slice_chars(0, m + 1), routput, ncount)
+                                        (&slice[0 .. m + 1], routput, ncount)
                                     },
                                     None => (slice, "", 0)
                                 }

@@ -1,0 +1,13 @@
+
+[package]
+name = "expr"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "expr"
+path = "expr.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

@@ -1,5 +1,4 @@
 #![crate_name= "realpath"]
-#![feature(file_type, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -13,11 +12,18 @@
 extern crate getopts;
 extern crate libc;
 
-use std::fs::PathExt;
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
+#[path = "../common/util.rs"]
+#[macro_use]
+mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "realpath";
 static VERSION: &'static str = "1.0.0";
@@ -63,7 +69,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
     let p = Path::new(path).to_path_buf();
-    let abs = p.canonicalize().unwrap();
+    let abs = canonicalize(p, CanonicalizeMode::Normal).unwrap();
 
     if strip {
         if zero {
@@ -84,12 +90,12 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
                 if !quiet { show_error!("Too many symbolic links: {}", path) };
                 return false
             }
-            match result.as_path().metadata() {
+            match fs::metadata(result.as_path()) {
                 Err(_) => break,
                 Ok(ref m) if !m.file_type().is_symlink() => break,
                 Ok(_) => {
                     links_left -= 1;
-                    match result.as_path().read_link() {
+                    match fs::read_link(result.as_path()) {
                         Ok(x) => {
                             result.pop();
                             result.push(x.as_path());

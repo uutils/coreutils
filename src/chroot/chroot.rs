@@ -1,5 +1,4 @@
 #![crate_name = "chroot"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -17,7 +16,6 @@ use c_types::{get_pw_from_args, get_group};
 use getopts::Options;
 use libc::funcs::posix88::unistd::{setgid, setuid};
 use std::ffi::CString;
-use std::fs::PathExt;
 use std::io::{Error, Write};
 use std::iter::FromIterator;
 use std::path::Path;
@@ -25,6 +23,9 @@ use std::process::Command;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
+#[path = "../common/filesystem.rs"] mod filesystem;
+
+use filesystem::UUPathExt;
 
 extern {
     fn chroot(path: *const libc::c_char) -> libc::c_int;
@@ -78,7 +79,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let user_shell = std::env::var("SHELL");
 
     let newroot = Path::new(&matches.free[0][..]);
-    if !newroot.is_dir() {
+    if !newroot.uu_is_dir() {
         crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
     }
 

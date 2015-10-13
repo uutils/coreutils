@@ -1,0 +1,12 @@
+[package]
+name = "ln"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "ln"
+path = "ln.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

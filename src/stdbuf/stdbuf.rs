@@ -1,5 +1,4 @@
 #![crate_name = "stdbuf"]
-#![feature(negate_unsigned, path_ext)]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -15,7 +14,6 @@ extern crate libc;
 
 use getopts::{Matches, Options};
 use std::env;
-use std::fs::PathExt;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -24,6 +22,11 @@ use std::process::Command;
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::{canonicalize, CanonicalizeMode, UUPathExt};
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";
@@ -59,7 +62,7 @@ fn preload_strings() -> (&'static str, &'static str) {
 
 #[cfg(target_os = "macos")]
 fn preload_strings() -> (&'static str, &'static str) { 
-    ("DYLD_INSERT_LIBRARIES", ".dylib")
+    ("DYLD_LIBRARY_PATH", ".dylib")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -190,7 +193,7 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
 
 fn exe_path() -> io::Result<PathBuf> {
     let exe_path = try!(env::current_exe());
-    let absolute_path = try!(exe_path.as_path().canonicalize());
+    let absolute_path = try!(canonicalize(exe_path, CanonicalizeMode::Normal));
     Ok(match absolute_path.parent() {
         Some(p) => p.to_path_buf(),
         None => absolute_path.clone()
@@ -204,7 +207,7 @@ fn get_preload_env() -> (String, String) {
     // First search for library in directory of executable.
     let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
     path.push(libstdbuf.clone());
-    if path.exists() {
+    if path.uu_exists() {
         match path.as_os_str().to_str() {
             Some(s) => { return (preload.to_string(), s.to_string()); },
             None => crash!(1, "Error while converting path.")
@@ -224,11 +227,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "version", "output version information and exit");
 
     let mut options = ProgramOptions {stdin: BufferType::Default, stdout: BufferType::Default, stderr: BufferType::Default};
-    let mut command_idx = -1;
-    for i in 1 .. args.len()-1 {
+    let mut command_idx: i32 = -1;
+    for i in 1 .. args.len()+1 {
         match parse_options(&args[1 .. i], &mut options, &opts) {
             Ok(OkMsg::Buffering) => {
-                command_idx = i - 1;
+                command_idx = (i as i32) - 1;
                 break;
             },
             Ok(OkMsg::Help) => {
@@ -246,10 +249,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if command_idx == -1 {
         crash!(125, "Invalid options\nTry 'stdbuf --help' for more information.");
     }
-    let ref command_name = args[command_idx];
+    let ref command_name = args[command_idx as usize];
     let mut command = Command::new(command_name);
     let (preload_env, libstdbuf) = get_preload_env();
-    command.args(&args[command_idx + 1 ..]).env(preload_env, libstdbuf);
+    command.args(&args[(command_idx as usize) + 1 ..]).env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);

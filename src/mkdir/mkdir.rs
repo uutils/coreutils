@@ -1,5 +1,4 @@
 #![crate_name = "mkdir"]
-#![feature(path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,13 +13,18 @@ extern crate getopts;
 extern crate libc;
 
 use std::ffi::CString;
-use std::fs::{self, PathExt};
+use std::fs;
 use std::io::{Error, Write};
 use std::path::{Path, PathBuf};
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 static NAME: &'static str = "mkdir";
 static VERSION: &'static str = "1.0.0";
@@ -102,7 +106,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
         } else {
             match path.parent() {
                 Some(parent) => {
-                    if parent != empty && !parent.exists() {
+                    if parent != empty && !parent.uu_exists() {
                         show_info!("cannot create directory '{}': No such file or directory", path.display());
                         status = 1;
                     } else {
@@ -122,7 +126,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
-    if path.exists() {
+    if path.uu_exists() {
         show_info!("cannot create directory '{}': File exists", path.display());
         return 1;
     }
@@ -136,13 +140,21 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
         show_info!("created directory '{}'", path.display());
     }
 
-    let directory = CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
-    let mode = mode as libc::mode_t;
+    #[cfg(unix)]
+    fn chmod(path: &Path, mode: u16) -> i32 {
+        let directory = CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
+        let mode = mode as libc::mode_t;
 
-    if unsafe { libc::chmod(directory.as_ptr(), mode) } != 0 {
-        show_info!("{}: errno {}", path.display(), Error::last_os_error().raw_os_error().unwrap());
-        return 1;
+        if unsafe { libc::chmod(directory.as_ptr(), mode) } != 0 {
+            show_info!("{}: errno {}", path.display(), Error::last_os_error().raw_os_error().unwrap());
+            return 1;
+        }
+        0
     }
-
-    0
+    #[cfg(windows)]
+    fn chmod(path: &Path, mode: u16) -> i32 {
+        // chmod on Windows only sets the readonly flag, which isn't even honored on directories
+        0
+    }
+    chmod(path, mode)
 }

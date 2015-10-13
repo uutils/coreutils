@@ -1,0 +1,12 @@
+[package]
+name = "mkfifo"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "mkfifo"
+path = "mkfifo.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

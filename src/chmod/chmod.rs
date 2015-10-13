@@ -1,5 +1,4 @@
 #![crate_name = "chmod"]
-#![feature(fs_walk, path_ext)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -12,22 +11,30 @@
 
 #![allow(unused_variables)]  // only necessary while the TODOs still exist
 
+extern crate aho_corasick;
 extern crate getopts;
 extern crate libc;
+extern crate memchr;
 extern crate regex;
 extern crate regex_syntax;
+extern crate walker;
 
 use getopts::Options;
 use regex::Regex;
 use std::ffi::CString;
-use std::fs::{self, PathExt};
 use std::io::{Error, Write};
 use std::mem;
 use std::path::Path;
+use walker::Walker;
 
 #[path = "../common/util.rs"]
 #[macro_use]
 mod util;
+
+#[path = "../common/filesystem.rs"]
+mod filesystem;
+
+use filesystem::UUPathExt;
 
 const NAME: &'static str = "chmod";
 const VERSION: &'static str = "1.0.0";
@@ -122,17 +129,17 @@ fn verify_mode(modes: &str) -> Result<(), String> {
 #[cfg(windows)]
 #[inline]
 // XXX: THIS IS NOT TESTED!!!
-fn verify_mode(mode: &str) -> Result<(), String> {
+fn verify_mode(modes: &str) -> Result<(), String> {
     let re: regex::Regex = Regex::new(r"^[ugoa]*(?:[-+=](?:([rwxXst]*)|[ugo]))+|[-+=]?([0-7]+)$").unwrap();
     for mode in modes.split(',') {
         match re.captures(mode) {
             Some(cap) => {
-                let symbols = cap.at(1);
-                let numbers = cap.at(2);
+                let symbols = cap.at(1).unwrap();
+                let numbers = cap.at(2).unwrap();
                 if symbols.contains("s") || symbols.contains("t") {
-                    return Err("The 's' and 't' modes are not supported on Windows".to_string());
-                } else if numbers.len() >= 4 && numbers.slice_to(num_len - 3).find(|ch| ch != '0').is_some() {
-                    return Err("Setuid, setgid, and sticky modes are not supported on Windows".to_string());
+                    return Err("The 's' and 't' modes are not supported on Windows".into());
+                } else if numbers.len() >= 4 && numbers[..numbers.len() - 3].find(|ch| ch != '0').is_some() {
+                    return Err("Setuid, setgid, and sticky modes are not supported on Windows".into());
                 }
             }
             None => return Err(format!("invalid mode '{}'", mode))
@@ -147,11 +154,11 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     for filename in files.iter() {
         let filename = &filename[..];
         let file = Path::new(filename);
-        if file.exists() {
-            if file.is_dir() {
+        if file.uu_exists() {
+            if file.uu_is_dir() {
                 if !preserve_root || filename != "/" {
                     if recursive {
-                        let walk_dir = match fs::walk_dir(&file) {
+                        let walk_dir = match Walker::new(&file) {
                             Ok(m) => m,
                             Err(f) => {
                                 crash!(1, "{}", f.to_string());
@@ -189,6 +196,14 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     r
 }
 
+#[cfg(windows)]
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
+    // chmod is useless on Windows
+    // it doesn't set any permissions at all
+    // instead it just sets the readonly attribute on the file
+    Err(0)
+}
+#[cfg(unix)]
 fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
     let path = CString::new(name).unwrap_or_else(|e| panic!("{}", e));
     match fmode {
@@ -263,7 +278,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                             'w' => rwx |= 0o002,
                             'x' => rwx |= 0o001,
                             'X' => {
-                                if file.is_dir() || (fperm & 0o0111) != 0 {
+                                if file.uu_is_dir() || (fperm & 0o0111) != 0 {
                                     rwx |= 0o001;
                                 }
                             }

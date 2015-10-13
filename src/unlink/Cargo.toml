@@ -1,0 +1,12 @@
+[package]
+name = "unlink"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "unlink"
+path = "unlink.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

@@ -1,5 +1,5 @@
 #![crate_name = "fmt"]
-#![feature(core, str_char, unicode)]
+#![feature(iter_cmp, str_char, unicode)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.
@@ -25,7 +25,7 @@ macro_rules! silent_unwrap(
     ($exp:expr) => (
         match $exp {
             Ok(_) => (),
-            Err(_) => unsafe { ::util::libc::exit(1) }
+            Err(_) => ::std::process::exit(1),
         }
     )
 );

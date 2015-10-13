@@ -52,8 +52,8 @@ PROGS       := \
   dirname \
   echo \
   env \
-  du \
   expand \
+  expr \
   factor \
   false \
   fmt \
@@ -61,8 +61,8 @@ PROGS       := \
   link \
   hashsum \
   join \
+  ln \
   mkdir \
-  mv \
   nl \
   nproc \
   od \
@@ -85,13 +85,11 @@ PROGS       := \
   tac \
   tee \
   test \
-  touch \
   tr \
   true \
   truncate \
   tsort \
   unexpand \
-  unlink \
   uniq \
   wc \
   yes \
@@ -101,6 +99,7 @@ PROGS       := \
 
 UNIX_PROGS := \
   chroot \
+  du \
   groups \
   hostid \
   hostname \
@@ -108,12 +107,15 @@ UNIX_PROGS := \
   kill \
   logname \
   mkfifo \
+  mv \
   nice \
   nohup \
   stdbuf \
   timeout \
+  touch \
   tty \
   uname \
+  unlink \
   uptime \
   users
 
@@ -144,12 +146,14 @@ INSTALLEES  := \
 
 # Shared library extension
 SYSTEM := $(shell uname)
-DYLIB_EXT := 
+DYLIB_EXT :=
 ifeq ($(SYSTEM),Linux)
 	DYLIB_EXT    := so
+	DYLIB_FLAGS  := -shared
 endif
 ifeq ($(SYSTEM),Darwin)
 	DYLIB_EXT    := dylib
+	DYLIB_FLAGS  := -dynamiclib -undefined dynamic_lookup
 endif
 
 # Libaries to install
@@ -163,7 +167,9 @@ TEST_PROGS  := \
   base64 \
   basename \
   cat \
+  cksum \
   cp \
+  cut \
   env \
   dirname \
   echo \
@@ -172,6 +178,7 @@ TEST_PROGS  := \
   fold \
   hashsum \
   head \
+  ln \
   mkdir \
   mv \
   nl \
@@ -184,7 +191,11 @@ TEST_PROGS  := \
   seq \
   sort \
   split \
+  stdbuf \
+  sum \
+  tac \
   test \
+  touch \
   tr \
   true \
   truncate \
@@ -251,6 +262,10 @@ define DEP_BUILD
 DEP_$(1):
 ifeq ($(1),crypto)
 	cd $(BASEDIR)/deps && $(CARGO) build --package rust-crypto --release
+else ifeq ($(1),kernel32)
+	cd $(BASEDIR)/deps && $(CARGO) build --package kernel32-sys --release
+else ifeq ($(1),advapi32)
+	cd $(BASEDIR)/deps && $(CARGO) build --package advapi32-sys --release
 else
 	cd $(BASEDIR)/deps && $(CARGO) build --package $(1) --release
 endif
@@ -303,15 +318,15 @@ $(BUILDDIR)/uutils: $(SRCDIR)/uutils/uutils.rs $(BUILDDIR)/mkuutils $(RLIB_PATHS
 	$(BUILDDIR)/mkuutils $(BUILDDIR)/gen/uutils.rs $(EXES)
 	$(RUSTC) $(RUSTCBINFLAGS) $(RESERVED_EXTERNS) --emit link,dep-info $(BUILDDIR)/gen/uutils.rs --out-dir $(BUILDDIR)
 	$(if $(ENABLE_STRIP),strip $@)
-	
+
 # Library for stdbuf
 $(BUILDDIR)/libstdbuf.$(DYLIB_EXT): $(SRCDIR)/stdbuf/libstdbuf.rs $(SRCDIR)/stdbuf/libstdbuf.c $(SRCDIR)/stdbuf/libstdbuf.h | $(BUILDDIR)
 	cd $(SRCDIR)/stdbuf && \
-	$(RUSTC) libstdbuf.rs && \
-	$(CC) -c -Wall -Werror -fpic libstdbuf.c -L. -llibstdbuf.a && \
-	$(CC) -shared -o libstdbuf.$(DYLIB_EXT) -Wl,--whole-archive liblibstdbuf.a -Wl,--no-whole-archive libstdbuf.o -lpthread && \
+	$(RUSTC) libstdbuf.rs --extern libc=$(BUILDDIR)/liblibc.rlib && \
+	$(CC) -c -Wall -Werror -fPIC libstdbuf.c && \
+	$(CC) $(DYLIB_FLAGS) -o libstdbuf.$(DYLIB_EXT) liblibstdbuf.a libstdbuf.o && \
 	mv *.$(DYLIB_EXT) $(BUILDDIR) && $(RM) *.o && $(RM) *.a
-	
+
 $(BUILDDIR)/stdbuf: $(BUILDDIR)/libstdbuf.$(DYLIB_EXT)
 
 deps: $(BUILDDIR) $(SRCDIR)/cksum/crc_table.rs $(addprefix DEP_,$(DEPLIBS) $(DEPPLUGS))

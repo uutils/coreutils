@@ -1,4 +1,6 @@
 extern crate libc;
+extern crate memchr;
+extern crate aho_corasick;
 extern crate rand;
 extern crate regex_syntax;
 extern crate regex;
@@ -108,9 +110,9 @@ fn test_split_default() {
 #[test]
 fn test_split_num_prefixed_chunks_by_bytes() {
     let name = "split_num_prefixed_chunks_by_bytes";
-    let glob = Glob::new(".", r"x\d\d$");
+    let glob = Glob::new(".", r"a\d\d$");
     RandomFile::new(name).add_bytes(10000);
-    if !Command::new(PROGNAME).args(&["-d", "-b", "1000", name]).status().unwrap().success() {
+    if !Command::new(PROGNAME).args(&["-d", "-b", "1000", name, "a"]).status().unwrap().success() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
@@ -121,9 +123,9 @@ fn test_split_num_prefixed_chunks_by_bytes() {
 #[test]
 fn test_split_str_prefixed_chunks_by_bytes() {
     let name = "split_str_prefixed_chunks_by_bytes";
-    let glob = Glob::new(".", r"x[:alpha:][:alpha:]$");
+    let glob = Glob::new(".", r"b[:alpha:][:alpha:]$");
     RandomFile::new(name).add_bytes(10000);
-    if !Command::new(PROGNAME).args(&["-b", "1000", name]).status().unwrap().success() {
+    if !Command::new(PROGNAME).args(&["-b", "1000", name, "b"]).status().unwrap().success() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
@@ -134,9 +136,9 @@ fn test_split_str_prefixed_chunks_by_bytes() {
 #[test]
 fn test_split_num_prefixed_chunks_by_lines() {
     let name = "split_num_prefixed_chunks_by_lines";
-    let glob = Glob::new(".", r"x\d\d$");
+    let glob = Glob::new(".", r"c\d\d$");
     RandomFile::new(name).add_lines(10000);
-    if !Command::new(PROGNAME).args(&["-d", "-l", "1000", name]).status().unwrap().success() {
+    if !Command::new(PROGNAME).args(&["-d", "-l", "1000", name, "c"]).status().unwrap().success() {
         panic!();
     }
     assert_eq!(glob.count(), 10);
@@ -147,9 +149,9 @@ fn test_split_num_prefixed_chunks_by_lines() {
 #[test]
 fn test_split_str_prefixed_chunks_by_lines() {
     let name = "split_str_prefixed_chunks_by_lines";
-    let glob = Glob::new(".", r"x[:alpha:][:alpha:]$");
+    let glob = Glob::new(".", r"d[:alpha:][:alpha:]$");
     RandomFile::new(name).add_lines(10000);
-    if !Command::new(PROGNAME).args(&["-l", "1000", name]).status().unwrap().success() {
+    if !Command::new(PROGNAME).args(&["-l", "1000", name, "d"]).status().unwrap().success() {
         panic!();
     }
     assert_eq!(glob.count(), 10);

@@ -1,0 +1,12 @@
+[package]
+name = "uniq"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uniq"
+path = "uniq.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

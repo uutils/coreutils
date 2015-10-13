@@ -1,0 +1,17 @@
+[package]
+name = "chmod"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "chmod"
+path = "chmod.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+aho-corasick = "*"
+memchr = "*"
+regex = "*"
+regex-syntax = "*"
+walker = "*"

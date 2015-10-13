@@ -1,6 +1,5 @@
 #![crate_name = "tr"]
 #![feature(io)]
-
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -12,11 +11,14 @@
  * file that was distributed with this source code.
  */
 
+extern crate bit_set;
 extern crate getopts;
+extern crate vec_map;
 
+use bit_set::BitSet;
 use getopts::Options;
-use std::collections::{BitSet, VecMap};
 use std::io::{stdin, stdout, BufReader, Read, Write};
+use vec_map::VecMap;
 
 use expand::ExpandSet;
 

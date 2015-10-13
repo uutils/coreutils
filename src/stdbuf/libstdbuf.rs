@@ -1,6 +1,5 @@
 #![crate_name = "libstdbuf"]
 #![crate_type = "staticlib"]
-#![feature(libc)]
 
 extern crate libc;
 
@@ -33,7 +32,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
             (_IOFBF, buff_size as size_t)
         }
     };
-    let mut res: c_int;
+    let res: c_int;
     unsafe {
         let buffer: *mut c_char = ptr::null_mut();
         assert!(buffer.is_null());

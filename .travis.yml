@@ -1,6 +1,7 @@
 language: rust
 rust:
-  - 1.0.0
+  - stable
+  - beta
   - nightly
 sudo: false
 script:
@@ -8,3 +9,7 @@ script:
   - make test
   - make build-check
   - make test-check
+matrix:
+  allow_failures:
+    - rust: stable
+    - rust: beta

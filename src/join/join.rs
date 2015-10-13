@@ -20,6 +20,7 @@ use getopts::Options;
 extern crate regex;
 use regex::Regex;
 
+static NAME: &'static str = "join";
 static VERSION: &'static str = "1.0.0";
 static AUTHOR: &'static str = "Gianpaolo Branca";
 
@@ -144,9 +145,7 @@ impl Format {
     }
 }
 
-pub fn main() {
-
-    let args: Vec<String> = env::args().collect();
+pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut opts = Options::new();
 // to complete
@@ -221,12 +220,15 @@ pub fn main() {
         Err(f) => panic!(f.to_string()), };
 // Option help
     if matches.opt_present("h") {
-        println!("coming soon!");
-        return; }
+        let brief = format!("Usage: {} [OPTIONS] file_1 file_2", NAME);
+        println!("{}", opts.usage(&brief));
+        return 0;
+    }
 // Option version
     if matches.opt_present("version") {
         println!("join {} Rust rewritten\n\nAuthor: {}", VERSION, AUTHOR);
-        return; }
+        return 0;
+    }
 // Option all
     let mut flag_a = Couple { f1: false, f2: false };
 
@@ -235,7 +237,8 @@ pub fn main() {
             "1" => flag_a.f1 = true,
             "2" => flag_a.f2 = true,
              _  => { println!("invalid argument");
-                     return}, } }
+                     return 1
+                 }, } }
 // Option v
 	let mut flag_v: bool = false;
 
@@ -248,14 +251,16 @@ pub fn main() {
 					 flag_v = true },
 
              _  => { println!("invalid argument");
-                     return}, } };
+                     return 1
+                 }, } };
 // Option tabulator
     let flag_t = match matches.opt_str("t").as_ref() {
 
         Some(t) => {
             if t.len() > 1 {
                 println!("invalid multichar tabulator: {}", t);
-                return }
+                return 1
+            }
             t.clone().pop().unwrap() },
 
         None => ' ', };
@@ -324,7 +329,7 @@ pub fn main() {
 
                 if i == "0" {
                     println!("invalid field: 0");
-                    return
+                    return 1
                 } else {
                     match i.parse::<usize>() {
                         Ok(u)   => u,
@@ -341,7 +346,7 @@ pub fn main() {
             Some(i) => {
                 if i == "0" {
                     println!("invalid field: 0");
-                    return
+                    return 1
                 } else {
                     match i.parse::<usize>() {
                         Ok(u)   => u,
@@ -361,21 +366,21 @@ pub fn main() {
 
         if t == 0 {
             println!("invalid field: 0");
-            return
+            return 1
         }
 
         if index_pos.f1 == 0 {
             index_pos.f1 = t;
         } else if index_pos.f1 != t {
             println!("non compatible fields: {}, {}", index_pos.f1, t);
-            return
+            return 1
         }
 
         if index_pos.f2 == 0 {
             index_pos.f2 = t;
         } else if index_pos.f1 != t {
             println!("non compatible fields: {}, {}", index_pos.f1, t);
-            return
+            return 1
         }
     }
 
@@ -571,4 +576,6 @@ pub fn main() {
             println!("{}",format.build(Vec::new(), tokens, flag_t, opt_e.clone(), index_pos.clone()));
         }
     }
+
+    0
 }

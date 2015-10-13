@@ -1,0 +1,13 @@
+[package]
+name = "factor"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "factor"
+path = "factor.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+rand = "*"

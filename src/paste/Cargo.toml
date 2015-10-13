@@ -1,0 +1,12 @@
+[package]
+name = "paste"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "paste"
+path = "paste.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"

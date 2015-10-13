@@ -1,5 +1,4 @@
 #![crate_name = "nl"]
-#![feature(collections, slice_patterns)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -11,7 +10,9 @@
  *
  */
 
+extern crate aho_corasick;
 extern crate getopts;
+extern crate memchr;
 extern crate regex_syntax;
 extern crate regex;
 
@@ -102,7 +103,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         number_width: 6,
         number_format: NumberFormat::Right,
         renumber: true,
-        number_separator: String::from_str("\t"),
+        number_separator: String::from("\t"),
     };
 
     let given_options = match opts.parse(&args[1..]) {
@@ -208,7 +209,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             }
             odd = !odd;
         }
- 
+
         // See how many groups we matched. That will tell us if this is
         // a line starting a new segment, and the number of groups
         // indicates what type of segment.
@@ -300,7 +301,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             line_no_threshold *= 10;
             line_no_width += 1;
         }
-    
+
     }
 }
 
