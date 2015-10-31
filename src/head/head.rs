@@ -165,7 +165,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in (1 .. len) {
+            for pos in 1 .. len {
                 // Ensure that the argument is only made out of digits
                 if !(current[pos] as char).is_numeric() { break; }
 

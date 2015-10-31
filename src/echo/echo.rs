@@ -59,7 +59,7 @@ fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
     };
 
     let mut bytes = vec!();
-    for offset in (0usize .. max_digits) {
+    for offset in 0usize .. max_digits {
         if string.len() <= index + offset as usize {
             break;
         }
@@ -206,7 +206,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                         print!("\\x");
                                     } else {
                                         print!("{}", c);
-                                        for _ in (0 .. num_char_used) {
+                                        for _ in 0 .. num_char_used {
                                             iter.next(); // consume used characters
                                         }
                                     }
@@ -217,7 +217,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                         print!("\0");
                                     } else {
                                         print!("{}", c);
-                                        for _ in (0 .. num_char_used) {
+                                        for _ in 0 .. num_char_used {
                                             iter.next(); // consume used characters
                                         }
                                     }
@@ -228,7 +228,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                         print!("\\{}", c);
                                     } else {
                                         print!("{}", esc_c);
-                                        for _ in (1 .. num_char_used) {
+                                        for _ in 1 .. num_char_used {
                                             iter.next(); // consume used characters
                                         }
                                     }

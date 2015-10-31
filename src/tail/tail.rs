@@ -182,7 +182,7 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
         };
 
     let mut multiplier = 1usize;
-    for _ in (0usize .. exponent) {
+    for _ in 0usize .. exponent {
         multiplier *= base;
     }
     if base == 1000usize && exponent == 0usize {
@@ -212,7 +212,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in (1 .. len) {
+            for pos in 1 .. len {
                 // Ensure that the argument is only made out of digits
                 if !(current[pos] as char).is_numeric() { break; }
 
