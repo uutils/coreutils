@@ -11,7 +11,7 @@ fn test_single_name_value_pair() {
         .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
-    assert!(out.lines_any().any(|line| line == "FOO=bar"));
+    assert!(out.lines().any(|line| line == "FOO=bar"));
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn test_multiple_name_value_pairs() {
         .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
-    assert_eq!(out.lines_any().filter(|&line| line == "FOO=bar" || line == "ABC=xyz").count(), 2);
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar" || line == "ABC=xyz").count(), 2);
 }
 
 #[test]
@@ -70,5 +70,5 @@ fn test_unset_variable() {
         .unwrap_or_else(|err| panic!("{}", err));
 
     let out = str::from_utf8(&po.stdout[..]).unwrap();
-    assert_eq!(out.lines_any().any(|line| line.starts_with("HOME=")), false);
+    assert_eq!(out.lines().any(|line| line.starts_with("HOME=")), false);
 }
