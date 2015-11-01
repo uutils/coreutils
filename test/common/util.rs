@@ -68,6 +68,10 @@ pub fn mkdir(dir: &str) {
     fs::create_dir(Path::new(dir)).unwrap();
 }
 
+pub fn mkdir_all(dir: &str) {
+    fs::create_dir_all(Path::new(dir)).unwrap();
+}
+
 pub fn make_file(name: &str) -> File {
     match File::create(Path::new(name)) {
         Ok(f) => f,

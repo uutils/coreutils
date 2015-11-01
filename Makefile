@@ -187,6 +187,7 @@ TEST_PROGS  := \
   readlink \
   realpath \
   rm \
+  rmdir \
   seq \
   sort \
   split \
