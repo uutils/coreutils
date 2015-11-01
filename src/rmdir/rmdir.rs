@@ -118,7 +118,7 @@ fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
             _ => (),
         }
     } else if !ignore {
-        show_error!("failed to remove '{}' Directory not empty", path.display());
+        show_error!("failed to remove '{}': Directory not empty", path.display());
         r = Err(1);
     }
 
