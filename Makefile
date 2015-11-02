@@ -177,6 +177,7 @@ TEST_PROGS  := \
   fold \
   hashsum \
   head \
+  link \
   ln \
   mkdir \
   mv \
