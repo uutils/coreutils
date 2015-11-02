@@ -64,6 +64,11 @@ pub fn get_file_contents(name: &str) -> String {
     contents
 }
 
+pub fn set_file_contents(name: &str, contents: &str) {
+    let mut f = File::open(Path::new(name)).unwrap();
+    let _ = f.write(contents.as_bytes());
+}
+
 pub fn mkdir(dir: &str) {
     fs::create_dir(Path::new(dir)).unwrap();
 }
