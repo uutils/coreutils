@@ -1,0 +1,12 @@
+
+[package]
+name = "join"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "join"
+path = "join.rs"
+
+[dependencies]
+regex = "0.1.41"

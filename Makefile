@@ -60,6 +60,7 @@ PROGS       := \
   fold \
   link \
   hashsum \
+  join \
   ln \
   mkdir \
   nl \

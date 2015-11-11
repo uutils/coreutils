@@ -32,6 +32,7 @@ all = [
     "hostid",
     "hostname",
     "id",
+    "join",
     "kill",
     "link",
     "ln",
@@ -108,6 +109,7 @@ head     = { optional=true, path="src/head" }
 hostid   = { optional=true, path="src/hostid" }
 hostname = { optional=true, path="src/hostname" }
 id       = { optional=true, path="src/id" }
+join     = { optional=true, path="src/join" }
 kill     = { optional=true, path="src/kill" }
 link     = { optional=true, path="src/link" }
 ln       = { optional=true, path="src/ln" }
@@ -161,4 +163,3 @@ yes      = { optional=true, path="src/yes" }
 [[bin]]
 name="uutils"
 path="src/uutils/uutils_cargo.rs"
-
