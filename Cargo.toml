@@ -157,6 +157,19 @@ wc       = { optional=true, path="src/wc" }
 whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
 
+[dev-dependencies]
+time = "*"
+kernel32-sys = "*"
+winapi = "*"
+filetime = "*"
+libc = "*"
+memchr = "*"
+primal = "*"
+aho-corasick= "*"
+regex-syntax= "*"
+regex="*"
+rand="*"
+tempdir="*"
 
 [[bin]]
 name="uutils"

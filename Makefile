@@ -18,7 +18,7 @@ LIBDIR         ?= /lib
 BASEDIR        ?= $(shell pwd)
 SRCDIR         := $(BASEDIR)/src
 BUILDDIR       := $(BASEDIR)/build
-TESTDIR        := $(BASEDIR)/test
+TESTDIR        := $(BASEDIR)/tests
 TEMPDIR        := $(BASEDIR)/tmp
 
 # Flags
