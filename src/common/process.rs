@@ -8,7 +8,6 @@
  */
 
 extern crate libc;
-extern crate time;
 
 use libc::{c_int, pid_t};
 use std::fmt;
@@ -17,6 +16,7 @@ use std::process::Child;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use time::{Duration, get_time};
+use std::time::Duration as StdDuration;
 
 // This is basically sys::unix::process::ExitStatus
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -76,8 +76,8 @@ pub trait ChildExt {
 
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        if unsafe { libc::funcs::posix88::signal::kill(self.id() as pid_t,
-                                                       signal as i32) } != 0 {
+        if unsafe { libc::kill(self.id() as pid_t,
+                               signal as i32) } != 0 {
             Err(io::Error::last_os_error())
         } else {
             Ok(())
@@ -125,7 +125,7 @@ impl ChildExt for Child {
                 return Ok(None)
             }
             let ms = (target - get_time()).num_milliseconds() as u32;
-            exitstatus = cvar.wait_timeout_ms(exitstatus, ms).unwrap().0;
+            exitstatus = cvar.wait_timeout(exitstatus, StdDuration::new(0, ms*1000)).unwrap().0;
         }
 
         // Turn Option<Result<ExitStatus>> into Result<Option<ExitStatus>>

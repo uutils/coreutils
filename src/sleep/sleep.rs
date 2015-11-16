@@ -13,7 +13,8 @@ extern crate getopts;
 extern crate libc;
 
 use std::io::Write;
-use std::thread::sleep_ms;
+use std::thread::{self};
+use std::time::Duration;
 use std::u32::MAX as U32_MAX;
 
 #[path = "../common/util.rs"]
@@ -75,7 +76,7 @@ fn sleep(args: Vec<String>) {
     let sleep_dur = if sleep_time > (U32_MAX as f64) { 
         U32_MAX
     } else { 
-        (1000.0 * sleep_time) as u32
+        (1000000.0 * sleep_time) as u32
     };
-    sleep_ms(sleep_dur);
+    thread::sleep(Duration::new(0, sleep_dur));
 }

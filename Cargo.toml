@@ -63,7 +63,7 @@ all = [
     "tac",
     "tail",
     "tee",
-    "test",
+    "test_uu",
     "timeout",
     "touch",
     "tr",
@@ -139,7 +139,7 @@ sync     = { optional=true, path="src/sync" }
 tac      = { optional=true, path="src/tac" }
 tail     = { optional=true, path="src/tail" }
 tee      = { optional=true, path="src/tee" }
-test     = { optional=true, path="src/test" }
+test_uu  = { optional=true, path="src/test" }
 timeout  = { optional=true, path="src/timeout" }
 touch    = { optional=true, path="src/touch" }
 tr       = { optional=true, path="src/tr" }

@@ -14,7 +14,7 @@ extern crate libc;
 
 use c_types::{get_pw_from_args, get_group};
 use getopts::Options;
-use libc::funcs::posix88::unistd::{setgid, setuid};
+use libc::{setgid, setuid};
 use std::ffi::CString;
 use std::io::{Error, Write};
 use std::iter::FromIterator;

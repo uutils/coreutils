@@ -12,11 +12,8 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::c_char;
-use libc::funcs::posix01::signal::signal;
-use libc::funcs::posix88::unistd::{dup2, execvp, isatty};
-use libc::consts::os::posix01::SIG_IGN;
-use libc::consts::os::posix88::SIGHUP;
+use libc::{c_char, signal, dup2, execvp, isatty};
+use libc::{SIG_IGN, SIGHUP};
 use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};

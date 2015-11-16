@@ -15,11 +15,8 @@ extern crate getopts;
 extern crate libc;
 
 use getopts::Options;
-use libc::consts::os::posix88::{S_IFMT, S_IFLNK, S_IFREG};
-use libc::funcs::posix01::stat_::lstat;
-use libc::funcs::posix88::unistd::unlink;
-use libc::types::os::arch::c95::c_char;
-use libc::types::os::arch::posix01::stat;
+use libc::{S_IFMT, S_IFLNK, S_IFREG};
+use libc::{lstat, unlink, c_char, stat};
 use std::io::{Error, ErrorKind, Write};
 use std::mem::uninitialized;
 

@@ -20,13 +20,21 @@ static VERSION: &'static str = "0.0.1";
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+fn name_sub(util_name: &str) -> &str {
+    match util_name {
+        "test" => "test_uu",
+        "test_uu" => "test",
+        x @ _ => x
+    }
+}
+
 fn usage(cmap: &UtilityMap) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
     println!("  {} [util [arguments...]]\n", NAME);
     println!("Currently defined functions:");
-    let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
+    let mut utils: Vec<&str> = cmap.keys().map(|&s| name_sub(s)).collect();
     utils.sort();
     for util in utils.iter() {
         println!("\t{}", util);
@@ -64,7 +72,7 @@ fn main() {
         args.remove(0);
         let util = &args[0][..];
 
-        match umap.get(util) {
+        match umap.get(name_sub(util)) {
             Some(&uumain) => {
                 std::process::exit(uumain(args.clone()));
             }
@@ -73,7 +81,7 @@ fn main() {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
                         let util = &args[1][..];
-                        match umap.get(util) {
+                        match umap.get(name_sub(util)) {
                             Some(&uumain) => {
                                 std::process::exit(uumain(vec![util.to_string(), "--help".to_string()]));
                             }

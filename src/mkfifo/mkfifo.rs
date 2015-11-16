@@ -12,7 +12,7 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::funcs::posix88::stat_::mkfifo;
+use libc::mkfifo;
 use std::ffi::CString;
 use std::io::{Error, Write};
 
