@@ -4,6 +4,7 @@ version = "0.0.1"
 authors = []
 build = "build.rs"
 
+
 [features]
 default = ["all"]
 all = [
@@ -58,6 +59,7 @@ all = [
     "sleep",
     "sort",
     "split",
+    "stdbuf",
     "sum",
     "sync",
     "tac",
@@ -134,6 +136,7 @@ shuf     = { optional=true, path="src/shuf" }
 sleep    = { optional=true, path="src/sleep" }
 sort     = { optional=true, path="src/sort" }
 split    = { optional=true, path="src/split" }
+stdbuf   = { optional=true, path="src/stdbuf" }
 sum      = { optional=true, path="src/sum" }
 sync     = { optional=true, path="src/sync" }
 tac      = { optional=true, path="src/tac" }
@@ -173,5 +176,5 @@ tempdir="*"
 
 [[bin]]
 name="uutils"
-path="src/uutils/uutils_cargo.rs"
+path="src/uutils/uutils.rs"
 

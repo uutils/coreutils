@@ -157,3 +157,8 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
         },
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

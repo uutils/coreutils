@@ -10,3 +10,7 @@ path = "tail.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="tail"
+path="tail.rs"

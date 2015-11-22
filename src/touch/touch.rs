@@ -209,3 +209,8 @@ fn parse_timestamp(s: &str) -> FileTime {
     }
 }
 
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

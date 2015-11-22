@@ -10,3 +10,7 @@ path = "sort.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="sort"
+path="sort.rs"

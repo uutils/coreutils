@@ -10,3 +10,7 @@ path = "seq.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="seq"
+path="seq.rs"

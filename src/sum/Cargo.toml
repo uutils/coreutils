@@ -10,3 +10,7 @@ path = "sum.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="sum"
+path="sum.rs"

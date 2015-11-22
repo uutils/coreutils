@@ -356,3 +356,8 @@ fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
     }
     simple_backup_path(path, suffix)
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

@@ -394,3 +394,8 @@ fn id_print(possible_pw: Option<c_passwd>, p_euid: bool, p_egid: bool) {
 
     println!("");
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

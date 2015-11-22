@@ -10,3 +10,7 @@ path = "yes.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="yes"
+path="yes.rs"

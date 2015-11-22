@@ -10,3 +10,7 @@ path = "fold.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="fold"
+path="fold.rs"

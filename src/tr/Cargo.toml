@@ -12,3 +12,7 @@ getopts = "*"
 libc = "*"
 bit-set = "*"
 vec_map = "*"
+
+[[bin]]
+name="tr"
+path="tr.rs"

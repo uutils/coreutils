@@ -10,3 +10,7 @@ path = "split.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="split"
+path="split.rs"

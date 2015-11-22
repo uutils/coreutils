@@ -14,8 +14,8 @@
 extern crate getopts;
 extern crate libc;
 
-use std::env;
 use std::io::Write;
+use std::env;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -75,4 +75,9 @@ pub fn exec(args: Vec<String>, separator: &str) {
             _ => ()
         }
     }
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

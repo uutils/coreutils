@@ -10,3 +10,7 @@ path = "realpath.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="realpath"
+path="realpath.rs"

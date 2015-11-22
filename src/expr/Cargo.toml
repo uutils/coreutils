@@ -11,3 +11,7 @@ path = "expr.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="expr"
+path="expr.rs"

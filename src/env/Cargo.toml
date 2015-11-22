@@ -10,3 +10,7 @@ path = "env.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="env"
+path="env.rs"

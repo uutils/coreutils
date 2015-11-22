@@ -129,3 +129,8 @@ Print CRC and size for each file.", NAME, VERSION);
 
     exit_code
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

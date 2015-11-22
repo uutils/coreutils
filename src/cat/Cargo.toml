@@ -10,3 +10,7 @@ path = "cat.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="cat"
+path="cat.rs"

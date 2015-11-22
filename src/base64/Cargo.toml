@@ -11,3 +11,7 @@ path = "base64.rs"
 getopts = "*"
 libc = "*"
 rustc-serialize = "*"
+
+[[bin]]
+name="base64"
+path="base64.rs"

@@ -258,3 +258,8 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
     }
     pipe_flush!();
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

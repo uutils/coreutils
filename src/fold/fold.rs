@@ -220,3 +220,8 @@ fn rfind_whitespace(slice: &str) -> Option<usize> {
     }
     None
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

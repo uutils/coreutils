@@ -10,3 +10,7 @@ path = "uniq.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="uniq"
+path="uniq.rs"

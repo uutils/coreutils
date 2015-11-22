@@ -128,3 +128,8 @@ fn unescape(s: String) -> String {
      .replace("\\\\", "\\")
      .replace("\\", "")
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

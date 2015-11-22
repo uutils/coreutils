@@ -172,3 +172,8 @@ fn warn(message: &str) -> Error {
     eprintln!("{}: {}", NAME, message);
     Error::new(ErrorKind::Other, format!("{}: {}", NAME, message))
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

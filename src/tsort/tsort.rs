@@ -194,3 +194,8 @@ impl Graph {
         true
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

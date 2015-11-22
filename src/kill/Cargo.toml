@@ -10,3 +10,7 @@ path = "kill.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="kill"
+path="kill.rs"

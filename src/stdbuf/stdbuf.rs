@@ -13,7 +13,6 @@ extern crate getopts;
 extern crate libc;
 
 use getopts::{Matches, Options};
-use std::env;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
@@ -192,7 +191,7 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
 }
 
 fn exe_path() -> io::Result<PathBuf> {
-    let exe_path = try!(env::current_exe());
+    let exe_path = try!(std::env::current_exe());
     let absolute_path = try!(canonicalize(exe_path, CanonicalizeMode::Normal));
     Ok(match absolute_path.parent() {
         Some(p) => p.to_path_buf(),
@@ -269,4 +268,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         },
         Err(e) => crash!(1, "{}", e)
     };
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

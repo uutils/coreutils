@@ -331,3 +331,8 @@ pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
         Err(_) => false
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

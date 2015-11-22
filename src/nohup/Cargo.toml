@@ -10,3 +10,7 @@ path = "nohup.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="nohup"
+path="nohup.rs"

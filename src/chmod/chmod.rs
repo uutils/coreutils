@@ -324,3 +324,8 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
 
     Ok(())
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

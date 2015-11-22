@@ -10,3 +10,7 @@ path = "ln.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="ln"
+path="ln.rs"

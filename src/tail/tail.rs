@@ -299,3 +299,8 @@ fn print_string<T: Write>(_: &mut T, s: &String) {
 fn version () {
     println!("{} {}", NAME, VERSION);
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

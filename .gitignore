@@ -1,12 +1,7 @@
 /src/*/gen_table
-/build/
 /target/
 /tmp/
 /busybox/
-/deps/regex/
-/deps/rust-crypto/
-/deps/target/
-/deps/time/
 *~
 .*.swp
 .*.swo

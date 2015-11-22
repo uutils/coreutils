@@ -13,3 +13,7 @@ libc = "*"
 regex = "*"
 regex-syntax = "*"
 rust-crypto = "*"
+
+[[bin]]
+name="hashsum"
+path="hashsum.rs"

@@ -174,3 +174,8 @@ fn xsethostname(name: &str) {
         println!("Cannot set hostname to {}", name);
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

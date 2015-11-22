@@ -10,3 +10,7 @@ path = "tac.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="tac"
+path="tac.rs"

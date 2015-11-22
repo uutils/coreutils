@@ -10,3 +10,9 @@ path = "mv.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[dev-dependencies]
+time = "*"
+[[bin]]
+name="mv"
+path="mv.rs"

@@ -79,3 +79,8 @@ fn exec() {
         None => println!("{}: no login name", NAME)
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

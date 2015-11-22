@@ -11,3 +11,7 @@ path = "uptime.rs"
 getopts = "*"
 libc = "*"
 time = "*"
+
+[[bin]]
+name="uptime"
+path="uptime.rs"

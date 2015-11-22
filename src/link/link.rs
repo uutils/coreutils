@@ -64,3 +64,8 @@ Create a link named FILE2 to FILE1.", NAME, VERSION);
         }
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

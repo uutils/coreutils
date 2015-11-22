@@ -307,3 +307,8 @@ fn digest_reader<'a, T: Read>(digest: &mut Box<Digest+'a>, reader: &mut BufReade
 
     Ok(digest.result_str())
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

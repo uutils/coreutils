@@ -10,3 +10,7 @@ path = "paste.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="paste"
+path="paste.rs"

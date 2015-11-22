@@ -218,3 +218,8 @@ If $(SHELL) is not set, /bin/sh is used.", NAME, VERSION);
 
     print!("{}", options.usage(&msg));
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

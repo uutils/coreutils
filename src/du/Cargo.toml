@@ -11,3 +11,7 @@ path = "du.rs"
 getopts = "*"
 libc = "*"
 time = "*"
+
+[[bin]]
+name="du"
+path="du.rs"

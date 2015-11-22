@@ -124,3 +124,8 @@ fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
 
     r
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

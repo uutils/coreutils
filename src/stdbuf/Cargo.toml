@@ -1,16 +1,16 @@
 [package]
-name = "groups"
+name = "stdbuf"
 version = "0.0.1"
 authors = []
 
 [lib]
-name = "groups"
-path = "groups.rs"
+name = "stdbuf"
+path = "stdbuf.rs"
 
 [dependencies]
 getopts = "*"
 libc = "*"
 
 [[bin]]
-name="groups"
-path="groups.rs"
+name="stdbuf"
+path="stdbuf.rs"

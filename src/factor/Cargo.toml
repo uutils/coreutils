@@ -11,3 +11,7 @@ path = "factor.rs"
 getopts = "*"
 libc = "*"
 rand = "*"
+
+[[bin]]
+name="factor"
+path="factor.rs"

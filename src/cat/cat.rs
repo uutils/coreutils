@@ -344,3 +344,8 @@ impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
 }
 
 /* vim: set ai ts=4 sw=4 sts=4 et : */
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

@@ -1,1 +1,0 @@
-DEPLIBS += winapi kernel32

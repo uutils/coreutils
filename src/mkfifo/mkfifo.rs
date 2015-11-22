@@ -77,3 +77,8 @@ Create a FIFO with the given name.", NAME, VERSION);
 
     exit_status
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

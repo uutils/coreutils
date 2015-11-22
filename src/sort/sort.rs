@@ -207,3 +207,8 @@ fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
         },
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

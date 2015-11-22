@@ -138,3 +138,8 @@ fn show_usage(opts: &getopts::Options) {
     print!("Print value of a symbolic link or canonical file name");
     print!("{}", opts.usage(""));
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

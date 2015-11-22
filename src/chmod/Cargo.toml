@@ -15,3 +15,7 @@ memchr = "*"
 regex = "*"
 regex-syntax = "*"
 walker = "*"
+
+[[bin]]
+name="chmod"
+path="chmod.rs"

@@ -240,3 +240,8 @@ fn open_output_file(out_file_name: String) -> BufWriter<Box<Write+'static>> {
     };
     BufWriter::new(out_file)
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

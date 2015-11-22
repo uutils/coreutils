@@ -14,3 +14,7 @@ aho-corasick = "*"
 memchr = "*"
 regex = "*"
 regex-syntax = "*"
+
+[[bin]]
+name="nl"
+path="nl.rs"

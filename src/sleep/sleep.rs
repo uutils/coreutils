@@ -80,3 +80,8 @@ fn sleep(args: Vec<String>) {
     };
     thread::sleep(Duration::new(0, sleep_dur));
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

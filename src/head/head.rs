@@ -208,3 +208,8 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
 fn version() {
     println!("{} {}", NAME, VERSION);
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

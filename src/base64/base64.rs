@@ -160,3 +160,8 @@ fn help(opts: Options) {
 fn version() {
     println!("{} {}", NAME, VERSION);
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

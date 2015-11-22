@@ -14,12 +14,12 @@ extern crate libc;
 
 use libc::{c_char, signal, dup2, execvp, isatty};
 use libc::{SIG_IGN, SIGHUP};
-use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, Write};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
+use std::env;
 
 #[path = "../common/util.rs"] #[macro_use] mod util;
 #[path = "../common/c_types.rs"] mod c_types;
@@ -143,4 +143,9 @@ or $HOME/nohup.out, if nohup.out open failed.
 If standard error is terminal, it'll be redirected to stdout.", NAME, VERSION);
 
     print!("{}", opts.usage(&msg));
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }
