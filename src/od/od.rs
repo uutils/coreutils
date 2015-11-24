@@ -56,12 +56,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         None => { panic!("Need fname for now") ; }
     };
 
-    main(&input_offset_base, &fname);
+    odfunc(&input_offset_base, &fname);
 
     0
 }
 
-fn main(input_offset_base: &Radix, fname: &str) {
+fn odfunc(input_offset_base: &Radix, fname: &str) {
     let mut f = match File::open(Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
@@ -123,4 +123,9 @@ fn print_with_radix(r: &Radix, x: usize) {
         Radix::Octal => print!("{:07o}", x),
         Radix::Binary => print!("{:07b}", x)
     }
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

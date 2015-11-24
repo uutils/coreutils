@@ -11,3 +11,7 @@ path = "expand.rs"
 getopts = "*"
 libc = "*"
 unicode-width = "*"
+
+[[bin]]
+name="expand"
+path="expand.rs"

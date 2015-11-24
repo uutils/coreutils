@@ -12,8 +12,8 @@
 extern crate getopts;
 extern crate num_cpus;
 
-use std::env;
 use std::io::Write;
+use std::env;
 
 static NAME : &'static str = "nproc";
 static VERSION : &'static str = "0.0.0";
@@ -84,4 +84,9 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
     println!("{}", cores);
     0
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

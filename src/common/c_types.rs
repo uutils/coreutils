@@ -13,7 +13,7 @@ use self::libc::time_t;
 #[cfg(target_os = "macos")]
 use self::libc::int32_t;
 
-use self::libc::funcs::posix88::unistd::getgroups;
+use self::libc::getgroups;
 
 use std::ffi::{CStr, CString};
 use std::io::{Error, Write};

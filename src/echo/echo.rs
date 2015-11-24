@@ -252,3 +252,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     0
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

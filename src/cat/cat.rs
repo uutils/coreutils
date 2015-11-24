@@ -18,9 +18,8 @@ use getopts::Options;
 use std::fs::File;
 use std::intrinsics::{copy_nonoverlapping};
 use std::io::{stdout, stdin, stderr, Write, Read, Result};
-use libc::consts::os::posix88::STDIN_FILENO;
-use libc::funcs::posix88::unistd::isatty;
-use libc::types::os::arch::c95::c_int;
+use libc::STDIN_FILENO;
+use libc::{c_int, isatty};
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -345,3 +344,8 @@ impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
 }
 
 /* vim: set ai ts=4 sw=4 sts=4 et : */
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

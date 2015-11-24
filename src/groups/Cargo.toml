@@ -10,3 +10,7 @@ path = "groups.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="groups"
+path="groups.rs"

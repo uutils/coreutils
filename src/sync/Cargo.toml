@@ -10,3 +10,7 @@ path = "sync.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="sync"
+path="sync.rs"

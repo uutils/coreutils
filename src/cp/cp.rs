@@ -159,3 +159,8 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
 
     Ok(pathbuf1 == pathbuf2)
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

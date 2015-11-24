@@ -158,3 +158,8 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
     }
     chmod(path, mode)
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

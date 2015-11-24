@@ -11,3 +11,7 @@ path = "nproc.rs"
 getopts = "*"
 libc = "*"
 num_cpus = "*"
+
+[[bin]]
+name="nproc"
+path="nproc.rs"

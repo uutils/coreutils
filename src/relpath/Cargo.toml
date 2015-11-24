@@ -10,3 +10,7 @@ path = "relpath.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="relpath"
+path="relpath.rs"

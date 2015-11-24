@@ -140,3 +140,8 @@ fn show_usage(opts: &getopts::Options) {
             Each resolved FILENAME will be written to the standard output, one per line.")
     );
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

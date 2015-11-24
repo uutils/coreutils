@@ -200,3 +200,8 @@ read from standard input.", NAME, VERSION);
     }
     0
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

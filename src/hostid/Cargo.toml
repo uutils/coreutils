@@ -10,3 +10,7 @@ path = "hostid.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="hostid"
+path="hostid.rs"

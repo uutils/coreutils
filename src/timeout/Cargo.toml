@@ -11,3 +11,7 @@ path = "timeout.rs"
 getopts = "*"
 libc = "*"
 time = "*"
+
+[[bin]]
+name="timeout"
+path="timeout.rs"

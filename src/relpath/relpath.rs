@@ -105,3 +105,8 @@ fn show_usage(opts: &getopts::Options) {
             If FROM path is omitted, current working dir will be used.")
     );
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

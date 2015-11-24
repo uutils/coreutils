@@ -10,3 +10,7 @@ path = "mkdir.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="mkdir"
+path="mkdir.rs"

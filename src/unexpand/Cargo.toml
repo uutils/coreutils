@@ -11,3 +11,7 @@ path = "unexpand.rs"
 getopts = "*"
 libc = "*"
 unicode-width = "*"
+
+[[bin]]
+name="unexpand"
+path="unexpand.rs"

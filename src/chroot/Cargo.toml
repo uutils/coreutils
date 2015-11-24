@@ -10,3 +10,7 @@ path = "chroot.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="chroot"
+path="chroot.rs"

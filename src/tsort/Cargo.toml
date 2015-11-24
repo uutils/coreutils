@@ -10,3 +10,7 @@ path = "tsort.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="tsort"
+path="tsort.rs"

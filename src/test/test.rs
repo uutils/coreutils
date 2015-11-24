@@ -1,4 +1,4 @@
-#![crate_name = "test"]
+#![crate_name = "test_uu"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -405,4 +405,9 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         PathCondition::Writable         => false, // TODO
         PathCondition::Executable       => false, // TODO
     }
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

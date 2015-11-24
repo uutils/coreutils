@@ -10,3 +10,7 @@ path = "id.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="id"
+path="id.rs"

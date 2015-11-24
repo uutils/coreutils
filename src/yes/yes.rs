@@ -61,3 +61,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 pub fn exec(string: &str) {
     while pipe_println!("{}", string) { }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

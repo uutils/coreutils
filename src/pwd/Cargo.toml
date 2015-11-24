@@ -10,3 +10,7 @@ path = "pwd.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="pwd"
+path="pwd.rs"

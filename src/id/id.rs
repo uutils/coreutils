@@ -17,8 +17,7 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::{getgid, getuid, uid_t};
-use libc::funcs::posix88::unistd::{getegid, geteuid, getlogin};
+use libc::{getgid, getuid, uid_t, getegid, geteuid, getlogin};
 use std::ffi::CStr;
 use std::io::Write;
 use std::ptr::read;
@@ -394,4 +393,9 @@ fn id_print(possible_pw: Option<c_passwd>, p_euid: bool, p_egid: bool) {
     }
 
     println!("");
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

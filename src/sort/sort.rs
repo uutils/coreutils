@@ -14,9 +14,8 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::consts::os::posix88::STDIN_FILENO;
-use libc::funcs::posix88::unistd::isatty;
-use libc::types::os::arch::c95::c_int;
+use libc::STDIN_FILENO;
+use libc::{c_int, isatty};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
@@ -207,4 +206,9 @@ fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
             None
         },
     }
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

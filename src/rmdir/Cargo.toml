@@ -10,3 +10,7 @@ path = "rmdir.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="rmdir"
+path="rmdir.rs"

@@ -10,3 +10,7 @@ path = "unlink.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="unlink"
+path="unlink.rs"

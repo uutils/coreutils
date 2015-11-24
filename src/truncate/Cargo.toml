@@ -10,3 +10,7 @@ path = "truncate.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="truncate"
+path="truncate.rs"

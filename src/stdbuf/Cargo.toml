@@ -1,0 +1,16 @@
+[package]
+name = "stdbuf"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "stdbuf"
+path = "stdbuf.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+
+[[bin]]
+name="stdbuf"
+path="stdbuf.rs"

@@ -10,3 +10,7 @@ path = "false.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="false"
+path="false.rs"

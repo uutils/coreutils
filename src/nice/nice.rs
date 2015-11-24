@@ -110,3 +110,8 @@ process).", NAME, VERSION);
     show_error!("{}", Error::last_os_error());
     if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT { 127 } else { 126 }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

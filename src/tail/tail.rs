@@ -17,7 +17,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, stdout, Write};
 use std::path::Path;
 use std::str::from_utf8;
-use std::thread::sleep_ms;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[path = "../common/util.rs"]
 #[macro_use]
@@ -273,7 +274,7 @@ fn tail<T: Read>(reader: &mut BufReader<T>, mut line_count: usize, mut byte_coun
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
     while follow {
-        sleep_ms(sleep_msec);
+        sleep(Duration::new(0, sleep_msec*1000));
         for io_line in reader.lines() {
             match io_line {
                 Ok(line) => print!("{}", line),
@@ -297,4 +298,9 @@ fn print_string<T: Write>(_: &mut T, s: &String) {
 
 fn version () {
     println!("{} {}", NAME, VERSION);
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

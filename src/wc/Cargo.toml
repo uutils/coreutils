@@ -10,3 +10,7 @@ path = "wc.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="wc"
+path="wc.rs"

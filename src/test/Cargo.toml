@@ -1,12 +1,16 @@
 [package]
-name = "test"
+name = "test_uu"
 version = "0.0.1"
 authors = []
 
 [lib]
-name = "test"
+name = "test_uu"
 path = "test.rs"
 
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="test"
+path="test.rs"

@@ -205,3 +205,8 @@ fn print_uptime(upsecs: i64) {
         print!("up  {:2}:{:02}, ", uphours, upmins);
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

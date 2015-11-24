@@ -12,3 +12,7 @@ filetime = "*"
 getopts = "*"
 libc = "*"
 time = "*"
+
+[[bin]]
+name="touch"
+path="touch.rs"

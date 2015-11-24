@@ -14,3 +14,7 @@ aho-corasick = "*"
 memchr = "*"
 regex-syntax = "*"
 regex = "*"
+
+[[bin]]
+name="ptx"
+path="ptx.rs"

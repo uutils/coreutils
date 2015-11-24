@@ -88,3 +88,8 @@ fn hostid() {
     result &= 0xffffffff; 
     println!("{:0>8x}", result);
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

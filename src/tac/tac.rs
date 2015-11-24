@@ -147,3 +147,8 @@ fn show_line(out: &mut Stdout, sep: &[u8], dat: &[u8], before: bool) {
         out.write_all(sep).unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
     }
 }
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
+}

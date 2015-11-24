@@ -10,3 +10,7 @@ path = "sleep.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="sleep"
+path="sleep.rs"

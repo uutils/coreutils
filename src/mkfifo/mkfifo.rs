@@ -12,7 +12,7 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::funcs::posix88::stat_::mkfifo;
+use libc::mkfifo;
 use std::ffi::CString;
 use std::io::{Error, Write};
 
@@ -76,4 +76,9 @@ Create a FIFO with the given name.", NAME, VERSION);
     }
 
     exit_status
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

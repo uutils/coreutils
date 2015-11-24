@@ -182,7 +182,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
     for pid in pids.iter() {
         match pid.parse::<usize>() {
             Ok(x) => {
-                if unsafe { libc::funcs::posix88::signal::kill(x as pid_t, signal_value as c_int) } != 0 {
+                if unsafe { libc::kill(x as pid_t, signal_value as c_int) } != 0 {
                     show_error!("{}", Error::last_os_error());
                     status = 1;
                 }
@@ -191,4 +191,9 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
         };
     }
     status
+}
+
+#[allow(dead_code)]
+fn main() {
+    std::process::exit(uumain(std::env::args().collect()));
 }

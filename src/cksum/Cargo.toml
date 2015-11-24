@@ -10,3 +10,7 @@ path = "cksum.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="cksum"
+path="cksum.rs"

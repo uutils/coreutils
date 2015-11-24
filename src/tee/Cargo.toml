@@ -10,3 +10,7 @@ path = "tee.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+
+[[bin]]
+name="tee"
+path="tee.rs"
