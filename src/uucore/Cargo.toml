@@ -1,0 +1,11 @@
+[package]
+name = "uucore"
+version = "0.0.1"
+authors = []
+
+[dependencies]
+libc = "*"
+time = "*"
+
+[lib]
+path = "lib.rs"
