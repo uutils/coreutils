@@ -17,16 +17,15 @@ extern crate libc;
 extern crate rustc_unicode;
 extern crate unicode_width;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::iter::repeat;
 use std::str::from_utf8;
 use rustc_unicode::str::utf8_char_width;
 use unicode_width::UnicodeWidthChar;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "expand";
 static VERSION: &'static str = "0.0.1";

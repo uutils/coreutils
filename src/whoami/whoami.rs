@@ -14,10 +14,12 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use std::io::Write;
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
 mod platform;
 
 static NAME: &'static str = "whoami";

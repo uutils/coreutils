@@ -12,13 +12,12 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::mkfifo;
 use std::ffi::CString;
 use std::io::{Error, Write};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "mkfifo";
 static VERSION: &'static str = "1.0.0";

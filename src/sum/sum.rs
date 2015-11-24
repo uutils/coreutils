@@ -12,13 +12,12 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::File;
 use std::io::{Read, Result, stdin, Write};
 use std::path::Path;
-
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "sum";
 static VERSION: &'static str = "1.0.0";

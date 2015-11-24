@@ -12,20 +12,15 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::{Matches, Options};
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::{canonicalize, CanonicalizeMode, UUPathExt};
+use uucore::fs::{canonicalize, CanonicalizeMode, UUPathExt};
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = "1.0.0";

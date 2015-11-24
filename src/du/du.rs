@@ -15,6 +15,9 @@ extern crate getopts;
 extern crate libc;
 extern crate time;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs;
 use std::io::{stderr, Write};
 use std::os::unix::fs::MetadataExt;
@@ -23,10 +26,6 @@ use std::sync::Arc;
 use time::Timespec;
 use std::sync::mpsc::channel;
 use std::thread;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "du";
 static VERSION: &'static str = "1.0.0";

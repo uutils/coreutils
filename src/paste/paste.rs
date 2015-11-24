@@ -12,14 +12,13 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::iter::repeat;
 use std::fs::File;
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "paste";
 static VERSION: &'static str = "1.0.0";

@@ -1,10 +1,6 @@
 #[macro_use]
 mod common;
 
-
-
-
-
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]

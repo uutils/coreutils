@@ -12,6 +12,9 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::{c_char, c_int, execvp};
 use std::ffi::CString;
 use std::io::{Error, Write};
@@ -21,10 +24,6 @@ const VERSION: &'static str = "1.0.0";
 
 // XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
 const PRIO_PROCESS: c_int = 0;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 extern {
     fn getpriority(which: c_int, who: c_int) -> c_int;

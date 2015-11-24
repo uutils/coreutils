@@ -11,6 +11,9 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use std::fs::File;
 use std::io::{self, stdin, Read, Write, BufReader};
@@ -18,10 +21,6 @@ use std::mem;
 use std::path::Path;
 
 use crc_table::CRC_TABLE;
-
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
 
 mod crc_table;
 

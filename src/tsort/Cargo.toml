@@ -10,6 +10,7 @@ path = "tsort.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="tsort"

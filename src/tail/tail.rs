@@ -12,6 +12,9 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, stdout, Write};
@@ -19,10 +22,6 @@ use std::path::Path;
 use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "tail";
 static VERSION: &'static str = "0.0.1";

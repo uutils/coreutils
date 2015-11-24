@@ -7,9 +7,10 @@
  * file that was distributed with this source code.
  */
 
+#[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: error: ", ::NAME);
+        pipe_write!(&mut ::std::io::stderr(), "{}: error: ", module_path!());
         pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
@@ -17,7 +18,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", ::NAME);
+        pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", module_path!());
         pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
@@ -25,7 +26,7 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_info(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: ", ::NAME);
+        pipe_write!(&mut ::std::io::stderr(), "{}: ", module_path!());
         pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );

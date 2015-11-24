@@ -11,6 +11,7 @@ path = "nproc.rs"
 getopts = "*"
 libc = "*"
 num_cpus = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="nproc"

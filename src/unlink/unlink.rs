@@ -14,15 +14,14 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use libc::{S_IFMT, S_IFLNK, S_IFREG};
 use libc::{lstat, unlink, c_char, stat};
 use std::io::{Error, ErrorKind, Write};
 use std::mem::uninitialized;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "unlink";
 static VERSION: &'static str = "1.0.0";

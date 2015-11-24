@@ -12,21 +12,16 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::File;
 use std::io::{stdout, stdin, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
+use uucore::fs::UUPathExt;
 
 use ranges::Range;
 use searcher::Searcher;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
 
 mod buffer;
 mod ranges;

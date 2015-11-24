@@ -17,11 +17,14 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::{getgid, getuid, uid_t, getegid, geteuid, getlogin};
 use std::ffi::CStr;
 use std::io::Write;
 use std::ptr::read;
-use c_types::{
+use uucore::c_types::{
     c_passwd,
     c_group,
     get_groups,
@@ -30,9 +33,6 @@ use c_types::{
     getpwuid,
     group
 };
-
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
 
 #[cfg(not(target_os = "linux"))]
 mod audit {

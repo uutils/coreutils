@@ -10,6 +10,7 @@ path = "fold.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="fold"

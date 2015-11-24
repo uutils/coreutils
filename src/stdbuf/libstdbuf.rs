@@ -3,14 +3,13 @@
 
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF, setvbuf};
 use std::env;
 use std::io::Write;
 use std::ptr;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 extern {
     static stdin: *mut FILE;

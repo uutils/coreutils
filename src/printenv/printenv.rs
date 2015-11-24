@@ -14,12 +14,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::io::Write;
 use std::env;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "printenv";
 static VERSION: &'static str = "1.0.0";

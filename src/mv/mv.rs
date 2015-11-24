@@ -13,19 +13,14 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
+use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "mv";
 static VERSION: &'static str = "0.0.1";

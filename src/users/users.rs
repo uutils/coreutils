@@ -17,18 +17,14 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
-use utmpx::*;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/utmpx.rs"]
-mod utmpx;
+use uucore::utmpx::*;
 
 extern {
     fn getutxent() -> *const c_utmp;

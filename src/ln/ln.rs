@@ -11,20 +11,15 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
 #[cfg(unix)] use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)] use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
-
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path="../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
+use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "ln";
 static VERSION: &'static str = "1.0.0";

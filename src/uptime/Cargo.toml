@@ -11,6 +11,7 @@ path = "uptime.rs"
 getopts = "*"
 libc = "*"
 time = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="uptime"

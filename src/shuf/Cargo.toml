@@ -11,6 +11,7 @@ path = "shuf.rs"
 getopts = "*"
 libc = "*"
 rand = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="shuf"

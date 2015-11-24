@@ -13,24 +13,14 @@ extern crate getopts;
 extern crate libc;
 extern crate time;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::pid_t;
 use std::io::{ErrorKind, Write};
 use std::process::{Command, Stdio};
 use std::os::unix::process::ExitStatusExt;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/parse_time.rs"]
-mod parse_time;
-
-#[path = "../common/signals.rs"]
-mod signals;
-
-#[path = "../common/process.rs"]
-mod process;
-use process::ChildExt;
+use uucore::process::ChildExt;
 
 extern {
     pub fn setpgid(_: libc::pid_t, _: libc::pid_t) -> libc::c_int;
@@ -74,7 +64,7 @@ Usage:
         let status = matches.opt_present("preserve-status");
         let foreground = matches.opt_present("foreground");
         let kill_after = match matches.opt_str("kill-after") {
-            Some(tstr) => match parse_time::from_str(&tstr) {
+            Some(tstr) => match uucore::parse_time::from_str(&tstr) {
                 Ok(time) => time,
                 Err(f) => {
                     show_error!("{}", f);
@@ -84,16 +74,16 @@ Usage:
             None => 0f64
         };
         let signal = match matches.opt_str("signal") {
-            Some(sigstr) => match signals::signal_by_name_or_value(&sigstr) {
+            Some(sigstr) => match uucore::signals::signal_by_name_or_value(&sigstr) {
                 Some(sig) => sig,
                 None => {
                     show_error!("invalid signal '{}'", sigstr);
                     return ERR_EXIT_STATUS;
                 }
             },
-            None => signals::signal_by_name_or_value("TERM").unwrap()
+            None => uucore::signals::signal_by_name_or_value("TERM").unwrap()
         };
-        let duration = match parse_time::from_str(&matches.free[0]) {
+        let duration = match uucore::parse_time::from_str(&matches.free[0]) {
             Ok(time) => time,
             Err(f) => {
                 show_error!("{}", f);
@@ -144,7 +134,7 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
                         // XXX: this may not be right
                         return 124;
                     }
-                    return_if_err!(ERR_EXIT_STATUS, process.send_signal(signals::signal_by_name_or_value("KILL").unwrap()));
+                    return_if_err!(ERR_EXIT_STATUS, process.send_signal(uucore::signals::signal_by_name_or_value("KILL").unwrap()));
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137
                 },

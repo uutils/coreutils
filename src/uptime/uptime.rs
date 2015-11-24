@@ -15,6 +15,9 @@ extern crate getopts;
 extern crate libc;
 extern crate time as rtime;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use libc::{time_t, c_double, c_int, c_char};
 use std::ffi::CString;
@@ -22,13 +25,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::mem::transmute;
 use std::ptr::null;
-use utmpx::*;
-
-#[path = "../common/util.rs"] #[macro_use] mod util;
-
-#[path = "../common/c_types.rs"] mod c_types;
-
-#[path = "../common/utmpx.rs"] mod utmpx;
+use uucore::utmpx::*;
 
 static NAME: &'static str = "uptime";
 static VERSION: &'static str = "1.0.0";

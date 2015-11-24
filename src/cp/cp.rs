@@ -11,19 +11,14 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use std::fs;
 use std::io::{ErrorKind, Result, Write};
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::{canonicalize, CanonicalizeMode, UUPathExt};
+use uucore::fs::{canonicalize, CanonicalizeMode, UUPathExt};
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {

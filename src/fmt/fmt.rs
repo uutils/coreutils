@@ -14,6 +14,9 @@ extern crate getopts;
 extern crate rustc_unicode;
 extern crate unicode_width;
 
+#[macro_use]
+extern crate uucore;
+
 use std::cmp;
 use std::io::{Read, BufReader, BufWriter};
 use std::fs::File;
@@ -30,9 +33,6 @@ macro_rules! silent_unwrap(
     )
 );
 
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 mod linebreak;
 mod parasplit;
 

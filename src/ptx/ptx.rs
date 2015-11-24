@@ -15,18 +15,16 @@ extern crate memchr;
 extern crate regex_syntax;
 extern crate regex;
 
+#[macro_use]
+extern crate uucore;
+
+use getopts::{Options, Matches};
+use regex::Regex;
+use std::cmp;
 use std::collections::{HashMap, HashSet, BTreeSet};
 use std::default::Default;
 use std::fs::File;
-use getopts::{Options, Matches};
 use std::io::{stdin, stdout, BufReader, BufWriter, BufRead, Read, Write};
-use regex::Regex;
-use std::cmp;
-
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "ptx";
 static VERSION: &'static str = "1.0.0";

@@ -1,5 +1,6 @@
 #![crate_name = "tr"]
 #![feature(io)]
+
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -15,16 +16,15 @@ extern crate bit_set;
 extern crate getopts;
 extern crate vec_map;
 
+#[macro_use]
+extern crate uucore;
+
 use bit_set::BitSet;
 use getopts::Options;
 use std::io::{stdin, stdout, BufReader, Read, Write};
 use vec_map::VecMap;
 
 use expand::ExpandSet;
-
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
 
 mod expand;
 

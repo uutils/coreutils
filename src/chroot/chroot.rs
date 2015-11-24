@@ -12,7 +12,9 @@
 extern crate getopts;
 extern crate libc;
 
-use c_types::{get_pw_from_args, get_group};
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use libc::{setgid, setuid};
 use std::ffi::CString;
@@ -20,12 +22,8 @@ use std::io::{Error, Write};
 use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
-
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
-#[path = "../common/filesystem.rs"] mod filesystem;
-
-use filesystem::UUPathExt;
+use uucore::c_types::{get_pw_from_args, get_group};
+use uucore::fs::UUPathExt;
 
 extern {
     fn chroot(path: *const libc::c_char) -> libc::c_int;

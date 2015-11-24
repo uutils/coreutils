@@ -12,6 +12,7 @@ filetime = "*"
 getopts = "*"
 libc = "*"
 time = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="touch"

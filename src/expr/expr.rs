@@ -12,9 +12,9 @@
 extern crate getopts;
 extern crate libc;
 
-#[path="../common/util.rs"]
 #[macro_use]
-mod util;
+extern crate uucore;
+
 mod tokens;
 mod syntax_tree;
 

@@ -19,22 +19,17 @@ extern crate regex;
 extern crate regex_syntax;
 extern crate walker;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use regex::Regex;
 use std::ffi::CString;
 use std::io::{Error, Write};
 use std::mem;
 use std::path::Path;
+use uucore::fs::UUPathExt;
 use walker::Walker;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
 
 const NAME: &'static str = "chmod";
 const VERSION: &'static str = "1.0.0";

@@ -10,6 +10,7 @@ path = "printenv.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="printenv"

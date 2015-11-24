@@ -16,16 +16,15 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
+use getopts::Options;
 use std::collections::hash_set::HashSet;
 use std::iter::repeat;
 use std::str;
 use std::io::Write;
 use std::net::ToSocketAddrs;
-use getopts::Options;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "hostname";
 

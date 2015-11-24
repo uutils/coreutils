@@ -12,19 +12,12 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::{c_int, pid_t};
-use signals::ALL_SIGNALS;
-use std::io::{Error, Write};
-
-#[path = "../common/util.rs"]
 #[macro_use]
-mod util;
+extern crate uucore;
 
-#[path = "../common/c_types.rs"]
-mod c_types;
-
-#[path = "../common/signals.rs"]
-mod signals;
+use libc::{c_int, pid_t};
+use std::io::{Error, Write};
+use uucore::signals::ALL_SIGNALS;
 
 static NAME: &'static str = "kill";
 static VERSION: &'static str = "0.0.1";
@@ -96,7 +89,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
             let val = &slice[1..];
             match val.parse() {
                 Ok(num) => {
-                    if signals::is_signal(num) {
+                    if uucore::signals::is_signal(num) {
                         args.remove(i);
                         return (args, Some(val.to_string()));
                     }
@@ -174,7 +167,7 @@ Usage:
 
 fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
     let mut status = 0;
-    let optional_signal_value = signals::signal_by_name_or_value(signalname);
+    let optional_signal_value = uucore::signals::signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)

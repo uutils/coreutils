@@ -9,9 +9,7 @@
 
 use std::io::{Result, Error};
 use ::libc;
-use self::c_types::{c_passwd, getpwuid};
-
-#[path = "../../common/c_types.rs"] mod c_types;
+use uucore::c_types::{c_passwd, getpwuid};
 
 extern {
     pub fn geteuid() -> libc::uid_t;

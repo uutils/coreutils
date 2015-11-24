@@ -12,18 +12,13 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::env;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "relpath";
 static VERSION: &'static str = "1.0.0";

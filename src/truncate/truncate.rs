@@ -12,14 +12,13 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::ascii::AsciiExt;
 use std::fs::{File, metadata, OpenOptions};
 use std::io::{Result, Write};
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 #[derive(Eq, PartialEq)]
 enum TruncateMode {

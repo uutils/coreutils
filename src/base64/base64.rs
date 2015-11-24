@@ -13,6 +13,9 @@ extern crate rustc_serialize as serialize;
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use serialize::base64::{self, FromBase64, ToBase64};
 use std::ascii::AsciiExt;
@@ -20,10 +23,6 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{BufReader, Read, stdin, stdout, Write};
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 enum Mode {
     Decode,

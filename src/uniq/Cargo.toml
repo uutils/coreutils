@@ -10,6 +10,7 @@ path = "uniq.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="uniq"

@@ -13,13 +13,12 @@
 
 #![allow(non_camel_case_types)]
 
+#[macro_use]
+extern crate uucore;
+
 use std::env;
 use std::io::Write;
 use std::process::Command;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "env";
 static VERSION: &'static str = "1.0.0";

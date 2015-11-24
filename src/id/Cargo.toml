@@ -10,6 +10,7 @@ path = "id.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="id"

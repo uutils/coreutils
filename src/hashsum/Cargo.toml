@@ -13,6 +13,7 @@ libc = "*"
 regex = "*"
 regex-syntax = "*"
 rust-crypto = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="hashsum"
