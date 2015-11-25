@@ -127,9 +127,9 @@ TEST_PROGS  := \
 	cksum \
 	cp \
 	cut \
-	env \
 	dirname \
 	echo \
+	env \
 	factor \
 	false \
 	fold \
@@ -159,8 +159,8 @@ TEST_PROGS  := \
 	true \
 	truncate \
 	tsort \
-	unlink \
 	unexpand \
+	unlink \
 	wc
 
 TESTS       := \
@@ -201,7 +201,7 @@ crates:
 	echo "okay" $(EXES)
 
 build_uutils = ${CARGO} build --features "${1}" ${PROFILE_CMD} --no-default-features
-build_pkg = ${CARGO} build ${PROFILE_CMD} -p "${1}"
+build_pkg = ${CARGO} build ${PROFILE_CMD} -p ${1}
 run_integration_tests = ${CARGO} test --test ${1}
 run_unit_tests = ${CARGO} test -p ${1}
 do_install = install ${1}
@@ -213,8 +213,8 @@ test:
 	$(foreach util, ${TESTS}, $(call run_unit_tests, ${util});)
 
 build:
-	$(call build_uutils,${EXES})
-	$(foreach util, ${EXES}, $(call build_pkg,${util});)
+	$(call build_uutils, ${EXES})
+	$(foreach util, ${EXES}, $(call build_pkg, ${util});)
 
 clean:
 	$(RM) -rf $(BUILDDIR) 
