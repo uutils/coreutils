@@ -22,9 +22,7 @@ INSTALLDIR=$(DESTDIR)$(PREFIX)
 # make a symlink without spaces that points to the directory.
 BASEDIR        ?= $(shell pwd)
 BUILDDIR       := $(BASEDIR)/target/${PROFILE}/
-PKG_BUILDDIR       := $(BUILDDIR)/deps/
-
-
+PKG_BUILDDIR   := $(BUILDDIR)/deps/
 
 # Possible programs
 PROGS       := \
@@ -163,17 +161,32 @@ TEST_PROGS  := \
 	unlink \
 	wc
 
-TESTS       := \
-  $(filter $(PROGS),$(filter-out $(DONT_TEST),$(filter $(BUILD),$(filter-out $(DONT_BUILD),$(TEST_PROGS)))))
-
 TEST        ?= $(TEST_PROGS)
+
+TESTS       := \
+	$(sort $(filter $(TEST),$(filter-out $(DONT_TEST),$(TEST_PROGS))))
+
+define BUILD_EXE
+build_exe_$(1):
+	${CARGO} build ${PROFILE_CMD} -p $(1)
+endef
+
+define TEST_INTEGRATION
+test_integration_$(1):
+	${CARGO} test --test $(1)
+endef
+
+define TEST_UNIT
+test_unit_$(1):
+	${CARGO} test -p $(1)
+endef
 
 # Output names
 EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 INSTALLEES  := \
-  $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils))
+  $(sort $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils)))
 
 INSTALL     ?= $(EXES)
 
@@ -245,4 +258,4 @@ uninstall-multicall:
 	rm -f $(addprefix $(INSTALLDIR)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)
 	rm -f $(addprefix $(INSTALLDIR)$(LIBDIR)/,$(LIBS))
 
-.PHONY: $(TEMPDIR) all build test distclean clean busytest install uninstall
+.PHONY: all build test distclean clean busytest install uninstall
