@@ -25,7 +25,7 @@ use crc_table::CRC_TABLE;
 mod crc_table;
 
 static NAME: &'static str = "cksum";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[inline]
 fn crc_update(crc: u32, input: u8) -> u32 {

@@ -38,7 +38,7 @@ mod parasplit;
 
 // program's NAME and VERSION are used for -V and -h
 static NAME: &'static str = "fmt";
-static VERSION: &'static str = "0.0.3";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 pub struct FmtOptions {

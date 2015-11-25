@@ -16,7 +16,7 @@ use std::path::Path;
 use std::env;
 
 static NAME: &'static str = "uutils";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 

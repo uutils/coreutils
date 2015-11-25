@@ -32,7 +32,7 @@ use uucore::fs::UUPathExt;
 use walker::Walker;
 
 const NAME: &'static str = "chmod";
-const VERSION: &'static str = "1.0.0";
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();

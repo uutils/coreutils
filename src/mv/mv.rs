@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "mv";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct Behaviour {
     overwrite: OverwriteMode,

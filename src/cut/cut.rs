@@ -28,7 +28,7 @@ mod ranges;
 mod searcher;
 
 static NAME: &'static str = "cut";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct Options {
     out_delim: Option<String>,

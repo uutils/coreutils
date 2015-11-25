@@ -23,7 +23,7 @@ use std::process::Command;
 use uucore::fs::{canonicalize, CanonicalizeMode, UUPathExt};
 
 static NAME: &'static str = "stdbuf";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static LIBSTDBUF: &'static str = "libstdbuf"; 
 
 enum BufferType {

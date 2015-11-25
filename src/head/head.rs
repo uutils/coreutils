@@ -22,7 +22,7 @@ use std::path::Path;
 use std::str::from_utf8;
 
 static NAME: &'static str = "head";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 enum FilterMode {
     Bytes(usize),

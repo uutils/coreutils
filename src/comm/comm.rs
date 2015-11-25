@@ -18,7 +18,7 @@ use std::io::{self, BufRead, BufReader, Read, stdin, Stdin};
 use std::path::Path;
 
 static NAME: &'static str = "comm";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();

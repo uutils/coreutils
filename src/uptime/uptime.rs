@@ -28,7 +28,7 @@ use std::ptr::null;
 use uucore::utmpx::*;
 
 static NAME: &'static str = "uptime";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
 extern {

@@ -30,7 +30,7 @@ enum InteractiveMode {
 }
 
 static NAME: &'static str = "rm";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // TODO: make getopts support -R in addition to -r

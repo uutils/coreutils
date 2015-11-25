@@ -27,7 +27,7 @@ extern {
 }
 
 static NAME: &'static str = "timeout";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static ERR_EXIT_STATUS: i32 = 125;
 

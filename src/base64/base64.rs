@@ -32,7 +32,7 @@ enum Mode {
 }
 
 static NAME: &'static str = "base64";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 

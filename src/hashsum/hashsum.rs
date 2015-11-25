@@ -30,7 +30,7 @@ use std::io::{self, BufRead, BufReader, Read, stdin, Write};
 use std::path::Path;
 
 static NAME: &'static str = "hashsum";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn is_custom_binary(program: &str) -> bool {
     match program {

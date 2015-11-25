@@ -20,7 +20,7 @@ use std::io::{Error, Write};
 use uucore::signals::ALL_SIGNALS;
 
 static NAME: &'static str = "kill";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static EXIT_OK:  i32 = 0;
 static EXIT_ERR: i32 = 1;

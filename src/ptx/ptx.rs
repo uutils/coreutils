@@ -27,7 +27,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, BufRead, Read, Write};
 
 static NAME: &'static str = "ptx";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 enum OutFormat {
