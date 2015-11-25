@@ -29,8 +29,8 @@ pub fn main() {
     let mut map: UtilityMap = HashMap::new();\n".as_bytes()).unwrap();
     for krate in crates {
         match krate.as_ref() {
-            "false" => continue,
-            "true" => continue,
+            "false" => {},
+            "true" => {},
             _ => cf.write_all(format!("extern crate {krate} as uu{krate};\n", krate=krate).as_bytes()).unwrap(),
         }
 
