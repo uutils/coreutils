@@ -119,6 +119,50 @@ ALIASES := \
 
 BUILD       ?= $(PROGS)
 
+# Programs with usable tests
+TEST_PROGS  := \
+	base64 \
+	basename \
+	cat \
+	cksum \
+	cp \
+	cut \
+	env \
+	dirname \
+	echo \
+	factor \
+	false \
+	fold \
+	hashsum \
+	head \
+	link \
+	ln \
+	mkdir \
+	mv \
+	nl \
+	paste \
+	ptx \
+	pwd \
+	readlink \
+	realpath \
+	rm \
+	rmdir \
+	seq \
+	sort \
+	split \
+	stdbuf \
+	sum \
+	tac \
+	test \
+	touch \
+	tr \
+	true \
+	truncate \
+	tsort \
+	unlink \
+	unexpand \
+	wc
+
 TESTS       := \
   $(filter $(PROGS),$(filter-out $(DONT_TEST),$(filter $(BUILD),$(filter-out $(DONT_BUILD),$(TEST_PROGS)))))
 
@@ -158,8 +202,8 @@ crates:
 
 build_uutils = ${CARGO} build --features "${1}" ${PROFILE_CMD} --no-default-features
 build_pkg = ${CARGO} build ${PROFILE_CMD} -p "${1}"
-run_integration_tests = ${CARGO} test --test "${1}"
-run_unit_tests = ${CARGO} test -p "${l}"
+run_integration_tests = ${CARGO} test --test ${1}
+run_unit_tests = ${CARGO} test -p ${1}
 do_install = install ${1}
 use_default := 1
 
