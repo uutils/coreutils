@@ -7,8 +7,6 @@ sudo: false
 script:
   - make
   - make test
-  - make build-check
-  - make test-check
 matrix:
   allow_failures:
     - rust: stable

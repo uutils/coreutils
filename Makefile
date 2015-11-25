@@ -200,30 +200,27 @@ all: build
 crates:
 	echo "okay" $(EXES)
 
-build_uutils = ${CARGO} build --features "${1}" ${PROFILE_CMD} --no-default-features
-build_pkg = ${CARGO} build ${PROFILE_CMD} -p ${1}
-run_integration_tests = ${CARGO} test --test ${1}
-run_unit_tests = ${CARGO} test -p ${1}
 do_install = install ${1}
 use_default := 1
 
-test:
-	$(call build_uutils, ${TESTS})
-	$(foreach util, ${TESTS}, $(call run_integration_tests, ${util});)
-	$(foreach util, ${TESTS}, $(call run_unit_tests, ${util});)
+$(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
-build:
-	$(call build_uutils, ${EXES})
+build-uutils:
+	${CARGO} build --features "${EXES}" ${PROFILE_CMD} --no-default-features
+
+build: build-uutils $(addprefix build_exe_,$(EXES))
 	$(foreach util, ${EXES}, $(call build_pkg, ${util});)
+
+$(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
+$(foreach test,$(TESTS),$(eval $(call TEST_UNIT,$(test))))
+
+test: $(addprefix test_integration_,$(TESTS)) $(addprefix test_unit_,$(TESTS))
 
 clean:
 	$(RM) -rf $(BUILDDIR) 
 
 distclean: clean
 	$(CARGO) clean && $(CARGO) update
-
-build-check: build clean
-test-check: test clean
 
 # TODO: figure out if there is way for prefixes to work with the symlinks
 install: build
