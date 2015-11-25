@@ -65,7 +65,7 @@ fn test_sysv_multiple_files() {
 fn test_sysv_stdin() {
     let (at, mut ucmd) = testing(UTIL_NAME);
     let input = at.read("lorem_ipsum.txt");
-    let result = ucmd.run_piped_stdin(input);
+    let result = ucmd.arg("-s").run_piped_stdin(input);
 
     assert_empty_stderr!(result);
     assert!(result.success);
