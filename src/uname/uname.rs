@@ -14,13 +14,13 @@
 extern crate getopts;
 extern crate libc;
 
-use c_types::utsname;
+#[macro_use]
+extern crate uucore;
+
 use std::ffi::CStr;
 use std::io::Write;
 use std::mem::uninitialized;
-
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
+use uucore::c_types::utsname;
 
 struct Uts {
     sysname: String,

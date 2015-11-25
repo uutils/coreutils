@@ -14,16 +14,15 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
+use libc::STDIN_FILENO;
+use libc::{c_int, isatty};
 use getopts::Options;
 use std::fs::File;
 use std::intrinsics::{copy_nonoverlapping};
 use std::io::{stdout, stdin, stderr, Write, Read, Result};
-use libc::STDIN_FILENO;
-use libc::{c_int, isatty};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "cat";
 static VERSION: &'static str = "1.0.0";

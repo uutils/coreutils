@@ -16,14 +16,14 @@ extern crate memchr;
 extern crate regex_syntax;
 extern crate regex;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::iter::repeat;
 use std::path::Path;
 
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
 mod helper;
 
 static NAME: &'static str = "nl";

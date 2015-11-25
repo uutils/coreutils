@@ -10,15 +10,14 @@
 extern crate winapi;
 extern crate advapi32;
 
-use std::io::{Result, Error};
+#[macro_use]
+extern crate uucore;
 
-#[path = "../../common/wide.rs"] #[macro_use] mod wide;
-
-use std::mem;
-use std::io::Write;
 use std::ffi::OsString;
+use std::io::{Error, Result, Write};
+use std::mem;
 use std::os::windows::ffi::OsStringExt;
-use self::wide::FromWide;
+use uucore::wide::FromWide;
 
 pub unsafe fn getusername() -> Result<String> {
     let mut buffer: [winapi::WCHAR; winapi::UNLEN as usize + 1] = mem::uninitialized();

@@ -12,11 +12,10 @@
 extern crate getopts;
 extern crate libc;
 
-use libc::c_long;
-
-#[path = "../common/util.rs"]
 #[macro_use]
-mod util;
+extern crate uucore;
+
+use libc::c_long;
 
 static NAME: &'static str = "hostid";
 static VERSION: &'static str = "0.0.1";

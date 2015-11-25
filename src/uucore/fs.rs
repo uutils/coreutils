@@ -43,7 +43,6 @@ impl UUPathExt for Path {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
 pub enum CanonicalizeMode {
     None,
     Normal,
@@ -51,7 +50,6 @@ pub enum CanonicalizeMode {
     Missing,
 }
 
-#[allow(dead_code)]
 fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
@@ -81,7 +79,6 @@ fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf> {
     Ok(result)
 }
 
-#[allow(dead_code)]
 pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> Result<PathBuf> {
     // Create an absolute path
     let original = original.as_ref();

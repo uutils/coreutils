@@ -12,20 +12,15 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{stdin, stderr, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
+use uucore::fs::UUPathExt;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {

@@ -6,12 +6,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::cmp;
 use std::io::Write;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "seq";
 static VERSION: &'static str = "1.0.0";

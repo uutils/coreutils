@@ -145,7 +145,7 @@ pub fn get_group(groupname: &str) -> Option<c_group> {
     let group = if groupname.chars().all(|c| c.is_digit(10)) {
         unsafe { getgrgid(groupname.parse().unwrap()) }
     } else {
-        unsafe { 
+        unsafe {
             let cstr = CString::new(groupname).unwrap();
             getgrnam(cstr.as_bytes_with_nul().as_ptr() as *const c_char)
         }

@@ -12,6 +12,9 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::{c_char, signal, dup2, execvp, isatty};
 use libc::{SIG_IGN, SIGHUP};
 use std::ffi::CString;
@@ -20,9 +23,6 @@ use std::io::{Error, Write};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use std::env;
-
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[path = "../common/c_types.rs"] mod c_types;
 
 static NAME: &'static str = "nohup";
 static VERSION: &'static str = "1.0.0";

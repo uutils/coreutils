@@ -10,6 +10,7 @@ path = "cp.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="cp"

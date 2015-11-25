@@ -10,6 +10,7 @@ path = "mv.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [dev-dependencies]
 time = "*"

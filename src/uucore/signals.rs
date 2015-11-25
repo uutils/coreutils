@@ -7,8 +7,6 @@
  * that was distributed with this source code.
  */
 
-#![allow(dead_code)]
-
 pub static DEFAULT_SIGNAL:usize= 15;
 
 

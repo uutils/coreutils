@@ -11,6 +11,7 @@ path = "base64.rs"
 getopts = "*"
 libc = "*"
 rustc-serialize = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="base64"

@@ -11,6 +11,7 @@ path = "du.rs"
 getopts = "*"
 libc = "*"
 time = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="du"

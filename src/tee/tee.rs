@@ -11,13 +11,12 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::OpenOptions;
 use std::io::{copy, Error, ErrorKind, Read, Result, sink, stdin, stdout, Write};
 use std::path::{Path, PathBuf};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "tee";
 static VERSION: &'static str = "1.0.0";

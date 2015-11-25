@@ -10,6 +10,7 @@ path = "sort.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="sort"

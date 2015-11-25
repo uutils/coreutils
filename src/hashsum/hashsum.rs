@@ -16,6 +16,9 @@ extern crate getopts;
 extern crate regex_syntax;
 extern crate regex;
 
+#[macro_use]
+extern crate uucore;
+
 use crypto::digest::Digest;
 use crypto::md5::Md5;
 use crypto::sha1::Sha1;
@@ -25,10 +28,6 @@ use std::ascii::AsciiExt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, stdin, Write};
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "hashsum";
 static VERSION: &'static str = "1.0.0";

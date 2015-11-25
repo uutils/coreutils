@@ -9,13 +9,14 @@
  * file that was distributed with this source code.
  *
  */
+
 extern crate getopts;
 
-use c_types::{get_pw_from_args, group};
-use std::io::Write;
+#[macro_use]
+extern crate uucore;
 
-#[path = "../common/util.rs"] #[macro_use]  mod util;
-#[path = "../common/c_types.rs"] mod c_types;
+use std::io::Write;
+use uucore::c_types::{get_pw_from_args, group};
 
 static NAME: &'static str = "groups";
 static VERSION: &'static str = "1.0.0";

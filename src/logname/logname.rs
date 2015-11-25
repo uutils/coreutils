@@ -14,10 +14,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::ffi::CStr;
 use std::io::Write;
-
-#[path = "../common/util.rs"] #[macro_use] mod util;
 
 extern {
     // POSIX requires using getlogin (or equivalent code)

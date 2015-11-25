@@ -14,12 +14,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use std::io::Write;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "yes";
 static VERSION: &'static str = "1.0.0";

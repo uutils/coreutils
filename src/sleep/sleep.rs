@@ -12,17 +12,13 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::io::Write;
 use std::thread::{self};
 use std::time::Duration;
 use std::u32::MAX as U32_MAX;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/parse_time.rs"]
-mod parse_time;
 
 static NAME: &'static str = "sleep";
 static VERSION: &'static str = "1.0.0";
@@ -68,7 +64,7 @@ specified by the sum of their values.", NAME, VERSION);
 
 fn sleep(args: Vec<String>) {
     let sleep_time = args.iter().fold(0.0, |result, arg|
-        match parse_time::from_str(&arg[..]) {
+        match uucore::parse_time::from_str(&arg[..]) {
             Ok(m) => m + result,
             Err(f) => crash!(1, "{}", f),
         });

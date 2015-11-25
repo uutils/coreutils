@@ -17,6 +17,9 @@ extern crate getopts;
 extern crate libc;
 extern crate rand;
 
+#[macro_use]
+extern crate uucore;
+
 use numeric::*;
 use prime_table::P_INVS_U64;
 use rand::weak_rng;
@@ -26,9 +29,6 @@ use std::io::{stdin, BufRead, BufReader, Write};
 use std::num::Wrapping;
 use std::mem::swap;
 
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
 mod numeric;
 mod prime_table;
 

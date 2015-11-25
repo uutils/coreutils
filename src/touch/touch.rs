@@ -14,19 +14,14 @@ extern crate libc;
 extern crate time;
 extern crate filetime;
 
+#[macro_use]
+extern crate uucore;
+
 use filetime::*;
 use std::fs::{self, File};
 use std::io::{Error, Write};
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
+use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "touch";
 static VERSION: &'static str = "1.0.0";

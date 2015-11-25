@@ -14,8 +14,8 @@
 extern crate getopts;
 extern crate libc;
 
-#[path = "../common/util.rs"] #[macro_use] mod util;
-#[cfg(windows)] #[path = "../common/wide.rs"] mod wide;
+#[macro_use]
+extern crate uucore;
 
 static NAME: &'static str = "sync";
 static VERSION: &'static str = "1.0.0";
@@ -42,7 +42,7 @@ mod platform {
     use std::fs::OpenOptions;
     use std::io::{Write};
     use std::os::windows::prelude::*;
-    use wide::{FromWide, ToWide};
+    use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();

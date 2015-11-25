@@ -13,14 +13,13 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "head";
 static VERSION: &'static str = "1.0.0";

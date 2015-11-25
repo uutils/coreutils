@@ -12,16 +12,15 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::{Matches, Options};
 use std::cmp::min;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
 use std::path::Path;
 use std::str::FromStr;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "uniq";
 static VERSION: &'static str = "1.0.0";

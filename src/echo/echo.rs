@@ -12,12 +12,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::io::Write;
 use std::str::from_utf8;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 #[allow(dead_code)]
 static NAME: &'static str = "echo";

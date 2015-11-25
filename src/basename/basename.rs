@@ -12,13 +12,12 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use getopts::Options;
 use std::io::Write;
 use std::path::{is_separator, PathBuf};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "basename";
 static VERSION: &'static str = "1.0.0";

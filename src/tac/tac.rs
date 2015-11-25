@@ -12,12 +12,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::File;
 use std::io::{BufReader, Read, stdin, stdout, Stdout, Write};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "tac";
 static VERSION: &'static str = "1.0.0";

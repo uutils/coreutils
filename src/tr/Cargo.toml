@@ -12,6 +12,7 @@ getopts = "*"
 libc = "*"
 bit-set = "*"
 vec_map = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="tr"

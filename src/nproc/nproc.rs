@@ -12,15 +12,14 @@
 extern crate getopts;
 extern crate num_cpus;
 
+#[macro_use]
+extern crate uucore;
+
 use std::io::Write;
 use std::env;
 
 static NAME : &'static str = "nproc";
 static VERSION : &'static str = "0.0.0";
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

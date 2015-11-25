@@ -11,6 +11,7 @@ path = "fmt.rs"
 getopts = "*"
 libc = "*"
 unicode-width = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="fmt"

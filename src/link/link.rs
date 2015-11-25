@@ -11,13 +11,12 @@
 
 extern crate getopts;
 
+#[macro_use]
+extern crate uucore;
+
 use std::fs::hard_link;
 use std::io::Write;
 use std::path::Path;
-
-#[path="../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "link";
 static VERSION: &'static str = "1.0.0";

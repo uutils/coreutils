@@ -13,15 +13,14 @@ extern crate getopts;
 extern crate libc;
 extern crate rand;
 
+#[macro_use]
+extern crate uucore;
+
 use rand::{Rng, ThreadRng};
 use rand::read::ReadRng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::usize::MAX as MAX_USIZE;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 enum Mode {
     Default,

@@ -14,16 +14,15 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use libc::STDIN_FILENO;
 use libc::{c_int, isatty};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::path::Path;
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
 
 static NAME: &'static str = "sort";
 static VERSION: &'static str = "0.0.1";

@@ -85,6 +85,7 @@ all = [
 ]
 
 [dependencies]
+uucore   = { path="src/uucore" }
 base64   = { optional=true, path="src/base64" }
 basename = { optional=true, path="src/basename" }
 cat      = { optional=true, path="src/cat" }

@@ -11,6 +11,7 @@ path = "timeout.rs"
 getopts = "*"
 libc = "*"
 time = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="timeout"

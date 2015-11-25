@@ -10,6 +10,7 @@ path = "tail.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="tail"

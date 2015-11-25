@@ -11,6 +11,7 @@ path = "unexpand.rs"
 getopts = "*"
 libc = "*"
 unicode-width = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="unexpand"

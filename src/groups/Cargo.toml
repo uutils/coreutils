@@ -10,6 +10,7 @@ path = "groups.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name="groups"

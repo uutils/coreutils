@@ -12,19 +12,14 @@
 extern crate getopts;
 extern crate libc;
 
+#[macro_use]
+extern crate uucore;
+
 use std::ffi::CString;
 use std::fs;
 use std::io::{Error, Write};
 use std::path::{Path, PathBuf};
-
-#[path = "../common/util.rs"]
-#[macro_use]
-mod util;
-
-#[path = "../common/filesystem.rs"]
-mod filesystem;
-
-use filesystem::UUPathExt;
+use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "mkdir";
 static VERSION: &'static str = "1.0.0";

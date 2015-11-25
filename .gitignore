@@ -1,5 +1,6 @@
+target/
 /src/*/gen_table
-/target/
+/build/
 /tmp/
 /busybox/
 *~
