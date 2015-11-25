@@ -24,7 +24,7 @@ use std::path::Path;
 use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "touch";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 // Since touch's date/timestamp parsing doesn't account for timezone, the
 // returned value from time::strptime() is UTC. We get system's timezone to

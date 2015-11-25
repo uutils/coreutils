@@ -23,7 +23,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 static NAME: &'static str = "uniq";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct Uniq {
     repeats_only: bool,

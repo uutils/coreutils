@@ -27,7 +27,7 @@ use rustc_unicode::str::utf8_char_width;
 use unicode_width::UnicodeWidthChar;
 
 static NAME: &'static str = "unexpand";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static DEFAULT_TABSTOP: usize = 8;
 

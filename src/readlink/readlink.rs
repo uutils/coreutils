@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 const NAME: &'static str = "readlink";
-const VERSION: &'static str = "0.0.1";
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

@@ -20,7 +20,7 @@ use std::io::{Read, Result, stdin, Write};
 use std::path::Path;
 
 static NAME: &'static str = "sum";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
     let mut buf = [0; 1024];

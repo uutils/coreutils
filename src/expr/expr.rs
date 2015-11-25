@@ -21,7 +21,7 @@ mod syntax_tree;
 use std::io::{Write};
 
 static NAME: &'static str = "expr";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
 	// For expr utility we do not want getopts.

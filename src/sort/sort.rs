@@ -25,7 +25,7 @@ use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::path::Path;
 
 static NAME: &'static str = "sort";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';

@@ -19,7 +19,7 @@ use std::io::{copy, Error, ErrorKind, Read, Result, sink, stdin, stdout, Write};
 use std::path::{Path, PathBuf};
 
 static NAME: &'static str = "tee";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     match options(&args).and_then(exec) {

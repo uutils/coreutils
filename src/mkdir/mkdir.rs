@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "mkdir";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 /**
  * Handles option parsing

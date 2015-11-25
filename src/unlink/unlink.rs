@@ -24,7 +24,7 @@ use std::io::{Error, ErrorKind, Write};
 use std::mem::uninitialized;
 
 static NAME: &'static str = "unlink";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();

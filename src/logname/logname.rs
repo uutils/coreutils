@@ -37,7 +37,7 @@ fn get_userlogin() -> Option<String> {
 }
 
 static NAME: &'static str = "logname";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     //

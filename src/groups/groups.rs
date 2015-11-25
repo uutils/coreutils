@@ -19,7 +19,7 @@ use std::io::Write;
 use uucore::c_types::{get_pw_from_args, group};
 
 static NAME: &'static str = "groups";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

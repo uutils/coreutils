@@ -18,7 +18,7 @@ extern crate uucore;
 use libc::c_long;
 
 static NAME: &'static str = "hostid";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 static EXIT_ERR: i32 = 1;
 

@@ -24,7 +24,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 static NAME: &'static str = "tail";
-static VERSION: &'static str = "0.0.1";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut beginning = false;

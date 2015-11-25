@@ -14,7 +14,7 @@ extern crate getopts;
 use std::path::Path;
 
 static NAME: &'static str = "dirname";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

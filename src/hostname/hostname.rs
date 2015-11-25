@@ -27,7 +27,7 @@ use std::io::Write;
 use std::net::ToSocketAddrs;
 
 static NAME: &'static str = "hostname";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;

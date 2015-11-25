@@ -33,7 +33,7 @@ mod numeric;
 mod prime_table;
 
 static NAME: &'static str = "factor";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {

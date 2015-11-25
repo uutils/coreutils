@@ -13,7 +13,7 @@ use std::cmp;
 use std::io::Write;
 
 static NAME: &'static str = "seq";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone)]
 struct SeqOptions {

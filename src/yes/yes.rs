@@ -21,7 +21,7 @@ use getopts::Options;
 use std::io::Write;
 
 static NAME: &'static str = "yes";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();

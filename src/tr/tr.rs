@@ -29,7 +29,7 @@ use expand::ExpandSet;
 mod expand;
 
 static NAME: &'static str = "tr";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const BUFFER_LEN: usize = 1024;
 
 fn delete<'a>(set: ExpandSet<'a>, complement: bool) {

@@ -21,7 +21,7 @@ use std::io::Write;
 use std::process::Command;
 
 static NAME: &'static str = "env";
-static VERSION: &'static str = "1.0.0";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct options {
     ignore_env: bool,
