@@ -27,6 +27,7 @@ use std::io::Write;
 use std::net::ToSocketAddrs;
 
 static NAME: &'static str = "hostname";
+static VERSION: &'static str = "1.0.0";
 
 extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
@@ -119,7 +120,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn version() {
-    println!("hostname 1.0.0");
+    println!("{} {}", NAME, VERSION);
 }
 
 fn help_menu(program: &str, options: Options) {
