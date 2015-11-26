@@ -164,7 +164,7 @@ endef
 
 define TEST_INTEGRATION
 test_integration_$(1):
-	${CARGO} test --test $(1)
+	${CARGO} test --test $(1) --features $(1) --no-default-features
 endef
 
 define TEST_UNIT
