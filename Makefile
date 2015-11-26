@@ -22,9 +22,7 @@ INSTALLDIR=$(DESTDIR)$(PREFIX)
 # make a symlink without spaces that points to the directory.
 BASEDIR        ?= $(shell pwd)
 BUILDDIR       := $(BASEDIR)/target/${PROFILE}/
-PKG_BUILDDIR       := $(BUILDDIR)/deps/
-
-
+PKG_BUILDDIR   := $(BUILDDIR)/deps/
 
 # Possible programs
 PROGS       := \
@@ -163,17 +161,32 @@ TEST_PROGS  := \
 	unlink \
 	wc
 
-TESTS       := \
-  $(filter $(PROGS),$(filter-out $(DONT_TEST),$(filter $(BUILD),$(filter-out $(DONT_BUILD),$(TEST_PROGS)))))
-
 TEST        ?= $(TEST_PROGS)
+
+TESTS       := \
+	$(sort $(filter $(TEST),$(filter-out $(DONT_TEST),$(TEST_PROGS))))
+
+define BUILD_EXE
+build_exe_$(1):
+	${CARGO} build ${PROFILE_CMD} -p $(1)
+endef
+
+define TEST_INTEGRATION
+test_integration_$(1):
+	${CARGO} test --test $(1)
+endef
+
+define TEST_UNIT
+test_unit_$(1):
+	${CARGO} test -p $(1)
+endef
 
 # Output names
 EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
 INSTALLEES  := \
-  $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils))
+  $(sort $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils)))
 
 INSTALL     ?= $(EXES)
 
@@ -200,30 +213,27 @@ all: build
 crates:
 	echo "okay" $(EXES)
 
-build_uutils = ${CARGO} build --features "${1}" ${PROFILE_CMD} --no-default-features
-build_pkg = ${CARGO} build ${PROFILE_CMD} -p ${1}
-run_integration_tests = ${CARGO} test --test ${1}
-run_unit_tests = ${CARGO} test -p ${1}
 do_install = install ${1}
 use_default := 1
 
-test:
-	$(call build_uutils, ${TESTS})
-	$(foreach util, ${TESTS}, $(call run_integration_tests, ${util});)
-	$(foreach util, ${TESTS}, $(call run_unit_tests, ${util});)
+$(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
-build:
-	$(call build_uutils, ${EXES})
+build-uutils:
+	${CARGO} build --features "${EXES}" ${PROFILE_CMD} --no-default-features
+
+build: build-uutils $(addprefix build_exe_,$(EXES))
 	$(foreach util, ${EXES}, $(call build_pkg, ${util});)
+
+$(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
+$(foreach test,$(TESTS),$(eval $(call TEST_UNIT,$(test))))
+
+test: $(addprefix test_integration_,$(TESTS)) $(addprefix test_unit_,$(TESTS))
 
 clean:
 	$(RM) -rf $(BUILDDIR) 
 
 distclean: clean
 	$(CARGO) clean && $(CARGO) update
-
-build-check: build clean
-test-check: test clean
 
 # TODO: figure out if there is way for prefixes to work with the symlinks
 install: build
@@ -248,4 +258,4 @@ uninstall-multicall:
 	rm -f $(addprefix $(INSTALLDIR)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)
 	rm -f $(addprefix $(INSTALLDIR)$(LIBDIR)/,$(LIBS))
 
-.PHONY: $(TEMPDIR) all build test distclean clean busytest install uninstall
+.PHONY: all build test distclean clean busytest install uninstall
