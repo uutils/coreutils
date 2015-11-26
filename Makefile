@@ -222,7 +222,7 @@ build-uutils:
 	${CARGO} build --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build: build-uutils $(addprefix build_exe_,$(EXES))
-	$(foreach util, ${EXES}, $(call build_pkg, ${util});)
+	$(foreach util, ${EXES}, $(call build_pkg, ${util}))
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
 $(foreach test,$(TESTS),$(eval $(call TEST_UNIT,$(test))))
