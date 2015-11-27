@@ -29,8 +29,7 @@ pub fn main() {
     let mut map: UtilityMap = HashMap::new();\n".as_bytes()).unwrap();
     for krate in crates {
         match krate.as_ref() {
-            "false" => {},
-            "true" => {},
+            "false" | "true" | "test" => {},
             _ => cf.write_all(format!("extern crate {krate} as uu{krate};\n", krate=krate).as_bytes()).unwrap(),
         }
 
@@ -44,12 +43,11 @@ pub fn main() {
                               map.insert(\"sha384sum\", uuhashsum::uumain);
                               map.insert(\"sha512sum\", uuhashsum::uumain);\n".as_bytes()).unwrap();
             },
-            "false" =>
-                mf.write_all("fn uufalse(_: Vec<String>) -> i32 { 1 }
-                             map.insert(\"false\", uufalse as fn(Vec<String>) -> i32);\n".as_bytes()).unwrap(),
-            "true" =>
-                mf.write_all("fn uutrue(_: Vec<String>) -> i32 { 0 }
-                             map.insert(\"true\", uutrue as fn(Vec<String>) -> i32);\n".as_bytes()).unwrap(),
+            "false" | "true" | "test" => {
+                mf.write_all(format!("fn uu{}", krate).as_bytes()).unwrap();
+                mf.write_all("(_: Vec<String>) -> i32 { 1 }\n".as_bytes()).unwrap();
+                mf.write_all(format!("map.insert(\"{krate}\", uu{krate} as fn(Vec<String>) -> i32);\n", krate=krate).as_bytes()).unwrap();
+            },
             _ => 
                 mf.write_all(format!("map.insert(\"{krate}\", uu{krate}::uumain as fn(Vec<String>) -> i32);\n", krate= krate).as_bytes()).unwrap(),
         }
