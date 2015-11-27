@@ -43,7 +43,12 @@ pub fn main() {
                               map.insert(\"sha384sum\", uuhashsum::uumain);
                               map.insert(\"sha512sum\", uuhashsum::uumain);\n".as_bytes()).unwrap();
             },
-            "false" | "true" | "test" => {
+            "true" => {
+                mf.write_all(format!("fn uu{}", krate).as_bytes()).unwrap();
+                mf.write_all("(_: Vec<String>) -> i32 { 0 }\n".as_bytes()).unwrap();
+                mf.write_all(format!("map.insert(\"{krate}\", uu{krate} as fn(Vec<String>) -> i32);\n", krate=krate).as_bytes()).unwrap();
+            }
+            "false" | "test" => {
                 mf.write_all(format!("fn uu{}", krate).as_bytes()).unwrap();
                 mf.write_all("(_: Vec<String>) -> i32 { 1 }\n".as_bytes()).unwrap();
                 mf.write_all(format!("map.insert(\"{krate}\", uu{krate} as fn(Vec<String>) -> i32);\n", krate=krate).as_bytes()).unwrap();
