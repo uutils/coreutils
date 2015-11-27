@@ -1,7 +1,6 @@
 # Config options
-ENABLE_RELEASE     ?= n
-PROFILE ?= debug
-MULTICALL ?= n
+PROFILE         ?= debug
+MULTICALL       ?= n
 
 PROFILE_CMD :=
 ifeq (${PROFILE},release)
@@ -9,20 +8,20 @@ ifeq (${PROFILE},release)
 endif
 
 # Binaries
-CARGO          ?= cargo
+CARGO  ?= cargo
 
 # Install directories
-PREFIX         ?= /usr/local
-BINDIR         ?= /bin
-LIBDIR         ?= /lib
+PREFIX ?= /usr/local
+BINDIR ?= /bin
+LIBDIR ?= /lib
 
 INSTALLDIR=$(DESTDIR)$(PREFIX)
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
-BASEDIR        ?= $(shell pwd)
-BUILDDIR       := $(BASEDIR)/target/${PROFILE}/
-PKG_BUILDDIR   := $(BUILDDIR)/deps/
+BASEDIR       ?= $(shell pwd)
+BUILDDIR      := $(BASEDIR)/target/${PROFILE}/
+PKG_BUILDDIR  := $(BUILDDIR)/deps/
 
 # Possible programs
 PROGS       := \
@@ -107,14 +106,6 @@ ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
 endif
 
-ALIASES := \
-	hashsum:md5sum \
-	hashsum:sha1sum \
-	hashsum:sha224sum \
-	hashsum:sha256sum \
-	hashsum:sha384sum \
-	hashsum:sha512sum
-
 BUILD       ?= $(PROGS)
 
 # Programs with usable tests
@@ -173,7 +164,7 @@ endef
 
 define TEST_INTEGRATION
 test_integration_$(1):
-	${CARGO} test --test $(1)
+	${CARGO} test --test $(1) --features $(1) --no-default-features
 endef
 
 define TEST_UNIT
@@ -210,9 +201,6 @@ endif
 
 all: build
 
-crates:
-	echo "okay" $(EXES)
-
 do_install = install ${1}
 use_default := 1
 
@@ -222,7 +210,7 @@ build-uutils:
 	${CARGO} build --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build: build-uutils $(addprefix build_exe_,$(EXES))
-	$(foreach util, ${EXES}, $(call build_pkg, ${util});)
+	$(foreach util, ${EXES}, $(call build_pkg, ${util}))
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
 $(foreach test,$(TESTS),$(eval $(call TEST_UNIT,$(test))))
