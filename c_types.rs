@@ -1,4 +1,4 @@
-#![allow(dead_code, non_camel_case_types, raw_pointer_derive)]
+#![allow(dead_code, non_camel_case_types)]
 
 extern crate libc;
 
