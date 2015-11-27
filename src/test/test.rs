@@ -406,8 +406,3 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         PathCondition::Executable       => false, // TODO
     }
 }
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
-}
