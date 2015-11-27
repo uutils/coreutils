@@ -5,8 +5,8 @@ rust:
   - nightly
 sudo: false
 script:
-  - make
-  - make test
+  - cargo build
+  - cargo test --no-fail-fast
 matrix:
   allow_failures:
     - rust: stable
