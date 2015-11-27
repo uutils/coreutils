@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="uutest"
-path="test.rs"
+name="test"
+path="main.rs"
