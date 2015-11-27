@@ -67,7 +67,7 @@ PROGS       := \
   sync \
   tac \
   tee \
-  test_uu \
+  test \
   tr \
   true \
   truncate \
@@ -163,7 +163,7 @@ build_exe_$(1):
 endef
 
 define TEST_INTEGRATION
-test_integration_$(1):
+test_integration_$(1): build_exe_$(1)
 	${CARGO} test --test $(1) --features $(1) --no-default-features
 endef
 
@@ -206,11 +206,10 @@ use_default := 1
 
 $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
-build-uutils:
+build-uutils: $(addprefix build_exe_,$(EXES))
 	${CARGO} build --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
-build: build-uutils $(addprefix build_exe_,$(EXES))
-	$(foreach util, ${EXES}, $(call build_pkg, ${util}))
+build: build-uutils
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
 $(foreach test,$(TESTS),$(eval $(call TEST_UNIT,$(test))))

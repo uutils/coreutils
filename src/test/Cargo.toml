@@ -1,10 +1,10 @@
 [package]
-name = "test_uu"
+name = "test"
 version = "0.0.1"
 authors = []
 
 [lib]
-name = "test_uu"
+name = "uutest"
 path = "test.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="test"
+name="uutest"
 path="test.rs"
