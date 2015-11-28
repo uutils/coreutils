@@ -72,6 +72,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
             (false, true)  => Ordering::Greater,
             (true , false) => Ordering::Less,
             (true , true) => match(&na, &nb) {
+                (&Ok(0), &Ok(0)) => break,
                 (&Ok(0), _) => Ordering::Greater,
                 (_, &Ok(0)) => Ordering::Less,
                 _ =>  ra.cmp(&rb),
@@ -85,6 +86,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                     ensure_nl(ra);
                     print!("{}{}", delim[1], ra);
                 }
+                ra.clear();
                 na = a.read_line(ra);
             },
             Ordering::Greater => {
@@ -92,6 +94,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                     ensure_nl(rb);
                     print!("{}{}", delim[2], rb);
                 }
+                rb.clear();
                 nb = b.read_line(rb);
             },
             Ordering::Equal => {
@@ -99,6 +102,8 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                     ensure_nl(ra);
                     print!("{}{}", delim[3], ra);
                 }
+                ra.clear();
+                rb.clear();
                 na = a.read_line(ra);
                 nb = b.read_line(rb);
             }
