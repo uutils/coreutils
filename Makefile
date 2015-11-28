@@ -114,6 +114,7 @@ TEST_PROGS  := \
 	basename \
 	cat \
 	cksum \
+	comm \
 	cp \
 	cut \
 	dirname \
