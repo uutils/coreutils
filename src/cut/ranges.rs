@@ -37,7 +37,7 @@ impl FromStr for Range {
             }
             (Some(n), Some(m)) if m.len() == 0 => {
                 if let Ok(low) = n.parse::<usize>() {
-                    if low > 0 { Ok(Range{ low: low, high: MAX}) } else { Err(field) }
+                    if low > 0 { Ok(Range{ low: low, high: MAX - 1}) } else { Err(field) }
                 } else {
                     Err(inval)
                 }
@@ -118,10 +118,10 @@ pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
                 }
             }
             (Some(last), None) => {
-                if last.high < usize::MAX {
+                if last.high < usize::MAX - 1 {
                     complements.push(Range {
                                         low: last.high + 1,
-                                        high: usize::MAX
+                                        high: usize::MAX - 1
                                      });
                 }
             }
