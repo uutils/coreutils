@@ -72,6 +72,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
             (false, true)  => Ordering::Greater,
             (true , false) => Ordering::Less,
             (true , true) => match(&na, &nb) {
+                (&Ok(0), &Ok(0)) => break,
                 (&Ok(0), _) => Ordering::Greater,
                 (_, &Ok(0)) => Ordering::Less,
                 _ =>  ra.cmp(&rb),
