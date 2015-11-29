@@ -12,8 +12,7 @@ pub fn main() {
         if val == "1" && key.starts_with(feature_prefix) {
             let krate = key[feature_prefix.len()..].to_lowercase();
             match krate.as_ref() {
-            "default" => continue,
-            "all" => continue,
+            "default" | "unix" | "generic" => continue,
             _ => {},
             }
             crates.push(krate.to_string());
