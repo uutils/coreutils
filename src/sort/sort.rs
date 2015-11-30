@@ -17,12 +17,11 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use libc::STDIN_FILENO;
-use libc::{c_int, isatty};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::path::Path;
+use uucore::fs::is_stdin_interactive;
 
 static NAME: &'static str = "sort";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -194,8 +193,7 @@ fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
 fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
     if path == "-" {
         let stdin = stdin();
-        let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
-        return Some((Box::new(stdin) as Box<Read>, interactive));
+        return Some((Box::new(stdin) as Box<Read>, is_stdin_interactive()));
     }
 
     match File::open(Path::new(path)) {

@@ -17,12 +17,11 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use libc::STDIN_FILENO;
-use libc::{c_int, isatty};
 use getopts::Options;
 use std::fs::File;
 use std::intrinsics::{copy_nonoverlapping};
 use std::io::{stdout, stdin, stderr, Write, Read, Result};
+use uucore::fs::is_stdin_interactive;
 
 static NAME: &'static str = "cat";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -260,8 +259,7 @@ fn exec(files: Vec<String>, number: NumberingMode, show_nonprint: bool,
 fn open(path: &str) -> Option<(Box<Read>, bool)> {
     if path == "-" {
         let stdin = stdin();
-        let interactive = unsafe { isatty(STDIN_FILENO) } != 0 as c_int;
-        return Some((Box::new(stdin) as Box<Read>, interactive));
+        return Some((Box::new(stdin) as Box<Read>, is_stdin_interactive()));
     }
 
     match File::open(path) {
