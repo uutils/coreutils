@@ -12,6 +12,7 @@
 // be backported to stable (<= 1.1). This will likely be dropped
 // when the path trait stabilizes.
 
+use ::libc;
 use std::env;
 use std::fs;
 use std::io::{Error, ErrorKind, Result};
@@ -141,4 +142,34 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         }
     }
     Ok(result)
+}
+
+#[cfg(unix)]
+pub fn is_stdin_interactive() -> bool {
+    unsafe { libc::isatty(libc::STDIN_FILENO) == 1 }
+}
+
+#[cfg(windows)]
+pub fn is_stdin_interactive() -> bool {
+    0
+}
+
+#[cfg(unix)]
+pub fn is_stdout_interactive() -> bool {
+    unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }
+}
+
+#[cfg(windows)]
+pub fn is_stdout_interactive() -> bool {
+    0
+}
+
+#[cfg(unix)]
+pub fn is_stderr_interactive() -> bool {
+    unsafe { libc::isatty(libc::STDERR_FILENO) == 1 }
+}
+
+#[cfg(windows)]
+pub fn is_stderr_interactive() -> bool {
+    0
 }
