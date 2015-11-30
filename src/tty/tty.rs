@@ -19,10 +19,10 @@ extern crate uucore;
 
 use std::ffi::CStr;
 use std::io::Write;
+use uucore::fs::is_stdin_interactive;
 
 extern {
     fn ttyname(filedesc: libc::c_int) -> *const libc::c_char;
-    fn isatty(filedesc: libc::c_int) -> libc::c_int;
 }
 
 static NAME: &'static str = "tty";
@@ -69,12 +69,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
 
-        return unsafe {
-            if isatty(libc::STDIN_FILENO) == 1 {
-                libc::EXIT_SUCCESS
-            } else {
-                libc::EXIT_FAILURE
-            }
+        return if is_stdin_interactive() {
+            libc::EXIT_SUCCESS
+        } else {
+            libc::EXIT_FAILURE
         };
     }
 

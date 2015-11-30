@@ -15,7 +15,7 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use libc::{c_char, signal, dup2, execvp, isatty};
+use libc::{c_char, signal, dup2, execvp};
 use libc::{SIG_IGN, SIGHUP};
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
@@ -23,6 +23,7 @@ use std::io::{Error, Write};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use std::env;
+use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
 
 static NAME: &'static str = "nohup";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -71,11 +72,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn replace_fds() {
-    let replace_stdin = unsafe { isatty(libc::STDIN_FILENO) == 1 };
-    let replace_stdout = unsafe { isatty(libc::STDOUT_FILENO) == 1 };
-    let replace_stderr = unsafe { isatty(libc::STDERR_FILENO) == 1 };
-
-    if replace_stdin {
+    if is_stdin_interactive() {
         let new_stdin = match File::open(Path::new("/dev/null")) {
             Ok(t) => t,
             Err(e) => {
@@ -87,7 +84,7 @@ fn replace_fds() {
         }
     }
 
-    if replace_stdout {
+    if is_stdout_interactive() {
         let new_stdout = find_stdout();
         let fd = new_stdout.as_raw_fd();
 
@@ -96,7 +93,7 @@ fn replace_fds() {
         }
     }
 
-    if replace_stderr {
+    if is_stderr_interactive() {
         if unsafe { dup2(1, 2) } != 2 {
             crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
         }
