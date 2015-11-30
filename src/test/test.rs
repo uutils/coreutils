@@ -12,7 +12,7 @@
 extern crate libc;
 
 use std::collections::HashMap;
-use std::ffi::{CString, OsString};
+use std::ffi::OsString;
 use std::env::{args_os};
 use std::str::{from_utf8};
 
@@ -328,6 +328,8 @@ enum PathCondition {
 fn path(path: &[u8], cond: PathCondition) -> bool {
     use libc::{stat, lstat, S_IFMT, S_IFLNK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFREG};
     use libc::{S_IFIFO, mode_t};
+    use std::ffi::CString;
+
     static S_ISUID: mode_t = 0o4000;
     static S_ISGID: mode_t = 0o2000;
     static S_IFSOCK: mode_t = 0o140000;

@@ -9,8 +9,6 @@
 
 extern crate winapi;
 extern crate advapi32;
-
-#[macro_use]
 extern crate uucore;
 
 use std::ffi::OsString;

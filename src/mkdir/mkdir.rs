@@ -15,9 +15,8 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use std::ffi::CString;
 use std::fs;
-use std::io::{Error, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use uucore::fs::UUPathExt;
 
@@ -137,6 +136,9 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
 
     #[cfg(unix)]
     fn chmod(path: &Path, mode: u16) -> i32 {
+        use std::ffi::CString;
+        use std::io::Error;
+
         let directory = CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
         let mode = mode as libc::mode_t;
 
