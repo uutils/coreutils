@@ -151,7 +151,7 @@ pub fn is_stdin_interactive() -> bool {
 
 #[cfg(windows)]
 pub fn is_stdin_interactive() -> bool {
-    0
+    false
 }
 
 #[cfg(unix)]
@@ -161,7 +161,7 @@ pub fn is_stdout_interactive() -> bool {
 
 #[cfg(windows)]
 pub fn is_stdout_interactive() -> bool {
-    0
+    false
 }
 
 #[cfg(unix)]
@@ -171,5 +171,5 @@ pub fn is_stderr_interactive() -> bool {
 
 #[cfg(windows)]
 pub fn is_stderr_interactive() -> bool {
-    0
+    false
 }
