@@ -11,8 +11,7 @@ extern crate winapi;
 extern crate advapi32;
 extern crate uucore;
 
-use std::ffi::OsString;
-use std::io::{Error, Result, Write};
+use std::io::{Error, Result};
 use std::mem;
 use std::os::windows::ffi::OsStringExt;
 use uucore::wide::FromWide;
