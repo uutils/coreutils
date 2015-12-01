@@ -12,7 +12,8 @@
 // be backported to stable (<= 1.1). This will likely be dropped
 // when the path trait stabilizes.
 
-use ::libc;
+#[cfg(unix)]
+use super::libc;
 use std::env;
 use std::fs;
 use std::io::{Error, ErrorKind, Result};
