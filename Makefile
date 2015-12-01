@@ -28,7 +28,6 @@ PROGS       := \
   base64 \
   basename \
   cat \
-  chmod \
   cksum \
   comm \
   cp \
@@ -81,6 +80,7 @@ PROGS       := \
   whoami
 
 UNIX_PROGS := \
+  chmod \
   chroot \
   du \
   groups \

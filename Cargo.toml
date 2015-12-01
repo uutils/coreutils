@@ -6,6 +6,7 @@ build = "build.rs"
 
 [features]
 unix = [
+  "chmod",
   "chroot",
   "du",
   "groups",
@@ -31,7 +32,6 @@ generic = [
   "base64",
   "basename",
   "cat",
-  "chmod",
   "cksum",
   "comm",
   "cp",
