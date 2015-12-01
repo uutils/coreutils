@@ -12,7 +12,8 @@
 // be backported to stable (<= 1.1). This will likely be dropped
 // when the path trait stabilizes.
 
-use ::libc;
+#[cfg(unix)]
+use super::libc;
 use std::env;
 use std::fs;
 use std::io::{Error, ErrorKind, Result};
@@ -151,7 +152,7 @@ pub fn is_stdin_interactive() -> bool {
 
 #[cfg(windows)]
 pub fn is_stdin_interactive() -> bool {
-    0
+    false
 }
 
 #[cfg(unix)]
@@ -161,7 +162,7 @@ pub fn is_stdout_interactive() -> bool {
 
 #[cfg(windows)]
 pub fn is_stdout_interactive() -> bool {
-    0
+    false
 }
 
 #[cfg(unix)]
@@ -171,5 +172,5 @@ pub fn is_stderr_interactive() -> bool {
 
 #[cfg(windows)]
 pub fn is_stderr_interactive() -> bool {
-    0
+    false
 }

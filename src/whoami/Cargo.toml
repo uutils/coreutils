@@ -10,6 +10,8 @@ path = "whoami.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+winapi = "*"
+advapi32-sys = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

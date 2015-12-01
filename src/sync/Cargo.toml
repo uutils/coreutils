@@ -10,6 +10,8 @@ path = "sync.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+winapi = "*"
+kernel32-sys = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
