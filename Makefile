@@ -168,11 +168,6 @@ test_integration_$(1): build_exe_$(1)
 	${CARGO} test --test $(1) --features $(1) --no-default-features
 endef
 
-define TEST_UNIT
-test_unit_$(1):
-	${CARGO} test -p $(1)
-endef
-
 # Output names
 EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
@@ -213,9 +208,8 @@ build-uutils: $(addprefix build_exe_,$(EXES))
 build: build-uutils
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
-$(foreach test,$(TESTS),$(eval $(call TEST_UNIT,$(test))))
 
-test: $(addprefix test_integration_,$(TESTS)) $(addprefix test_unit_,$(TESTS))
+test: $(addprefix test_integration_,$(TESTS))
 
 clean:
 	$(RM) -rf $(BUILDDIR) 
