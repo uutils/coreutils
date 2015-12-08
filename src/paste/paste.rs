@@ -1,4 +1,4 @@
-#![crate_name = "paste"]
+#![crate_name = "uu_paste"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -126,9 +126,4 @@ fn unescape(s: String) -> String {
      .replace("\\t", "\t")
      .replace("\\\\", "\\")
      .replace("\\", "")
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

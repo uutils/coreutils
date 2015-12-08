@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "sync"
+name = "uu_sync"
 path = "sync.rs"
 
 [dependencies]
@@ -15,5 +15,5 @@ kernel32-sys = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="sync"
-path="sync.rs"
+name = "sync"
+path = "main.rs"

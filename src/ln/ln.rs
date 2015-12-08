@@ -1,4 +1,4 @@
-#![crate_name = "ln"]
+#![crate_name = "uu_ln"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -325,9 +325,4 @@ pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
         Ok(m) => m.file_type().is_symlink(),
         Err(_) => false
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

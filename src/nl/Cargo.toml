@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "nl"
+name = "uu_nl"
 path = "nl.rs"
 
 [dependencies]
@@ -17,5 +17,5 @@ regex-syntax = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="nl"
-path="nl.rs"
+name = "nl"
+path = "main.rs"

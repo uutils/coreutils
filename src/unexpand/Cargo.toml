@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "unexpand"
+name = "uu_unexpand"
 path = "unexpand.rs"
 
 [dependencies]
@@ -14,5 +14,5 @@ unicode-width = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="unexpand"
-path="unexpand.rs"
+name = "unexpand"
+path = "main.rs"

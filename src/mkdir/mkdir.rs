@@ -1,4 +1,4 @@
-#![crate_name = "mkdir"]
+#![crate_name = "uu_mkdir"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -154,9 +154,4 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
         0
     }
     chmod(path, mode)
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

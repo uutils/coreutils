@@ -1,4 +1,4 @@
-#![crate_name = "cat"]
+#![crate_name = "uu_cat"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -338,11 +338,4 @@ impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
     fn drop(&mut self) {
         let _ = self.flush_buf();
     }
-}
-
-/* vim: set ai ts=4 sw=4 sts=4 et : */
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

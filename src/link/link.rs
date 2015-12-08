@@ -1,4 +1,4 @@
-#![crate_name = "link"]
+#![crate_name = "uu_link"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -62,9 +62,4 @@ Create a link named FILE2 to FILE1.", NAME, VERSION);
             1
         }
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

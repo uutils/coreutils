@@ -1,4 +1,4 @@
-#![crate_name = "id"]
+#![crate_name = "uu_id"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -393,9 +393,4 @@ fn id_print(possible_pw: Option<c_passwd>, p_euid: bool, p_egid: bool) {
     }
 
     println!("");
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

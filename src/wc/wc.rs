@@ -1,4 +1,4 @@
-#![crate_name = "wc"]
+#![crate_name = "uu_wc"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -276,9 +276,4 @@ fn open(path: &str) -> StdResult<BufReader<Box<Read+'static>>, i32> {
             Err(1)
         }
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

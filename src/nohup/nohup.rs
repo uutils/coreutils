@@ -1,4 +1,4 @@
-#![crate_name = "nohup"]
+#![crate_name = "uu_nohup"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -140,9 +140,4 @@ or $HOME/nohup.out, if nohup.out open failed.
 If standard error is terminal, it'll be redirected to stdout.", NAME, VERSION);
 
     print!("{}", opts.usage(&msg));
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

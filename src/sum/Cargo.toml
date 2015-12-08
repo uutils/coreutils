@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "sum"
+name = "uu_sum"
 path = "sum.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="sum"
-path="sum.rs"
+name = "sum"
+path = "main.rs"

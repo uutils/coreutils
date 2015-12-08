@@ -1,4 +1,4 @@
-#![crate_name = "truncate"]
+#![crate_name = "uu_truncate"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -211,9 +211,4 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         };
     }
     (number, mode)
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

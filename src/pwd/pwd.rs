@@ -1,4 +1,4 @@
-#![crate_name = "pwd"]
+#![crate_name = "uu_pwd"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -49,9 +49,4 @@ Print the full filename of the current working directory.", NAME, VERSION);
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

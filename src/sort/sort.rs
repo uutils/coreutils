@@ -1,4 +1,4 @@
-#![crate_name = "sort"]
+#![crate_name = "uu_sort"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -203,9 +203,4 @@ fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
             None
         },
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

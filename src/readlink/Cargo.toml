@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "readlink"
+name = "uu_readlink"
 path = "readlink.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="readlink"
-path="readlink.rs"
+name = "readlink"
+path = "main.rs"

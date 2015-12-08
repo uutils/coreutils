@@ -1,4 +1,4 @@
-#![crate_name = "uutest"]
+#![crate_name = "uu_test"]
 
 /*
  * This file is part of the uutils coreutils package.

@@ -1,4 +1,4 @@
-#![crate_name = "tail"]
+#![crate_name = "uu_tail"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -297,9 +297,4 @@ fn print_string<T: Write>(_: &mut T, s: &String) {
 
 fn version () {
     println!("{} {}", NAME, VERSION);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

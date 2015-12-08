@@ -1,4 +1,4 @@
-#![crate_name = "whoami"]
+#![crate_name = "uu_whoami"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -64,9 +64,4 @@ pub fn exec() {
             }
         }
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "sort"
+name = "uu_sort"
 path = "sort.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="sort"
-path="sort.rs"
+name = "sort"
+path = "main.rs"

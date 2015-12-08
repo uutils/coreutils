@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "hashsum"
+name = "uu_hashsum"
 path = "hashsum.rs"
 
 [dependencies]
@@ -16,5 +16,5 @@ rust-crypto = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="hashsum"
-path="hashsum.rs"
+name = "hashsum"
+path = "main.rs"

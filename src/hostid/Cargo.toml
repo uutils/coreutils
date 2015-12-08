@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "hostid"
+name = "uu_hostid"
 path = "hostid.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="hostid"
-path="hostid.rs"
+name = "hostid"
+path = "main.rs"

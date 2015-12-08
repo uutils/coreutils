@@ -1,4 +1,4 @@
-#![crate_name = "nproc"]
+#![crate_name = "uu_nproc"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -83,9 +83,4 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
     println!("{}", cores);
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

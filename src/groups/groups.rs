@@ -1,4 +1,4 @@
-#![crate_name = "groups"]
+#![crate_name = "uu_groups"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -50,9 +50,4 @@ Prints the groups a user is in to standard output.", NAME, VERSION);
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

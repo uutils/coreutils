@@ -1,4 +1,4 @@
-#![crate_name = "hostid"]
+#![crate_name = "uu_hostid"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -86,9 +86,4 @@ fn hostid() {
 
     result &= 0xffffffff; 
     println!("{:0>8x}", result);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

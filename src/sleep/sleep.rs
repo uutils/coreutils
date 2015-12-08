@@ -1,4 +1,4 @@
-#![crate_name = "sleep"]
+#![crate_name = "uu_sleep"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -75,9 +75,4 @@ fn sleep(args: Vec<String>) {
         (1000000.0 * sleep_time) as u32
     };
     thread::sleep(Duration::new(0, sleep_dur));
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

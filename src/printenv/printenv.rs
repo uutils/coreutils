@@ -1,4 +1,4 @@
-#![crate_name = "printenv"]
+#![crate_name = "uu_printenv"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -74,9 +74,4 @@ pub fn exec(args: Vec<String>, separator: &str) {
             _ => ()
         }
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

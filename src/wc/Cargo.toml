@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "wc"
+name = "uu_wc"
 path = "wc.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="wc"
-path="wc.rs"
+name = "wc"
+path = "main.rs"

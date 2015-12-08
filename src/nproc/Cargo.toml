@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "nproc"
+name = "uu_nproc"
 path = "nproc.rs"
 
 [dependencies]
@@ -14,5 +14,5 @@ num_cpus = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="nproc"
-path="nproc.rs"
+name = "nproc"
+path = "main.rs"

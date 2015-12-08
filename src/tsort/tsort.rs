@@ -1,4 +1,4 @@
-#![crate_name = "tsort"]
+#![crate_name = "uu_tsort"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -192,9 +192,4 @@ impl Graph {
         }
         true
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

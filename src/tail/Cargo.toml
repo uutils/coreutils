@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "tail"
+name = "uu_tail"
 path = "tail.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="tail"
-path="tail.rs"
+name = "tail"
+path = "main.rs"

@@ -1,4 +1,4 @@
-#![crate_name = "mv"]
+#![crate_name = "uu_mv"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -350,9 +350,4 @@ fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
         return numbered_backup_path(path);
     }
     simple_backup_path(path, suffix)
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

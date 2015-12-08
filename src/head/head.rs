@@ -1,4 +1,4 @@
-#![crate_name = "head"]
+#![crate_name = "uu_head"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -206,9 +206,4 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
 
 fn version() {
     println!("{} {}", NAME, VERSION);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

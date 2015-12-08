@@ -1,4 +1,4 @@
-#![crate_name = "uptime"]
+#![crate_name = "uu_uptime"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -201,9 +201,4 @@ fn print_uptime(upsecs: i64) {
     else {
         print!("up  {:2}:{:02}, ", uphours, upmins);
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

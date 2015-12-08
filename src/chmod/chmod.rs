@@ -1,4 +1,4 @@
-#![crate_name = "chmod"]
+#![crate_name = "uu_chmod"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -318,9 +318,4 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
     }
 
     Ok(())
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

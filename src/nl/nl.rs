@@ -1,4 +1,4 @@
-#![crate_name = "nl"]
+#![crate_name = "uu_nl"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -327,9 +327,4 @@ fn print_usage(opts: &getopts::Options) {
 
 fn version() {
     println!("{} {}", NAME, VERSION);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

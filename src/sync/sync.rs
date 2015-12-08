@@ -1,4 +1,4 @@
-#![crate_name = "sync"]
+#![crate_name = "uu_sync"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -143,9 +143,4 @@ fn sync() -> isize {
     unsafe {
         platform::do_sync()
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

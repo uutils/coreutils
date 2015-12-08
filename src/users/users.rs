@@ -1,4 +1,4 @@
-#![crate_name = "users"]
+#![crate_name = "uu_users"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -115,9 +115,4 @@ fn exec(filename: &str) {
         users.sort();
         println!("{}", users.join(" "));
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

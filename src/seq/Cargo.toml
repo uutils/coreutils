@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "seq"
+name = "uu_seq"
 path = "seq.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="seq"
-path="seq.rs"
+name = "seq"
+path = "main.rs"

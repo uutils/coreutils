@@ -1,4 +1,4 @@
-#![crate_name = "base64"]
+#![crate_name = "uu_base64"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -158,9 +158,4 @@ fn help(opts: Options) {
 
 fn version() {
     println!("{} {}", NAME, VERSION);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

@@ -1,4 +1,4 @@
-#![crate_name = "expand"]
+#![crate_name = "uu_expand"]
 #![feature(unicode)]
 
 /*
@@ -240,9 +240,4 @@ fn expand(options: Options) {
             buf.truncate(0);    // clear the buffer
         }
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

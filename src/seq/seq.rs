@@ -1,4 +1,4 @@
-#![crate_name = "seq"]
+#![crate_name = "uu_seq"]
 
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
@@ -256,9 +256,4 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
         pipe_print!("{}", terminator);
     }
     pipe_flush!();
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "dirname"
+name = "uu_dirname"
 path = "dirname.rs"
 
 [dependencies]
@@ -12,5 +12,5 @@ getopts = "*"
 libc = "*"
 
 [[bin]]
-name="dirname"
-path="dirname.rs"
+name = "dirname"
+path = "main.rs"

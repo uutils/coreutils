@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "mkfifo"
+name = "uu_mkfifo"
 path = "mkfifo.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="mkfifo"
-path="mkfifo.rs"
+name = "mkfifo"
+path = "main.rs"

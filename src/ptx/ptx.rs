@@ -1,4 +1,4 @@
-#![crate_name = "ptx"]
+#![crate_name = "uu_ptx"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -559,9 +559,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     write_traditional_output(&config, &file_map, &word_set, &output_file);
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

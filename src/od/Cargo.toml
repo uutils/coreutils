@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "od"
+name = "uu_od"
 path = "od.rs"
 
 [dependencies]
@@ -12,5 +12,5 @@ getopts = "*"
 libc = "*"
 
 [[bin]]
-name="od"
-path="od.rs"
+name = "od"
+path = "main.rs"

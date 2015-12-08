@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "mv"
+name = "uu_mv"
 path = "mv.rs"
 
 [dependencies]
@@ -16,5 +16,5 @@ uucore = { path="../uucore" }
 time = "*"
 
 [[bin]]
-name="mv"
-path="mv.rs"
+name = "mv"
+path = "main.rs"

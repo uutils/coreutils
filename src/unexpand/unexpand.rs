@@ -1,4 +1,4 @@
-#![crate_name = "unexpand"]
+#![crate_name = "uu_unexpand"]
 #![feature(unicode)]
 
 /*
@@ -279,9 +279,4 @@ fn unexpand(options: Options) {
         }
     }
     pipe_flush!(output);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }
