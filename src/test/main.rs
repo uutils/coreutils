@@ -1,5 +1,5 @@
-extern crate uutest;
+extern crate uu_test;
 
 fn main() {
-    std::process::exit(uutest::uumain(std::env::args().collect()));
+    std::process::exit(uu_test::uumain(std::env::args().collect()));
 }

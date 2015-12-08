@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "chroot"
+name = "uu_chroot"
 path = "chroot.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="chroot"
-path="chroot.rs"
+name = "chroot"
+path = "main.rs"

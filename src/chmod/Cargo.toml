@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "chmod"
+name = "uu_chmod"
 path = "chmod.rs"
 
 [dependencies]
@@ -18,5 +18,5 @@ uucore = { path="../uucore" }
 walker = "*"
 
 [[bin]]
-name="chmod"
-path="chmod.rs"
+name = "chmod"
+path = "main.rs"

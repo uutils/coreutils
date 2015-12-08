@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "realpath"
+name = "uu_realpath"
 path = "realpath.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="realpath"
-path="realpath.rs"
+name = "realpath"
+path = "main.rs"

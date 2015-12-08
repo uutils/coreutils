@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "true"
+name = "uu_true"
 path = "true.rs"
 
 [dependencies]
@@ -12,5 +12,5 @@ getopts = "*"
 libc = "*"
 
 [[bin]]
-name="true"
-path="true.rs"
+name = "true"
+path = "main.rs"

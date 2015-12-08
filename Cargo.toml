@@ -177,5 +177,5 @@ rand="*"
 tempdir="*"
 
 [[bin]]
-name="uutils"
-path="src/uutils/uutils.rs"
+name = "uutils"
+path = "src/uutils/uutils.rs"

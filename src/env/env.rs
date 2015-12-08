@@ -1,4 +1,4 @@
-#![crate_name = "env"]
+#![crate_name = "uu_env"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -203,9 +203,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(env::args().collect()));
 }

@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "tty"
+name = "uu_tty"
 path = "tty.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="tty"
-path="tty.rs"
+name = "tty"
+path = "main.rs"

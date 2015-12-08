@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "whoami"
+name = "uu_whoami"
 path = "whoami.rs"
 
 [dependencies]
@@ -15,5 +15,5 @@ advapi32-sys = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="whoami"
-path="whoami.rs"
+name = "whoami"
+path = "main.rs"

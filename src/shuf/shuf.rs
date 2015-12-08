@@ -1,4 +1,4 @@
-#![crate_name = "shuf"]
+#![crate_name = "uu_shuf"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -265,9 +265,4 @@ impl WrappedRng {
             &mut WrappedRng::RngDefault(ref mut r) => r.next_u32() as usize,
         }
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

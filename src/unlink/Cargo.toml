@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "unlink"
+name = "uu_unlink"
 path = "unlink.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="unlink"
-path="unlink.rs"
+name = "unlink"
+path = "main.rs"

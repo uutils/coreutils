@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "nohup"
+name = "uu_nohup"
 path = "nohup.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="nohup"
-path="nohup.rs"
+name = "nohup"
+path = "main.rs"

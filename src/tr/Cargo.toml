@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "tr"
+name = "uu_tr"
 path = "tr.rs"
 
 [dependencies]
@@ -15,5 +15,5 @@ vec_map = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="tr"
-path="tr.rs"
+name = "tr"
+path = "main.rs"

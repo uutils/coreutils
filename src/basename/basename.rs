@@ -1,4 +1,4 @@
-#![crate_name = "basename"]
+#![crate_name = "uu_basename"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -104,9 +104,4 @@ fn strip_suffix(name: &str, suffix: &str) -> String {
     }
 
     name.to_string()
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

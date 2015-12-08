@@ -1,4 +1,4 @@
-#![crate_name = "hostname"]
+#![crate_name = "uu_hostname"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -173,9 +173,4 @@ fn xsethostname(name: &str) {
     if err != 0 {
         println!("Cannot set hostname to {}", name);
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

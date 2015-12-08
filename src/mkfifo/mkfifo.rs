@@ -1,4 +1,4 @@
-#![crate_name = "mkfifo"]
+#![crate_name = "uu_mkfifo"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -75,9 +75,4 @@ Create a FIFO with the given name.", NAME, VERSION);
     }
 
     exit_status
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

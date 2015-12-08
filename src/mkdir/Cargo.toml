@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "mkdir"
+name = "uu_mkdir"
 path = "mkdir.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="mkdir"
-path="mkdir.rs"
+name = "mkdir"
+path = "main.rs"

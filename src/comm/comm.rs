@@ -1,4 +1,4 @@
-#![crate_name = "comm"]
+#![crate_name = "uu_comm"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -162,9 +162,4 @@ Compare sorted files line by line.", NAME, VERSION);
     comm(&mut f1, &mut f2, &matches);
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

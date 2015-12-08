@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "comm"
+name = "uu_comm"
 path = "comm.rs"
 
 [dependencies]
@@ -12,5 +12,5 @@ getopts = "*"
 libc = "*"
 
 [[bin]]
-name="comm"
-path="comm.rs"
+name = "comm"
+path = "main.rs"

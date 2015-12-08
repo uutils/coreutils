@@ -1,4 +1,4 @@
-#![crate_name = "logname"]
+#![crate_name = "uu_logname"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -79,9 +79,4 @@ fn exec() {
         Some(userlogin) => println!("{}", userlogin),
         None => println!("{}: no login name", NAME)
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

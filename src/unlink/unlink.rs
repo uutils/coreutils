@@ -1,4 +1,4 @@
-#![crate_name = "unlink"]
+#![crate_name = "uu_unlink"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -89,9 +89,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

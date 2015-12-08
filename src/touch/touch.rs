@@ -1,4 +1,4 @@
-#![crate_name = "touch"]
+#![crate_name = "uu_touch"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -202,10 +202,4 @@ fn parse_timestamp(s: &str) -> FileTime {
         Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
         Err(e) => panic!("Unable to parse timestamp\n{}", e)
     }
-}
-
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

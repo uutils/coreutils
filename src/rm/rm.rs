@@ -1,4 +1,4 @@
-#![crate_name = "rm"]
+#![crate_name = "uu_rm"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -284,9 +284,4 @@ fn prompt(msg: &str) -> bool {
         }
         _ => false,
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

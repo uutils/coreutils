@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "ptx"
+name = "uu_ptx"
 path = "ptx.rs"
 
 [dependencies]
@@ -17,5 +17,5 @@ regex = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="ptx"
-path="ptx.rs"
+name = "ptx"
+path = "main.rs"

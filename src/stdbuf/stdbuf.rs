@@ -1,4 +1,4 @@
-#![crate_name = "stdbuf"]
+#![crate_name = "uu_stdbuf"]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -263,9 +263,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
         },
         Err(e) => crash!(1, "{}", e)
     };
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

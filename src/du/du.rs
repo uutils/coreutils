@@ -1,4 +1,4 @@
-#![crate_name = "du"]
+#![crate_name = "uu_du"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -394,9 +394,4 @@ Try '{} --help' for more information.", s, NAME);
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

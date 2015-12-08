@@ -1,4 +1,4 @@
-#![crate_name = "relpath"]
+#![crate_name = "uu_relpath"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -99,9 +99,4 @@ fn show_usage(opts: &getopts::Options) {
             "Convert TO destination to the relative path from the FROM dir.\n\
             If FROM path is omitted, current working dir will be used.")
     );
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

@@ -1,4 +1,4 @@
-#![crate_name = "expr"]
+#![crate_name = "uu_expr"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -60,8 +60,6 @@ fn evaluate_ast( maybe_ast: Result<Box<syntax_tree::ASTNode>, String> ) -> Resul
 	if maybe_ast.is_err() { Err( maybe_ast.err().unwrap() ) }
 	else { maybe_ast.ok().unwrap().evaluate() }
 }
-
-
 
 fn maybe_handle_help_or_version( args: &Vec<String> ) -> bool {
 	if args.len() == 2 {
@@ -132,9 +130,4 @@ Environment variables:
 
 fn print_version() {
 	println!("{} {}", NAME, VERSION);
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

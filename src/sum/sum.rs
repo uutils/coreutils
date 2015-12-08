@@ -1,4 +1,4 @@
-#![crate_name = "sum"]
+#![crate_name = "uu_sum"]
 
 /*
 * This file is part of the uutils coreutils package.
@@ -136,9 +136,4 @@ Checksum and count the blocks in a file.", NAME, VERSION);
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

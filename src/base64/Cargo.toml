@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "base64"
+name = "uu_base64"
 path = "base64.rs"
 
 [dependencies]
@@ -14,5 +14,5 @@ rustc-serialize = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="base64"
-path="base64.rs"
+name = "base64"
+path = "main.rs"

@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "fold"
+name = "uu_fold"
 path = "fold.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="fold"
-path="fold.rs"
+name = "fold"
+path = "main.rs"

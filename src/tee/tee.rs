@@ -1,4 +1,4 @@
-#![crate_name = "tee"]
+#![crate_name = "uu_tee"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -170,9 +170,4 @@ impl Read for NamedReader {
 fn warn(message: &str) -> Error {
     eprintln!("{}: {}", NAME, message);
     Error::new(ErrorKind::Other, format!("{}: {}", NAME, message))
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

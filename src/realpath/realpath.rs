@@ -1,4 +1,4 @@
-#![crate_name= "realpath"]
+#![crate_name= "uu_realpath"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -134,9 +134,4 @@ fn show_usage(opts: &getopts::Options) {
             Each path component must exist or resolution will fail and non-zero exit status returned.\n\
             Each resolved FILENAME will be written to the standard output, one per line.")
     );
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

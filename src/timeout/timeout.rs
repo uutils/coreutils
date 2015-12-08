@@ -1,4 +1,4 @@
-#![crate_name = "timeout"]
+#![crate_name = "uu_timeout"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -146,9 +146,4 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
             ERR_EXIT_STATUS
         },
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

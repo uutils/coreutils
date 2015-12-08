@@ -1,4 +1,4 @@
-#![crate_name = "fold"]
+#![crate_name = "uu_fold"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -218,9 +218,4 @@ fn rfind_whitespace(slice: &str) -> Option<usize> {
         }
     }
     None
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

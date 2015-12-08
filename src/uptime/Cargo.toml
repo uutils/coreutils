@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "uptime"
+name = "uu_uptime"
 path = "uptime.rs"
 
 [dependencies]
@@ -14,5 +14,5 @@ time = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="uptime"
-path="uptime.rs"
+name = "uptime"
+path = "main.rs"

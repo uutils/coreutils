@@ -1,4 +1,4 @@
-#![crate_name = "uname"]
+#![crate_name = "uu_uname"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -105,9 +105,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
     println!("{}", output.trim());
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

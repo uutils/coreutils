@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "touch"
+name = "uu_touch"
 path = "touch.rs"
 
 [dependencies]
@@ -15,5 +15,5 @@ time = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="touch"
-path="touch.rs"
+name = "touch"
+path = "main.rs"

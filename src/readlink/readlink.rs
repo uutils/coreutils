@@ -1,4 +1,4 @@
-#![crate_name = "readlink"]
+#![crate_name = "uu_readlink"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -132,9 +132,4 @@ fn show_usage(opts: &getopts::Options) {
     println!("Usage: {0} [OPTION]... [FILE]...", NAME);
     print!("Print value of a symbolic link or canonical file name");
     print!("{}", opts.usage(""));
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

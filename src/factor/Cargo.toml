@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "factor"
+name = "uu_factor"
 path = "factor.rs"
 
 [dependencies]
@@ -14,5 +14,5 @@ rand = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="factor"
-path="factor.rs"
+name = "factor"
+path = "main.rs"

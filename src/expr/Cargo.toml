@@ -1,11 +1,10 @@
-
 [package]
 name = "expr"
 version = "0.0.1"
 authors = []
 
 [lib]
-name = "expr"
+name = "uu_expr"
 path = "expr.rs"
 
 [dependencies]
@@ -14,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="expr"
-path="expr.rs"
+name = "expr"
+path = "main.rs"

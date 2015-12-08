@@ -1,4 +1,4 @@
-#![crate_name = "od"]
+#![crate_name = "uu_od"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -123,9 +123,4 @@ fn print_with_radix(r: &Radix, x: usize) {
         Radix::Octal => print!("{:07o}", x),
         Radix::Binary => print!("{:07b}", x)
     }
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

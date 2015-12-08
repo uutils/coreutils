@@ -1,4 +1,4 @@
-#![crate_name = "split"]
+#![crate_name = "uu_split"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -313,9 +313,4 @@ fn split(settings: &Settings) -> i32 {
         control.current_line = sl[advance..sl.chars().count()].to_string();
     }
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

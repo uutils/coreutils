@@ -1,4 +1,4 @@
-#![crate_name = "chroot"]
+#![crate_name = "uu_chroot"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -215,9 +215,4 @@ If COMMAND is not specified, it defaults to '$(SHELL) -i'.
 If $(SHELL) is not set, /bin/sh is used.", NAME, VERSION);
 
     print!("{}", options.usage(&msg));
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }

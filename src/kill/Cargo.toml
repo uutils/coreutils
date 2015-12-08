@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 
 [lib]
-name = "kill"
+name = "uu_kill"
 path = "kill.rs"
 
 [dependencies]
@@ -13,5 +13,5 @@ libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
-name="kill"
-path="kill.rs"
+name = "kill"
+path = "main.rs"

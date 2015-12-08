@@ -1,4 +1,4 @@
-#![crate_name = "fmt"]
+#![crate_name = "uu_fmt"]
 #![feature(iter_cmp, str_char, unicode)]
 
 /*
@@ -218,9 +218,4 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     0
-}
-
-#[allow(dead_code)]
-fn main() {
-    std::process::exit(uumain(std::env::args().collect()));
 }
