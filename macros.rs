@@ -8,9 +8,21 @@
  */
 
 #[macro_export]
+macro_rules! executable(
+    () => ({
+        let module = module_path!();
+        if &module[0..3] == "uu_" {
+            &module[3..]
+        } else {
+            module
+        }
+    })
+);
+
+#[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: error: ", module_path!());
+        pipe_write!(&mut ::std::io::stderr(), "{}: error: ", executable!());
         pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
@@ -18,7 +30,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", module_path!());
+        pipe_write!(&mut ::std::io::stderr(), "{}: warning: ", executable!());
         pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
@@ -26,7 +38,7 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_info(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: ", module_path!());
+        pipe_write!(&mut ::std::io::stderr(), "{}: ", executable!());
         pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
     })
 );
