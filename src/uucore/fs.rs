@@ -7,42 +7,12 @@
  * file that was distributed with this source code.
  */
 
-// Based on the pattern using by Cargo, I created a shim over the
-// standard PathExt trait, so that the unstable path methods could
-// be backported to stable (<= 1.1). This will likely be dropped
-// when the path trait stabilizes.
-
 #[cfg(unix)]
 use super::libc;
 use std::env;
 use std::fs;
 use std::io::{Error, ErrorKind, Result};
 use std::path::{Component, Path, PathBuf};
-
-pub trait UUPathExt {
-    fn uu_exists(&self) -> bool;
-    fn uu_is_file(&self) -> bool;
-    fn uu_is_dir(&self) -> bool;
-    fn uu_metadata(&self) -> Result<fs::Metadata>;
-}
-
-impl UUPathExt for Path {
-    fn uu_exists(&self) -> bool {
-        fs::metadata(self).is_ok()
-    }
-
-    fn uu_is_file(&self) -> bool {
-        fs::metadata(self).map(|m| m.is_file()).unwrap_or(false)
-    }
-
-    fn uu_is_dir(&self) -> bool {
-        fs::metadata(self).map(|m| m.is_dir()).unwrap_or(false)
-    }
-
-    fn uu_metadata(&self) -> Result<fs::Metadata> {
-        fs::metadata(self)
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CanonicalizeMode {

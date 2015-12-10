@@ -22,7 +22,6 @@ use std::io::{stdin, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::result::Result as StdResult;
 use std::str::from_utf8;
-use uucore::fs::UUPathExt;
 
 struct Settings {
     show_bytes: bool,
@@ -263,7 +262,7 @@ fn open(path: &str) -> StdResult<BufReader<Box<Read+'static>>, i32> {
     }
 
     let fpath = Path::new(path);
-    if fpath.uu_is_dir() {
+    if fpath.is_dir() {
         show_info!("{}: is a directory", path);
     }
     match File::open(&fpath) {

@@ -28,7 +28,6 @@ use std::ffi::CString;
 use std::io::{Error, Write};
 use std::mem;
 use std::path::Path;
-use uucore::fs::UUPathExt;
 use walker::Walker;
 
 const NAME: &'static str = "chmod";
@@ -149,8 +148,8 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
     for filename in files.iter() {
         let filename = &filename[..];
         let file = Path::new(filename);
-        if file.uu_exists() {
-            if file.uu_is_dir() {
+        if file.exists() {
+            if file.is_dir() {
                 if !preserve_root || filename != "/" {
                     if recursive {
                         let walk_dir = match Walker::new(&file) {
@@ -273,7 +272,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                             'w' => rwx |= 0o002,
                             'x' => rwx |= 0o001,
                             'X' => {
-                                if file.uu_is_dir() || (fperm & 0o0111) != 0 {
+                                if file.is_dir() || (fperm & 0o0111) != 0 {
                                     rwx |= 0o001;
                                 }
                             }

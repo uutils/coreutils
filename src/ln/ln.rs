@@ -19,7 +19,6 @@ use std::io::{BufRead, BufReader, Result, stdin, Write};
 #[cfg(unix)] use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)] use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
-use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "ln";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -200,7 +199,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
 }
 
 fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Settings) -> i32 {
-    if !target_dir.uu_is_dir() {
+    if !target_dir.is_dir() {
         show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
     }
@@ -232,13 +231,13 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
 
-    if dst.uu_is_dir() {
+    if dst.is_dir() {
         if settings.no_target_dir {
             try!(fs::remove_dir(dst));
         }
     }
 
-    if is_symlink(dst) || dst.uu_exists() {
+    if is_symlink(dst) || dst.exists() {
         match settings.overwrite {
             OverwriteMode::NoClobber => {},
             OverwriteMode::Interactive => {
@@ -301,7 +300,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
-        if !new_path.uu_exists() {
+        if !new_path.exists() {
             return new_path;
         }
         i += 1;
@@ -310,7 +309,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
 
 fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
     let test_path = simple_backup_path(path, &".~1~".to_string());
-    if test_path.uu_exists() {
+    if test_path.exists() {
         return numbered_backup_path(path);
     }
     simple_backup_path(path, suffix)

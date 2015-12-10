@@ -18,7 +18,6 @@ extern crate uucore;
 use std::fs::File;
 use std::io::{stdout, stdin, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
-use uucore::fs::UUPathExt;
 
 use ranges::Range;
 use searcher::Searcher;
@@ -379,7 +378,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
         } else {
             let path = Path::new(&filename[..]);
 
-            if !path.uu_exists() {
+            if !path.exists() {
                 show_error!("{}: No such file or directory", filename);
                 continue
             }

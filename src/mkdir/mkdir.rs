@@ -18,7 +18,6 @@ extern crate uucore;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "mkdir";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -100,7 +99,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
         } else {
             match path.parent() {
                 Some(parent) => {
-                    if parent != empty && !parent.uu_exists() {
+                    if parent != empty && !parent.exists() {
                         show_info!("cannot create directory '{}': No such file or directory", path.display());
                         status = 1;
                     } else {
@@ -120,7 +119,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
-    if path.uu_exists() {
+    if path.exists() {
         show_info!("cannot create directory '{}': File exists", path.display());
         return 1;
     }
