@@ -20,7 +20,6 @@ use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "mv";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -195,14 +194,14 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
         2 => {
             let ref source = files[0];
             let ref target = files[1];
-            if !source.uu_exists() {
+            if !source.exists() {
                 show_error!("cannot stat ‘{}’: No such file or directory", source.display());
                 return 1;
             }
 
-            if target.uu_is_dir() {
+            if target.is_dir() {
                 if b.no_target_dir {
-                    if !source.uu_is_dir() {
+                    if !source.is_dir() {
                         show_error!("cannot overwrite directory ‘{}’ with non-directory",
                             target.display());
                         return 1;
@@ -242,7 +241,7 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
 }
 
 fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
-    if !target_dir.uu_is_dir() {
+    if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
     }
@@ -275,7 +274,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
     let mut backup_path = None;
 
-    if to.uu_exists() {
+    if to.exists() {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -337,7 +336,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
-        if !new_path.uu_exists() {
+        if !new_path.exists() {
             return new_path;
         }
         i = i + 1;
@@ -346,7 +345,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
 
 fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
     let test_path = simple_backup_path(path, &".~1~".to_string());
-    if test_path.uu_exists() {
+    if test_path.exists() {
         return numbered_backup_path(path);
     }
     simple_backup_path(path, suffix)

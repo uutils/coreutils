@@ -23,7 +23,6 @@ use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 use uucore::c_types::{get_pw_from_args, get_group};
-use uucore::fs::UUPathExt;
 
 extern {
     fn chroot(path: *const libc::c_char) -> libc::c_int;
@@ -77,7 +76,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let user_shell = std::env::var("SHELL");
 
     let newroot = Path::new(&matches.free[0][..]);
-    if !newroot.uu_is_dir() {
+    if !newroot.is_dir() {
         crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
     }
 

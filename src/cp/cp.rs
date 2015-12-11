@@ -18,7 +18,7 @@ use getopts::Options;
 use std::fs;
 use std::io::{ErrorKind, Result, Write};
 use std::path::Path;
-use uucore::fs::{canonicalize, CanonicalizeMode, UUPathExt};
+use uucore::fs::{canonicalize, CanonicalizeMode};
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -118,7 +118,7 @@ fn copy(matches: getopts::Matches) {
             panic!();
         }
     } else {
-        if !dest.uu_is_dir() {
+        if !dest.is_dir() {
             show_error!("TARGET must be a directory");
             panic!();
         }
@@ -126,7 +126,7 @@ fn copy(matches: getopts::Matches) {
         for src in sources.iter() {
             let source = Path::new(&src);
 
-            if !source.uu_is_file() {
+            if !source.is_file() {
                 show_error!("\"{}\" is not a file", source.display());
                 continue;
             }

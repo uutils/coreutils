@@ -20,7 +20,6 @@ use std::fs;
 use std::io::{stdin, stderr, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
-use uucore::fs::UUPathExt;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
@@ -130,8 +129,8 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
     for filename in files.iter() {
         let filename = &filename[..];
         let file = Path::new(filename);
-        if file.uu_exists() {
-            if file.uu_is_dir() {
+        if file.exists() {
+            if file.is_dir() {
                 if recursive && (filename != "/" || !preserve_root) {
                     if interactive != InteractiveMode::InteractiveAlways {
                         match fs::remove_dir_all(file) {

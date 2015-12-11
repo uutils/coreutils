@@ -20,7 +20,7 @@ use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
-use uucore::fs::{canonicalize, CanonicalizeMode, UUPathExt};
+use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -201,7 +201,7 @@ fn get_preload_env() -> (String, String) {
     // First search for library in directory of executable.
     let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
     path.push(libstdbuf.clone());
-    if path.uu_exists() {
+    if path.exists() {
         match path.as_os_str().to_str() {
             Some(s) => { return (preload.to_string(), s.to_string()); },
             None => crash!(1, "Error while converting path.")

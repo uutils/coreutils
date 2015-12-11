@@ -21,7 +21,6 @@ use filetime::*;
 use std::fs::{self, File};
 use std::io::{Error, Write};
 use std::path::Path;
-use uucore::fs::UUPathExt;
 
 static NAME: &'static str = "touch";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -108,7 +107,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     for filename in matches.free.iter() {
         let path = &filename[..];
 
-        if !Path::new(path).uu_exists() {
+        if !Path::new(path).exists() {
             // no-dereference included here for compatibility
             if matches.opts_present(&["no-create".to_string(), "no-dereference".to_string()]) {
                 continue;
