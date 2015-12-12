@@ -126,7 +126,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
             multiple = true;
         }
 
-
         for file in files.iter() {
             if multiple {
                 if !firstime { println!(""); }
@@ -295,6 +294,6 @@ fn print_string<T: Write>(_: &mut T, s: &String) {
     print!("{}", s);
 }
 
-fn version () {
+fn version() {
     println!("{} {}", NAME, VERSION);
 }
