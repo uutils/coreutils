@@ -143,6 +143,7 @@ TEST_PROGS  := \
 	stdbuf \
 	sum \
 	tac \
+	tail \
 	test \
 	touch \
 	tr \
