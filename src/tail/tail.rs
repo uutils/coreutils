@@ -26,16 +26,35 @@ use std::time::Duration;
 static NAME: &'static str = "tail";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+enum FilterMode {
+    Bytes(usize),
+    Lines(usize),
+}
+
+struct Settings {
+    mode: FilterMode,
+    sleep_msec: u32,
+    beginning: bool,
+    follow: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            mode: FilterMode::Lines(10),
+            sleep_msec: 1000,
+            beginning: false,
+            follow: false,
+        }
+    }
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut beginning = false;
-    let mut lines = true;
-    let mut byte_count = 0usize;
-    let mut line_count = 10usize;
-    let mut sleep_msec = 1000u32;
+    let mut settings: Settings = Default::default();
 
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
-        (args, Some(n)) => { line_count = n; args },
+        (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
         (args, None) => args
     };
 
@@ -64,13 +83,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
     if given_options.opt_present("V") { version(); return 0 }
 
-    let follow = given_options.opt_present("f");
-    if follow {
+    settings.follow = given_options.opt_present("f");
+    if settings.follow {
         match given_options.opt_str("s") {
             Some(n) => {
                 let parsed: Option<u32> = n.parse().ok();
                 match parsed {
-                    Some(m) => { sleep_msec = m * 1000 }
+                    Some(m) => { settings.sleep_msec = m * 1000 }
                     None => {}
                 }
             }
@@ -82,32 +101,31 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Some(n) => {
             let mut slice: &str = n.as_ref();
             if slice.chars().next().unwrap_or('_') == '+' {
-                beginning = true;
+                settings.beginning = true;
                 slice = &slice[1..];
             }
-            line_count = match parse_size(slice) {
-                Some(m) => m,
+            match parse_size(slice) {
+                Some(m) => settings.mode = FilterMode::Lines(m),
                 None => {
                     show_error!("invalid number of lines ({})", slice);
                     return 1;
                 }
-            };
+            }
         }
         None => match given_options.opt_str("c") {
             Some(n) => {
                 let mut slice: &str = n.as_ref();
                 if slice.chars().next().unwrap_or('_') == '+' {
-                    beginning = true;
+                    settings.beginning = true;
                     slice = &slice[1..];
                 }
-                byte_count = match parse_size(slice) {
-                    Some(m) => m,
+                match parse_size(slice) {
+                    Some(m) => settings.mode = FilterMode::Bytes(m),
                     None => {
                         show_error!("invalid number of bytes ({})", slice);
                         return 1;
                     }
-                };
-                lines = false;
+                }
             }
             None => { }
         }
@@ -117,7 +135,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
-        tail(&mut buffer, line_count, byte_count, beginning, lines, follow, sleep_msec);
+        tail(&mut buffer, &settings);
     } else {
         let mut multiple = false;
         let mut firstime = true;
@@ -125,7 +143,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         if files.len() > 1 {
             multiple = true;
         }
-
 
         for file in files.iter() {
             if multiple {
@@ -137,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let path = Path::new(file);
             let reader = File::open(&path).unwrap();
             let mut buffer = BufReader::new(reader);
-            tail(&mut buffer, line_count, byte_count, beginning, lines, follow, sleep_msec);
+            tail(&mut buffer, &settings);
         }
     }
 
@@ -232,15 +249,16 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 }
 
 macro_rules! tail_impl (
-    ($kind:ty, $kindfn:ident, $kindprint:ident, $reader:ident, $count:ident, $beginning:ident) => ({
+    ($kind:ty, $kindfn:ident, $kindprint:ident, $reader:ident, $count:expr, $beginning:expr) => ({
         // read through each line and store them in a ringbuffer that always contains
         // count lines/chars. When reaching the end of file, output the data in the
         // ringbuf.
+        let mut count = $count;
         let mut ringbuf: VecDeque<$kind> = VecDeque::new();
         let data = $reader.$kindfn().skip(
             if $beginning {
-                let temp = $count;
-                $count = ::std::usize::MAX;
+                let temp = count;
+                count = ::std::usize::MAX;
                 temp - 1
             } else {
                 0
@@ -249,7 +267,7 @@ macro_rules! tail_impl (
         for io_datum in data {
             match io_datum {
                 Ok(datum) => {
-                    if $count <= ringbuf.len() {
+                    if count <= ringbuf.len() {
                         ringbuf.pop_front();
                     }
                     ringbuf.push_back(datum);
@@ -264,16 +282,19 @@ macro_rules! tail_impl (
     })
 );
 
-fn tail<T: Read>(reader: &mut BufReader<T>, mut line_count: usize, mut byte_count: usize, beginning: bool, lines: bool, follow: bool, sleep_msec: u32) {
-    if lines {
-        tail_impl!(String, lines, print_string, reader, line_count, beginning);
-    } else {
-        tail_impl!(u8, bytes, print_byte, reader, byte_count, beginning);
+fn tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+    match settings.mode {
+        FilterMode::Lines(count) => {
+            tail_impl!(String, lines, print_string, reader, count, settings.beginning)
+        },
+        FilterMode::Bytes(count) => {
+            tail_impl!(u8, bytes, print_byte, reader, count, settings.beginning)
+        }
     }
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
-    while follow {
-        sleep(Duration::new(0, sleep_msec*1000));
+    while settings.follow {
+        sleep(Duration::new(0, settings.sleep_msec*1000));
         for io_line in reader.lines() {
             match io_line {
                 Ok(line) => print!("{}", line),
@@ -295,6 +316,6 @@ fn print_string<T: Write>(_: &mut T, s: &String) {
     print!("{}", s);
 }
 
-fn version () {
+fn version() {
     println!("{} {}", NAME, VERSION);
 }
