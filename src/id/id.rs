@@ -191,7 +191,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
         print!("uid\t{}\ngroups\t", pw_name);
         group(possible_pw, true);
     } else {
-        let login = unsafe { String::from_utf8_lossy(CStr::from_ptr((getlogin() as *const i8)).to_bytes()).to_string() };
+        let login = unsafe { String::from_utf8_lossy(CStr::from_ptr((getlogin() as *const _)).to_bytes()).to_string() };
         let rid = unsafe { getuid() };
         let pw = unsafe { getpwuid(rid) };
 
