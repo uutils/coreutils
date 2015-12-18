@@ -9,6 +9,7 @@ endif
 
 # Binaries
 CARGO  ?= cargo
+CARGOFLAGS ?=
 
 # Install directories
 PREFIX ?= /usr/local
@@ -161,12 +162,12 @@ TESTS       := \
 
 define BUILD_EXE
 build_exe_$(1):
-	${CARGO} build ${PROFILE_CMD} -p $(1)
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} -p $(1)
 endef
 
 define TEST_INTEGRATION
 test_integration_$(1): build_exe_$(1)
-	${CARGO} test --test $(1) --features $(1) --no-default-features
+	${CARGO} test ${CARGOFLAGS} --test $(1) --features $(1) --no-default-features
 endef
 
 # Output names
@@ -204,7 +205,7 @@ use_default := 1
 $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
 build-uutils: $(addprefix build_exe_,$(EXES))
-	${CARGO} build --features "${EXES}" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build: build-uutils
 
@@ -216,7 +217,7 @@ clean:
 	$(RM) -rf $(BUILDDIR) 
 
 distclean: clean
-	$(CARGO) clean && $(CARGO) update
+	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 # TODO: figure out if there is way for prefixes to work with the symlinks
 install: build
