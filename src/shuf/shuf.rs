@@ -16,8 +16,7 @@ extern crate rand;
 #[macro_use]
 extern crate uucore;
 
-use rand::{Rng, ThreadRng};
-use rand::read::ReadRng;
+use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::usize::MAX as MAX_USIZE;

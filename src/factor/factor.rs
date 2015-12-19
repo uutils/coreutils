@@ -22,7 +22,6 @@ extern crate uucore;
 
 use numeric::*;
 use prime_table::P_INVS_U64;
-use rand::weak_rng;
 use rand::distributions::{Range, IndependentSample};
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead, BufReader, Write};
