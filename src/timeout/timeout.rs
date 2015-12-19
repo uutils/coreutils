@@ -16,7 +16,6 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 
-use libc::pid_t;
 use std::io::{ErrorKind, Write};
 use std::process::{Command, Stdio};
 use std::os::unix::process::ExitStatusExt;
