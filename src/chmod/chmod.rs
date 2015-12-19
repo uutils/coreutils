@@ -78,7 +78,7 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         let recursive = matches.opt_present("recursive");
         let fmode = matches.opt_str("reference").and_then(|fref| {
             let mut stat : libc::stat = unsafe { mem::uninitialized() };
-            let statres = unsafe { libc::stat(fref.as_ptr() as *const i8, &mut stat as *mut libc::stat) };
+            let statres = unsafe { libc::stat(fref.as_ptr() as *const _, &mut stat as *mut libc::stat) };
             if statres == 0 {
                 Some(stat.st_mode)
             } else {

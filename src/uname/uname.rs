@@ -35,7 +35,7 @@ extern {
 }
 
 unsafe fn string_from_c_str(ptr: *const i8) -> String {
-    String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
+    String::from_utf8_lossy(CStr::from_ptr(ptr as *const std::os::raw::c_char).to_bytes()).to_string()
 }
 
 unsafe fn getuname() -> Uts {

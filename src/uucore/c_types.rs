@@ -128,7 +128,7 @@ pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
         } else {
             let pw_pointer = unsafe {
                 let cstr = CString::new(username).unwrap();
-                getpwnam(cstr.as_bytes_with_nul().as_ptr() as *const i8)
+                getpwnam(cstr.as_bytes_with_nul().as_ptr() as *const _)
             };
             if !pw_pointer.is_null() {
                 Some(unsafe { read(pw_pointer) })
