@@ -248,56 +248,83 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     (options, None)
 }
 
-macro_rules! tail_impl (
-    ($kind:ty, $kindfn:ident, $kindprint:ident, $reader:ident, $count:expr, $beginning:expr) => ({
-        // read through each line and store them in a ringbuffer that always contains
-        // count lines/chars. When reaching the end of file, output the data in the
-        // ringbuf.
-        let mut count = $count;
-        let mut ringbuf: VecDeque<$kind> = VecDeque::new();
-        let data = $reader.$kindfn().skip(
-            if $beginning {
+fn tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+    // Read through each line/char and store them in a ringbuffer that always
+    // contains count lines/chars. When reaching the end of file, output the
+    // data in the ringbuf.
+    match settings.mode {
+        FilterMode::Lines(mut count) => {
+            let mut ringbuf: VecDeque<String> = VecDeque::new();
+            let mut skip = if settings.beginning {
                 let temp = count;
                 count = ::std::usize::MAX;
                 temp - 1
             } else {
                 0
-            }
-        );
-        for io_datum in data {
-            match io_datum {
-                Ok(datum) => {
-                    if count <= ringbuf.len() {
-                        ringbuf.pop_front();
-                    }
-                    ringbuf.push_back(datum);
+            };
+            loop {
+                let mut datum = String::new();
+                match reader.read_line(&mut datum) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        if skip > 0 {
+                            skip -= 1;
+                        } else {
+                            if count <= ringbuf.len() {
+                                ringbuf.pop_front();
+                            }
+                            ringbuf.push_back(datum);
+                        }
+                    },
+                    Err(err) => panic!(err)
                 }
-                Err(err) => panic!(err)
             }
-        }
-        let mut stdout = stdout();
-        for datum in ringbuf.iter() {
-            $kindprint(&mut stdout, datum);
-        }
-    })
-);
-
-fn tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
-    match settings.mode {
-        FilterMode::Lines(count) => {
-            tail_impl!(String, lines, print_string, reader, count, settings.beginning)
+            let mut stdout = stdout();
+            for datum in ringbuf.iter() {
+                print_string(&mut stdout, datum);
+            }
         },
-        FilterMode::Bytes(count) => {
-            tail_impl!(u8, bytes, print_byte, reader, count, settings.beginning)
+        FilterMode::Bytes(mut count) => {
+            let mut ringbuf: VecDeque<u8> = VecDeque::new();
+            let mut skip = if settings.beginning {
+                let temp = count;
+                count = ::std::usize::MAX;
+                temp - 1
+            } else {
+                0
+            };
+            loop {
+                let mut datum = [0; 1];
+                match reader.read(&mut datum) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        if skip > 0 {
+                            skip -= 1;
+                        } else {
+                            if count <= ringbuf.len() {
+                                ringbuf.pop_front();
+                            }
+                            ringbuf.push_back(datum[0]);
+                        }
+                    },
+                    Err(err) => panic!(err)
+                }
+            }
+            let mut stdout = stdout();
+            for datum in ringbuf.iter() {
+                print_byte(&mut stdout, datum);
+            }
         }
     }
 
     // if we follow the file, sleep a bit and print the rest if the file has grown.
     while settings.follow {
         sleep(Duration::new(0, settings.sleep_msec*1000));
-        for io_line in reader.lines() {
-            match io_line {
-                Ok(line) => print!("{}", line),
+        loop {
+            let mut datum = String::new();
+            match reader.read_line(&mut datum) {
+                Ok(0) => break,
+                Ok(_) => print!("{}", datum),
                 Err(err) => panic!(err)
             }
         }
