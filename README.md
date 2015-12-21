@@ -110,6 +110,26 @@ To test only a few of the available utilities:
 make TEST='UTILITY_1 UTILITY_2' test
 ```
 
+Run busybox tests
+-----------------
+
+This testing functionality is only available on *nix operating systems
+
+To run busybox's tests for all utilities for which busybox has tests
+```
+make busytest
+```
+
+To run busybox's tests for a few of the available utilities
+```
+make BUSYTEST='UTILITY_1 UTILITY_2' busytest
+```
+
+To pass an argument like "-v" to the busybox test runtime
+```
+make BUSYTEST='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
+```
+
 Contribute
 ----------
 
