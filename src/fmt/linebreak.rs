@@ -314,7 +314,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
 fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<usize>) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut breakwords = vec!();
     // of the active paths, we select the one with the fewest demerits
-    let mut best_idx = match active.iter().min_by(|&&a| paths[a].demerits) {
+    let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
         None => crash!(1, "Failed to find a k-p linebreak solution. This should never happen."),
         Some(&s) => s
     };
