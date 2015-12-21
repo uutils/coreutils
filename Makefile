@@ -231,7 +231,7 @@ test: $(addprefix test_integration_,$(TESTS))
 busybox-src:
 	if [ ! -e $(BUSYBOX_SRC) ]; then \
 	mkdir -p $(BUSYBOX_ROOT); \
-	wget http://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2 -P $(BUSYBOX_ROOT); \
+	wget https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2 -P $(BUSYBOX_ROOT); \
 	tar -C $(BUSYBOX_ROOT) -xf $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2; \
 	fi; \
 
