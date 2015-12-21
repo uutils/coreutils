@@ -23,3 +23,30 @@ fn test_path_without_trailing_slashes() {
 
     assert_eq!(out.trim_right(), "/root/alpha/beta/gamma/delta/epsilon");
 }
+
+#[test]
+fn test_root() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let dir = "/";
+    let out = ucmd.arg(dir).run().stdout;
+
+    assert_eq!(out.trim_right(), "/");
+}
+
+#[test]
+fn test_pwd() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let dir = ".";
+    let out = ucmd.arg(dir).run().stdout;
+
+    assert_eq!(out.trim_right(), ".");
+}
+
+#[test]
+fn test_empty() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let dir = "";
+    let out = ucmd.arg(dir).run().stdout;
+
+    assert_eq!(out.trim_right(), ".");
+}

@@ -54,9 +54,21 @@ directory).", NAME, VERSION);
     if !matches.free.is_empty() {
         for path in matches.free.iter() {
             let p = Path::new(path);
-            let d = p.parent().unwrap().to_str();
-            if d.is_some() {
-                print!("{}", d.unwrap());
+            match p.parent() {
+                Some(d) => {
+                    if d.components().next() == None {
+                        print!(".")
+                    } else {
+                        print!("{}", d.to_string_lossy());
+                    }
+                }
+                None => {
+                    if p.is_absolute() {
+                        print!("/");
+                    } else {
+                        print!(".");
+                    }
+                }
             }
             print!("{}", separator);
         }
