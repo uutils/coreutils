@@ -70,6 +70,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let hostname = xgethostname();
 
             if matches.opt_present("i") {
+                // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
+                // This should use std::net::lookup_host, but that is still marked unstable.
+                let hostname = hostname + ":1";
                 match hostname.to_socket_addrs() {
                     Ok(addresses) => {
                         let mut hashset = HashSet::new();
@@ -77,7 +80,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         for addr in addresses {
                             // XXX: not sure why this is necessary...
                             if !hashset.contains(&addr) {
-                                output.push_str(&format!("{}", addr));
+                                let mut ip = format!("{}", addr);
+                                if ip.ends_with(":1") {
+                                    ip = ip[..ip.len()-2].to_string();
+                                }
+                                output.push_str(&ip);
                                 output.push_str(" ");
                                 hashset.insert(addr.clone());
                             }
