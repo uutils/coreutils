@@ -141,9 +141,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let id = if possible_pw.is_some() {
             possible_pw.unwrap().pw_uid
         } else if rflag {
-            unsafe { getgid() }
+            unsafe { getuid() }
         } else {
-            unsafe { getegid() }
+            unsafe { geteuid() }
         };
 
         let pw = unsafe { getpwuid(id) };
