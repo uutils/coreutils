@@ -24,6 +24,10 @@ BASEDIR       ?= $(shell pwd)
 BUILDDIR      := $(BASEDIR)/target/${PROFILE}/
 PKG_BUILDDIR  := $(BUILDDIR)/deps/
 
+BUSYBOX_ROOT := $(BASEDIR)/tmp/
+BUSYBOX_VER := 1.24.1
+BUSYBOX_SRC:=$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)/
+
 # Possible programs
 PROGS       := \
   base64 \
@@ -160,6 +164,11 @@ TEST        ?= $(TEST_PROGS)
 TESTS       := \
 	$(sort $(filter $(TEST),$(filter-out $(DONT_TEST),$(TEST_PROGS))))
 
+BUSYTEST ?= $(PROGS)
+BUSYTESTS       := \
+	$(sort $(filter $(BUSYTEST),$(filter-out $(DONT_BUSYTEST),$(PROGS))))
+
+
 define BUILD_EXE
 build_exe_$(1):
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} -p $(1)
@@ -168,6 +177,11 @@ endef
 define TEST_INTEGRATION
 test_integration_$(1): build_exe_$(1)
 	${CARGO} test ${CARGOFLAGS} --test $(1) --features $(1) --no-default-features
+endef
+
+define TEST_BUSYBOX
+test_busybox_$(1): build_exe_$(1)
+	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
 endef
 
 # Output names
@@ -210,8 +224,34 @@ build-uutils: $(addprefix build_exe_,$(EXES))
 build: build-uutils
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
+$(foreach test,$(PROGS),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test: $(addprefix test_integration_,$(TESTS))
+
+busybox-src:
+	if [ ! -e $(BUSYBOX_SRC) ]; then \
+	mkdir -p $(BUSYBOX_ROOT); \
+	wget http://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2 -P $(BUSYBOX_ROOT); \
+	tar -C $(BUSYBOX_ROOT) -xf $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2; \
+	fi; \
+
+ensure-builddir:
+	mkdir -p $(BUILDDIR)
+
+# Test under the busybox testsuite
+$(BUILDDIR)/busybox: busybox-src ensure-builddir
+	echo '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 $${@:2}' > $@; \
+	chmod +x $@;
+
+# This is a busybox-specific config file their test suite wants to parse.
+$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config ensure-builddir
+	cp $< $@
+
+ifeq ($(BUSYTESTS),)
+busytest:
+else
+busytest: $(BUILDDIR)/busybox $(BUILDDIR)/.config $(addprefix test_busybox_,$(BUSYTESTS))
+endif
 
 clean:
 	$(RM) -rf $(BUILDDIR) 
