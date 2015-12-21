@@ -49,12 +49,7 @@ fn main() {
         None => (),
     }
 
-    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
-        binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox") {
-            // uutils can be called as either "uutils", "busybox"
-            // "uutils-suffix" or "busybox-suffix". Not sure
-            // what busybox uses the -suffix pattern for.
-    } else {
+    if !(binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils")) {
         println!("{}: applet not found", binary_as_util);
         std::process::exit(1);
     }
