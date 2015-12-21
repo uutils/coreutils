@@ -240,7 +240,7 @@ ensure-builddir:
 
 # Test under the busybox testsuite
 $(BUILDDIR)/busybox: busybox-src ensure-builddir
-	echo '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 $${@:2}' > $@; \
+	echo -e '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 $${@:2}' > $@; \
 	chmod +x $@;
 
 # This is a busybox-specific config file their test suite wants to parse.
