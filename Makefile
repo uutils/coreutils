@@ -125,6 +125,7 @@ TEST_PROGS  := \
 	dirname \
 	echo \
 	env \
+	expr \
 	factor \
 	false \
 	fold \
