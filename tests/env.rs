@@ -54,7 +54,12 @@ fn test_null_delimiter() {
                   .run()
                   .stdout;
 
-    assert_eq!(out, "FOO=bar\0ABC=xyz\0");
+    let mut vars : Vec<_> = out.split('\0').collect();
+    assert_eq!(vars.len(), 3);
+    vars.sort();
+    assert_eq!(vars[0], "");
+    assert_eq!(vars[1], "ABC=xyz");
+    assert_eq!(vars[2], "FOO=bar");
 }
 
 #[test]
