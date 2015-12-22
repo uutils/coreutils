@@ -103,6 +103,8 @@ impl ASTNode {
                                     |a: &String, b: &String| Ok( bool_as_string(a >= b) ),
                                     &operand_values
                                 ),
+                            "|" => infix_operator_or(&operand_values),
+                            "&" => infix_operator_and(&operand_values),
                             "length" => prefix_operator_length( &operand_values ),
                             "index" => prefix_operator_index( &operand_values ),
                             "substr" => prefix_operator_substr( &operand_values ),
@@ -331,6 +333,23 @@ fn infix_operator_two_ints_or_two_strings<FI, FS>( fi: FI, fs: FS, values: &Vec<
     }
 }
 
+fn infix_operator_or( values: &Vec<String> ) -> Result<String, String> {
+    assert!(values.len() == 2);
+    if value_as_bool(&values[0]) {
+        Ok(values[0].clone())
+    } else {
+        Ok(values[1].clone())
+    }
+}
+
+fn infix_operator_and( values: &Vec<String> ) -> Result<String, String> {
+    if value_as_bool(&values[0]) && value_as_bool(&values[1]) {
+        Ok(values[0].clone())
+    } else {
+        Ok(0.to_string())
+    }
+}
+
 fn prefix_operator_length( values: &Vec<String> ) -> Result<String, String> {
     assert!( values.len() == 1 );
     Ok( values[0].len().to_string() )
@@ -383,4 +402,12 @@ fn prefix_operator_substr( values: &Vec<String> ) -> Result<String, String> {
 
 fn bool_as_int( b: bool ) -> i64 { if b { 1 } else { 0 } }
 fn bool_as_string( b: bool ) -> String { if b { "1".to_string() } else { "0".to_string() } }
-
+fn value_as_bool( s: &str ) -> bool {
+    if s.len() == 0 {
+        return false
+    }
+    match s.parse::<i64>() {
+        Ok(n) => n != 0,
+        Err(_) => true,
+    }
+}
