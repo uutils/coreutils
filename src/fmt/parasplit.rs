@@ -58,7 +58,7 @@ impl Line {
 // each line's prefix has to be considered to know whether to merge it with
 // the next line or not
 #[derive(Debug)]
-struct FileLine {
+pub struct FileLine {
     line       : String,
     indent_end : usize,     // the end of the indent, always the start of the text
     pfxind_end : usize,     // the end of the PREFIX's indent, that is, the spaces before the prefix
