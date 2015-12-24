@@ -49,14 +49,26 @@ fn main() {
         None => (),
     }
 
-    if !(binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils")) {
-        println!("{}: applet not found", binary_as_util);
-        std::process::exit(1);
+    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") {
+        args.remove(0);
+    } else {
+        let mut found = false;
+        for util in umap.keys() {
+            if binary_as_util.ends_with(util) {
+                args[0] = util.clone().to_owned();
+                found = true;
+                break;
+            }
+        }
+        if ! found {
+            println!("{}: applet not found", binary_as_util);
+            std::process::exit(1);
+        }
     }
 
     // try first arg as util name.
-    if args.len() >= 2 {
-        args.remove(0);
+    if args.len() >= 1 {
+
         let util = &args[0][..];
 
         match umap.get(util) {

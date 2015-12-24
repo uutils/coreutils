@@ -64,14 +64,19 @@ To install only a few of the available utilities:
 make INSTALL='UTILITY_1 UTILITY_2' install
 ```
 
-To install every program with a prefix:
+To install every program with a prefix (e.g. uu-echo uu-cat):
 ```
 make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
 
 To install the multicall binary:
 ```
-make install-multicall
+make MULTICALL=y install
+```
+
+Set install parent directory (default value is /usr/local):
+```
+make PREFIX=/my/path install
 ```
 
 Uninstallation Instructions
@@ -89,7 +94,12 @@ make PROG_PREFIX=PREFIX_GOES_HERE uninstall
 
 To uninstall the multicall binary:
 ```
-make uninstall-multicall
+make MULTICALL=y uninstall
+```
+
+To uninstall from a custom parent directory:
+```
+make PREFIX=/my/path uninstall
 ```
 
 Test Instructions
