@@ -16,7 +16,13 @@ use std::ffi::OsStr;
 use self::tempdir::TempDir;
 use std::rc::Rc;
 
+#[cfg(windows)]
+static PROGNAME: &'static str = "target\\debug\\uutils.exe";
+#[cfg(windows)]
+static FIXTURES_DIR: &'static str = "tests\\fixtures";
+#[cfg(not(windows))]
 static PROGNAME: &'static str = "target/debug/uutils";
+#[cfg(not(windows))]
 static FIXTURES_DIR: &'static str = "tests/fixtures";
 static ALREADY_RUN: &'static str = " you have already run this UCommand, if you want to run \
                                     another command in the same test, use TestSet::new instead of \
