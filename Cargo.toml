@@ -56,6 +56,7 @@ generic = [
   "od",
   "paste",
   "printenv",
+  "printf",
   "ptx",
   "pwd",
   "readlink",
@@ -129,6 +130,7 @@ nproc    = { optional=true, path="src/nproc" }
 od       = { optional=true, path="src/od" }
 paste    = { optional=true, path="src/paste" }
 printenv = { optional=true, path="src/printenv" }
+printf   = { optional=true, path="src/printf" }
 ptx      = { optional=true, path="src/ptx" }
 pwd      = { optional=true, path="src/pwd" }
 readlink = { optional=true, path="src/readlink" }
