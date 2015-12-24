@@ -152,7 +152,7 @@ To do
 - expr
 - getlimits
 - install
-- join
+- join (some options to do)
 - ls
 - mknod
 - mktemp
