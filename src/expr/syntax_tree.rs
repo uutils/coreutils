@@ -15,7 +15,7 @@
 use tokens::{Token};
 
 type TokenStack = Vec<(usize, Token)>;
-type OperandsList = Vec< Box<ASTNode> >;
+pub type OperandsList = Vec< Box<ASTNode> >;
 
 #[derive(Debug)]
 pub enum ASTNode {
