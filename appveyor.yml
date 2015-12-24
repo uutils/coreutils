@@ -25,7 +25,14 @@ install:
   - cargo -V
 
 build_script:
-  - call %MBASH% "cd $APPVEYOR_BUILD_FOLDER; PATH=$PATH:/mingw64/bin:/mingw32/bin; exec 0</dev/null; make"
+  - call %MBASH% "cd $APPVEYOR_BUILD_FOLDER; PATH=$PATH:/mingw64/bin:/mingw32/bin; exec 0</dev/null; make PROFILE='release' build"
+  - 7z a -tzip uutils.zip .\target\release\deps\*.exe
+ 
+artifacts:
+  - path: uutils.zip
+    name: zipfile
+  - path: target\release\uutils.exe
+    name: uutils.exe
 
 test_script:
   - call %MBASH% "cd $APPVEYOR_BUILD_FOLDER; PATH=$PATH:/mingw64/bin:/mingw32/bin; exec 0</dev/null; make test"
