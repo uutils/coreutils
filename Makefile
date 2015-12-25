@@ -254,7 +254,7 @@ ensure-builddir:
 # Test under the busybox testsuite
 $(BUILDDIR)/busybox: busybox-src ensure-builddir
 # Make automatically appends -e to echo calls
-	echo '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 "$${@:2}"' > $@; \
+	printf '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 "$${@:2}"' > $@; \
 # newer busybox tests require a "links dir" of links to binaries
 # being tested. normally this folder is populated using the output
 # of busybox utility's short help however uutils does output slightly
