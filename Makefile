@@ -18,13 +18,12 @@ CARGO  ?= cargo
 CARGOFLAGS ?=
 
 # Install directories
-FS_ROOT ?= /
-PREFIX ?= /usr/local
+DESTDIR ?= /usr/local
 BINDIR ?= /bin
 LIBDIR ?= /lib
 
-INSTALLDIR_BIN=$(FS_ROOT)$(PREFIX)$(BINDIR)
-INSTALLDIR_LIB=$(FS_ROOT)$(PREFIX)$(LIBDIR)
+INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
+INSTALLDIR_LIB=$(DESTDIR)$(LIBDIR)
 
 #prefix to apply to uutils binary and all tool binaries
 PROG_PREFIX ?=
@@ -274,10 +273,9 @@ distclean: clean
 # TODO: figure out if there is way for prefixes to work with the symlinks
 install: build 
 	mkdir -p $(INSTALLDIR_BIN)
-	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(INSTALLEES))
 ifeq (${MULTICALL}, y)
 	install $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
-	$(foreach prog, $(INSTALLEES), cd $(INSTALLDIR_BIN) && ln -s $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
+	$(foreach prog, $(INSTALLEES), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
 else
 	$(foreach prog, $(INSTALLEES), \
 		install $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)

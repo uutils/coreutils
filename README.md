@@ -76,7 +76,7 @@ make MULTICALL=y install
 
 Set install parent directory (default value is /usr/local):
 ```
-make PREFIX=/my/path install
+make DESTDIR=/my/path install
 ```
 
 Uninstallation Instructions
@@ -99,7 +99,7 @@ make MULTICALL=y uninstall
 
 To uninstall from a custom parent directory:
 ```
-make PREFIX=/my/path uninstall
+make DESTDIR=/my/path uninstall
 ```
 
 Test Instructions
