@@ -3,8 +3,6 @@ PROFILE         ?= debug
 MULTICALL       ?= n
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
-override BUILD:=$(INSTALL)
-override DONT_BUILD:=$(DONT_INSTALL)
 endif
 
 PROFILE_CMD :=
@@ -175,10 +173,17 @@ TEST        ?= $(TEST_PROGS)
 TESTS       := \
 	$(sort $(filter $(TEST),$(filter-out $(DONT_TEST),$(TEST_PROGS))))
 
+INSTALL  ?= $(PROGS)
 BUSYTEST ?= $(PROGS)
+
+ifneq (,$(filter install, $(MAKECMDGOALS)))
+override BUILD:=$(INSTALL)
+override DONT_BUILD:=$(DONT_INSTALL)
+else
 ifneq (,$(filter busytest, $(MAKECMDGOALS)))
 override BUILD:=$(BUSYTEST)
 override DONT_BUILD:=$(DONT_BUSYTEST)
+endif
 endif
 
 define BUILD_EXE
