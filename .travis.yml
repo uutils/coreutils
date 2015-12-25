@@ -6,6 +6,9 @@ rust:
 os:
  - linux
  - osx
+cache:
+ directories:
+  - $HOME/.cargo
 sudo: false
 script:
   - cargo build
