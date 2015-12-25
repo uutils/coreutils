@@ -49,7 +49,8 @@ fn main() {
         None => (),
     }
 
-    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") {
+    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
+     binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox") {
         args.remove(0);
     } else {
         let mut found = false;

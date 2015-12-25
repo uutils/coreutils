@@ -1,12 +1,11 @@
 # Config options
 PROFILE         ?= debug
+MULTICALL       ?= n
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 override BUILD:=$(INSTALL)
 override DONT_BUILD:=$(DONT_INSTALL)
 endif
-
-MULTICALL       ?= n
 
 PROFILE_CMD :=
 ifeq ($(PROFILE),release)
@@ -177,9 +176,10 @@ TESTS       := \
 	$(sort $(filter $(TEST),$(filter-out $(DONT_TEST),$(TEST_PROGS))))
 
 BUSYTEST ?= $(PROGS)
-BUSYTESTS       := \
-	$(sort $(filter $(BUSYTEST),$(filter-out $(DONT_BUSYTEST),$(PROGS))))
-
+ifneq (,$(filter busytest, $(MAKECMDGOALS)))
+override BUILD:=$(BUSYTEST)
+override DONT_BUILD:=$(DONT_BUSYTEST)
+endif
 
 define BUILD_EXE
 build_exe_$(1):
@@ -192,7 +192,7 @@ test_integration_$(1): build_exe_$(1)
 endef
 
 define TEST_BUSYBOX
-test_busybox_$(1): build_exe_$(1)
+test_busybox_$(1):
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
 endef
 
@@ -230,10 +230,12 @@ use_default := 1
 
 $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
-build-uutils: $(addprefix build_exe_,$(EXES))
+build-pkgs: $(addprefix build_exe_,$(EXES))
+
+build-uutils: 
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
-build: build-uutils
+build: build-uutils build-pkgs
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
 $(foreach test,$(PROGS),$(eval $(call TEST_BUSYBOX,$(test))))
@@ -247,22 +249,19 @@ busybox-src:
 	tar -C $(BUSYBOX_ROOT) -xf $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2; \
 	fi; \
 
-ensure-builddir:
-	mkdir -p $(BUILDDIR)
-
-# Test under the busybox testsuite
-$(BUILDDIR)/busybox: busybox-src ensure-builddir
-	echo -e '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 "$${@:2}"' > $@; \
-	chmod +x $@;
-
 # This is a busybox-specific config file their test suite wants to parse.
-$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config ensure-builddir
+$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config 
 	cp $< $@
 
-ifeq ($(BUSYTESTS),)
+# Test under the busybox testsuite
+$(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config 
+	cp $(BUILDDIR)/uutils $(BUILDDIR)/busybox; \
+	chmod +x $@;
+
+ifeq ($(EXES),)
 busytest:
 else
-busytest: $(BUILDDIR)/busybox $(BUILDDIR)/.config $(addprefix test_busybox_,$(BUSYTESTS))
+busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(EXES))
 endif
 
 clean:
