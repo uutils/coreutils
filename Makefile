@@ -2,8 +2,8 @@
 PROFILE         ?= debug
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
-override BUILD:=INSTALL
-override DONT_BUILD:=DONT_INSTALL
+override BUILD:=$(INSTALL)
+override DONT_BUILD:=$(DONT_INSTALL)
 endif
 
 MULTICALL       ?= n
