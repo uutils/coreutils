@@ -245,6 +245,7 @@ busybox-src:
 	mkdir -p $(BUSYBOX_ROOT); \
 	wget https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2 -P $(BUSYBOX_ROOT); \
 	tar -C $(BUSYBOX_ROOT) -xf $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2; \
+	sed -ri 's/rm .rf ..LINKSDIR.*/#/g' $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)/testsuite/runtest; \
 	fi; \
 
 ensure-builddir:
@@ -252,7 +253,18 @@ ensure-builddir:
 
 # Test under the busybox testsuite
 $(BUILDDIR)/busybox: busybox-src ensure-builddir
-	echo -e '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 "$${@:2}"' > $@; \
+# Make automatically appends -e to echo calls
+	printf '#!/bin/bash\n$(PKG_BUILDDIR)./$$1 "$${@:2}"' > $@; \
+# newer busybox tests require a "links dir" of links to binaries
+# being tested. normally this folder is populated using the output
+# of busybox utility's short help however uutils does output slightly
+# differently, so we must generate it here.
+	rm -rf ${BUILDDIR}/runtest-tempdir-links/; \
+	mkdir -p ${BUILDDIR}/runtest-tempdir-links/; \
+	ln -s $(BUILDDIR)/busybox $(BUILDDIR)runtest-tempdir-links/busybox; \
+	for util in $(BUSYTESTS); do \
+		ln -s $(PKG_BUILDDIR)$$util $(BUILDDIR)runtest-tempdir-links/$$util; \
+	done; \
 	chmod +x $@;
 
 # This is a busybox-specific config file their test suite wants to parse.
