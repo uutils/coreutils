@@ -1,0 +1,38 @@
+platform:
+  - x64
+
+environment:
+  global:
+    MSYS2_BASEVER: 20150512
+    MSYS2_ARCH: x86_64
+    MBASH: msys64\usr\bin\sh --login -c
+
+  matrix:
+  - TARGET: i686-pc-windows-gnu
+
+install:
+  - appveyor DownloadFile "http://kent.dl.sourceforge.net/project/msys2/Base/%MSYS2_ARCH%/msys2-base-%MSYS2_ARCH%-%MSYS2_BASEVER%.tar.xz" -FileName "msys2.tar.xz"
+  - 7z x msys2.tar.xz
+  - 7z x msys2.tar > NUL
+  - call %MBASH% ""
+  - call %MBASH% "for i in {1..3}; do pacman --noconfirm -Suy mingw-w64-%MSYS2_ARCH%-{ragel,freetype,icu,gettext} libtool pkg-config gcc make autoconf automake perl && break || sleep 15; done"
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe"
+  - rust-nightly-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - call "C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\vcvarsall.bat" amd64
+  - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin
+  - SET PATH=%PATH%;C:\MinGW\bin
+  - rustc -V
+  - cargo -V
+
+build_script:
+  - call %MBASH% "cd $APPVEYOR_BUILD_FOLDER; PATH=$PATH:/mingw64/bin:/mingw32/bin; exec 0</dev/null; make PROFILE='release' build"
+  - 7z a -tzip uutils.zip .\target\release\deps\*.exe
+ 
+artifacts:
+  - path: uutils.zip
+    name: zipfile
+  - path: target\release\uutils.exe
+    name: uutils.exe
+
+test_script:
+  - call %MBASH% "cd $APPVEYOR_BUILD_FOLDER; PATH=$PATH:/mingw64/bin:/mingw32/bin; exec 0</dev/null; make test"

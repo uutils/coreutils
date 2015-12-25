@@ -1,9 +1,15 @@
 # Config options
 PROFILE         ?= debug
+ifneq (,$(filter install, $(MAKECMDGOALS)))
+override PROFILE:=release
+override BUILD:=INSTALL
+override DONT_BUILD:=DONT_INSTALL
+endif
+
 MULTICALL       ?= n
 
 PROFILE_CMD :=
-ifeq (${PROFILE},release)
+ifeq ($(PROFILE),release)
 	PROFILE_CMD = --release
 endif
 
@@ -12,11 +18,16 @@ CARGO  ?= cargo
 CARGOFLAGS ?=
 
 # Install directories
+FS_ROOT ?= /
 PREFIX ?= /usr/local
 BINDIR ?= /bin
 LIBDIR ?= /lib
 
-INSTALLDIR=$(DESTDIR)$(PREFIX)
+INSTALLDIR_BIN=$(FS_ROOT)$(PREFIX)$(BINDIR)
+INSTALLDIR_LIB=$(FS_ROOT)$(PREFIX)$(LIBDIR)
+
+#prefix to apply to uutils binary and all tool binaries
+PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
@@ -189,10 +200,10 @@ endef
 EXES        := \
   $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
 
+INSTALL     ?= $(EXES)
+
 INSTALLEES  := \
   $(sort $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils)))
-
-INSTALL     ?= $(EXES)
 
 # Shared library extension
 SYSTEM := $(shell uname)
@@ -261,26 +272,24 @@ distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 # TODO: figure out if there is way for prefixes to work with the symlinks
-install: build
-	PROFILE_CMD=--release
-	mkdir -p $(INSTALLDIR)$(BINDIR)
+install: build 
+	mkdir -p $(INSTALLDIR_BIN)
+	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(INSTALLEES))
 ifeq (${MULTICALL}, y)
-	install $(BUILDDIR)/uutils $(INSTALLDIR)$(BINDIR)/$(PROG_PREFIX)uutils
-	cd $(INSTALLDIR)$(BINDIR)
-	$(foreach prog, $(INSTALLEES), ln -s $(PROG_PREFIX)uutils $$prog;)
+	install $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
+	$(foreach prog, $(INSTALLEES), cd $(INSTALLDIR_BIN) && ln -s $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
 else
-	$(foreach prog, $(INSTALLEES); \
-		install $(PKG_BUILDDIR)/$$prog $(INSTALLDIR)$(BINDIR)/$(PROG_PREFIX)$$prog;)
+	$(foreach prog, $(INSTALLEES), \
+		install $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
-	mkdir -p $(INSTALLDIR)$(LIBDIR)
-	$(foreach lib, $(LIBS), install $(BUILDDIR)/$$lib $(INSTALLDIR)$(LIBDIR)/$$lib;)
+	mkdir -p $(INSTALLDIR_LIB)
+	$(foreach lib, $(LIBS), install $(BUILDDIR)/$$lib $(INSTALLDIR_LIB)/$(lib);)
 
 uninstall:
-	rm -f $(addprefix $(INSTALLDIR)$(BINDIR)/$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(INSTALLDIR)$(LIBDIR)/,$(LIBS))
-
-uninstall-multicall:
-	rm -f $(addprefix $(INSTALLDIR)$(BINDIR)/,$(PROGS) $(PROG_PREFIX)uutils)
-	rm -f $(addprefix $(INSTALLDIR)$(LIBDIR)/,$(LIBS))
+ifeq (${MULTICALL}, y)
+	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)uutils)
+endif
+	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(INSTALLDIR_LIB)/,$(LIBS))
 
 .PHONY: all build test distclean clean busytest install uninstall
