@@ -18,12 +18,13 @@ CARGO  ?= cargo
 CARGOFLAGS ?=
 
 # Install directories
-DESTDIR ?= /usr/local
+PREFIX ?= /usr/local
+DESTDIR ?= 
 BINDIR ?= /bin
 LIBDIR ?= /lib
 
-INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
-INSTALLDIR_LIB=$(DESTDIR)$(LIBDIR)
+INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
+INSTALLDIR_LIB=$(DESTDIR)$(PREFIX)$(LIBDIR)
 
 #prefix to apply to uutils binary and all tool binaries
 PROG_PREFIX ?=
