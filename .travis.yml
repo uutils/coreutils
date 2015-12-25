@@ -3,6 +3,9 @@ rust:
   - stable
   - beta
   - nightly
+os:
+ - linux
+ - osx
 sudo: false
 script:
   - cargo build
@@ -11,3 +14,4 @@ matrix:
   allow_failures:
     - rust: stable
     - rust: beta
+    - os: osx
