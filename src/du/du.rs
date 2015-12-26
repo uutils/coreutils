@@ -51,7 +51,7 @@ struct Stat {
 
 impl Stat {
     fn new(path: &PathBuf) -> Stat {
-        let metadata = safe_unwrap!(fs::metadata(path));
+        let metadata = safe_unwrap!(fs::symlink_metadata(path));
         Stat {
             path: path.clone(),
             is_dir: metadata.is_dir(),
