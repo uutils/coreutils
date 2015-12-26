@@ -196,6 +196,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Err(s) => { show_error!("{}", s); return 1; }
         }
     };
+    if largest_dec > 0 {
+        largest_dec -= 1;
+    }
     let separator = escape_sequences(&options.separator[..]);
     let terminator = match options.terminator {
         Some(term) => escape_sequences(&term[..]),
@@ -219,7 +222,7 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
     let mut i = 0isize;
     let mut value = first + i as f64 * step;
     while !done_printing(value, step, last) {
-        let istr = value.to_string();
+        let istr = format!("{:.*}", largest_dec, value);
         let ilen = istr.len();
         let before_dec = istr.find('.').unwrap_or(ilen);
         if pad && before_dec < padding {
@@ -230,20 +233,6 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
             }
         }
         pipe_print!("{}", istr);
-        let mut idec = ilen - before_dec;
-        if idec < largest_dec {
-            if idec == 0 {
-                if !pipe_print!(".") {
-                    return;
-                }
-                idec += 1;
-            }
-            for _ in idec..largest_dec {
-                if !pipe_print!("0") {
-                    return;
-                }
-            }
-        }
         i += 1;
         value = first + i as f64 * step;
         if !done_printing(value, step, last) {
