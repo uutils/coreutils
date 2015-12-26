@@ -54,8 +54,9 @@ PROGS       := \
   false \
   fmt \
   fold \
-  link \
   hashsum \
+  head \
+  link \
   ln \
   mkdir \
   nl \
@@ -70,14 +71,15 @@ PROGS       := \
   relpath \
   rm \
   rmdir \
-  sleep \
-  split \
   seq \
   shuf \
+  sleep \
   sort \
+  split \
   sum \
   sync \
   tac \
+  tail \
   tee \
   test \
   tr \
@@ -87,10 +89,8 @@ PROGS       := \
   unexpand \
   uniq \
   wc \
-  yes \
-  head \
-  tail \
-  whoami
+  whoami \
+  yes
 
 UNIX_PROGS := \
   chmod \
@@ -275,7 +275,6 @@ clean:
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
-# TODO: figure out if there is way for prefixes to work with the symlinks
 install: build 
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
