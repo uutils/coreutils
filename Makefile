@@ -275,7 +275,6 @@ clean:
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
-# TODO: figure out if there is way for prefixes to work with the symlinks
 install: build 
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
