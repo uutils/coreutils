@@ -176,7 +176,6 @@ To do
 - remove
 - runcon
 - setuidgid
-- shred
 - sort (a couple of options implemented)
 - split (a couple of missing options)
 - stat

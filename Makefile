@@ -72,6 +72,7 @@ PROGS       := \
   rm \
   rmdir \
   seq \
+  shred\
   shuf \
   sleep \
   sort \
