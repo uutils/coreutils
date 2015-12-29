@@ -63,6 +63,7 @@ generic = [
   "rm",
   "rmdir",
   "seq",
+  "shred",
   "shuf",
   "sleep",
   "sort",
@@ -134,6 +135,7 @@ relpath  = { optional=true, path="src/relpath" }
 rm       = { optional=true, path="src/rm" }
 rmdir    = { optional=true, path="src/rmdir" }
 seq      = { optional=true, path="src/seq" }
+shred    = { optional=true, path="src/shred" }
 shuf     = { optional=true, path="src/shuf" }
 sleep    = { optional=true, path="src/sleep" }
 sort     = { optional=true, path="src/sort" }
