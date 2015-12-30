@@ -208,14 +208,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("help") {
-        println!("Usage: {} [OPTION]... FILE...", NAME);
-        println!("Overwrite the specified FILE(s) repeatedly, in order to make it harder \
-                  for even very expensive hardware probing to recover the data.");
-        println!("{}", opts.usage(""));
-        println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
-        println!("the files because it is common to operate on device files like /dev/hda,");
-        println!("and those files usually should not be removed.");
-        println!("");
+        show_help(&opts);
         return 0;
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION_STR);
@@ -245,8 +238,49 @@ pub fn uumain(args: Vec<String>) -> i32 {
                       size, exact, zero, verbose);
         }
     }
-    
+
     0
+}
+
+fn show_help(opts: &getopts::Options) {
+    println!("Usage: {} [OPTION]... FILE...", NAME);
+    println!("Overwrite the specified FILE(s) repeatedly, in order to make it harder \
+              for even very expensive hardware probing to recover the data.");
+    println!("{}", opts.usage(""));
+    println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
+    println!("the files because it is common to operate on device files like /dev/hda,");
+    println!("and those files usually should not be removed.");
+    println!("");
+    println!("CAUTION: Note that {} relies on a very important assumption:", NAME);
+    println!("that the file system overwrites data in place.  This is the traditional");
+    println!("way to do things, but many modern file system designs do not satisfy this");
+    println!("assumption.  The following are examples of file systems on which {} is", NAME);
+    println!("not effective, or is not guaranteed to be effective in all file system modes:");
+    println!("");
+    println!("* log-structured or journaled file systems, such as those supplied with");
+    println!("AIX and Solaris (and JFS, ReiserFS, XFS, Ext3, etc.)");
+    println!("");
+    println!("* file systems that write redundant data and carry on even if some writes");
+    println!("fail, such as RAID-based file systems");
+    println!("");
+    println!("* file systems that make snapshots, such as Network Appliance's NFS server");
+    println!("");
+    println!("* file systems that cache in temporary locations, such as NFS");
+    println!("version 3 clients");
+    println!("");
+    println!("* compressed file systems");
+    println!("");
+    println!("In the case of ext3 file systems, the above disclaimer applies");
+    println!("(and {} is thus of limited effectiveness) only in data=journal mode,", NAME);
+    println!("which journals file data in addition to just metadata.  In both the");
+    println!("data=ordered (default) and data=writeback modes, {} works as usual.", NAME);
+    println!("Ext3 journaling modes can be changed by adding the data=something option");
+    println!("to the mount options for a particular file system in the /etc/fstab file,");
+    println!("as documented in the mount man page (man mount).");
+    println!("");
+    println!("In addition, file system backups and remote mirrors may contain copies");
+    println!("of the file that cannot be removed, and that will allow a shredded file");
+    println!("to be recovered later.");
 }
 
 // TODO: Add support for all postfixes here up to and including EiB
