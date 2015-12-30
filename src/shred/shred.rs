@@ -314,10 +314,9 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
 fn bytes_to_string(bytes: &[u8]) -> String {
     let mut s: String = String::new();
     while s.len() < 6 {
-        if bytes.len() == 1 && bytes[0] == (0 as u8) {
-            s.push('0');
-        } else {
-            s.push('?');
+        for b in bytes {
+            let readable: String = format!("{:x}", b);
+            s.push_str(&readable);
         }
     }
 
