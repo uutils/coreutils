@@ -6,6 +6,7 @@ build = "build.rs"
 
 [features]
 unix = [
+  "chgrp",
   "chmod",
   "chroot",
   "du",
@@ -92,6 +93,7 @@ uucore   = { path="src/uucore" }
 base64   = { optional=true, path="src/base64" }
 basename = { optional=true, path="src/basename" }
 cat      = { optional=true, path="src/cat" }
+chgrp    = { optional=true, path="src/chgrp" }
 chmod    = { optional=true, path="src/chmod" }
 chroot   = { optional=true, path="src/chroot" }
 cksum    = { optional=true, path="src/cksum" }
