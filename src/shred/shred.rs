@@ -15,8 +15,9 @@ extern crate rand;
 use rand::{ThreadRng, Rng};
 use std::cell::{Cell, RefCell};
 use std::fs;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io;
+use std::io::SeekFrom;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 
@@ -286,7 +287,7 @@ fn show_help(opts: &getopts::Options) {
 // TODO: Add support for all postfixes here up to and including EiB
 //       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    if size_str_opt.is_none() { 
+    if size_str_opt.is_none() {
         return None;
     }
     
@@ -364,48 +365,55 @@ fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
     }
     
     // --zero specifies whether we want one final pass of 0x00 on our file
-    if zero { 
+    if zero {
         pass_sequence.push(PassType::Pattern(b"\x00"));
     }
-    let total_passes: usize = n_passes + { if zero { 1 } else { 0 } };
 
-    for (i, pass_type) in pass_sequence.iter().enumerate() {
-        if verbose {
-            let pattern_str: String = match *pass_type {
-                PassType::Random => String::from("random"),
-                PassType::Pattern(p) => bytes_to_string(p)
-            };
-            if total_passes.to_string().len() == 1 {
-                println!("{}: {}: pass {}/{} ({})... ", NAME, path.display(), i + 1, total_passes, pattern_str);
+    {
+        let total_passes: usize = pass_sequence.len();
+        let mut file: File = OpenOptions::new().write(true)
+                                               .truncate(false)
+                                               .open(path)
+                                               .expect("Failed to open file for writing");
+
+        for (i, pass_type) in pass_sequence.iter().enumerate() {
+            if verbose {
+                let pattern_str: String = match *pass_type {
+                    PassType::Random => String::from("random"),
+                    PassType::Pattern(p) => bytes_to_string(p)
+                };
+                if total_passes.to_string().len() == 1 {
+                    println!("{}: {}: pass {}/{} ({})... ", NAME, path.display(), i + 1, total_passes, pattern_str);
+                }
+                else {
+                    println!("{}: {}: pass {:2.0}/{:2.0} ({})... ", NAME, path.display(), i + 1, total_passes, pattern_str);
+                }
             }
-            else {
-                println!("{}: {}: pass {:2.0}/{:2.0} ({})... ", NAME, path.display(), i + 1, total_passes, pattern_str);
-            }
+            // size is an optional argument for exactly how many bytes we want to shred
+            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed"); // Ignore failed writes; just keep trying
         }
-        // size is an optional argument for exactly how many bytes we want to shred
-        do_pass(path, *pass_type, size, exact).expect("File write pass failed"); // Ignore failed writes; just keep trying
     }
-    
+
     if remove {
         do_remove(path, path_str, verbose).expect("Failed to remove file");
     }
 }
 
-fn do_pass(path: &Path, generator_type: PassType,
+fn do_pass(file: &mut File, path: &Path, generator_type: PassType,
            given_file_size: Option<u64>, exact: bool) -> Result<(), io::Error> {
+
+    try!(file.seek(SeekFrom::Start(0)));
 
     // Use the given size or the whole file if not specified
     let size: u64 = given_file_size.unwrap_or(try!(get_file_size(path)));
 
     let generator = BytesGenerator::new(size, generator_type, exact);
 
-    let mut file: File = try!(File::create(path));
-
     for block in generator {
         try!(file.write_all(&*block));
     }
 
-    try!(file.sync_all());
+    try!(file.sync_data());
 
     Ok(())
 }
@@ -421,15 +429,15 @@ fn get_file_size(path: &Path) -> Result<u64, io::Error> {
 fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
     let file_name_len: usize = orig_path.file_name().unwrap().to_str().unwrap().len();
     
-    let mut last_path: PathBuf = PathBuf::from(orig_path); 
+    let mut last_path: PathBuf = PathBuf::from(orig_path);
     
     for length in (1..file_name_len + 1).rev() {
         for name in FilenameGenerator::new(length) {
             let new_path: PathBuf = orig_path.with_file_name(name);
             // We don't want the filename to already exist (don't overwrite)
             // If it does, find another name that doesn't
-            if new_path.exists() { 
-                continue; 
+            if new_path.exists() {
+                continue;
             }
             match fs::rename(&last_path, &new_path) {
                 Ok(()) => {
@@ -439,9 +447,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                                                           new_path.display());
                     }
                    
-                    // Sync every file rename 
+                    // Sync every file rename
                     {
-                        let new_file: File = File::create(new_path.clone()).expect("Failed to open renamed file for syncing");
+                        let new_file: File = File::open(new_path.clone()).expect("Failed to open renamed file for syncing");
                         new_file.sync_all().expect("Failed to sync renamed file");
                     }
 
