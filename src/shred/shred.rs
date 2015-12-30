@@ -411,8 +411,7 @@ fn do_pass(path: &Path, generator_type: PassType,
 }
 
 fn get_file_size(path: &Path) -> Result<u64, io::Error> {
-    let file: File = try!(File::open(path));
-    let size: u64 = try!(file.metadata()).len();
+    let size: u64 = try!(fs::metadata(path)).len();
 
     Ok(size)
 }
