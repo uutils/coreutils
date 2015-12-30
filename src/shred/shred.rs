@@ -42,14 +42,14 @@ const PATTERNS: [&'static [u8]; 22] = [
 #[derive(Clone, Copy)]
 enum PassType<'a> {
     Pattern(&'a [u8]),
-    Random,
+    Random
 }
 
 // Used to generate all possible filenames of a certain length using NAMESET as an alphabet
 struct FilenameGenerator {
     name_len: usize,
     nameset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAMESET
-    exhausted: Cell<bool>,
+    exhausted: Cell<bool>
 }
 
 impl FilenameGenerator {
@@ -110,7 +110,7 @@ struct BytesGenerator<'a> {
     block_size: usize,
     exact: bool, // if false, every block's size is block_size
     gen_type: PassType<'a>,
-    rng: Option<RefCell<ThreadRng>>,
+    rng: Option<RefCell<ThreadRng>>
 }
 
 impl<'a> BytesGenerator<'a> {
@@ -311,16 +311,20 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     Some(coeff * unit)
 }
 
-fn bytes_to_string(bytes: &[u8]) -> String {
-    let mut s: String = String::new();
-    while s.len() < 6 {
-        for b in bytes {
-            let readable: String = format!("{:x}", b);
-            s.push_str(&readable);
+fn pass_name(pass_type: &PassType) -> String {
+    match *pass_type {
+        PassType::Random => String::from("random"),
+        PassType::Pattern(bytes) => {
+            let mut s: String = String::new();
+            while s.len() < 6 {
+                for b in bytes {
+                    let readable: String = format!("{:x}", b);
+                    s.push_str(&readable);
+                }
+            }
+            s
         }
     }
-
-    s
 }
 
 fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
@@ -377,15 +381,12 @@ fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
 
         for (i, pass_type) in pass_sequence.iter().enumerate() {
             if verbose {
-                let pattern_str: String = match *pass_type {
-                    PassType::Random => String::from("random"),
-                    PassType::Pattern(p) => bytes_to_string(p)
-                };
+                let pass_name: String = pass_name(pass_type);
                 if total_passes.to_string().len() == 1 {
-                    println!("{}: {}: pass {}/{} ({})... ", NAME, path.display(), i + 1, total_passes, pattern_str);
+                    println!("{}: {}: pass {}/{} ({})... ", NAME, path.display(), i + 1, total_passes, pass_name);
                 }
                 else {
-                    println!("{}: {}: pass {:2.0}/{:2.0} ({})... ", NAME, path.display(), i + 1, total_passes, pattern_str);
+                    println!("{}: {}: pass {:2.0}/{:2.0} ({})... ", NAME, path.display(), i + 1, total_passes, pass_name);
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
