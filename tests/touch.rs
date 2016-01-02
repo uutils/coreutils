@@ -77,7 +77,7 @@ fn test_touch_set_mdhm_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", &format!("{}01010000", 1900+time::now().tm_year));
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
@@ -97,7 +97,7 @@ fn test_touch_set_mdhms_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", "201501010000.00");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", &format!("{}01010000.00", 1900+time::now().tm_year));
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
