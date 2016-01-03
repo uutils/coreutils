@@ -56,7 +56,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         crash!(1, "quiet option is not supported yet.");
     };
 
-    if args.len() == 1 || matches.opt_present("help") {
+    if  matches.opt_present("help") {
         print_help(&opts);
         return 0;
     }
