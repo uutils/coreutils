@@ -311,6 +311,15 @@ impl UCommand {
         self.raw.args(args.as_ref());
         Box::new(self)
     }
+
+    pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand> where K: AsRef<OsStr>, V: AsRef<OsStr> {
+        if self.has_run {
+            panic!(ALREADY_RUN);
+        }
+        self.raw.env(key, val);
+        Box::new(self)
+    }
+
     pub fn run(&mut self) -> CmdResult {
         self.has_run = true;
         log_info("run", &self.comm_string);
