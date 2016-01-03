@@ -59,6 +59,7 @@ PROGS       := \
   link \
   ln \
   mkdir \
+  mktemp \
   nl \
   nproc \
   od \
@@ -143,6 +144,7 @@ TEST_PROGS  := \
 	link \
 	ln \
 	mkdir \
+	mktemp \
 	mv \
 	nl \
 	paste \

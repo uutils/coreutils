@@ -1,0 +1,15 @@
+[package]
+name = "mktemp"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_mktemp"
+path = "mktemp.rs"
+
+[dependencies]
+uucore = { path="../uucore" }
+getopts = "*"
+libc = "*"
+rand = "0.3"
+tempfile = {git = "https://github.com/Stebalien/tempfile.git"}
