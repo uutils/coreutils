@@ -30,16 +30,15 @@ fn test_mktemp_mktemp() {
     let ts = TestSet::new(UTIL_NAME);
 
     let pathname = ts.fixtures.as_string();
-    set_var(TMPDIR, pathname);
 
-    let exit_success1 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = ts.util_cmd_keepenv().arg(TEST_TEMPLATE8).run().success;
+    let exit_success1 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE1).run().success;
+    let exit_success2 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE2).run().success;
+    let exit_success3 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE3).run().success;
+    let exit_success4 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE4).run().success;
+    let exit_success5 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE5).run().success;
+    let exit_success6 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE6).run().success;
+    let exit_success7 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE7).run().success;
+    let exit_success8 = ts.util_cmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE8).run().success;
 
 
     assert!(exit_success1);
@@ -53,21 +52,21 @@ fn test_mktemp_mktemp() {
 }
 
 // TODO: test directory option when implemented
+
 #[test]
 fn test_mktemp_dry_run() {
     let ts = TestSet::new(UTIL_NAME);
 
     let pathname = ts.fixtures.as_string();
-    set_var(TMPDIR, pathname);
 
-    let exit_success1 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = ts.util_cmd_keepenv().arg("-u").arg(TEST_TEMPLATE8).run().success;
+    let exit_success1 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE1).run().success;
+    let exit_success2 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE2).run().success;
+    let exit_success3 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE3).run().success;
+    let exit_success4 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE4).run().success;
+    let exit_success5 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE5).run().success;
+    let exit_success6 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE6).run().success;
+    let exit_success7 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE7).run().success;
+    let exit_success8 = ts.util_cmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE8).run().success;
 
 
     assert!(exit_success1);
@@ -87,16 +86,15 @@ fn test_mktemp_suffix() {
     let ts = TestSet::new(UTIL_NAME);
 
     let pathname = ts.fixtures.as_string();
-     set_var(TMPDIR, pathname);
 
-    let exit_success1 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = ts.util_cmd_keepenv().arg("--suffix").arg("suf").arg(TEST_TEMPLATE8).run().success;
+    let exit_success1 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE1).run().success;
+    let exit_success2 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE2).run().success;
+    let exit_success3 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE3).run().success;
+    let exit_success4 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE4).run().success;
+    let exit_success5 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE5).run().success;
+    let exit_success6 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE6).run().success;
+    let exit_success7 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE7).run().success;
+    let exit_success8 = ts.util_cmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE8).run().success;
 
 
     assert!(exit_success1);
