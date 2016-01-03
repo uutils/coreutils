@@ -185,8 +185,6 @@ fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool
         .prefix(prefix)
         .rand_bytes(rand)
         .suffix(suffix)
-    // CAUTION: Creating tempfile regardless of dry_run option.
-    // if dry_run options is given, we delete the created file.
         .create_in(tmpdir);
 
     let tmpfile = match tmpfile {
