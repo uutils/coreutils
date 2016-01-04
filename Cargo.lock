@@ -58,6 +58,7 @@ dependencies = [
  "rm 0.0.1",
  "rmdir 0.0.1",
  "seq 0.0.1",
+ "shred 0.0.1",
  "shuf 0.0.1",
  "sleep 0.0.1",
  "sort 0.0.1",
@@ -717,6 +718,18 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
+name = "shred"
+version = "0.0.1"
+dependencies = [
+ "filetime 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.34 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 

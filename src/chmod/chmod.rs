@@ -211,7 +211,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
         }
         None => {
             // TODO: make the regex processing occur earlier (i.e. once in the main function)
-            let re: regex::Regex = Regex::new(r"^(([ugoa]*)((?:[-+=](?:[rwxXst]*|[ugo]))+))|([-+=]?[0-7]+)$").unwrap();
+            let re: regex::Regex = Regex::new(r"^(([ugoa]*)((?:[-+=](?:[ugo]|[rwxXst]*))+))|([-+=]?[0-7]+)$").unwrap();
             let mut stat: libc::stat = unsafe { mem::uninitialized() };
             let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
             let mut fperm =
@@ -233,11 +233,12 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                         levels = "a";
                     }
                     let change = cap.at(3).unwrap().to_string() + "+";
-                    let mut action = change.chars().next().unwrap();
+                    let mut change = change.chars();
+                    let mut action = change.next().unwrap();
                     let mut rwx = 0;
                     let mut special = 0;
                     let mut special_changed = false;
-                    for ch in change[1..].chars() {
+                    for ch in change {
                         match ch {
                             '+' | '-' | '=' => {
                                 for level in levels.chars() {
