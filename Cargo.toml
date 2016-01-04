@@ -16,6 +16,7 @@ unix = [
   "kill",
   "logname",
   "mkfifo",
+  "mktemp",
   "mv",
   "nice",
   "nohup",
@@ -118,6 +119,7 @@ link     = { optional=true, path="src/link" }
 ln       = { optional=true, path="src/ln" }
 logname  = { optional=true, path="src/logname" }
 mkdir    = { optional=true, path="src/mkdir" }
+mktemp   = { optional=true, path="src/mktemp" }
 mkfifo   = { optional=true, path="src/mkfifo" }
 mv       = { optional=true, path="src/mv" }
 nice     = { optional=true, path="src/nice" }
