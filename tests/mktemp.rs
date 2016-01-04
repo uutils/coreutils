@@ -1,7 +1,6 @@
 extern crate tempdir;
 
 use tempdir::TempDir;
-use std::env::set_var;
 
 #[macro_use]
 mod common;
