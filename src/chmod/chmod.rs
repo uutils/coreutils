@@ -15,17 +15,15 @@ extern crate aho_corasick;
 extern crate getopts;
 extern crate libc;
 extern crate memchr;
-extern crate regex;
-extern crate regex_syntax;
 extern crate walker;
 
 #[macro_use]
 extern crate uucore;
 
 use getopts::Options;
-use regex::Regex;
+use std::error::Error;
 use std::ffi::CString;
-use std::io::{Error, Write};
+use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use walker::Walker;
@@ -82,19 +80,12 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
             if statres == 0 {
                 Some(stat.st_mode)
             } else {
-                crash!(1, "{}", Error::last_os_error())
+                crash!(1, "{}", io::Error::last_os_error())
             }
         });
         let cmode =
             if fmode.is_none() {
-                let mode = matches.free.remove(0);
-                match verify_mode(&mode[..]) {
-                    Ok(_) => Some(mode),
-                    Err(f) => {
-                        show_error!("{}", f);
-                        return 1;
-                    }
-                }
+                Some(matches.free.remove(0))
             } else {
                 None
             };
@@ -106,40 +97,6 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
     }
 
     0
-}
-
-#[cfg(unix)]
-#[inline]
-fn verify_mode(modes: &str) -> Result<(), String> {
-    let re: regex::Regex = Regex::new(r"^[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+$").unwrap();
-    for mode in modes.split(',') {
-        if !re.is_match(mode) {
-            return Err(format!("invalid mode '{}'", mode));
-        }
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-#[inline]
-// XXX: THIS IS NOT TESTED!!!
-fn verify_mode(modes: &str) -> Result<(), String> {
-    let re: regex::Regex = Regex::new(r"^[ugoa]*(?:[-+=](?:([rwxXst]*)|[ugo]))+|[-+=]?([0-7]+)$").unwrap();
-    for mode in modes.split(',') {
-        match re.captures(mode) {
-            Some(cap) => {
-                let symbols = cap.at(1).unwrap();
-                let numbers = cap.at(2).unwrap();
-                if symbols.contains("s") || symbols.contains("t") {
-                    return Err("The 's' and 't' modes are not supported on Windows".into());
-                } else if numbers.len() >= 4 && numbers[..numbers.len() - 3].find(|ch| ch != '0').is_some() {
-                    return Err("Setuid, setgid, and sticky modes are not supported on Windows".into());
-                }
-            }
-            None => return Err(format!("invalid mode '{}'", mode))
-        }
-    }
-    Ok(())
 }
 
 fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
@@ -205,112 +162,39 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
             if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
                 // TODO: handle changes, quiet, and verbose
             } else {
-                show_error!("{}", Error::last_os_error());
+                show_error!("{}", io::Error::last_os_error());
                 return Err(1);
             }
         }
         None => {
-            // TODO: make the regex processing occur earlier (i.e. once in the main function)
-            let re: regex::Regex = Regex::new(r"^(([ugoa]*)((?:[-+=](?:[ugo]|[rwxXst]*))+))|([-+=]?[0-7]+)$").unwrap();
             let mut stat: libc::stat = unsafe { mem::uninitialized() };
             let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
             let mut fperm =
                 if statres == 0 {
                     stat.st_mode
                 } else {
-                    show_error!("{}", Error::last_os_error());
+                    show_error!("{}", io::Error::last_os_error());
                     return Err(1);
                 };
             for mode in cmode.unwrap().split(',') {  // cmode is guaranteed to be Some in this case
-                let cap = re.captures(mode).unwrap();  // mode was verified earlier, so this is safe
-                if match cap.at(1) {
-                    Some("") | None => false,
-                    _ => true,
-                } {
-                    // symbolic
-                    let mut levels = cap.at(2).unwrap();
-                    if levels.len() == 0 {
-                        levels = "a";
-                    }
-                    let change = cap.at(3).unwrap().to_string() + "+";
-                    let mut change = change.chars();
-                    let mut action = change.next().unwrap();
-                    let mut rwx = 0;
-                    let mut special = 0;
-                    let mut special_changed = false;
-                    for ch in change {
-                        match ch {
-                            '+' | '-' | '=' => {
-                                for level in levels.chars() {
-                                    let (rwx, mask) = match level {
-                                        'u' => (rwx << 6, 0o7077),
-                                        'g' => (rwx << 3, 0o7707),
-                                        'o' => (rwx, 0o7770),
-                                        'a' => ((rwx << 6) | (rwx << 3) | rwx, 0o7000),
-                                        _ => unreachable!()
-                                    };
-                                    match action {
-                                        '+' => fperm |= rwx,
-                                        '-' => fperm &= !rwx,
-                                        '=' => fperm = (fperm & mask) | rwx,
-                                        _ => unreachable!()
-                                    }
-                                }
-                                if special_changed {
-                                    match action {
-                                        '+' => fperm |= special,
-                                        '-' => fperm &= !special,
-                                        '=' => fperm &= special | 0o0777,
-                                        _ => unreachable!()
-                                    }
-                                }
-                                action = ch;
-                                rwx = 0;
-                                special = 0;
-                                special_changed = false;
-                            }
-                            'r' => rwx |= 0o004,
-                            'w' => rwx |= 0o002,
-                            'x' => rwx |= 0o001,
-                            'X' => {
-                                if file.is_dir() || (fperm & 0o0111) != 0 {
-                                    rwx |= 0o001;
-                                }
-                            }
-                            's' => {
-                                special |= 0o4000 | 0o2000;
-                                special_changed = true;
-                            }
-                            't' => {
-                                special |= 0o1000;
-                                special_changed = true;
-                            }
-                            'u' => rwx = (fperm >> 6) & 0o007,
-                            'g' => rwx = (fperm >> 3) & 0o007,
-                            'o' => rwx = (fperm >> 0) & 0o007,
-                            _ => unreachable!()
-                        }
-                    }
-                } else {
-                    // numeric
-                    let change = cap.at(4).unwrap();
-                    let ch = change.chars().next().unwrap();
-                    let (action, slice) = match ch {
-                        '+' | '-' | '=' => (ch, &change[1..]),
-                        _ => ('=', change)
+                let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+                let result =
+                    if mode.contains(arr) {
+                        parse_numeric(fperm, mode)
+                    } else {
+                        parse_symbolic(fperm, mode, file)
                     };
-                    let mode = u32::from_str_radix(slice, 8).unwrap() as libc::mode_t;  // already verified
-                    match action {
-                        '+' => fperm |= mode,
-                        '-' => fperm &= !mode,
-                        '=' => fperm = mode,
-                        _ => unreachable!()
+                match result {
+                    Ok(m) => fperm = m,
+                    Err(f) => {
+                        show_error!("{}", f);
+                        return Err(1)
                     }
-                }
+                };
                 if unsafe { libc::chmod(path.as_ptr(), fperm) } == 0 {
                     // TODO: see above
                 } else {
-                    show_error!("{}", Error::last_os_error());
+                    show_error!("{}", io::Error::last_os_error());
                     return Err(1);
                 }
             }
@@ -318,4 +202,105 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
     }
 
     Ok(())
+}
+
+fn parse_numeric(fperm: libc::mode_t, mut mode: &str) -> Result<libc::mode_t, String> {
+    let (op, pos) = try!(parse_op(mode, Some('=')));
+    mode = mode[pos..].trim_left_matches('0');
+    if mode.len() > 4 {
+        Err(format!("mode is too large ({} > 7777)", mode))
+    } else {
+        match libc::mode_t::from_str_radix(mode, 8) {
+            Ok(change) => {
+                Ok(match op {
+                    '+' => fperm | change,
+                    '-' => fperm & !change,
+                    '=' => change,
+                    _ => unreachable!()
+                })
+            }
+            Err(err) => Err(err.description().to_string())
+        }
+    }
+}
+
+fn parse_symbolic(mut fperm: libc::mode_t, mut mode: &str, file: &Path) -> Result<libc::mode_t, String> {
+    let (mask, pos) = parse_levels(mode);
+    if pos == mode.len() {
+        return Err(format!("invalid mode ({})", mode));
+    }
+    mode = &mode[pos..];
+    while mode.len() > 0 {
+        let (op, pos) = try!(parse_op(mode, None));
+        mode = &mode[pos..];
+        let (srwx, pos) = parse_change(mode, fperm, file);
+        mode = &mode[pos..];
+        match op {
+            '+' => fperm |= srwx & mask,
+            '-' => fperm &= !(srwx & mask),
+            '=' => fperm = (fperm & !mask) | (srwx & mask),
+            _ => unreachable!()
+        }
+    }
+    Ok(fperm)
+}
+
+fn parse_levels(mode: &str) -> (libc::mode_t, usize) {
+    let mut mask = 0;
+    let mut pos = 0;
+    for ch in mode.chars() {
+        mask |= match ch {
+            'u' => 0o7700,
+            'g' => 0o7070,
+            'o' => 0o7007,
+            'a' => 0o7777,
+            _ => break
+        };
+        pos += 1;
+    }
+    if pos == 0 {
+        mask = 0o7777;  // default to 'a'
+    }
+    (mask, pos)
+}
+
+fn parse_op(mode: &str, default: Option<char>) -> Result<(char, usize), String> {
+    match mode.chars().next() {
+        Some(ch) => match ch {
+            '+' | '-' | '=' => Ok((ch, 1)),
+            _ => match default {
+                Some(ch) => Ok((ch, 0)),
+                None => Err(format!("invalid operator (expected +, -, or =, but found {})", ch))
+            }
+        },
+        None => Err("unexpected end of mode".to_string())
+    }
+}
+
+fn parse_change(mode: &str, fperm: libc::mode_t, file: &Path) -> (libc::mode_t, usize) {
+    let mut srwx = fperm & 0o7000;
+    let mut pos = 0;
+    for (i, ch) in mode.chars().enumerate() {
+        match ch {
+            'r' => srwx |= 0o444,
+            'w' => srwx |= 0o222,
+            'x' => srwx |= 0o111,
+            'X' => {
+                if file.is_dir() || (fperm & 0o0111) != 0 {
+                    srwx |= 0o111
+                }
+            }
+            's' => srwx |= 0o4000 | 0o2000,
+            't' => srwx |= 0o1000,
+            'u' => srwx = (fperm & 0o700) | ((fperm >> 3) & 0o070) | ((fperm >> 6) & 0o007),
+            'g' => srwx = ((fperm << 3) & 0o700) | (fperm & 0o070) | ((fperm >> 3) & 0o007),
+            'o' => srwx = ((fperm << 6) & 0o700) | ((fperm << 3) & 0o070) | (fperm & 0o007),
+            _ => break
+        };
+        pos += 1;
+    }
+    if pos == 0 {
+        srwx = 0;
+    }
+    (srwx, pos)
 }

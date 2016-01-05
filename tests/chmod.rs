@@ -58,9 +58,9 @@ fn test_chmod_octal() {
         // TestCase{args: vec!{"-0700", TEST_FILE}, before: 0o700, after: 0o000},
         // TestCase{args: vec!{"-0070", TEST_FILE}, before: 0o060, after: 0o000},
         // TestCase{args: vec!{"-0007", TEST_FILE}, before: 0o001, after: 0o000},
-        // TestCase{args: vec!{"+0100", TEST_FILE}, before: 0o600, after: 0o700},
-        // TestCase{args: vec!{"+0020", TEST_FILE}, before: 0o050, after: 0o070},
-        // TestCase{args: vec!{"+0004", TEST_FILE}, before: 0o003, after: 0o007},
+        TestCase{args: vec!{"+0100", TEST_FILE}, before: 0o600, after: 0o700},
+        TestCase{args: vec!{"+0020", TEST_FILE}, before: 0o050, after: 0o070},
+        TestCase{args: vec!{"+0004", TEST_FILE}, before: 0o003, after: 0o007},
     };
     run_tests(tests);
 }
