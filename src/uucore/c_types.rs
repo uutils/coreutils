@@ -109,7 +109,7 @@ extern {
     pub fn getgroupcount(name: *const c_char, gid: gid_t) -> int32_t;
 }
 
-pub fn get_pw_from_args(free: &Vec<String>) -> Option<c_passwd> {
+pub fn get_pw_from_args(free: &[String]) -> Option<c_passwd> {
     if free.len() == 1 {
         let username = &free[0][..];
 
@@ -219,7 +219,7 @@ pub fn group(possible_pw: Option<c_passwd>, nflag: bool) {
         Err(errno) =>
             crash!(1, "failed to get group list (errno={})", errno),
         Ok(groups) => {
-            for &g in groups.iter() {
+            for &g in &groups {
                 if nflag {
                     let group = unsafe { getgrgid(g) };
                     if !group.is_null() {
