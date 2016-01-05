@@ -83,16 +83,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    if matches.opt_present("date") && matches.opts_present(&["reference".to_string(), "t".to_string()]) ||
-       matches.opt_present("reference") && matches.opts_present(&["date".to_string(), "t".to_string()]) ||
-       matches.opt_present("t") && matches.opts_present(&["date".to_string(), "reference".to_string()]) {
+    if matches.opt_present("date") && matches.opts_present(&["reference".to_owned(), "t".to_owned()]) ||
+       matches.opt_present("reference") && matches.opts_present(&["date".to_owned(), "t".to_owned()]) ||
+       matches.opt_present("t") && matches.opts_present(&["date".to_owned(), "reference".to_owned()]) {
         panic!("Invalid options: cannot specify reference time from more than one source");
     }
 
     let (mut atime, mut mtime) =
         if matches.opt_present("reference") {
             stat(&matches.opt_str("reference").unwrap()[..], !matches.opt_present("no-dereference"))
-        } else if matches.opts_present(&["date".to_string(), "t".to_string()]) {
+        } else if matches.opts_present(&["date".to_owned(), "t".to_owned()]) {
             let timestamp = if matches.opt_present("date") {
                 parse_date(matches.opt_str("date").unwrap().as_ref())
             } else {
@@ -104,54 +104,50 @@ pub fn uumain(args: Vec<String>) -> i32 {
             (now, now)
         };
 
-    for filename in matches.free.iter() {
+    for filename in &matches.free {
         let path = &filename[..];
 
         if !Path::new(path).exists() {
             // no-dereference included here for compatibility
-            if matches.opts_present(&["no-create".to_string(), "no-dereference".to_string()]) {
+            if matches.opts_present(&["no-create".to_owned(), "no-dereference".to_owned()]) {
                 continue;
             }
 
-            match File::create(path) {
-                Err(e) => {
-                    show_warning!("cannot touch '{}': {}", path, e);
-                    continue;
-                },
-                _ => (),
+            if let Err(e) = File::create(path) {
+                show_warning!("cannot touch '{}': {}", path, e);
+                continue;
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.opts_present(&["date".to_string(), "reference".to_string(), "t".to_string()]) {
+            if !matches.opts_present(&["date".to_owned(), "reference".to_owned(), "t".to_owned()]) {
                 continue;
             }
         }
 
         // If changing "only" atime or mtime, grab the existing value of the other.
         // Note that "-a" and "-m" may be passed together; this is not an xor.
-        if matches.opts_present(&["a".to_string(), "m".to_string(), "time".to_string()]) {
+        if matches.opts_present(&["a".to_owned(), "m".to_owned(), "time".to_owned()]) {
             let st = stat(path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 
             if !(matches.opt_present("a") ||
-                 time.contains(&"access".to_string()) ||
-                 time.contains(&"atime".to_string()) ||
-                 time.contains(&"use".to_string())) {
+                 time.contains(&"access".to_owned()) ||
+                 time.contains(&"atime".to_owned()) ||
+                 time.contains(&"use".to_owned())) {
                 atime = st.0;
             }
 
             if !(matches.opt_present("m") ||
-                 time.contains(&"modify".to_string()) ||
-                 time.contains(&"mtime".to_string())) {
+                 time.contains(&"modify".to_owned()) ||
+                 time.contains(&"mtime".to_owned())) {
                 mtime = st.1;
             }
         }
 
         // this follows symlinks and thus does not work correctly for the -h flag
         // need to use lutimes() c function on supported platforms
-        match filetime::set_file_times(path, atime, mtime) {
-            Err(e) => show_warning!("cannot touch '{}': {}", path, e),
-            _ => (),
+        if let Err(e) = filetime::set_file_times(path, atime, mtime) {
+            show_warning!("cannot touch '{}': {}", path, e);
         };
     }
 
@@ -188,10 +184,10 @@ fn parse_date(str: &str) -> FileTime {
 fn parse_timestamp(s: &str) -> FileTime {
     let now = time::now();
     let (format, ts) = match s.chars().count() {
-        15 => ("%Y%m%d%H%M.%S", s.to_string()),
-        12 => ("%Y%m%d%H%M", s.to_string()),
-        13 => ("%y%m%d%H%M.%S", s.to_string()),
-        10 => ("%y%m%d%H%M", s.to_string()),
+        15 => ("%Y%m%d%H%M.%S", s.to_owned()),
+        12 => ("%Y%m%d%H%M", s.to_owned()),
+        13 => ("%y%m%d%H%M.%S", s.to_owned()),
+        10 => ("%y%m%d%H%M", s.to_owned()),
         11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
          8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
          _ => panic!("Unknown timestamp format")

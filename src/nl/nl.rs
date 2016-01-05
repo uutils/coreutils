@@ -124,9 +124,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Update the settings from the command line options, and terminate the
     // program if some options could not successfully be parsed.
     let parse_errors = helper::parse_options(&mut settings, &given_options);
-    if parse_errors.len() > 0 {
+    if !parse_errors.is_empty() {
         show_error!("Invalid arguments supplied.");
-        for message in parse_errors.iter() {
+        for message in &parse_errors {
             println!("{}", message);
         }
         return 1;
@@ -135,7 +135,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let files = given_options.free;
     let mut read_stdin = files.is_empty();
 
-    for file in files.iter() {
+    for file in &files {
         if file == "-" {
             // If both file names and '-' are specified, we choose to treat first all
             // regular files, and then read from stdin last.
@@ -179,7 +179,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
     let mut line_filter : fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
-        if l.len() > 0 && l.chars().rev().next().unwrap() == '\n' {
+        if !l.is_empty() && l.chars().rev().next().unwrap() == '\n' {
             l.pop();
         }
         // Next we iterate through the individual chars to see if this

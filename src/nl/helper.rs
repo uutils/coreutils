@@ -10,7 +10,7 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
     } else if chars.len() == 1 && chars[0] == 'n' {
         Ok(::NumberingStyle::NumberForNone)
     } else if chars.len() > 1 && chars[0] == 'p' {
-        let s: String = chars[1..].iter().map(|c| *c).collect();
+        let s: String = chars[1..].iter().cloned().collect();
         match regex::Regex::new(&s) {
             Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
             Err(_) => Err(String::from("Illegal regular expression")),

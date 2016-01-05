@@ -69,18 +69,13 @@ Remove the DIRECTORY(ies), if they are empty.", NAME, VERSION);
 fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32> {
     let mut r = Ok(());
 
-    for dir in dirs.iter() {
+    for dir in &dirs {
         let path = Path::new(&dir[..]);
         r = remove_dir(&path, ignore, verbose).and(r);
         if parents {
             let mut p = path;
-            loop {
-                let new_p = match p.parent() {
-                    Some(p) => p,
-                    None => break,
-                };
+            while let Some(new_p) = p.parent() {
                 p = new_p;
-
                 match p.as_os_str().to_str() {
                     None => break,
                     Some(s) => match s {

@@ -52,14 +52,14 @@ impl Token {
     }
 
     fn is_infix_plus( &self ) -> bool {
-        match self {
-            &Token::InfixOp{ ref value, .. } => value == "+",
+        match *self {
+            Token::InfixOp{ ref value, .. } => value == "+",
             _ => false
         }
     }
     fn is_a_number( &self ) -> bool {
-        match self {
-            &Token::Value{ ref value, .. } =>
+        match *self {
+            Token::Value{ ref value, .. } =>
                 match value.parse::<i64>() {
                     Ok( _ ) => true,
                     Err( _ ) => false
@@ -68,14 +68,14 @@ impl Token {
         }
     }
     fn is_a_close_paren( &self ) -> bool {
-        match self {
-            &Token::ParClose => true,
+        match *self {
+            Token::ParClose => true,
             _ => false,
         }
     }
 }
 
-pub fn strings_to_tokens( strings: &Vec<String> ) -> Result< Vec<(usize, Token)>, String > {
+pub fn strings_to_tokens( strings: &[String] ) -> Result< Vec<(usize, Token)>, String > {
     let mut tokens_acc = Vec::with_capacity( strings.len() );
     let mut tok_idx = 1;
 
@@ -122,7 +122,7 @@ pub fn strings_to_tokens( strings: &Vec<String> ) -> Result< Vec<(usize, Token)>
     Ok( tokens_acc )
 }
 
-fn maybe_dump_tokens_acc( tokens_acc: &Vec<(usize, Token)> ) {
+fn maybe_dump_tokens_acc( tokens_acc: &[(usize, Token)] ) {
     use std::env;
 
     if let Ok(debug_var) = env::var( "EXPR_DEBUG_TOKENS" ) {
@@ -147,8 +147,9 @@ fn push_token_if_not_escaped( acc: &mut Vec<(usize, Token)>, tok_idx: usize, tok
             let pre_prev = &acc[acc.len() - 2];
             ! ( pre_prev.1.is_a_number() || pre_prev.1.is_a_close_paren() )
         }
-        else if prev_is_plus { true }
-        else { false };
+        else {
+            prev_is_plus 
+        };
 
     if should_use_as_escaped {
         acc.pop();

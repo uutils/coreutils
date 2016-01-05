@@ -66,7 +66,7 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-fn help(usage: &String) {
+fn help(usage: &str) {
     let msg = format!("{0} {1}\n\n\
                        Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY\n  \
@@ -82,7 +82,7 @@ fn copy(matches: getopts::Matches) {
         panic!()
     } else {
         // All but the last argument:
-        matches.free[..matches.free.len() - 1].iter().map(|arg| arg.clone()).collect()
+        matches.free[..matches.free.len() - 1].iter().cloned().collect()
     };
     let dest = if matches.free.len() < 2 {
         show_error!("Missing DEST argument. Try --help.");
@@ -123,7 +123,7 @@ fn copy(matches: getopts::Matches) {
             panic!();
         }
 
-        for src in sources.iter() {
+        for src in &sources {
             let source = Path::new(&src);
 
             if !source.is_file() {

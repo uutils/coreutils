@@ -116,7 +116,7 @@ Print CRC and size for each file.", NAME, VERSION);
     }
 
     let mut exit_code = 0;
-    for fname in files.iter() {
+    for fname in &files {
         match cksum(fname.as_ref()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
             Err(err) => {

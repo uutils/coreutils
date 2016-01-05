@@ -52,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         crash!(1, "missing operand\nTry '{0} --help' for more information.", NAME);
     } else if matches.free.len() > 1 {
         crash!(1, "extra operand: '{1}'\nTry '{0} --help' for more information.", NAME, matches.free[1]);

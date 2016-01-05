@@ -60,16 +60,16 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     }
 
     let mut settings = Settings {
-        prefix: "".to_string(),
+        prefix: "".to_owned(),
         numeric_suffix: false,
         suffix_length: 0,
-        input: "".to_string(),
-        strategy: "".to_string(),
-        strategy_param: "".to_string(),
+        input: "".to_owned(),
+        strategy: "".to_owned(),
+        strategy_param: "".to_owned(),
         verbose: false,
     };
 
-    settings.numeric_suffix = if matches.opt_present("d") { true } else { false };
+    settings.numeric_suffix = matches.opt_present("d");
 
     settings.suffix_length = match matches.opt_str("a") {
         Some(n) => match n.parse() {
@@ -79,16 +79,16 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         None => 2
     };
 
-    settings.verbose = if matches.opt_present("verbose") { true } else { false };
+    settings.verbose = matches.opt_present("verbose");
 
-    settings.strategy = "l".to_string();
-    settings.strategy_param = "1000".to_string();
+    settings.strategy = "l".to_owned();
+    settings.strategy_param = "1000".to_owned();
     let strategies = vec!["b", "C", "l"];
-    for e in strategies.iter() {
+    for e in &strategies {
         match matches.opt_str(*e) {
             Some(a) => {
                 if settings.strategy == "l" {
-                    settings.strategy = e.to_string();
+                    settings.strategy = (*e).to_owned();
                     settings.strategy_param = a;
                 } else {
                     crash!(1, "{}: cannot split in more than one way", NAME)
@@ -100,9 +100,9 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 
     let mut v = matches.free.iter();
     let (input, prefix) = match (v.next(), v.next()) {
-        (Some(a), None) => (a.to_string(), "x".to_string()),
-        (Some(a), Some(b)) => (a.to_string(), b.to_string()),
-        (None, _) => ("-".to_string(), "x".to_string()),
+        (Some(a), None) => (a.to_owned(), "x".to_owned()),
+        (Some(a), Some(b)) => (a.clone(), b.clone()),
+        (None, _) => ("-".to_owned(), "x".to_owned()),
     };
     settings.input = input;
     settings.prefix = prefix;
@@ -179,7 +179,7 @@ impl ByteSplitter {
             _ => crash!(1, "invalid number of bytes")
         };
         let n = if suffix.is_alphabetic() {
-            match strategy_param.iter().map(|c| *c).collect::<String>().parse::<usize>() {
+            match strategy_param.iter().cloned().collect::<String>().parse::<usize>() {
                 Ok(a) => a,
                 Err(e) => crash!(1, "invalid number of bytes: {}", e)
             }
@@ -192,7 +192,7 @@ impl ByteSplitter {
         Box::new(ByteSplitter {
             saved_bytes_to_write: n * multiplier,
             bytes_to_write: n * multiplier,
-            break_on_line_end: if settings.strategy == "b" { false } else { true },
+            break_on_line_end: settings.strategy == "b",
             require_whole_line: false,
         }) as Box<Splitter>
     }
@@ -206,7 +206,7 @@ impl Splitter for ByteSplitter {
             self.bytes_to_write = self.saved_bytes_to_write;
             control.request_new_file = true;
             self.require_whole_line = false;
-            return line[0..0].to_string();
+            return line[0..0].to_owned();
         }
         self.bytes_to_write -= n;
         if n == 0 {
@@ -216,13 +216,13 @@ impl Splitter for ByteSplitter {
         if self.break_on_line_end && n == line.chars().count() {
             self.require_whole_line = self.break_on_line_end;
         }
-        line[..n].to_string()
+        line[..n].to_owned()
     }
 }
 
 // (1, 3) -> "aab"
 fn str_prefix(i: usize, width: usize) -> String {
-    let mut c = "".to_string();
+    let mut c = "".to_owned();
     let mut n = i;
     let mut w = width;
     while w > 0 {
@@ -237,7 +237,7 @@ fn str_prefix(i: usize, width: usize) -> String {
 
 // (1, 3) -> "001"
 fn num_prefix(i: usize, width: usize) -> String {
-    let mut c = "".to_string();
+    let mut c = "".to_owned();
     let mut n = i;
     let mut w = width;
     while w > 0 {
@@ -267,11 +267,11 @@ fn split(settings: &Settings) -> i32 {
         match settings.strategy.as_ref() {
             "l" => LineSplitter::new(settings),
             "b" | "C" => ByteSplitter::new(settings),
-            a @ _ => crash!(1, "strategy {} not supported", a)
+            a => crash!(1, "strategy {} not supported", a)
         };
 
     let mut control = SplitControl {
-        current_line: "".to_string(), // Request new line
+        current_line: "".to_owned(), // Request new line
         request_new_file: true, // Request new file
     };
 
@@ -310,7 +310,7 @@ fn split(settings: &Settings) -> i32 {
         let advance = consumed.chars().count();
         let clone = control.current_line.clone();
         let sl = clone;
-        control.current_line = sl[advance..sl.chars().count()].to_string();
+        control.current_line = sl[advance..sl.chars().count()].to_owned();
     }
     0
 }

@@ -46,13 +46,10 @@ directory).", NAME, VERSION);
         return 0;
     }
 
-    let separator = match matches.opt_present("zero") {
-        true => "\0",
-        false => "\n"
-    };
+    let separator = if matches.opt_present("zero") {"\0"} else {"\n"};
 
     if !matches.free.is_empty() {
-        for path in matches.free.iter() {
+        for path in &matches.free {
             let p = Path::new(path);
             match p.parent() {
                 Some(d) => {

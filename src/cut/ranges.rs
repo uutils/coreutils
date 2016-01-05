@@ -97,7 +97,7 @@ impl Range {
     }
 }
 
-pub fn complement(ranges: &Vec<Range>) -> Vec<Range> {
+pub fn complement(ranges: &[Range]) -> Vec<Range> {
     use std::usize;
 
     let mut complements = Vec::with_capacity(ranges.len() + 1);

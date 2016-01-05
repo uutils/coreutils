@@ -144,7 +144,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             multiple = true;
         }
 
-        for file in files.iter() {
+        for file in &files {
             if multiple {
                 if !firstime { println!(""); }
                 println!("==> {} <==", file);
@@ -280,7 +280,7 @@ fn tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                 }
             }
             let mut stdout = stdout();
-            for datum in ringbuf.iter() {
+            for datum in &ringbuf {
                 print_string(&mut stdout, datum);
             }
         },
@@ -311,7 +311,7 @@ fn tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                 }
             }
             let mut stdout = stdout();
-            for datum in ringbuf.iter() {
+            for datum in &ringbuf {
                 print_byte(&mut stdout, datum);
             }
         }
@@ -339,7 +339,7 @@ fn print_byte<T: Write>(stdout: &mut T, ch: &u8) {
 }
 
 #[inline]
-fn print_string<T: Write>(_: &mut T, s: &String) {
+fn print_string<T: Write>(_: &mut T, s: &str) {
     print!("{}", s);
 }
 

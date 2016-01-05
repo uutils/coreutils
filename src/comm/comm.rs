@@ -24,7 +24,7 @@ fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
     let delim = match opts.opt_str("output-delimiter") {
         Some(d) => d.clone(),
-        None => "\t".to_string(),
+        None => "\t".to_owned(),
     };
 
     if col > 1 && !opts.opt_present("1") {
@@ -51,9 +51,9 @@ enum LineReader {
 
 impl LineReader {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
-        match self {
-            &mut LineReader::Stdin(ref mut r)  => r.read_line(buf),
-            &mut LineReader::FileIn(ref mut r) => r.read_line(buf),
+        match *self {
+            LineReader::Stdin(ref mut r)  => r.read_line(buf),
+            LineReader::FileIn(ref mut r) => r.read_line(buf),
         }
     }
 }

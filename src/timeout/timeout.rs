@@ -137,7 +137,7 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
                     return_if_err!(ERR_EXIT_STATUS, process.wait());
                     137
                 },
-                Err(_) => return 124,
+                Err(_) => 124,
             }
         },
         Err(_) => {

@@ -75,18 +75,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let files = matches.free;
-    if files.len() == 0 {
+    if files.is_empty() {
         crash!(1, "missing operand\nTry {} --help for more information", NAME);
     }
 
-    if no_newline && files.len() > 1 {
-        if !silent {
-            eprintln!("{}: ignoring --no-newline with multiple arguments", NAME);
-            no_newline = false;
-        }
+    if no_newline && files.len() > 1 && !silent {
+        eprintln!("{}: ignoring --no-newline with multiple arguments", NAME);
+        no_newline = false;
     }
 
-    for f in files.iter() {
+    for f in &files {
         let p = PathBuf::from(f);
         if can_mode == CanonicalizeMode::None {
             match fs::read_link(&p) {

@@ -148,7 +148,7 @@ fn print_version() {
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut options = SeqOptions {
-        separator: "\n".to_string(),
+        separator: "\n".to_owned(),
         terminator: None,
         widths: false
     };
@@ -209,7 +209,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-#[inline(always)]
 fn done_printing(next: f64, step: f64, last: f64) -> bool {
     if step >= 0f64 {
         next > last

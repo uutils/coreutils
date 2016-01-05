@@ -32,7 +32,7 @@ static NAME: &'static str = "tr";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const BUFFER_LEN: usize = 1024;
 
-fn delete<'a>(set: ExpandSet<'a>, complement: bool) {
+fn delete(set: ExpandSet, complement: bool) {
     let mut bset = BitSet::new();
     let mut stdout = stdout();
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
@@ -59,7 +59,7 @@ fn delete<'a>(set: ExpandSet<'a>, complement: bool) {
             safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
         }
     }
-    if buf.len() > 0 {
+    if !buf.is_empty() {
         safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
         pipe_flush!();
     }
@@ -95,7 +95,7 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
             }
         }
     }
-    if buf.len() > 0 {
+    if !buf.is_empty() {
         safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
         pipe_flush!();
     }
@@ -137,13 +137,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         usage(&opts);
         return 1;
     }
 
     let dflag = matches.opt_present("d");
-    let cflag = matches.opts_present(&["c".to_string(), "C".to_string()]);
+    let cflag = matches.opts_present(&["c".to_owned(), "C".to_owned()]);
     let sets = matches.free;
 
     if cflag && !dflag {

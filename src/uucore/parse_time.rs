@@ -10,7 +10,7 @@
 pub fn from_str(string: &str) -> Result<f64, String> {
     let len = string.len();
     if len == 0 {
-        return Err("empty string".to_string())
+        return Err("empty string".to_owned())
     }
     let slice = &string[..len - 1];
     let (numstr, times) = match string.chars().next_back().unwrap() {

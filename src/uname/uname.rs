@@ -81,7 +81,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let uname = unsafe { getuname() };
     let mut output = String::new();
     if matches.opt_present("sysname") || matches.opt_present("all")
-        || !matches.opts_present(&["nodename".to_string(), "release".to_string(), "version".to_string(), "machine".to_string()]) {
+        || !matches.opts_present(&["nodename".to_owned(), "release".to_owned(), "version".to_owned(), "machine".to_owned()]) {
             output.push_str(uname.sysname.as_ref());
             output.push_str(" ");
     }

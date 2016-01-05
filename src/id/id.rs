@@ -196,7 +196,7 @@ fn pretty(possible_pw: Option<c_passwd>) {
         let pw = unsafe { getpwuid(rid) };
 
         let is_same_user = unsafe {
-            String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() == login
+            String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()) == login
         };
 
         if pw.is_null() || is_same_user {
@@ -374,11 +374,11 @@ fn id_print(possible_pw: Option<c_passwd>, p_euid: bool, p_egid: bool) {
         }
     }
 
-    if groups.len() > 0 {
+    if !groups.is_empty() {
         print!(" groups=");
 
         let mut first = true;
-        for &gr in groups.iter() {
+        for &gr in &groups {
             if !first { print!(",") }
             print!("{}", gr);
             let group = unsafe { getgrgid(gr) };

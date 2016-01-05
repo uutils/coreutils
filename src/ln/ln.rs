@@ -112,7 +112,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
     } else {
-        "~".to_string()
+        "~".to_owned()
     };
 
     if matches.opt_present("T") && matches.opt_present("t") {
@@ -216,13 +216,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
             }
         };
 
-        match link(srcpath, &targetpath, settings) {
-            Err(e) => {
-                show_error!("cannot link '{}' to '{}': {}",
-                            targetpath.display(), srcpath.display(), e);
-                all_successful = false;
-            },
-            _ => {}
+        if let Err(e) = link(srcpath, &targetpath, settings) {
+            show_error!("cannot link '{}' to '{}': {}",
+                        targetpath.display(), srcpath.display(), e);
+            all_successful = false;
         }
     }
     if all_successful { 0 } else { 1 }
@@ -231,10 +228,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
 
-    if dst.is_dir() {
-        if settings.no_target_dir {
-            try!(fs::remove_dir(dst));
-        }
+    if dst.is_dir() && settings.no_target_dir {
+        try!(fs::remove_dir(dst));
     }
 
     if is_symlink(dst) || dst.exists() {
@@ -290,8 +285,8 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
-    let mut p = path.as_os_str().to_str().unwrap().to_string();
+fn simple_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+    let mut p = path.as_os_str().to_str().unwrap().to_owned();
     p.push_str(suffix);
     PathBuf::from(p)
 }
@@ -307,8 +302,8 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     }
 }
 
-fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
-    let test_path = simple_backup_path(path, &".~1~".to_string());
+fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+    let test_path = simple_backup_path(path, &".~1~".to_owned());
     if test_path.exists() {
         return numbered_backup_path(path);
     }

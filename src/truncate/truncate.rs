@@ -115,7 +115,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
         }
         None => parse_size(size.unwrap().as_ref())
     };
-    for filename in filenames.iter() {
+    for filename in &filenames {
         let path = Path::new(filename);
         match OpenOptions::new().read(true).write(true).create(!no_create).open(path) {
             Ok(file) => {
@@ -135,7 +135,7 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     TruncateMode::RoundDown => fsize - fsize % refsize,
                     TruncateMode::RoundUp => fsize + fsize % refsize
                 };
-                let _ = match file.set_len(tsize) {
+                match file.set_len(tsize) {
                     Ok(_) => {},
                     Err(f) => {
                         crash!(1, "{}", f.to_string())
@@ -163,7 +163,6 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
     let bytes = {
         let mut slice =
             if mode == TruncateMode::Reference {
-                let size: &str = size;
                 size
             } else {
                 &size[1..]
@@ -175,7 +174,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
             }
         }
         slice
-    }.to_string();
+    }.to_owned();
     let mut number: u64 = match bytes.parse() {
         Ok(num) => num,
         Err(e) => {

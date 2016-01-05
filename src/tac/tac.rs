@@ -50,16 +50,16 @@ Write each file to standard output, last line first.", NAME, VERSION);
         let regex = matches.opt_present("r");
         let separator = match matches.opt_str("s") {
             Some(m) => {
-                if m.len() == 0 {
+                if m.is_empty() {
                     crash!(1, "separator cannot be empty")
                 } else {
                     m
                 }
             }
-            None => "\n".to_string()
+            None => "\n".to_owned()
         };
         let files = if matches.free.is_empty() {
-            vec!("-".to_string())
+            vec!("-".to_owned())
         } else {
             matches.free
         };
@@ -74,7 +74,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
     let sbytes = separator.as_bytes();
     let slen = sbytes.len();
 
-    for filename in filenames.iter() {
+    for filename in &filenames {
         let mut file = BufReader::new(
             if filename == "-" {
                 Box::new(stdin()) as Box<Read>
@@ -115,7 +115,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         drop(i);
 
         // if there isn't a separator at the end of the file, fake it
-        if offsets.len() == 0 || *offsets.last().unwrap() < data.len() - slen {
+        if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
             offsets.push(data.len());
         }
 

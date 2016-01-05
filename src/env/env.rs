@@ -84,11 +84,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
             match (name, value) {
                 (Some(n), Some(v)) => {
-                    opts.sets.push((n.to_string(), v.to_string()));
+                    opts.sets.push((n.to_owned(), v.to_owned()));
                 }
                 _ => {
                     // read the program now
-                    opts.program.push(opt.to_string());
+                    opts.program.push(opt.to_owned());
                     break;
                 }
             }
@@ -104,7 +104,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                     match var {
                         None => println!("{}: this option requires an argument: {}", NAME, opt),
-                        Some(s) => opts.unsets.push(s.to_string())
+                        Some(s) => opts.unsets.push(s.to_owned())
                     }
                 }
 
@@ -137,7 +137,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                         match var {
                             None => println!("{}: this option requires an argument: {}", NAME, opt),
-                            Some(s) => opts.unsets.push(s.to_string())
+                            Some(s) => opts.unsets.push(s.to_owned())
                         }
                     }
                     _ => {
@@ -156,12 +156,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
             match (name, value) {
                 (Some(n), Some(v)) => {
                     // yes
-                    opts.sets.push((n.to_string(), v.to_string()));
+                    opts.sets.push((n.to_owned(), v.to_owned()));
                     wait_cmd = true;
                 }
                 // no, its a program-like opt
                 _ => {
-                    opts.program.push(opt.to_string());
+                    opts.program.push(opt.clone());
                     break;
                 }
             }
@@ -172,7 +172,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // read program arguments
     for opt in iter {
-        opts.program.push(opt.to_string());
+        opts.program.push(opt.clone());
     }
 
     if opts.ignore_env {
@@ -181,11 +181,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
 
-    for name in opts.unsets.iter() {
+    for name in &opts.unsets {
         env::remove_var(name);
     }
 
-    for &(ref name, ref val) in opts.sets.iter() {
+    for &(ref name, ref val) in &opts.sets {
         env::set_var(name, val);
     }
 

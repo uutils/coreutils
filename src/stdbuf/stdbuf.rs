@@ -93,7 +93,7 @@ fn print_usage(opts: &Options) {
 fn parse_size(size: &str) -> Option<u64> {
     let ext = size.trim_left_matches(|c: char| c.is_digit(10));
     let num = size.trim_right_matches(|c: char| c.is_alphabetic());
-    let mut recovered = num.to_string();
+    let mut recovered = num.to_owned();
     recovered.push_str(ext);
     if recovered != size {
         return None;
@@ -196,19 +196,19 @@ fn exe_path() -> io::Result<PathBuf> {
 
 fn get_preload_env() -> (String, String) {
     let (preload, extension) = preload_strings();
-    let mut libstdbuf = LIBSTDBUF.to_string();
+    let mut libstdbuf = LIBSTDBUF.to_owned();
     libstdbuf.push_str(extension);
     // First search for library in directory of executable.
     let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
     path.push(libstdbuf.clone());
     if path.exists() {
         match path.as_os_str().to_str() {
-            Some(s) => { return (preload.to_string(), s.to_string()); },
+            Some(s) => { return (preload.to_owned(), s.to_owned()); },
             None => crash!(1, "Error while converting path.")
         };
     }
     // We assume library is in LD_LIBRARY_PATH/ DYLD_LIBRARY_PATH.
-    (preload.to_string(), libstdbuf)
+    (preload.to_owned(), libstdbuf)
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -243,7 +243,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if command_idx == -1 {
         crash!(125, "Invalid options\nTry 'stdbuf --help' for more information.");
     }
-    let ref command_name = args[command_idx as usize];
+    let command_name = &args[command_idx as usize];
     let mut command = Command::new(command_name);
     let (preload_env, libstdbuf) = get_preload_env();
     command.args(&args[(command_idx as usize) + 1 ..]).env(preload_env, libstdbuf);

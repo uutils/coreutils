@@ -82,7 +82,7 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
     }
 
     // Resolve the symlinks where possible
-    if parts.len() > 0 {
+    if !parts.is_empty() {
         for part in parts[..parts.len()-1].iter() {
             result.push(part);
 

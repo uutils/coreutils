@@ -54,9 +54,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let input = if files.len() > 1 {
         crash!(1, "{}, extra operand '{}'", NAME, matches.free[1]);
     } else if files.is_empty() {
-        "-".to_string()
+        "-".to_owned()
     } else {
-        files[0].to_string()
+        files[0].clone()
     };
 
     let mut stdin_buf;
@@ -82,8 +82,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line.trim_right().split_whitespace().map(|s| s.to_string()).collect();
-                if tokens.len() == 0 {
+                let tokens: Vec<String> = line.trim_right().split_whitespace().map(|s| s.to_owned()).collect();
+                if tokens.is_empty() {
                     break
                 }
                 for ab in tokens.chunks(2) {
@@ -103,7 +103,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         crash!(1, "{}, input contains a loop:", input);
     }
 
-    for x in g.result.iter() {
+    for x in &g.result {
         println!("{}", x);
     }
 
@@ -127,11 +127,11 @@ impl Graph {
         }
     }
 
-    fn has_node(&self, n: &String) -> bool {
+    fn has_node(&self, n: &str) -> bool {
         self.in_edges.contains_key(n)
     }
 
-    fn has_edge(&self, from: &String, to: &String) -> bool {
+    fn has_edge(&self, from: &str, to: &str) -> bool {
         self.in_edges.get(to).unwrap().contains(from)
     }
 
@@ -159,7 +159,7 @@ impl Graph {
     // O(|V|+|E|)
     fn run_tsort(&mut self) {
         let mut start_nodes = vec!();
-        for (n, edges) in self.in_edges.iter() {
+        for (n, edges) in &self.in_edges {
             if edges.is_empty() {
                 start_nodes.push(n.clone());
             }
@@ -185,7 +185,7 @@ impl Graph {
     }
 
     fn is_acyclic(&self) -> bool {
-        for (_, edges) in self.out_edges.iter() {
+        for (_, edges) in &self.out_edges {
             if !edges.is_empty() {
                 return false
             }

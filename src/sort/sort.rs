@@ -69,7 +69,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
     let mut files = matches.free;
     if files.is_empty() {
         /* if no file, default to stdin */
-        files.push("-".to_string());
+        files.push("-".to_owned());
     }
 
     exec(files, numeric, human_readable, reverse);
@@ -78,7 +78,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
 }
 
 fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) {
-    for path in files.iter() {
+    for path in &files {
         let (reader, _) = match open(path) {
             Some(x) => x,
             None => continue,
@@ -114,7 +114,7 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) 
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_f64_parse(a: &String) -> f64{
+fn permissive_f64_parse(a: &str) -> f64{
     //Maybe should be split on non-digit, but then 10e100 won't parse properly.
     //On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
     //because there's no way to handle both CSV and thousands separators without a new flag.
@@ -135,13 +135,13 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     //f64::cmp isn't implemented because NaN messes with it
     //but we sidestep that with permissive_f64_parse so just fake it
     if fa > fb {
-        return Ordering::Greater;
+        Ordering::Greater
     }
     else if fa < fb {
-        return Ordering::Less;
+        Ordering::Less
     }
     else {
-        return Ordering::Equal;
+        Ordering::Equal
     }
 }
 
@@ -162,7 +162,7 @@ fn human_readable_convert(a: &String) -> f64 {
         'P' => 1E15,
         _ => 1f64
     };
-    return int_part * suffix;
+    int_part * suffix
 }
 
 /// Compare two strings as if they are human readable sizes.
@@ -171,18 +171,17 @@ fn human_readable_size_compare(a: &String, b: &String) -> Ordering {
     let fa = human_readable_convert(a);
     let fb = human_readable_convert(b);
     if fa > fb {
-        return Ordering::Greater;
+        Ordering::Greater
     }
     else if fa < fb {
-        return Ordering::Less;
+        Ordering::Less
     }
     else {
-        return Ordering::Equal;
+        Ordering::Equal
     }
 
 }
 
-#[inline(always)]
 fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
     for line in iter {
         println!("{}", line);
@@ -190,7 +189,7 @@ fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
 }
 
 // from cat.rs
-fn open<'a>(path: &str) -> Option<(Box<Read + 'a>, bool)> {
+fn open(path: &str) -> Option<(Box<Read>, bool)> {
     if path == "-" {
         let stdin = stdin();
         return Some((Box::new(stdin) as Box<Read>, is_stdin_interactive()));
