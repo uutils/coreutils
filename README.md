@@ -150,7 +150,6 @@ To do
 
 - chcon
 - chgrp
-- chmod (mostly done, just needs verbosity options)
 - chown
 - copy
 - cp (not much done)

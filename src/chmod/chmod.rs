@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![allow(unused_variables)]  // only necessary while the TODOs still exist
-
 extern crate aho_corasick;
 extern crate getopts;
 extern crate libc;
@@ -125,7 +123,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
                                                                 Some(s) => Some(s.to_string()),
                                                                 None => None,
                                                             },
-                                                            Err(e) => None,
+                                                            Err(_) => None,
                                                           }).collect(),
                                   changes, quiet, verbose, preserve_root, recursive, fmode, cmode).and(r);
                         r = chmod_file(&file, filename, changes, quiet, verbose, fmode, cmode).and(r);
@@ -157,25 +155,20 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
 #[cfg(unix)]
 fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
     let path = CString::new(name).unwrap_or_else(|e| panic!("{}", e));
-    match fmode {
-        Some(mode) => {
-            if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
-                // TODO: handle changes, quiet, and verbose
-            } else {
+    let mut stat: libc::stat = unsafe { mem::uninitialized() };
+    let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
+    let mut fperm =
+        if statres == 0 {
+            stat.st_mode & 0o7777
+        } else {
+            if !quiet {
                 show_error!("{}", io::Error::last_os_error());
-                return Err(1);
             }
-        }
+            return Err(1);
+        };
+    match fmode {
+        Some(mode) => try!(change_file(fperm, mode, file, &path, verbose, changes, quiet)),
         None => {
-            let mut stat: libc::stat = unsafe { mem::uninitialized() };
-            let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
-            let mut fperm =
-                if statres == 0 {
-                    stat.st_mode
-                } else {
-                    show_error!("{}", io::Error::last_os_error());
-                    return Err(1);
-                };
             for mode in cmode.unwrap().split(',') {  // cmode is guaranteed to be Some in this case
                 let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
                 let result =
@@ -185,17 +178,16 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                         parse_symbolic(fperm, mode, file)
                     };
                 match result {
-                    Ok(m) => fperm = m,
-                    Err(f) => {
-                        show_error!("{}", f);
-                        return Err(1)
+                    Ok(mode) => {
+                        try!(change_file(fperm, mode, file, &path, verbose, changes, quiet));
+                        fperm = mode;
                     }
-                };
-                if unsafe { libc::chmod(path.as_ptr(), fperm) } == 0 {
-                    // TODO: see above
-                } else {
-                    show_error!("{}", io::Error::last_os_error());
-                    return Err(1);
+                    Err(f) => {
+                        if !quiet {
+                            show_error!("{}", f);
+                        }
+                        return Err(1);
+                    }
                 }
             }
         }
@@ -280,7 +272,7 @@ fn parse_op(mode: &str, default: Option<char>) -> Result<(char, usize), String> 
 fn parse_change(mode: &str, fperm: libc::mode_t, file: &Path) -> (libc::mode_t, usize) {
     let mut srwx = fperm & 0o7000;
     let mut pos = 0;
-    for (i, ch) in mode.chars().enumerate() {
+    for ch in mode.chars() {
         match ch {
             'r' => srwx |= 0o444,
             'w' => srwx |= 0o222,
@@ -303,4 +295,26 @@ fn parse_change(mode: &str, fperm: libc::mode_t, file: &Path) -> (libc::mode_t, 
         srwx = 0;
     }
     (srwx, pos)
+}
+
+fn change_file(fperm: libc::mode_t, mode: libc::mode_t, file: &Path, path: &CString, verbose: bool, changes: bool, quiet: bool) -> Result<(), i32> {
+    if fperm == mode {
+        if verbose && !changes {
+            show_info!("mode of \"{}\" retained as {:o}", file.display(), fperm);
+        }
+        Ok(())
+    } else if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
+        if verbose || changes {
+            show_info!("mode of \"{}\" changed from {:o} to {:o}", file.display(), fperm, mode);
+        }
+        Ok(())
+    } else {
+        if !quiet {
+            show_error!("{}", io::Error::last_os_error());
+        }
+        if verbose {
+            show_info!("failed to change mode of file \"{}\" from {:o} to {:o}", file.display(), fperm, mode);
+        }
+        return Err(1);
+    }
 }
