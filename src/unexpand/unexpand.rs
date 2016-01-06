@@ -1,5 +1,4 @@
 #![crate_name = "uu_unexpand"]
-#![feature(unicode)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -14,7 +13,6 @@
 
 extern crate getopts;
 extern crate libc;
-extern crate rustc_unicode;
 extern crate unicode_width;
 
 #[macro_use]
@@ -23,7 +21,6 @@ extern crate uucore;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
-use rustc_unicode::str::utf8_char_width;
 use unicode_width::UnicodeWidthChar;
 
 static NAME: &'static str = "unexpand";
@@ -208,7 +205,7 @@ fn unexpand(options: Options) {
                 }
 
                 let (ctype, cwidth, nbytes) = if options.uflag {
-                    let nbytes = utf8_char_width(buf[byte]);
+                    let nbytes = uucore::utf8::utf8_char_width(buf[byte]);
 
                     // figure out how big the next char is, if it's UTF-8
                     if byte + nbytes > buf.len() {
