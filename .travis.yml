@@ -11,6 +11,7 @@ cache:
   - $HOME/.cargo
 sudo: false
 script:
+  - ./.travis_fixup.sh
   - cargo build
   - cargo test --no-fail-fast
 matrix:

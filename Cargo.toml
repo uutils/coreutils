@@ -40,11 +40,11 @@ generic = [
   "dirname",
   "echo",
   "env",
-  "expand",
+  "expand",	# skip_on_beta
   "expr",
   "factor",
   "false",
-  "fmt",
+  "fmt",	# skip_on_beta
   "fold",
   "hashsum",
   "head",
@@ -56,7 +56,7 @@ generic = [
   "od",
   "paste",
   "printenv",
-  "ptx",
+  "ptx",	# skip_on_stable
   "pwd",
   "readlink",
   "realpath",
@@ -75,11 +75,11 @@ generic = [
   "tail",
   "tee",
   "test",
-  "tr",
+  "tr",          # skip_on_beta
   "true",
   "truncate",
   "tsort",
-  "unexpand",
+  "unexpand",    # skip_on_beta
   "uniq",
   "wc",
   "whoami",
