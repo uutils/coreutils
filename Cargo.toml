@@ -56,7 +56,7 @@ generic = [
   "od",
   "paste",
   "printenv",
-  "ptx",	# skip_on_stable
+  "ptx",
   "pwd",
   "readlink",
   "realpath",
