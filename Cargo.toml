@@ -40,7 +40,7 @@ generic = [
   "dirname",
   "echo",
   "env",
-  "expand",	# skip_on_beta
+  "expand",
   "expr",
   "factor",
   "false",
@@ -79,7 +79,7 @@ generic = [
   "true",
   "truncate",
   "tsort",
-  "unexpand",    # skip_on_beta
+  "unexpand",
   "uniq",
   "wc",
   "whoami",
