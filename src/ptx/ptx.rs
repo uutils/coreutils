@@ -334,9 +334,9 @@ fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
 
 fn get_output_chunks(all_before: &str, keyword: &str, all_after: &str,
                     config: &Config) -> (String, String, String, String) {
-    assert_eq!(all_before.trim().to_owned(), *all_before);
-    assert_eq!(keyword.trim().to_owned(), *keyword);
-    assert_eq!(all_after.trim().to_owned(), *all_after);
+    assert_eq!(all_before.trim(), all_before);
+    assert_eq!(keyword.trim(), keyword);
+    assert_eq!(all_after.trim(), all_after);
     let mut head = String::new();
     let mut before = String::new();
     let mut after = String::new();
