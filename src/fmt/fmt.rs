@@ -189,7 +189,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut files = matches.free;
     if files.is_empty() {
-        files.push("-".to_string());
+        files.push("-".to_owned());
     }
 
     let mut ostream = BufWriter::new(stdout());

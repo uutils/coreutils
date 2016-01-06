@@ -55,17 +55,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // Translate a ~str in octal form to u16, default to 755
     // Not tested on Windows
-    let mode_match = matches.opts_str(&["mode".to_string()]);
+    let mode_match = matches.opts_str(&["mode".to_owned()]);
     let mode: u16 = if mode_match.is_some() {
         let m = mode_match.unwrap();
         let res: Option<u16> = u16::from_str_radix(&m, 8).ok();
         if res.is_some() {
-            unsafe { std::mem::transmute(res.unwrap()) }
+            res.unwrap()
         } else {
             crash!(1, "no mode given");
         }
     } else {
-        unsafe { std::mem::transmute(0o755 as u16) }
+        0o755 as u16
     };
 
     let dirs = matches.free;
@@ -88,7 +88,7 @@ fn print_help(opts: &getopts::Options) {
 fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
     let mut status = 0;
     let empty = Path::new("");
-    for dir in dirs.iter() {
+    for dir in &dirs {
         let path = Path::new(dir);
         if recursive {
             let mut pathbuf = PathBuf::new();

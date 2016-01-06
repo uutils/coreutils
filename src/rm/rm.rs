@@ -126,19 +126,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs: bool, preserve_root: bool, recursive: bool, dir: bool, verbose: bool) -> bool {
     let mut had_err = false;
 
-    for filename in files.iter() {
+    for filename in &files {
         let filename = &filename[..];
         let file = Path::new(filename);
         if file.exists() {
             if file.is_dir() {
                 if recursive && (filename != "/" || !preserve_root) {
                     if interactive != InteractiveMode::InteractiveAlways {
-                        match fs::remove_dir_all(file) {
-                            Err(e) => {
-                                had_err = true;
-                                show_error!("could not remove '{}': {}", filename, e);
-                            },
-                            _ => (),
+                        if let Err(e) = fs::remove_dir_all(file) {
+                            had_err = true;
+                            show_error!("could not remove '{}': {}", filename, e);
                         };
                     } else {
                         let mut dirs: VecDeque<PathBuf> = VecDeque::new();
@@ -185,7 +182,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                                 },
                             };
 
-                            for f in files.iter() {
+                            for f in &files {
                                 had_err = remove_file(f.as_path(), interactive, verbose).bitor(had_err);
                             }
 

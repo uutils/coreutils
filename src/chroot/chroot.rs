@@ -65,7 +65,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.opt_present("V") { version(); return 0 }
     if matches.opt_present("h") { help_menu(opts); return 0 }
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         println!("Missing operand: NEWROOT");
         println!("Try `{} --help` for more information.", NAME);
         return 1
@@ -191,7 +191,7 @@ fn set_groups_from_str(groups: &str) {
 
 fn set_user(user: &str) {
     if !user.is_empty() {
-        let user_id = get_pw_from_args(&vec!(user.to_string())).unwrap().pw_uid;
+        let user_id = get_pw_from_args(&vec!(user.to_owned())).unwrap().pw_uid;
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
             crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())

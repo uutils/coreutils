@@ -89,19 +89,19 @@ fn strip_dir(fullname: &str) -> String {
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(path);
     match pb.components().last() {
-        Some(c) => c.as_os_str().to_str().unwrap().to_string(),
-        None => "".to_string()
+        Some(c) => c.as_os_str().to_str().unwrap().to_owned(),
+        None => "".to_owned()
     }
 }
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
-        return name.to_string();
+        return name.to_owned();
     }
 
     if name.ends_with(suffix) {
-        return name[..name.len() - suffix.len()].to_string();
+        return name[..name.len() - suffix.len()].to_owned();
     }
 
-    name.to_string()
+    name.to_owned()
 }

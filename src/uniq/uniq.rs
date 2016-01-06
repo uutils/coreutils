@@ -58,7 +58,7 @@ impl Uniq {
         }
     }
 
-    fn skip_fields(&self, line: &String) -> String {
+    fn skip_fields(&self, line: &str) -> String {
         match self.skip_fields {
             Some(skip_fields) =>
                 if line.split_whitespace().count() > skip_fields {
@@ -73,15 +73,15 @@ impl Uniq {
                         }
                         field = field + 1;
                     }
-                    line[i..].to_string()
+                    line[i..].to_owned()
                 } else {
-                    "".to_string()
+                    "".to_owned()
                 },
-            None => line[..].to_string()
+            None => line[..].to_owned()
         }
     }
 
-    fn cmp_key(&self, line: &String) -> String {
+    fn cmp_key(&self, line: &str) -> String {
         let len = line.len();
         if len > 0 {
             let slice_start = match self.slice_start {
@@ -99,11 +99,11 @@ impl Uniq {
                     _ => c,
                 }).collect()
         } else {
-            line.clone()
+            line.to_owned()
         }
     }
 
-    fn print_lines<W: Write>(&self, writer: &mut BufWriter<W>, lines: &Vec<String>, print_delimiter: bool) -> bool {
+    fn print_lines<W: Write>(&self, writer: &mut BufWriter<W>, lines: &[String], print_delimiter: bool) -> bool {
         let mut first_line_printed = false;
         let mut count = if self.all_repeated { 1 } else { lines.len() };
         if lines.len() == 1 && !self.repeats_only
@@ -122,7 +122,7 @@ impl Uniq {
         first_line_printed
     }
 
-    fn print_line<W: Write>(&self, writer: &mut BufWriter<W>, line: &String, count: usize, print_delimiter: bool) {
+    fn print_line<W: Write>(&self, writer: &mut BufWriter<W>, line: &str, count: usize, print_delimiter: bool) {
         if print_delimiter {
             crash_if_err!(1, writer.write_all(&['\n' as u8]));
         }
@@ -183,8 +183,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{} {}", NAME, VERSION);
     } else {
         let (in_file_name, out_file_name) = match matches.free.len() {
-            0 => ("-".to_string(), "-".to_string()),
-            1 => (matches.free[0].clone(), "-".to_string()),
+            0 => ("-".to_owned(), "-".to_owned()),
+            1 => (matches.free[0].clone(), "-".to_owned()),
             2 => (matches.free[0].clone(), matches.free[1].clone()),
             _ => {
                 crash!(1, "Extra operand: {}", matches.free[2]);
@@ -196,13 +196,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
             all_repeated: matches.opt_present("all-repeated"),
             delimiters: match matches.opt_default("all-repeated", "none") {
                 Some(ref opt_arg) if opt_arg != "none" => {
-                    let rep_args = ["prepend".to_string(), "separate".to_string()];
+                    let rep_args = ["prepend".to_owned(), "separate".to_owned()];
                     if !rep_args.contains(opt_arg) {
                         crash!(1, "Incorrect argument for all-repeated: {}", opt_arg.clone());
                     }
                     opt_arg.clone()
                 },
-                _ => "".to_string()
+                _ => "".to_owned()
             },
             show_counts: matches.opt_present("count"),
             skip_fields: opt_parsed("skip-fields", &matches),

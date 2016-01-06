@@ -24,7 +24,7 @@ pub fn uumain(_: Vec<String>) -> i32 {
     let args = args_os().collect::<Vec<OsString>>();
     // This is completely disregarding valid windows paths that aren't valid unicode
     let args = args.iter().map(|a| a.to_str().unwrap().as_bytes()).collect::<Vec<&[u8]>>();
-    if args.len() == 0 {
+    if args.is_empty() {
         return 2;
     }
     let args =
@@ -145,7 +145,7 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
 fn isatty(fd: &[u8]) -> bool {
     use libc::{isatty};
     from_utf8(fd).ok().and_then(|s| s.parse().ok())
-            .map(|i| unsafe { isatty(i) == 1 }).unwrap_or(false)
+            .map_or(false, |i| unsafe { isatty(i) == 1 })
 }
 
 fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
@@ -347,7 +347,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         } else if gid == stat.st_gid {
             stat.st_mode & ((p as mode_t) << 3) != 0
         } else {
-            stat.st_mode & ((p as mode_t) << 0) != 0
+            stat.st_mode & ((p as mode_t)) != 0
         }
     };
 

@@ -88,16 +88,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
             } else {
                 crash!(1, "Template should end with 'X' when you specify suffix option.")
             },
-            None => (p, r, s.to_string())
+            None => (p, r, s.to_owned())
         },
-        None => ("",0, "".to_string())
+        None => ("",0, "".to_owned())
     };
 
     if rand < 3 {
         crash!(1, "Too few 'X's in template")
     }
 
-    if suffix.chars().any(|c| is_separator(c)) {
+    if suffix.chars().any(is_separator) {
         crash!(1, "suffix cannot contain any path separators");
     }
 
@@ -168,7 +168,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     }
     tmpdir.push(String::from(buf));
     println!("{}", tmpdir.display());
-    return 0;
+    0
 }
 
 
@@ -203,5 +203,5 @@ fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool
     // I call a dengeros function `forget`.
     forget(tmpfile);
 
-    return 0;
+    0
 }

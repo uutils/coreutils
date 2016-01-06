@@ -141,7 +141,7 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     if signal_name_or_value == "0" {
         return Some(0);
     }
-    for signal in ALL_SIGNALS.iter() {
+    for signal in &ALL_SIGNALS {
         let long_name = format!("SIG{}", signal.name);
         if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_string()) || (long_name == signal_name_or_value) {
             return Some(signal.value);

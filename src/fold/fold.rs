@@ -53,10 +53,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if matches.opt_present("w") {
                 matches.opt_str("w")
             } else {
-                match obs_width {
-                    Some(v) => Some(v.to_string()),
-                    None => None,
-                }
+                obs_width
             };
         let width = match poss_width {
             Some(inp_width) => match inp_width.parse::<usize>() {
@@ -66,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             None => 80
         };
         let files = if matches.free.is_empty() {
-            vec!("-".to_string())
+            vec!("-".to_owned())
         } else {
             matches.free
         };
@@ -82,7 +79,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
         if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
             let mut v = args.to_vec();
             v.remove(i);
-            return (v, Some(slice[1..].to_string()));
+            return (v, Some(slice[1..].to_owned()));
         }
     }
     (args.to_vec(), None)
@@ -90,7 +87,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 
 #[inline]
 fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
-    for filename in filenames.iter() {
+    for filename in &filenames {
         let filename: &str = &filename;
         let mut stdin_buf;
         let mut file_buf;
@@ -168,7 +165,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                                 (slice, "", 0)
                             };
                         println!("{}", out);
-                        (val.to_string(), ncount)
+                        (val.to_owned(), ncount)
                     };
                     output = val;
                     count = ncount;

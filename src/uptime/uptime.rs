@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{} {}", NAME, VERSION);
         return 0;
     }
-    if matches.opt_present("help") || matches.free.len() > 0 {
+    if matches.opt_present("help") || !matches.free.is_empty() {
         println!("{} {}", NAME, VERSION);
         println!("");
         println!("Usage:");

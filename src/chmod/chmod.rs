@@ -100,7 +100,7 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
 fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
     let mut r = Ok(());
 
-    for filename in files.iter() {
+    for filename in &files {
         let filename = &filename[..];
         let file = Path::new(filename);
         if file.exists() {
@@ -120,7 +120,7 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
                         // to chmod() and chmod_file().
                         r = chmod(walk_dir.filter_map(|x| match x {
                                                             Ok(o) => match o.path().into_os_string().to_str() {
-                                                                Some(s) => Some(s.to_string()),
+                                                                Some(s) => Some(s.to_owned()),
                                                                 None => None,
                                                             },
                                                             Err(_) => None,
@@ -211,7 +211,7 @@ fn parse_numeric(fperm: libc::mode_t, mut mode: &str) -> Result<libc::mode_t, St
                     _ => unreachable!()
                 })
             }
-            Err(err) => Err(err.description().to_string())
+            Err(err) => Err(err.description().to_owned())
         }
     }
 }
@@ -265,7 +265,7 @@ fn parse_op(mode: &str, default: Option<char>) -> Result<(char, usize), String> 
                 None => Err(format!("invalid operator (expected +, -, or =, but found {})", ch))
             }
         },
-        None => Err("unexpected end of mode".to_string())
+        None => Err("unexpected end of mode".to_owned())
     }
 }
 

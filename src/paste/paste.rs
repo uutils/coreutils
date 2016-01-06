@@ -49,7 +49,7 @@ FILE, separated by TABs, to standard output.", NAME, VERSION);
         println!("{} {}", NAME, VERSION);
     } else {
         let serial = matches.opt_present("serial");
-        let delimiters = matches.opt_str("delimiters").unwrap_or("\t".to_string());
+        let delimiters = matches.opt_str("delimiters").unwrap_or("\t".to_owned());
         paste(matches.free, serial, delimiters);
     }
 
@@ -72,7 +72,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
     let mut delim_count = 0;
 
     if serial {
-        for file in files.iter_mut() {
+        for file in &mut files {
             let mut output = String::new();
             loop {
                 let mut line = String::new();

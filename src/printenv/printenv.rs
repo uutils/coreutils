@@ -66,12 +66,9 @@ pub fn exec(args: Vec<String>, separator: &str) {
         return;
     }
 
-    for env_var in args.iter() {
-        match env::var(env_var) {
-            Ok(var) => {
-                print!("{}{}", var, separator);
-            }
-            _ => ()
+    for env_var in &args {
+        if let Ok(var) = env::var(env_var) {
+            print!("{}{}", var, separator);
         }
     }
 }

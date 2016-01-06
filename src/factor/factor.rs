@@ -145,7 +145,7 @@ fn print_factors(num: u64) {
     table_division(num, &mut factors);
     factors.sort();
 
-    for fac in factors.iter() {
+    for fac in &factors {
         print!(" {}", fac);
     }
     println!("");
@@ -193,7 +193,7 @@ read from standard input.", NAME, VERSION);
             }
         }
     } else {
-        for num_str in matches.free.iter() {
+        for num_str in &matches.free {
             print_factors_str(num_str);
         }
     }

@@ -79,8 +79,8 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
                 if echo {
                     Mode::Echo
                 } else {
-                    if matches.free.len() == 0 {
-                        matches.free.push("-".to_string());
+                    if matches.free.is_empty() {
+                        matches.free.push("-".to_owned());
                     } else if matches.free.len() > 1 {
                         show_error!("extra operand '{}'", &matches.free[1][..]);
                     }
@@ -212,7 +212,7 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, repeat: bool, count: usize, sep: u8, outpu
     drop(len);
 
     let mut count = count;
-    while count > 0 && input.len() > 0 {
+    while count > 0 && !input.is_empty() {
         let mut r = input.len();
         while r >= input.len() {
             r = rng.next_usize() % len_mod;
@@ -238,7 +238,7 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, repeat: bool, count: usize, sep: u8, outpu
 fn parse_range(input_range: String) -> Result<(usize, usize), String> {
     let split: Vec<&str> = input_range.split('-').collect();
     if split.len() != 2 {
-        Err("invalid range format".to_string())
+        Err("invalid range format".to_owned())
     } else {
         let begin = match split[0].parse::<usize>() {
             Ok(m) => m,
@@ -259,9 +259,9 @@ enum WrappedRng {
 
 impl WrappedRng {
     fn next_usize(&mut self) -> usize {
-        match self {
-            &mut WrappedRng::RngFile(ref mut r) => r.next_u32() as usize,
-            &mut WrappedRng::RngDefault(ref mut r) => r.next_u32() as usize,
+        match *self {
+            WrappedRng::RngFile(ref mut r) => r.next_u32() as usize,
+            WrappedRng::RngDefault(ref mut r) => r.next_u32() as usize,
         }
     }
 }

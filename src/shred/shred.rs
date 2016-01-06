@@ -352,7 +352,7 @@ fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
         let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
         
         for _ in 0..n_full_arrays {
-            for p in PATTERNS.iter() {
+            for p in &PATTERNS {
                 pass_sequence.push(PassType::Pattern(*p));
             }
         }

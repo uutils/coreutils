@@ -29,7 +29,7 @@ struct EchoOptions {
 }
 
 #[inline(always)]
-fn to_char(bytes: &Vec<u8>, base: u32) -> char {
+fn to_char(bytes: &[u8], base: u32) -> char {
     usize::from_str_radix(from_utf8(bytes.as_ref()).unwrap(), base).unwrap() as u8 as char
 }
 
@@ -70,7 +70,7 @@ fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
         }
     }
 
-    if bytes.len() == 0 {
+    if bytes.is_empty() {
         (' ', 0)
     } else {
         (to_char(&bytes, base), bytes.len())
@@ -177,65 +177,60 @@ pub fn uumain(args: Vec<String>) -> i32 {
         if options.escape {
             let mut prev_was_slash = false;
             let mut iter = string.chars().enumerate();
-            loop {
-                match iter.next() {
-                    Some((index, c)) => {
-                        if !prev_was_slash {
-                            if c != '\\' {
-                                print!("{}", c);
+            while let Some((index, c)) = iter.next() {
+                if !prev_was_slash {
+                    if c != '\\' {
+                        print!("{}", c);
+                    } else {
+                        prev_was_slash = true;
+                    }
+                } else {
+                    prev_was_slash = false;
+                    match c {
+                        '\\' => print!("\\"),
+                        'a' => print!("\x07"),
+                        'b' => print!("\x08"),
+                        'c' => break,
+                        'e' => print!("\x1B"),
+                        'f' => print!("\x0C"),
+                        'n' => print!("\n"),
+                        'r' => print!("\r"),
+                        't' => print!("\t"),
+                        'v' => print!("\x0B"),
+                        'x' => {
+                            let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16);
+                            if num_char_used == 0 {
+                                print!("\\x");
                             } else {
-                                prev_was_slash = true;
-                            }
-                        } else {
-                            prev_was_slash = false;
-                            match c {
-                                '\\' => print!("\\"),
-                                'a' => print!("\x07"),
-                                'b' => print!("\x08"),
-                                'c' => break,
-                                'e' => print!("\x1B"),
-                                'f' => print!("\x0C"),
-                                'n' => print!("\n"),
-                                'r' => print!("\r"),
-                                't' => print!("\t"),
-                                'v' => print!("\x0B"),
-                                'x' => {
-                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16);
-                                    if num_char_used == 0 {
-                                        print!("\\x");
-                                    } else {
-                                        print!("{}", c);
-                                        for _ in 0 .. num_char_used {
-                                            iter.next(); // consume used characters
-                                        }
-                                    }
-                                },
-                                '0' => {
-                                    let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8);
-                                    if num_char_used == 0 {
-                                        print!("\0");
-                                    } else {
-                                        print!("{}", c);
-                                        for _ in 0 .. num_char_used {
-                                            iter.next(); // consume used characters
-                                        }
-                                    }
+                                print!("{}", c);
+                                for _ in 0 .. num_char_used {
+                                    iter.next(); // consume used characters
                                 }
-                                _ => {
-                                    let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8);
-                                    if num_char_used == 0 {
-                                        print!("\\{}", c);
-                                    } else {
-                                        print!("{}", esc_c);
-                                        for _ in 1 .. num_char_used {
-                                            iter.next(); // consume used characters
-                                        }
-                                    }
+                            }
+                        },
+                        '0' => {
+                            let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8);
+                            if num_char_used == 0 {
+                                print!("\0");
+                            } else {
+                                print!("{}", c);
+                                for _ in 0 .. num_char_used {
+                                    iter.next(); // consume used characters
+                                }
+                            }
+                        }
+                        _ => {
+                            let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8);
+                            if num_char_used == 0 {
+                                print!("\\{}", c);
+                            } else {
+                                print!("{}", esc_c);
+                                for _ in 1 .. num_char_used {
+                                    iter.next(); // consume used characters
                                 }
                             }
                         }
                     }
-                    None => break
                 }
             }
         } else {

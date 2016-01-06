@@ -77,13 +77,10 @@ impl<R: Read> ByteReader<R> {
                     Err(e) => crash!(1, "read error: {}", e),
                 };
 
-                match filled_buf.iter().position(|byte| *byte == b'\n') {
-                    Some(idx) => {
-                        consume_val = idx + 1;
-                        bytes_consumed += consume_val;
-                        break;
-                    }
-                    _ => ()
+                if let Some(idx) = filled_buf.iter().position(|byte| *byte == b'\n') {
+                    consume_val = idx + 1;
+                    bytes_consumed += consume_val;
+                    break;
                 }
 
                 consume_val = filled_buf.len();
@@ -94,7 +91,7 @@ impl<R: Read> ByteReader<R> {
         }
 
         self.consume(consume_val);
-        return bytes_consumed;
+        bytes_consumed
     }
 }
 

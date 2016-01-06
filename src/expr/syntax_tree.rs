@@ -30,9 +30,9 @@ impl ASTNode {
         for _ in 0..depth {
             print!("\t", );
         }
-        match self {
-            &ASTNode::Leaf{ ref token_idx, ref value } => println!("Leaf( {} ) at #{} ( evaluate -> {:?} )", value, token_idx, self.evaluate()),
-            &ASTNode::Node{ ref token_idx, ref op_type, ref operands } => {
+        match *self {
+            ASTNode::Leaf{ ref token_idx, ref value } => println!("Leaf( {} ) at #{} ( evaluate -> {:?} )", value, token_idx, self.evaluate()),
+            ASTNode::Node{ ref token_idx, ref op_type, ref operands } => {
                 println!("Node( {} ) at #{} (evaluate -> {:?})", op_type, token_idx, self.evaluate());
                 for operand in operands {
                     operand.debug_dump_impl( depth + 1 );
@@ -52,9 +52,9 @@ impl ASTNode {
         Box::new( ASTNode::Leaf{ token_idx: token_idx, value: value.clone() } )
     }
     pub fn evaluate( &self ) -> Result<String, String> {
-        match self {
-            &ASTNode::Leaf{ ref value, .. } => Ok( value.clone() ),
-            &ASTNode::Node{ ref op_type, .. } =>
+        match *self {
+            ASTNode::Leaf{ ref value, .. } => Ok( value.clone() ),
+            ASTNode::Node{ ref op_type, .. } =>
                 match self.operand_values() {
                     Err( reason ) => Err( reason ),
                     Ok( operand_values ) =>
@@ -64,12 +64,12 @@ impl ASTNode {
                             "*" => infix_operator_two_ints( |a: i64, b: i64| Ok( a * b ), &operand_values ),
                             "/" => infix_operator_two_ints(
                                 |a: i64, b: i64|
-                                    if b == 0 { Err("division by zero".to_string()) }
+                                    if b == 0 { Err("division by zero".to_owned()) }
                                     else { Ok( a / b ) },
                                 &operand_values ),
                             "%" => infix_operator_two_ints(
                                 |a: i64, b: i64|
-                                    if b == 0 { Err("division by zero".to_string()) }
+                                    if b == 0 { Err("division by zero".to_owned()) }
                                     else { Ok( a % b ) },
                                 &operand_values ),
 
@@ -149,7 +149,7 @@ pub fn tokens_to_ast( maybe_tokens: Result< Vec<(usize, Token)>, String > ) -> R
         maybe_dump_rpn( &out_stack );
         let result = ast_from_rpn( &mut out_stack );
         if !out_stack.is_empty() {
-            Err( "syntax error (fist RPN token does not represent expression AST's root)".to_string() )
+            Err( "syntax error (fist RPN token does not represent expression AST's root)".to_owned() )
         }
         else {
             maybe_dump_ast( &result );
@@ -163,9 +163,9 @@ fn maybe_dump_ast( result: &Result< Box<ASTNode>, String > ) {
     if let Ok( debug_var ) = env::var( "EXPR_DEBUG_AST" ) {
         if debug_var == "1" {
             println!("EXPR_DEBUG_AST");
-            match result {
-                &Ok( ref ast ) => ast.debug_dump(),
-                &Err( ref reason ) => println!("\terr: {:?}", reason),
+            match *result {
+                Ok( ref ast ) => ast.debug_dump(),
+                Err( ref reason ) => println!("\terr: {:?}", reason),
            }
         }
     }
@@ -185,7 +185,7 @@ fn maybe_dump_rpn( rpn: &TokenStack ) {
 
 fn ast_from_rpn( rpn: &mut TokenStack ) -> Result<Box<ASTNode>, String> {
     match rpn.pop() {
-        None => Err( "syntax error (premature end of expression)".to_string() ),
+        None => Err( "syntax error (premature end of expression)".to_owned() ),
 
         Some( (token_idx, Token::Value{ value }) ) =>
             Ok( ASTNode::new_leaf( token_idx, &value ) ),
@@ -225,18 +225,18 @@ fn move_rest_of_ops_to_out( out_stack: &mut TokenStack, op_stack: &mut TokenStac
 
 fn push_token_to_either_stack( token_idx: usize, token: &Token, out_stack: &mut TokenStack, op_stack: &mut TokenStack ) -> Result<(), String> {
     let result =
-        match token {
-            &Token::Value{ .. } => Ok( out_stack.push( (token_idx, token.clone()) ) ),
+        match *token {
+            Token::Value{ .. } => Ok( out_stack.push( (token_idx, token.clone()) ) ),
 
-            &Token::InfixOp{ .. } =>
+            Token::InfixOp{ .. } =>
                 if op_stack.is_empty() { Ok( op_stack.push( (token_idx, token.clone()) ) ) }
                 else { push_op_to_stack( token_idx, token, out_stack, op_stack ) },
 
-            &Token::PrefixOp{ .. } => Ok( op_stack.push( (token_idx, token.clone()) ) ),
+            Token::PrefixOp{ .. } => Ok( op_stack.push( (token_idx, token.clone()) ) ),
 
-            &Token::ParOpen => Ok( op_stack.push( (token_idx, token.clone()) ) ),
+            Token::ParOpen => Ok( op_stack.push( (token_idx, token.clone()) ) ),
 
-            &Token::ParClose => move_till_match_paren( out_stack, op_stack )
+            Token::ParClose => move_till_match_paren( out_stack, op_stack )
         };
     maybe_dump_shunting_yard_step( token_idx, token, out_stack, op_stack, &result );
     result

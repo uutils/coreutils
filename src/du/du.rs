@@ -101,7 +101,7 @@ fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) ->
         }
     }
 
-    for rx in futures.iter_mut() {
+    for rx in &mut futures {
         for stat in rx.recv().unwrap().into_iter().rev() {
             if !options.separate_dirs && stat.path.parent().unwrap().to_path_buf() == my_stat.path {
                 my_stat.size += stat.size;
@@ -236,24 +236,18 @@ ers of 1000).",
 
     let options = Options {
         all: matches.opt_present("all"),
-        program_name: NAME.to_string(),
+        program_name: NAME.to_owned(),
         max_depth: max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {vec!("./".to_string())} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {vec!("./".to_owned())} else {matches.free.clone()};
 
     let options_arc = Arc::new(options);
 
-    let MB = match matches.opt_present("si") {
-        true => 1000 * 1000,
-        false => 1024 * 1024,
-    };
-    let KB = match matches.opt_present("si") {
-        true => 1000,
-        false => 1024,
-    };
+    let MB = if matches.opt_present("si") {1000 * 1000} else {1024 * 1024};
+    let KB = if matches.opt_present("si") {1000} else {1024};
 
     let block_size = match matches.opt_str("block-size") {
         Some(s) => {
@@ -331,10 +325,7 @@ Try '{} --help' for more information.", s, NAME);
         None => "%Y-%m-%d %H:%M"
     };
 
-    let line_separator = match matches.opt_present("0") {
-        true => "\0",
-        false => "\n",
-    };
+    let line_separator = if matches.opt_present("0") {"\0"} else {"\n"};
 
     let mut grand_total = 0;
     for path_str in strs.into_iter() {
@@ -343,11 +334,12 @@ Try '{} --help' for more information.", s, NAME);
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat) in iter.enumerate() {
-            let size = match matches.opt_present("apparent-size") {
-                true => stat.nlink * stat.size,
+            let size = if matches.opt_present("apparent-size") {
+                stat.nlink * stat.size
+            } else {
                 // C's stat is such that each block is assume to be 512 bytes
                 // See: http://linux.die.net/man/2/stat
-                false => stat.blocks * 512,
+                stat.blocks * 512
             };
             if matches.opt_present("time") {
                 let tm = {

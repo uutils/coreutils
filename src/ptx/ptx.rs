@@ -60,9 +60,9 @@ impl Default for Config {
             input_ref : false,
             right_ref : false,
             ignore_case : false,
-            macro_name : "xx".to_string(),
-            trunc_str : "/".to_string(),
-            context_regex : "\\w+".to_string(),
+            macro_name : "xx".to_owned(),
+            trunc_str : "/".to_owned(),
+            context_regex : "\\w+".to_owned(),
             line_width : 72,
             gap_size : 3
         }
@@ -109,9 +109,9 @@ impl WordFilter {
             if matches.opt_present("W") {
                 matches.opt_str("W").expect("parsing options failed!")
             } else if config.gnu_ext {
-                "\\w+".to_string()
+                "\\w+".to_owned()
             } else {
-                "[^ \t\n]+".to_string()
+                "[^ \t\n]+".to_owned()
             };
         WordFilter {
             only_specified: o,
@@ -153,7 +153,7 @@ fn get_config(matches: &Matches) -> Config {
     if matches.opt_present("G") {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
-        config.context_regex = "[^ \t\n]+".to_string();
+        config.context_regex = "[^ \t\n]+".to_owned();
     } else {
         crash!(1, "GNU extensions not implemented yet");
     }
@@ -166,11 +166,11 @@ fn get_config(matches: &Matches) -> Config {
     config.ignore_case = matches.opt_present("f");
     if matches.opt_present("M") {
         config.macro_name =
-            matches.opt_str("M").expect(err_msg).to_string();
+            matches.opt_str("M").expect(err_msg);
     }
     if matches.opt_present("F") {
         config.trunc_str =
-            matches.opt_str("F").expect(err_msg).to_string();
+            matches.opt_str("F").expect(err_msg);
     }
     if matches.opt_present("w") {
         let width_str = matches.opt_str("w").expect(err_msg);
@@ -191,7 +191,7 @@ fn get_config(matches: &Matches) -> Config {
     config
 }
 
-fn read_input(input_files: &Vec<String>, config: &Config) ->
+fn read_input(input_files: &[String], config: &Config) ->
              HashMap<String, (Vec<String>, usize)> {
     let mut file_map : HashMap<String, (Vec<String>, usize)> =
         HashMap::new();
@@ -219,7 +219,7 @@ fn read_input(input_files: &Vec<String>, config: &Config) ->
         let lines: Vec<String> = reader.lines().map(|x| crash_if_err!(1, x))
             .collect();
         let size = lines.len();
-        file_map.insert(filename.to_string(), (lines, lines_so_far));
+        file_map.insert(filename.to_owned(), (lines, lines_so_far));
         lines_so_far += size
     }
     file_map
@@ -234,7 +234,7 @@ fn create_word_set(config: &Config, filter: &WordFilter,
     for (file, lines) in file_map.iter() {
         let mut count: usize = 0;
         let offs = lines.1;
-        for line in (lines.0).iter() {
+        for line in &lines.0 {
             // if -r, exclude reference from word set
             let (ref_beg, ref_end) = match ref_reg.find(line) {
                 Some(x) => x,
@@ -245,7 +245,7 @@ fn create_word_set(config: &Config, filter: &WordFilter,
                 if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;
                 }
-                let mut word = line[beg .. end].to_string();
+                let mut word = line[beg .. end].to_owned();
                 if filter.only_specified &&
                    !(filter.only_set.contains(&word)) {
                     continue;
@@ -272,7 +272,7 @@ fn create_word_set(config: &Config, filter: &WordFilter,
     word_set
 }
 
-fn get_reference(config: &Config, word_ref: &WordRef, line: &String) ->
+fn get_reference(config: &Config, word_ref: &WordRef, line: &str) ->
                 String {
     if config.auto_ref {
         format!("{}:{}", word_ref.filename, word_ref.local_line_nr + 1)
@@ -288,12 +288,12 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &String) ->
     }
 }
 
-fn assert_str_integrity(s: &Vec<char>, beg: usize, end: usize) {
+fn assert_str_integrity(s: &[char], beg: usize, end: usize) {
     assert!(beg <= end);
     assert!(end <= s.len());
 }
 
-fn trim_broken_word_left(s: &Vec<char>, beg: usize, end: usize) -> usize {
+fn trim_broken_word_left(s: &[char], beg: usize, end: usize) -> usize {
     assert_str_integrity(s, beg, end);
     if beg == end || beg == 0 || s[beg].is_whitespace() ||
        s[beg-1].is_whitespace() {
@@ -306,7 +306,7 @@ fn trim_broken_word_left(s: &Vec<char>, beg: usize, end: usize) -> usize {
     b
 }
 
-fn trim_broken_word_right(s: &Vec<char>, beg: usize, end: usize) -> usize {
+fn trim_broken_word_right(s: &[char], beg: usize, end: usize) -> usize {
     assert_str_integrity(s, beg, end);
     if beg == end || end == s.len() || s[end-1].is_whitespace() ||
        s[end].is_whitespace() {
@@ -319,7 +319,7 @@ fn trim_broken_word_right(s: &Vec<char>, beg: usize, end: usize) -> usize {
     e
 }
 
-fn trim_idx(s: &Vec<char>, beg: usize, end: usize) -> (usize, usize) {
+fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
     assert_str_integrity(s, beg, end);
     let mut b = beg;
     let mut e = end;
@@ -332,11 +332,11 @@ fn trim_idx(s: &Vec<char>, beg: usize, end: usize) -> (usize, usize) {
     (b,e)
 }
 
-fn get_output_chunks(all_before: &String, keyword: &String, all_after: &String,
+fn get_output_chunks(all_before: &str, keyword: &str, all_after: &str,
                     config: &Config) -> (String, String, String, String) {
-    assert_eq!(all_before.trim().to_string(), *all_before);
-    assert_eq!(keyword.trim().to_string(), *keyword);
-    assert_eq!(all_after.trim().to_string(), *all_after);
+    assert_eq!(all_before.trim().to_owned(), *all_before);
+    assert_eq!(keyword.trim().to_owned(), *keyword);
+    assert_eq!(all_after.trim().to_owned(), *all_after);
     let mut head = String::new();
     let mut before = String::new();
     let mut after = String::new();
@@ -398,7 +398,7 @@ fn get_output_chunks(all_before: &String, keyword: &String, all_after: &String,
     }
 
     // add space before "after" if needed
-    if after.len() > 0 {
+    if !after.is_empty() {
         after = format!(" {}", after);
     }
 
@@ -407,7 +407,7 @@ fn get_output_chunks(all_before: &String, keyword: &String, all_after: &String,
 
 fn tex_mapper(x: char) -> String {
     match x {
-        '\\' => "\\backslash{}".to_string(),
+        '\\' => "\\backslash{}".to_owned(),
         '$' | '%' | '#' | '&' | '_' => format!("\\{}", x),
         '}' | '{' => format!("$\\{}$", x),
         _ => x.to_string()
@@ -416,14 +416,14 @@ fn tex_mapper(x: char) -> String {
 
 fn adjust_tex_str(context: &str) -> String {
     let ws_reg = Regex::new(r"[\t\n\v\f\r ]").unwrap();
-    let mut fix: String = ws_reg.replace_all(context, " ").trim().to_string();
+    let mut fix: String = ws_reg.replace_all(context, " ").trim().to_owned();
     let mapped_chunks: Vec<String> = fix.chars().map(tex_mapper).collect();
     fix = mapped_chunks.join("");
     fix
 }
 
-fn format_tex_line(config: &Config, word_ref: &WordRef, line: &String,
-                  reference: &String) -> String {
+fn format_tex_line(config: &Config, word_ref: &WordRef, line: &str,
+                  reference: &str) -> String {
     let mut output = String::new();
     output.push_str(&format!("\\{} ", config.macro_name));
     let all_before = if config.input_ref {
@@ -449,7 +449,7 @@ fn format_tex_line(config: &Config, word_ref: &WordRef, line: &String,
 
 fn adjust_roff_str(context: &str) -> String {
     let ws_reg = Regex::new(r"[\t\n\v\f\r]").unwrap();
-    ws_reg.replace_all(context, " ").replace("\"", "\"\"").trim().to_string()
+    ws_reg.replace_all(context, " ").replace("\"", "\"\"").trim().to_owned()
 }
 
 fn format_roff_line(config: &Config, word_ref: &WordRef, line: &str,
@@ -478,7 +478,7 @@ fn format_roff_line(config: &Config, word_ref: &WordRef, line: &str,
 
 fn write_traditional_output(config: &Config,
                             file_map: &HashMap<String, (Vec<String>,usize)>,
-                            words: &BTreeSet<WordRef>, output_filename: &String) {
+                            words: &BTreeSet<WordRef>, output_filename: &str) {
     let mut writer: BufWriter<Box<Write>> = BufWriter::new(
     if output_filename == "-" {
         Box::new(stdout())
@@ -555,7 +555,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let output_file = if !config.gnu_ext && matches.free.len() == 2 {
         matches.free[1].clone()
     } else {
-        "-".to_string()
+        "-".to_owned()
     };
     write_traditional_output(&config, &file_map, &word_set, &output_file);
     0

@@ -28,7 +28,7 @@ fn usage(cmap: &UtilityMap) {
     println!("Currently defined functions:");
     let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
     utils.sort();
-    for util in utils.iter() {
+    for util in utils {
         println!("\t{}", util);
     }
 }
@@ -83,7 +83,7 @@ fn main() {
                         let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                std::process::exit(uumain(vec![util.to_string(), "--help".to_string()]));
+                                std::process::exit(uumain(vec![util.to_owned(), "--help".to_owned()]));
                             }
                             None => {
                                 println!("{}: applet not found", util);

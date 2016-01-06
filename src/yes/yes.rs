@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
     let string = if matches.free.is_empty() {
-        "y".to_string()
+        "y".to_owned()
     } else {
         matches.free.join(" ")
     };

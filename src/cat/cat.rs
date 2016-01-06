@@ -66,16 +66,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         NumberingMode::NumberNone
     };
-    let show_nonprint = matches.opts_present(&["A".to_string(), "e".to_string(),
-                                              "t".to_string(), "v".to_string()]);
-    let show_ends = matches.opts_present(&["E".to_string(), "A".to_string(),
-                                          "e".to_string()]);
-    let show_tabs = matches.opts_present(&["A".to_string(), "T".to_string(),
-                                          "t".to_string()]);
+    let show_nonprint = matches.opts_present(&["A".to_owned(), "e".to_owned(),
+                                              "t".to_owned(), "v".to_owned()]);
+    let show_ends = matches.opts_present(&["E".to_owned(), "A".to_owned(),
+                                          "e".to_owned()]);
+    let show_tabs = matches.opts_present(&["A".to_owned(), "T".to_owned(),
+                                          "t".to_owned()]);
     let squeeze_blank = matches.opt_present("s");
     let mut files = matches.free;
     if files.is_empty() {
-        files.push("-".to_string());
+        files.push("-".to_owned());
     }
 
     exec(files, number_mode, show_nonprint, show_ends, show_tabs, squeeze_blank);

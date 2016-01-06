@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.opt_present("V") { version(); return 0 }
     if matches.opt_present("h") { show_usage(&opts); return 0 }
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         show_error!("Missing operand: FILENAME, at least one is required");
         println!("Try `{} --help` for more information.", NAME);
         return 1
@@ -54,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let zero = matches.opt_present("z");
     let quiet = matches.opt_present("q");
     let mut retcode = 0;
-    for path in matches.free.iter() {
+    for path in &matches.free {
         if !resolve_path(path, strip, zero, quiet) {
             retcode = 1
         };

@@ -128,7 +128,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
     } else {
-        "~".to_string()
+        "~".to_owned()
     };
 
     if matches.opt_present("T") && matches.opt_present("t") {
@@ -192,8 +192,8 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
             return 1;
         },
         2 => {
-            let ref source = files[0];
-            let ref target = files[1];
+            let source = &files[0];
+            let target = &files[1];
             if !source.exists() {
                 show_error!("cannot stat ‘{}’: No such file or directory", source.display());
                 return 1;
@@ -219,12 +219,9 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 return move_files_into_dir(&[source.clone()], target, &b);
             }
 
-            match rename(source, target, &b) {
-                Err(e) => {
-                    show_error!("{}", e);
-                    return 1;
-                },
-                _ => {}
+            if let Err(e) = rename(source, target, &b) {
+                show_error!("{}", e);
+                return 1;
             }
         }
         _ => {
@@ -259,13 +256,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
             }
         };
 
-        match rename(sourcepath, &targetpath, b) {
-            Err(e) => {
-                show_error!("mv: cannot move ‘{}’ to ‘{}’: {}",
-                            sourcepath.display(), targetpath.display(), e);
-                all_successful = false;
-            },
-            _ => {}
+        if let Err(e) = rename(sourcepath, &targetpath, b) {
+            show_error!("mv: cannot move ‘{}’ to ‘{}’: {}",
+                        sourcepath.display(), targetpath.display(), e);
+            all_successful = false;
         }
     };
     if all_successful { 0 } else { 1 }
@@ -326,10 +320,10 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
-    let mut p = path.as_os_str().to_str().unwrap().to_string();
+fn simple_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+    let mut p = path.as_os_str().to_str().unwrap().to_owned();
     p.push_str(suffix);
-    return PathBuf::from(p);
+    PathBuf::from(p)
 }
 
 fn numbered_backup_path(path: &PathBuf) -> PathBuf {
@@ -343,8 +337,8 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     }
 }
 
-fn existing_backup_path(path: &PathBuf, suffix: &String) -> PathBuf {
-    let test_path = simple_backup_path(path, &".~1~".to_string());
+fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+    let test_path = simple_backup_path(path, &".~1~".to_owned());
     if test_path.exists() {
         return numbered_backup_path(path);
     }

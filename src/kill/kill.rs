@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::Kill    => return kill(&matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_string())), matches.free),
+        Mode::Kill    => return kill(&matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_owned())), matches.free),
         Mode::Table   => table(),
         Mode::List    => list(matches.opt_str("list")),
         Mode::Help    => help(&opts),
@@ -91,7 +91,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
                 Ok(num) => {
                     if uucore::signals::is_signal(num) {
                         args.remove(i);
-                        return (args, Some(val.to_string()));
+                        return (args, Some(val.to_owned()));
                     }
                 }
                 Err(_)=> break  /* getopts will error out for us */
@@ -105,7 +105,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
 fn table() {
     let mut name_width = 0;
     /* Compute the maximum width of a signal name. */
-    for s in ALL_SIGNALS.iter() {
+    for s in &ALL_SIGNALS {
         if s.name.len() > name_width {
             name_width = s.name.len()
         }
@@ -122,7 +122,7 @@ fn table() {
 }
 
 fn print_signal(signal_name_or_value: &str) {
-    for signal in ALL_SIGNALS.iter() {
+    for signal in &ALL_SIGNALS {
         if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name)) == signal_name_or_value {
             println!("{}", signal.value);
             exit!(EXIT_OK as i32)
@@ -172,7 +172,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
         Some(x) => x,
         None => crash!(EXIT_ERR, "unknown signal name {}", signalname)
     };
-    for pid in pids.iter() {
+    for pid in &pids {
         match pid.parse::<usize>() {
             Ok(x) => {
                 if unsafe { libc::kill(x as pid_t, signal_value as c_int) } != 0 {

@@ -54,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.opt_present("V") { println!("{} {}", NAME, VERSION); return 0 }
     if matches.opt_present("h") { show_usage(&opts); return 0 }
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         show_error!("Missing operand: COMMAND");
         println!("Try `{} --help` for more information.", NAME);
         return 1

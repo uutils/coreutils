@@ -41,9 +41,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn process_expr( token_strings: &Vec<String> ) -> Result< String, String > {
 	let maybe_tokens = tokens::strings_to_tokens( &token_strings );
 	let maybe_ast = syntax_tree::tokens_to_ast( maybe_tokens );
-	let maybe_result = evaluate_ast( maybe_ast );
-
-	maybe_result
+	evaluate_ast( maybe_ast )
 }
 
 fn print_expr_ok( expr_result: &String ) -> i32 {

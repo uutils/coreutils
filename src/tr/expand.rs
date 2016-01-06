@@ -81,9 +81,8 @@ impl<'a> Iterator for ExpandSet<'a> {
         // while the Range has elements, try to return chars from it
         // but make sure that they actually turn out to be Chars!
         while let Some(n) = self.range.next() {
-            match from_u32(n) {
-                Some(c) => return Some(c),
-                _ => (),
+            if let Some(c) = from_u32(n) {
+                return Some(c);
             }
         }
 

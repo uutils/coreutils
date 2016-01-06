@@ -73,7 +73,7 @@ process).", NAME, VERSION);
 
     let adjustment = match matches.opt_str("adjustment") {
         Some(nstr) => {
-            if matches.free.len() == 0 {
+            if matches.free.is_empty() {
                 show_error!("A command must be given with an adjustment.
                                 Try \"{} --help\" for more information.", args[0]);
                 return 125;
@@ -87,7 +87,7 @@ process).", NAME, VERSION);
             }
         },
         None => {
-            if matches.free.len() == 0 {
+            if matches.free.is_empty() {
                 println!("{}", niceness);
                 return 0;
             }

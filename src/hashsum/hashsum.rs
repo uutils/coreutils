@@ -124,7 +124,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let strict = matches.opt_present("strict");
         let warn = matches.opt_present("warn") && !status;
         let files = if matches.free.is_empty() {
-            vec!("-".to_string())
+            vec!("-".to_owned())
         } else {
             matches.free
         };
@@ -158,7 +158,7 @@ Compute and check message digests.", NAME, VERSION, spec);
     pipe_print!("{}", opts.usage(&msg));
 }
 
-fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {
+fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool) -> Result<(), i32> {
     let mut bad_format = 0;
     let mut failed = 0;
     let binary_marker = if binary {
@@ -166,7 +166,7 @@ fn hashsum<'a>(algoname: &str, mut digest: Box<Digest+'a>, files: Vec<String>, b
     } else {
         " "
     };
-    for filename in files.iter() {
+    for filename in &files {
         let filename: &str = filename;
         let stdin_buf;
         let file_buf;

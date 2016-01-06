@@ -66,7 +66,7 @@ Create a FIFO with the given name.", NAME, VERSION);
     };
 
     let mut exit_status = 0;
-    for f in matches.free.iter() {
+    for f in &matches.free {
         let err = unsafe { mkfifo(CString::new(f.as_bytes()).unwrap().as_ptr(), mode as libc::mode_t) };
         if err == -1 {
             show_error!("creating '{}': {}", f, Error::last_os_error().raw_os_error().unwrap());

@@ -104,7 +104,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.free.is_empty() {
-        matches.free.push("-".to_string());
+        matches.free.push("-".to_owned());
     }
 
     let settings = Settings::new(&matches);
@@ -139,7 +139,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut results = vec!();
     let mut max_width: usize = 0;
 
-    for path in files.iter() {
+    for path in &files {
         let mut reader = try!(open(&path[..]));
 
         let mut line_count: usize = 0;
@@ -153,9 +153,9 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         // hence the option wrapped in a result here
         while match reader.read_until(LF, &mut raw_line) {
             Ok(n) if n > 0 => true,
-            Err(ref e) if raw_line.len() > 0 => {
+            Err(ref e) if !raw_line.is_empty() => {
                 show_warning!("Error while reading {}: {}", path, e);
-                raw_line.len() > 0
+                !raw_line.is_empty()
             },
             _ => false,
         } {
@@ -190,7 +190,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         }
 
         results.push(Result {
-            title: path.to_string(),
+            title: path.clone(),
             bytes: byte_count,
             chars: char_count,
             lines: line_count,
@@ -211,13 +211,13 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         max_width = total_byte_count.to_string().len() + 1;
     }
 
-    for result in results.iter() {
+    for result in &results {
         print_stats(settings, &result, max_width);
     }
 
     if files.len() > 1 {
         let result = Result {
-            title: "total".to_string(),
+            title: "total".to_owned(),
             bytes: total_byte_count,
             chars: total_char_count,
             lines: total_line_count,

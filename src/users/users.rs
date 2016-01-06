@@ -74,7 +74,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let filename = if matches.free.len() > 0 {
+    let filename = if !matches.free.is_empty() {
         matches.free[0].as_ref()
     } else {
         DEFAULT_FILE
@@ -111,7 +111,7 @@ fn exec(filename: &str) {
         endutxent();
     }
 
-    if users.len() > 0 {
+    if !users.is_empty() {
         users.sort();
         println!("{}", users.join(" "));
     }

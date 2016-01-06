@@ -130,7 +130,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         let mut firstime = true;
 
-        for file in files.iter() {
+        for file in &files {
             if settings.verbose {
                 if !firstime { pipe_println!(""); }
                 pipe_println!("==> {} <==", file);

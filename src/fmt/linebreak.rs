@@ -24,7 +24,6 @@ struct BreakArgs<'a> {
 }
 
 impl<'a> BreakArgs<'a> {
-    #[inline(always)]
     fn compute_width<'b>(&self, winfo: &WordInfo<'b>, posn: usize, fresh: bool) -> usize {
         if fresh {
             0
@@ -99,7 +98,6 @@ fn break_simple<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &mut Brea
     silent_unwrap!(args.ostream.write_all("\n".as_bytes()));
 }
 
-#[inline(always)]
 fn accum_words_simple<'a>(args: &mut BreakArgs<'a>, (l, prev_punct): (usize, bool), winfo: &'a WordInfo<'a>) -> (usize, bool) {
     // compute the length of this word, considering how tabs will expand at this position on the line
     let wlen = winfo.word_nchars + args.compute_width(winfo, l, false);
@@ -310,8 +308,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item=&'a WordInfo<'a>>>(iter: T, args: &B
     build_best_path(&linebreaks, active_breaks)
 }
 
-#[inline(always)]
-fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<usize>) -> Vec<(&'a WordInfo<'a>, bool)> {
+fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut breakwords = vec!();
     // of the active paths, we select the one with the fewest demerits
     let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
@@ -322,7 +319,7 @@ fn build_best_path<'a>(paths: &Vec<LineBreak<'a>>, active: &Vec<usize>) -> Vec<(
     // now, chase the pointers back through the break list, recording
     // the words at which we should break
     loop {
-        let ref next_best = paths[best_idx];
+        let next_best = &paths[best_idx];
         match next_best.linebreak {
             None => return breakwords,
             Some(prev) => {
@@ -343,7 +340,6 @@ const DR_MULT: f32 = 600.0;
 // DL_MULT is penalty multiplier for short words at end of line
 const DL_MULT: f32 = 300.0;
 
-#[inline(always)]
 fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
     let ratio =
@@ -377,7 +373,6 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     (demerits, ratio)
 }
 
-#[inline(always)]
 fn restart_active_breaks<'a>(args: &BreakArgs<'a>, active: &LineBreak<'a>, act_idx: usize, w: &'a WordInfo<'a>, slen: usize, min: usize) -> LineBreak<'a> {
     let (break_before, line_length) =
         if active.fresh {
@@ -409,7 +404,6 @@ fn restart_active_breaks<'a>(args: &BreakArgs<'a>, active: &LineBreak<'a>, act_i
 }
 
 // Number of spaces to add before a word, based on mode, newline, sentence start.
-#[inline(always)]
 fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize {
     if uniform || newline {
         if start || (newline && punct) {
@@ -424,8 +418,7 @@ fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize
 
 // If we're on a fresh line, slen=0 and we slice off leading whitespace.
 // Otherwise, compute slen and leave whitespace alone.
-#[inline(always)]
-fn slice_if_fresh<'a>(fresh: bool, word: &'a str, start: usize, uniform: bool, newline: bool, sstart: bool, punct: bool) -> (usize, &'a str) {
+fn slice_if_fresh(fresh: bool, word: &str, start: usize, uniform: bool, newline: bool, sstart: bool, punct: bool) -> (usize, &str) {
     if fresh {
         (0, &word[start..])
     } else {
@@ -434,14 +427,12 @@ fn slice_if_fresh<'a>(fresh: bool, word: &'a str, start: usize, uniform: bool, n
 }
 
 // Write a newline and add the indent.
-#[inline(always)]
 fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) {
     silent_unwrap!(ostream.write_all("\n".as_bytes()));
     silent_unwrap!(ostream.write_all(indent.as_bytes()));
 }
 
 // Write the word, along with slen spaces.
-#[inline(always)]
 fn write_with_spaces(word: &str, slen: usize, ostream: &mut BufWriter<Stdout>) {
     if slen == 2 {
         silent_unwrap!(ostream.write_all("  ".as_bytes()));

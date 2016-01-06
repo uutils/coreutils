@@ -46,9 +46,8 @@ fn tabstops_parse(s: String) -> Vec<usize> {
         crash!(1, "{}\n", "tab size cannot be 0");
     }
 
-    match nums.iter().fold((true, 0), |(acc, last), &n| (acc && last <= n, n)) {
-        (false, _) => crash!(1, "{}\n", "tab sizes must be ascending"),
-        _ => {}
+    if let (false, _) = nums.iter().fold((true, 0), |(acc, last), &n| (acc && last <= n, n)) {
+        crash!(1, "{}\n", "tab sizes must be ascending");
     }
 
     nums
@@ -83,7 +82,7 @@ impl Options {
 
         let files =
             if matches.free.is_empty() {
-                vec!("-".to_string())
+                vec!("-".to_owned())
             } else {
                 matches.free
             };
@@ -168,7 +167,7 @@ fn expand(options: Options) {
 
         while match fh.read_until('\n' as u8, &mut buf) {
             Ok(s) => s > 0,
-            Err(_) => buf.len() > 0,
+            Err(_) => buf.is_empty(),
         } {
             let mut col = 0;
             let mut byte = 0;

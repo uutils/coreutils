@@ -37,7 +37,7 @@ struct Options {
     files: Vec<String>
 }
 
-fn options(args: &Vec<String>) -> Result<Options> {
+fn options(args: &[String]) -> Result<Options> {
     let mut opts = getopts::Options::new();
 
     opts.optflag("a", "append", "append to the given FILEs, do not overwrite");
@@ -54,12 +54,12 @@ fn options(args: &Vec<String>) -> Result<Options> {
                            version, NAME, arguments, opts.usage(brief),
                            comment);
         let mut names: Vec<String> = m.free.clone().into_iter().collect();
-        names.push("-".to_string());
+        names.push("-".to_owned());
         let to_print = if m.opt_present("help") { Some(help) }
                        else if m.opt_present("version") { Some(version) }
                        else { None };
         Ok(Options {
-            program: NAME.to_string(),
+            program: NAME.to_owned(),
             append: m.opt_present("append"),
             ignore_interrupts: m.opt_present("ignore-interrupts"),
             print_and_exit: to_print,
@@ -108,14 +108,14 @@ struct MultiWriter {
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        for writer in self.writers.iter_mut() {
+        for writer in &mut self.writers {
             try!(writer.write_all(buf));
         }
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> Result<()> {
-        for writer in self.writers.iter_mut() {
+        for writer in &mut self.writers {
             try!(writer.flush());
         }
         Ok(())

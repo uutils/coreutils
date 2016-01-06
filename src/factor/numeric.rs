@@ -17,13 +17,11 @@ pub fn big_add(a: u64, b: u64, m: u64) -> u64 {
     let msb_mod_m = msb_mod_m % m;
 
     let Wrapping(res) = Wrapping(a) + Wrapping(b);
-    let res = if b <= MAX_U64 - a {
+    if b <= MAX_U64 - a {
         res
     } else {
         (res + msb_mod_m) % m
-    };
-
-    res
+    }
 }
 
 // computes (a + b) % m using the russian peasant algorithm

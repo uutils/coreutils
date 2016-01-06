@@ -106,7 +106,7 @@ Checksum and count the blocks in a file.", NAME, VERSION);
     let sysv = matches.opt_present("sysv");
 
     let files = if matches.free.is_empty() {
-        vec!["-".to_string()]
+        vec!["-".to_owned()]
     } else {
         matches.free
     };
@@ -117,7 +117,7 @@ Checksum and count the blocks in a file.", NAME, VERSION);
         files.len() > 1
     };
 
-    for file in files.iter() {
+    for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
             _ => crash!(1, "unable to open file")

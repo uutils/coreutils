@@ -82,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                             if !hashset.contains(&addr) {
                                 let mut ip = format!("{}", addr);
                                 if ip.ends_with(":1") {
-                                    ip = ip[..ip.len()-2].to_string();
+                                    ip = ip[..ip.len()-2].to_owned();
                                 }
                                 output.push_str(&ip);
                                 output.push_str(" ");
@@ -153,7 +153,7 @@ fn xgethostname() -> String {
 
     let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
 
-    str::from_utf8(&name[..last_char]).unwrap().to_string()
+    str::from_utf8(&name[..last_char]).unwrap().to_owned()
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]

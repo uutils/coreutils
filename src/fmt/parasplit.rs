@@ -15,7 +15,6 @@ use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
 use FmtOptions;
 
-#[inline(always)]
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {
         // if it is ASCII, call it exactly 1 wide (including control chars)
@@ -103,7 +102,7 @@ impl<'a> FileLines<'a> {
             // we do it this way rather than byte indexing to support unicode whitespace chars
             let mut i = 0;
             while (i < line.len()) && line.char_at(i).is_whitespace() {
-                i = match line.char_range_at(i) { CharRange { ch: _ , next: nxi } => nxi };
+                i = match line.char_range_at(i) { CharRange { next: nxi, .. } => nxi };
                 if line[i..].starts_with(pfx) {
                     return (true, i);
                 }
@@ -157,7 +156,7 @@ impl<'a> Iterator for FileLines<'a> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.chars().all(|c| c.is_whitespace()) {
-            return Some(Line::NoFormatLine("\n".to_string(), true));
+            return Some(Line::NoFormatLine("\n".to_owned(), true));
         }
 
         // if this line does not match the prefix,
@@ -246,10 +245,10 @@ impl<'a> ParagraphStream<'a> {
                 // header field must be nonzero length
                 if colon_posn == 0 { return false; }
 
-                return l_slice[..colon_posn].chars().all(|x| match x as usize {
+                l_slice[..colon_posn].chars().all(|x| match x as usize {
                     y if y < 33 || y > 126 => false,
                     _ => true
-                });
+                })
             }
         }
     }
@@ -263,9 +262,9 @@ impl<'a> Iterator for ParagraphStream<'a> {
         let noformat =
             match self.lines.peek() {
                 None => return None,
-                Some(l) => match l {
-                    &Line::FormatLine(_) => false,
-                    &Line::NoFormatLine(_, _) => true
+                Some(l) => match *l {
+                    Line::FormatLine(_) => false,
+                    Line::NoFormatLine(_, _) => true
                 }
             };
 
@@ -296,14 +295,14 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     match self.lines.peek() {
                         None => break,
                         Some(l) => {
-                            match l {
-                                &Line::FormatLine(ref x) => x,
-                                &Line::NoFormatLine(..) => break
+                            match *l {
+                                Line::FormatLine(ref x) => x,
+                                Line::NoFormatLine(..) => break
                             }
                         }
                     };
 
-                if p_lines.len() == 0 {
+                if p_lines.is_empty() {
                     // first time through the loop, get things set up
                     // detect mail header
                     if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
@@ -410,7 +409,7 @@ impl<'a> ParaWords<'a> {
         pw
     }
 
-    fn create_words<'r>(&'r mut self) {
+    fn create_words(& mut self) {
         if self.para.mail_header {
             // no extra spacing for mail headers; always exactly 1 space
             // safe to trim_left on every line of a mail header, since the
@@ -445,7 +444,7 @@ impl<'a> ParaWords<'a> {
         }
     }
 
-    pub fn words(&'a self) -> Iter<'a, WordInfo<'a>> { return self.words.iter() }
+    pub fn words(&'a self) -> Iter<'a, WordInfo<'a>> { self.words.iter() }
 }
 
 struct WordSplit<'a> {
@@ -546,7 +545,7 @@ impl<'a> Iterator for WordSplit<'a> {
 
         // now record whether this word ends in punctuation
         self.prev_punct = match self.string.char_range_at_reverse(self.position) {
-            CharRange { ch, next: _ } => WordSplit::is_punctuation(ch)
+            CharRange { ch, .. } => WordSplit::is_punctuation(ch)
         };
 
         let (word, word_start_relative, before_tab, after_tab) =
