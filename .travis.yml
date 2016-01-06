@@ -16,6 +16,4 @@ script:
   - cargo test --no-fail-fast
 matrix:
   allow_failures:
-    - rust: stable
-    - rust: beta
     - os: osx
