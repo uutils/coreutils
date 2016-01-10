@@ -10,7 +10,7 @@ fn test_current_directory() {
     let (at, mut ucmd) = testing(UTIL_NAME);
     let out = ucmd.arg(".").run().stdout;
 
-    assert_eq!(out.trim_right(), at.root_dir());
+    assert_eq!(trim_private(out.trim_right()), at.root_dir());
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn test_long_redirection_to_current_dir() {
     let dir = repeat_str("./", 128);
     let out = ucmd.arg(dir).run().stdout;
 
-    assert_eq!(out.trim_right(), at.root_dir());
+    assert_eq!(trim_private(out.trim_right()), at.root_dir());
 }
 
 #[test]

@@ -300,12 +300,12 @@ fn parse_change(mode: &str, fperm: libc::mode_t, file: &Path) -> (libc::mode_t, 
 fn change_file(fperm: libc::mode_t, mode: libc::mode_t, file: &Path, path: &CString, verbose: bool, changes: bool, quiet: bool) -> Result<(), i32> {
     if fperm == mode {
         if verbose && !changes {
-            show_info!("mode of \"{}\" retained as {:o}", file.display(), fperm);
+            show_info!("mode of '{}' retained as {:o}", file.display(), fperm);
         }
         Ok(())
     } else if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
         if verbose || changes {
-            show_info!("mode of \"{}\" changed from {:o} to {:o}", file.display(), fperm, mode);
+            show_info!("mode of '{}' changed from {:o} to {:o}", file.display(), fperm, mode);
         }
         Ok(())
     } else {
@@ -313,7 +313,7 @@ fn change_file(fperm: libc::mode_t, mode: libc::mode_t, file: &Path, path: &CStr
             show_error!("{}", io::Error::last_os_error());
         }
         if verbose {
-            show_info!("failed to change mode of file \"{}\" from {:o} to {:o}", file.display(), fperm, mode);
+            show_info!("failed to change mode of file '{}' from {:o} to {:o}", file.display(), fperm, mode);
         }
         return Err(1);
     }

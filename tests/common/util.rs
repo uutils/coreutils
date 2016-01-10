@@ -53,6 +53,16 @@ pub struct CmdResult {
     pub stderr: String,
 }
 
+#[cfg(target_os = "macos")]
+pub fn trim_private(input: &str) -> &str {
+    input.trim_left_matches("/private")
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn trim_private(input: &str) -> &str {
+   input
+}
+
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
     println!("{}: {}", msg.as_ref(), par.as_ref());
 }
