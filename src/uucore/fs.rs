@@ -31,7 +31,7 @@ fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf> {
             return Err(Error::new(ErrorKind::InvalidInput, "maximum links followed"));
         }
 
-        match fs::metadata(&result) {
+        match fs::symlink_metadata(&result) {
             Err(e) => return Err(e),
             Ok(ref m) if !m.file_type().is_symlink() => break,
             Ok(..) => {
