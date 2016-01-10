@@ -1,9 +1,9 @@
 Contributing to coreutils
 =========================
 
-Contributions are very welcome, and should target Rust's master branch until
-Rust 1.0 is released. You may *claim* an item on the to-do list by following
-these steps:
+Contributions are very welcome, and should target Rust's master branch until the
+standard libraries are stabilized. You may *claim* an item on the to-do list by
+following these steps:
 
 1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement ls"
 2. State that you are working on this utility.
