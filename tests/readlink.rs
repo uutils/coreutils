@@ -16,7 +16,7 @@ fn test_canonicalize() {
                   .run()
                   .stdout;
 
-    assert_eq!(trim_private(out.trim_right()), at.root_dir());
+    assert_eq!(out.trim_right(), at.root_dir_resolved());
 }
 
 #[test]
@@ -27,13 +27,13 @@ fn test_canonicalize_existing() {
                   .run()
                   .stdout;
 
-    assert_eq!(trim_private(out.trim_right()), at.root_dir());
+    assert_eq!(out.trim_right(), at.root_dir_resolved());
 }
 
 #[test]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = testing(UTIL_NAME);
-    let mut expected = at.root_dir();
+    let mut expected = at.root_dir_resolved();
     expected.push_str("/");
     expected.push_str(GIBBERISH);
 
@@ -42,7 +42,7 @@ fn test_canonicalize_missing() {
                   .run()
                   .stdout;
 
-    assert_eq!(trim_private(out.trim_right()), expected);
+    assert_eq!(out.trim_right(), expected);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn test_long_redirection_to_current_dir() {
                   .run()
                   .stdout;
 
-    assert_eq!(trim_private(&out), at.root_dir());
+    assert_eq!(out, at.root_dir_resolved());
 }
 
 #[test]
