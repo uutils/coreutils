@@ -11,6 +11,6 @@ fn test_default() {
     let (at, mut ucmd) = testing(UTIL_NAME);
     let out = ucmd.run().stdout;
 
-    let expected = at.root_dir();
-    assert_eq!(trim_private(out.trim_right()), expected);
+    let expected = at.root_dir_resolved();
+    assert_eq!(out.trim_right(), expected);
 }
