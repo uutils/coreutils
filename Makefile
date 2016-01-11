@@ -241,13 +241,13 @@ $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
 build-pkgs: $(addprefix build_exe_,$(EXES))
 
-build-uutils: 
+build-uutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build: build-uutils build-pkgs
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
-$(foreach test,$(PROGS),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(filter-out $(DONT_TEST),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test: $(addprefix test_integration_,$(TESTS))
 
@@ -259,18 +259,18 @@ busybox-src:
 	fi; \
 
 # This is a busybox-specific config file their test suite wants to parse.
-$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config 
+$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 	cp $< $@
 
 # Test under the busybox testsuite
-$(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config 
+$(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config
 	cp $(BUILDDIR)/uutils $(BUILDDIR)/busybox; \
 	chmod +x $@;
 
 ifeq ($(EXES),)
 busytest:
 else
-busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(EXES))
+busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(DONT_TEST),$(EXES)))
 endif
 
 clean:
@@ -279,7 +279,7 @@ clean:
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
-install: build 
+install: build
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
 	install $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
