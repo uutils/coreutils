@@ -34,17 +34,12 @@ make
 
 To build all but a few of the available utilities:
 ```
-make DONT_BUILD='UTILITY_1 UTILITY_2'
+make SKIP_UTILS='UTILITY_1 UTILITY_2'
 ```
 
 To build only a few of the available utilities:
 ```
-make BUILD='UTILITY_1 UTILITY_2'
-```
-
-To build with LTO and stripping:
-```
-make ENABLE_LTO=y ENABLE_STRIP=y
+make UTILS='UTILITY_1 UTILITY_2'
 ```
 
 Installation Instructions
@@ -57,12 +52,12 @@ make install
 
 To install all but a few of the available utilities:
 ```
-make DONT_INSTALL='UTILITY_1 UTILITY_2' install
+make SKIP_UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install only a few of the available utilities:
 ```
-make INSTALL='UTILITY_1 UTILITY_2' install
+make UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install every program with a prefix (e.g. uu-echo uu-cat):
@@ -113,12 +108,12 @@ make test
 
 To test all but a few of the available utilities:
 ```
-make DONT_TEST='UTILITY_1 UTILITY_2' test
+make SKIP_UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To test only a few of the available utilities:
 ```
-make TEST='UTILITY_1 UTILITY_2' test
+make UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 Run busybox tests
@@ -133,12 +128,12 @@ make busytest
 
 To run busybox's tests for a few of the available utilities
 ```
-make BUSYTEST='UTILITY_1 UTILITY_2' busytest
+make UTILS='UTILITY_1 UTILITY_2' busytest
 ```
 
 To pass an argument like "-v" to the busybox test runtime
 ```
-make BUSYTEST='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
+make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
 Contribute
