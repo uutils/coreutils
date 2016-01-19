@@ -121,7 +121,7 @@ ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
 endif
 
-BUILD       ?= $(PROGS)
+UTILS ?= $(PROGS)
 
 # Programs with usable tests
 TEST_PROGS  := \
@@ -172,23 +172,8 @@ TEST_PROGS  := \
 	unlink \
 	wc
 
-TEST        ?= $(TEST_PROGS)
-
 TESTS       := \
-	$(sort $(filter $(TEST),$(filter-out $(DONT_TEST),$(TEST_PROGS))))
-
-INSTALL  ?= $(PROGS)
-BUSYTEST ?= $(PROGS)
-
-ifneq (,$(filter install, $(MAKECMDGOALS)))
-override BUILD:=$(INSTALL)
-override DONT_BUILD:=$(DONT_INSTALL)
-else
-ifneq (,$(filter busytest, $(MAKECMDGOALS)))
-override BUILD:=$(BUSYTEST)
-override DONT_BUILD:=$(DONT_BUSYTEST)
-endif
-endif
+	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
 
 define BUILD_EXE
 build_exe_$(1):
@@ -207,12 +192,9 @@ endef
 
 # Output names
 EXES        := \
-  $(sort $(filter $(BUILD),$(filter-out $(DONT_BUILD),$(PROGS))))
+  $(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
 
-INSTALL     ?= $(EXES)
-
-INSTALLEES  := \
-  $(sort $(filter $(INSTALL),$(filter-out $(DONT_INSTALL),$(EXES) uutils)))
+INSTALLEES  := ${EXES} uutils
 
 # Shared library extension
 SYSTEM := $(shell uname)
@@ -247,7 +229,7 @@ build-uutils:
 build: build-uutils build-pkgs
 
 $(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
-$(foreach test,$(PROGS),$(eval $(call TEST_BUSYBOX,$(test))))
+$(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
 test: $(addprefix test_integration_,$(TESTS))
 
@@ -270,7 +252,7 @@ $(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config
 ifeq ($(EXES),)
 busytest:
 else
-busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(EXES))
+busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTILS),$(EXES)))
 endif
 
 clean:
