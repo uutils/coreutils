@@ -43,9 +43,9 @@ fn delete(set: ExpandSet, complement: bool) {
 
     let is_allowed = |c : char| {
         if complement {
-            bset.contains(&(c as usize))
+            bset.contains(c as usize)
         } else {
-            !bset.contains(&(c as usize))
+            !bset.contains(c as usize)
         }
     };
 
