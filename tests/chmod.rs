@@ -16,7 +16,7 @@ struct TestCase {
 }
 
 fn mkfile(file: &str, mode: mode_t) {
-    std::fs::OpenOptions::new().mode(mode).create(true).open(file).unwrap();
+    std::fs::OpenOptions::new().mode(mode).create(true).write(true).open(file).unwrap();
     let mut perms = std::fs::metadata(file).unwrap().permissions();
     perms.set_mode(mode);
     std::fs::set_permissions(file, perms).unwrap();
