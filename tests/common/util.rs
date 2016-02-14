@@ -282,7 +282,19 @@ impl UCommand {
                 let mut cmd = Command::new(arg.as_ref());
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
-                    cmd.env_clear();
+                    if cfg!(windows) {
+                        // %SYSTEMROOT% is required on Windows to initialize crypto provider
+                        // ... and crypto provider is required for std::rand
+                        // From procmon: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+                        // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
+                        for (key, _) in env::vars_os() {
+                            if key.as_os_str() != "SYSTEMROOT" {
+                                cmd.env_remove(key);
+                            }
+                        }
+                    } else {
+                        cmd.env_clear();
+                    }
                 }
                 cmd
             },
