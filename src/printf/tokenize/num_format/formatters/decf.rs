@@ -32,12 +32,14 @@ impl Formatter for Decf {
         str_in : &str
             ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6)+1;
+        //default to scif interp. so as to not truncate input vals
+        //(that would be displayed in scif) based on relation to decimal place
         let analysis = FloatAnalysis::analyze(
             str_in,
             inprefix,
             Some(second_field as usize+1),            
-            None
-                );
+            None,
+            false);
         let mut f_sci = get_primitive_dec(
             inprefix,
             &str_in[inprefix.offset..],

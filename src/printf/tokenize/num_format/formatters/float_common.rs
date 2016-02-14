@@ -13,12 +13,37 @@ pub struct FloatAnalysis {
     pub decimal_pos: Option<usize>,
     pub follow: Option<char>
 }
+fn has_enough_digits(
+    hex_input: bool,
+    hex_output: bool,
+    string_position: usize,
+    starting_position: usize,
+    limit: usize,
+) -> bool {
+    //-1s are for rounding
+    if hex_output {
+        if hex_input {
+            ((string_position-1) - starting_position >= limit)
+        } else {
+            false //undecidable without converting
+        }
+    } else {
+        if hex_input {
+            ((((string_position-1) - starting_position)*9)/8 >= limit)
+        } else {
+            ((string_position-1) - starting_position >= limit)
+        }                            
+    }
+    
+}
+
 impl FloatAnalysis {
     pub fn analyze(
         str_in: &str,
         inprefix: &InPrefix,
         max_sd_opt: Option<usize>,
         max_after_dec_opt: Option<usize>,
+        hex_output: bool
         ) -> FloatAnalysis {
         // this fn assumes
         // the input string
@@ -29,20 +54,26 @@ impl FloatAnalysis {
             decimal_pos: None,
             follow: None
         };
+        let hex_input = match inprefix.radix_in {
+            Base::Hex => { true }
+            Base::Ten => { false }
+            Base::Octal => { panic!("this should never happen: floats should never receive octal input"); }
+        };
         let mut i=0;
+        let mut pos_before_first_nonzero_after_decimal : Option<usize> = None;
         while let Some(c) = str_it.next() { match c{
             e @ '0'...'9' | e @ 'A'...'F' | e @ 'a'...'f' => {
-                match inprefix.radix_in {
-                    Base::Ten => {
-                        match e {
-                            '0'...'9' => {},
-                            _ => {
-                                warn_incomplete_conv(str_in);
-                                break;
-                            }
+                if !hex_input {
+                    match e {
+                        '0'...'9' => {},
+                        _ => {
+                            warn_incomplete_conv(str_in);
+                            break;
                         }
                     }
-                    _ => {}
+                }
+                if ret.decimal_pos.is_some() && pos_before_first_nonzero_after_decimal.is_none() && e != '0' {
+                    pos_before_first_nonzero_after_decimal = Some(i-1);
                 }
                 if let Some(max_sd) = max_sd_opt {
                     if i == max_sd {
@@ -55,11 +86,17 @@ impl FloatAnalysis {
                         break;
                     }
                 }
-                if let Some(p) = ret.decimal_pos {
-                    if let Some(max_after_dec) = max_after_dec_opt {
-                        if (i-1) - p == max_after_dec {
-                            break
+                if let Some(max_after_dec) = max_after_dec_opt {
+                    if let Some(p) = ret.decimal_pos {
+                        if has_enough_digits(hex_input, hex_output, i, p, max_after_dec) {
+                            break;
                         }
+                    }
+                } else if let Some(max_sd) = max_sd_opt {
+                    if let Some(p) = pos_before_first_nonzero_after_decimal {
+                        if has_enough_digits(hex_input, hex_output, i, p, max_sd) {
+                            break;
+                        }                        
                     }
                 }
             },
@@ -72,7 +109,6 @@ impl FloatAnalysis {
                 }
             }
             _ => {
-                println!("awarn2");
                 warn_incomplete_conv(str_in);
                 break;
             }

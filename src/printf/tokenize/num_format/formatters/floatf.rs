@@ -25,8 +25,8 @@ impl Formatter for Floatf {
             &str_in,
             inprefix,
             None,
-            Some(second_field as usize)
-                );
+            Some(second_field as usize),
+            false);
         let f = get_primitive_dec(
             inprefix,
             &str_in[inprefix.offset..],

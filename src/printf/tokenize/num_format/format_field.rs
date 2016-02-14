@@ -4,6 +4,7 @@
 pub enum FieldType {
     Strf,
     Floatf,
+    CninetyNineHexFloatf,
     Scif,
     Decf,
     Intf,

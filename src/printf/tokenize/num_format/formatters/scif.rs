@@ -25,8 +25,8 @@ impl Formatter for Scif {
             str_in,
             inprefix,
             Some(second_field as usize+1),
-            None
-                );
+            None,
+            false);
         let f = get_primitive_dec(
             inprefix,
             &str_in[inprefix.offset..],

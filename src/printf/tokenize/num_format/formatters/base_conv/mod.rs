@@ -1,5 +1,5 @@
 pub fn arrnum_int_mult(
-    arrnum : &Vec<u8>,
+    arr_num : &Vec<u8>,
     basenum : u8,
     base_ten_int_fact : u8 
     ) -> Vec<u8> {
@@ -10,7 +10,7 @@ pub fn arrnum_int_mult(
     let base : u16 = basenum as u16;
      
     let mut ret_rev : Vec<u8> = Vec::new();
-    let mut it = arrnum.iter().rev();
+    let mut it = arr_num.iter().rev();
     loop {
         let i = it.next();
         match i {
@@ -35,41 +35,119 @@ pub fn arrnum_int_mult(
     ret
 }
 
-pub struct Remainder {    
-    position : usize,
-    replace : Option<u8>
+pub struct Remainder<'a> {    
+    pub position: usize,
+    pub replace: Vec<u8>,
+    pub arr_num: &'a Vec<u8>
 }
 
-pub struct DivOut {
-    quotient : u8,
-    remainder: Remainder
+pub struct DivOut<'a> {
+    pub quotient: u8,
+    pub remainder: Remainder<'a>
 }
 
-pub fn arrnum_int_div(
-    arrnum : &Vec<u8>,
-    basenum : u8,
-    base_ten_int_divisor : u8,
-    rem_in : Remainder
-        ) -> DivOut  {
+pub fn arrnum_int_div_step<'a>(
+    rem_in: Remainder<'a>,
+    radix_in: u8,
+    base_ten_int_divisor: u8,
+    after_decimal: bool
+        ) -> DivOut<'a>  {
 
     let mut rem_out = Remainder {
         position: rem_in.position,
-        replace : None
+        replace: Vec::new(),
+        arr_num: rem_in.arr_num
     };
 
-    let mut bufferval : u16 = 0;
-    let base : u16 = basenum as u16;
-    let divisor : u16 = base_ten_int_divisor as u16;
+    let mut bufferval: u16 = 0;
+    let base: u16 = radix_in as u16;
+    let divisor: u16 = base_ten_int_divisor as u16;
+    let mut traversed = 0;
 
     let mut quotient = 0;
-    let mut u_cur : Option<&u8> = Some(match rem_in.replace {
-        Some(ref u) => { u }
-        None => { &arrnum[rem_in.position] }
-    });
+    let refd_vals = &rem_in.arr_num[rem_in.position+rem_in.replace.len()..];
+    let mut it_replace = rem_in.replace.iter();
+    let mut it_f = refd_vals.iter();
+    loop {
+        let u = match it_replace.next() {
+            Some(u_rep) => { u_rep.clone() as u16 }
+            None => {
+                match it_f.next() {
+                    Some(u_orig) => {
+                        u_orig.clone() as u16
+                    }
+                    None => {
+                        if !after_decimal {
+                            break;
+                        }
+                        0
+                    }
+                }
+            }
+        };
+        traversed += 1;
+        bufferval += u;
+        if bufferval > divisor {
+            while bufferval >= divisor {
+                quotient+=1;
+                bufferval -= divisor;
+            }
+            rem_out.replace = if bufferval == 0 {
+                Vec::new()
+            } else {
+                let remainder_as_arrnum = unsigned_to_arrnum(bufferval);
+                let remainder_as_base_arrnum = base_conv_vec(
+                    &remainder_as_arrnum,
+                    10,
+                    radix_in
+                );
+                remainder_as_base_arrnum
+            };
+            rem_out.position += 1+(traversed - rem_out.replace.len());
+            break;
+        } else {
+            bufferval *= base;            
+        }
+    }
+    DivOut { quotient: quotient, remainder: rem_out }
+}
+/*
+pub struct ArrFloat {
+    pub leading_zeros: u8,
+    pub values: Vec<u8>,
+    pub basenum: u8
+}
 
-    let str_f = &arrnum[rem_in.position+1..];
-    let mut it_f = str_f.iter();
-    loop {        
+pub struct ArrFloatDivOut {
+    pub quotient: u8,
+    pub remainder: ArrFloat
+}
+
+pub fn arrfloat_int_div(
+    arrfloat_in : &ArrFloat,
+    base_ten_int_divisor : u8,
+    precision : u16
+) -> DivOut  {
+
+    let mut remainder = ArrFloat {
+        basenum: arrfloat_in.basenum,
+        leading_zeros: arrfloat_in.leading_zeroes,
+        values: Vec<u8>::new()
+    }
+    let mut quotient = 0;
+    
+    let mut bufferval : u16 = 0;
+    let base : u16 = arrfloat_in.basenum as u16;
+    let divisor : u16 = base_ten_int_divisor as u16;
+
+    let mut it_f = arrfloat_in.values.iter();
+    let mut position = 0 + arrfloat_in.leading_zeroes as u16;
+    let mut at_end = false;
+    while position< precision {
+        let next_digit = match it_f.next() {
+            Some(c) => {}
+            None => { 0 }
+        }
         match u_cur {
             Some(u) => {
                 bufferval += u.clone() as u16;
@@ -95,9 +173,9 @@ pub fn arrnum_int_div(
         u_cur = it_f.next().clone();
         rem_out.position+=1;
     }
-    DivOut { quotient: quotient, remainder: rem_out }
+    ArrFloatDivOut { quotient: quotient, remainder: remainder }
 }
-
+*/
 pub fn arrnum_int_add(
     arrnum : &Vec<u8>,
     basenum : u8,
@@ -153,7 +231,22 @@ pub fn base_conv_vec(
     result
 }
 
+pub fn unsigned_to_arrnum(
+    src : u16
+) -> Vec<u8> {
+    let mut result : Vec<u8> = Vec::new();
+    let mut src_tmp : u16 = src.clone();
+    while src_tmp > 0 {
+        result.push((src_tmp % 10) as u8);
+        src_tmp /= 10;
+    }
+    result.reverse();
+    result
+}
 
+
+//temporary needs-improvement-function
+#[allow(unused_variables)]
 pub fn base_conv_float(
     src : &Vec<u8>,
     radix_src : u8,
@@ -165,11 +258,10 @@ pub fn base_conv_float(
     // of how it would work.
     let mut result : Vec<u8> = Vec::new();
     result.push(0);
-    let mut factor : f64 = radix_dest as f64;
+    let mut factor : f64 = 1.;
     let radix_src_float : f64 = radix_src as f64;
     let mut i = 0;
     let mut r :f64 = 0 as f64;
-    factor /= 10.;
     for u in src {
         if i > 15 { break; }
         i+=1;
@@ -271,3 +363,4 @@ impl RadixDef for RadixHex {
     }
 }
 
+mod tests;

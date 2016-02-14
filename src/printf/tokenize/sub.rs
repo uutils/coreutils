@@ -67,6 +67,7 @@ impl Sub {
             's' | 'b' => FieldType::Strf,
             'd' | 'i' | 'u' | 'o' | 'x' | 'X' => FieldType::Intf,
             'f' | 'F' => FieldType::Floatf,
+            'a' | 'A' => FieldType::CninetyNineHexFloatf,
             'e' | 'E' => FieldType::Scif,
             'g' | 'G' => FieldType::Decf,
             'c' => FieldType::Charf,
@@ -157,9 +158,10 @@ impl SubParser {
         // though, as we want to mimic the original behavior of printing
         // the field as interpreted up until the error in the field.
 
-        let mut legal_fields=vec!['b', 'c', 'd', 'e', 'E',
-                                  'f', 'g', 'G', 'i', 'o',
-                                  's', 'u', 'x', 'X'];
+        let mut legal_fields=vec![
+            //'a', 'A', //c99 hex float implementation not yet complete
+                                  'b', 'c', 'd', 'e', 'E', 'f',
+                                  'F', 'g', 'G', 'i', 'o','s', 'u', 'x', 'X'];
         let mut specifiers=vec!['h', 'j', 'l', 'L', 't', 'z'];
         legal_fields.sort();
         specifiers.sort();

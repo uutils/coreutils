@@ -7,6 +7,7 @@ use super::format_field::{FormatField, FieldType};
 use super::formatter::{Formatter, FormatPrimitive, InPrefix, Base};
 use super::formatters::intf::Intf;
 use super::formatters::floatf::Floatf;
+use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
 use super::formatters::scif::Scif;
 use super::formatters::decf::Decf;
 
@@ -200,6 +201,7 @@ pub fn num_format(
     let fmtr : Box<Formatter> = match *field.field_type {
         FieldType::Intf => Box::new(Intf::new()),
         FieldType::Floatf => Box::new(Floatf::new()),
+        FieldType::CninetyNineHexFloatf => Box::new(CninetyNineHexFloatf::new()),
         FieldType::Scif => Box::new(Scif::new()),
         FieldType::Decf => Box::new(Decf::new()),
         _ => { panic!("asked to do num format with non-num fieldtype"); }
