@@ -1,11 +1,8 @@
-extern crate tempdir;
-
-use tempdir::TempDir;
-
 #[macro_use]
 mod common;
 
 use common::util::*;
+use common::util::tempdir::TempDir;
 
 static UTIL_NAME: &'static str = "mktemp";
 
