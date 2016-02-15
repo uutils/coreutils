@@ -188,6 +188,18 @@ fn sub_num_dec_trunc() {
     expect_stdout(vec!["pi is ~ %g", "3.1415926535"], "pi is ~ 3.141593");
 }
 
+#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[test]
+fn sub_num_hex_float_lower() {
+    expect_stdout(vec!["%a", ".875"], "0xep-4");
+}
+
+#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[test]
+fn sub_num_hex_float_upper() {
+    expect_stdout(vec!["%A", ".875"], "0XEP-4");
+}
+
 #[test]
 fn sub_minwidth() {
     expect_stdout(vec!["hello %7s", "world"], "hello   world");

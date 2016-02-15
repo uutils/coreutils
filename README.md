@@ -116,6 +116,11 @@ To test only a few of the available utilities:
 make UTILS='UTILITY_1 UTILITY_2' test
 ```
 
+To include tests for unimplemented behavior:
+```
+make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
+```
+
 Run busybox tests
 -----------------
 
