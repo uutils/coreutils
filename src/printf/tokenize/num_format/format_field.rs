@@ -11,23 +11,22 @@ pub enum FieldType {
     Charf,
 }
 
-/*
-#[allow(non_camel_case_types)]
-pub enum FChar {
-    d,
-    e,
-    E,
-    i,
-    f,
-    F,
-    g,
-    G,
-    u,
-    x,
-    X,
-    o
-}
- */
+// #[allow(non_camel_case_types)]
+// pub enum FChar {
+// d,
+// e,
+// E,
+// i,
+// f,
+// F,
+// g,
+// G,
+// u,
+// x,
+// X,
+// o
+// }
+//
 
 // a Sub Tokens' fields are stored
 // as a single object so they can be more simply
@@ -36,8 +35,7 @@ pub enum FChar {
 pub struct FormatField<'a> {
     pub min_width: Option<isize>,
     pub second_field: Option<u32>,
-    pub field_char: & 'a char,
-    pub field_type: & 'a FieldType,
-    pub orig : & 'a String
+    pub field_char: &'a char,
+    pub field_type: &'a FieldType,
+    pub orig: &'a String,
 }
-

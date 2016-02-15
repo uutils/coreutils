@@ -26,7 +26,5 @@ pub trait Token {
 // a number of arguments equal to the number of argument-using tokens
 
 pub trait Tokenizer {
-    fn from_it(it: &mut PutBackN<Chars>,
-               args: &mut Peekable<Iter<String>>)
-               -> Option<Box<Token>>;
+    fn from_it(it: &mut PutBackN<Chars>, args: &mut Peekable<Iter<String>>) -> Option<Box<Token>>;
 }

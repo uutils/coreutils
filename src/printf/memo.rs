@@ -1,4 +1,4 @@
-//! Memo runner of printf 
+//! Memo runner of printf
 //! Takes a format string and arguments
 //! 1. tokenizes format string into tokens, consuming
 //! any subst. arguments along the way.
@@ -17,18 +17,15 @@ pub struct Memo {
     tokens: Vec<Box<Token>>,
 }
 
-fn warn_excess_args(first_arg : &str) {
+fn warn_excess_args(first_arg: &str) {
     cli::err_msg(&format!("warning: ignoring excess arguments, starting with '{}'",
-             first_arg));
+                          first_arg));
 }
 
 impl Memo {
-    pub fn new(
-        pf_string: &String,
-        pf_args_it: &mut Peekable<Iter<String>>
-            ) -> Memo {
+    pub fn new(pf_string: &String, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
         let mut pm = Memo { tokens: Vec::new() };
-        let mut tmp_token : Option<Box<Token>>;
+        let mut tmp_token: Option<Box<Token>>;
         let mut it = PutBackN::new(pf_string.chars());
         let mut has_sub = false;
         loop {
@@ -40,24 +37,28 @@ impl Memo {
             tmp_token = Sub::from_it(&mut it, pf_args_it);
             match tmp_token {
                 Some(x) => {
-                    if ! has_sub { has_sub = true; }
+                    if !has_sub {
+                        has_sub = true;
+                    }
                     pm.tokens.push(x);
-                },
+                }
                 None => {}
             }
             if let Some(x) = it.next() {
                 it.put_back(x);
-            } else { break; }
+            } else {
+                break;
+            }
         }
-        if ! has_sub {
-            let mut drain= false;
+        if !has_sub {
+            let mut drain = false;
             if let Some(first_arg) = pf_args_it.peek() {
                 warn_excess_args(first_arg);
                 drain = true;
             }
             if drain {
                 loop {
-                    //drain remaining args;
+                    // drain remaining args;
                     if pf_args_it.next().is_none() {
                         break;
                     }

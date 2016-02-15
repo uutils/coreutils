@@ -12,7 +12,7 @@ use super::formatters::scif::Scif;
 use super::formatters::decf::Decf;
 
 pub fn warn_expected_numeric(pf_arg: &String) {
-    //important: keep println here not print
+    // important: keep println here not print
     cli::err_msg(&format!("{}: expected a numeric value", pf_arg));
 }
 
@@ -24,8 +24,10 @@ fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
         Err(e) => {
             match e {
                 env::VarError::NotPresent => {
-                        cli::err_msg(&format!("warning: {:?}: character(s) following character constant have been ignored", &*remaining_bytes));
-                },
+                    cli::err_msg(&format!("warning: {:?}: character(s) following character \
+                                           constant have been ignored",
+                                          &*remaining_bytes));
+                }
                 _ => {}
             }
         }
@@ -35,11 +37,9 @@ fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
 // this function looks at the first few
 // characters of an argument and returns a value if we can learn
 // a value from that (e.g. no argument? return 0, char constant? ret value)
-fn get_provided(
-    str_in_opt : Option<&String>
-        ) -> Option<u8> {            
-    const C_S_QUOTE: u8=39;
-    const C_D_QUOTE: u8=34;
+fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
+    const C_S_QUOTE: u8 = 39;
+    const C_D_QUOTE: u8 = 34;
     match str_in_opt {
         Some(str_in) => {
             let mut byte_it = str_in.bytes();
@@ -48,31 +48,34 @@ fn get_provided(
                     C_S_QUOTE | C_D_QUOTE => {
                         return Some(match byte_it.next() {
                             Some(second_byte) => {
-                                let mut ignored : Vec<u8> = Vec::new();
-                                while let Some(cont)=byte_it.next() {
+                                let mut ignored: Vec<u8> = Vec::new();
+                                while let Some(cont) = byte_it.next() {
                                     ignored.push(cont);
                                 }
                                 if ignored.len() > 0 {
                                     warn_char_constant_ign(ignored);
                                 }
                                 second_byte as u8
-                            },
-                            //no byte after quote
+                            }
+                            // no byte after quote
                             None => {
-                                let so_far =
-                                    (qchar as u8 as char).to_string();
+                                let so_far = (qchar as u8 as char).to_string();
                                 warn_expected_numeric(&so_far);
                                 0 as u8
                             }
                         });
-                    },
-                    //first byte is not quote
-                    _ => { return None; }
-                    //no first byte
+                    }
+                    // first byte is not quote
+                    _ => {
+                        return None;
+                    }
+                    // no first byte
                 }
-            } else { Some(0 as u8) }
+            } else {
+                Some(0 as u8)
+            }
         }
-        None =>{ Some(0) }
+        None => Some(0),
     }
 }
 
@@ -81,27 +84,39 @@ fn get_provided(
 // a base,
 // and an offset for index after all
 //  initial spacing, sign, base prefix, and leading zeroes
-fn get_inprefix(
-    str_in : &String,
-    field_type : &FieldType
-        ) -> InPrefix {
+fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
     let mut str_it = str_in.chars();
-    let mut ret = InPrefix { radix_in: Base::Ten, sign: 1, offset: 0 };
+    let mut ret = InPrefix {
+        radix_in: Base::Ten,
+        sign: 1,
+        offset: 0,
+    };
     let mut topchar = str_it.next().clone();
-    //skip spaces and ensure topchar is the first non-space char
+    // skip spaces and ensure topchar is the first non-space char
     // (or None if none exists)
     loop {
-        match topchar
-        {
-            Some(' ')=>{ret.offset+=1; topchar=str_it.next();},
-            _=>{ break; }
-        } 
+        match topchar {
+            Some(' ') => {
+                ret.offset += 1;
+                topchar = str_it.next();
+            }
+            _ => {
+                break;
+            }
+        }
     }
-    //parse sign
+    // parse sign
     match topchar {
-        Some('+')=>{ ret.offset+=1; topchar=str_it.next(); }
-        Some('-')=>{ ret.sign = -1; ret.offset+=1; topchar=str_it.next(); }
-        _=>{}
+        Some('+') => {
+            ret.offset += 1;
+            topchar = str_it.next();
+        }
+        Some('-') => {
+            ret.sign = -1;
+            ret.offset += 1;
+            topchar = str_it.next();
+        }
+        _ => {}
     }
     // we want to exit with offset being
     // the index of the first non-zero
@@ -128,20 +143,20 @@ fn get_inprefix(
                     ret.offset += 2;
                     ret.radix_in = Base::Hex;
                     do_clean_lead_zeroes = true;
-                },
+                }
                 e @ '0'...'9' => {
-                    ret.offset+=1;
+                    ret.offset += 1;
                     match *field_type {
-                        FieldType::Intf => {                            
+                        FieldType::Intf => {
                             ret.radix_in = Base::Octal;
-                        },
+                        }
                         _ => {}                        
                     }
                     if e == '0' {
                         do_clean_lead_zeroes = true;
                     }
                 }
-                _=>{}
+                _ => {}
             }
             if do_clean_lead_zeroes {
                 let mut first = true;
@@ -159,22 +174,26 @@ fn get_inprefix(
                     // current offset is not the final offset.
                     match ch_zero {
                         '0' => {
-                            if !(is_hex && first) { ret.offset+=1; }
-                        },
-                        //if decimal, keep last zero if one exists
-                        //(it's possible for last zero to
+                            if !(is_hex && first) {
+                                ret.offset += 1;
+                            }
+                        }
+                        // if decimal, keep last zero if one exists
+                        // (it's possible for last zero to
                         // not exist at this branch if we're in hex input)
-                        '.' => {
-                            break
-                        }, 
-                        //other digit, etc.
+                        '.' => break, 
+                        // other digit, etc.
                         _ => {
-                            if !(is_hex && first) { ret.offset+=1; }
-                            break
+                            if !(is_hex && first) {
+                                ret.offset += 1;
+                            }
+                            break;
                         }
                     }
-                    if first { first = false; }
-                    
+                    if first {
+                        first = false;
+                    }
+
                 }
             }
         }
@@ -185,12 +204,9 @@ fn get_inprefix(
 // this is the function a Sub's print will delegate to
 // if it is a numeric field, passing the field details
 // and an iterator to the argument
-pub fn num_format(
-    field: &FormatField,
-    in_str_opt: Option<&String>
-        ) -> Option<String> {
+pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<String> {
 
-    
+
     let fchar = field.field_char.clone();
 
     // num format mainly operates by further delegating to one of
@@ -198,13 +214,15 @@ pub fn num_format(
     // see formatter.rs for more details
 
     // to do switch to static dispatch
-    let fmtr : Box<Formatter> = match *field.field_type {
+    let fmtr: Box<Formatter> = match *field.field_type {
         FieldType::Intf => Box::new(Intf::new()),
         FieldType::Floatf => Box::new(Floatf::new()),
         FieldType::CninetyNineHexFloatf => Box::new(CninetyNineHexFloatf::new()),
         FieldType::Scif => Box::new(Scif::new()),
         FieldType::Decf => Box::new(Decf::new()),
-        _ => { panic!("asked to do num format with non-num fieldtype"); }
+        _ => {
+            panic!("asked to do num format with non-num fieldtype");
+        }
     };
     let prim_opt=
         // if we can get an assumed value from looking at the first
@@ -258,13 +276,8 @@ pub fn num_format(
         };
     // if we have a formatPrimitive, print its results
     // according to the field-char appropriate Formatter
-    if let Some(prim) = prim_opt { 
-        Some( 
-            fmtr.primitive_to_str(
-                &prim,
-                field.clone()
-                    )
-             )
+    if let Some(prim) = prim_opt {
+        Some(fmtr.primitive_to_str(&prim, field.clone()))
     } else {
         None
     }

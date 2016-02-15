@@ -17,23 +17,18 @@ impl UnescapedText {
     fn new() -> UnescapedText {
         UnescapedText(Vec::new())
     }
-    //take an iterator to the format string
-    //consume between min and max chars
-    //and return it as a base-X number
-    fn base_to_u32(
-        min_chars: u8,
-        max_chars: u8,
-        base : u32,
-        it: &mut PutBackN<Chars>
-            ) -> u32 {
-        let mut retval : u32 = 0;
-        let mut found=0;
+    // take an iterator to the format string
+    // consume between min and max chars
+    // and return it as a base-X number
+    fn base_to_u32(min_chars: u8, max_chars: u8, base: u32, it: &mut PutBackN<Chars>) -> u32 {
+        let mut retval: u32 = 0;
+        let mut found = 0;
         while found < max_chars {
-            //if end of input break
+            // if end of input break
             let nc = it.next();
             match nc {
                 Some(digit) => {
-                    //if end of hexchars break
+                    // if end of hexchars break
                     match digit.to_digit(base) {
                         Some(d) => {
                             found += 1;
@@ -42,17 +37,17 @@ impl UnescapedText {
                         }
                         None => {
                             it.put_back(digit);
-                            break
+                            break;
                         }
                     }
-                },
+                }
                 None => {
                     break;
                 }
             }
         }
         if found < min_chars {
-            //only ever expected for hex
+            // only ever expected for hex
             println!("missing hexadecimal number in escape"); //todo stderr
             exit(cli::EXIT_ERR);
         }
@@ -65,36 +60,29 @@ impl UnescapedText {
     // dropped-in as a replacement.
     fn validate_iec(val: u32, eight_word: bool) {
         let mut preface = 'u';
-        let mut leading_zeros= 4;
+        let mut leading_zeros = 4;
         if eight_word {
-            preface='U';
-            leading_zeros=8;
+            preface = 'U';
+            leading_zeros = 8;
         }
-        let err_msg=format!("invalid universal character name {0}{1:02$x}",
-                            preface,
-                            val,
-                            leading_zeros);
-        if (val < 159 && (val != 36 &&
-                          val != 64 &&
-                          val != 96)) ||
-            (val > 55296 && val < 57343) {
-                println!("{}", err_msg);//todo stderr
-                exit(cli::EXIT_ERR);
-            }
+        let err_msg = format!("invalid universal character name {0}{1:02$x}",
+                              preface,
+                              val,
+                              leading_zeros);
+        if (val < 159 && (val != 36 && val != 64 && val != 96)) || (val > 55296 && val < 57343) {
+            println!("{}", err_msg);//todo stderr
+            exit(cli::EXIT_ERR);
+        }
     }
     // pass an iterator that succeeds an '/',
     // and process the remaining character
     // adding the unescaped bytes
     // to the passed byte_vec
     // in subs_mode change octal behavior
-    fn handle_escaped(
-        byte_vec: &mut Vec<u8>,
-        it: &mut PutBackN<Chars>,
-        subs_mode: bool
-            ) {
+    fn handle_escaped(byte_vec: &mut Vec<u8>, it: &mut PutBackN<Chars>, subs_mode: bool) {
         let ch = match it.next() {
             Some(x) => x,
-            None => '\\'
+            None => '\\',
         };
         match ch {
             '0'...'9' | 'x' => {
@@ -103,9 +91,10 @@ impl UnescapedText {
                 let mut base = 16;
                 let ignore = false;
                 match ch {
-                    'x'=>{ },
+                    'x' => {}
                     e @ '0'...'9' => {
-                        max_len=3; base =8;
+                        max_len = 3;
+                        base = 8;
                         // in practice, gnu coreutils printf
                         // interprets octals without a
                         // leading zero in %b
@@ -114,31 +103,29 @@ impl UnescapedText {
                         // if we ever want to match gnu coreutil
                         // printf's docs instead of its behavior
                         // we'd set this to true.
-                        //if subs_mode && e != '0'
-                        //  { ignore = true; }                            
-                        if ! subs_mode || e != '0'
-                        { it.put_back(ch); }
+                        // if subs_mode && e != '0'
+                        //  { ignore = true; }
+                        if !subs_mode || e != '0' {
+                            it.put_back(ch);
+                        }
                     }
-                    _ =>{}
+                    _ => {}
                 }
-                if ! ignore {
-                    let val = (UnescapedText::base_to_u32(min_len,
-                                                   max_len,
-                                                   base,
-                                                   it) % 256) as u8;
+                if !ignore {
+                    let val = (UnescapedText::base_to_u32(min_len, max_len, base, it) % 256) as u8;
                     byte_vec.push(val);
                     let bvec = [val];
                     cli::flush_bytes(&bvec);
                 } else {
                     byte_vec.push(ch as u8);
                 }
-            },
+            }
             e @ _ => {
-                //only for hex and octal
-                //is byte encoding specified.
-                //otherwise, why not leave the door open
-                //for other encodings unless it turns out
-                //a bottleneck.
+                // only for hex and octal
+                // is byte encoding specified.
+                // otherwise, why not leave the door open
+                // for other encodings unless it turns out
+                // a bottleneck.
                 let mut s = String::new();
                 let ch = match e {
                     '\\' => '\\',
@@ -146,31 +133,30 @@ impl UnescapedText {
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',
-                    //bell
+                    // bell
                     'a' => '\x07',
-                    //backspace
+                    // backspace
                     'b' => '\x08',
-                    //vertical tab
+                    // vertical tab
                     'v' => '\x0B',
-                    //form feed
+                    // form feed
                     'f' => '\x0C',
-                    //escape character
+                    // escape character
                     'e' => '\x1B',
-                    'c' => { exit(cli::EXIT_OK) },
+                    'c' => exit(cli::EXIT_OK),
                     'u' | 'U' => {
                         let len = match e {
                             'u' => 4,
-                            'U' | _ => 8
+                            'U' | _ => 8,
                         };
-                        let val = UnescapedText::base_to_u32(len,
-                                                             len,
-                                                             16,
-                                                             it);
+                        let val = UnescapedText::base_to_u32(len, len, 16, it);
                         UnescapedText::validate_iec(val, false);
                         if let Some(c) = from_u32(val) {
                             c
-                        } else { '-' }
-                    },
+                        } else {
+                            '-'
+                        }
+                    }
                     _ => {
                         s.push('\\');
                         ch
@@ -188,15 +174,16 @@ impl UnescapedText {
     // and return a wrapper around a Vec<u8> of unescaped bytes
     // break on encounter of sub symbol ('%[^%]') unless called
     // through %b subst.
-    pub fn from_it_core(it: &mut PutBackN<Chars>,
-                    subs_mode: bool) -> Option<Box<token::Token>> {
+    pub fn from_it_core(it: &mut PutBackN<Chars>, subs_mode: bool) -> Option<Box<token::Token>> {
         let mut addchar = false;
         let mut new_text = UnescapedText::new();
         let mut tmp_str = String::new();
         {
-            let mut new_vec : &mut Vec<u8> = &mut (new_text.0);
+            let mut new_vec: &mut Vec<u8> = &mut (new_text.0);
             while let Some(ch) = it.next() {
-                if ! addchar { addchar = true; }
+                if !addchar {
+                    addchar = true;
+                }
                 match ch as char {
                     x if x != '\\' && x != '%' => {
                         // lazy branch eval
@@ -216,10 +203,8 @@ impl UnescapedText {
                         if tmp_str.len() > 0 {
                             new_vec.extend(tmp_str.bytes());
                             tmp_str = String::new();
-                        }                        
-                        UnescapedText::handle_escaped(new_vec,
-                                                      it,
-                                                      subs_mode)
+                        }
+                        UnescapedText::handle_escaped(new_vec, it, subs_mode)
                     }
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {
@@ -229,11 +214,11 @@ impl UnescapedText {
                             } else {
                                 it.put_back(follow);
                                 it.put_back(ch);
-                                break
+                                break;
                             }
                         } else {
                             it.put_back(ch);
-                            break
+                            break;
                         }
                     }
                     _ => {
@@ -248,7 +233,7 @@ impl UnescapedText {
         }
         match addchar {
             true => Some(Box::new(new_text)),
-            false => None
+            false => None,
         }
     }
 }
