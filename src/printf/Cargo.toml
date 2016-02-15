@@ -1,0 +1,16 @@
+[package]
+name = "printf"
+version = "0.0.1"
+authors = ["Nathan Ross"]
+
+[lib]
+name = "uu_printf"
+path = "printf.rs"
+
+[dependencies]
+"itertools" = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "printf"
+path = "main.rs"

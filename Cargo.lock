@@ -48,6 +48,7 @@ dependencies = [
  "paste 0.0.1",
  "primal 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "printenv 0.0.1",
+ "printf 0.0.1",
  "ptx 0.0.1",
  "pwd 0.0.1",
  "rand 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -388,6 +389,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "kernel32-sys"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -612,6 +618,14 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
+name = "printf"
+version = "0.0.1"
+dependencies = [
+ "itertools 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 

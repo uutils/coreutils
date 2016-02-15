@@ -65,6 +65,7 @@ PROGS       := \
   od \
   paste \
   printenv \
+  printf \
   ptx \
   pwd \
   readlink \
@@ -149,6 +150,7 @@ TEST_PROGS  := \
 	mv \
 	nl \
 	paste \
+	printf \
 	ptx \
 	pwd \
 	readlink \
