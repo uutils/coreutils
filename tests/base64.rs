@@ -65,3 +65,30 @@ fn test_wrap() {
                    "VGhlIHF1aWNrIGJyb3du\nIGZveCBqdW1wcyBvdmVy\nIHRoZSBsYXp5IGRvZy4=\n");
     }
 }
+
+#[test]
+fn test_wrap_no_arg() {
+    for wrap_param in vec!["-w", "--wrap"] {
+        let (_, mut ucmd) = testing(UTIL_NAME);
+        let result = ucmd.arg(wrap_param).run();
+
+        assert!(!result.success);
+        assert!(result.stdout.len() == 0);
+        assert_eq!(result.stderr.trim_right(),
+                   format!("base64: error: Argument to option '{}' missing.",
+                           if wrap_param == "-w" { "w" } else { "wrap" }));
+    }
+}
+
+#[test]
+fn test_wrap_bad_arg() {
+    for wrap_param in vec!["-w", "--wrap"] {
+        let (_, mut ucmd) = testing(UTIL_NAME);
+        let result = ucmd.arg(wrap_param).arg("b").run();
+
+        assert!(!result.success);
+        assert!(result.stdout.len() == 0);
+        assert_eq!(result.stderr.trim_right(),
+                   "base64: error: Argument to option 'wrap' improperly formatted: invalid digit found in string");
+    }
+}
