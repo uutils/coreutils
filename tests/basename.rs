@@ -74,3 +74,19 @@ fn test_zero_param() {
         expect_successful_stdout(vec![zero_param, "-a", path, path], "baz\0baz\0");
     }
 }
+
+#[test]
+fn test_invalid_option() {
+    let path = "/foo/bar/baz";
+    expect_error(vec!["-q", path], "");
+}
+
+#[test]
+fn test_no_args() {
+    expect_error(vec![], "");
+}
+
+#[test]
+fn test_too_many_args() {
+    expect_error(vec!["a", "b", "c"], "");
+}
