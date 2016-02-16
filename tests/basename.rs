@@ -5,40 +5,34 @@ use common::util::*;
 
 static UTIL_NAME: &'static str = "basename";
 
+fn expect_successful_stdout(input: Vec<&str>, expected: &str) {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let results = ucmd.args(&input).run();
+    assert_empty_stderr!(results);
+    assert!(results.success);
+    assert_eq!(expected, results.stdout.trim_right());
+}
+
 #[test]
 fn test_directory() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let dir = "/root/alpha/beta/gamma/delta/epsilon/omega/";
-    ucmd.arg(dir);
-
-    assert_eq!(ucmd.run().stdout.trim_right(), "omega");
+    expect_successful_stdout(vec![dir], "omega");
 }
 
 #[test]
 fn test_file() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let file = "/etc/passwd";
-    ucmd.arg(file);
-
-    assert_eq!(ucmd.run().stdout.trim_right(), "passwd");
+    expect_successful_stdout(vec![file], "passwd");
 }
 
 #[test]
 fn test_remove_suffix() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let path = "/usr/local/bin/reallylongexecutable.exe";
-    ucmd.arg(path)
-        .arg(".exe");
-
-    assert_eq!(ucmd.run().stdout.trim_right(), "reallylongexecutable");
+    expect_successful_stdout(vec![path, ".exe"], "reallylongexecutable");
 }
 
 #[test]
 fn test_dont_remove_suffix() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let path = "/foo/bar/baz";
-    ucmd.arg(path)
-        .arg("baz");
-
-    assert_eq!(ucmd.run().stdout.trim_right(), "baz");
+    expect_successful_stdout(vec![path, "baz"], "baz");
 }
