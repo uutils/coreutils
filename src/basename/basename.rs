@@ -52,15 +52,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // too few arguments
     if args.len() < 2 {
-        println!("{}: {}", NAME, "missing operand");
-        println!("Try '{} --help' for more information.", NAME);
-        return 1;
+        crash!(
+            1,
+            "{0}: {1}\nTry '{0} --help' for more information.",
+            NAME,
+            "missing operand"
+        );
     }
     // too many arguments
     else if args.len() > 3 {
-        println!("{}: extra operand '{}'", NAME, args[3]);
-        println!("Try '{} --help' for more information.", NAME);
-        return 1;
+        crash!(
+            1,
+            "{0}: extra operand '{1}'\nTry '{0} --help' for more information.",
+            NAME,
+            args[3]
+        );
     }
 
     //
