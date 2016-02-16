@@ -36,3 +36,41 @@ fn test_dont_remove_suffix() {
     let path = "/foo/bar/baz";
     expect_successful_stdout(vec![path, "baz"], "baz");
 }
+
+fn expect_error(input: Vec<&str>, expected_stdout: &str) {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let results = ucmd.args(&input).run();
+    assert!(!results.success);
+    assert!(results.stderr.len() > 0);
+    assert_eq!(expected_stdout, results.stdout.trim_right());
+}
+#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[test]
+fn test_multiple_param() {
+    for multiple_param in vec!["-a", "--multiple"] {
+        let path = "/foo/bar/baz";
+        expect_successful_stdout(vec![multiple_param, path, path], "baz\nbaz");
+    }
+}
+
+#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[test]
+fn test_suffix_param() {
+    for suffix_param in vec!["-s", "--suffix"] {
+        let path = "/foo/bar/baz.exe";
+        let suffix = ".exe";
+        expect_successful_stdout(
+            vec![suffix_param, suffix, path, path],
+            "baz\nbaz"
+        );
+    }
+}
+
+#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[test]
+fn test_zero_param() {
+    for zero_param in vec!["-z", "--zero"] {
+        let path = "/foo/bar/baz";
+        expect_successful_stdout(vec![zero_param, "-a", path, path], "baz\0baz\0");
+    }
+}
