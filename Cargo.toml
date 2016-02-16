@@ -87,6 +87,7 @@ generic = [
   "yes",
 ]
 default = ["generic", "unix"]
+test_unimplemented = []
 
 [dependencies]
 uucore   = { path="src/uucore" }

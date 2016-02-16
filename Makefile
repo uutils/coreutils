@@ -177,6 +177,13 @@ TEST_PROGS  := \
 TESTS       := \
 	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
 
+TEST_NO_FAIL_FAST :=
+TEST_SPEC_FEATURE := 
+ifneq ($(SPEC),)
+TEST_NO_FAIL_FAST :=--no-fail-fast
+TEST_SPEC_FEATURE := test_unimplemented
+endif
+
 define BUILD_EXE
 build_exe_$(1):
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} -p $(1)
@@ -184,7 +191,7 @@ endef
 
 define TEST_INTEGRATION
 test_integration_$(1): build_exe_$(1)
-	${CARGO} test ${CARGOFLAGS} --test $(1) --features $(1) --no-default-features
+	${CARGO} test ${CARGOFLAGS} --test $(1) --features "$(1) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
 endef
 
 define TEST_BUSYBOX
