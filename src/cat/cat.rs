@@ -101,6 +101,7 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
         let mut out_buf = [0; 1024 * 64];
         let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
         let mut at_line_start = true;
+        let mut one_blank_kept = false;
         while let Ok(n) = reader.read(&mut in_buf) {
             if n == 0 { break }
 
@@ -113,7 +114,8 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     None => break,
                 };
                 if in_buf[pos] == '\n' as u8 {
-                    if !at_line_start || !squeeze_blank {
+                    if !at_line_start || !squeeze_blank || !one_blank_kept {
+                        one_blank_kept = true;
                         if at_line_start && number == NumberingMode::NumberAll {
                             (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
                             line_counter += 1;
@@ -128,6 +130,8 @@ fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool,
                     }
                     at_line_start = true;
                     continue;
+                } else if one_blank_kept {
+                    one_blank_kept = false;
                 }
                 if at_line_start && number != NumberingMode::NumberNone {
                     (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
