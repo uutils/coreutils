@@ -131,7 +131,7 @@ fn test_mv_interactive() {
     at.touch(file_b);
 
 
-    let result1 = ts.util_cmd().arg("-i").arg(file_a).arg(file_b).run_piped_stdin(b"n");
+    let result1 = ts.util_cmd().arg("-i").arg(file_a).arg(file_b).run_piped_stdin("n");
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -140,7 +140,7 @@ fn test_mv_interactive() {
     assert!(at.file_exists(file_b));
 
 
-    let result2 = ts.util_cmd().arg("-i").arg(file_a).arg(file_b).run_piped_stdin(b"Yesh");
+    let result2 = ts.util_cmd().arg("-i").arg(file_a).arg(file_b).run_piped_stdin("Yesh");
 
     assert_empty_stderr!(result2);
     assert!(result2.success);

@@ -27,7 +27,8 @@ static FIXTURES_DIR: &'static str = "tests/fixtures";
 static ALREADY_RUN: &'static str = " you have already run this UCommand, if you want to run \
                                     another command in the same test, use TestSet::new instead of \
                                     testing();";
-
+static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
+    
 #[macro_export]
 macro_rules! assert_empty_stderr(
     ($cond:expr) => (
@@ -51,6 +52,44 @@ pub struct CmdResult {
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
+}
+
+impl CmdResult {
+    pub fn success(&self) -> Box<&CmdResult> {
+        assert!(self.success);
+        Box::new(self)
+    }
+    pub fn failure(&self) -> Box<&CmdResult> {
+        assert!(!self.success);
+        Box::new(self)
+    }
+    pub fn no_stderr(&self) -> Box<&CmdResult> {
+        assert!(self.stderr.len() == 0);
+        Box::new(self)
+    }
+    pub fn no_stdout(&self) -> Box<&CmdResult> {
+        assert!(self.stdout.len() == 0);
+        Box::new(self)
+    }
+    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+        assert!(self.stdout.trim_right() == String::from(msg.as_ref()).trim_right());
+        Box::new(self)
+    }
+    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+        assert!(self.stderr.trim_right() == String::from(msg.as_ref()).trim_right());
+        Box::new(self)
+    }
+    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+        self.stdout_is(msg).no_stderr()
+    }
+    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+        self.stderr_is(msg).no_stdout()
+    }
+    pub fn fails_silently(&self) -> Box<&CmdResult> {
+        assert!(!self.success);
+        assert!(self.stderr.len() == 0);
+        Box::new(self)
+    }
 }
 
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
@@ -272,6 +311,7 @@ pub struct UCommand {
     comm_string: String,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
+    stdin: Option<Vec<u8>>
 }
 impl UCommand {
     pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
@@ -299,6 +339,7 @@ impl UCommand {
                 cmd
             },
             comm_string: String::from(arg.as_ref().to_str().unwrap()),
+            stdin: None
         }
     }
     pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
@@ -319,7 +360,7 @@ impl UCommand {
 
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!(MULTIPLE_STDIN_MEANINGLESS);
         }
         for s in args {
             self.comm_string.push_str(" ");
@@ -339,37 +380,59 @@ impl UCommand {
     }
 
     pub fn run(&mut self) -> CmdResult {
+        if self.has_run {
+            panic!(ALREADY_RUN);
+        }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let prog = self.raw.output().unwrap();
+        let prog = match self.stdin {
+            Some(ref input) => {
+                let mut result = self.raw
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                
+                result.stdin
+                    .take()
+                    .unwrap_or_else(
+                        || panic!(
+                            "Could not take child process stdin"))
+                    .write_all(&input)
+                    .unwrap_or_else(|e| panic!("{}", e));
+                
+                result.wait_with_output().unwrap()        
+            }
+            None => {
+                self.raw.output().unwrap()
+            }
+        };
         CmdResult {
             success: prog.status.success(),
             stdout: from_utf8(&prog.stdout).unwrap().to_string(),
             stderr: from_utf8(&prog.stderr).unwrap().to_string(),
         }
     }
-    pub fn run_piped_stdin<T: AsRef<[u8]>>(&mut self, input: T) -> CmdResult {
-        self.has_run = true;
-        log_info("run_piped_stdin", &self.comm_string);
-        let mut result = self.raw
-                             .stdin(Stdio::piped())
-                             .stdout(Stdio::piped())
-                             .stderr(Stdio::piped())
-                             .spawn()
-                             .unwrap();
-
-        result.stdin
-              .take()
-              .unwrap_or_else(|| panic!("Could not take child process stdin"))
-              .write_all(input.as_ref())
-              .unwrap_or_else(|e| panic!("{}", e));
-
-        let prog = result.wait_with_output().unwrap();
-        CmdResult {
-            success: prog.status.success(),
-            stdout: from_utf8(&prog.stdout).unwrap().to_string(),
-            stderr: from_utf8(&prog.stderr).unwrap().to_string(),
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
+        if self.stdin.is_some() {
+            panic!(MULTIPLE_STDIN_MEANINGLESS);
         }
+        self.stdin = Some(input.into());
+        Box::new(self)
+    }
+    pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
+        self.pipe_in(input).run()
+    }
+    pub fn succeeds(&mut self) -> CmdResult {
+        let cmd_result = self.run();
+        cmd_result.success();
+        cmd_result
+    }
+    pub fn fails(&mut self) -> CmdResult {
+        let cmd_result = self.run();
+        cmd_result.failure();
+        cmd_result
     }
 }
 

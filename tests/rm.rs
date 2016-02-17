@@ -51,7 +51,7 @@ fn test_rm_interactive() {
                     .arg("-i")
                     .arg(file_a)
                     .arg(file_b)
-                    .run_piped_stdin(b"n");
+                    .run_piped_stdin("n");
 
     assert!(result1.success);
 
@@ -62,7 +62,7 @@ fn test_rm_interactive() {
                     .arg("-i")
                     .arg(file_a)
                     .arg(file_b)
-                    .run_piped_stdin(b"Yesh");
+                    .run_piped_stdin("Yesh");
 
     assert!(result2.success);
 
