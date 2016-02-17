@@ -28,13 +28,23 @@ fn test_output_multi_files_print_all_chars() {
 }
 
 #[test]
-fn test_stdin_squeeze() {
+fn test_stdin_show_all() {
     let (_, mut ucmd) = testing(UTIL_NAME);
     let out = ucmd.arg("-A")
                   .run_piped_stdin("\x00\x01\x02".as_bytes())
                   .stdout;
 
     assert_eq!(out, "^@^A^B");
+}
+
+#[test]
+fn test_stdin_squeeze_blank() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let out = ucmd.arg("--squeeze-blank")
+                  .run_piped_stdin("\n\na\n\n\n\n\nb\n\n\n".as_bytes())
+                  .stdout;
+
+    assert_eq!(out, "\na\n\nb\n\n");
 }
 
 #[test]
