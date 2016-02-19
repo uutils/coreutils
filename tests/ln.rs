@@ -126,7 +126,7 @@ fn test_symlink_interactive() {
 
     let result1 = ts.util_cmd()
                     .args(&["-i", "-s", file, link])
-                    .run_piped_stdin(b"n");
+                    .run_piped_stdin("n");
 
     assert_empty_stderr!(result1);
     assert!(result1.success);
@@ -136,7 +136,7 @@ fn test_symlink_interactive() {
 
     let result2 = ts.util_cmd()
                     .args(&["-i", "-s", file, link])
-                    .run_piped_stdin(b"Yesh");
+                    .run_piped_stdin("Yesh");
 
     assert_empty_stderr!(result2);
     assert!(result2.success);
