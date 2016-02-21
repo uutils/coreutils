@@ -17,9 +17,17 @@ extern crate uucore;
 use std::fs::hard_link;
 use std::io::Write;
 use std::path::Path;
+use std::io::Error;
 
 static NAME: &'static str = "link";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+pub fn normalize_error_message(e: Error) -> String {
+    match e.raw_os_error() {
+        Some(2) => { String::from("No such file or directory (os error 2)") }
+        _ => { format!("{}", e) }
+    }
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -58,7 +66,7 @@ Create a link named FILE2 to FILE1.", NAME, VERSION);
     match hard_link(old, new) {
         Ok(_) => 0,
         Err(err) => {
-            show_error!("{}", err);
+            show_error!("{}",normalize_error_message(err));
             1
         }
     }
