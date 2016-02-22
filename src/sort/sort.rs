@@ -19,7 +19,7 @@ extern crate uucore;
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
 use std::path::Path;
 use uucore::fs::is_stdin_interactive;
 
@@ -37,6 +37,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
+    opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -65,6 +66,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
     let numeric = matches.opt_present("numeric-sort");
     let human_readable = matches.opt_present("human-readable-sort");
     let reverse = matches.opt_present("reverse");
+    let outfile = matches.opt_str("output");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -72,12 +74,12 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         files.push("-".to_owned());
     }
 
-    exec(files, numeric, human_readable, reverse);
+    exec(files, numeric, human_readable, reverse, outfile);
 
     0
 }
 
-fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) {
+fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool, outfile: Option<String>) {
     for path in &files {
         let (reader, _) = match open(path) {
             Some(x) => x,
@@ -106,9 +108,9 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool) 
 
         let iter = lines.iter();
         if reverse {
-            print_sorted(iter.rev());
+            print_sorted(iter.rev(), &outfile);
         } else {
-            print_sorted(iter)
+            print_sorted(iter, &outfile)
         };
     }
 }
@@ -182,9 +184,30 @@ fn human_readable_size_compare(a: &String, b: &String) -> Ordering {
 
 }
 
-fn print_sorted<S, T: Iterator<Item=S>>(iter: T) where S: std::fmt::Display {
+fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where S: std::fmt::Display {
+    let mut file: Box<Write> = match *outfile {
+        Some(ref filename) => {
+            match File::create(Path::new(&filename)) {
+                Ok(f) => Box::new(BufWriter::new(f)) as Box<Write>,
+                Err(e) => {
+                    show_error!("sort: {0}: {1}", filename, e.to_string());
+                    panic!("Could not open output file");
+                },
+            }
+        },
+        None => Box::new(stdout()) as Box<Write>,
+    };
+
+
     for line in iter {
-        println!("{}", line);
+        let str = format!("{}\n", line);
+        match file.write_all(str.as_bytes()) {
+            Err(e) => {
+                show_error!("sort: {0}", e.to_string());
+                panic!("Write failed");
+            },
+            Ok(_) => (),
+        }
     }
 }
 
