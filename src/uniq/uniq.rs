@@ -16,7 +16,6 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::{Matches, Options};
-use std::cmp::min;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
 use std::path::Path;
@@ -84,16 +83,9 @@ impl Uniq {
     fn cmp_key(&self, line: &str) -> String {
         let len = line.len();
         if len > 0 {
-            let slice_start = match self.slice_start {
-                Some(i) => min(i, len - 1),
-                None => 0
-            };
-            let slice_stop = match self.slice_stop {
-                Some(i) => min(slice_start + i, len),
-                None => len
-            };
-
-            line[slice_start..slice_stop].chars()
+            line.chars()
+                .skip(self.slice_start.unwrap_or(0))
+                .take(self.slice_stop.unwrap_or(len))
                 .map(|c| match c {
                     'a' ... 'z' if self.ignore_case => ((c as u8) - 32) as char,
                     _ => c,
