@@ -171,6 +171,7 @@ TEST_PROGS  := \
 	truncate \
 	tsort \
 	unexpand \
+	uniq \
 	unlink \
 	wc
 
