@@ -44,7 +44,7 @@ impl Uniq {
 
         for io_line in reader.lines() {
             let line = crash_if_err!(1, io_line);
-            if !lines.is_empty() && self.cmp_key(&self.skip_fields(&lines[0])) != self.cmp_key(&self.skip_fields(&line)) {
+            if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
                 let print_delimiter = delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
                 lines.truncate(0);
@@ -58,32 +58,33 @@ impl Uniq {
     }
 
     fn skip_fields(&self, line: &str) -> String {
-        match self.skip_fields {
-            Some(skip_fields) =>
-                if line.split_whitespace().count() > skip_fields {
-                    let mut field = 0;
-                    let mut i = 0;
-                    while field < skip_fields && i < line.len() {
-                        while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                            i = i + 1;
-                        }
-                        while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                            i = i + 1;
-                        }
-                        field = field + 1;
+        if let Some(skip_fields) = self.skip_fields {
+            if line.split_whitespace().count() > skip_fields {
+                let mut field = 0;
+                let mut i = 0;
+                while field < skip_fields && i < line.len() {
+                    while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
+                        i = i + 1;
                     }
-                    line[i..].to_owned()
-                } else {
-                    "".to_owned()
-                },
-            None => line[..].to_owned()
+                    while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
+                        i = i + 1;
+                    }
+                    field = field + 1;
+                }
+                line[i..].to_owned()
+            } else {
+                "".to_owned()
+            }
+        } else {
+            line[..].to_owned()
         }
     }
 
     fn cmp_key(&self, line: &str) -> String {
-        let len = line.len();
+        let fields_to_check = &self.skip_fields(line);
+        let len = fields_to_check.len();
         if len > 0 {
-            line.chars()
+            fields_to_check.chars()
                 .skip(self.slice_start.unwrap_or(0))
                 .take(self.slice_stop.unwrap_or(len))
                 .map(|c| match c {
@@ -91,7 +92,7 @@ impl Uniq {
                     _ => c,
                 }).collect()
         } else {
-            line.to_owned()
+            fields_to_check.to_owned()
         }
     }
 
