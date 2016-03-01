@@ -60,7 +60,7 @@ directory).", NAME, VERSION);
                     }
                 }
                 None => {
-                    if p.is_absolute() {
+                    if p.is_absolute() || path == "/" {
                         print!("/");
                     } else {
                         print!(".");
