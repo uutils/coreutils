@@ -61,7 +61,7 @@ directory).", NAME, VERSION);
                 }
                 None => {
                     if p.is_absolute() {
-                        print!("/");
+                        print!("{}", path);
                     } else {
                         print!(".");
                     }
