@@ -36,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)");
     opts.optflag("", "no-preserve-root", "do not treat '/' specially (the default)");
     opts.optflag("", "preserve-root", "fail to operate recursively on '/'");
-    opts.optflagopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE");
+    opts.optopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE");
     opts.optflag("R", "recursive", "change files and directories recursively");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
@@ -62,7 +62,7 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         return 0;
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() && matches.opt_present("reference") || matches.free.len() < 2 {
+    } else if matches.free.is_empty() {
         show_error!("missing an argument");
         show_error!("for help, try '{} --help'", NAME);
         return 1;
@@ -73,12 +73,15 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         let preserve_root = matches.opt_present("preserve-root");
         let recursive = matches.opt_present("recursive");
         let fmode = matches.opt_str("reference").and_then(|fref| {
+            let s = CString::new(fref).unwrap_or_else( |_| {
+                crash!(1, "reference file name contains internal nul byte")
+            });
             let mut stat : libc::stat = unsafe { mem::uninitialized() };
-            let statres = unsafe { libc::stat(fref.as_ptr() as *const _, &mut stat as *mut libc::stat) };
+            let statres = unsafe { libc::stat(s.as_ptr() as *const _, &mut stat as *mut libc::stat) };
             if statres == 0 {
                 Some(stat.st_mode)
             } else {
-                crash!(1, "{}", io::Error::last_os_error())
+                crash!(1, "cannot stat attribues of '{}': {}", matches.opt_str("reference").unwrap(), io::Error::last_os_error())
             }
         });
         let cmode =

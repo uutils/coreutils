@@ -8,6 +8,8 @@ use common::util::*;
 
 static UTIL_NAME: &'static str = "chmod";
 static TEST_FILE: &'static str = "file";
+static REFERENCE_FILE: &'static str = "reference";
+static REFERENCE_PERMS: mode_t = 0o247;
 
 struct TestCase {
     args: Vec<&'static str>,
@@ -27,6 +29,7 @@ fn run_tests(tests: Vec<TestCase>) {
         let (at, mut ucmd) = testing(UTIL_NAME);
 
         mkfile(&at.plus_as_string(TEST_FILE), test.before);
+        mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
         let perms = at.metadata(TEST_FILE).permissions().mode();
         if perms != test.before{
             panic!(format!("{}: expected: {:o} got: {:o}", "setting permissions failed", test.after, perms));
@@ -84,6 +87,14 @@ fn test_chmod_ugo_copy() {
         TestCase{args: vec!{"o=u", TEST_FILE}, before: 0o200, after: 0o202},
         TestCase{args: vec!{"u-g", TEST_FILE}, before: 0o710, after: 0o610},
         TestCase{args: vec!{"u+g", TEST_FILE}, before: 0o250, after: 0o750},
+    };
+    run_tests(tests);
+}
+
+#[test]
+fn test_chmod_reference_file() {
+    let tests = vec!{
+        TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
     };
     run_tests(tests);
 }
