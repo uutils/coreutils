@@ -24,18 +24,14 @@ fn mkfile(file: &str, mode: mode_t) {
     std::fs::set_permissions(file, perms).unwrap();
 }
 
-fn run_tests(tests: Vec<TestCase>) {
-    for test in tests {
-        let (at, mut ucmd) = testing(UTIL_NAME);
-
+fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
         mkfile(&at.plus_as_string(TEST_FILE), test.before);
-        mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
         let perms = at.metadata(TEST_FILE).permissions().mode();
         if perms != test.before{
             panic!(format!("{}: expected: {:o} got: {:o}", "setting permissions failed", test.after, perms));
         }
 
-        for arg in test.args {
+        for arg in &test.args {
             ucmd.arg(arg);
         }
         let r = ucmd.run();
@@ -48,6 +44,12 @@ fn run_tests(tests: Vec<TestCase>) {
         if perms != test.after {
             panic!(format!("{:?}: expected: {:o} got: {:o}", ucmd.raw, test.after, perms));
         }
+}
+
+fn run_tests(tests: Vec<TestCase>) {
+    for test in tests {
+        let (at, ucmd) = testing(UTIL_NAME);
+        run_single_test(&test, at, ucmd);
     }
 }
 
@@ -96,5 +98,7 @@ fn test_chmod_reference_file() {
     let tests = vec!{
         TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
     };
-    run_tests(tests);
+    let (at, ucmd) = testing(UTIL_NAME);
+    mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
+    run_single_test(&tests[0], at, ucmd);
 }
