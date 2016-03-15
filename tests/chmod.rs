@@ -96,6 +96,14 @@ fn test_chmod_ugo_copy() {
 }
 
 #[test]
+fn test_chmod_many_options() {
+    let tests = vec!{
+        TestCase{args: vec!{"-r,a+w", TEST_FILE}, before: 0o444, after: 0o222},
+    };
+    run_tests(tests);
+}
+
+#[test]
 fn test_chmod_reference_file() {
     let tests = vec!{
         TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
