@@ -59,10 +59,9 @@ fn test_chmod_octal() {
         TestCase{args: vec!{"0700",  TEST_FILE}, before: 0o000, after: 0o700},
         TestCase{args: vec!{"0070",  TEST_FILE}, before: 0o000, after: 0o070},
         TestCase{args: vec!{"0007",  TEST_FILE}, before: 0o000, after: 0o007},
-        // Known failues: #788
-        // TestCase{args: vec!{"-0700", TEST_FILE}, before: 0o700, after: 0o000},
-        // TestCase{args: vec!{"-0070", TEST_FILE}, before: 0o060, after: 0o000},
-        // TestCase{args: vec!{"-0007", TEST_FILE}, before: 0o001, after: 0o000},
+        TestCase{args: vec!{"-0700", TEST_FILE}, before: 0o700, after: 0o000},
+        TestCase{args: vec!{"-0070", TEST_FILE}, before: 0o060, after: 0o000},
+        TestCase{args: vec!{"-0007", TEST_FILE}, before: 0o001, after: 0o000},
         TestCase{args: vec!{"+0100", TEST_FILE}, before: 0o600, after: 0o700},
         TestCase{args: vec!{"+0020", TEST_FILE}, before: 0o050, after: 0o070},
         TestCase{args: vec!{"+0004", TEST_FILE}, before: 0o003, after: 0o007},
@@ -77,6 +76,9 @@ fn test_chmod_ugoa() {
         TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o000, after: 0o070},
         TestCase{args: vec!{"o=rwx", TEST_FILE}, before: 0o000, after: 0o007},
         TestCase{args: vec!{"a=rwx", TEST_FILE}, before: 0o000, after: 0o777},
+        TestCase{args: vec!{"-r", TEST_FILE}, before: 0o777, after: 0o333},
+        TestCase{args: vec!{"-w", TEST_FILE}, before: 0o777, after: 0o555},
+        TestCase{args: vec!{"-x", TEST_FILE}, before: 0o777, after: 0o666},
     };
     run_tests(tests);
 }
