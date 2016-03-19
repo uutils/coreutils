@@ -134,8 +134,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let files = given_options.free;
 
     if files.is_empty() {
-        let mut buffer = BufReader::new(stdin());
-        tail(&mut buffer, &settings);
+        let buffer = BufReader::new(stdin());
+        tail(buffer, &settings);
     } else {
         let mut multiple = false;
         let mut firstime = true;
@@ -153,8 +153,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
             let path = Path::new(file);
             let reader = File::open(&path).unwrap();
-            let mut buffer = BufReader::new(reader);
-            tail(&mut buffer, &settings);
+            let buffer = BufReader::new(reader);
+            tail(buffer, &settings);
         }
     }
 
@@ -169,7 +169,7 @@ fn parse_size(mut size_slice: &str) -> Option<usize> {
         } else {
             1024usize
         };
-    let exponent = 
+    let exponent =
         if size_slice.len() > 0 {
             let mut has_suffix = true;
             let exp = match size_slice.chars().last().unwrap_or('_') {
@@ -248,7 +248,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     (options, None)
 }
 
-fn tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+fn tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
     // Read through each line/char and store them in a ringbuffer that always
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
