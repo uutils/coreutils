@@ -17,7 +17,7 @@ extern crate uucore;
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin, stdout, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, stdin, stdout, Write};
 use std::path::Path;
 use std::str::from_utf8;
 use std::thread::sleep;
@@ -135,7 +135,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if files.is_empty() {
         let buffer = BufReader::new(stdin());
-        tail(buffer, &settings);
+        unbounded_tail(buffer, &settings);
     } else {
         let mut multiple = false;
         let mut firstime = true;
@@ -153,8 +153,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
             let path = Path::new(file);
             let reader = File::open(&path).unwrap();
-            let buffer = BufReader::new(reader);
-            tail(buffer, &settings);
+            bounded_tail(reader, &settings);
         }
     }
 
@@ -248,7 +247,130 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     (options, None)
 }
 
-fn tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
+/// When reading files in reverse in `bounded_tail`, this is the size of each
+/// block read at a time.
+const BLOCK_SIZE: u64 = 1 << 16;
+
+fn follow<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
+    assert!(settings.follow);
+    loop {
+        sleep(Duration::new(0, settings.sleep_msec*1000));
+        loop {
+            let mut datum = String::new();
+            match reader.read_line(&mut datum) {
+                Ok(0) => break,
+                Ok(_) => print!("{}", datum),
+                Err(err) => panic!(err)
+            }
+        }
+    }
+}
+
+/// Iterate over bytes in the file, in reverse, until `should_stop` returns
+/// true. The `file` is left seek'd to the position just after the byte that
+/// `should_stop` returned true for.
+fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, should_stop: &mut F)
+    where F: FnMut(u8) -> bool
+{
+    let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
+
+    for block_idx in 0..max_blocks_to_read {
+        let block_size = if block_idx == max_blocks_to_read - 1 {
+            size % BLOCK_SIZE
+        } else {
+            BLOCK_SIZE
+        };
+
+        // Ensure that the buffer is filled and zeroed, if needed.
+        if buf.len() < (block_size as usize) {
+            for _ in buf.len()..(block_size as usize) {
+                buf.push(0);
+            }
+        }
+
+        // Seek backwards by the next block, read the full block into
+        // `buf`, and then seek back to the start of the block again.
+        let pos = file.seek(SeekFrom::Current(-(block_size as i64))).unwrap();
+        file.read_exact(&mut buf[0..(block_size as usize)]).unwrap();
+        let pos2 = file.seek(SeekFrom::Current(-(block_size as i64))).unwrap();
+        assert_eq!(pos, pos2);
+
+        // Iterate backwards through the bytes, calling `should_stop` on each
+        // one.
+        let slice = &buf[0..(block_size as usize)];
+        for (i, ch) in slice.iter().enumerate().rev() {
+            // Ignore one trailing newline.
+            if block_idx == 0 && i as u64 == block_size - 1 && *ch == ('\n' as u8) {
+                continue;
+            }
+
+            if should_stop(*ch) {
+                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
+                return;
+            }
+        }
+    }
+}
+
+/// When tail'ing a file, we do not need to read the whole file from start to
+/// finish just to find the last n lines or bytes. Instead, we can seek to the
+/// end of the file, and then read the file "backwards" in blocks of size
+/// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
+/// being a nice performance win for very large files.
+fn bounded_tail(mut file: File, settings: &Settings) {
+    let size = file.seek(SeekFrom::End(0)).unwrap();
+    if size == 0 {
+        if settings.follow {
+            let reader = BufReader::new(file);
+            follow(reader, settings);
+        }
+        return;
+    }
+
+    let mut buf = Vec::with_capacity(BLOCK_SIZE as usize);
+
+    // Find the position in the file to start printing from.
+    match settings.mode {
+        FilterMode::Lines(mut count) => {
+            backwards_thru_file(&mut file, size, &mut buf, &mut |byte| {
+                if byte == ('\n' as u8) {
+                    count -= 1;
+                    count == 0
+                } else {
+                    false
+                }
+            });
+        },
+        FilterMode::Bytes(mut count) => {
+            backwards_thru_file(&mut file, size, &mut buf, &mut |_| {
+                count -= 1;
+                count == 0
+            });
+        },
+    }
+
+    // Print the target section of the file.
+    loop {
+        let bytes_read = file.read(&mut buf).unwrap();
+
+        let mut stdout = stdout();
+        for b in &buf[0..bytes_read] {
+            print_byte(&mut stdout, b);
+        }
+
+        if bytes_read == 0 {
+            break;
+        }
+    }
+
+    // Continue following changes, if requested.
+    if settings.follow {
+        let reader = BufReader::new(file);
+        follow(reader, settings);
+    }
+}
+
+fn unbounded_tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
     // Read through each line/char and store them in a ringbuffer that always
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
@@ -317,17 +439,8 @@ fn tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
         }
     }
 
-    // if we follow the file, sleep a bit and print the rest if the file has grown.
-    while settings.follow {
-        sleep(Duration::new(0, settings.sleep_msec*1000));
-        loop {
-            let mut datum = String::new();
-            match reader.read_line(&mut datum) {
-                Ok(0) => break,
-                Ok(_) => print!("{}", datum),
-                Err(err) => panic!(err)
-            }
-        }
+    if settings.follow {
+        follow(reader, settings);
     }
 }
 
