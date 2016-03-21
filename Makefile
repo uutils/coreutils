@@ -64,6 +64,7 @@ PROGS       := \
   nproc \
   od \
   paste \
+  pathchk \
   printenv \
   printf \
   ptx \
@@ -109,6 +110,7 @@ UNIX_PROGS := \
   mv \
   nice \
   nohup \
+  pathchk \
   stdbuf \
   timeout \
   touch \
