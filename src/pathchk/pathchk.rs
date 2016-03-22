@@ -10,6 +10,7 @@
  */
 
 extern crate getopts;
+extern crate libc;
 
 #[macro_use]
 extern crate uucore;
@@ -25,15 +26,33 @@ enum Mode {
     Version
 }
 
+enum PathCheckResult {
+    PathOk,
+    EmptyFileName,
+    LstatError(String),
+    NoFileNameLimit(String),
+    FileLimitExceeded(u32, u32, String),
+    ComponentLimitExceeded(u32, u32, String),
+    DirectoryError(u32, String) // TODO: meh
+}
+
 static NAME: &'static str = "pathchk";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+// a few global constants as used in the GNU implememntation
+static POSIX_PATH_MAX: u32 = 256;
+static POSIX_NAME_MAX: u32 = 14;
+// static PATH_MAX_MINIMUM: u32 = POSIX_PATH_MAX;
+// static NAME_MAX_MINIMUM: u32 = POSIX_NAME_MAX;
+// TODO: what about PC_NAME_MAX etc?
+// TODO: pathconf macro ?
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // add options
     let mut opts = Options::new();
-    opts.optflag("p", "posix", "check for POSIX systems");
+    opts.optflag("p", "posix", "check for (most) POSIX systems");
     opts.optflag("P",
-                 "posix-special", "check for empty names and leading \"-\"");
+        "posix-special", "check for empty names and leading \"-\"");
     opts.optflag("",
         "portability", "check for all POSIX systems (equivalent to -p -P)");
     opts.optflag("h", "help", "display this help text and exit");
@@ -77,5 +96,14 @@ fn version() {
 }
 
 fn check_path(mode: Mode, paths: Vec<String>) -> i32 {
-    0 // TODO: implement
+}
+
+fn no_leading_hyphen(path: &String) -> bool {
+    !path.contains("/-") && !path.starts_with('-')
+}
+
+fn portable_chars_only(path: &String) -> bool {
+    !path.contains(|c|
+         !"/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
+         .to_string().contains(c))
 }

@@ -9,6 +9,7 @@ path = "pathchk.rs"
 
 [dependencies]
 getopts = "*"
+libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
