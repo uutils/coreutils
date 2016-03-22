@@ -1,5 +1,4 @@
 #![crate_name = "uu_fmt"]
-#![feature(str_char)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.

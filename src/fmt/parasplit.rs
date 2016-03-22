@@ -10,7 +10,6 @@
 use std::iter::Peekable;
 use std::io::{BufRead, Lines};
 use std::slice::Iter;
-use std::str::CharRange;
 use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
 use FmtOptions;
@@ -100,11 +99,13 @@ impl<'a> FileLines<'a> {
 
         if !exact {
             // we do it this way rather than byte indexing to support unicode whitespace chars
-            let mut i = 0;
-            while (i < line.len()) && line.char_at(i).is_whitespace() {
-                i = match line.char_range_at(i) { CharRange { next: nxi, .. } => nxi };
-                if line[i..].starts_with(pfx) {
-                    return (true, i);
+            for (i, char) in line.char_indices() {
+                if char.is_whitespace() {
+                    if line[i..].starts_with(pfx) {
+                        return (true, i);
+                    }
+                } else {
+                    break;
                 }
             }
         }
@@ -544,8 +545,9 @@ impl<'a> Iterator for WordSplit<'a> {
         let is_start_of_sentence = self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
 
         // now record whether this word ends in punctuation
-        self.prev_punct = match self.string.char_range_at_reverse(self.position) {
-            CharRange { ch, .. } => WordSplit::is_punctuation(ch)
+        self.prev_punct = match self.string[..self.position].chars().rev().next() {
+            Some(ch) => WordSplit::is_punctuation(ch),
+            _ => panic!("fatal: expected word not to be empty")
         };
 
         let (word, word_start_relative, before_tab, after_tab) =
