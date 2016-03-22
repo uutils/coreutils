@@ -1,5 +1,4 @@
 #![crate_name = "uu_tr"]
-#![feature(io)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -21,7 +20,7 @@ extern crate uucore;
 
 use bit_set::BitSet;
 use getopts::Options;
-use std::io::{stdin, stdout, BufReader, Read, Write};
+use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use vec_map::VecMap;
 
 use expand::ExpandSet;
@@ -49,25 +48,22 @@ fn delete(set: ExpandSet, complement: bool) {
         }
     };
 
-    for c in BufReader::new(stdin()).chars() {
-        match c {
-            Ok(c) if is_allowed(c) => buf.push(c),
-            Ok(_) => (),
-            Err(err) => panic!("{}", err),
-        };
-        if buf.len() >= BUFFER_LEN {
-            safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
-        }
-    }
-    if !buf.is_empty() {
-        safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
-        pipe_flush!();
+    let mut reader = BufReader::new(stdin());
+
+    while let Ok(length) = reader.read_to_string(&mut buf) {
+        if length == 0 { break }
+
+        let filtered = buf.chars()
+                          .filter(|c| { is_allowed(*c) })
+                          .collect::<String>();
+        safe_unwrap!(stdout.write_all(filtered.as_bytes()));
+        buf.clear();
     }
 }
 
 fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
     let mut map = VecMap::new();
-    let mut stdout = stdout();
+    let stdout = stdout();
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
 
     let mut s2_prev = '_';
@@ -77,27 +73,25 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
         map.insert(i as usize, s2_prev);
     }
 
-    for c in BufReader::new(stdin()).chars() {
-        match c {
-            Ok(inc) => {
-                let trc = match map.get(&(inc as usize)) {
+    let mut reader = BufReader::new(stdin());
+    let mut writer = BufWriter::new(stdout);
+
+    while let Ok(length) = reader.read_to_string(&mut buf) {
+        if length == 0 { break }
+
+        {
+            let mut chars = buf.chars();
+
+            while let Some(char) = chars.next() {
+                let trc = match map.get(&(char as usize)) {
                     Some(t) => *t,
-                    None => inc,
+                    None => char,
                 };
-                buf.push(trc);
-                if buf.len() >= BUFFER_LEN {
-                    safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
-                    buf.truncate(0);
-                }
-            }
-            Err(err) => {
-                panic!("{}", err);
+                safe_unwrap!(writer.write_all(format!("{}", trc).as_ref()));
             }
         }
-    }
-    if !buf.is_empty() {
-        safe_unwrap!(stdout.write_all(&buf[..].as_bytes()));
-        pipe_flush!();
+
+        buf.clear();
     }
 }
 
