@@ -1,5 +1,5 @@
 #![crate_name = "uu_fmt"]
-#![feature(str_char, unicode)]
+#![feature(str_char)]
 
 /*
  * This file is part of `fmt` from the uutils coreutils package.
@@ -11,7 +11,6 @@
  */
 
 extern crate getopts;
-extern crate rustc_unicode;
 extern crate unicode_width;
 
 #[macro_use]
