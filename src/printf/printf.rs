@@ -262,8 +262,7 @@ MORE INFO :
   https://github.com/uutils/coreutils
 
 COPYRIGHT : 
-  Copyright 2015 uutils project.
-  Licensed under the MIT License, please see LICENSE file for details
+  Licensed under the GPLv3 License, please see LICENSE file for details
 
 ";
 
