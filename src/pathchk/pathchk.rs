@@ -22,12 +22,12 @@ use std::io::{Write, ErrorKind};
 
 // operating mode
 enum Mode {
-    Default,
-    Basic,
-    Extra,
-    Both,
-    Help,
-    Version
+    Default, // use filesystem to determine information and limits
+    Basic,   // check basic compatibility with POSIX
+    Extra,   // check for leading dashes and empty names
+    Both,    // a combination of `Basic` and `Extra`
+    Help,    // show help
+    Version  // show version information
 }
 
 static NAME: &'static str = "pathchk";
@@ -81,13 +81,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     NAME, NAME);
                 res = false;
             }
+            // free strings are path operands
+            // FIXME: TCS, seems inefficient and overly verbose (?)
             for p in matches.free {
-                let mut path = Vec::with_capacity(p.len());
+                let mut path = Vec::new();
                 for path_segment in p.split('/') {
                     path.push(path_segment.to_string());
                 }
                 res &= check_path(&mode, &path);
             }
+            // determine error code
             if res { 0 } else { 1 }
         }
     }
@@ -106,7 +109,7 @@ fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-// check a path, given as a slice of it's components
+// check a path, given as a slice of it's components and an operating mode
 fn check_path(mode: &Mode, path: &[String]) -> bool {
     match *mode {
         Mode::Basic => check_basic(&path),
@@ -119,45 +122,45 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
 // check a path in basic compatibility mode
 fn check_basic(path: &[String]) -> bool {
     let joined_path = path.join("/");
-    if joined_path.len() > POSIX_PATH_MAX {
+    let total_len = joined_path.len();
+    // path length
+    if total_len > POSIX_PATH_MAX {
         writeln!(&mut std::io::stderr(),
             "limit {} exceeded by length {} of file name {}",
-            POSIX_PATH_MAX, joined_path.len(), joined_path);
+            POSIX_PATH_MAX, total_len, joined_path);
         return false;
-    } else if joined_path.len() == 0 {
+    } else if total_len == 0 {
         writeln!(&mut std::io::stderr(), "empty file name");
         return false;
     }
-
+    // components: character portability and length
     for p in path {
-        if p.len() > POSIX_NAME_MAX {
+        let component_len = p.len();
+        if component_len > POSIX_NAME_MAX {
             writeln!(&mut std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
-                POSIX_NAME_MAX, p.len(), p);
+                "limit {} exceeded by length {} of file name component '{}'",
+                POSIX_NAME_MAX, component_len, p);
             return false;
         }
-        match portable_chars_only(&p) {
-            Some(ch) => {
-                writeln!(&mut std::io::stderr(),
-                    "nonportable character '{}' in file name '{}'",
-                    ch, joined_path);
-                return false;
-            }
-            None => continue
+        if !check_portable_chars(&p) {
+            return false;
         }
     }
+    // permission checks
     check_searchable(&joined_path)
 }
 
 // check a path in extra compatibility mode
 fn check_extra(path: &[String]) -> bool {
+    // components: leading hyphens
     for p in path {
         if !no_leading_hyphen(&p) {
             writeln!(&mut std::io::stderr(),
-                "leading hyphen in path segment '{}'", p);
+                "leading hyphen in file name component '{}'", p);
             return false;
         }
     }
+    // path length
     if path.join("/").len() == 0 {
         writeln!(&mut std::io::stderr(), "empty file name");
         return false;
@@ -167,29 +170,32 @@ fn check_extra(path: &[String]) -> bool {
 
 // check a path in default mode (using the file system)
 fn check_default(path: &[String]) -> bool {
-    println!("{}", libc::FILENAME_MAX);
-    println!("{}", libc::PATH_MAX);
-    for p in path {
-        if p.len() > libc::FILENAME_MAX as usize {
-            writeln!(&mut std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
-                libc::FILENAME_MAX, p.len(), p);
-            return false;
-        }
-    }
     let joined_path = path.join("/");
     let total_len = joined_path.len();
+    // path length
     if total_len > libc::PATH_MAX as usize {
         writeln!(&mut std::io::stderr(),
-            "limit {} exceeded by length {} of file name {}",
+            "limit {} exceeded by length {} of file name '{}'",
             libc::PATH_MAX, total_len, joined_path);
         return false;
     }
+    // components: length
+    for p in path {
+        let component_len = p.len();
+        if component_len > libc::FILENAME_MAX as usize {
+            writeln!(&mut std::io::stderr(),
+                "limit {} exceeded by length {} of file name component '{}'",
+                libc::FILENAME_MAX, component_len, p);
+            return false;
+        }
+    }
+    // permission checks
     check_searchable(&joined_path)
 }
 
-// check whether a path is searchable o
+// check whether a path is or if other problems arise
 fn check_searchable(path: &String) -> bool {
+    // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
         Err(e) => if e.kind() == ErrorKind::NotFound {
@@ -207,14 +213,17 @@ fn no_leading_hyphen(path_segment: &String) -> bool {
 }
 
 // check whether a path segment contains only valid (read: portable) characters
-fn portable_chars_only(path_segment: &String) -> Option<char> {
+fn check_portable_chars(path_segment: &String) -> bool {
     let valid_str =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
         .to_string();
     for ch in path_segment.chars() {
         if !valid_str.contains(ch) {
-            return Some(ch);
+            writeln!(&mut std::io::stderr(),
+                "nonportable character '{}' in file name component '{}'",
+                ch, path_segment);
+            return false;
         }
     }
-    None
+    true
 }
