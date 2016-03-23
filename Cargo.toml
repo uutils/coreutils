@@ -44,7 +44,7 @@ generic = [
   "expr",
   "factor",
   "false",
-  "fmt",	# skip_on_beta
+  "fmt",
   "fold",
   "hashsum",
   "head",
@@ -76,7 +76,7 @@ generic = [
   "tail",
   "tee",
   "test",
-  "tr",          # skip_on_beta
+  "tr",
   "true",
   "truncate",
   "tsort",
