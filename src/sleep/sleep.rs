@@ -18,7 +18,6 @@ extern crate uucore;
 use std::io::Write;
 use std::thread::{self};
 use std::time::Duration;
-use std::u32::MAX as U32_MAX;
 
 static NAME: &'static str = "sleep";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -62,17 +61,19 @@ specified by the sum of their values.", NAME, VERSION);
     0
 }
 
+fn float_to_duration(dur_f: f64) -> Duration {
+    let seconds = dur_f as u64;
+    let nanos = ((dur_f - seconds as f64) * 1e9) as u32;
+    Duration::new(seconds, nanos)
+}
+
 fn sleep(args: Vec<String>) {
     let sleep_time = args.iter().fold(0.0, |result, arg|
         match uucore::parse_time::from_str(&arg[..]) {
             Ok(m) => m + result,
             Err(f) => crash!(1, "{}", f),
         });
+    let sleep_dur = float_to_duration(sleep_time);
 
-    let sleep_dur = if sleep_time > (U32_MAX as f64) { 
-        U32_MAX
-    } else { 
-        (1000000.0 * sleep_time) as u32
-    };
-    thread::sleep(Duration::new(0, sleep_dur));
+    thread::sleep(sleep_dur);
 }
