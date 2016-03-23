@@ -10,3 +10,4 @@ winapi = "*"
 
 [lib]
 path = "lib.rs"
+name = "uucore"
