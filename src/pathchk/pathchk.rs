@@ -17,10 +17,12 @@ extern crate libc;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::Write;
+use std::fs;
+use std::io::{Write, ErrorKind};
 
 // operating mode
 enum Mode {
+    Default,
     Basic,
     Extra,
     Both,
@@ -53,6 +55,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // set working mode
     let mode = if matches.opt_present("version") {
         Mode::Version
+    } else if matches.opt_present("help") {
+        Mode::Help
     } else if (matches.opt_present("posix") &&
                matches.opt_present("posix-special")) ||
               matches.opt_present("portability") {
@@ -62,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else if matches.opt_present("posix-special") {
         Mode::Extra
     } else {
-        Mode::Help
+        Mode::Default
     };
 
     // take necessary actions
@@ -71,6 +75,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Mode::Version => { version(); 0 }
         _ => {
             let mut res = true;
+            if matches.free.len() == 0 {
+                writeln!(&mut std::io::stderr(),
+                    "{}: missing operand\nTry {} --help for more information",
+                    NAME, NAME);
+                res = false;
+            }
             for p in matches.free {
                 let mut path = Vec::with_capacity(p.len());
                 for path_segment in p.split('/') {
@@ -108,16 +118,18 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
 
 // check a path in basic compatibility mode
 fn check_basic(path: &[String]) -> bool {
-    let mut char_num = 0;
     let joined_path = path.join("/");
     if joined_path.len() > POSIX_PATH_MAX {
         writeln!(&mut std::io::stderr(),
             "limit {} exceeded by length {} of file name {}",
             POSIX_PATH_MAX, joined_path.len(), joined_path);
         return false;
+    } else if joined_path.len() == 0 {
+        writeln!(&mut std::io::stderr(), "empty file name");
+        return false;
     }
+
     for p in path {
-        char_num += p.len();
         if p.len() > POSIX_NAME_MAX {
             writeln!(&mut std::io::stderr(),
                 "limit {} exceeded by length {} of file name component {}",
@@ -134,25 +146,19 @@ fn check_basic(path: &[String]) -> bool {
             None => continue
         }
     }
-    if char_num == 0 {
-        writeln!(&mut std::io::stderr(), "empty file name");
-        return false;
-    }
-    true
+    check_searchable(&joined_path)
 }
 
 // check a path in extra compatibility mode
 fn check_extra(path: &[String]) -> bool {
-    let mut char_num = 0;
     for p in path {
-        char_num += p.len();
         if !no_leading_hyphen(&p) {
             writeln!(&mut std::io::stderr(),
                 "leading hyphen in path segment '{}'", p);
             return false;
         }
     }
-    if char_num == 0 {
+    if path.join("/").len() == 0 {
         writeln!(&mut std::io::stderr(), "empty file name");
         return false;
     }
@@ -161,10 +167,38 @@ fn check_extra(path: &[String]) -> bool {
 
 // check a path in default mode (using the file system)
 fn check_default(path: &[String]) -> bool {
-    // TODO: lines 288-296
-    // get PATH_MAX here
-    // get NAME_MAX here
-    true
+    println!("{}", libc::FILENAME_MAX);
+    println!("{}", libc::PATH_MAX);
+    for p in path {
+        if p.len() > libc::FILENAME_MAX as usize {
+            writeln!(&mut std::io::stderr(),
+                "limit {} exceeded by length {} of file name component {}",
+                libc::FILENAME_MAX, p.len(), p);
+            return false;
+        }
+    }
+    let joined_path = path.join("/");
+    let total_len = joined_path.len();
+    if total_len > libc::PATH_MAX as usize {
+        writeln!(&mut std::io::stderr(),
+            "limit {} exceeded by length {} of file name {}",
+            libc::PATH_MAX, total_len, joined_path);
+        return false;
+    }
+    check_searchable(&joined_path)
+}
+
+// check whether a path is searchable o
+fn check_searchable(path: &String) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(_) => true,
+        Err(e) => if e.kind() == ErrorKind::NotFound {
+            true
+        } else {
+            writeln!(&mut std::io::stderr(), "{}", e);
+            false
+        }
+    }
 }
 
 // check for a hypthen at the beginning of a path segment
