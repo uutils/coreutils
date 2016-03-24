@@ -107,6 +107,7 @@ fn test_chmod_many_options() {
 fn test_chmod_reference_file() {
     let tests = vec!{
         TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
+        TestCase{args: vec!{"a-w", "--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
     };
     let (at, ucmd) = testing(UTIL_NAME);
     mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
