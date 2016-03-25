@@ -148,11 +148,11 @@ fn exec(files: Vec<String>, settings: &Settings) {
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_f64_parse(a: &str) -> f64{
-    //Maybe should be split on non-digit, but then 10e100 won't parse properly.
-    //On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
-    //because there's no way to handle both CSV and thousands separators without a new flag.
-    //GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
+fn permissive_f64_parse(a: &str) -> f64 {
+    // Maybe should be split on non-digit, but then 10e100 won't parse properly.
+    // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
+    // because there's no way to handle both CSV and thousands separators without a new flag.
+    // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
     let sa: &str = a.split_whitespace().next().unwrap();
     match sa.parse::<f64>() {
         Ok(a) => a,
@@ -160,14 +160,14 @@ fn permissive_f64_parse(a: &str) -> f64{
     }
 }
 
-/// Compares two floating point numbers, with errors being assumned to be -inf.
+/// Compares two floating point numbers, with errors being assumed to be -inf.
 /// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but 
 /// 1,000 will parse as -inf.
 fn numeric_compare(a: &String, b: &String) -> Ordering {
     let fa = permissive_f64_parse(a);
     let fb = permissive_f64_parse(b);
-    //f64::cmp isn't implemented because NaN messes with it
-    //but we sidestep that with permissive_f64_parse so just fake it
+    // f64::cmp isn't implemented because NaN messes with it
+    // but we sidestep that with permissive_f64_parse so just fake it
     if fa > fb {
         Ordering::Greater
     }
