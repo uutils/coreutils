@@ -41,6 +41,11 @@ fn human1() {
     test_helper(&String::from("human1"), &String::from("-H"));
 }
 
+#[test]
+fn month1() {
+    test_helper(&String::from("month1"), &String::from("-M"));
+}
+
 fn numeric_helper(test_num: isize) {
     test_helper(&format!("numeric{}", test_num), &String::from("-n"))
 }
