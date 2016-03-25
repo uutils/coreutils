@@ -194,7 +194,7 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 fn display_symlink_count(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
     
-    md.nlink().to_string()
+    metadata.nlink().to_string()
 }
 
 #[cfg(target_family = "windows")]
@@ -207,31 +207,8 @@ fn display_permissions(metadata: &Metadata) -> String {
 fn display_permissions(metadata: &Metadata) -> String {
     use std::os::unix::fs::PermissionsExt;
     
-    "lolwtfbbq".to_string();
+    "xxxxxxxxx".to_string();
 }
-
-
-// fn list_directory_contents(directory: &Path, options: &getopts::Matches) {
-//     let rd = fs::read_dir(directory);
-    
-//     match rd {
-//         Err(err) => println!("ERROR! {}", err),
-//         Ok(entries) => display_directory_contents(entries, &options),
-//     }
-// }
-
-// fn display_directory_contents(contents: ReadDir, options: &getopts::Matches) {
-//     for entry in contents {
-//         let entry = match entry {
-//             Err(err) => { 
-//                 println!("ERROR! {}", err);
-//                 panic!() 
-//             },
-//             Ok(en) => en
-//         };
-//         display_item(entry.path().as_path(), &options);
-//     }
-// }
 
 fn display_item(item: &Path, options: &getopts::Matches) {
     // let fileType = item.file
