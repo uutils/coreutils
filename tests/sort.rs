@@ -7,54 +7,45 @@ static UTIL_NAME: &'static str = "sort";
 
 
 #[test]
-fn numeric1() {
-    numeric_helper(1);
+fn test_numeric_floats_and_ints() {
+    test_helper("numeric_floats_and_ints", &String::from("-n"));
 }
 
 #[test]
-fn numeric2() {
-    numeric_helper(2);
+fn test_numeric_floats() {
+    test_helper("numeric_floats", &String::from("-n"));
 }
 
 #[test]
-fn numeric3() {
-    numeric_helper(3);
+fn test_numeric_unfixed_floats() {
+    test_helper("numeric_unfixed_floats", &String::from("-n"));
 }
 
 #[test]
-fn numeric4() {
-    numeric_helper(4);
+fn test_numeric_fixed_floats() {
+    test_helper("numeric_fixed_floats", &String::from("-n"));
 }
 
 #[test]
-fn numeric5() {
-    numeric_helper(5);
+fn test_numeric_unsorted_ints() {
+    test_helper("numeric_unsorted_ints", &String::from("-n"));
 }
 
 #[test]
-fn numeric6() {
-    numeric_helper(6);
+fn test_human_block_sizes() {
+    test_helper("human_block_sizes", &String::from("-h"));
 }
 
 #[test]
-fn human1() {
-    test_helper(&String::from("human1"), &String::from("-h"));
+fn test_month_default() {
+    test_helper("month_default", &String::from("-M"));
 }
 
-#[test]
-fn month1() {
-    test_helper(&String::from("month1"), &String::from("-M"));
-}
-
-fn numeric_helper(test_num: isize) {
-    test_helper(&format!("numeric{}", test_num), &String::from("-n"))
-}
-
-fn test_helper(file_name: &String, args: &String) {
+fn test_helper(file_name: &str, args: &String) {
     let (at, mut ucmd) = testing(UTIL_NAME);
     ucmd.arg(args);
     let out = ucmd.arg(format!("{}{}", file_name, ".txt")).run().stdout;
 
-    let filename = format!("{}{}", file_name, ".ans");
+    let filename = format!("{}{}", file_name, ".expected");
     assert_eq!(out, at.read(&filename));
 }
