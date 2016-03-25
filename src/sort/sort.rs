@@ -31,7 +31,7 @@ static THOUSANDS_SEP: char = ',';
 
 enum SortMode {
     Numeric,
-    HumanReadable,
+    HumanNumeric,
     Default,
 }
 
@@ -56,7 +56,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     opts.optflag("n", "numeric-sort", "compare according to string numerical value");
-    opts.optflag("H", "human-readable-sort", "compare according to human readable sizes, eg 1M > 100k");
+    opts.optflag("h", "human-numeric-sort", "compare according to human readable sizes, eg 1M > 100k");
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
@@ -88,8 +88,8 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
 
     settings.mode = if matches.opt_present("numeric-sort") {
         SortMode::Numeric
-    } else if matches.opt_present("human-readable-sort") {
-        SortMode::HumanReadable
+    } else if matches.opt_present("human-numeric-sort") {
+        SortMode::HumanNumeric
     } else {
         SortMode::Default
     };
@@ -129,7 +129,7 @@ fn exec(files: Vec<String>, settings: &Settings) {
 
         match settings.mode {
             SortMode::Numeric => lines.sort_by(numeric_compare),
-            SortMode::HumanReadable => lines.sort_by(human_readable_size_compare),
+            SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
             SortMode::Default => lines.sort()
         }
 
@@ -174,7 +174,7 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     }
 }
 
-fn human_readable_convert(a: &String) -> f64 {
+fn human_numeric_convert(a: &String) -> f64 {
     let int_iter = a.chars();
     let suffix_iter = a.chars();
     let int_str: String = int_iter.take_while(|c| c.is_numeric()).collect();
@@ -196,9 +196,9 @@ fn human_readable_convert(a: &String) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_readable_size_compare(a: &String, b: &String) -> Ordering {
-    let fa = human_readable_convert(a);
-    let fb = human_readable_convert(b);
+fn human_numeric_size_compare(a: &String, b: &String) -> Ordering {
+    let fa = human_numeric_convert(a);
+    let fb = human_numeric_convert(b);
     if fa > fb {
         Ordering::Greater
     }
