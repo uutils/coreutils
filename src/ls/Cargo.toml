@@ -1,0 +1,18 @@
+[package]
+name = "ls"
+version = "0.0.1"
+authors = ["Jeremiah Peschka <jeremiah.peschkak@gmail.com>"]
+
+[lib]
+name = "uu_ls"
+path = "ls.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+uucore = { path="../uucore" }
+pretty-bytes = "0.1.0"
+
+[[bin]]
+name = "ls"
+path = "main.rs"

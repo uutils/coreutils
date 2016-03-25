@@ -58,6 +58,7 @@ PROGS       := \
   head \
   link \
   ln \
+  ls \
   mkdir \
   mktemp \
   nl \
