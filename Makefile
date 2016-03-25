@@ -146,6 +146,7 @@ TEST_PROGS  := \
 	head \
 	link \
 	ln \
+    ls \
 	mkdir \
 	mktemp \
 	mv \

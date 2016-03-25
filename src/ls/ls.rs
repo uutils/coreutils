@@ -89,8 +89,7 @@ fn help() {
 
 fn list(options: getopts::Matches) {
     let locs: Vec<String> = if options.free.is_empty() {
-        show_error!("Missing DIRECTORY or FILES argument. Try --help.");
-        panic!();
+        vec![String::from(".")]
     } else {
         options.free.iter().cloned().collect()
     };
