@@ -29,7 +29,30 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
+enum SortMode {
+    Numeric,
+    HumanReadable,
+    Default,
+}
+
+struct Settings {
+    mode: SortMode,
+    reverse: bool,
+    outfile: Option<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            mode: SortMode::Default,
+            reverse: false,
+            outfile: None,
+        }
+    }
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
+    let mut settings: Settings = Default::default();
     let mut opts = getopts::Options::new();
 
     opts.optflag("n", "numeric-sort", "compare according to string numerical value");
@@ -63,10 +86,16 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         return 0;
     }
 
-    let numeric = matches.opt_present("numeric-sort");
-    let human_readable = matches.opt_present("human-readable-sort");
-    let reverse = matches.opt_present("reverse");
-    let outfile = matches.opt_str("output");
+    settings.mode = if matches.opt_present("numeric-sort") {
+        SortMode::Numeric
+    } else if matches.opt_present("human-readable-sort") {
+        SortMode::HumanReadable
+    } else {
+        SortMode::Default
+    };
+
+    settings.reverse = matches.opt_present("reverse");
+    settings.outfile = matches.opt_str("output");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -74,12 +103,12 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         files.push("-".to_owned());
     }
 
-    exec(files, numeric, human_readable, reverse, outfile);
+    exec(files, &settings);
 
     0
 }
 
-fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool, outfile: Option<String>) {
+fn exec(files: Vec<String>, settings: &Settings) {
     for path in &files {
         let (reader, _) = match open(path) {
             Some(x) => x,
@@ -98,19 +127,17 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool, 
             }
         }
 
-        if numeric {
-            lines.sort_by(numeric_compare);
-        } else if human_readable {
-            lines.sort_by(human_readable_size_compare);
-        } else {
-            lines.sort();
+        match settings.mode {
+            SortMode::Numeric => lines.sort_by(numeric_compare),
+            SortMode::HumanReadable => lines.sort_by(human_readable_size_compare),
+            SortMode::Default => lines.sort()
         }
 
         let iter = lines.iter();
-        if reverse {
-            print_sorted(iter.rev(), &outfile);
+        if settings.reverse {
+            print_sorted(iter.rev(), &settings.outfile);
         } else {
-            print_sorted(iter, &outfile)
+            print_sorted(iter, &settings.outfile)
         };
     }
 }
