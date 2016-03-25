@@ -32,6 +32,7 @@ static THOUSANDS_SEP: char = ',';
 enum SortMode {
     Numeric,
     HumanNumeric,
+    Month,
     Default,
 }
 
@@ -57,6 +58,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("n", "numeric-sort", "compare according to string numerical value");
     opts.optflag("h", "human-numeric-sort", "compare according to human readable sizes, eg 1M > 100k");
+    opts.optflag("M", "month-sort", "compare according to month name abbreviation");
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
@@ -90,6 +92,8 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         SortMode::Numeric
     } else if matches.opt_present("human-numeric-sort") {
         SortMode::HumanNumeric
+    } else if matches.opt_present("month-sort") {
+        SortMode::Month
     } else {
         SortMode::Default
     };
@@ -130,6 +134,7 @@ fn exec(files: Vec<String>, settings: &Settings) {
         match settings.mode {
             SortMode::Numeric => lines.sort_by(numeric_compare),
             SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
+            SortMode::Month => lines.sort_by(month_compare),
             SortMode::Default => lines.sort()
         }
 
@@ -208,7 +213,46 @@ fn human_numeric_size_compare(a: &String, b: &String) -> Ordering {
     else {
         Ordering::Equal
     }
+}
 
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
+enum Month {
+    Unknown     = 0,
+    January     = 1,
+    February    = 2,
+    March       = 3,
+    April       = 4,
+    May         = 5,
+    June        = 6,
+    July        = 7,
+    August      = 8,
+    September   = 9,
+    October     = 10,
+    November    = 11,
+    December    = 12,
+}
+
+/// Parse the beginning string into a Month, returning Month::Unknown on errors.
+fn month_parse(line: &String) -> Month {
+    match line.split_whitespace().next().unwrap().to_uppercase().as_ref() {
+        "JAN" => Month::January,
+        "FEB" => Month::February,
+        "MAR" => Month::March,
+        "APR" => Month::April,
+        "MAY" => Month::May,
+        "JUN" => Month::June,
+        "JUL" => Month::July,
+        "AUG" => Month::August,
+        "SEP" => Month::September,
+        "OCT" => Month::October,
+        "NOV" => Month::November,
+        "DEC" => Month::December,
+        _     => Month::Unknown,
+    }
+}
+
+fn month_compare(a: &String, b: &String) -> Ordering {
+    month_parse(a).cmp(&month_parse(b))
 }
 
 fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where S: std::fmt::Display {
