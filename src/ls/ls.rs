@@ -207,7 +207,7 @@ fn display_permissions(metadata: &Metadata) -> String {
 fn display_permissions(metadata: &Metadata) -> String {
     use std::os::unix::fs::PermissionsExt;
     
-    "xxxxxxxxx".to_string();
+    "xxxxxxxxx".to_string()
 }
 
 fn display_item(item: &Path, options: &getopts::Matches) {
