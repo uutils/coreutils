@@ -41,6 +41,11 @@ fn test_month_default() {
     test_helper("month_default", &String::from("-M"));
 }
 
+#[test]
+fn test_default_unsorted_ints() {
+    test_helper("default_unsorted_ints", &String::from(""));
+}
+
 fn test_helper(file_name: &str, args: &String) {
     let (at, mut ucmd) = testing(UTIL_NAME);
     ucmd.arg(args);
