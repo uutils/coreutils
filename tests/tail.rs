@@ -57,3 +57,10 @@ fn test_single_big_args() {
     assert_eq!(result.stdout, at.read(BIG_EXPECTED));
     cleanup_big_test_files(&at);
 }
+
+#[test]
+fn test_bytes_single() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let result = ucmd.arg("-c").arg("10").arg(INPUT).run();
+    assert_eq!(result.stdout, at.read("foobar_bytes_single.expected"));
+}
