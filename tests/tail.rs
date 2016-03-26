@@ -9,10 +9,6 @@ static UTIL_NAME: &'static str = "tail";
 
 static INPUT: &'static str = "foobar.txt";
 
-static BIG: &'static str = "big.txt";
-
-static BIG_EXPECTED: &'static str = "big_single_big_args.expected";
-
 #[test]
 fn test_stdin_default() {
     let (at, mut ucmd) = testing(UTIL_NAME);
@@ -27,35 +23,29 @@ fn test_single_default() {
     assert_eq!(result.stdout, at.read("foobar_single_default.expected"));
 }
 
-const BIG_LINES: usize = 1_000_000;
-const BIG_N_ARG: usize = 100_000;
-
-fn generate_big_test_files(at: &AtPath) {
-    let mut big_input = at.make_file(BIG);
-    for i in 0..BIG_LINES {
-        write!(&mut big_input, "Line {}\n", i).expect("Could not write to BIG file");
-    }
-    big_input.flush().expect("Could not flush BIG file");
-
-    let mut big_expected = at.make_file(BIG_EXPECTED);
-    for i in (BIG_LINES - BIG_N_ARG)..BIG_LINES {
-        write!(&mut big_expected, "Line {}\n", i).expect("Could not write to BIG_EXPECTED file");
-    }
-    big_expected.flush().expect("Could not flush BIG_EXPECTED file");
-}
-
-fn cleanup_big_test_files(at: &AtPath) {
-    at.cleanup(BIG);
-    at.cleanup(BIG_EXPECTED);
-}
-
 #[test]
 fn test_single_big_args() {
+    const FILE: &'static str = "single_big_args.txt";
+    const EXPECTED_FILE: &'static str = "single_big_args_expected.txt";
+    const LINES: usize = 1_000_000;
+    const N_ARG: usize = 100_000;
+
     let (at, mut ucmd) = testing(UTIL_NAME);
-    generate_big_test_files(&at);
-    let result = ucmd.arg(BIG).arg("-n").arg(format!("{}", BIG_N_ARG)).run();
-    assert_eq!(result.stdout, at.read(BIG_EXPECTED));
-    cleanup_big_test_files(&at);
+
+    let mut big_input = at.make_scoped_file(FILE);
+    for i in 0..LINES {
+        write!(&mut big_input, "Line {}\n", i).expect("Could not write to FILE");
+    }
+    big_input.flush().expect("Could not flush FILE");
+
+    let mut big_expected = at.make_scoped_file(EXPECTED_FILE);
+    for i in (LINES - N_ARG)..LINES {
+        write!(&mut big_expected, "Line {}\n", i).expect("Could not write to EXPECTED_FILE");
+    }
+    big_expected.flush().expect("Could not flush EXPECTED_FILE");
+
+    let result = ucmd.arg(FILE).arg("-n").arg(format!("{}", N_ARG)).run();
+    assert_eq!(result.stdout, at.read(EXPECTED_FILE));
 }
 
 #[test]
