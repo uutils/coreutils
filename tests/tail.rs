@@ -64,3 +64,10 @@ fn test_bytes_single() {
     let result = ucmd.arg("-c").arg("10").arg(INPUT).run();
     assert_eq!(result.stdout, at.read("foobar_bytes_single.expected"));
 }
+
+#[test]
+fn test_bytes_stdin() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let result = ucmd.arg("-c").arg("13").run_piped_stdin(at.read(INPUT));
+    assert_eq!(result.stdout, at.read("foobar_bytes_stdin.expected"));
+}
