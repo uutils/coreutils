@@ -29,11 +29,36 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 
+enum SortMode {
+    Numeric,
+    HumanNumeric,
+    Month,
+    Default,
+}
+
+struct Settings {
+    mode: SortMode,
+    reverse: bool,
+    outfile: Option<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            mode: SortMode::Default,
+            reverse: false,
+            outfile: None,
+        }
+    }
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
+    let mut settings: Settings = Default::default();
     let mut opts = getopts::Options::new();
 
     opts.optflag("n", "numeric-sort", "compare according to string numerical value");
-    opts.optflag("H", "human-readable-sort", "compare according to human readable sizes, eg 1M > 100k");
+    opts.optflag("h", "human-numeric-sort", "compare according to human readable sizes, eg 1M > 100k");
+    opts.optflag("M", "month-sort", "compare according to month name abbreviation");
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
@@ -63,10 +88,18 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         return 0;
     }
 
-    let numeric = matches.opt_present("numeric-sort");
-    let human_readable = matches.opt_present("human-readable-sort");
-    let reverse = matches.opt_present("reverse");
-    let outfile = matches.opt_str("output");
+    settings.mode = if matches.opt_present("numeric-sort") {
+        SortMode::Numeric
+    } else if matches.opt_present("human-numeric-sort") {
+        SortMode::HumanNumeric
+    } else if matches.opt_present("month-sort") {
+        SortMode::Month
+    } else {
+        SortMode::Default
+    };
+
+    settings.reverse = matches.opt_present("reverse");
+    settings.outfile = matches.opt_str("output");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -74,12 +107,12 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         files.push("-".to_owned());
     }
 
-    exec(files, numeric, human_readable, reverse, outfile);
+    exec(files, &settings);
 
     0
 }
 
-fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool, outfile: Option<String>) {
+fn exec(files: Vec<String>, settings: &Settings) {
     for path in &files {
         let (reader, _) = match open(path) {
             Some(x) => x,
@@ -98,29 +131,28 @@ fn exec(files: Vec<String>, numeric: bool, human_readable: bool, reverse: bool, 
             }
         }
 
-        if numeric {
-            lines.sort_by(numeric_compare);
-        } else if human_readable {
-            lines.sort_by(human_readable_size_compare);
-        } else {
-            lines.sort();
+        match settings.mode {
+            SortMode::Numeric => lines.sort_by(numeric_compare),
+            SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
+            SortMode::Month => lines.sort_by(month_compare),
+            SortMode::Default => lines.sort()
         }
 
         let iter = lines.iter();
-        if reverse {
-            print_sorted(iter.rev(), &outfile);
+        if settings.reverse {
+            print_sorted(iter.rev(), &settings.outfile);
         } else {
-            print_sorted(iter, &outfile)
+            print_sorted(iter, &settings.outfile)
         };
     }
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_f64_parse(a: &str) -> f64{
-    //Maybe should be split on non-digit, but then 10e100 won't parse properly.
-    //On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
-    //because there's no way to handle both CSV and thousands separators without a new flag.
-    //GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
+fn permissive_f64_parse(a: &str) -> f64 {
+    // Maybe should be split on non-digit, but then 10e100 won't parse properly.
+    // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
+    // because there's no way to handle both CSV and thousands separators without a new flag.
+    // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
     let sa: &str = a.split_whitespace().next().unwrap();
     match sa.parse::<f64>() {
         Ok(a) => a,
@@ -128,14 +160,14 @@ fn permissive_f64_parse(a: &str) -> f64{
     }
 }
 
-/// Compares two floating point numbers, with errors being assumned to be -inf.
+/// Compares two floating point numbers, with errors being assumed to be -inf.
 /// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but 
 /// 1,000 will parse as -inf.
 fn numeric_compare(a: &String, b: &String) -> Ordering {
     let fa = permissive_f64_parse(a);
     let fb = permissive_f64_parse(b);
-    //f64::cmp isn't implemented because NaN messes with it
-    //but we sidestep that with permissive_f64_parse so just fake it
+    // f64::cmp isn't implemented because NaN messes with it
+    // but we sidestep that with permissive_f64_parse so just fake it
     if fa > fb {
         Ordering::Greater
     }
@@ -147,7 +179,7 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     }
 }
 
-fn human_readable_convert(a: &String) -> f64 {
+fn human_numeric_convert(a: &String) -> f64 {
     let int_iter = a.chars();
     let suffix_iter = a.chars();
     let int_str: String = int_iter.take_while(|c| c.is_numeric()).collect();
@@ -169,9 +201,9 @@ fn human_readable_convert(a: &String) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_readable_size_compare(a: &String, b: &String) -> Ordering {
-    let fa = human_readable_convert(a);
-    let fb = human_readable_convert(b);
+fn human_numeric_size_compare(a: &String, b: &String) -> Ordering {
+    let fa = human_numeric_convert(a);
+    let fb = human_numeric_convert(b);
     if fa > fb {
         Ordering::Greater
     }
@@ -181,7 +213,46 @@ fn human_readable_size_compare(a: &String, b: &String) -> Ordering {
     else {
         Ordering::Equal
     }
+}
 
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
+enum Month {
+    Unknown,
+    January,
+    February,
+    March,
+    April,
+    May,
+    June,
+    July,
+    August,
+    September,
+    October,
+    November,
+    December,
+}
+
+/// Parse the beginning string into a Month, returning Month::Unknown on errors.
+fn month_parse(line: &String) -> Month {
+    match line.split_whitespace().next().unwrap().to_uppercase().as_ref() {
+        "JAN" => Month::January,
+        "FEB" => Month::February,
+        "MAR" => Month::March,
+        "APR" => Month::April,
+        "MAY" => Month::May,
+        "JUN" => Month::June,
+        "JUL" => Month::July,
+        "AUG" => Month::August,
+        "SEP" => Month::September,
+        "OCT" => Month::October,
+        "NOV" => Month::November,
+        "DEC" => Month::December,
+        _     => Month::Unknown,
+    }
+}
+
+fn month_compare(a: &String, b: &String) -> Ordering {
+    month_parse(a).cmp(&month_parse(b))
 }
 
 fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where S: std::fmt::Display {
