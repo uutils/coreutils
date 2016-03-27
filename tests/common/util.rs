@@ -252,7 +252,21 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
-        self.subdir.canonicalize().unwrap().to_str().unwrap().to_owned()
+        let s = self.subdir.canonicalize().unwrap().to_str().unwrap().to_owned();
+
+        // Due to canonicalize()'s use of GetFinalPathNameByHandleW() on Windows, the resolved path
+        // starts with '\\?\' to extend the limit of a given path to 32,767 wide characters.
+        //
+        // To address this issue, we remove this prepended string if available.
+        //
+        // Source:
+        // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
+        let prefix = "\\\\?\\";
+        if s.starts_with(prefix) {
+            String::from(&s[prefix.len()..])
+        } else {
+            s
+        }
     }
 }
 
