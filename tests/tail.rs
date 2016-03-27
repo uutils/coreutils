@@ -61,3 +61,35 @@ fn test_bytes_stdin() {
     let result = ucmd.arg("-c").arg("13").run_piped_stdin(at.read(INPUT));
     assert_eq!(result.stdout, at.read("foobar_bytes_stdin.expected"));
 }
+
+#[test]
+fn test_bytes_big() {
+    const FILE: &'static str = "test_bytes_big.txt";
+    const EXPECTED_FILE: &'static str = "test_bytes_big_expected.txt";
+    const BYTES: usize = 1_000_000;
+    const N_ARG: usize = 100_000;
+
+    let (at, mut ucmd) = testing(UTIL_NAME);
+
+    let mut big_input = at.make_scoped_file(FILE);
+    for i in 0..BYTES {
+        let digit = std::char::from_digit((i % 10) as u32, 10).unwrap();
+        write!(&mut big_input, "{}", digit).expect("Could not write to FILE");
+    }
+    big_input.flush().expect("Could not flush FILE");
+
+    let mut big_expected = at.make_scoped_file(EXPECTED_FILE);
+    for i in (BYTES - N_ARG)..BYTES {
+        let digit = std::char::from_digit((i % 10) as u32, 10).unwrap();
+        write!(&mut big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
+    }
+    big_expected.flush().expect("Could not flush EXPECTED_FILE");
+
+    let result = ucmd.arg(FILE).arg("-c").arg(format!("{}", N_ARG)).run().stdout;
+    let expected = at.read(EXPECTED_FILE);
+
+    assert_eq!(result.len(), expected.len());
+    for (actual_char, expected_char) in result.chars().zip(expected.chars()) {
+        assert_eq!(actual_char, expected_char);
+    }
+}
