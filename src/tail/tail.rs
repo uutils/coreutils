@@ -272,6 +272,8 @@ fn follow<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
 fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, should_stop: &mut F)
     where F: FnMut(u8) -> bool
 {
+    assert!(buf.len() >= BLOCK_SIZE as usize);
+
     let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
 
     for block_idx in 0..max_blocks_to_read {
@@ -280,13 +282,6 @@ fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, should_
         } else {
             BLOCK_SIZE
         };
-
-        // Ensure that the buffer is filled and zeroed, if needed.
-        if buf.len() < (block_size as usize) {
-            for _ in buf.len()..(block_size as usize) {
-                buf.push(0);
-            }
-        }
 
         // Seek backwards by the next block, read the full block into
         // `buf`, and then seek back to the start of the block again.
@@ -327,7 +322,7 @@ fn bounded_tail(mut file: File, settings: &Settings) {
         return;
     }
 
-    let mut buf = Vec::with_capacity(BLOCK_SIZE as usize);
+    let mut buf = vec![0; BLOCK_SIZE as usize];
 
     // Find the position in the file to start printing from.
     match settings.mode {
