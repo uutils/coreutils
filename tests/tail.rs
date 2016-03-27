@@ -24,6 +24,13 @@ fn test_single_default() {
 }
 
 #[test]
+fn test_n_greater_than_number_of_lines() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let result = ucmd.arg("-n").arg("99999999").arg(FOOBAR_TXT).run();
+    assert_eq!(result.stdout, at.read(FOOBAR_TXT));
+}
+
+#[test]
 fn test_single_big_args() {
     const FILE: &'static str = "single_big_args.txt";
     const EXPECTED_FILE: &'static str = "single_big_args_expected.txt";
