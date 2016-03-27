@@ -336,11 +336,8 @@ fn bounded_tail(mut file: File, settings: &Settings) {
                 }
             });
         },
-        FilterMode::Bytes(mut count) => {
-            backwards_thru_file(&mut file, size, &mut buf, &mut |_| {
-                count -= 1;
-                count == 0
-            });
+        FilterMode::Bytes(count) => {
+            file.seek(SeekFrom::End(-(count as i64))).unwrap();
         },
     }
 
