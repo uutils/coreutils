@@ -5,6 +5,7 @@ extern crate tempdir;
 use std::env;
 use std::fs::{self, File};
 use std::io::{Read, Write, Result};
+use std::ops::{Deref, DerefMut};
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
@@ -28,7 +29,7 @@ static ALREADY_RUN: &'static str = " you have already run this UCommand, if you 
                                     another command in the same test, use TestSet::new instead of \
                                     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
-    
+
 #[macro_export]
 macro_rules! assert_empty_stderr(
     ($cond:expr) => (
@@ -122,6 +123,40 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A scoped, temporary file that is removed upon drop.
+pub struct ScopedFile {
+    path: PathBuf,
+    file: File,
+}
+
+impl ScopedFile {
+    fn new(path: PathBuf, file: File) -> ScopedFile {
+        ScopedFile {
+            path: path,
+            file: file
+        }
+    }
+}
+
+impl Deref for ScopedFile {
+    type Target = File;
+    fn deref(&self) -> &File {
+        &self.file
+    }
+}
+
+impl DerefMut for ScopedFile {
+    fn deref_mut(&mut self) -> &mut File {
+        &mut self.file
+    }
+}
+
+impl Drop for ScopedFile {
+    fn drop(&mut self) {
+        fs::remove_file(&self.path).unwrap();
+    }
+}
+
 pub struct AtPath {
     pub subdir: PathBuf,
 }
@@ -184,6 +219,9 @@ impl AtPath {
             Ok(f) => f,
             Err(e) => panic!("{}", e),
         }
+    }
+    pub fn make_scoped_file(&self, name: &str) -> ScopedFile {
+        ScopedFile::new(self.plus(name), self.make_file(name))
     }
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
@@ -407,7 +445,7 @@ impl UCommand {
                     .stderr(Stdio::piped())
                     .spawn()
                     .unwrap();
-                
+
                 result.stdin
                     .take()
                     .unwrap_or_else(
@@ -415,8 +453,8 @@ impl UCommand {
                             "Could not take child process stdin"))
                     .write_all(&input)
                     .unwrap_or_else(|e| panic!("{}", e));
-                
-                result.wait_with_output().unwrap()        
+
+                result.wait_with_output().unwrap()
             }
             None => {
                 self.raw.output().unwrap()
