@@ -124,14 +124,6 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
     println!("{}: {}", msg.as_ref(), par.as_ref());
 }
 
-pub fn repeat_component(s: &str, n: u32) -> String {
-    let mut path = PathBuf::from("");
-    for _ in 0..n {
-        path.push(s);
-    }
-    path.to_str().unwrap().to_owned()
-}
-
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
     if try!(fs::metadata(src)).is_dir() {
         for entry in try!(fs::read_dir(src)) {
