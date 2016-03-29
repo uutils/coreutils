@@ -49,6 +49,25 @@ macro_rules! assert_no_error(
     );
 );
 
+#[macro_export]
+macro_rules! path_concat {
+    ($e:expr, ..$n:expr) => {{
+        let n = $n;
+        let mut pb = std::path::PathBuf::new();
+        for _ in 0..n {
+            pb.push($e);
+        }
+        pb.to_str().unwrap().to_owned()
+    }};
+    ($($e:expr),*) => {{
+        let mut pb = std::path::PathBuf::new();
+        $(
+            pb.push($e);
+        )*
+        pb.to_str().unwrap().to_owned()
+    }};
+}
+
 pub struct CmdResult {
     pub success: bool,
     pub stdout: String,
@@ -97,15 +116,6 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
     println!("{}: {}", msg.as_ref(), par.as_ref());
 }
 
-
-pub fn repeat_str(s: &str, n: u32) -> String {
-    let mut repeated = String::new();
-    for _ in 0..n {
-        repeated.push_str(s);
-    }
-    repeated
-}
-
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
     if try!(fs::metadata(src)).is_dir() {
         for entry in try!(fs::read_dir(src)) {
@@ -121,6 +131,14 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn get_root_path() -> &'static str {
+    if cfg!(windows) {
+        "C:\\"
+    } else {
+        "/"
+    }
 }
 
 /// A scoped, temporary file that is removed upon drop.
