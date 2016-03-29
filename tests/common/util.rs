@@ -49,6 +49,25 @@ macro_rules! assert_no_error(
     );
 );
 
+#[macro_export]
+macro_rules! path_concat {
+    ($e:expr, ..$n:expr) => {{
+        let n = $n;
+        let mut pb = std::path::PathBuf::new();
+        for _ in 0..n {
+            pb.push($e);
+        }
+        pb.to_str().unwrap().to_owned()
+    }};
+    ($($e:expr),*) => {{
+        let mut pb = std::path::PathBuf::new();
+        $(
+            pb.push($e);
+        )*
+        pb.to_str().unwrap().to_owned()
+    }};
+}
+
 pub struct CmdResult {
     pub success: bool,
     pub stdout: String,
@@ -60,32 +79,40 @@ impl CmdResult {
         assert!(self.success);
         Box::new(self)
     }
+
     pub fn failure(&self) -> Box<&CmdResult> {
         assert!(!self.success);
         Box::new(self)
     }
+
     pub fn no_stderr(&self) -> Box<&CmdResult> {
         assert!(self.stderr.len() == 0);
         Box::new(self)
     }
+
     pub fn no_stdout(&self) -> Box<&CmdResult> {
         assert!(self.stdout.len() == 0);
         Box::new(self)
     }
+
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert!(self.stdout.trim_right() == String::from(msg.as_ref()).trim_right());
         Box::new(self)
     }
+
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert!(self.stderr.trim_right() == String::from(msg.as_ref()).trim_right());
         Box::new(self)
     }
+
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stdout_is(msg).no_stderr()
     }
+
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stderr_is(msg).no_stdout()
     }
+
     pub fn fails_silently(&self) -> Box<&CmdResult> {
         assert!(!self.success);
         assert!(self.stderr.len() == 0);
@@ -95,15 +122,6 @@ impl CmdResult {
 
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
     println!("{}: {}", msg.as_ref(), par.as_ref());
-}
-
-
-pub fn repeat_str(s: &str, n: u32) -> String {
-    let mut repeated = String::new();
-    for _ in 0..n {
-        repeated.push_str(s);
-    }
-    repeated
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
@@ -121,6 +139,14 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn get_root_path() -> &'static str {
+    if cfg!(windows) {
+        "C:\\"
+    } else {
+        "/"
+    }
 }
 
 /// A scoped, temporary file that is removed upon drop.
@@ -160,21 +186,26 @@ impl Drop for ScopedFile {
 pub struct AtPath {
     pub subdir: PathBuf,
 }
+
 impl AtPath {
     pub fn new(subdir: &Path) -> AtPath {
         AtPath { subdir: PathBuf::from(subdir) }
     }
+
     pub fn as_string(&self) -> String {
         self.subdir.to_str().unwrap().to_owned()
     }
+
     pub fn plus(&self, name: &str) -> PathBuf {
         let mut pathbuf = self.subdir.clone();
         pathbuf.push(name);
         pathbuf
     }
+
     pub fn plus_as_string(&self, name: &str) -> String {
         String::from(self.plus(name).to_str().unwrap())
     }
+
     fn minus(&self, name: &str) -> PathBuf {
         // relative_from is currently unstable
         let prefixed = PathBuf::from(name);
@@ -189,23 +220,28 @@ impl AtPath {
             prefixed
         }
     }
+
     pub fn minus_as_string(&self, name: &str) -> String {
         String::from(self.minus(name).to_str().unwrap())
     }
+
     pub fn open(&self, name: &str) -> File {
         log_info("open", self.plus_as_string(name));
         File::open(self.plus(name)).unwrap()
     }
+
     pub fn read(&self, name: &str) -> String {
         let mut f = self.open(name);
         let mut contents = String::new();
         let _ = f.read_to_string(&mut contents);
         contents
     }
+
     pub fn write(&self, name: &str, contents: &str) {
         let mut f = self.open(name);
         let _ = f.write(contents.as_bytes());
     }
+
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
@@ -214,24 +250,29 @@ impl AtPath {
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
     }
+
     pub fn make_file(&self, name: &str) -> File {
         match File::create(&self.plus(name)) {
             Ok(f) => f,
             Err(e) => panic!("{}", e),
         }
     }
+
     pub fn make_scoped_file(&self, name: &str) -> ScopedFile {
         ScopedFile::new(self.plus(name), self.make_file(name))
     }
+
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
         File::create(&self.plus(file)).unwrap();
     }
+
     pub fn symlink(&self, src: &str, dst: &str) {
         log_info("symlink",
                  &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)));
         symlink_file(&self.plus(src), &self.plus(dst)).unwrap();
     }
+
     pub fn is_symlink(&self, path: &str) -> bool {
         log_info("is_symlink", self.plus_as_string(path));
         match fs::symlink_metadata(&self.plus(path)) {
@@ -314,6 +355,7 @@ pub struct TestSet {
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
 }
+
 impl TestSet {
     pub fn new(util_name: &str) -> TestSet {
         let tmpd = Rc::new(TempDir::new("uutils").unwrap());
@@ -338,14 +380,17 @@ impl TestSet {
         }
         ts
     }
+
     pub fn util_cmd(&self) -> UCommand {
         let mut cmd = self.cmd(&self.bin_path);
         cmd.arg(&self.util_name);
         cmd
     }
+
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
     }
+
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn util_cmd_keepenv(&self) -> UCommand {
@@ -353,6 +398,7 @@ impl TestSet {
         cmd.arg(&self.util_name);
         cmd
     }
+
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
     }
@@ -365,6 +411,7 @@ pub struct UCommand {
     has_run: bool,
     stdin: Option<Vec<u8>>
 }
+
 impl UCommand {
     pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
         UCommand {
@@ -394,12 +441,14 @@ impl UCommand {
             stdin: None
         }
     }
+
     pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
         let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
+
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> Box<&mut UCommand> {
         if self.has_run {
             panic!(ALREADY_RUN);
@@ -466,6 +515,7 @@ impl UCommand {
             stderr: from_utf8(&prog.stderr).unwrap().to_string(),
         }
     }
+
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
         if self.stdin.is_some() {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
@@ -473,14 +523,17 @@ impl UCommand {
         self.stdin = Some(input.into());
         Box::new(self)
     }
+
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
         self.pipe_in(input).run()
     }
+
     pub fn succeeds(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.success();
         cmd_result
     }
+
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
@@ -495,6 +548,7 @@ pub fn testset_and_ucommand(utilname: &str) -> (TestSet, UCommand) {
     let ucmd = ts.util_cmd();
     (ts, ucmd)
 }
+
 pub fn testing(utilname: &str) -> (AtPath, UCommand) {
     let ts = TestSet::new(utilname);
     let ucmd = ts.util_cmd();

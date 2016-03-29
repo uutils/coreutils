@@ -33,9 +33,7 @@ fn test_canonicalize_existing() {
 #[test]
 fn test_canonicalize_missing() {
     let (at, mut ucmd) = testing(UTIL_NAME);
-    let mut expected = at.root_dir_resolved();
-    expected.push_str("/");
-    expected.push_str(GIBBERISH);
+    let expected = path_concat!(at.root_dir_resolved(), GIBBERISH);
 
     let out = ucmd.arg("-m")
                   .arg(GIBBERISH)
@@ -49,7 +47,7 @@ fn test_canonicalize_missing() {
 fn test_long_redirection_to_current_dir() {
     let (at, mut ucmd) = testing(UTIL_NAME);
     // Create a 256-character path to current directory
-    let dir = repeat_str("./", 128);
+    let dir = path_concat!(".", ..128);
     let out = ucmd.arg("-n")
                   .arg("-m")
                   .arg(dir)
@@ -63,12 +61,12 @@ fn test_long_redirection_to_current_dir() {
 fn test_long_redirection_to_root() {
     let (_, mut ucmd) = testing(UTIL_NAME);
     // Create a 255-character path to root
-    let dir = repeat_str("../", 85);
+    let dir = path_concat!("..", ..85);
     let out = ucmd.arg("-n")
                   .arg("-m")
                   .arg(dir)
                   .run()
                   .stdout;
 
-    assert_eq!(out, "/");
+    assert_eq!(out, get_root_path());
 }
