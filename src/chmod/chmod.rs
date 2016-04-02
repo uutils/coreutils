@@ -9,10 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate aho_corasick;
 extern crate getopts;
 extern crate libc;
-extern crate memchr;
 extern crate walker;
 
 #[macro_use]
