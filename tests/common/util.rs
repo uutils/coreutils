@@ -11,7 +11,7 @@ use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Stdio, Child};
 use std::str::from_utf8;
 use std::ffi::OsStr;
 use self::tempdir::TempDir;
@@ -480,7 +480,8 @@ impl UCommand {
         Box::new(self)
     }
 
-    pub fn run(&mut self) -> CmdResult {
+    /// Spawns the command, feeds the stdin if any, and returns immediately.
+    pub fn run_no_wait(&mut self) -> Child {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
@@ -503,7 +504,13 @@ impl UCommand {
                 .unwrap_or_else(|e| panic!("{}", e));
         }
 
-        let prog = result.wait_with_output().unwrap();
+        result
+    }
+
+    /// Spawns the command, feeds the stdin if any, waits for the result
+    /// and returns it.
+    pub fn run(&mut self) -> CmdResult {
+        let prog = self.run_no_wait().wait_with_output().unwrap();
 
         CmdResult {
             success: prog.status.success(),
