@@ -8,6 +8,7 @@ use common::util::*;
 static UTIL_NAME: &'static str = "tail";
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
+static FOOBAR_WITH_NULL_TXT: &'static str = "foobar_with_null.txt";
 
 #[test]
 fn test_stdin_default() {
@@ -28,6 +29,13 @@ fn test_n_greater_than_number_of_lines() {
     let (at, mut ucmd) = testing(UTIL_NAME);
     let result = ucmd.arg("-n").arg("99999999").arg(FOOBAR_TXT).run();
     assert_eq!(result.stdout, at.read(FOOBAR_TXT));
+}
+
+#[test]
+fn test_null_default() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let result = ucmd.arg("-z").arg(FOOBAR_WITH_NULL_TXT).run();
+    assert_eq!(result.stdout, at.read("foobar_with_null_default.expected"));
 }
 
 #[test]
