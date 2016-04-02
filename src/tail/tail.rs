@@ -28,7 +28,7 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 enum FilterMode {
     Bytes(usize),
-    Lines(usize),
+    Lines(usize, u8), // (number of lines, delimiter)
 }
 
 struct Settings {
@@ -41,7 +41,7 @@ struct Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            mode: FilterMode::Lines(10),
+            mode: FilterMode::Lines(10, '\n' as u8),
             sleep_msec: 1000,
             beginning: false,
             follow: false,
@@ -54,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
-        (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
+        (args, Some(n)) => { settings.mode = FilterMode::Lines(n, '\n' as u8); args },
         (args, None) => args
     };
 
@@ -66,6 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("n", "lines", "Number of lines to print", "k");
     opts.optflag("f", "follow", "Print the file as it grows");
     opts.optopt("s", "sleep-interval", "Number or seconds to sleep between polling the file when running with -f", "n");
+    opts.optflag("z", "zero-terminated", "Line delimiter is NUL, not newline");
     opts.optflag("h", "help", "help");
     opts.optflag("V", "version", "version");
 
@@ -105,7 +106,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 slice = &slice[1..];
             }
             match parse_size(slice) {
-                Some(m) => settings.mode = FilterMode::Lines(m),
+                Some(m) => settings.mode = FilterMode::Lines(m, '\n' as u8),
                 None => {
                     show_error!("invalid number of lines ({})", slice);
                     return 1;
@@ -130,6 +131,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
             None => { }
         }
     };
+
+    if given_options.opt_present("z") {
+        if let FilterMode::Lines(count, _) = settings.mode {
+            settings.mode = FilterMode::Lines(count, 0);
+        }
+    }
 
     let files = given_options.free;
 
@@ -269,7 +276,7 @@ fn follow<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
 /// Iterate over bytes in the file, in reverse, until `should_stop` returns
 /// true. The `file` is left seek'd to the position just after the byte that
 /// `should_stop` returned true for.
-fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, should_stop: &mut F)
+fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, delimiter: u8, should_stop: &mut F)
     where F: FnMut(u8) -> bool
 {
     assert!(buf.len() >= BLOCK_SIZE as usize);
@@ -295,7 +302,7 @@ fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, should_
         let slice = &buf[0..(block_size as usize)];
         for (i, ch) in slice.iter().enumerate().rev() {
             // Ignore one trailing newline.
-            if block_idx == 0 && i as u64 == block_size - 1 && *ch == ('\n' as u8) {
+            if block_idx == 0 && i as u64 == block_size - 1 && *ch == delimiter {
                 continue;
             }
 
@@ -326,9 +333,9 @@ fn bounded_tail(mut file: File, settings: &Settings) {
 
     // Find the position in the file to start printing from.
     match settings.mode {
-        FilterMode::Lines(mut count) => {
-            backwards_thru_file(&mut file, size, &mut buf, &mut |byte| {
-                if byte == ('\n' as u8) {
+        FilterMode::Lines(mut count, delimiter) => {
+            backwards_thru_file(&mut file, size, &mut buf, delimiter, &mut |byte| {
+                if byte == delimiter {
                     count -= 1;
                     count == 0
                 } else {
@@ -367,7 +374,7 @@ fn unbounded_tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
     match settings.mode {
-        FilterMode::Lines(mut count) => {
+        FilterMode::Lines(mut count, _delimiter) => {
             let mut ringbuf: VecDeque<String> = VecDeque::new();
             let mut skip = if settings.beginning {
                 let temp = count;
