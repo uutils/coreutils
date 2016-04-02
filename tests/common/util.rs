@@ -3,7 +3,7 @@
 extern crate tempdir;
 
 use std::env;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Result};
 use std::ops::{Deref, DerefMut};
 #[cfg(unix)]
@@ -16,6 +16,8 @@ use std::str::from_utf8;
 use std::ffi::OsStr;
 use self::tempdir::TempDir;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "target\\debug\\uutils.exe";
@@ -239,6 +241,12 @@ impl AtPath {
 
     pub fn write(&self, name: &str, contents: &str) {
         let mut f = self.open(name);
+        let _ = f.write(contents.as_bytes());
+    }
+
+    pub fn append(&self, name: &str, contents: &str) {
+        log_info("open(append)", self.plus_as_string(name));
+        let mut f = OpenOptions::new().append(true).open(self.plus(name)).unwrap();
         let _ = f.write(contents.as_bytes());
     }
 
@@ -542,6 +550,14 @@ impl UCommand {
         cmd_result.failure();
         cmd_result
     }
+}
+
+pub fn read_size(child: &mut Child, size: usize) -> String {
+    let mut output = Vec::new();
+    output.resize(size, 0);
+    sleep(Duration::from_millis(100));
+    child.stdout.as_mut().unwrap().read(output.as_mut_slice()).unwrap();
+    String::from_utf8(output).unwrap()
 }
 
 // returns a testSet and a ucommand initialized to the utility binary
