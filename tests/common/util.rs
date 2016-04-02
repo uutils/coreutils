@@ -486,29 +486,25 @@ impl UCommand {
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let prog = match self.stdin {
-            Some(ref input) => {
-                let mut result = self.raw
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
+        let mut result = self.raw
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
 
-                result.stdin
-                    .take()
-                    .unwrap_or_else(
-                        || panic!(
-                            "Could not take child process stdin"))
-                    .write_all(&input)
-                    .unwrap_or_else(|e| panic!("{}", e));
+        if let Some(ref input) = self.stdin {
+            result.stdin
+                .take()
+                .unwrap_or_else(
+                    || panic!(
+                        "Could not take child process stdin"))
+                .write_all(&input)
+                .unwrap_or_else(|e| panic!("{}", e));
+        }
 
-                result.wait_with_output().unwrap()
-            }
-            None => {
-                self.raw.output().unwrap()
-            }
-        };
+        let prog = result.wait_with_output().unwrap();
+
         CmdResult {
             success: prog.status.success(),
             stdout: from_utf8(&prog.stdout).unwrap().to_string(),
