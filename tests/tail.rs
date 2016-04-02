@@ -1,3 +1,6 @@
+extern crate uu_tail;
+use uu_tail::parse_size;
+
 use std::io::Write;
 
 #[macro_use]
@@ -107,4 +110,64 @@ fn test_bytes_big() {
     for (actual_char, expected_char) in result.chars().zip(expected.chars()) {
         assert_eq!(actual_char, expected_char);
     }
+}
+
+#[test]
+fn test_parse_size() {
+    // No suffix.
+    assert_eq!(Ok(1234), parse_size("1234"));
+
+    // kB is 1000
+    assert_eq!(Ok(9 * 1000), parse_size("9kB"));
+
+    // K is 1024
+    assert_eq!(Ok(2 * 1024), parse_size("2K"));
+
+    let suffixes = [
+        ('M', 2u32),
+        ('G', 3u32),
+        ('T', 4u32),
+        ('P', 5u32),
+        ('E', 6u32),
+    ];
+
+    for &(c, exp) in &suffixes {
+        let s = format!("2{}B", c);
+        assert_eq!(Ok(2 * (1000 as u64).pow(exp)), parse_size(&s));
+
+        let s = format!("2{}", c);
+        assert_eq!(Ok(2 * (1024 as u64).pow(exp)), parse_size(&s));
+    }
+
+    // Sizes that are too big.
+    assert!(parse_size("1Z").is_err());
+    assert!(parse_size("1Y").is_err());
+
+    // Bad number
+    assert!(parse_size("328hdsf3290").is_err());
+}
+
+#[test]
+fn test_lines_with_size_suffix() {
+    const FILE: &'static str = "test_lines_with_size_suffix.txt";
+    const EXPECTED_FILE: &'static str = "test_lines_with_size_suffix_expected.txt";
+    const LINES: usize = 3_000;
+    const N_ARG: usize = 2 * 1024;
+
+    let (at, mut ucmd) = testing(UTIL_NAME);
+
+    let mut big_input = at.make_scoped_file(FILE);
+    for i in 0..LINES {
+        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
+    }
+    big_input.flush().expect("Could not flush FILE");
+
+    let mut big_expected = at.make_scoped_file(EXPECTED_FILE);
+    for i in (LINES - N_ARG)..LINES {
+        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+    }
+    big_expected.flush().expect("Could not flush EXPECTED_FILE");
+
+    let result = ucmd.arg(FILE).arg("-n").arg("2K").run();
+    assert_eq!(result.stdout, at.read(EXPECTED_FILE));
 }
