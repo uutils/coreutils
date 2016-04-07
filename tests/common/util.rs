@@ -3,7 +3,7 @@
 extern crate tempdir;
 
 use std::env;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Result};
 use std::ops::{Deref, DerefMut};
 #[cfg(unix)]
@@ -11,11 +11,13 @@ use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Stdio, Child};
 use std::str::from_utf8;
 use std::ffi::OsStr;
 use self::tempdir::TempDir;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "target\\debug\\uutils.exe";
@@ -239,6 +241,12 @@ impl AtPath {
 
     pub fn write(&self, name: &str, contents: &str) {
         let mut f = self.open(name);
+        let _ = f.write(contents.as_bytes());
+    }
+
+    pub fn append(&self, name: &str, contents: &str) {
+        log_info("open(append)", self.plus_as_string(name));
+        let mut f = OpenOptions::new().write(true).append(true).open(self.plus(name)).unwrap();
         let _ = f.write(contents.as_bytes());
     }
 
@@ -480,35 +488,38 @@ impl UCommand {
         Box::new(self)
     }
 
-    pub fn run(&mut self) -> CmdResult {
+    /// Spawns the command, feeds the stdin if any, and returns immediately.
+    pub fn run_no_wait(&mut self) -> Child {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let prog = match self.stdin {
-            Some(ref input) => {
-                let mut result = self.raw
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
+        let mut result = self.raw
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
 
-                result.stdin
-                    .take()
-                    .unwrap_or_else(
-                        || panic!(
-                            "Could not take child process stdin"))
-                    .write_all(&input)
-                    .unwrap_or_else(|e| panic!("{}", e));
+        if let Some(ref input) = self.stdin {
+            result.stdin
+                .take()
+                .unwrap_or_else(
+                    || panic!(
+                        "Could not take child process stdin"))
+                .write_all(&input)
+                .unwrap_or_else(|e| panic!("{}", e));
+        }
 
-                result.wait_with_output().unwrap()
-            }
-            None => {
-                self.raw.output().unwrap()
-            }
-        };
+        result
+    }
+
+    /// Spawns the command, feeds the stdin if any, waits for the result
+    /// and returns it.
+    pub fn run(&mut self) -> CmdResult {
+        let prog = self.run_no_wait().wait_with_output().unwrap();
+
         CmdResult {
             success: prog.status.success(),
             stdout: from_utf8(&prog.stdout).unwrap().to_string(),
@@ -539,6 +550,14 @@ impl UCommand {
         cmd_result.failure();
         cmd_result
     }
+}
+
+pub fn read_size(child: &mut Child, size: usize) -> String {
+    let mut output = Vec::new();
+    output.resize(size, 0);
+    sleep(Duration::from_millis(100));
+    child.stdout.as_mut().unwrap().read(output.as_mut_slice()).unwrap();
+    String::from_utf8(output).unwrap()
 }
 
 // returns a testSet and a ucommand initialized to the utility binary
