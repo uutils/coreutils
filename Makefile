@@ -33,7 +33,7 @@ BUILDDIR      := $(BASEDIR)/target/${PROFILE}/
 PKG_BUILDDIR  := $(BUILDDIR)/deps/
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp/
-BUSYBOX_VER := 1.24.1
+BUSYBOX_VER := 1.22.0
 BUSYBOX_SRC:=$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)/
 
 # Possible programs

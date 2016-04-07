@@ -246,7 +246,7 @@ impl AtPath {
 
     pub fn append(&self, name: &str, contents: &str) {
         log_info("open(append)", self.plus_as_string(name));
-        let mut f = OpenOptions::new().append(true).open(self.plus(name)).unwrap();
+        let mut f = OpenOptions::new().write(true).append(true).open(self.plus(name)).unwrap();
         let _ = f.write(contents.as_bytes());
     }
 
