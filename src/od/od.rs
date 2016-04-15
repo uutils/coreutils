@@ -71,6 +71,11 @@ fn odfunc(input_offset_base: &Radix, fname: &str) {
     let bytes = &mut [b'\x00'; 16];
     loop {
         match f.read(bytes) {
+            Ok(0) => {
+                print_with_radix(input_offset_base, addr);
+                print!("\n");
+                break;
+            }
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
                 for b in 0 .. n / mem::size_of::<u16>() {
