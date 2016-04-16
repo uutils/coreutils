@@ -23,6 +23,7 @@ use crypto::digest::Digest;
 use crypto::md5::Md5;
 use crypto::sha1::Sha1;
 use crypto::sha2::{Sha224, Sha256, Sha384, Sha512};
+use crypto::sha3::{Sha3, Sha3Mode};
 use regex::Regex;
 use std::ascii::AsciiExt;
 use std::fs::File;
@@ -36,7 +37,10 @@ fn is_custom_binary(program: &str) -> bool {
     match program {
         "md5sum" | "sha1sum"
             | "sha224sum" | "sha256sum"
-            | "sha384sum" | "sha512sum" => true,
+            | "sha384sum" | "sha512sum"
+            | "sha3-224sum" | "sha3-256sum"
+            | "sha3-384sum" | "sha3-512sum"
+            | "shake128sum" | "shake256sum" => true,
         _ => false
     }
 }
@@ -51,6 +55,10 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<Digest>),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<Digest>),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<Digest>),
+        "sha3-224sum" => ("SHA3-224", Box::new(Sha3::new(Sha3Mode::Sha3_224)) as Box<Digest>),
+        "sha3-256sum" => ("SHA3-256", Box::new(Sha3::new(Sha3Mode::Sha3_256)) as Box<Digest>),
+        "sha3-384sum" => ("SHA3-384", Box::new(Sha3::new(Sha3Mode::Sha3_384)) as Box<Digest>),
+        "sha3-512sum" => ("SHA3-512", Box::new(Sha3::new(Sha3Mode::Sha3_512)) as Box<Digest>),
         _ => {
             {
                 let mut set_or_crash = |n, val| -> () {
@@ -64,6 +72,10 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
                 if matches.opt_present("sha256") { set_or_crash("SHA256", Box::new(Sha256::new())) };
                 if matches.opt_present("sha384") { set_or_crash("SHA384", Box::new(Sha384::new())) };
                 if matches.opt_present("sha512") { set_or_crash("SHA512", Box::new(Sha512::new())) };
+                if matches.opt_present("sha3-224") { set_or_crash("SHA3-224", Box::new(Sha3::new(Sha3Mode::Sha3_224))) };
+                if matches.opt_present("sha3-256") { set_or_crash("SHA3-256", Box::new(Sha3::new(Sha3Mode::Sha3_256))) };
+                if matches.opt_present("sha3-384") { set_or_crash("SHA3-384", Box::new(Sha3::new(Sha3Mode::Sha3_384))) };
+                if matches.opt_present("sha3-512") { set_or_crash("SHA3-512", Box::new(Sha3::new(Sha3Mode::Sha3_512))) };
             }
             if alg.is_none() { crash!(1, "You must specify hash algorithm!") };
             (name, alg.unwrap())
@@ -97,6 +109,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         opts.optflag("", "sha256", "work with SHA256");
         opts.optflag("", "sha384", "work with SHA384");
         opts.optflag("", "sha512", "work with SHA512");
+        opts.optflag("", "sha3-224", "work with SHA3-224");
+        opts.optflag("", "sha3-256", "work with SHA3-256");
+        opts.optflag("", "sha3-384", "work with SHA3-384");
+        opts.optflag("", "sha3-512", "work with SHA3-512");
     }
 
     let matches = match opts.parse(&args[1..]) {
@@ -145,7 +161,8 @@ fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
     let spec = if is_custom_binary(binary_name) {
         format!("  {} [OPTION]... [FILE]...", program)
     } else {
-        format!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512}} [OPTION]... [FILE]...", program)
+        format!("  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512|\
+                        --sha3-224|--sha3-256|--sha3-384|sha3-512}} [OPTION]... [FILE]...", program)
     };
 
     let msg = format!("{} {}

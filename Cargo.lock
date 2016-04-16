@@ -348,7 +348,7 @@ dependencies = [
  "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.1.44 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex-syntax 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "rust-crypto 0.2.34 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rust-crypto 0.2.35 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "rust-crypto"
-version = "0.2.34"
+version = "0.2.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "gcc 0.3.21 (registry+https://github.com/rust-lang/crates.io-index)",
