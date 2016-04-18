@@ -76,9 +76,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         _ => {
             let mut res = true;
             if matches.free.len() == 0 {
-                writeln!(&mut std::io::stderr(),
-                    "{}: missing operand\nTry {} --help for more information",
-                    NAME, NAME);
+                show_error!(
+                    "missing operand\nTry {} --help for more information", NAME
+                );
                 res = false;
             }
             // free strings are path operands
