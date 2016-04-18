@@ -39,6 +39,15 @@ macro_rules! assert_empty_stderr(
 );
 
 #[macro_export]
+macro_rules! assert_empty_stdout(
+    ($cond:expr) => (
+        if $cond.stdout.len() > 0 {
+            panic!(format!("stdout: {}", $cond.stdout))
+        }
+    );
+);
+
+#[macro_export]
 macro_rules! assert_no_error(
     ($cond:expr) => (
         assert!($cond.success);
