@@ -75,7 +75,7 @@ fn odfunc(input_offset_base: &Radix, fname: &str) {
                 print_with_radix(input_offset_base, addr);
                 print!("\n");
                 break;
-            }, 
+            }
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
                 for b in 0 .. n / mem::size_of::<u16>() {
