@@ -78,13 +78,15 @@ fn odfunc(input_offset_base: &Radix, fname: &str) {
             }
             Ok(n) => {
                 print_with_radix(input_offset_base, addr);
+                print!("  "); // 3 spaces after offset - we print 2 more before each word
+                
                 for b in 0 .. n / mem::size_of::<u16>() {
                     let bs = &bytes[(2 * b) .. (2 * b + 2)];
                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
-                    print!(" {:06o}", p);
+                    print!("  {:06o}", p);
                 }
                 if n % mem::size_of::<u16>() == 1 {
-                    print!(" {:06o}", bytes[n - 1]);
+                    print!("  {:06o}", bytes[n - 1]);
                 }
                 print!("\n");
                 addr += n;
