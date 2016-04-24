@@ -61,36 +61,46 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
+const LINEBYTES:usize = 16;
+const WORDBYTES:usize = 2;
+
 fn odfunc(input_offset_base: &Radix, fname: &str) {
     let mut f = match File::open(Path::new(fname)) {
         Ok(f) => f,
         Err(e) => panic!("file error: {}", e)
     };
-
     let mut addr = 0;
-    let bytes = &mut [b'\x00'; 16];
-    loop {
+    let bytes = &mut [b'\x00'; LINEBYTES];
+    loop { // print each line
+        print_with_radix(input_offset_base, addr); // print offset
         match f.read(bytes) {
             Ok(0) => {
-                print_with_radix(input_offset_base, addr);
                 print!("\n");
                 break;
             }
             Ok(n) => {
-                print_with_radix(input_offset_base, addr);
+                print!("  "); // 4 spaces after offset - we print 2 more before each word
+                
                 for b in 0 .. n / mem::size_of::<u16>() {
                     let bs = &bytes[(2 * b) .. (2 * b + 2)];
                     let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
-                    print!(" {:06o}", p);
+                    print!("  {:06o}", p);
                 }
                 if n % mem::size_of::<u16>() == 1 {
-                    print!(" {:06o}", bytes[n - 1]);
+                    print!("  {:06o}", bytes[n - 1]);
                 }
+
+                // Add extra spaces to pad out the short, presumably last, line.
+                if n<LINEBYTES {
+                    // calc # of items we did not print, must be short at least WORDBYTES to be missing any.
+                    let words_short = (LINEBYTES-n)/WORDBYTES; 
+                    print!("{:>width$}", "", width=(words_short)*(6+2));
+                }
+
                 print!("\n");
                 addr += n;
             },
             Err(_) => {
-                print_with_radix(input_offset_base, addr);
                 break;
             }
         };
