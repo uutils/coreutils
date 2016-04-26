@@ -14,8 +14,10 @@ extern crate getopts;
 use std::fs::File;
 use std::io::Read;
 use std::mem;
-use std::path::Path;
-
+use std::io::BufReader;
+use std::io::Write;
+use std::io;
+ 
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
 
@@ -50,62 +52,130 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(r) => r,
         Err(f) => { panic!("Invalid -A/--address-radix\n{}", f) }
     };
-
-    let fname = match args.last() {
-        Some(n) => n,
-        None => { panic!("Need fname for now") ; }
+ 
+    // Gather up file names - args wich don't start with '-'
+    let fnames = args[1..]
+                     .iter()
+                     .filter(|w| !w.starts_with('-'))
+                     .map(|x| x.clone())
+                     .collect::<Vec<_>>();
+ 
+    // With no filenames, od would use stdin as input, which is currently not supported.
+    if fnames.len() == 0 {
+        panic!("Need fname for now") ;
     };
-
-    odfunc(&input_offset_base, &fname);
-
-    0
+    odfunc(&input_offset_base, fnames)
 }
 
 const LINEBYTES:usize = 16;
 const WORDBYTES:usize = 2;
+ 
+fn odfunc(input_offset_base: &Radix, fnames: Vec<String>) -> i32 {
 
-fn odfunc(input_offset_base: &Radix, fname: &str) {
-    let mut f = match File::open(Path::new(fname)) {
-        Ok(f) => f,
-        Err(e) => panic!("file error: {}", e)
-    };
-
-    let mut addr = 0;
-    let bytes = &mut [b'\x00'; LINEBYTES];
-    loop { // print each line
-        print_with_radix(input_offset_base, addr); // print offset
-        match f.read(bytes) {
-            Ok(0) => {
-                print!("\n");
-                break;
-            }
-            Ok(n) => {
-                print!("  "); // 4 spaces after offset - we print 2 more before each word
-                 
-                for b in 0 .. n / mem::size_of::<u16>() {
-                    let bs = &bytes[(2 * b) .. (2 * b + 2)];
-                    let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
-                    print!("  {:06o}", p);
+    let mut status = 0;
+    let mut ni = fnames.iter();
+    {
+        // Open and return the next file to process as a BufReader
+        // Returns None when no more files.
+        let mut next_file = || -> Option<BufReader<File>> {
+            // loop retries with subsequent files if err - normally 'loops' once
+            loop {
+                let fname = match ni.next() {
+                    None => return None,
+                    Some(s) => s,
+                };
+                match File::open(fname) {
+                    Ok(f) => return Some(BufReader::new(f)),
+                    Err(e) => {
+                        // If any file can't be opened,
+                        // print an error at the time that the file is needed,
+                        // then move on the the next file.
+                        // This matches the behavior of the original `od`
+                        let _ = writeln!(&mut std::io::stderr(), "od: '{}': {}", fname, e);
+                        if status == 0 {status = 1}
+                    }
                 }
-                if n % mem::size_of::<u16>() == 1 {
-                    print!("  {:06o}", bytes[n - 1]);
-                }
-
-                // Add extra spaces to pad out the short, presumably last, line.
-                if n<LINEBYTES {
-                    // calc # of items we did not print, must be short at least WORDBYTES to be missing any.
-                    let words_short = (LINEBYTES-n)/WORDBYTES; 
-                    print!("{:>width$}", "", width=(words_short)*(6+2));
-                }
-
-                print!("\n");
-                addr += n;
-            },
-            Err(_) => {
-                break;
             }
         };
+
+        let mut curr_file: BufReader<File> = match next_file() {
+            Some(f) => f, 
+            None => {
+                return 1;
+            } 
+        };
+
+        let mut exhausted = false; // There is no more input, gone to the end of the last file.
+
+        // Fill buf with bytes read from the list of files
+        // Returns Ok(<number of bytes read>) 
+        // Handles io errors itself, thus always returns OK
+        // Fills the provided buffer completely, unless it has run out of input.
+        // If any call returns short (< buf.len()), all subsequent calls will return Ok<0>
+        let mut f_read = |buf: &mut [u8]| -> io::Result<usize> {
+            if exhausted {
+                Ok(0)
+            } else {
+                let mut xfrd = 0;
+                while xfrd < buf.len() {
+                    xfrd += match curr_file.read(&mut buf[xfrd..]) {
+                        Ok(n) => n,
+                        Err(e) => panic!("file error: {}", e),
+                    };
+                    if xfrd == buf.len() {
+                        // transferred all that was asked for.
+                        break;
+                    }
+                    curr_file = match next_file() { 
+                        Some(f) => f, 
+                        None => {
+                            exhausted = true;
+                            break;
+                        } 
+                    };
+                }
+                Ok(xfrd)
+            }
+        };
+ 
+        let mut addr = 0;
+        let bytes = &mut [b'\x00'; LINEBYTES];
+        loop { // print each line
+            print_with_radix(input_offset_base, addr); // print offset
+            match f_read(bytes) {
+                Ok(0) => {
+                    print!("\n");
+                    break;
+                }
+                Ok(n) => {
+                    print!("  "); // 4 spaces after offset - we print 2 more before each word
+                 
+                    for b in 0 .. n / mem::size_of::<u16>() {
+                        let bs = &bytes[(2 * b) .. (2 * b + 2)];
+                        let p: u16 = (bs[1] as u16) << 8 | bs[0] as u16;
+                        print!("  {:06o}", p);
+                    }
+                    if n % mem::size_of::<u16>() == 1 {
+                        print!("  {:06o}", bytes[n - 1]);
+                    }
+ 
+                    // Add extra spaces to pad out the short, presumably last, line.
+                    if n<LINEBYTES {
+                        // calc # of items we did not print, must be short at least WORDBYTES to be missing any.
+                        let words_short = (LINEBYTES-n)/WORDBYTES; 
+                        print!("{:>width$}", "", width=(words_short)*(6+2));
+                    }
+ 
+                    print!("\n");
+                    addr += n;
+                },
+                Err(_) => {
+                    break;
+                }
+            };
+        };
     };
+    status
 }
 
 fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
@@ -129,7 +199,7 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
         }
     }
 }
- 
+
 fn print_with_radix(r: &Radix, x: usize) {
     // TODO(keunwoo): field widths should be based on sizeof(x), or chosen dynamically based on the
     // expected range of address values.  Binary in particular is not great here.
