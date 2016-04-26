@@ -149,6 +149,7 @@ TEST_PROGS  := \
 	mktemp \
 	mv \
 	nl \
+	od \
 	paste \
 	printf \
 	ptx \
