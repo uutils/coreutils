@@ -83,5 +83,45 @@ fn test_no_file() {
     let result = ucmd.arg(file.as_os_str()).run();
      
     assert!(!result.success);
- 
+}
+
+// Test that od reads from stdin instead of a file
+#[test]
+fn test_from_stdin() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+
+    let input = "abcdefghijklmnopqrstuvwxyz\n";
+    let result = ucmd.run_piped_stdin(input.as_bytes());
+    
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, ALPHA_OUT);
+
+}
+
+// Test that od reads from stdin and also from files
+#[test]
+fn test_from_mixed() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+
+    let temp = env::var("TMPDIR").unwrap_or_else(|_| env::var("TEMP").unwrap());
+    let tmpdir = Path::new(&temp);
+    let file1 = tmpdir.join("test-1");
+    let file3 = tmpdir.join("test-3");
+
+    let (data1, data2, data3) = ("abcdefg","hijklmnop","qrstuvwxyz\n");
+    for &(path,data)in &[(&file1, data1),(&file3, data3)] {
+        let mut f = File::create(&path).unwrap();
+        match f.write_all(data.as_bytes()) {
+            Err(_)  => panic!("Test setup failed - could not write file"),
+            _ => {}
+        }
+    }
+   
+    let result = ucmd.arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
+    
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, ALPHA_OUT);
+
 }

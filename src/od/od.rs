@@ -20,7 +20,13 @@ use std::io;
  
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
-
+ 
+#[derive(Debug)]
+enum InputSource<'a> {
+    FileName(&'a str ),
+    Stdin
+}
+ 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
@@ -53,58 +59,62 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(f) => { panic!("Invalid -A/--address-radix\n{}", f) }
     };
  
-    // Gather up file names - args wich don't start with '-'
+    // Gather up file names - args which don't start with '-'
     let fnames = args[1..]
                      .iter()
-                     .filter(|w| !w.starts_with('-'))
-                     .map(|x| x.clone())
+                     .filter(|w| !w.starts_with('-') || w == &"--" ) // "--" starts with '-', but it denotes stdin, not a flag 
+                     .map(|x| match x.as_str() { "--" => InputSource::Stdin, x => InputSource::FileName(x)})
                      .collect::<Vec<_>>();
  
-    // With no filenames, od would use stdin as input, which is currently not supported.
+    // With no filenames, od uses stdin as input.
     if fnames.len() == 0 {
-        panic!("Need fname for now") ;
-    };
-    odfunc(&input_offset_base, fnames)
+        odfunc(&input_offset_base, &[InputSource::Stdin])
+    }
+    else {
+        odfunc(&input_offset_base, &fnames)
+    }
 }
 
 const LINEBYTES:usize = 16;
 const WORDBYTES:usize = 2;
  
-fn odfunc(input_offset_base: &Radix, fnames: Vec<String>) -> i32 {
-
+fn odfunc(input_offset_base: &Radix, fnames: &[InputSource]) -> i32 {
+ 
     let mut status = 0;
     let mut ni = fnames.iter();
     {
         // Open and return the next file to process as a BufReader
         // Returns None when no more files.
-        let mut next_file = || -> Option<BufReader<File>> {
+        let mut next_file = || -> Option<Box<io::Read>> {
             // loop retries with subsequent files if err - normally 'loops' once
             loop {
-                let fname = match ni.next() {
+                match ni.next() {
                     None => return None,
-                    Some(s) => s,
-                };
-                match File::open(fname) {
-                    Ok(f) => return Some(BufReader::new(f)),
-                    Err(e) => {
-                        // If any file can't be opened,
-                        // print an error at the time that the file is needed,
-                        // then move on the the next file.
-                        // This matches the behavior of the original `od`
-                        let _ = writeln!(&mut std::io::stderr(), "od: '{}': {}", fname, e);
-                        if status == 0 {status = 1}
+                    Some(input) => match *input {
+                        InputSource::Stdin => return Some(Box::new(BufReader::new(std::io::stdin()))),
+                        InputSource::FileName(fname) => match File::open(fname) {
+                            Ok(f) => return Some(Box::new(BufReader::new(f))),
+                            Err(e) => {
+                                // If any file can't be opened,
+                                // print an error at the time that the file is needed,
+                                // then move on the the next file.
+                                // This matches the behavior of the original `od`
+                                let _ = writeln!(&mut std::io::stderr(), "od: '{}': {}", fname, e);
+                                if status == 0 {status = 1}
+                            }
+                        }
                     }
                 }
             }
         };
-
-        let mut curr_file: BufReader<File> = match next_file() {
+ 
+        let mut curr_file: Box<io::Read> = match next_file() {
             Some(f) => f, 
             None => {
                 return 1;
             } 
         };
-
+ 
         let mut exhausted = false; // There is no more input, gone to the end of the last file.
 
         // Fill buf with bytes read from the list of files
@@ -117,14 +127,18 @@ fn odfunc(input_offset_base: &Radix, fnames: Vec<String>) -> i32 {
                 Ok(0)
             } else {
                 let mut xfrd = 0;
-                while xfrd < buf.len() {
-                    xfrd += match curr_file.read(&mut buf[xfrd..]) {
-                        Ok(n) => n,
-                        Err(e) => panic!("file error: {}", e),
-                    };
-                    if xfrd == buf.len() {
-                        // transferred all that was asked for.
-                        break;
+                // while buffer we are filling is not full.. May go thru several files.
+                'fillloop: while xfrd < buf.len() {
+                    loop { // stdin may return on 'return' (enter), even though the buffer isn't full.
+                        xfrd += match curr_file.read(&mut buf[xfrd..]) {
+                            Ok(0) => break, 
+                            Ok(n) => n,
+                            Err(e) => panic!("file error: {}", e),
+                        };
+                        if xfrd == buf.len() {
+                            // transferred all that was asked for.
+                            break 'fillloop;
+                        }
                     }
                     curr_file = match next_file() { 
                         Some(f) => f, 
