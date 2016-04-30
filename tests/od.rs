@@ -20,7 +20,8 @@ static ALPHA_OUT: &'static str = "0000000    061141  062143  063145  064147  065
 #[test]
 fn test_file() {
     let (_, mut ucmd) = testing(UTIL_NAME);
-    let temp = env::var("TMPDIR").unwrap_or_else(|_| env::var("TEMP").unwrap());
+    use std::env;
+    let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file = tmpdir.join("test");
      
@@ -45,7 +46,7 @@ fn test_file() {
 #[test]
 fn test_2files() {
     let (_, mut ucmd) = testing(UTIL_NAME);
-    let temp = env::var("TMPDIR").unwrap_or_else(|_| env::var("TEMP").unwrap());
+    let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file1 = tmpdir.join("test1");
     let file2 = tmpdir.join("test2");
@@ -76,7 +77,7 @@ fn test_2files() {
 #[test]
 fn test_no_file() {
     let (_, mut ucmd) = testing(UTIL_NAME);
-    let temp = env::var("TMPDIR").unwrap_or_else(|_| env::var("TEMP").unwrap());
+    let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file = tmpdir.join("}surely'none'would'thus'a'file'name");
      
@@ -104,7 +105,7 @@ fn test_from_stdin() {
 fn test_from_mixed() {
     let (_, mut ucmd) = testing(UTIL_NAME);
 
-    let temp = env::var("TMPDIR").unwrap_or_else(|_| env::var("TEMP").unwrap());
+    let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file1 = tmpdir.join("test-1");
     let file3 = tmpdir.join("test-3");
