@@ -10,10 +10,6 @@ path = "chmod.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
-aho-corasick = "*"
-memchr = "*"
-regex = "*"
-regex-syntax = "*"
 uucore = { path="../uucore" }
 walker = "*"
 
