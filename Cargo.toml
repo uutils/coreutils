@@ -50,6 +50,7 @@ generic = [
   "head",
   "link",
   "ln",
+  "ls",
   "mkdir",
   "nl",
   "nproc",
@@ -119,6 +120,7 @@ id       = { optional=true, path="src/id" }
 kill     = { optional=true, path="src/kill" }
 link     = { optional=true, path="src/link" }
 ln       = { optional=true, path="src/ln" }
+ls       = { optional=true, path="src/ls" }
 logname  = { optional=true, path="src/logname" }
 mkdir    = { optional=true, path="src/mkdir" }
 mktemp   = { optional=true, path="src/mktemp" }

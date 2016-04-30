@@ -35,6 +35,7 @@ dependencies = [
  "link 0.0.1",
  "ln 0.0.1",
  "logname 0.0.1",
+ "ls 0.0.1",
  "memchr 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "mkdir 0.0.1",
  "mkfifo 0.0.1",
@@ -445,6 +446,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ls"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pretty-bytes 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
 name = "memchr"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -565,6 +576,15 @@ dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
+]
+
+[[package]]
+name = "pretty-bytes"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
