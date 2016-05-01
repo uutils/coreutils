@@ -58,6 +58,7 @@ PROGS       := \
   head \
   link \
   ln \
+  ls \
   mkdir \
   mktemp \
   nl \
@@ -146,10 +147,12 @@ TEST_PROGS  := \
 	head \
 	link \
 	ln \
+	ls \
 	mkdir \
 	mktemp \
 	mv \
 	nl \
+	od \
 	paste \
 	pathchk \
 	printf \

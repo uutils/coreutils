@@ -3,18 +3,21 @@
 extern crate tempdir;
 
 use std::env;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Result};
+use std::ops::{Deref, DerefMut};
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, Stdio, Child};
 use std::str::from_utf8;
 use std::ffi::OsStr;
 use self::tempdir::TempDir;
 use std::rc::Rc;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "target\\debug\\uutils.exe";
@@ -28,7 +31,7 @@ static ALREADY_RUN: &'static str = " you have already run this UCommand, if you 
                                     another command in the same test, use TestSet::new instead of \
                                     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
-    
+
 #[macro_export]
 macro_rules! assert_empty_stderr(
     ($cond:expr) => (
@@ -57,6 +60,25 @@ macro_rules! assert_no_error(
     );
 );
 
+#[macro_export]
+macro_rules! path_concat {
+    ($e:expr, ..$n:expr) => {{
+        let n = $n;
+        let mut pb = std::path::PathBuf::new();
+        for _ in 0..n {
+            pb.push($e);
+        }
+        pb.to_str().unwrap().to_owned()
+    }};
+    ($($e:expr),*) => {{
+        let mut pb = std::path::PathBuf::new();
+        $(
+            pb.push($e);
+        )*
+        pb.to_str().unwrap().to_owned()
+    }};
+}
+
 pub struct CmdResult {
     pub success: bool,
     pub stdout: String,
@@ -68,32 +90,40 @@ impl CmdResult {
         assert!(self.success);
         Box::new(self)
     }
+
     pub fn failure(&self) -> Box<&CmdResult> {
         assert!(!self.success);
         Box::new(self)
     }
+
     pub fn no_stderr(&self) -> Box<&CmdResult> {
         assert!(self.stderr.len() == 0);
         Box::new(self)
     }
+
     pub fn no_stdout(&self) -> Box<&CmdResult> {
         assert!(self.stdout.len() == 0);
         Box::new(self)
     }
+
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert!(self.stdout.trim_right() == String::from(msg.as_ref()).trim_right());
         Box::new(self)
     }
+
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert!(self.stderr.trim_right() == String::from(msg.as_ref()).trim_right());
         Box::new(self)
     }
+
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stdout_is(msg).no_stderr()
     }
+
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stderr_is(msg).no_stdout()
     }
+
     pub fn fails_silently(&self) -> Box<&CmdResult> {
         assert!(!self.success);
         assert!(self.stderr.len() == 0);
@@ -103,15 +133,6 @@ impl CmdResult {
 
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
     println!("{}: {}", msg.as_ref(), par.as_ref());
-}
-
-
-pub fn repeat_str(s: &str, n: u32) -> String {
-    let mut repeated = String::new();
-    for _ in 0..n {
-        repeated.push_str(s);
-    }
-    repeated
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
@@ -131,24 +152,71 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn get_root_path() -> &'static str {
+    if cfg!(windows) {
+        "C:\\"
+    } else {
+        "/"
+    }
+}
+
+/// A scoped, temporary file that is removed upon drop.
+pub struct ScopedFile {
+    path: PathBuf,
+    file: File,
+}
+
+impl ScopedFile {
+    fn new(path: PathBuf, file: File) -> ScopedFile {
+        ScopedFile {
+            path: path,
+            file: file
+        }
+    }
+}
+
+impl Deref for ScopedFile {
+    type Target = File;
+    fn deref(&self) -> &File {
+        &self.file
+    }
+}
+
+impl DerefMut for ScopedFile {
+    fn deref_mut(&mut self) -> &mut File {
+        &mut self.file
+    }
+}
+
+impl Drop for ScopedFile {
+    fn drop(&mut self) {
+        fs::remove_file(&self.path).unwrap();
+    }
+}
+
 pub struct AtPath {
     pub subdir: PathBuf,
 }
+
 impl AtPath {
     pub fn new(subdir: &Path) -> AtPath {
         AtPath { subdir: PathBuf::from(subdir) }
     }
+
     pub fn as_string(&self) -> String {
         self.subdir.to_str().unwrap().to_owned()
     }
+
     pub fn plus(&self, name: &str) -> PathBuf {
         let mut pathbuf = self.subdir.clone();
         pathbuf.push(name);
         pathbuf
     }
+
     pub fn plus_as_string(&self, name: &str) -> String {
         String::from(self.plus(name).to_str().unwrap())
     }
+
     fn minus(&self, name: &str) -> PathBuf {
         // relative_from is currently unstable
         let prefixed = PathBuf::from(name);
@@ -163,23 +231,34 @@ impl AtPath {
             prefixed
         }
     }
+
     pub fn minus_as_string(&self, name: &str) -> String {
         String::from(self.minus(name).to_str().unwrap())
     }
+
     pub fn open(&self, name: &str) -> File {
         log_info("open", self.plus_as_string(name));
         File::open(self.plus(name)).unwrap()
     }
+
     pub fn read(&self, name: &str) -> String {
         let mut f = self.open(name);
         let mut contents = String::new();
         let _ = f.read_to_string(&mut contents);
         contents
     }
+
     pub fn write(&self, name: &str, contents: &str) {
         let mut f = self.open(name);
         let _ = f.write(contents.as_bytes());
     }
+
+    pub fn append(&self, name: &str, contents: &str) {
+        log_info("open(append)", self.plus_as_string(name));
+        let mut f = OpenOptions::new().write(true).append(true).open(self.plus(name)).unwrap();
+        let _ = f.write(contents.as_bytes());
+    }
+
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
@@ -188,21 +267,29 @@ impl AtPath {
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
     }
+
     pub fn make_file(&self, name: &str) -> File {
         match File::create(&self.plus(name)) {
             Ok(f) => f,
             Err(e) => panic!("{}", e),
         }
     }
+
+    pub fn make_scoped_file(&self, name: &str) -> ScopedFile {
+        ScopedFile::new(self.plus(name), self.make_file(name))
+    }
+
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
         File::create(&self.plus(file)).unwrap();
     }
+
     pub fn symlink(&self, src: &str, dst: &str) {
         log_info("symlink",
                  &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)));
         symlink_file(&self.plus(src), &self.plus(dst)).unwrap();
     }
+
     pub fn is_symlink(&self, path: &str) -> bool {
         log_info("is_symlink", self.plus_as_string(path));
         match fs::symlink_metadata(&self.plus(path)) {
@@ -261,7 +348,21 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
-        self.subdir.canonicalize().unwrap().to_str().unwrap().to_owned()
+        let s = self.subdir.canonicalize().unwrap().to_str().unwrap().to_owned();
+
+        // Due to canonicalize()'s use of GetFinalPathNameByHandleW() on Windows, the resolved path
+        // starts with '\\?\' to extend the limit of a given path to 32,767 wide characters.
+        //
+        // To address this issue, we remove this prepended string if available.
+        //
+        // Source:
+        // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
+        let prefix = "\\\\?\\";
+        if s.starts_with(prefix) {
+            String::from(&s[prefix.len()..])
+        } else {
+            s
+        }
     }
 }
 
@@ -271,6 +372,7 @@ pub struct TestSet {
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
 }
+
 impl TestSet {
     pub fn new(util_name: &str) -> TestSet {
         let tmpd = Rc::new(TempDir::new("uutils").unwrap());
@@ -295,14 +397,17 @@ impl TestSet {
         }
         ts
     }
+
     pub fn util_cmd(&self) -> UCommand {
         let mut cmd = self.cmd(&self.bin_path);
         cmd.arg(&self.util_name);
         cmd
     }
+
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
     }
+
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn util_cmd_keepenv(&self) -> UCommand {
@@ -310,6 +415,7 @@ impl TestSet {
         cmd.arg(&self.util_name);
         cmd
     }
+
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
     }
@@ -322,6 +428,7 @@ pub struct UCommand {
     has_run: bool,
     stdin: Option<Vec<u8>>
 }
+
 impl UCommand {
     pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
         UCommand {
@@ -351,12 +458,14 @@ impl UCommand {
             stdin: None
         }
     }
+
     pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
         let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
+
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> Box<&mut UCommand> {
         if self.has_run {
             panic!(ALREADY_RUN);
@@ -388,41 +497,45 @@ impl UCommand {
         Box::new(self)
     }
 
-    pub fn run(&mut self) -> CmdResult {
+    /// Spawns the command, feeds the stdin if any, and returns immediately.
+    pub fn run_no_wait(&mut self) -> Child {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let prog = match self.stdin {
-            Some(ref input) => {
-                let mut result = self.raw
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .unwrap();
-                
-                result.stdin
-                    .take()
-                    .unwrap_or_else(
-                        || panic!(
-                            "Could not take child process stdin"))
-                    .write_all(&input)
-                    .unwrap_or_else(|e| panic!("{}", e));
-                
-                result.wait_with_output().unwrap()        
-            }
-            None => {
-                self.raw.output().unwrap()
-            }
-        };
+        let mut result = self.raw
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        if let Some(ref input) = self.stdin {
+            result.stdin
+                .take()
+                .unwrap_or_else(
+                    || panic!(
+                        "Could not take child process stdin"))
+                .write_all(&input)
+                .unwrap_or_else(|e| panic!("{}", e));
+        }
+
+        result
+    }
+
+    /// Spawns the command, feeds the stdin if any, waits for the result
+    /// and returns it.
+    pub fn run(&mut self) -> CmdResult {
+        let prog = self.run_no_wait().wait_with_output().unwrap();
+
         CmdResult {
             success: prog.status.success(),
             stdout: from_utf8(&prog.stdout).unwrap().to_string(),
             stderr: from_utf8(&prog.stderr).unwrap().to_string(),
         }
     }
+
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
         if self.stdin.is_some() {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
@@ -430,19 +543,30 @@ impl UCommand {
         self.stdin = Some(input.into());
         Box::new(self)
     }
+
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
         self.pipe_in(input).run()
     }
+
     pub fn succeeds(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.success();
         cmd_result
     }
+
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
         cmd_result
     }
+}
+
+pub fn read_size(child: &mut Child, size: usize) -> String {
+    let mut output = Vec::new();
+    output.resize(size, 0);
+    sleep(Duration::from_millis(100));
+    child.stdout.as_mut().unwrap().read(output.as_mut_slice()).unwrap();
+    String::from_utf8(output).unwrap()
 }
 
 // returns a testSet and a ucommand initialized to the utility binary
@@ -452,6 +576,7 @@ pub fn testset_and_ucommand(utilname: &str) -> (TestSet, UCommand) {
     let ucmd = ts.util_cmd();
     (ts, ucmd)
 }
+
 pub fn testing(utilname: &str) -> (AtPath, UCommand) {
     let ts = TestSet::new(utilname);
     let ucmd = ts.util_cmd();

@@ -42,11 +42,8 @@ fn main() {
     let binary = Path::new(&args0[..]);
     let binary_as_util = binary.file_name().unwrap().to_str().unwrap();
 
-    match umap.get(binary_as_util) {
-        Some(&uumain) => {
-            std::process::exit(uumain(args));
-        }
-        None => (),
+    if let Some(&uumain) = umap.get(binary_as_util) {
+        std::process::exit(uumain(args));
     }
 
     if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
@@ -56,7 +53,7 @@ fn main() {
         let mut found = false;
         for util in umap.keys() {
             if binary_as_util.ends_with(util) {
-                args[0] = util.clone().to_owned();
+                args[0] = (*util).to_owned();
                 found = true;
                 break;
             }

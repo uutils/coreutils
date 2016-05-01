@@ -9,10 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate aho_corasick;
 extern crate getopts;
 extern crate libc;
-extern crate memchr;
 extern crate walker;
 
 #[macro_use]
@@ -29,7 +27,7 @@ use walker::Walker;
 const NAME: &'static str = "chmod";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(mut args: Vec<String>) -> i32 {
     let mut opts = Options::new();
     opts.optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)");
     opts.optflag("f", "quiet", "suppress most error messages (unimplemented)"); // TODO: support --silent
@@ -40,7 +38,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("R", "recursive", "change files and directories recursively");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
-    // TODO: sanitize input for - at beginning (e.g. chmod -x testfile).  Solution is to add a to -x, making a-x
+    // sanitize input for - at beginning (e.g. chmod -x testfile). Remove
+    // the option and save it for later, after parsing is finished.
+    let mut negative_option = None;
+    for i in 0..args.len() {
+        if let Some(first) = args[i].chars().nth(0) {
+            if first != '-' {
+                continue;
+            }
+
+            if let Some(second) = args[i].chars().nth(1) {
+                match second {
+                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0' ... '7' => {
+                        negative_option = Some(args.remove(i));
+                        break;
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+
     let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => { crash!(1, "{}", f) }
@@ -86,7 +104,13 @@ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
         });
         let cmode =
             if fmode.is_none() {
-                Some(matches.free.remove(0))
+                // If there was a negative option, now it's a good time to
+                // use it.
+                if negative_option.is_some() {
+                    negative_option
+                } else {
+                    Some(matches.free.remove(0))
+                }
             } else {
                 None
             };
