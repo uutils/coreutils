@@ -1,0 +1,17 @@
+[package]
+name = "mknod"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_mknod"
+path = "mknod.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "mknod"
+path = "main.rs"

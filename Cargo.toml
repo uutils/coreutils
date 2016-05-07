@@ -16,6 +16,7 @@ unix = [
   "kill",
   "logname",
   "mkfifo",
+  "mknod",
   "mktemp",
   "mv",
   "nice",
@@ -123,8 +124,9 @@ ln       = { optional=true, path="src/ln" }
 ls       = { optional=true, path="src/ls" }
 logname  = { optional=true, path="src/logname" }
 mkdir    = { optional=true, path="src/mkdir" }
-mktemp   = { optional=true, path="src/mktemp" }
 mkfifo   = { optional=true, path="src/mkfifo" }
+mknod    = { optional=true, path="src/mknod" }
+mktemp   = { optional=true, path="src/mktemp" }
 mv       = { optional=true, path="src/mv" }
 nice     = { optional=true, path="src/nice" }
 nl       = { optional=true, path="src/nl" }
