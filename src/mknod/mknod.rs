@@ -79,9 +79,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 Mandatory arguments to long options are mandatory for short options too.
   -m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
-  -Z                   set the SELinux security context to default type
-      --context[=CTX]  like -Z, or if CTX is specified then set the SELinux
-                         or SMACK security context to CTX
       --help     display this help and exit
       --version  output version information and exit
 
