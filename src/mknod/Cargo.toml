@@ -9,7 +9,7 @@ path = "mknod.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
+libc = "^0.2.4"
 uucore = { path="../uucore" }
 
 [[bin]]
