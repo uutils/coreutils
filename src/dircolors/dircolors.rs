@@ -1,0 +1,380 @@
+#![crate_name = "uu_dircolors"]
+
+// This file is part of the uutils coreutils package.
+//
+// (c) Jian Zeng <anonymousknight96@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+
+extern crate libc;
+extern crate glob;
+extern crate getopts;
+
+#[macro_use]
+extern crate uucore;
+
+use getopts::Options;
+
+use std::fs::File;
+use std::io::{BufRead, BufReader, Write};
+use std::borrow::Borrow;
+use std::env;
+
+static NAME: &'static str = "dircolors";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+mod colors;
+use colors::INTERNAL_DB;
+
+#[derive(PartialEq, Debug)]
+enum OutputFmt {
+    Shell,
+    CShell,
+    Unknown,
+}
+
+macro_rules! disp_err {
+    ($($args:tt)+) => ({
+        pipe_write!(&mut ::std::io::stderr(), "{}: ", NAME);
+        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
+        pipe_writeln!(&mut ::std::io::stderr(), "Try '{} --help' for more information.", NAME);
+    })
+}
+
+fn guess_syntax() -> OutputFmt {
+    match env::var("SHELL") {
+        Ok(s) => {
+            if s.is_empty() {
+                return OutputFmt::Unknown;
+            }
+            if let Some(last) = s.rsplit('/').next() {
+                if last == "csh" || last == "tcsh" {
+                    OutputFmt::CShell
+                } else {
+                    OutputFmt::Shell
+                }
+            } else {
+                OutputFmt::Shell
+            }
+        }
+        Err(_) => OutputFmt::Unknown,
+    }
+}
+
+pub fn uumain(args: Vec<String>) -> i32 {
+    let mut opts = Options::new();
+
+    opts.optflag("b", "sh", "output Bourne shell code to set LS_COLORS");
+    opts.optflag("",
+                 "bourne-shell",
+                 "output Bourne shell code to set LS_COLORS");
+    opts.optflag("c", "csh", "output C shell code to set LS_COLORS");
+    opts.optflag("", "c-shell", "output C shell code to set LS_COLORS");
+    opts.optflag("p", "print-database", "print the byte counts");
+
+    opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("", "version", "output version information and exit");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => crash!(1, "Invalid options\n{}", f),
+    };
+
+    if matches.opt_present("help") {
+        println!("Usage: {} [OPTION]... [FILE]
+Output commands to set the LS_COLORS environment variable.
+
+Determine format of output:
+  -b, --sh, --bourne-shell    output Bourne shell code to set LS_COLORS
+  -c, --csh, --c-shell        output C shell code to set LS_COLORS
+  -p, --print-database        output defaults
+      --help     display this help and exit
+      --version  output version information and exit
+
+If FILE is specified, read it to determine which colors to use for which
+file types and extensions.  Otherwise, a precompiled database is used.
+For details on the format of these files, run 'dircolors --print-database'.",
+                 NAME);
+        return 0;
+    }
+
+    if matches.opt_present("version") {
+        println!("{} {}", NAME, VERSION);
+        return 0;
+    }
+
+    if (matches.opt_present("csh") || matches.opt_present("c-shell") ||
+        matches.opt_present("sh") || matches.opt_present("bourne-shell")) &&
+       matches.opt_present("print-database") {
+        disp_err!("the options to output dircolors' internal database and\nto select a shell \
+                   syntax are mutually exclusive");
+        return 1;
+    }
+
+    if matches.opt_present("print-database") {
+        if !matches.free.is_empty() {
+            disp_err!("extra operand ‘{}’\nfile operands cannot be combined with \
+                      --print-database (-p)",
+                      matches.free[0]);
+            return 1;
+        }
+        println!("{}", INTERNAL_DB);
+        return 0;
+    }
+
+    let mut out_format = OutputFmt::Unknown;
+    if matches.opt_present("csh") || matches.opt_present("c-shell") {
+        out_format = OutputFmt::CShell;
+    } else if matches.opt_present("sh") || matches.opt_present("bourne-shell") {
+        out_format = OutputFmt::Shell;
+    }
+
+    if out_format == OutputFmt::Unknown {
+        match guess_syntax() {
+            OutputFmt::Unknown => {
+                show_info!("no SHELL environment variable, and no shell type option given");
+                return 1;
+            }
+            fmt => out_format = fmt,
+        }
+    }
+
+    let result;
+    if matches.free.is_empty() {
+        result = parse(INTERNAL_DB.lines(), out_format, "")
+    } else {
+        if matches.free.len() > 1 {
+            disp_err!("extra operand ‘{}’", matches.free[1]);
+            return 1;
+        }
+        match File::open(matches.free[0].as_str()) {
+            Ok(f) => {
+                let fin = BufReader::new(f);
+                result = parse(fin.lines().filter_map(|l| l.ok()),
+                               out_format,
+                               matches.free[0].as_str())
+            }
+            Err(e) => {
+                show_info!("{}: {}", matches.free[0], e);
+                return 1;
+            }
+        }
+    }
+    match result {
+        Ok(s) => {
+            println!("{}", s);
+            0
+        }
+        Err(s) => {
+            show_info!("{}", s);
+            1
+        }
+    }
+}
+
+trait StrUtils {
+    fn purify(&self) -> &Self;
+    fn split_two(&self) -> (&str, &str);
+    fn fnmatch(&self, pattern: &str) -> bool;
+}
+
+impl StrUtils for str {
+    /// Remove comments and trim whitespaces
+    fn purify(&self) -> &Self {
+        let mut line = self;
+        for (n, c) in self.chars().enumerate() {
+            if c != '#' {
+                continue;
+            }
+
+            // Ignore if '#' is at the beginning of line
+            if n == 0 {
+                line = &self[..0];
+                break;
+            }
+
+            // Ignore the content after '#'
+            // only if it is preceded by at least one whitespace
+            if self.chars().nth(n - 1).unwrap().is_whitespace() {
+                line = &self[..n];
+            }
+        }
+        line.trim()
+    }
+
+    /// Like split_whitespace() but only produce 2 components
+    fn split_two(&self) -> (&str, &str) {
+        if let Some(b) = self.find(char::is_whitespace) {
+            let key = &self[..b];
+            if let Some(e) = self[b..].find(|c: char| !c.is_whitespace()) {
+                (key, &self[b + e..])
+            } else {
+                (key, "")
+            }
+        } else {
+            ("", "")
+        }
+    }
+
+    fn fnmatch(&self, pat: &str) -> bool {
+        pat.parse::<glob::Pattern>().unwrap().matches(self)
+    }
+}
+
+#[derive(PartialEq)]
+enum ParseState {
+    Global,
+    Matched,
+    Continue,
+    Pass,
+}
+use std::collections::HashMap;
+fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
+    where T: IntoIterator,
+          T::Item: Borrow<str>
+{
+    // 1440 > $(dircolors | wc -m)
+    let mut result = String::with_capacity(1440);
+    match fmt {
+        OutputFmt::Shell => result.push_str("LS_COLORS='"),
+        OutputFmt::CShell => result.push_str("setenv LS_COLORS '"),
+        _ => unreachable!(),
+    }
+
+    let mut table: HashMap<&str, &str> = HashMap::with_capacity(48);
+    table.insert("normal", "no");
+    table.insert("norm", "no");
+    table.insert("file", "fi");
+    table.insert("reset", "rs");
+    table.insert("dir", "di");
+    table.insert("lnk", "ln");
+    table.insert("link", "ln");
+    table.insert("symlink", "ln");
+    table.insert("orphan", "or");
+    table.insert("missing", "mi");
+    table.insert("fifo", "pi");
+    table.insert("pipe", "pi");
+    table.insert("sock", "so");
+    table.insert("blk", "bd");
+    table.insert("block", "bd");
+    table.insert("chr", "cd");
+    table.insert("char", "cd");
+    table.insert("door", "do");
+    table.insert("exec", "ex");
+    table.insert("left", "lc");
+    table.insert("leftcode", "lc");
+    table.insert("right", "rc");
+    table.insert("rightcode", "rc");
+    table.insert("end", "ec");
+    table.insert("endcode", "ec");
+    table.insert("suid", "su");
+    table.insert("setuid", "su");
+    table.insert("sgid", "sg");
+    table.insert("setgid", "sg");
+    table.insert("sticky", "st");
+    table.insert("other_writable", "ow");
+    table.insert("owr", "ow");
+    table.insert("sticky_other_writable", "tw");
+    table.insert("owt", "tw");
+    table.insert("capability", "ca");
+    table.insert("multihardlink", "mh");
+    table.insert("clrtoeol", "cl");
+
+    let term = env::var("TERM").unwrap_or("none".to_owned());
+    let term = term.as_str();
+
+    let mut state = ParseState::Global;
+
+    for (num, line) in lines.into_iter().enumerate() {
+        let num = num + 1;
+        let line = line.borrow().purify();
+        if line.is_empty() {
+            continue;
+        }
+
+        let (key, val) = line.split_two();
+        if val.is_empty() {
+            return Err(format!("{}:{}: invalid line;  missing second token", fp, num));
+        }
+        let lower = key.to_lowercase();
+
+        if lower == "term" {
+            if term.fnmatch(val) {
+                state = ParseState::Matched;
+            } else if state != ParseState::Matched {
+                state = ParseState::Pass;
+            }
+        } else {
+            if state == ParseState::Matched {
+                // prevent subsequent mismatched TERM from
+                // cancelling the input
+                state = ParseState::Continue;
+            }
+            if state != ParseState::Pass {
+                if key.starts_with(".") {
+                    result.push_str(format!("*{}={}:", key, val).as_str());
+                } else if key.starts_with("*") {
+                    result.push_str(format!("{}={}:", key, val).as_str());
+                } else if lower == "options" || lower == "color" || lower == "eightbit" {
+                    // Slackware only. Ignore
+                } else {
+                    if let Some(s) = table.get(lower.as_str()) {
+                        result.push_str(format!("{}={}:", s, val).as_str());
+                    } else {
+                        return Err(format!("{}:{}: unrecognized keyword {}", fp, num, key));
+                    }
+                }
+            }
+        }
+    }
+
+    match fmt {
+        OutputFmt::Shell => result.push_str("';\nexport LS_COLORS"),
+        OutputFmt::CShell => result.push('\''),
+        _ => unreachable!(),
+    }
+
+    Ok(result)
+}
+
+#[test]
+fn test_shell_syntax() {
+    use std::env;
+    let last = env!("SHELL");
+    env::set_var("SHELL", "/path/csh");
+    assert_eq!(OutputFmt::CShell, guess_syntax());
+    env::set_var("SHELL", "csh");
+    assert_eq!(OutputFmt::CShell, guess_syntax());
+    env::set_var("SHELL", "/path/bash");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "bash");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "bash");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "/asd/bar");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "foo");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "");
+    assert_eq!(OutputFmt::Unknown, guess_syntax());
+    env::remove_var("SHELL");
+    assert_eq!(OutputFmt::Unknown, guess_syntax());
+
+    env::set_var("SHELL", last);
+}
+
+#[test]
+fn test_strutils() {
+    let s = "  asd#zcv #hk\t\n  ";
+    assert_eq!("asd#zcv", s.purify());
+
+    let s = "con256asd";
+    assert!(s.fnmatch("*[2][3-6][5-9]?sd"));
+
+    let s = "zxc \t\nqwe jlk    hjl";
+    let (k, v) = s.split_two();
+    assert_eq!("zxc", k);
+    assert_eq!("qwe jlk    hjl", v);
+}

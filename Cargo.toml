@@ -38,6 +38,7 @@ generic = [
   "comm",
   "cp",
   "cut",
+  "dircolors",
   "dirname",
   "echo",
   "env",
@@ -102,6 +103,7 @@ cksum    = { optional=true, path="src/cksum" }
 comm     = { optional=true, path="src/comm" }
 cp       = { optional=true, path="src/cp" }
 cut      = { optional=true, path="src/cut" }
+dircolors= { optional=true, path="src/dircolors" }
 dirname  = { optional=true, path="src/dirname" }
 du       = { optional=true, path="src/du" }
 echo     = { optional=true, path="src/echo" }
