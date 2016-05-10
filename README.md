@@ -156,7 +156,6 @@ To do
 - date
 - dd
 - df
-- dircolors
 - expr (almost done, no regular expressions)
 - getlimits
 - install

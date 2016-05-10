@@ -45,6 +45,7 @@ PROGS       := \
   comm \
   cp \
   cut \
+  dircolors \
   dirname \
   echo \
   env \
@@ -135,6 +136,7 @@ TEST_PROGS  := \
 	comm \
 	cp \
 	cut \
+	dircolors \
 	dirname \
 	echo \
 	env \

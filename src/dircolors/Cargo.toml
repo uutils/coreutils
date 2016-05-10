@@ -1,0 +1,18 @@
+[package]
+name = "dircolors"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_dircolors"
+path = "dircolors.rs"
+
+[dependencies]
+getopts = "*"
+glob = "*"
+libc = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "dircolors"
+path = "main.rs"
