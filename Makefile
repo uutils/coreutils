@@ -16,7 +16,7 @@ CARGOFLAGS ?=
 
 # Install directories
 PREFIX ?= /usr/local
-DESTDIR ?= 
+DESTDIR ?=
 BINDIR ?= /bin
 LIBDIR ?= /lib
 
@@ -107,6 +107,7 @@ UNIX_PROGS := \
   kill \
   logname \
   mkfifo \
+  mknod \
   mv \
   nice \
   nohup \
@@ -182,7 +183,7 @@ TESTS       := \
 	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
 
 TEST_NO_FAIL_FAST :=
-TEST_SPEC_FEATURE := 
+TEST_SPEC_FEATURE :=
 ifneq ($(SPEC),)
 TEST_NO_FAIL_FAST :=--no-fail-fast
 TEST_SPEC_FEATURE := test_unimplemented
@@ -236,7 +237,7 @@ $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
 
 build-pkgs: $(addprefix build_exe_,$(EXES))
 
-build-uutils: 
+build-uutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build: build-uutils build-pkgs
@@ -254,11 +255,11 @@ busybox-src:
 	fi; \
 
 # This is a busybox-specific config file their test suite wants to parse.
-$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config 
+$(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 	cp $< $@
 
 # Test under the busybox testsuite
-$(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config 
+$(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config
 	cp $(BUILDDIR)/uutils $(BUILDDIR)/busybox; \
 	chmod +x $@;
 
@@ -269,12 +270,12 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	$(RM) -rf $(BUILDDIR) 
+	$(RM) -rf $(BUILDDIR)
 
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
-install: build 
+install: build
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
 	install $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils

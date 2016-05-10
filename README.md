@@ -162,7 +162,6 @@ To do
 - install
 - join
 - ls
-- mknod
 - mktemp (almost done, some options are not working)
 - mv (almost done, one more option)
 - numfmt
