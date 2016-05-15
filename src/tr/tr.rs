@@ -83,7 +83,7 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
             let mut chars = buf.chars();
 
             while let Some(char) = chars.next() {
-                let trc = match map.get(&(char as usize)) {
+                let trc = match map.get(char as usize) {
                     Some(t) => *t,
                     None => char,
                 };

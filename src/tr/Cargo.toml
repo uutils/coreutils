@@ -11,7 +11,7 @@ path = "tr.rs"
 getopts = "*"
 libc = "*"
 bit-set = "*"
-vec_map = "*"
+vec_map = "0.6.0"
 uucore = { path="../uucore" }
 
 [[bin]]
