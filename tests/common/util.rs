@@ -60,6 +60,14 @@ macro_rules! assert_no_error(
     );
 );
 
+pub fn repeat_str(s: &str, n: u32) -> String {
+    let mut repeated = String::new();
+    for _ in 0..n {
+        repeated.push_str(s);
+    }
+    repeated
+}
+
 #[macro_export]
 macro_rules! path_concat {
     ($e:expr, ..$n:expr) => {{
