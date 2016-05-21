@@ -13,6 +13,13 @@ install:
 
 build_script:
   - cargo build --features generic --no-default-features
+  - 7z a -tzip uutils.zip .\target\release\deps\*.exe
+
+artifacts:
+  - path: uutils.zip
+    name: zipfile
+  - path: target\release\uutils.exe
+    name: uutils.exe
 
 test_script:
   - cargo test --no-fail-fast --features generic --no-default-features
