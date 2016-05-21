@@ -44,6 +44,15 @@ macro_rules! show_info(
 );
 
 #[macro_export]
+macro_rules! disp_err(
+    ($($args:tt)+) => ({
+        pipe_write!(&mut ::std::io::stderr(), "{}: ", executable!());
+        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
+        pipe_writeln!(&mut ::std::io::stderr(), "Try '{} --help' for more information.", executable!());
+    })
+);
+
+#[macro_export]
 macro_rules! eprint(
     ($($args:tt)+) => (pipe_write!(&mut ::std::io::stderr(), $($args)+))
 );
