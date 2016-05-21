@@ -35,21 +35,14 @@ enum OutputFmt {
     Unknown,
 }
 
-macro_rules! disp_err {
-    ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: ", NAME);
-        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
-        pipe_writeln!(&mut ::std::io::stderr(), "Try '{} --help' for more information.", NAME);
-    })
-}
-
 fn guess_syntax() -> OutputFmt {
+    use std::path;
     match env::var("SHELL") {
         Ok(s) => {
             if s.is_empty() {
                 return OutputFmt::Unknown;
             }
-            if let Some(last) = s.rsplit('/').next() {
+            if let Some(last) = s.rsplit(path::MAIN_SEPARATOR).next() {
                 if last == "csh" || last == "tcsh" {
                     OutputFmt::CShell
                 } else {
@@ -79,7 +72,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
+        Err(f) => {
+            disp_err!("{}", f);
+            return 1;
+        }
     };
 
     if matches.opt_present("help") {
@@ -175,13 +171,14 @@ For details on the format of these files, run 'dircolors --print-database'.",
 }
 
 trait StrUtils {
+    /// Remove comments and trim whitespaces
     fn purify(&self) -> &Self;
+    /// Like split_whitespace() but only produce 2 components
     fn split_two(&self) -> (&str, &str);
     fn fnmatch(&self, pattern: &str) -> bool;
 }
 
 impl StrUtils for str {
-    /// Remove comments and trim whitespaces
     fn purify(&self) -> &Self {
         let mut line = self;
         for (n, c) in self.chars().enumerate() {
@@ -204,7 +201,6 @@ impl StrUtils for str {
         line.trim()
     }
 
-    /// Like split_whitespace() but only produce 2 components
     fn split_two(&self) -> (&str, &str) {
         if let Some(b) = self.find(char::is_whitespace) {
             let key = &self[..b];
@@ -342,14 +338,12 @@ fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
 #[test]
 fn test_shell_syntax() {
     use std::env;
-    let last = env!("SHELL");
+    let last = env::var("SHELL");
     env::set_var("SHELL", "/path/csh");
     assert_eq!(OutputFmt::CShell, guess_syntax());
     env::set_var("SHELL", "csh");
     assert_eq!(OutputFmt::CShell, guess_syntax());
     env::set_var("SHELL", "/path/bash");
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "bash");
     assert_eq!(OutputFmt::Shell, guess_syntax());
     env::set_var("SHELL", "bash");
     assert_eq!(OutputFmt::Shell, guess_syntax());
@@ -362,7 +356,9 @@ fn test_shell_syntax() {
     env::remove_var("SHELL");
     assert_eq!(OutputFmt::Unknown, guess_syntax());
 
-    env::set_var("SHELL", last);
+    if let Ok(s) = last {
+        env::set_var("SHELL", s);
+    }
 }
 
 #[test]
