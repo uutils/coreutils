@@ -126,3 +126,53 @@ fn test_from_mixed() {
     assert_eq!(result.stdout, ALPHA_OUT);
 
 }
+
+#[test]
+fn test_multiple_formats() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+
+    let input = "abcdefghijklmnopqrstuvwxyz\n";
+    let result = ucmd.arg("-c").arg("-b").run_piped_stdin(input.as_bytes());
+    
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, "0000000    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p\n          141 142 143 144 145 146 147 150 151 152 153 154 155 156 157 160\n0000020    q   r   s   t   u   v   w   x   y   z  \\n                \n          161 162 163 164 165 166 167 170 171 172 012                \n0000033\n");
+
+}
+
+#[test]
+fn test_dec() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+
+    
+    let input = [ 
+    	0u8, 0u8, 
+    	1u8, 0u8,
+    	2u8, 0u8,
+    	3u8, 0u8,
+    	0xffu8,0x7fu8,
+    	0x00u8,0x80u8,
+    	0x01u8,0x80u8,];
+    let expected_output = "0000000         0       1       2       3   32767  -32768  -32767        \n0000016\n";
+    let result = ucmd.arg("-i").run_piped_stdin(&input[..]);
+    
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+
+
+}
+
+
+// We don't support multibyte chars, so big NEIN to this
+/*
+#[test]
+fn mit_die_umlauten_getesten() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    let result = ucmd.run_piped_stdin("Universität Tübingen".as_bytes());
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout,    
+    "0000000    U   n   i   v   e   r   s   i   t   ä  **   t       T   ü  **\n0000020    b   i   n   g   e   n\n0000026")
+}
+*/
