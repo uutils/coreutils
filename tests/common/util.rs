@@ -30,61 +30,12 @@ static ALREADY_RUN: &'static str = " you have already run this UCommand, if you 
                                     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
-#[macro_export]
-macro_rules! assert_empty_stderr(
-    ($cond:expr) => (
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
-
-#[macro_export]
-macro_rules! assert_empty_stdout(
-    ($cond:expr) => (
-        if $cond.stdout.len() > 0 {
-            panic!(format!("stdout: {}", $cond.stdout))
-        }
-    );
-);
-
-#[macro_export]
-macro_rules! assert_no_error(
-    ($cond:expr) => (
-        assert!($cond.success);
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
-
 pub fn repeat_str(s: &str, n: u32) -> String {
     let mut repeated = String::new();
     for _ in 0..n {
         repeated.push_str(s);
     }
     repeated
-}
-
-#[macro_export]
-macro_rules! path_concat {
-    ($e:expr, ..$n:expr) => {{
-        use std::path::PathBuf;
-        let n = $n;
-        let mut pb = PathBuf::new();
-        for _ in 0..n {
-            pb.push($e);
-        }
-        pb.to_str().unwrap().to_owned()
-    }};
-    ($($e:expr),*) => {{
-        use std::path::PathBuf;
-        let mut pb = PathBuf::new();
-        $(
-            pb.push($e);
-        )*
-        pb.to_str().unwrap().to_owned()
-    }};
 }
 
 pub struct CmdResult {
