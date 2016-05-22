@@ -21,6 +21,7 @@ unix = [
   "mv",
   "nice",
   "nohup",
+  "pathchk",
   "stdbuf",
   "timeout",
   "touch",
@@ -136,6 +137,7 @@ nohup    = { optional=true, path="src/nohup" }
 nproc    = { optional=true, path="src/nproc" }
 od       = { optional=true, path="src/od" }
 paste    = { optional=true, path="src/paste" }
+pathchk  = { optional=true, path="src/pathchk" }
 printenv = { optional=true, path="src/printenv" }
 printf   = { optional=true, path="src/printf" }
 ptx      = { optional=true, path="src/ptx" }

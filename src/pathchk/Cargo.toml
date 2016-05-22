@@ -1,0 +1,17 @@
+[package]
+name = "pathchk"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_pathchk"
+path = "pathchk.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "pathchk"
+path = "main.rs"

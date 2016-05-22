@@ -42,6 +42,15 @@ macro_rules! assert_empty_stderr(
 );
 
 #[macro_export]
+macro_rules! assert_empty_stdout(
+    ($cond:expr) => (
+        if $cond.stdout.len() > 0 {
+            panic!(format!("stdout: {}", $cond.stdout))
+        }
+    );
+);
+
+#[macro_export]
 macro_rules! assert_no_error(
     ($cond:expr) => (
         assert!($cond.success);
@@ -50,6 +59,14 @@ macro_rules! assert_no_error(
         }
     );
 );
+
+pub fn repeat_str(s: &str, n: u32) -> String {
+    let mut repeated = String::new();
+    for _ in 0..n {
+        repeated.push_str(s);
+    }
+    repeated
+}
 
 #[macro_export]
 macro_rules! path_concat {

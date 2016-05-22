@@ -47,6 +47,7 @@ dependencies = [
  "nproc 0.0.1",
  "od 0.0.1",
  "paste 0.0.1",
+ "pathchk 0.0.1",
  "primal 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "printenv 0.0.1",
  "printf 0.0.1",
@@ -571,6 +572,15 @@ dependencies = [
 
 [[package]]
 name = "paste"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
+name = "pathchk"
 version = "0.0.1"
 dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
