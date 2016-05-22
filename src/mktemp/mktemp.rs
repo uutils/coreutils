@@ -31,7 +31,6 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static DEFAULT_TEMPLATE: &'static str = "tmp.XXXXXXXXXX";
 
 
-
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
     opts.optflag("d", "directory", "Make a directory instead of a file");
@@ -171,15 +170,11 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     0
 }
 
-
-
-
 fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> i32 {
     // TODO: respect make_dir option
     if make_dir {
         crash!(1, "Directory option is not supported yet. Sorry.");
     }
-
 
     let tmpfile = NamedTempFileOptions::new()
         .prefix(prefix)
