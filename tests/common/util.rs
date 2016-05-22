@@ -18,17 +18,18 @@ use std::time::Duration;
 use tempdir::TempDir;
 
 #[cfg(windows)]
-static PROGNAME: &'static str = "target\\debug\\uutils.exe";
-#[cfg(windows)]
-static FIXTURES_DIR: &'static str = "tests\\fixtures";
+static PROGNAME: &'static str = "uutils.exe";
 #[cfg(not(windows))]
-static PROGNAME: &'static str = "target/debug/uutils";
-#[cfg(not(windows))]
-static FIXTURES_DIR: &'static str = "tests/fixtures";
+static PROGNAME: &'static str = "uutils";
+
+static TESTS_DIR: &'static str = "tests";
+static FIXTURES_DIR: &'static str = "fixtures";
+
 static ALREADY_RUN: &'static str = " you have already run this UCommand, if you want to run \
                                     another command in the same test, use TestSet::new instead of \
                                     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
+
 
 pub fn repeat_str(s: &str, n: u32) -> String {
     let mut repeated = String::new();
@@ -337,17 +338,20 @@ impl TestSet {
         let tmpd = Rc::new(TempDir::new("uutils").unwrap());
         let ts = TestSet {
             bin_path: {
-                let mut bin_path_builder = env::current_dir().unwrap();
-                bin_path_builder.push(PathBuf::from(PROGNAME));
-                bin_path_builder
+                // Instead of hardcoding the path relative to the current
+                // directory, use Cargo's OUT_DIR to find path to executable.
+                // This allows tests to be run using profiles other than debug.
+                let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..");
+                Path::new(&target_dir).join(PROGNAME).canonicalize().unwrap()
             },
             util_name: String::from(util_name),
             fixtures: AtPath::new(&tmpd.as_ref().path()),
             tmpd: tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
-        fixture_path_builder.push(PathBuf::from(FIXTURES_DIR));
-        fixture_path_builder.push(PathBuf::from(util_name));
+        fixture_path_builder.push(TESTS_DIR);
+        fixture_path_builder.push(FIXTURES_DIR);
+        fixture_path_builder.push(util_name);
         match fs::metadata(&fixture_path_builder) {
             Ok(m) => if m.is_dir() {
                 recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
