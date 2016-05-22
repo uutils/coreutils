@@ -17,6 +17,7 @@ mod sieve;
 
 #[cfg(unix)] mod test_chmod;
 #[cfg(unix)] mod test_mv;
+#[cfg(unix)] mod test_pathchk;
 #[cfg(unix)] mod test_stdbuf;
 #[cfg(unix)] mod test_touch;
 #[cfg(unix)] mod test_unlink;
@@ -46,7 +47,6 @@ mod test_mktemp;
 mod test_nl;
 mod test_od;
 mod test_paste;
-mod test_pathchk;
 mod test_printf;
 mod test_ptx;
 mod test_pwd;
