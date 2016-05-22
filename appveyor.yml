@@ -12,12 +12,9 @@ install:
   - cargo -V
 
 build_script:
-  - cargo build --features generic --no-default-features
-  - 7z a -tzip uutils.zip .\target\release\deps\*.exe
+  - cargo build --release --features generic --no-default-features
 
 artifacts:
-  - path: uutils.zip
-    name: zipfile
   - path: target\release\uutils.exe
     name: uutils.exe
 
