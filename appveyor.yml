@@ -19,4 +19,4 @@ artifacts:
     name: uutils.exe
 
 test_script:
-  - cargo test --no-fail-fast --features generic --no-default-features
+  - cargo test --no-fail-fast

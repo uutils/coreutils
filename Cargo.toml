@@ -192,3 +192,6 @@ tempdir="*"
 [[bin]]
 name = "uutils"
 path = "src/uutils/uutils.rs"
+
+[[test]]
+name = "tests"
