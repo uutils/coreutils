@@ -46,6 +46,7 @@ mod test_mktemp;
 mod test_nl;
 mod test_od;
 mod test_paste;
+mod test_pathchk;
 mod test_printf;
 mod test_ptx;
 mod test_pwd;
