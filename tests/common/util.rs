@@ -3,7 +3,6 @@
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Result};
-use std::ops::{Deref, DerefMut};
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
@@ -120,40 +119,6 @@ pub fn get_root_path() -> &'static str {
     }
 }
 
-/// A scoped, temporary file that is removed upon drop.
-pub struct ScopedFile {
-    path: PathBuf,
-    file: File,
-}
-
-impl ScopedFile {
-    fn new(path: PathBuf, file: File) -> ScopedFile {
-        ScopedFile {
-            path: path,
-            file: file
-        }
-    }
-}
-
-impl Deref for ScopedFile {
-    type Target = File;
-    fn deref(&self) -> &File {
-        &self.file
-    }
-}
-
-impl DerefMut for ScopedFile {
-    fn deref_mut(&mut self) -> &mut File {
-        &mut self.file
-    }
-}
-
-impl Drop for ScopedFile {
-    fn drop(&mut self) {
-        fs::remove_file(&self.path).unwrap();
-    }
-}
-
 pub struct AtPath {
     pub subdir: PathBuf,
 }
@@ -232,10 +197,6 @@ impl AtPath {
             Ok(f) => f,
             Err(e) => panic!("{}", e),
         }
-    }
-
-    pub fn make_scoped_file(&self, name: &str) -> ScopedFile {
-        ScopedFile::new(self.plus(name), self.make_file(name))
     }
 
     pub fn touch(&self, file: &str) {

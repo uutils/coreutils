@@ -65,13 +65,13 @@ fn test_single_big_args() {
 
     let (at, mut ucmd) = testing(UTIL_NAME);
 
-    let mut big_input = at.make_scoped_file(FILE);
+    let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
         write!(&mut big_input, "Line {}\n", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
-    let mut big_expected = at.make_scoped_file(EXPECTED_FILE);
+    let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
         write!(&mut big_expected, "Line {}\n", i).expect("Could not write to EXPECTED_FILE");
     }
@@ -104,14 +104,14 @@ fn test_bytes_big() {
 
     let (at, mut ucmd) = testing(UTIL_NAME);
 
-    let mut big_input = at.make_scoped_file(FILE);
+    let mut big_input = at.make_file(FILE);
     for i in 0..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
         write!(&mut big_input, "{}", digit).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
-    let mut big_expected = at.make_scoped_file(EXPECTED_FILE);
+    let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (BYTES - N_ARG)..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
         write!(&mut big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
@@ -171,13 +171,13 @@ fn test_lines_with_size_suffix() {
 
     let (at, mut ucmd) = testing(UTIL_NAME);
 
-    let mut big_input = at.make_scoped_file(FILE);
+    let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
         writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
-    let mut big_expected = at.make_scoped_file(EXPECTED_FILE);
+    let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
         writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
