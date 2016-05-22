@@ -13,3 +13,7 @@ getopts = "*"
 libc = "*"
 rand = "0.3"
 tempfile = "*"
+
+[[bin]]
+name = "mktemp"
+path = "main.rs"
