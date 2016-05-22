@@ -11,12 +11,11 @@ install:
   - rustc -V
   - cargo -V
 
-build_script:
-  - cargo build --release --features generic --no-default-features
-
 artifacts:
-  - path: target\release\uutils.exe
+  - path: target\debug\uutils.exe
     name: uutils.exe
+
+build: false
 
 test_script:
   - cargo test --no-fail-fast --features generic --no-default-features
