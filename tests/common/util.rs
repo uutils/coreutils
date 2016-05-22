@@ -178,7 +178,6 @@ impl AtPath {
     }
 
     fn minus(&self, name: &str) -> PathBuf {
-        // relative_from is currently unstable
         let prefixed = PathBuf::from(name);
         if prefixed.starts_with(&self.subdir) {
             let mut unprefixed = PathBuf::new();
