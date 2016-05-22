@@ -12,6 +12,7 @@ dependencies = [
  "comm 0.0.1",
  "cp 0.0.1",
  "cut 0.0.1",
+ "dircolors 0.0.1",
  "dirname 0.0.1",
  "du 0.0.1",
  "echo 0.0.1",
@@ -39,6 +40,7 @@ dependencies = [
  "memchr 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "mkdir 0.0.1",
  "mkfifo 0.0.1",
+ "mknod 0.0.1",
  "mktemp 0.0.1",
  "mv 0.0.1",
  "nice 0.0.1",
@@ -209,6 +211,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dircolors"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "glob 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
 name = "dirname"
 version = "0.0.1"
 dependencies = [
@@ -322,6 +334,11 @@ dependencies = [
 [[package]]
 name = "getopts"
 version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "glob"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -475,6 +492,15 @@ dependencies = [
 
 [[package]]
 name = "mkfifo"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
+name = "mknod"
 version = "0.0.1"
 dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",

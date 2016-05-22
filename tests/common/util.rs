@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-extern crate tempdir;
-
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Result};
@@ -14,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, Child};
 use std::str::from_utf8;
 use std::ffi::OsStr;
-use self::tempdir::TempDir;
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
+use tempdir::TempDir;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "target\\debug\\uutils.exe";
@@ -71,15 +69,17 @@ pub fn repeat_str(s: &str, n: u32) -> String {
 #[macro_export]
 macro_rules! path_concat {
     ($e:expr, ..$n:expr) => {{
+        use std::path::PathBuf;
         let n = $n;
-        let mut pb = std::path::PathBuf::new();
+        let mut pb = PathBuf::new();
         for _ in 0..n {
             pb.push($e);
         }
         pb.to_str().unwrap().to_owned()
     }};
     ($($e:expr),*) => {{
-        let mut pb = std::path::PathBuf::new();
+        use std::path::PathBuf;
+        let mut pb = PathBuf::new();
         $(
             pb.push($e);
         )*
