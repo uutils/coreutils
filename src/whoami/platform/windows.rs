@@ -13,7 +13,6 @@ extern crate uucore;
 
 use std::io::{Error, Result};
 use std::mem;
-use std::os::windows::ffi::OsStringExt;
 use uucore::wide::FromWide;
 
 pub unsafe fn getusername() -> Result<String> {
