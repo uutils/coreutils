@@ -12,4 +12,8 @@ uucore = { path="../uucore" }
 getopts = "*"
 libc = "*"
 rand = "0.3"
-tempfile = {git = "https://github.com/Stebalien/tempfile.git"}
+tempfile = "*"
+
+[[bin]]
+name = "mktemp"
+path = "main.rs"

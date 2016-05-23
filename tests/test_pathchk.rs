@@ -1,6 +1,3 @@
-#[macro_use]
-mod common;
-
 use common::util::*;
 
 static UTIL_NAME: &'static str = "pathchk";

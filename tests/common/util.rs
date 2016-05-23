@@ -3,7 +3,6 @@
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write, Result};
-use std::ops::{Deref, DerefMut};
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
 #[cfg(windows)]
@@ -18,45 +17,18 @@ use std::time::Duration;
 use tempdir::TempDir;
 
 #[cfg(windows)]
-static PROGNAME: &'static str = "target\\debug\\uutils.exe";
-#[cfg(windows)]
-static FIXTURES_DIR: &'static str = "tests\\fixtures";
+static PROGNAME: &'static str = "uutils.exe";
 #[cfg(not(windows))]
-static PROGNAME: &'static str = "target/debug/uutils";
-#[cfg(not(windows))]
-static FIXTURES_DIR: &'static str = "tests/fixtures";
+static PROGNAME: &'static str = "uutils";
+
+static TESTS_DIR: &'static str = "tests";
+static FIXTURES_DIR: &'static str = "fixtures";
+
 static ALREADY_RUN: &'static str = " you have already run this UCommand, if you want to run \
                                     another command in the same test, use TestSet::new instead of \
                                     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
-#[macro_export]
-macro_rules! assert_empty_stderr(
-    ($cond:expr) => (
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
-
-#[macro_export]
-macro_rules! assert_empty_stdout(
-    ($cond:expr) => (
-        if $cond.stdout.len() > 0 {
-            panic!(format!("stdout: {}", $cond.stdout))
-        }
-    );
-);
-
-#[macro_export]
-macro_rules! assert_no_error(
-    ($cond:expr) => (
-        assert!($cond.success);
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
-        }
-    );
-);
 
 pub fn repeat_str(s: &str, n: u32) -> String {
     let mut repeated = String::new();
@@ -64,27 +36,6 @@ pub fn repeat_str(s: &str, n: u32) -> String {
         repeated.push_str(s);
     }
     repeated
-}
-
-#[macro_export]
-macro_rules! path_concat {
-    ($e:expr, ..$n:expr) => {{
-        use std::path::PathBuf;
-        let n = $n;
-        let mut pb = PathBuf::new();
-        for _ in 0..n {
-            pb.push($e);
-        }
-        pb.to_str().unwrap().to_owned()
-    }};
-    ($($e:expr),*) => {{
-        use std::path::PathBuf;
-        let mut pb = PathBuf::new();
-        $(
-            pb.push($e);
-        )*
-        pb.to_str().unwrap().to_owned()
-    }};
 }
 
 pub struct CmdResult {
@@ -168,40 +119,6 @@ pub fn get_root_path() -> &'static str {
     }
 }
 
-/// A scoped, temporary file that is removed upon drop.
-pub struct ScopedFile {
-    path: PathBuf,
-    file: File,
-}
-
-impl ScopedFile {
-    fn new(path: PathBuf, file: File) -> ScopedFile {
-        ScopedFile {
-            path: path,
-            file: file
-        }
-    }
-}
-
-impl Deref for ScopedFile {
-    type Target = File;
-    fn deref(&self) -> &File {
-        &self.file
-    }
-}
-
-impl DerefMut for ScopedFile {
-    fn deref_mut(&mut self) -> &mut File {
-        &mut self.file
-    }
-}
-
-impl Drop for ScopedFile {
-    fn drop(&mut self) {
-        fs::remove_file(&self.path).unwrap();
-    }
-}
-
 pub struct AtPath {
     pub subdir: PathBuf,
 }
@@ -226,7 +143,6 @@ impl AtPath {
     }
 
     fn minus(&self, name: &str) -> PathBuf {
-        // relative_from is currently unstable
         let prefixed = PathBuf::from(name);
         if prefixed.starts_with(&self.subdir) {
             let mut unprefixed = PathBuf::new();
@@ -281,10 +197,6 @@ impl AtPath {
             Ok(f) => f,
             Err(e) => panic!("{}", e),
         }
-    }
-
-    pub fn make_scoped_file(&self, name: &str) -> ScopedFile {
-        ScopedFile::new(self.plus(name), self.make_file(name))
     }
 
     pub fn touch(&self, file: &str) {
@@ -386,17 +298,20 @@ impl TestSet {
         let tmpd = Rc::new(TempDir::new("uutils").unwrap());
         let ts = TestSet {
             bin_path: {
-                let mut bin_path_builder = env::current_dir().unwrap();
-                bin_path_builder.push(PathBuf::from(PROGNAME));
-                bin_path_builder
+                // Instead of hardcoding the path relative to the current
+                // directory, use Cargo's OUT_DIR to find path to executable.
+                // This allows tests to be run using profiles other than debug.
+                let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..", PROGNAME);
+                PathBuf::from(AtPath::new(&Path::new(&target_dir)).root_dir_resolved())
             },
             util_name: String::from(util_name),
             fixtures: AtPath::new(&tmpd.as_ref().path()),
             tmpd: tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
-        fixture_path_builder.push(PathBuf::from(FIXTURES_DIR));
-        fixture_path_builder.push(PathBuf::from(util_name));
+        fixture_path_builder.push(TESTS_DIR);
+        fixture_path_builder.push(FIXTURES_DIR);
+        fixture_path_builder.push(util_name);
         match fs::metadata(&fixture_path_builder) {
             Ok(m) => if m.is_dir() {
                 recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
