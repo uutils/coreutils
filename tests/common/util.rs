@@ -301,8 +301,8 @@ impl TestSet {
                 // Instead of hardcoding the path relative to the current
                 // directory, use Cargo's OUT_DIR to find path to executable.
                 // This allows tests to be run using profiles other than debug.
-                let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..");
-                Path::new(&target_dir).join(PROGNAME).canonicalize().unwrap()
+                let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..", PROGNAME);
+                PathBuf::from(AtPath::new(&Path::new(&target_dir)).root_dir_resolved())
             },
             util_name: String::from(util_name),
             fixtures: AtPath::new(&tmpd.as_ref().path()),
