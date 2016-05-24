@@ -17,6 +17,7 @@ extern crate uucore;
 use getopts::Options;
 use std::fs::File;
 use std::io::{self, stdin, Read, Write, BufReader};
+#[cfg(not(windows))]
 use std::mem;
 use std::path::Path;
 
@@ -42,6 +43,16 @@ fn crc_final(mut crc: u32, mut length: usize) -> u32 {
     !crc
 }
 
+#[cfg(windows)]
+fn init_byte_array() -> Vec<u8> {
+    vec![0; 1024 * 1024]
+}
+
+#[cfg(not(windows))]
+fn init_byte_array() -> [u8; 1024*1024] {
+    unsafe { mem::uninitialized() }
+}
+
 #[inline]
 fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut crc = 0u32;
@@ -58,7 +69,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
         }
     };
 
-    let mut bytes: [u8; 1024 * 1024] = unsafe { mem::uninitialized() };
+    let mut bytes = init_byte_array();
     loop {
         match rd.read(&mut bytes) {
             Ok(num_bytes) => {
@@ -73,6 +84,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
             Err(err) => return Err(err)
         }
     }
+    //Ok((0 as u32,0 as usize))
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
