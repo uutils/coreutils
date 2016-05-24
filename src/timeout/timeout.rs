@@ -18,7 +18,6 @@ extern crate uucore;
 
 use std::io::{ErrorKind, Write};
 use std::process::{Command, Stdio};
-use std::os::unix::process::ExitStatusExt;
 use uucore::process::ChildExt;
 
 extern {
