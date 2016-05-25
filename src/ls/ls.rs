@@ -204,9 +204,9 @@ fn display_permissions(metadata: &Metadata) -> String {
 }
 
 #[cfg(target_family = "unix")]
-fn display_permissions(metadata: &Metadata) -> String {
-    use std::os::unix::fs::PermissionsExt;
     
+fn display_permissions(_metadata: &Metadata) -> String {
+    //use std::os::unix::fs::PermissionsExt;
     "xxxxxxxxx".to_string()
 }
 
