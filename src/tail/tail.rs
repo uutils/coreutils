@@ -319,8 +319,7 @@ fn follow<T: Read>(mut readers: Vec<BufReader<T>>, filenames: &Vec<String>, sett
                     Ok(0) => break,
                     Ok(_) => {
                         if i != last {
-                            println!("");
-                            println!("==> {} <==", filenames[i]);
+                            println!("\n==> {} <==", filenames[i]);
                             last = i;
                         }
                         print!("{}", datum);
