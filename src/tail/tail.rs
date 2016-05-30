@@ -303,7 +303,7 @@ const BLOCK_SIZE: u64 = 1 << 16;
 
 fn follow<T: Read>(mut readers: Vec<BufReader<T>>, filenames: &Vec<String>, settings: &Settings) {
     assert!(settings.follow);
-    let mut last = readers.len();
+    let mut last = readers.len() - 1;
 
     loop {
         sleep(Duration::new(0, settings.sleep_msec*1000));
