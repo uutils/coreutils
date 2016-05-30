@@ -147,6 +147,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         unbounded_tail(buffer, &settings);
     } else {
         let mut multiple = false;
+        let mut first_header = true;
         let mut readers = Vec::new();
 
         if files.len() > 1 {
@@ -155,8 +156,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         for filename in &files {
             if multiple {
+                if !first_header { println!(""); }
                 println!("==> {} <==", filename);
             }
+            first_header = false;
 
             let path = Path::new(filename);
             let file = File::open(&path).unwrap();
