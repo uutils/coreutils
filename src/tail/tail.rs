@@ -147,22 +147,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
         unbounded_tail(buffer, &settings);
     } else {
         let mut multiple = false;
-        let mut firstime = true;
+        let mut readers = Vec::new();
 
         if files.len() > 1 {
             multiple = true;
         }
 
-        for file in &files {
+        for filename in &files {
             if multiple {
-                if !firstime { println!(""); }
-                println!("==> {} <==", file);
+                println!("==> {} <==", filename);
             }
-            firstime = false;
 
-            let path = Path::new(file);
-            let reader = File::open(&path).unwrap();
-            bounded_tail(reader, &settings);
+            let path = Path::new(filename);
+            let file = File::open(&path).unwrap();
+            bounded_tail(&file, &settings);
+
+            if settings.follow {
+                let reader = BufReader::new(file);
+                readers.push(reader);
+            }
+        }
+
+        if settings.follow {
+            follow(readers, &settings);
         }
     }
 
@@ -294,16 +301,25 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 /// block read at a time.
 const BLOCK_SIZE: u64 = 1 << 16;
 
-fn follow<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
+fn follow<T: Read>(mut readers: Vec<BufReader<T>>, settings: &Settings) {
     assert!(settings.follow);
+    let mut last = readers.len();
+
     loop {
         sleep(Duration::new(0, settings.sleep_msec*1000));
-        loop {
-            let mut datum = String::new();
-            match reader.read_line(&mut datum) {
-                Ok(0) => break,
-                Ok(_) => print!("{}", datum),
-                Err(err) => panic!(err)
+
+        for reader in &mut readers {
+            // Print all new content since the last pass
+            loop {
+                let mut datum = String::new();
+                match reader.read_line(&mut datum) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        // TODO: Print headers if i != last
+                        print!("{}", datum);
+                    },
+                    Err(err) => panic!(err)
+                }
             }
         }
     }
@@ -312,7 +328,7 @@ fn follow<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
 /// Iterate over bytes in the file, in reverse, until `should_stop` returns
 /// true. The `file` is left seek'd to the position just after the byte that
 /// `should_stop` returned true for.
-fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, delimiter: u8, should_stop: &mut F)
+fn backwards_thru_file<F>(mut file: &File, size: u64, buf: &mut Vec<u8>, delimiter: u8, should_stop: &mut F)
     where F: FnMut(u8) -> bool
 {
     assert!(buf.len() >= BLOCK_SIZE as usize);
@@ -355,7 +371,7 @@ fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, delimit
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(mut file: File, settings: &Settings) {
+fn bounded_tail(mut file: &File, settings: &Settings) {
     let size = file.seek(SeekFrom::End(0)).unwrap();
     let mut buf = vec![0; BLOCK_SIZE as usize];
 
@@ -460,8 +476,10 @@ fn unbounded_tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
         }
     }
 
+    // TODO: make following stdin work with the new follow() signature
+    // maybe wrap stdin in a 1-element vec?
     if settings.follow {
-        follow(reader, settings);
+        //follow(reader, settings);
     }
 }
 
