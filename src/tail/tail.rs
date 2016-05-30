@@ -169,7 +169,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         if settings.follow {
-            follow(readers, &settings);
+            follow(readers, &files, &settings);
         }
     }
 
@@ -301,21 +301,25 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 /// block read at a time.
 const BLOCK_SIZE: u64 = 1 << 16;
 
-fn follow<T: Read>(mut readers: Vec<BufReader<T>>, settings: &Settings) {
+fn follow<T: Read>(mut readers: Vec<BufReader<T>>, filenames: &Vec<String>, settings: &Settings) {
     assert!(settings.follow);
     let mut last = readers.len();
 
     loop {
         sleep(Duration::new(0, settings.sleep_msec*1000));
 
-        for reader in &mut readers {
+        for (i, reader) in readers.iter_mut().enumerate() {
             // Print all new content since the last pass
             loop {
                 let mut datum = String::new();
                 match reader.read_line(&mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
-                        // TODO: Print headers if i != last
+                        if i != last {
+                            println!("");
+                            println!("==> {} <==", filenames[i]);
+                            last = i;
+                        }
                         print!("{}", datum);
                     },
                     Err(err) => panic!(err)
