@@ -357,14 +357,6 @@ fn backwards_thru_file<F>(file: &mut File, size: u64, buf: &mut Vec<u8>, delimit
 /// being a nice performance win for very large files.
 fn bounded_tail(mut file: File, settings: &Settings) {
     let size = file.seek(SeekFrom::End(0)).unwrap();
-    if size == 0 {
-        if settings.follow {
-            let reader = BufReader::new(file);
-            follow(reader, settings);
-        }
-        return;
-    }
-
     let mut buf = vec![0; BLOCK_SIZE as usize];
 
     // Find the position in the file to start printing from.
@@ -396,12 +388,6 @@ fn bounded_tail(mut file: File, settings: &Settings) {
         if bytes_read == 0 {
             break;
         }
-    }
-
-    // Continue following changes, if requested.
-    if settings.follow {
-        let reader = BufReader::new(file);
-        follow(reader, settings);
     }
 }
 
