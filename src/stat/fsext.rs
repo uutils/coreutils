@@ -9,7 +9,7 @@ pub use self::libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLN
 #[macro_export]
 macro_rules! has {
     ($mode:expr, $perm:expr) => (
-        ($mode & $perm != 0)
+        $mode & $perm != 0
     )
 }
 
