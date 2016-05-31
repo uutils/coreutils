@@ -2,7 +2,7 @@ extern crate uu_tail;
 
 use common::util::*;
 use std::char::from_digit;
-use std::io::{Read, Write};
+use std::io::Write;
 use uu_tail::parse_size;
 
 static UTIL_NAME: &'static str = "tail";
@@ -72,6 +72,17 @@ fn test_follow_multiple() {
     let second_append = "doce\ntrece\n";
     let expected = at.read("foobar_follow_multiple_appended.expected");
     at.append(FOOBAR_TXT, second_append);
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    child.kill().unwrap();
+}
+
+#[test]
+fn test_follow_stdin() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let mut child = ucmd.arg("-f").pipe_in(at.read(FOOBAR_TXT)).run_no_wait();
+
+    let expected = at.read("follow_stdin.expected");
     assert_eq!(read_size(&mut child, expected.len()), expected);
 
     child.kill().unwrap();
