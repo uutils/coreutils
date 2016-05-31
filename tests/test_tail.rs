@@ -8,6 +8,7 @@ use uu_tail::parse_size;
 static UTIL_NAME: &'static str = "tail";
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
+static FOOBAR_2_TXT: &'static str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &'static str = "foobar_with_null.txt";
 
 #[test]
@@ -51,6 +52,26 @@ fn test_follow() {
     let expected = "line1\nline2\n";
     at.append(FOOBAR_TXT, expected);
 
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    child.kill().unwrap();
+}
+
+#[test]
+fn test_follow_multiple() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run_no_wait();
+
+    let expected = at.read("foobar_follow_multiple.expected");
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    let first_append = "trois\n";
+    at.append(FOOBAR_2_TXT, first_append);
+    assert_eq!(read_size(&mut child, first_append.len()), first_append);
+
+    let second_append = "doce\ntrece\n";
+    let expected = at.read("foobar_follow_multiple_appended.expected");
+    at.append(FOOBAR_TXT, second_append);
     assert_eq!(read_size(&mut child, expected.len()), expected);
 
     child.kill().unwrap();
