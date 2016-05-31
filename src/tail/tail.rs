@@ -172,7 +172,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         if settings.follow {
-            follow(readers, &files, &settings);
+            follow(&mut readers[..], &files[..], &settings);
         }
     }
 
@@ -304,7 +304,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 /// block read at a time.
 const BLOCK_SIZE: u64 = 1 << 16;
 
-fn follow<T: Read>(mut readers: Vec<BufReader<T>>, filenames: &Vec<String>, settings: &Settings) {
+fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
     assert!(settings.follow);
     let mut last = readers.len() - 1;
 
@@ -482,10 +482,8 @@ fn unbounded_tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
         }
     }
 
-    // TODO: make following stdin work with the new follow() signature
-    // maybe wrap stdin in a 1-element vec?
     if settings.follow {
-        //follow(reader, settings);
+        follow(&mut [reader], &["stdin".to_string()], settings);
     }
 }
 
