@@ -21,6 +21,7 @@ unix = [
   "nice",
   "nohup",
   "pathchk",
+  "stat",
   "stdbuf",
   "timeout",
   "touch",
@@ -153,6 +154,7 @@ shuf     = { optional=true, path="src/shuf" }
 sleep    = { optional=true, path="src/sleep" }
 sort     = { optional=true, path="src/sort" }
 split    = { optional=true, path="src/split" }
+stat     = { optional=true, path="src/stat" }
 stdbuf   = { optional=true, path="src/stdbuf" }
 sum      = { optional=true, path="src/sum" }
 sync     = { optional=true, path="src/sync" }
