@@ -21,10 +21,12 @@ use fsext::*;
 extern crate uucore;
 
 use std::{fs, iter, cmp};
-use std::io::Write;
+use std::fs::File;
+use std::io::{Write, BufReader, BufRead};
 use std::borrow::Cow;
-// use std::error::Error;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::path::Path;
+use std::convert::AsRef;
 
 #[cfg(test)]
 mod test_stat;
@@ -92,13 +94,14 @@ macro_rules! print_adjusted {
 static NAME: &'static str = "stat";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-pub const F_ALTER: u8 = 0b1;
-pub const F_ZERO: u8 = 0b10;
-pub const F_LEFT: u8 = 0b100;
-pub const F_SPACE: u8 = 0b1000;
-pub const F_SIGN: u8 = 0b10000;
+const MOUNT_INFO: &'static str = "/etc/mtab";
+pub const F_ALTER: u8 = 1;
+pub const F_ZERO: u8 = 1 << 1;
+pub const F_LEFT: u8 = 1 << 2;
+pub const F_SPACE: u8 = 1 << 3;
+pub const F_SIGN: u8 = 1 << 4;
 // unused at present
-pub const F_GROUP: u8 = 0b100000;
+pub const F_GROUP: u8 = 1 << 5;
 
 #[derive(Debug, PartialEq)]
 pub enum OutputType {
@@ -151,6 +154,7 @@ pub struct Stater {
     showfs: bool,
     from_user: bool,
     files: Vec<String>,
+    mount_list: Vec<String>,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
 }
@@ -292,7 +296,7 @@ impl Stater {
                             '-' => flag |= F_LEFT,
                             ' ' => flag |= F_SPACE,
                             '+' => flag |= F_SIGN,
-                            //'\'' => flag |= F_GROUP,
+                            // '\'' => flag |= F_GROUP,
                             '\'' => unimplemented!(),
                             'I' => unimplemented!(),
                             _ => break,
@@ -406,6 +410,15 @@ impl Stater {
                                                          use_printf)
                                      .unwrap();
 
+        let reader = BufReader::new(File::open(MOUNT_INFO).expect("Failed to read /etc/mtab"));
+        let mut mount_list = reader.lines()
+                                   .filter_map(|s| s.ok())
+                                   .filter_map(|line| {
+                                       line.split_whitespace().nth(1).map(|s| s.to_owned())
+                                   })
+                                   .collect::<Vec<String>>();
+        mount_list.sort_by(|a, b| b.cmp(a));
+
         Ok(Stater {
             follow: matches.opt_present("dereference"),
             showfs: showfs,
@@ -413,17 +426,32 @@ impl Stater {
             files: matches.free,
             default_tokens: default_tokens,
             default_dev_tokens: default_dev_tokens,
+            mount_list: mount_list,
         })
     }
 
-    fn exec(&self) -> i32 {
-        for f in &self.files {
-            self.do_stat(f.as_str());
+    fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<String> {
+        let path = match p.as_ref().canonicalize() {
+            Ok(s) => s,
+            Err(_) => return None,
+        };
+        for root in (&self.mount_list).into_iter() {
+            if path.starts_with(root) {
+                return Some(root.clone());
+            }
         }
-        0
+        None
     }
 
-    fn do_stat(&self, file: &str) {
+    fn exec(&self) -> i32 {
+        let mut ret = 0;
+        for f in &self.files {
+            ret |= self.do_stat(f.as_str());
+        }
+        ret
+    }
+
+    fn do_stat(&self, file: &str) -> i32 {
 
         #[inline]
         fn get_grp_name(gid: u32) -> String {
@@ -535,11 +563,9 @@ impl Stater {
                                         otype = OutputType::Unsigned;
                                     }
 
-                                    // string
-                                    // FIXME:
+                                    // mount point
                                     'm' => {
-                                        // mount point
-                                        arg = "/".to_owned();
+                                        arg = self.find_mount_point(file).unwrap();
                                         otype = OutputType::Str;
                                     }
 
@@ -651,7 +677,7 @@ impl Stater {
                 }
                 Err(e) => {
                     show_info!("cannot stat '{}': {}", file, e);
-                    return;
+                    return 1;
                 }
             }
         } else {
@@ -740,10 +766,11 @@ impl Stater {
                 }
                 Err(e) => {
                     show_info!("cannot stat '{}': {}", file, e);
-                    return;
+                    return 1;
                 }
             }
         }
+        0
     }
 
     // taken from coreutils/src/stat.c
@@ -751,7 +778,6 @@ impl Stater {
 
         // SELinux related format is *ignored*
 
-        // 36 is taken randomly
         let mut fmtstr = String::with_capacity(36);
         if showfs {
             if terse {
@@ -814,11 +840,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     match Stater::new(matches) {
-        // FIXME: Handle error
         Ok(stater) => stater.exec(),
         Err(e) => {
             show_info!("{}", e);
-            return 1;
+            1
         }
     }
 }
