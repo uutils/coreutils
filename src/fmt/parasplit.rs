@@ -100,11 +100,9 @@ impl<'a> FileLines<'a> {
         if !exact {
             // we do it this way rather than byte indexing to support unicode whitespace chars
             for (i, char) in line.char_indices() {
-                if char.is_whitespace() {
-                    if line[i..].starts_with(pfx) {
-                        return (true, i);
-                    }
-                } else {
+                if line[i..].starts_with(pfx) {
+                    return (true, i);
+                } else if !char.is_whitespace() {
                     break;
                 }
             }
@@ -157,7 +155,7 @@ impl<'a> Iterator for FileLines<'a> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.chars().all(|c| c.is_whitespace()) {
-            return Some(Line::NoFormatLine("\n".to_owned(), true));
+            return Some(Line::NoFormatLine("".to_owned(), true));
         }
 
         // if this line does not match the prefix,
