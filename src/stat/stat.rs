@@ -75,12 +75,12 @@ macro_rules! pad_and_print {
     )
 }
 macro_rules! print_adjusted {
-    ($str: ident, $left: expr, $width: expr, $padding: expr) => (
+    ($str: ident, $left: expr, $width: expr, $padding: expr) => ({
         let field_width = cmp::max($width, $str.len());
         let mut result = String::with_capacity(field_width);
         pad_and_print!(result, $str, $left, field_width, $padding);
-    );
-    ($str: ident, $left: expr, $need_prefix: expr, $prefix: expr, $width: expr, $padding: expr) => (
+    });
+    ($str: ident, $left: expr, $need_prefix: expr, $prefix: expr, $width: expr, $padding: expr) => ({
         let mut field_width = cmp::max($width, $str.len());
         let mut result = String::with_capacity(field_width + $prefix.len());
         if $need_prefix {
@@ -88,7 +88,7 @@ macro_rules! print_adjusted {
             field_width -= $prefix.len();
         }
         pad_and_print!(result, $str, $left, field_width, $padding);
-    )
+    })
 }
 
 static NAME: &'static str = "stat";
@@ -124,25 +124,67 @@ pub enum Token {
     },
 }
 
-trait ScanNum {
-    /// Return (F, offset)
+pub trait ScanUtil {
     fn scan_num<F>(&self) -> Option<(F, usize)> where F: std::str::FromStr;
+    fn scan_char(&self, radix: u32) -> Option<(char, usize)>;
 }
 
-impl ScanNum for str {
+impl ScanUtil for str {
     fn scan_num<F>(&self) -> Option<(F, usize)>
         where F: std::str::FromStr
     {
         let mut chars = self.chars();
         let mut i = 0;
+        if let Some(c) = chars.next() {
+            match c {
+                '-' | '+' | '0' ... '9' => i += 1,
+                _ => return None,
+            }
+        } else {
+            return None;
+        }
         while let Some(c) = chars.next() {
             match c {
-                '-' | '+' | '0'...'9' => i += 1,
+                '0'...'9' => i += 1,
                 _ => break,
             }
         }
         if i > 0 {
             F::from_str(&self[..i]).ok().map(|x| (x, i))
+        } else {
+            None
+        }
+    }
+
+    fn scan_char(&self, radix: u32) -> Option<(char, usize)> {
+        let mut chars = self.chars();
+        let mut i = 0;
+        let count = match radix {
+            8 => 3_usize,
+            16 => 2,
+            _ => return None,
+        };
+        let mut res = 0_u32;
+        while i < count {
+            if let Some(c) = chars.next() {
+                match c.to_digit(radix) {
+                    Some(digit) => {
+                        let tmp = res * radix + digit;
+                        if tmp < 256 {
+                            res = tmp;
+                        } else {
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            } else {
+                break;
+            }
+            i += 1;
+        }
+        if i > 0 {
+            Some((res as u8 as char, i))
         } else {
             None
         }
@@ -354,21 +396,29 @@ impl Stater {
                             continue;
                         }
                         match chars[i] {
-                            'x' => {
-                                // TODO: parse character
+                            'x' if i + 1 < bound => {
+                                if let Some((c, offset)) = fmtstr[i + 1..].scan_char(16) {
+                                    tokens.push(Token::Char(c));
+                                    i += offset;
+                                } else {
+                                    show_warning!("unrecognized escape '\\x'");
+                                    tokens.push(Token::Char('x'));
+                                }
                             }
                             '0'...'7' => {
-                                // TODO: parse character
+                                let (c, offset) = fmtstr[i..].scan_char(8).unwrap();
+                                tokens.push(Token::Char(c));
+                                i += offset - 1;
                             }
                             '"' => tokens.push(Token::Char('"')),
                             '\\' => tokens.push(Token::Char('\\')),
                             'a' => tokens.push(Token::Char('\x07')),
                             'b' => tokens.push(Token::Char('\x08')),
                             'e' => tokens.push(Token::Char('\x1B')),
-                            'f' => tokens.push(Token::Char('\x0c')),
+                            'f' => tokens.push(Token::Char('\x0C')),
                             'n' => tokens.push(Token::Char('\n')),
                             'r' => tokens.push(Token::Char('\r')),
-                            'v' => tokens.push(Token::Char('\x0b')),
+                            'v' => tokens.push(Token::Char('\x0B')),
                             c => {
                                 show_warning!("unrecognized escape '\\{}'", c);
                                 tokens.push(Token::Char(c));
@@ -401,10 +451,7 @@ impl Stater {
         let default_tokens = if fmtstr.is_empty() {
             Stater::generate_tokens(&Stater::default_fmt(showfs, terse, false), use_printf).unwrap()
         } else {
-            match Stater::generate_tokens(&fmtstr, use_printf) {
-                Ok(ts) => ts,
-                Err(e) => return Err(e),
-            }
+            try!(Stater::generate_tokens(&fmtstr, use_printf))
         };
         let default_dev_tokens = Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true),
                                                          use_printf)
@@ -417,6 +464,7 @@ impl Stater {
                                        line.split_whitespace().nth(1).map(|s| s.to_owned())
                                    })
                                    .collect::<Vec<String>>();
+        // Reverse sort. The longer comes first.
         mount_list.sort_by(|a, b| b.cmp(a));
 
         Ok(Stater {
@@ -619,18 +667,33 @@ impl Stater {
                                     }
 
                                     // string
-                                    // FIXME:
                                     'w' => {
                                         // time of file birth, human-readable; - if unknown
-                                        arg = "-".to_owned();
+                                        arg = if let Some(elapsed) = meta.created()
+                                                                         .ok()
+                                                                         .map(|t| {
+                                                                             t.elapsed().unwrap()
+                                                                         }) {
+                                            pretty_time(elapsed.as_secs() as i64,
+                                                        elapsed.subsec_nanos() as i64)
+                                        } else {
+                                            "-".to_owned()
+                                        };
                                         otype = OutputType::Str;
                                     }
 
                                     // int
-                                    // FIXME:
                                     'W' => {
                                         // time of file birth, seconds since Epoch; 0 if unknown
-                                        arg = format!("{}", 0);
+                                        arg = if let Some(elapsed) = meta.created()
+                                                                         .ok()
+                                                                         .map(|t| {
+                                                                             t.elapsed().unwrap()
+                                                                         }) {
+                                            format!("{}", elapsed.as_secs())
+                                        } else {
+                                            "0".to_owned()
+                                        };
                                         otype = OutputType::Integer;
                                     }
 

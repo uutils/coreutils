@@ -1,3 +1,11 @@
+// This file is part of the uutils coreutils package.
+//
+// (c) Jian Zeng <anonymousknight96@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
+//
+
 extern crate libc;
 extern crate time;
 
@@ -307,8 +315,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
 }
 
 #[cfg(test)]
-mod tests {
-    #[allow(unused_imports)]
+mod test_fsext {
     use super::*;
 
     #[test]
