@@ -206,7 +206,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
         for para_result in p_stream {
             match para_result {
-                Err(s) => silent_unwrap!(ostream.write_all(s.as_bytes())),
+                Err(s) => {
+                    silent_unwrap!(ostream.write_all(s.as_bytes()));
+                    silent_unwrap!(ostream.write_all("\n".as_bytes()));
+                },
                 Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
             }
         }
