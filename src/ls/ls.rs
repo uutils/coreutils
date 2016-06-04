@@ -164,6 +164,7 @@ fn cstr2string(cstr: *const c_char) -> String {
     unsafe { String::from_utf8_lossy(CStr::from_ptr(cstr).to_bytes()).to_string() }
 }
 
+#[cfg(target_family = "unix")]
 fn display_uname(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -175,6 +176,7 @@ fn display_uname(metadata: &Metadata) -> String {
     }
 }
 
+#[cfg(target_family = "unix")]
 fn display_group(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -184,6 +186,18 @@ fn display_group(metadata: &Metadata) -> String {
     } else {
         metadata.gid().to_string()
     }
+}
+
+#[cfg(target_family = "windows")]
+#[allow(unused_variables)]
+fn display_uname(metadata: &Metadata) -> String {
+    "somebody".to_string()
+}
+
+#[cfg(target_family = "windows")]
+#[allow(unused_variables)]
+fn display_group(metadata: &Metadata) -> String {
+    "somegroup".to_string()
 }
 
 fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String {
