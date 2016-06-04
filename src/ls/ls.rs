@@ -177,7 +177,13 @@ fn display_uname(metadata: &Metadata) -> String {
 
 fn display_group(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
-    metadata.uid().to_string()
+
+    let ent = unsafe { getgrgid(metadata.gid()) };
+    if !ent.is_null() {
+        cstr2string(unsafe { ptr::read(ent).gr_name })
+    } else {
+        metadata.gid().to_string()
+    }
 }
 
 fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String {
