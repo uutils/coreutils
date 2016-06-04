@@ -16,6 +16,9 @@ use pretty_bytes::converter::convert;
 #[macro_use]
 extern crate uucore;
 
+extern crate libc;
+use self::libc::c_char;
+
 use getopts::Options;
 use std::fs;
 use std::fs::{ReadDir, DirEntry, FileType, Metadata};
@@ -23,7 +26,7 @@ use std::ffi::{OsString,CStr};
 use std::path::Path;
 use std::io::Write;
 use std::ptr;
-use uucore::c_types::getpwuid;
+use uucore::c_types::{getpwuid, getgrgid};
 
 
 #[derive(Copy, Clone, PartialEq)]
@@ -157,15 +160,16 @@ fn display_dir_entry(entry: DirEntry, options: &getopts::Matches) {
             );
 }
 
+fn cstr2string(cstr: *const c_char) -> String {
+    unsafe { String::from_utf8_lossy(CStr::from_ptr(cstr).to_bytes()).to_string() }
+}
+
 fn display_uname(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
 
     let pw = unsafe { getpwuid(metadata.uid()) };
     if !pw.is_null() {
-        let pw_name = unsafe {
-            String::from_utf8_lossy(CStr::from_ptr(ptr::read(pw).pw_name).to_bytes()).to_string()
-        };
-        pw_name
+        cstr2string(unsafe { ptr::read(pw).pw_name })
     } else {
         metadata.uid().to_string()
     }
@@ -173,7 +177,7 @@ fn display_uname(metadata: &Metadata) -> String {
 
 fn display_group(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
-    metadata.gid().to_string()
+    metadata.uid().to_string()
 }
 
 fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String {
