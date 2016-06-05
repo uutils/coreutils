@@ -9,7 +9,7 @@ path = "stat.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
+libc = "^0.2"
 time = "*"
 uucore = { path="../uucore" }
 

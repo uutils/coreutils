@@ -584,7 +584,7 @@ impl Stater {
                                     }
                                     // file type
                                     'F' => {
-                                        arg = pretty_filetype(meta.mode(), meta.len()).to_owned();
+                                        arg = pretty_filetype(meta.mode() as mode_t, meta.len()).to_owned();
                                         otype = OutputType::Str;
                                     }
                                     // group ID of owner
@@ -622,13 +622,13 @@ impl Stater {
                                     // quoted file name with dereference if symbolic link
                                     'N' => {
                                         if ftype.is_symlink() {
-                                            arg = format!("'{}' -> '{}'",
+                                            arg = format!("`{}' -> `{}'",
                                                           file,
                                                           fs::read_link(file)
                                                               .expect("Invalid symlink")
                                                               .to_string_lossy());
                                         } else {
-                                            arg = format!("'{}'", file);
+                                            arg = format!("`{}'", file);
                                         }
                                         otype = OutputType::Str;
                                     }
@@ -667,28 +667,32 @@ impl Stater {
 
                                     // time of file birth, human-readable; - if unknown
                                     'w' => {
-                                        arg = if let Ok(elapsed) = meta.created()
-                                                                       .map(|t| {
-                                                                           t.elapsed().unwrap()
-                                                                       }) {
-                                            pretty_time(elapsed.as_secs() as i64,
-                                                        elapsed.subsec_nanos() as i64)
-                                        } else {
-                                            "-".to_owned()
-                                        };
+                                        // Unstable. Commented
+                                        //arg = if let Ok(elapsed) = meta.created()
+                                                                       //.map(|t| {
+                                                                           //t.elapsed().unwrap()
+                                                                       //}) {
+                                            //pretty_time(elapsed.as_secs() as i64,
+                                                        //elapsed.subsec_nanos() as i64)
+                                        //} else {
+                                            //"-".to_owned()
+                                        //};
+                                        arg = "-".to_owned();
                                         otype = OutputType::Str;
                                     }
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
                                     'W' => {
-                                        arg = if let Ok(elapsed) = meta.created()
-                                                                       .map(|t| {
-                                                                           t.elapsed().unwrap()
-                                                                       }) {
-                                            format!("{}", elapsed.as_secs())
-                                        } else {
-                                            "0".to_owned()
-                                        };
+                                        // Unstable. Commented
+                                        //arg = if let Ok(elapsed) = meta.created()
+                                                                       //.map(|t| {
+                                                                           //t.elapsed().unwrap()
+                                                                       //}) {
+                                            //format!("{}", elapsed.as_secs())
+                                        //} else {
+                                            //"0".to_owned()
+                                        //};
+                                        arg = "0".to_owned();
                                         otype = OutputType::Integer;
                                     }
 

@@ -23,7 +23,12 @@ macro_rules! has {
 
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
     let tm = time::at(Timespec::new(sec, nsec as i32));
-    time::strftime("%Y-%m-%d %H:%M:%S.%f %z", &tm).unwrap()
+    let res = time::strftime("%Y-%m-%d %H:%M:%S.%f %z", &tm).unwrap();
+    if res.ends_with(" -0000") {
+        res.replace(" -0000", " +0000")
+    } else {
+        res
+    }
 }
 
 pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
@@ -72,7 +77,7 @@ pub fn pretty_access(mode: mode_t) -> String {
     } else {
         '-'
     });
-    result.push(if has!(mode, S_ISUID as u32) {
+    result.push(if has!(mode, S_ISUID as mode_t) {
         if has!(mode, S_IXUSR) {
             's'
         } else {
@@ -94,7 +99,7 @@ pub fn pretty_access(mode: mode_t) -> String {
     } else {
         '-'
     });
-    result.push(if has!(mode, S_ISGID as u32) {
+    result.push(if has!(mode, S_ISGID as mode_t) {
         if has!(mode, S_IXGRP) {
             's'
         } else {
@@ -116,7 +121,7 @@ pub fn pretty_access(mode: mode_t) -> String {
     } else {
         '-'
     });
-    result.push(if has!(mode, S_ISVTX as u32) {
+    result.push(if has!(mode, S_ISVTX as mode_t) {
         if has!(mode, S_IXOTH) {
             't'
         } else {
@@ -386,19 +391,19 @@ mod test_fsext {
         assert_eq!("?rw-r-xr-x", pretty_access(0o655));
 
         assert_eq!("brwSr-xr-x",
-                   pretty_access(S_IFBLK | S_ISUID as u32 | 0o655));
+                   pretty_access(S_IFBLK | S_ISUID as mode_t | 0o655));
         assert_eq!("brwsr-xr-x",
-                   pretty_access(S_IFBLK | S_ISUID as u32 | 0o755));
+                   pretty_access(S_IFBLK | S_ISUID as mode_t | 0o755));
 
         assert_eq!("prw---sr--",
-                   pretty_access(S_IFIFO | S_ISGID as u32 | 0o614));
+                   pretty_access(S_IFIFO | S_ISGID as mode_t | 0o614));
         assert_eq!("prw---Sr--",
-                   pretty_access(S_IFIFO | S_ISGID as u32 | 0o604));
+                   pretty_access(S_IFIFO | S_ISGID as mode_t | 0o604));
 
         assert_eq!("c---r-xr-t",
-                   pretty_access(S_IFCHR | S_ISVTX as u32 | 0o055));
+                   pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o055));
         assert_eq!("c---r-xr-T",
-                   pretty_access(S_IFCHR | S_ISVTX as u32 | 0o054));
+                   pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o054));
     }
 
     #[test]
