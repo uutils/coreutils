@@ -12,7 +12,7 @@ extern crate time;
 use self::time::Timespec;
 pub use self::libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLNK, S_IFSOCK,
                      S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP,
-                     S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH};
+                     S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_int, strerror};
 
 #[macro_export]
 macro_rules! has {
@@ -26,7 +26,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     time::strftime("%Y-%m-%d %H:%M:%S.%f %z", &tm).unwrap()
 }
 
-pub fn pretty_filetype<'a>(mode: u32, size: u64) -> &'a str {
+pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
     match mode & S_IFMT {
         S_IFREG => {
             if size != 0 {
@@ -47,7 +47,7 @@ pub fn pretty_filetype<'a>(mode: u32, size: u64) -> &'a str {
     }
 }
 
-pub fn pretty_access(mode: u32) -> String {
+pub fn pretty_access(mode: mode_t) -> String {
     let mut result = String::with_capacity(10);
     result.push(match mode & S_IFMT {
         S_IFDIR => 'd',
@@ -136,57 +136,116 @@ use std::path::Path;
 use std::borrow::Cow;
 use std::ffi::CString;
 use std::convert::{AsRef, From};
+use std::error::Error;
+use std::io::Error as IOError;
 
-pub struct Statfs {
-    pub f_type: i64,
-    pub f_bsize: i64,
-    pub f_blocks: u64,
-    pub f_bfree: u64,
-    pub f_bavail: u64,
-    pub f_files: u64,
-    pub f_ffree: u64,
-    pub f_namelen: i64,
-    pub f_frsize: i64,
-    pub f_fsid: u64,
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+use self::libc::statfs as Sstatfs;
+// #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
+// use self::libc::statvfs as Sstatfs;
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+use self::libc::statfs as statfs_fn;
+// #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
+// use self::libc::statvfs as statfs_fn;
+
+pub trait FsMeta {
+    fn fs_type(&self) -> i64;
+    fn iosize(&self) -> i64;
+    fn blksize(&self) -> i64;
+    fn total_blocks(&self) -> u64;
+    fn free_blocks(&self) -> u64;
+    fn avail_blocks(&self) -> u64;
+    fn total_fnodes(&self) -> u64;
+    fn free_fnodes(&self) -> u64;
+    fn fsid(&self) -> u64;
+    fn namelen(&self) -> i64;
 }
 
-pub fn statfs<P: AsRef<Path>>(path: P) -> Result<Statfs, String>
+impl FsMeta for Sstatfs {
+    fn blksize(&self) -> i64 {
+        self.f_bsize as i64
+    }
+    fn total_blocks(&self) -> u64 {
+        self.f_blocks as u64
+    }
+    fn free_blocks(&self) -> u64 {
+        self.f_bfree as u64
+    }
+    fn avail_blocks(&self) -> u64 {
+        self.f_bavail as u64
+    }
+    fn total_fnodes(&self) -> u64 {
+        self.f_files as u64
+    }
+    fn free_fnodes(&self) -> u64 {
+        self.f_ffree as u64
+    }
+    fn fs_type(&self) -> i64 {
+        self.f_type as i64
+    }
+
+    #[cfg(target_os = "linux")]
+    fn iosize(&self) -> i64 {
+        self.f_frsize as i64
+    }
+    #[cfg(target_os = "macos")]
+    fn iosize(&self) -> i64 {
+        self.f_iosize as i64
+    }
+    // FIXME:
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn iosize(&self) -> i64 {
+        0
+    }
+
+    // Linux, SunOS, HP-UX, 4.4BSD, FreeBSD have a system call statfs() that returns
+    // a struct statfs, containing a fsid_t f_fsid, where fsid_t is defined
+    // as struct { int val[2];  }
+    //
+    // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
+    // struct statvfs, containing an  unsigned  long  f_fsid
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn fsid(&self) -> u64 {
+        let f_fsid: &[u32; 2] = unsafe { transmute(&self.f_fsid) };
+        (f_fsid[0] as u64) << 32 | f_fsid[1] as u64
+    }
+    // FIXME:
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn fsid(&self) -> u64 {
+        0
+    }
+
+    #[cfg(target_os = "linux")]
+    fn namelen(&self) -> i64 {
+        self.f_namelen as i64
+    }
+    #[cfg(target_os = "macos")]
+    fn namelen(&self) -> i64 {
+        1024
+    }
+    // FIXME:
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    fn namelen(&self) -> u64 {
+        0
+    }
+}
+
+pub fn statfs<P: AsRef<Path>>(path: P) -> Result<Sstatfs, String>
     where Vec<u8>: From<P>
 {
-    use std::error::Error;
     match CString::new(path) {
         Ok(p) => {
-            let mut buffer = unsafe { mem::zeroed() };
+            let mut buffer: Sstatfs = unsafe { mem::zeroed() };
             unsafe {
-                match self::libc::statfs(p.as_ptr(), &mut buffer) {
-                    0 => {
-                        let fsid: u64;
-                        if cfg!(unix) {
-                            // Linux, SunOS, HP-UX, 4.4BSD, FreeBSD have a system call statfs() that returns
-                            // a struct statfs, containing a fsid_t f_fsid, where fsid_t is defined
-                            // as struct { int val[2];  }
-                            let f_fsid: &[u32; 2] = transmute(&buffer.f_fsid);
-                            fsid = (f_fsid[0] as u64) << 32_u64 | f_fsid[1] as u64;
-                        } else {
-                            // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
-                            // struct statvfs, containing an  unsigned  long  f_fsid
-                            fsid = 0;
-                        }
-                        Ok(Statfs {
-                            f_type: buffer.f_type as i64,
-                            f_bsize: buffer.f_bsize as i64,
-                            f_blocks: buffer.f_blocks as u64,
-                            f_bfree: buffer.f_bfree as u64,
-                            f_bavail: buffer.f_bavail as u64,
-                            f_files: buffer.f_files as u64,
-                            f_ffree: buffer.f_ffree as u64,
-                            f_fsid: fsid,
-                            f_namelen: buffer.f_namelen as i64,
-                            f_frsize: buffer.f_frsize as i64,
-                        })
+                match statfs_fn(p.as_ptr(), &mut buffer) {
+                    0 => Ok(buffer),
+                    _ => {
+                        let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+                        Err(CString::from_raw(strerror(errno))
+                                .into_string()
+                                .unwrap_or("Unknown Error".to_owned()))
                     }
-                    // TODO: Return explicit error message
-                    _ => Err("Unknown error".to_owned()),
                 }
             }
         }
