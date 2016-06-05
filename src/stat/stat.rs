@@ -8,8 +8,6 @@
 // that was distributed with this source code.
 //
 
-extern crate users;
-
 extern crate getopts;
 use getopts::Options;
 
@@ -44,7 +42,6 @@ macro_rules! fill_string {
         iter::repeat($c).take($cnt).map(|c| $str.push(c)).all(|_| true)
     )
 }
-
 macro_rules! extend_digits {
     ($str: ident, $min: expr) => (
         if $min > $str.len() {
@@ -57,7 +54,6 @@ macro_rules! extend_digits {
         }
     )
 }
-
 macro_rules! pad_and_print {
     ($result: ident, $str: ident, $left: expr, $width: expr, $padding: expr) => (
         if $str.len() < $width {
@@ -135,13 +131,9 @@ impl ScanUtil for str {
     {
         let mut chars = self.chars();
         let mut i = 0;
-        if let Some(c) = chars.next() {
-            match c {
-                '-' | '+' | '0' ... '9' => i += 1,
-                _ => return None,
-            }
-        } else {
-            return None;
+        match chars.next() {
+            Some('-') | Some('+') | Some('0'...'9') => i += 1,
+            _ => return None,
         }
         while let Some(c) = chars.next() {
             match c {
@@ -157,34 +149,33 @@ impl ScanUtil for str {
     }
 
     fn scan_char(&self, radix: u32) -> Option<(char, usize)> {
-        let mut chars = self.chars();
-        let mut i = 0;
         let count = match radix {
             8 => 3_usize,
             16 => 2,
             _ => return None,
         };
+        let mut chars = self.chars().enumerate();
         let mut res = 0_u32;
-        while i < count {
-            if let Some(c) = chars.next() {
-                match c.to_digit(radix) {
-                    Some(digit) => {
-                        let tmp = res * radix + digit;
-                        if tmp < 256 {
-                            res = tmp;
-                        } else {
-                            break;
-                        }
-                    }
-                    None => break,
-                }
-            } else {
+        let mut offset = 0_usize;
+        while let Some((i, c)) = chars.next() {
+            if i >= count {
                 break;
             }
-            i += 1;
+            match c.to_digit(radix) {
+                Some(digit) => {
+                    let tmp = res * radix + digit;
+                    if tmp < 256 {
+                        res = tmp;
+                    } else {
+                        break;
+                    }
+                }
+                None => break,
+            }
+            offset = i + 1;
         }
-        if i > 0 {
-            Some((res as u8 as char, i))
+        if offset > 0 {
+            Some((res as u8 as char, offset))
         } else {
             None
         }
@@ -301,6 +292,31 @@ fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32
                             padding_char);
         }
         _ => unreachable!(),
+    }
+}
+
+
+use std::ptr;
+use std::ffi::CStr;
+use uucore::c_types::{getpwuid, getgrgid};
+fn get_grp_name(gid: u32) -> String {
+    let p = unsafe { getgrgid(gid) };
+    if !p.is_null() {
+        unsafe { CStr::from_ptr(ptr::read(p).gr_name).to_string_lossy().into_owned() }
+    } else {
+        "UNKNOWN".to_owned()
+    }
+}
+fn get_usr_name(uid: u32) -> String {
+    let p = unsafe { getpwuid(uid) };
+    if !p.is_null() {
+        unsafe {
+            CStr::from_ptr(ptr::read(p).pw_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    } else {
+        "UNKNOWN".to_owned()
     }
 }
 
@@ -501,24 +517,6 @@ impl Stater {
 
     fn do_stat(&self, file: &str) -> i32 {
 
-        #[inline]
-        fn get_grp_name(gid: u32) -> String {
-            if let Some(g) = users::get_group_by_gid(gid) {
-                g.name().to_owned()
-            } else {
-                "UNKNOWN".to_owned()
-            }
-        }
-
-        #[inline]
-        fn get_usr_name(uid: u32) -> String {
-            if let Some(g) = users::get_user_by_uid(uid) {
-                g.name().to_owned()
-            } else {
-                "UNKNOWN".to_owned()
-            }
-        }
-
         if !self.showfs {
             let result = if self.follow {
                 fs::metadata(file)
@@ -534,7 +532,6 @@ impl Stater {
                     } else {
                         &self.default_dev_tokens
                     };
-                    let is_symlink = ftype.is_symlink();
 
                     for t in tokens.into_iter() {
                         match t {
@@ -545,23 +542,23 @@ impl Stater {
                                 let otype: OutputType;
 
                                 match format {
-                                    // unsigned oct
+                                    // access rights in octal
                                     'a' => {
                                         arg = format!("{:o}", 0o7777 & meta.mode());
                                         otype = OutputType::UnsignedOct;
                                     }
-                                    // string
+                                    // access rights in human readable form
                                     'A' => {
-                                        arg = pretty_access(meta.mode());
+                                        arg = pretty_access(meta.mode() as mode_t);
                                         otype = OutputType::Str;
                                     }
-                                    // unsigned
+                                    // number of blocks allocated (see %B)
                                     'b' => {
                                         arg = format!("{}", meta.blocks());
                                         otype = OutputType::Unsigned;
                                     }
 
-                                    // unsigned
+                                    // the size in bytes of each block reported by %b
                                     // FIXME: blocksize differs on various platform
                                     // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE
                                     'B' => {
@@ -570,42 +567,42 @@ impl Stater {
                                         otype = OutputType::Unsigned;
                                     }
 
-                                    // unsigned
+                                    // device number in decimal
                                     'd' => {
                                         arg = format!("{}", meta.dev());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // unsigned hex
+                                    // device number in hex
                                     'D' => {
                                         arg = format!("{:x}", meta.dev());
                                         otype = OutputType::UnsignedHex;
                                     }
-                                    // unsigned hex
+                                    // raw mode in hex
                                     'f' => {
                                         arg = format!("{:x}", meta.mode());
                                         otype = OutputType::UnsignedHex;
                                     }
-                                    // string
+                                    // file type
                                     'F' => {
                                         arg = pretty_filetype(meta.mode(), meta.len()).to_owned();
                                         otype = OutputType::Str;
                                     }
-                                    // unsigned
+                                    // group ID of owner
                                     'g' => {
                                         arg = format!("{}", meta.gid());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // string
+                                    // group name of owner
                                     'G' => {
                                         arg = get_grp_name(meta.gid());
                                         otype = OutputType::Str;
                                     }
-                                    // unsigned
+                                    // number of hard links
                                     'h' => {
                                         arg = format!("{}", meta.nlink());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // unsigned
+                                    // inode number
                                     'i' => {
                                         arg = format!("{}", meta.ino());
                                         otype = OutputType::Unsigned;
@@ -617,14 +614,14 @@ impl Stater {
                                         otype = OutputType::Str;
                                     }
 
-                                    // string
+                                    // file name
                                     'n' => {
                                         arg = file.to_owned();
                                         otype = OutputType::Str;
                                     }
-                                    // string
+                                    // quoted file name with dereference if symbolic link
                                     'N' => {
-                                        if is_symlink {
+                                        if ftype.is_symlink() {
                                             arg = format!("'{}' -> '{}'",
                                                           file,
                                                           fs::read_link(file)
@@ -635,45 +632,45 @@ impl Stater {
                                         }
                                         otype = OutputType::Str;
                                     }
-                                    // unsigned
+                                    // optimal I/O transfer size hint
                                     'o' => {
                                         arg = format!("{}", meta.blksize());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // int
+                                    // total size, in bytes
                                     's' => {
                                         arg = format!("{}", meta.len());
                                         otype = OutputType::Integer;
                                     }
-                                    // unsigned hex
+                                    // major device type in hex, for character/block device special
+                                    // files
                                     't' => {
                                         arg = format!("{:x}", meta.rdev() >> 8);
                                         otype = OutputType::UnsignedHex;
                                     }
-                                    // unsigned hex
+                                    // minor device type in hex, for character/block device special
+                                    // files
                                     'T' => {
                                         arg = format!("{:x}", meta.rdev() & 0xff);
                                         otype = OutputType::UnsignedHex;
                                     }
-                                    // unsigned
+                                    // user ID of owner
                                     'u' => {
                                         arg = format!("{}", meta.uid());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // string
+                                    // user name of owner
                                     'U' => {
                                         arg = get_usr_name(meta.uid());
                                         otype = OutputType::Str;
                                     }
 
-                                    // string
+                                    // time of file birth, human-readable; - if unknown
                                     'w' => {
-                                        // time of file birth, human-readable; - if unknown
-                                        arg = if let Some(elapsed) = meta.created()
-                                                                         .ok()
-                                                                         .map(|t| {
-                                                                             t.elapsed().unwrap()
-                                                                         }) {
+                                        arg = if let Ok(elapsed) = meta.created()
+                                                                       .map(|t| {
+                                                                           t.elapsed().unwrap()
+                                                                       }) {
                                             pretty_time(elapsed.as_secs() as i64,
                                                         elapsed.subsec_nanos() as i64)
                                         } else {
@@ -682,14 +679,12 @@ impl Stater {
                                         otype = OutputType::Str;
                                     }
 
-                                    // int
+                                    // time of file birth, seconds since Epoch; 0 if unknown
                                     'W' => {
-                                        // time of file birth, seconds since Epoch; 0 if unknown
-                                        arg = if let Some(elapsed) = meta.created()
-                                                                         .ok()
-                                                                         .map(|t| {
-                                                                             t.elapsed().unwrap()
-                                                                         }) {
+                                        arg = if let Ok(elapsed) = meta.created()
+                                                                       .map(|t| {
+                                                                           t.elapsed().unwrap()
+                                                                       }) {
                                             format!("{}", elapsed.as_secs())
                                         } else {
                                             "0".to_owned()
@@ -697,32 +692,32 @@ impl Stater {
                                         otype = OutputType::Integer;
                                     }
 
-                                    // string
+                                    // time of last access, human-readable
                                     'x' => {
                                         arg = pretty_time(meta.atime(), meta.atime_nsec());
                                         otype = OutputType::Str;
                                     }
-                                    // int
+                                    // time of last access, seconds since Epoch
                                     'X' => {
                                         arg = format!("{}", meta.atime());
                                         otype = OutputType::Integer;
                                     }
-                                    // string
+                                    // time of last data modification, human-readable
                                     'y' => {
                                         arg = pretty_time(meta.mtime(), meta.mtime_nsec());
                                         otype = OutputType::Str;
                                     }
-                                    // int
+                                    // time of last data modification, seconds since Epoch
                                     'Y' => {
                                         arg = format!("{}", meta.mtime());
                                         otype = OutputType::Str;
                                     }
-                                    // string
+                                    // time of last status change, human-readable
                                     'z' => {
                                         arg = pretty_time(meta.ctime(), meta.ctime_nsec());
                                         otype = OutputType::Str;
                                     }
-                                    // int
+                                    // time of last status change, seconds since Epoch
                                     'Z' => {
                                         arg = format!("{}", meta.ctime());
                                         otype = OutputType::Integer;
@@ -745,7 +740,7 @@ impl Stater {
             }
         } else {
             match statfs(file) {
-                Ok(data) => {
+                Ok(meta) => {
                     let tokens = &self.default_tokens;
 
                     for t in tokens.into_iter() {
@@ -756,64 +751,64 @@ impl Stater {
                                 let arg: String;
                                 let otype: OutputType;
                                 match format {
-                                    // int
+                                    // free blocks available to non-superuser
                                     'a' => {
-                                        arg = format!("{}", data.f_bavail);
+                                        arg = format!("{}", meta.avail_blocks());
                                         otype = OutputType::Integer;
                                     }
-                                    // int
+                                    // total data blocks in file system
                                     'b' => {
-                                        arg = format!("{}", data.f_blocks);
+                                        arg = format!("{}", meta.total_blocks());
                                         otype = OutputType::Integer;
                                     }
-                                    // unsigned
+                                    // total file nodes in file system
                                     'c' => {
-                                        arg = format!("{}", data.f_files);
+                                        arg = format!("{}", meta.total_fnodes());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // int
+                                    // free file nodes in file system
                                     'd' => {
-                                        arg = format!("{}", data.f_ffree);
+                                        arg = format!("{}", meta.free_fnodes());
                                         otype = OutputType::Integer;
                                     }
-                                    // int
+                                    // free blocks in file system
                                     'f' => {
-                                        arg = format!("{}", data.f_bfree);
+                                        arg = format!("{}", meta.free_blocks());
                                         otype = OutputType::Integer;
                                     }
-                                    // hex unsigned
+                                    // file system ID in hex
                                     'i' => {
-                                        arg = format!("{:x}", data.f_fsid);
+                                        arg = format!("{:x}", meta.fsid());
                                         otype = OutputType::UnsignedHex;
                                     }
-                                    // unsigned
+                                    // maximum length of filenames
                                     'l' => {
-                                        arg = format!("{}", data.f_namelen);
+                                        arg = format!("{}", meta.namelen());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // string
+                                    // file name
                                     'n' => {
                                         arg = file.to_owned();
                                         otype = OutputType::Str;
                                     }
-                                    // unsigned
+                                    // block size (for faster transfers)
                                     's' => {
-                                        arg = format!("{}", data.f_bsize);
+                                        arg = format!("{}", meta.iosize());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // unsigned
+                                    // fundamental block size (for block counts)
                                     'S' => {
-                                        arg = format!("{}", data.f_frsize);
+                                        arg = format!("{}", meta.blksize());
                                         otype = OutputType::Unsigned;
                                     }
-                                    // hex unsigned
+                                    // file system type in hex
                                     't' => {
-                                        arg = format!("{:x}", data.f_type);
+                                        arg = format!("{:x}", meta.fs_type());
                                         otype = OutputType::UnsignedHex;
                                     }
-                                    // string
+                                    // file system type in human readable form
                                     'T' => {
-                                        arg = pretty_fstype(data.f_type).into_owned();
+                                        arg = pretty_fstype(meta.fs_type()).into_owned();
                                         otype = OutputType::Str;
                                     }
                                     _ => {
@@ -828,7 +823,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_info!("cannot stat '{}': {}", file, e);
+                    show_info!("cannot read file system information for '{}': {}", file, e);
                     return 1;
                 }
             }
