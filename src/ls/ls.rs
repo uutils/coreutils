@@ -26,8 +26,6 @@ use std::ffi::{OsString,CStr};
 use std::path::Path;
 use std::io::Write;
 use std::ptr;
-use uucore::c_types::{getpwuid, getgrgid};
-
 
 #[derive(Copy, Clone, PartialEq)]
 enum Mode {
@@ -166,6 +164,9 @@ fn cstr2string(cstr: *const c_char) -> String {
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
+#[cfg(target_family = "linux")]
+use uucore::c_types::{getpwuid, getgrgid};
+
 #[cfg(target_family = "linux")]
 fn display_uname(metadata: &Metadata) -> String {
     use std::os::unix::fs::MetadataExt;
