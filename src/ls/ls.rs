@@ -16,7 +16,9 @@ use pretty_bytes::converter::convert;
 extern crate uucore;
 
 extern crate libc;
-use self::libc::c_char;
+#[cfg(unix)]
+use self::libc::{S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP,
+                 S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_char};
 
 use getopts::Options;
 use std::fs;
@@ -25,6 +27,9 @@ use std::ffi::{OsString, CStr};
 use std::path::Path;
 use std::io::Write;
 use std::ptr;
+
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 #[derive(Copy, Clone, PartialEq)]
 enum Mode {
@@ -178,18 +183,16 @@ fn display_dir_entry(entry: DirEntry, options: &getopts::Matches) {
 }
 
 fn cstr2string(cstr: *const c_char) -> String {
-    unsafe { String::from_utf8_lossy(CStr::from_ptr(cstr).to_bytes()).to_string() }
+    unsafe { CStr::from_ptr(cstr).to_string_lossy().into_owned() }
 }
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
-#[cfg(target_family = "linux")]
+#[cfg(unix)]
 use uucore::c_types::{getpwuid, getgrgid};
 
-#[cfg(target_family = "linux")]
+#[cfg(unix)]
 fn display_uname(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-
     let pw = unsafe { getpwuid(metadata.uid()) };
     if !pw.is_null() {
         cstr2string(unsafe { ptr::read(pw).pw_name })
@@ -198,10 +201,8 @@ fn display_uname(metadata: &Metadata) -> String {
     }
 }
 
-#[cfg(target_family = "linux")]
+#[cfg(unix)]
 fn display_group(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-
     let ent = unsafe { getgrgid(metadata.gid()) };
     if !ent.is_null() {
         cstr2string(unsafe { ptr::read(ent).gr_name })
@@ -210,13 +211,13 @@ fn display_group(metadata: &Metadata) -> String {
     }
 }
 
-#[cfg(not(target_family = "linux"))]
+#[cfg(not(unix))]
 #[allow(unused_variables)]
 fn display_uname(metadata: &Metadata) -> String {
     "somebody".to_string()
 }
 
-#[cfg(not(target_family = "linux"))]
+#[cfg(not(unix))]
 #[allow(unused_variables)]
 fn display_group(metadata: &Metadata) -> String {
     "somegroup".to_string()
@@ -262,7 +263,6 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 
 #[cfg(target_family = "unix")]
 fn display_symlink_count(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
     metadata.nlink().to_string()
 }
 
