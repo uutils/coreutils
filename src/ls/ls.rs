@@ -182,14 +182,16 @@ fn display_dir_entry(entry: DirEntry, options: &getopts::Matches) {
              display_file_name(entry.file_name()));
 }
 
-fn cstr2string(cstr: *const c_char) -> String {
-    unsafe { CStr::from_ptr(cstr).to_string_lossy().into_owned() }
-}
-
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
 use uucore::c_types::{getpwuid, getgrgid};
+
+// Only used in `display_uname` and `display_group`
+#[cfg(unix)]
+fn cstr2string(cstr: *const c_char) -> String {
+    unsafe { CStr::from_ptr(cstr).to_string_lossy().into_owned() }
+}
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata) -> String {
@@ -272,13 +274,85 @@ fn display_permissions(metadata: &Metadata) -> String {
     String::from("---------")
 }
 
+macro_rules! has {
+    ($mode:expr, $perm:expr) => (
+        $mode & $perm != 0
+    )
+}
 #[cfg(target_family = "unix")]
+fn display_permissions(metadata: &Metadata) -> String {
+    let mode = metadata.mode() as mode_t;
+    let mut result = String::with_capacity(9);
+    result.push(if has!(mode, S_IRUSR) {
+        'r'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_IWUSR) {
+        'w'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_ISUID as mode_t) {
+        if has!(mode, S_IXUSR) {
+            's'
+        } else {
+            'S'
+        }
+    } else if has!(mode, S_IXUSR) {
+        'x'
+    } else {
+        '-'
+    });
 
-fn display_permissions(_metadata: &Metadata) -> String {
-    //use std::os::unix::fs::PermissionsExt;
-    "xxxxxxxxx".to_string()
+    result.push(if has!(mode, S_IRGRP) {
+        'r'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_IWGRP) {
+        'w'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_ISGID as mode_t) {
+        if has!(mode, S_IXGRP) {
+            's'
+        } else {
+            'S'
+        }
+    } else if has!(mode, S_IXGRP) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result.push(if has!(mode, S_IROTH) {
+        'r'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_IWOTH) {
+        'w'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_ISVTX as mode_t) {
+        if has!(mode, S_IXOTH) {
+            't'
+        } else {
+            'T'
+        }
+    } else if has!(mode, S_IXOTH) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result
 }
 
+#[allow(unused_variables)]
 fn display_item(item: &Path, options: &getopts::Matches) {
     // let fileType = item.file
     // let mut fileMeta = String::new();
