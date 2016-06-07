@@ -21,6 +21,7 @@ mod sieve;
 #[cfg(unix)] mod test_stdbuf;
 #[cfg(unix)] mod test_touch;
 #[cfg(unix)] mod test_unlink;
+#[cfg(unix)] mod test_stat;
 
 mod test_base64;
 mod test_basename;

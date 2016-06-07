@@ -113,6 +113,7 @@ UNIX_PROGS := \
   nice \
   nohup \
   pathchk \
+  stat \
   stdbuf \
   timeout \
   touch \
@@ -168,6 +169,7 @@ TEST_PROGS  := \
 	seq \
 	sort \
 	split \
+	stat \
 	stdbuf \
 	sum \
 	tac \
