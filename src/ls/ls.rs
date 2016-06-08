@@ -1,13 +1,12 @@
 #![crate_name = "uu_ls"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
+//
 
 extern crate getopts;
 extern crate pretty_bytes;
@@ -17,21 +16,26 @@ use pretty_bytes::converter::convert;
 extern crate uucore;
 
 extern crate libc;
-use self::libc::c_char;
+#[cfg(unix)]
+use self::libc::{S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP,
+                 S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_char};
 
 use getopts::Options;
 use std::fs;
 use std::fs::{ReadDir, DirEntry, FileType, Metadata};
-use std::ffi::{OsString,CStr};
+use std::ffi::{OsString, CStr};
 use std::path::Path;
 use std::io::Write;
 use std::ptr;
+
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 #[derive(Copy, Clone, PartialEq)]
 enum Mode {
     Help,
     Version,
-    List
+    List,
 }
 
 static NAME: &'static str = "ls";
@@ -43,19 +47,37 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
-    opts.optflag("a", "all", "Do not ignore hidden files (files with names that start with '.').");
-    opts.optflag("A", "almost-all", "In a directory, do not ignore all file names that start with '.', only ignore '.' and '..'.");
-    opts.optflag("B", "ignore-backups", "Ignore files that end with ~. Equivalent to using `--ignore='*~'` or `--ignore='.*~'.");
-    opts.optflag("d", "directory", "Only list the names of directories, rather than listing directory contents. This will not follow symbolic links unless one of `--dereference-command-line (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is specified.");
-    opts.optflag("H", "dereference-command-line", "If a command line argument specifies a symbolic link, show information about the linked file rather than the link itself.");
-    opts.optflag("h", "human-readable", "Print human readable file sizes (e.g. 1K 234M 56G).");
+    opts.optflag("a",
+                 "all",
+                 "Do not ignore hidden files (files with names that start with '.').");
+    opts.optflag("A",
+                 "almost-all",
+                 "In a directory, do not ignore all file names that start with '.', only ignore \
+                  '.' and '..'.");
+    opts.optflag("B",
+                 "ignore-backups",
+                 "Ignore files that end with ~. Equivalent to using `--ignore='*~'` or \
+                  `--ignore='.*~'.");
+    opts.optflag("d",
+                 "directory",
+                 "Only list the names of directories, rather than listing directory contents. \
+                  This will not follow symbolic links unless one of `--dereference-command-line \
+                  (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
+                  specified.");
+    opts.optflag("H",
+                 "dereference-command-line",
+                 "If a command line argument specifies a symbolic link, show information about \
+                  the linked file rather than the link itself.");
+    opts.optflag("h",
+                 "human-readable",
+                 "Print human readable file sizes (e.g. 1K 234M 56G).");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(e) => {
             show_error!("{}", e);
             panic!()
-        },
+        }
     };
 
     let mode = if matches.opt_present("version") {
@@ -68,15 +90,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     match mode {
         Mode::Version => version(),
-        Mode::Help    => help(),
-        Mode::List    => list(matches)
+        Mode::Help => help(),
+        Mode::List => list(matches),
     }
 
     0
 }
 
 fn version() {
-     println!("{} {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 fn help() {
@@ -87,7 +109,9 @@ fn help() {
                        By default, ls will list the files and contents of any directories on \
                        the command line, expect that it will ignore files and directories \
                        whose names start with '.'. \n\
-                       \n", NAME, VERSION);
+                       \n",
+                      NAME,
+                      VERSION);
     println!("{}", msg);
 }
 
@@ -108,10 +132,10 @@ fn list(options: getopts::Matches) {
 
         if p.is_dir() {
             match fs::read_dir(p) {
-                Err(e)      => {
+                Err(e) => {
                     show_error!("Cannot read directory '{}'. \n Reason: {}", loc, e);
                     panic!();
-                },
+                }
                 Ok(entries) => enter_directory(entries, &options),
             };
         }
@@ -128,8 +152,8 @@ fn enter_directory(contents: ReadDir, options: &getopts::Matches) {
             Err(err) => {
                 show_error!("{}", err);
                 panic!();
-            },
-            Ok(en) => en
+            }
+            Ok(en) => en,
         };
 
         // Currently have a DirEntry that we can believe in.
@@ -141,36 +165,36 @@ fn display_dir_entry(entry: DirEntry, options: &getopts::Matches) {
     let md = match entry.metadata() {
         Err(e) => {
             show_error!("Unable to retrieve metadata for {}. \n Error: {}",
-                        display_file_name(entry.file_name()), e);
+                        display_file_name(entry.file_name()),
+                        e);
             panic!();
-        },
-        Ok(md) => md
+        }
+        Ok(md) => md,
     };
 
-    println!(" {}{} {} {} {} {: >9} {}",
+    println!("{}{} {} {} {} {: >9} {}",
              display_file_type(entry.file_type()),
              display_permissions(&md),
              display_symlink_count(&md),
              display_uname(&md),
              display_group(&md),
              display_file_size(&md, options),
-             display_file_name(entry.file_name())
-            );
-}
-
-fn cstr2string(cstr: *const c_char) -> String {
-    unsafe { String::from_utf8_lossy(CStr::from_ptr(cstr).to_bytes()).to_string() }
+             display_file_name(entry.file_name()));
 }
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
-#[cfg(target_family = "linux")]
+#[cfg(unix)]
 use uucore::c_types::{getpwuid, getgrgid};
 
-#[cfg(target_family = "linux")]
-fn display_uname(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
+// Only used in `display_uname` and `display_group`
+#[cfg(unix)]
+fn cstr2string(cstr: *const c_char) -> String {
+    unsafe { CStr::from_ptr(cstr).to_string_lossy().into_owned() }
+}
 
+#[cfg(unix)]
+fn display_uname(metadata: &Metadata) -> String {
     let pw = unsafe { getpwuid(metadata.uid()) };
     if !pw.is_null() {
         cstr2string(unsafe { ptr::read(pw).pw_name })
@@ -179,10 +203,8 @@ fn display_uname(metadata: &Metadata) -> String {
     }
 }
 
-#[cfg(target_family = "linux")]
+#[cfg(unix)]
 fn display_group(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
-
     let ent = unsafe { getgrgid(metadata.gid()) };
     if !ent.is_null() {
         cstr2string(unsafe { ptr::read(ent).gr_name })
@@ -191,13 +213,13 @@ fn display_group(metadata: &Metadata) -> String {
     }
 }
 
-#[cfg(not(target_family = "linux"))]
+#[cfg(not(unix))]
 #[allow(unused_variables)]
 fn display_uname(metadata: &Metadata) -> String {
     "somebody".to_string()
 }
 
-#[cfg(not(target_family = "linux"))]
+#[cfg(not(unix))]
 #[allow(unused_variables)]
 fn display_group(metadata: &Metadata) -> String {
     "somegroup".to_string()
@@ -216,8 +238,8 @@ fn display_file_type(file_type: Result<FileType, std::io::Error>) -> String {
         Err(e) => {
             show_error!("{}", e);
             panic!()
-        },
-        Ok(ft) => ft
+        }
+        Ok(ft) => ft,
     };
 
     if file_type.is_dir() {
@@ -243,7 +265,6 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 
 #[cfg(target_family = "unix")]
 fn display_symlink_count(metadata: &Metadata) -> String {
-    use std::os::unix::fs::MetadataExt;
     metadata.nlink().to_string()
 }
 
@@ -253,13 +274,85 @@ fn display_permissions(metadata: &Metadata) -> String {
     String::from("---------")
 }
 
+macro_rules! has {
+    ($mode:expr, $perm:expr) => (
+        $mode & $perm != 0
+    )
+}
 #[cfg(target_family = "unix")]
+fn display_permissions(metadata: &Metadata) -> String {
+    let mode = metadata.mode() as mode_t;
+    let mut result = String::with_capacity(9);
+    result.push(if has!(mode, S_IRUSR) {
+        'r'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_IWUSR) {
+        'w'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_ISUID as mode_t) {
+        if has!(mode, S_IXUSR) {
+            's'
+        } else {
+            'S'
+        }
+    } else if has!(mode, S_IXUSR) {
+        'x'
+    } else {
+        '-'
+    });
 
-fn display_permissions(_metadata: &Metadata) -> String {
-    //use std::os::unix::fs::PermissionsExt;
-    "xxxxxxxxx".to_string()
+    result.push(if has!(mode, S_IRGRP) {
+        'r'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_IWGRP) {
+        'w'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_ISGID as mode_t) {
+        if has!(mode, S_IXGRP) {
+            's'
+        } else {
+            'S'
+        }
+    } else if has!(mode, S_IXGRP) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result.push(if has!(mode, S_IROTH) {
+        'r'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_IWOTH) {
+        'w'
+    } else {
+        '-'
+    });
+    result.push(if has!(mode, S_ISVTX as mode_t) {
+        if has!(mode, S_IXOTH) {
+            't'
+        } else {
+            'T'
+        }
+    } else if has!(mode, S_IXOTH) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result
 }
 
+#[allow(unused_variables)]
 fn display_item(item: &Path, options: &getopts::Matches) {
     // let fileType = item.file
     // let mut fileMeta = String::new();
