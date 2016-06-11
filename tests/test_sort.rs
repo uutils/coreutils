@@ -42,6 +42,11 @@ fn test_default_unsorted_ints() {
     test_helper("default_unsorted_ints", "");
 }
 
+#[test]
+fn test_numeric_unique_ints() {
+    test_helper("numeric_unsorted_ints_unique", "-nu");
+}
+
 fn test_helper(file_name: &str, args: &str) {
     let (at, mut ucmd) = testing(UTIL_NAME);
     ucmd.arg(args);

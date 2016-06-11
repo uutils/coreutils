@@ -40,6 +40,7 @@ struct Settings {
     mode: SortMode,
     reverse: bool,
     outfile: Option<String>,
+    unique: bool,
 }
 
 impl Default for Settings {
@@ -48,6 +49,7 @@ impl Default for Settings {
             mode: SortMode::Default,
             reverse: false,
             outfile: None,
+            unique: false,
         }
     }
 }
@@ -63,6 +65,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
     opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
+    opts.optflag("u", "unique", "output only the first of an equal run");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -100,6 +103,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
 
     settings.reverse = matches.opt_present("reverse");
     settings.outfile = matches.opt_str("output");
+    settings.unique = matches.opt_present("unique");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -138,6 +142,10 @@ fn exec(files: Vec<String>, settings: &Settings) {
             SortMode::Default => lines.sort()
         }
 
+        if settings.unique {
+            lines.dedup()
+        }
+
         let iter = lines.iter();
         if settings.reverse {
             print_sorted(iter.rev(), &settings.outfile);
@@ -161,7 +169,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
 }
 
 /// Compares two floating point numbers, with errors being assumed to be -inf.
-/// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but 
+/// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
 /// 1,000 will parse as -inf.
 fn numeric_compare(a: &String, b: &String) -> Ordering {
     let fa = permissive_f64_parse(a);
