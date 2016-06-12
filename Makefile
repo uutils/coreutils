@@ -202,7 +202,7 @@ endef
 
 define TEST_INTEGRATION
 test_integration_$(1): build_exe_$(1)
-	${CARGO} test ${CARGOFLAGS} --test $(1) --features "$(1) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+	${CARGO} test ${CARGOFLAGS} --features "$(1) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
 endef
 
 define TEST_BUSYBOX

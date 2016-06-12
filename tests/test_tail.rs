@@ -3,7 +3,7 @@ extern crate uu_tail;
 use common::util::*;
 use std::char::from_digit;
 use std::io::Write;
-use uu_tail::parse_size;
+use self::uu_tail::parse_size;
 
 static UTIL_NAME: &'static str = "tail";
 
