@@ -174,7 +174,6 @@ To do
 - setuidgid
 - sort (a couple of options implemented)
 - split (a couple of missing options)
-- stat
 - stty
 - tail (not all features implemented)
 - test (not all features implemented)
