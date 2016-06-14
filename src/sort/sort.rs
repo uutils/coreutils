@@ -123,6 +123,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
 }
 
 fn exec(files: Vec<String>, settings: &Settings) {
+    let mut lines = Vec::new();
     for path in &files {
         let (reader, _) = match open(path) {
             Some(x) => x,
@@ -130,7 +131,6 @@ fn exec(files: Vec<String>, settings: &Settings) {
         };
 
         let buf_reader = BufReader::new(reader);
-        let mut lines = Vec::new();
 
         for line in buf_reader.lines() {
             match line {
@@ -140,26 +140,26 @@ fn exec(files: Vec<String>, settings: &Settings) {
                 _ => break
             }
         }
-
-        match settings.mode {
-            SortMode::Numeric => lines.sort_by(numeric_compare),
-            SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
-            SortMode::Month => lines.sort_by(month_compare),
-            SortMode::Version => lines.sort_by(version_compare),
-            SortMode::Default => lines.sort()
-        }
-
-        if settings.unique {
-            lines.dedup()
-        }
-
-        let iter = lines.iter();
-        if settings.reverse {
-            print_sorted(iter.rev(), &settings.outfile);
-        } else {
-            print_sorted(iter, &settings.outfile)
-        };
     }
+
+    match settings.mode {
+        SortMode::Numeric => lines.sort_by(numeric_compare),
+        SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
+        SortMode::Month => lines.sort_by(month_compare),
+        SortMode::Version => lines.sort_by(version_compare),
+        SortMode::Default => lines.sort()
+    }
+
+    if settings.unique {
+        lines.dedup()
+    }
+
+    let iter = lines.iter();
+    if settings.reverse {
+        print_sorted(iter.rev(), &settings.outfile);
+    } else {
+        print_sorted(iter, &settings.outfile)
+    };
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.

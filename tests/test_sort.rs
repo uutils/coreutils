@@ -52,6 +52,16 @@ fn test_version() {
     test_helper("version", "-V");
 }
 
+#[test]
+fn test_multiple_files() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    ucmd.arg("-n");
+    ucmd.arg("multiple_files1.txt");
+    ucmd.arg("multiple_files2.txt");
+    let out = ucmd.run().stdout;
+    assert_eq!(out, at.read("multiple_files.expected"));
+}
+
 fn test_helper(file_name: &str, args: &str) {
     let (at, mut ucmd) = testing(UTIL_NAME);
     ucmd.arg(args);
