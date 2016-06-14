@@ -13,6 +13,7 @@
 
 extern crate getopts;
 extern crate libc;
+extern crate semver;
 
 #[macro_use]
 extern crate uucore;
@@ -22,6 +23,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
 use std::path::Path;
 use uucore::fs::is_stdin_interactive;
+use semver::Version;
 
 static NAME: &'static str = "sort";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -33,6 +35,7 @@ enum SortMode {
     Numeric,
     HumanNumeric,
     Month,
+    Version,
     Default,
 }
 
@@ -66,6 +69,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "version", "output version information and exit");
     opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
     opts.optflag("u", "unique", "output only the first of an equal run");
+    opts.optflag("V", "version-sort", "Sort by SemVer version number, eg 1.12.2 > 1.1.2");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -97,6 +101,8 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         SortMode::HumanNumeric
     } else if matches.opt_present("month-sort") {
         SortMode::Month
+    } else if matches.opt_present("version-sort") {
+        SortMode::Version
     } else {
         SortMode::Default
     };
@@ -139,6 +145,7 @@ fn exec(files: Vec<String>, settings: &Settings) {
             SortMode::Numeric => lines.sort_by(numeric_compare),
             SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
             SortMode::Month => lines.sort_by(month_compare),
+            SortMode::Version => lines.sort_by(version_compare),
             SortMode::Default => lines.sort()
         }
 
@@ -261,6 +268,20 @@ fn month_parse(line: &String) -> Month {
 
 fn month_compare(a: &String, b: &String) -> Ordering {
     month_parse(a).cmp(&month_parse(b))
+}
+
+fn version_compare(a: &String, b: &String) -> Ordering {
+    let ver_a = Version::parse(a);
+    let ver_b = Version::parse(b);
+    if ver_a > ver_b {
+        Ordering::Greater
+    }
+    else if ver_a < ver_b {
+        Ordering::Less
+    }
+    else {
+        Ordering::Equal
+    }
 }
 
 fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where S: std::fmt::Display {
