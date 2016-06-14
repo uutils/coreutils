@@ -44,6 +44,7 @@ struct Settings {
     reverse: bool,
     outfile: Option<String>,
     unique: bool,
+    check: bool,
 }
 
 impl Default for Settings {
@@ -53,6 +54,7 @@ impl Default for Settings {
             reverse: false,
             outfile: None,
             unique: false,
+            check: false,
         }
     }
 }
@@ -70,6 +72,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
     opts.optflag("u", "unique", "output only the first of an equal run");
     opts.optflag("V", "version-sort", "Sort by SemVer version number, eg 1.12.2 > 1.1.2");
+    opts.optflag("c", "check", "check for sorted input; do not sort");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -110,6 +113,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
     settings.reverse = matches.opt_present("reverse");
     settings.outfile = matches.opt_str("output");
     settings.unique = matches.opt_present("unique");
+    settings.check = matches.opt_present("check");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -117,12 +121,10 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         files.push("-".to_owned());
     }
 
-    exec(files, &settings);
-
-    0
+    exec(files, &settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) {
+fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     let mut lines = Vec::new();
     for path in &files {
         let (reader, _) = match open(path) {
@@ -142,6 +144,8 @@ fn exec(files: Vec<String>, settings: &Settings) {
         }
     }
 
+    let original_lines = lines.to_vec();
+
     match settings.mode {
         SortMode::Numeric => lines.sort_by(numeric_compare),
         SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
@@ -154,12 +158,24 @@ fn exec(files: Vec<String>, settings: &Settings) {
         lines.dedup()
     }
 
-    let iter = lines.iter();
     if settings.reverse {
-        print_sorted(iter.rev(), &settings.outfile);
-    } else {
-        print_sorted(iter, &settings.outfile)
-    };
+        lines.reverse()
+    }
+
+    if settings.check {
+        for (i, line) in lines.iter().enumerate() {
+            if line != &original_lines[i] {
+                println!("sort: disorder in line {}", i);
+                return 1;
+            }
+        }
+    }
+    else {
+        print_sorted(lines.iter(), &settings.outfile)
+    }
+
+    0
+
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
