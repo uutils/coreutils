@@ -42,11 +42,51 @@ fn test_default_unsorted_ints() {
     test_helper("default_unsorted_ints", "");
 }
 
+#[test]
+fn test_numeric_unique_ints() {
+    test_helper("numeric_unsorted_ints_unique", "-nu");
+}
+
+#[test]
+fn test_version() {
+    test_helper("version", "-V");
+}
+
+#[test]
+fn test_multiple_files() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    ucmd.arg("-n");
+    ucmd.arg("multiple_files1.txt");
+    ucmd.arg("multiple_files2.txt");
+    let res = ucmd.run();
+    assert_eq!(res.success, true);
+    assert_eq!(res.stdout, at.read("multiple_files.expected"));
+}
+
+#[test]
+fn test_check() {
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    ucmd.arg("-c");
+    let res = ucmd.arg("check_fail.txt").run();
+
+    assert_eq!(res.success, false);
+    assert_eq!(res.stdout, "sort: disorder in line 4\n");
+
+    let (_, mut ucmd) = testing(UTIL_NAME);
+    ucmd.arg("-c");
+    let res = ucmd.arg("multiple_files.expected").run();
+
+    assert_eq!(res.success, true);
+    assert_eq!(res.stdout, "");
+}
+
 fn test_helper(file_name: &str, args: &str) {
     let (at, mut ucmd) = testing(UTIL_NAME);
     ucmd.arg(args);
-    let out = ucmd.arg(format!("{}{}", file_name, ".txt")).run().stdout;
+    let res = ucmd.arg(format!("{}{}", file_name, ".txt")).run();
+
+    assert_eq!(res.success, true);
 
     let filename = format!("{}{}", file_name, ".expected");
-    assert_eq!(out, at.read(&filename));
+    assert_eq!(res.stdout, at.read(&filename));
 }

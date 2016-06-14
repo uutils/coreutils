@@ -13,6 +13,7 @@
 
 extern crate getopts;
 extern crate libc;
+extern crate semver;
 
 #[macro_use]
 extern crate uucore;
@@ -22,6 +23,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
 use std::path::Path;
 use uucore::fs::is_stdin_interactive;
+use semver::Version;
 
 static NAME: &'static str = "sort";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -33,6 +35,7 @@ enum SortMode {
     Numeric,
     HumanNumeric,
     Month,
+    Version,
     Default,
 }
 
@@ -40,6 +43,8 @@ struct Settings {
     mode: SortMode,
     reverse: bool,
     outfile: Option<String>,
+    unique: bool,
+    check: bool,
 }
 
 impl Default for Settings {
@@ -48,6 +53,8 @@ impl Default for Settings {
             mode: SortMode::Default,
             reverse: false,
             outfile: None,
+            unique: false,
+            check: false,
         }
     }
 }
@@ -63,6 +70,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
     opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
+    opts.optflag("u", "unique", "output only the first of an equal run");
+    opts.optflag("V", "version-sort", "Sort by SemVer version number, eg 1.12.2 > 1.1.2");
+    opts.optflag("c", "check", "check for sorted input; do not sort");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -94,12 +104,16 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         SortMode::HumanNumeric
     } else if matches.opt_present("month-sort") {
         SortMode::Month
+    } else if matches.opt_present("version-sort") {
+        SortMode::Version
     } else {
         SortMode::Default
     };
 
     settings.reverse = matches.opt_present("reverse");
     settings.outfile = matches.opt_str("output");
+    settings.unique = matches.opt_present("unique");
+    settings.check = matches.opt_present("check");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -107,12 +121,11 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         files.push("-".to_owned());
     }
 
-    exec(files, &settings);
-
-    0
+    exec(files, &settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) {
+fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+    let mut lines = Vec::new();
     for path in &files {
         let (reader, _) = match open(path) {
             Some(x) => x,
@@ -120,7 +133,6 @@ fn exec(files: Vec<String>, settings: &Settings) {
         };
 
         let buf_reader = BufReader::new(reader);
-        let mut lines = Vec::new();
 
         for line in buf_reader.lines() {
             match line {
@@ -130,21 +142,40 @@ fn exec(files: Vec<String>, settings: &Settings) {
                 _ => break
             }
         }
-
-        match settings.mode {
-            SortMode::Numeric => lines.sort_by(numeric_compare),
-            SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
-            SortMode::Month => lines.sort_by(month_compare),
-            SortMode::Default => lines.sort()
-        }
-
-        let iter = lines.iter();
-        if settings.reverse {
-            print_sorted(iter.rev(), &settings.outfile);
-        } else {
-            print_sorted(iter, &settings.outfile)
-        };
     }
+
+    let original_lines = lines.to_vec();
+
+    match settings.mode {
+        SortMode::Numeric => lines.sort_by(numeric_compare),
+        SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
+        SortMode::Month => lines.sort_by(month_compare),
+        SortMode::Version => lines.sort_by(version_compare),
+        SortMode::Default => lines.sort()
+    }
+
+    if settings.unique {
+        lines.dedup()
+    }
+
+    if settings.reverse {
+        lines.reverse()
+    }
+
+    if settings.check {
+        for (i, line) in lines.iter().enumerate() {
+            if line != &original_lines[i] {
+                println!("sort: disorder in line {}", i);
+                return 1;
+            }
+        }
+    }
+    else {
+        print_sorted(lines.iter(), &settings.outfile)
+    }
+
+    0
+
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
@@ -161,7 +192,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
 }
 
 /// Compares two floating point numbers, with errors being assumed to be -inf.
-/// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but 
+/// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
 /// 1,000 will parse as -inf.
 fn numeric_compare(a: &String, b: &String) -> Ordering {
     let fa = permissive_f64_parse(a);
@@ -253,6 +284,20 @@ fn month_parse(line: &String) -> Month {
 
 fn month_compare(a: &String, b: &String) -> Ordering {
     month_parse(a).cmp(&month_parse(b))
+}
+
+fn version_compare(a: &String, b: &String) -> Ordering {
+    let ver_a = Version::parse(a);
+    let ver_b = Version::parse(b);
+    if ver_a > ver_b {
+        Ordering::Greater
+    }
+    else if ver_a < ver_b {
+        Ordering::Less
+    }
+    else {
+        Ordering::Equal
+    }
 }
 
 fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where S: std::fmt::Display {
