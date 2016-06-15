@@ -14,7 +14,7 @@ extern crate getopts;
 use getopts::Options;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, stdin, Stdin};
+use std::io::{self, BufRead, BufReader, stdin, Stdin};
 use std::path::Path;
 
 static NAME: &'static str = "comm";
