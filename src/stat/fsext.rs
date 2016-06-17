@@ -10,9 +10,40 @@ extern crate libc;
 extern crate time;
 
 use self::time::Timespec;
-pub use self::libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLNK, S_IFSOCK,
-                     S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP,
-                     S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_int, strerror};
+pub use self::libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLNK, S_IFSOCK, S_ISUID, S_ISGID,
+                     S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t,
+                     c_int, strerror};
+
+pub trait BirthTime {
+    fn pretty_birth(&self) -> String;
+    fn birth(&self) -> String;
+}
+
+use std::fs::Metadata;
+impl BirthTime for Metadata {
+    #[cfg(feature = "nightly")]
+    fn pretty_birth(&self) -> String {
+        self.created()
+            .map(|t| t.elapsed().unwrap())
+            .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
+            .unwrap_or("-".to_owned())
+    }
+    #[cfg(not(feature = "nightly"))]
+    fn pretty_birth(&self) -> String {
+        "-".to_owned()
+    }
+    #[cfg(feature = "nightly")]
+    fn birth(&self) -> String {
+        self.created()
+            .map(|t| t.elapsed().unwrap())
+            .map(|e| format!("{}", e.as_secs()))
+            .unwrap_or("0".to_owned())
+    }
+    #[cfg(not(feature = "nightly"))]
+    fn birth(&self) -> String {
+        "0".to_owned()
+    }
+}
 
 #[macro_export]
 macro_rules! has {
@@ -248,8 +279,8 @@ pub fn statfs<P: AsRef<Path>>(path: P) -> Result<Sstatfs, String>
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
                         Err(CString::from_raw(strerror(errno))
-                                .into_string()
-                                .unwrap_or("Unknown Error".to_owned()))
+                            .into_string()
+                            .unwrap_or("Unknown Error".to_owned()))
                     }
                 }
             }
@@ -375,56 +406,5 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x012FD16D => "xia".into(),
         0x2FC12FC1 => "zfs".into(),
         other => format!("UNKNOWN ({:#x})", other).into(),
-    }
-}
-
-#[cfg(test)]
-mod test_fsext {
-    use super::*;
-
-    #[test]
-    fn test_access() {
-        assert_eq!("drwxr-xr-x", pretty_access(S_IFDIR | 0o755));
-        assert_eq!("-rw-r--r--", pretty_access(S_IFREG | 0o644));
-        assert_eq!("srw-r-----", pretty_access(S_IFSOCK | 0o640));
-        assert_eq!("lrw-r-xr-x", pretty_access(S_IFLNK | 0o655));
-        assert_eq!("?rw-r-xr-x", pretty_access(0o655));
-
-        assert_eq!("brwSr-xr-x",
-                   pretty_access(S_IFBLK | S_ISUID as mode_t | 0o655));
-        assert_eq!("brwsr-xr-x",
-                   pretty_access(S_IFBLK | S_ISUID as mode_t | 0o755));
-
-        assert_eq!("prw---sr--",
-                   pretty_access(S_IFIFO | S_ISGID as mode_t | 0o614));
-        assert_eq!("prw---Sr--",
-                   pretty_access(S_IFIFO | S_ISGID as mode_t | 0o604));
-
-        assert_eq!("c---r-xr-t",
-                   pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o055));
-        assert_eq!("c---r-xr-T",
-                   pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o054));
-    }
-
-    #[test]
-    fn test_file_type() {
-        assert_eq!("block special file", pretty_filetype(S_IFBLK, 0));
-        assert_eq!("character special file", pretty_filetype(S_IFCHR, 0));
-        assert_eq!("regular file", pretty_filetype(S_IFREG, 1));
-        assert_eq!("regular empty file", pretty_filetype(S_IFREG, 0));
-        assert_eq!("weird file", pretty_filetype(0, 0));
-    }
-
-    #[test]
-    fn test_fs_type() {
-        assert_eq!("ext2/ext3", pretty_fstype(0xEF53));
-        assert_eq!("tmpfs", pretty_fstype(0x01021994));
-        assert_eq!("nfs", pretty_fstype(0x6969));
-        assert_eq!("btrfs", pretty_fstype(0x9123683e));
-        assert_eq!("xfs", pretty_fstype(0x58465342));
-        assert_eq!("zfs", pretty_fstype(0x2FC12FC1));
-        assert_eq!("ntfs", pretty_fstype(0x5346544e));
-        assert_eq!("fat", pretty_fstype(0x4006));
-        assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
     }
 }

@@ -13,7 +13,7 @@ use getopts::Options;
 
 #[macro_use]
 mod fsext;
-use fsext::*;
+pub use fsext::*;
 
 #[macro_use]
 extern crate uucore;
@@ -25,9 +25,6 @@ use std::borrow::Cow;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::convert::AsRef;
-
-#[cfg(test)]
-mod test_stat;
 
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => (
@@ -43,7 +40,7 @@ macro_rules! fill_string {
     )
 }
 macro_rules! extend_digits {
-    ($str: ident, $min: expr) => (
+    ($str: expr, $min: expr) => (
         if $min > $str.len() {
             let mut pad = String::with_capacity($min);
             fill_string!(pad, '0', $min - $str.len());
@@ -182,6 +179,23 @@ impl ScanUtil for str {
     }
 }
 
+pub fn group_num<'a>(s: &'a str) -> Cow<'a, str> {
+    assert!(s.chars().all(char::is_numeric));
+    if s.len() < 4 {
+        return s.into();
+    }
+    let mut res = String::with_capacity((s.len() - 1) / 3);
+    let mut alone = (s.len() - 1) % 3 + 1;
+    res.push_str(&s[..alone]);
+    while alone != s.len() {
+        res.push(',');
+        res.push_str(&s[alone..alone + 3]);
+        alone += 3;
+    }
+    res.into()
+}
+
+
 pub struct Stater {
     follow: bool,
     showfs: bool,
@@ -262,13 +276,23 @@ fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32
             print_adjusted!(s, left_align, width, ' ');
         }
         OutputType::Integer => {
+            let arg = if has!(flag, F_GROUP) {
+                group_num(arg)
+            } else {
+                Cow::Borrowed(arg)
+            };
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits!(arg, min_digits);
+            let extended: Cow<str> = extend_digits!(arg.as_ref(), min_digits);
             print_adjusted!(extended, left_align, has_sign, prefix, width, padding_char);
         }
         OutputType::Unsigned => {
+            let arg = if has!(flag, F_GROUP) {
+                group_num(arg)
+            } else {
+                Cow::Borrowed(arg)
+            };
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits!(arg, min_digits);
+            let extended: Cow<str> = extend_digits!(arg.as_ref(), min_digits);
             print_adjusted!(extended, left_align, width, padding_char);
         }
         OutputType::UnsignedOct => {
@@ -354,8 +378,7 @@ impl Stater {
                             '-' => flag |= F_LEFT,
                             ' ' => flag |= F_SPACE,
                             '+' => flag |= F_SIGN,
-                            // '\'' => flag |= F_GROUP,
-                            '\'' => unimplemented!(),
+                            '\'' => flag |= F_GROUP,
                             'I' => unimplemented!(),
                             _ => break,
                         }
@@ -469,16 +492,13 @@ impl Stater {
         } else {
             try!(Stater::generate_tokens(&fmtstr, use_printf))
         };
-        let default_dev_tokens = Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true),
-                                                         use_printf)
-                                     .unwrap();
+        let default_dev_tokens = Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true), use_printf)
+            .unwrap();
 
         let reader = BufReader::new(File::open(MOUNT_INFO).expect("Failed to read /etc/mtab"));
         let mut mount_list = reader.lines()
                                    .filter_map(|s| s.ok())
-                                   .filter_map(|line| {
-                                       line.split_whitespace().nth(1).map(|s| s.to_owned())
-                                   })
+                                   .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
                                    .collect::<Vec<String>>();
         // Reverse sort. The longer comes first.
         mount_list.sort_by(|a, b| b.cmp(a));
@@ -526,8 +546,7 @@ impl Stater {
             match result {
                 Ok(meta) => {
                     let ftype = meta.file_type();
-                    let tokens = if self.from_user ||
-                                    !(ftype.is_char_device() || ftype.is_block_device()) {
+                    let tokens = if self.from_user || !(ftype.is_char_device() || ftype.is_block_device()) {
                         &self.default_tokens
                     } else {
                         &self.default_dev_tokens
@@ -622,11 +641,14 @@ impl Stater {
                                     // quoted file name with dereference if symbolic link
                                     'N' => {
                                         if ftype.is_symlink() {
-                                            arg = format!("`{}' -> `{}'",
-                                                          file,
-                                                          fs::read_link(file)
-                                                              .expect("Invalid symlink")
-                                                              .to_string_lossy());
+                                            let dst = match fs::read_link(file) {
+                                                Ok(path) => path,
+                                                Err(e) => {
+                                                    println!("{}", e);
+                                                    return 1;
+                                                }
+                                            };
+                                            arg = format!("`{}' -> `{}'", file, dst.to_string_lossy());
                                         } else {
                                             arg = format!("`{}'", file);
                                         }
@@ -667,32 +689,13 @@ impl Stater {
 
                                     // time of file birth, human-readable; - if unknown
                                     'w' => {
-                                        // Unstable. Commented
-                                        //arg = if let Ok(elapsed) = meta.created()
-                                                                       //.map(|t| {
-                                                                           //t.elapsed().unwrap()
-                                                                       //}) {
-                                            //pretty_time(elapsed.as_secs() as i64,
-                                                        //elapsed.subsec_nanos() as i64)
-                                        //} else {
-                                            //"-".to_owned()
-                                        //};
-                                        arg = "-".to_owned();
+                                        arg = meta.pretty_birth();
                                         otype = OutputType::Str;
                                     }
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
                                     'W' => {
-                                        // Unstable. Commented
-                                        //arg = if let Ok(elapsed) = meta.created()
-                                                                       //.map(|t| {
-                                                                           //t.elapsed().unwrap()
-                                                                       //}) {
-                                            //format!("{}", elapsed.as_secs())
-                                        //} else {
-                                            //"0".to_owned()
-                                        //};
-                                        arg = "0".to_owned();
+                                        arg = meta.birth();
                                         otype = OutputType::Integer;
                                     }
 

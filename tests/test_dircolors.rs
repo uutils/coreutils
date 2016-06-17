@@ -1,6 +1,49 @@
+extern crate uu_dircolors;
+use self::uu_dircolors::{StrUtils, guess_syntax, OutputFmt};
+
 use common::util::*;
 
 static UTIL_NAME: &'static str = "dircolors";
+
+#[test]
+fn test_shell_syntax() {
+    use std::env;
+    let last = env::var("SHELL");
+    env::set_var("SHELL", "/path/csh");
+    assert_eq!(OutputFmt::CShell, guess_syntax());
+    env::set_var("SHELL", "csh");
+    assert_eq!(OutputFmt::CShell, guess_syntax());
+    env::set_var("SHELL", "/path/bash");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "bash");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "/asd/bar");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "foo");
+    assert_eq!(OutputFmt::Shell, guess_syntax());
+    env::set_var("SHELL", "");
+    assert_eq!(OutputFmt::Unknown, guess_syntax());
+    env::remove_var("SHELL");
+    assert_eq!(OutputFmt::Unknown, guess_syntax());
+
+    if let Ok(s) = last {
+        env::set_var("SHELL", s);
+    }
+}
+
+#[test]
+fn test_strutils() {
+    let s = "  asd#zcv #hk\t\n  ";
+    assert_eq!("asd#zcv", s.purify());
+
+    let s = "con256asd";
+    assert!(s.fnmatch("*[2][3-6][5-9]?sd"));
+
+    let s = "zxc \t\nqwe jlk    hjl";
+    let (k, v) = s.split_two();
+    assert_eq!("zxc", k);
+    assert_eq!("qwe jlk    hjl", v);
+}
 
 #[test]
 fn test1() {

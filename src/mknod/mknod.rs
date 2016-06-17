@@ -46,14 +46,6 @@ fn _makenod(path: CString, mode: mode_t, dev: dev_t) -> i32 {
     unsafe { libc::mknod(path.as_ptr(), mode, dev) }
 }
 
-macro_rules! disp_err {
-    ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stderr(), "{}: ", NAME);
-        pipe_writeln!(&mut ::std::io::stderr(), $($args)+);
-        pipe_writeln!(&mut ::std::io::stderr(), "Try '{} --help' for more information.", NAME);
-    })
-}
-
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
