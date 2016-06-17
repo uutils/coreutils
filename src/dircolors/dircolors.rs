@@ -29,19 +29,16 @@ mod colors;
 use colors::INTERNAL_DB;
 
 #[derive(PartialEq, Debug)]
-enum OutputFmt {
+pub enum OutputFmt {
     Shell,
     CShell,
     Unknown,
 }
 
-fn guess_syntax() -> OutputFmt {
+pub fn guess_syntax() -> OutputFmt {
     use std::path;
     match env::var("SHELL") {
-        Ok(s) => {
-            if s.is_empty() {
-                return OutputFmt::Unknown;
-            }
+        Ok(ref s) if !s.is_empty() => {
             if let Some(last) = s.rsplit(path::MAIN_SEPARATOR).next() {
                 if last == "csh" || last == "tcsh" {
                     OutputFmt::CShell
@@ -52,7 +49,7 @@ fn guess_syntax() -> OutputFmt {
                 OutputFmt::Shell
             }
         }
-        Err(_) => OutputFmt::Unknown,
+        _ => OutputFmt::Unknown,
     }
 }
 
@@ -170,7 +167,7 @@ For details on the format of these files, run 'dircolors --print-database'.",
     }
 }
 
-trait StrUtils {
+pub trait StrUtils {
     /// Remove comments and trim whitespaces
     fn purify(&self) -> &Self;
     /// Like split_whitespace() but only produce 2 components
@@ -333,44 +330,4 @@ fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
     }
 
     Ok(result)
-}
-
-#[test]
-fn test_shell_syntax() {
-    use std::env;
-    let last = env::var("SHELL");
-    env::set_var("SHELL", "/path/csh");
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    env::set_var("SHELL", "csh");
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    env::set_var("SHELL", "/path/bash");
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "bash");
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "/asd/bar");
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "foo");
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "");
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-    env::remove_var("SHELL");
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-
-    if let Ok(s) = last {
-        env::set_var("SHELL", s);
-    }
-}
-
-#[test]
-fn test_strutils() {
-    let s = "  asd#zcv #hk\t\n  ";
-    assert_eq!("asd#zcv", s.purify());
-
-    let s = "con256asd";
-    assert!(s.fnmatch("*[2][3-6][5-9]?sd"));
-
-    let s = "zxc \t\nqwe jlk    hjl";
-    let (k, v) = s.split_two();
-    assert_eq!("zxc", k);
-    assert_eq!("qwe jlk    hjl", v);
 }
