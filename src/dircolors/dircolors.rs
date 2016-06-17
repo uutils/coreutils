@@ -36,11 +36,12 @@ pub enum OutputFmt {
 }
 
 pub fn guess_syntax() -> OutputFmt {
-    use std::path;
+    use std::path::Path;
     match env::var("SHELL") {
         Ok(ref s) if !s.is_empty() => {
-            if let Some(last) = s.rsplit(path::MAIN_SEPARATOR).next() {
-                if last == "csh" || last == "tcsh" {
+            let shell_path: &Path = s.as_ref();
+            if let Some(name) = shell_path.file_name() {
+                if name == "csh" || name == "tcsh" {
                     OutputFmt::CShell
                 } else {
                     OutputFmt::Shell
