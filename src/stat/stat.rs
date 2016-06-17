@@ -689,29 +689,13 @@ impl Stater {
 
                                     // time of file birth, human-readable; - if unknown
                                     'w' => {
-                                        arg = if cfg!(feature = "nightly") {
-                                            // Unstable
-                                            meta.created()
-                                                .map(|t| t.elapsed().unwrap())
-                                                .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
-                                                .unwrap_or("-".to_owned())
-                                        } else {
-                                            "-".to_owned()
-                                        };
+                                        arg = meta.pretty_birth();
                                         otype = OutputType::Str;
                                     }
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
                                     'W' => {
-                                        arg = if cfg!(feature = "nightly") {
-                                            // Unstable
-                                            meta.created()
-                                                .map(|t| t.elapsed().unwrap())
-                                                .map(|e| format!("{}", e.as_secs()))
-                                                .unwrap_or("0".to_owned())
-                                        } else {
-                                            "0".to_owned()
-                                        };
+                                        arg = meta.birth();
                                         otype = OutputType::Integer;
                                     }
 

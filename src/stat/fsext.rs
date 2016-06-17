@@ -14,6 +14,37 @@ pub use self::libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLN
                      S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t,
                      c_int, strerror};
 
+pub trait BirthTime {
+    fn pretty_birth(&self) -> String;
+    fn birth(&self) -> String;
+}
+
+use std::fs::Metadata;
+impl BirthTime for Metadata {
+    #[cfg(feature = "nightly")]
+    fn pretty_birth(&self) -> String {
+        self.created()
+            .map(|t| t.elapsed().unwrap())
+            .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
+            .unwrap_or("-".to_owned())
+    }
+    #[cfg(not(feature = "nightly"))]
+    fn pretty_birth(&self) -> String {
+        "-".to_owned()
+    }
+    #[cfg(feature = "nightly")]
+    fn birth(&self) -> String {
+        self.created()
+            .map(|t| t.elapsed().unwrap())
+            .map(|e| format!("{}", e.as_secs()))
+            .unwrap_or("0".to_owned())
+    }
+    #[cfg(not(feature = "nightly"))]
+    fn birth(&self) -> String {
+        "0".to_owned()
+    }
+}
+
 #[macro_export]
 macro_rules! has {
     ($mode:expr, $perm:expr) => (
