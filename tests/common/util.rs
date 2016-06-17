@@ -487,7 +487,7 @@ impl UCommand {
 pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);
-    sleep(Duration::from_millis(100));
+    sleep(Duration::from_secs(1));
     child.stdout.as_mut().unwrap().read(output.as_mut_slice()).unwrap();
     String::from_utf8(output).unwrap()
 }
