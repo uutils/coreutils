@@ -71,6 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let make_dir = matches.opt_present("directory");
     let dry_run = matches.opt_present("dry-run");
     let suffix_opt = matches.opt_str("suffix");
+    let suppress_file_err = matches.opt_present("quiet");
 
 
     let template = if matches.free.is_empty() {
@@ -119,7 +120,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if dry_run {
         dry_exec(tmpdir, prefix, rand, &suffix)
     } else {
-        exec(tmpdir, prefix, rand , &suffix, make_dir)
+        exec(tmpdir, prefix, rand, &suffix, make_dir, suppress_file_err)
     }
 
 }
@@ -175,8 +176,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     0
 }
 
-fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> i32 {
-    // TODO: respect make_dir option
+fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool, quiet: bool) -> i32 {
     if make_dir {
         match tempdir::new_in(&tmpdir, prefix, rand, suffix) {
             Ok(ref f) => {
