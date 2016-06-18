@@ -1,13 +1,13 @@
 #![crate_name = "uu_mktemp"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Sunrin SHIMURA
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Sunrin SHIMURA
+// Collaborator: Jian Zeng
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
 
 extern crate getopts;
 extern crate libc;
@@ -26,6 +26,8 @@ use std::iter;
 use rand::Rng;
 use tempfile::NamedTempFileOptions;
 
+mod tempdir;
+
 static NAME: &'static str = "mktemp";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static DEFAULT_TEMPLATE: &'static str = "tmp.XXXXXXXXXX";
@@ -34,7 +36,9 @@ static DEFAULT_TEMPLATE: &'static str = "tmp.XXXXXXXXXX";
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
     opts.optflag("d", "directory", "Make a directory instead of a file");
-    opts.optflag("u", "dry-run", "do not create anything; merely print a name (unsafe)");
+    opts.optflag("u",
+                 "dry-run",
+                 "do not create anything; merely print a name (unsafe)");
     opts.optflag("q", "quiet", "Fail silently if an error occurs.");
     opts.optopt("", "suffix", "append SUFF to TEMPLATE; SUFF must not contain a path separator. This option is implied if TEMPLATE does not end with X.", "SUFF");
     opts.optopt("p", "tmpdir", "interpret TEMPLATE relative to DIR; if DIR is not specified, use $TMPDIR if set, else /tmp.  With this option, TEMPLATE  must  not  be  an  absolute name; unlike with -t, TEMPLATE may contain slashes, but mktemp creates only the final component", "DIR");
@@ -47,15 +51,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // >> early return options
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
-    if matches.opt_present("quiet") {
-        // TODO: close stderror. `crash!` macro always write output to stderror
-        crash!(1, "quiet option is not supported yet.");
-    };
-
-    if  matches.opt_present("help") {
+    if matches.opt_present("help") {
         print_help(&opts);
         return 0;
     }
@@ -72,6 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let make_dir = matches.opt_present("directory");
     let dry_run = matches.opt_present("dry-run");
     let suffix_opt = matches.opt_str("suffix");
+    let suppress_file_err = matches.opt_present("quiet");
 
 
     let template = if matches.free.is_empty() {
@@ -81,15 +81,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let (prefix, rand, suffix) = match parse_template(template) {
-        Some((p, r, s)) => match suffix_opt {
-            Some(suf) => if s == "" {
-                (p, r, suf)
-            } else {
-                crash!(1, "Template should end with 'X' when you specify suffix option.")
-            },
-            None => (p, r, s.to_owned())
-        },
-        None => ("",0, "".to_owned())
+        Some((p, r, s)) => {
+            match suffix_opt {
+                Some(suf) => {
+                    if s == "" {
+                        (p, r, suf)
+                    } else {
+                        crash!(1,
+                               "Template should end with 'X' when you specify suffix option.")
+                    }
+                }
+                None => (p, r, s.to_owned()),
+            }
+        }
+        None => ("", 0, "".to_owned()),
     };
 
     if rand < 3 {
@@ -104,18 +109,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let tmpdir = match matches.opt_str("tmpdir") {
         Some(s) => {
             if PathBuf::from(prefix).is_absolute() {
-                crash!(1, "template must not be an absolute path when tempdir is specified.");
+                show_info!("invalid template, ‘{}’; with --tmpdir, it may not be absolute", template);
+                return 1;
             }
             PathBuf::from(s)
-                
-        },
-        None => env::temp_dir()
+        }
+        None => env::temp_dir(),
     };
 
     if dry_run {
         dry_exec(tmpdir, prefix, rand, &suffix)
     } else {
-        exec(tmpdir, prefix, rand , &suffix, make_dir)
+        exec(tmpdir, prefix, rand, &suffix, make_dir, suppress_file_err)
     }
 
 }
@@ -123,7 +128,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn print_help(opts: &getopts::Options) {
     let usage = format!(" Create a temporary file or directory, safely, and print its name.
 TEMPLATE must contain at least 3 consecutive 'X's in last component.
-If TEMPLATE is not specified, use {}, and --tmpdir is implied", DEFAULT_TEMPLATE);
+If TEMPLATE is not specified, use {}, and --tmpdir is implied",
+                        DEFAULT_TEMPLATE);
 
     println!("{} {}", NAME, VERSION);
     println!("SYNOPSIS");
@@ -132,10 +138,10 @@ If TEMPLATE is not specified, use {}, and --tmpdir is implied", DEFAULT_TEMPLATE
     print!("{}", opts.usage(&usage[..]));
 }
 
-fn parse_template(temp :&str) -> Option<(&str, usize, &str)> {
+fn parse_template(temp: &str) -> Option<(&str, usize, &str)> {
     let right = match temp.rfind('X') {
-        Some(r) => r+1,
-        None => return None
+        Some(r) => r + 1,
+        None => return None,
     };
     let left = temp[..right].rfind(|c| c != 'X').map_or(0, |i| i + 1);
     let prefix = &temp[..left];
@@ -170,10 +176,20 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     0
 }
 
-fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> i32 {
-    // TODO: respect make_dir option
+fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool, quiet: bool) -> i32 {
     if make_dir {
-        crash!(1, "Directory option is not supported yet. Sorry.");
+        match tempdir::new_in(&tmpdir, prefix, rand, suffix) {
+            Ok(ref f) => {
+                println!("{}", f);
+                return 0;
+            }
+            Err(e) => {
+                if !quiet {
+                    show_info!("{}", e);
+                }
+                return 1;
+            }
+        }
     }
 
     let tmpfile = NamedTempFileOptions::new()
@@ -184,13 +200,17 @@ fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool
 
     let tmpfile = match tmpfile {
         Ok(f) => f,
-        Err(_) => crash!(1, "failed to create tempfile")
+        Err(e) => {
+            if !quiet {
+                show_info!("failed to create tempfile: {}", e);
+            }
+            return 1;
+        }
     };
-    
-    let tmpname = tmpfile
-        .path()
-        .to_string_lossy()
-        .to_string();
+
+    let tmpname = tmpfile.path()
+                         .to_string_lossy()
+                         .to_string();
 
     println!("{}", tmpname);
 
