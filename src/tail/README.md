@@ -7,7 +7,6 @@ Rudimentary tail implementation.
 * `--pid` : with `-f`, terminate after process ID, PID dies
 * `--quiet` : never output headers giving file names
 * `--retry` : keep trying to open a file even when it is or becomes inaccessible; useful when follow‐ing by name, i.e., with `--follow=name`
-* `--verbose` : always output headers giving file names
 
 ### Others
 The current implementation does not handle `-` as an alias for stdin.
