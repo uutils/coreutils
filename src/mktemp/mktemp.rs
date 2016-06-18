@@ -26,6 +26,8 @@ use std::iter;
 use rand::Rng;
 use tempfile::NamedTempFileOptions;
 
+mod tempdir;
+
 static NAME: &'static str = "mktemp";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 static DEFAULT_TEMPLATE: &'static str = "tmp.XXXXXXXXXX";
@@ -173,7 +175,18 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
 fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> i32 {
     // TODO: respect make_dir option
     if make_dir {
-        crash!(1, "Directory option is not supported yet. Sorry.");
+        match tempdir::new_in(&tmpdir, prefix, rand, suffix) {
+            Ok(ref f) => {
+                println!("{}", f);
+                return 0;
+            }
+            Err(e) => {
+                if !quiet {
+                    show_info!("{}", e);
+                }
+                return 1;
+            }
+        }
     }
 
     let tmpfile = NamedTempFileOptions::new()
@@ -184,13 +197,17 @@ fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool
 
     let tmpfile = match tmpfile {
         Ok(f) => f,
-        Err(_) => crash!(1, "failed to create tempfile")
+        Err(e) => {
+            if !quiet {
+                show_info!("failed to create tempfile: {}", e);
+            }
+            return 1;
+        }
     };
-    
-    let tmpname = tmpfile
-        .path()
-        .to_string_lossy()
-        .to_string();
+
+    let tmpname = tmpfile.path()
+                         .to_string_lossy()
+                         .to_string();
 
     println!("{}", tmpname);
 
