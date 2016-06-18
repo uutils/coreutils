@@ -43,7 +43,30 @@ fn test_mktemp_mktemp() {
     assert!(!exit_success8);
 }
 
-// TODO: test directory option when implemented
+#[test]
+fn test_mktemp_make_temp_dir() {
+    let ts = TestSet::new(UTIL_NAME);
+
+    let pathname = ts.fixtures.as_string();
+
+    let exit_success1 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE1).run().success;
+    let exit_success2 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE2).run().success;
+    let exit_success3 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE3).run().success;
+    let exit_success4 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE4).run().success;
+    let exit_success5 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE5).run().success;
+    let exit_success6 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE6).run().success;
+    let exit_success7 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE7).run().success;
+    let exit_success8 = ts.util_cmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE8).run().success;
+
+    assert!(exit_success1);
+    assert!(!exit_success2);
+    assert!(!exit_success3);
+    assert!(!exit_success4);
+    assert!(exit_success5);
+    assert!(exit_success6);
+    assert!(exit_success7);
+    assert!(!exit_success8);
+}
 
 #[test]
 fn test_mktemp_dry_run() {
@@ -71,7 +94,16 @@ fn test_mktemp_dry_run() {
     assert!(!exit_success8);
 }
 
-// TOOD: test quiet option when correctry implemented
+#[test]
+fn test_mktemp_quiet() {
+    let ts = TestSet::new(UTIL_NAME);
+
+    let result1 = ts.util_cmd().arg("-p").arg("/definitely/not/exist/I/promise").arg("-q").run();
+    let result2 = ts.util_cmd().arg("-d").arg("-p").arg("/definitely/not/exist/I/promise").arg("-q").run();
+
+    assert!(result1.stderr.is_empty() && result1.stdout.is_empty() && !result1.success);
+    assert!(result2.stderr.is_empty() && result2.stdout.is_empty() && !result2.success);
+}
 
 #[test]
 fn test_mktemp_suffix() {
