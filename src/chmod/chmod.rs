@@ -248,11 +248,18 @@ fn parse_symbolic(mut fperm: libc::mode_t, mut mode: &str, file: &Path) -> Resul
     if pos == mode.len() {
         return Err(format!("invalid mode ({})", mode));
     }
+    let respect_umask = pos == 0;
+    let last_umask = unsafe {
+        libc::umask(0)
+    };
     mode = &mode[pos..];
     while mode.len() > 0 {
         let (op, pos) = try!(parse_op(mode, None));
         mode = &mode[pos..];
-        let (srwx, pos) = parse_change(mode, fperm, file);
+        let (mut srwx, pos) = parse_change(mode, fperm, file);
+        if respect_umask {
+            srwx &= !last_umask;
+        }
         mode = &mode[pos..];
         match op {
             '+' => fperm |= srwx & mask,
@@ -260,6 +267,9 @@ fn parse_symbolic(mut fperm: libc::mode_t, mut mode: &str, file: &Path) -> Resul
             '=' => fperm = (fperm & !mask) | (srwx & mask),
             _ => unreachable!()
         }
+    }
+    unsafe {
+        libc::umask(last_umask);
     }
     Ok(fperm)
 }

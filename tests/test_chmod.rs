@@ -2,6 +2,9 @@ use common::util::*;
 use std::fs::{metadata, OpenOptions, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
+extern crate libc;
+use self::libc::umask;
+
 static UTIL_NAME: &'static str = "chmod";
 static TEST_FILE: &'static str = "file";
 static REFERENCE_FILE: &'static str = "reference";
@@ -67,6 +70,9 @@ fn test_chmod_octal() {
 
 #[test]
 fn test_chmod_ugoa() {
+    let last = unsafe {
+        umask(0)
+    };
     let tests = vec!{
         TestCase{args: vec!{"u=rwx", TEST_FILE}, before: 0o000, after: 0o700},
         TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o000, after: 0o070},
@@ -77,6 +83,24 @@ fn test_chmod_ugoa() {
         TestCase{args: vec!{"-x", TEST_FILE}, before: 0o777, after: 0o666},
     };
     run_tests(tests);
+
+    unsafe {
+        umask(0o022);
+    }
+    let tests = vec!{
+        TestCase{args: vec!{"u=rwx", TEST_FILE}, before: 0o000, after: 0o700},
+        TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o000, after: 0o070},
+        TestCase{args: vec!{"o=rwx", TEST_FILE}, before: 0o000, after: 0o007},
+        TestCase{args: vec!{"a=rwx", TEST_FILE}, before: 0o000, after: 0o777},
+        TestCase{args: vec!{"+rw", TEST_FILE}, before: 0o000, after: 0o644},
+        TestCase{args: vec!{"=rwx", TEST_FILE}, before: 0o000, after: 0o755},
+        TestCase{args: vec!{"-w", TEST_FILE}, before: 0o777, after: 0o577},
+        TestCase{args: vec!{"-x", TEST_FILE}, before: 0o777, after: 0o666},
+    };
+    run_tests(tests);
+    unsafe {
+        umask(last);
+    }
 }
 
 #[test]
