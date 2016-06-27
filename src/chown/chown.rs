@@ -8,9 +8,6 @@
 // file that was distributed with this source code.
 //
 
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
-
 extern crate libc;
 use libc::{uid_t, gid_t, c_char, c_int};
 
@@ -20,9 +17,12 @@ extern crate uucore;
 extern crate getopts;
 use getopts::Options;
 
+extern crate walkdir;
+use walkdir::WalkDir;
+
 pub mod passwd;
 
-use std::fs;
+use std::fs::{self, Metadata};
 use std::os::unix::fs::MetadataExt;
 
 use std::io::{self, Write};
@@ -34,8 +34,6 @@ use std::convert::AsRef;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-use std::sync::Arc;
-
 static NAME: &'static str = "chown";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -44,6 +42,7 @@ const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
 extern "C" {
+    #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "lchown$UNIX2003")]
     pub fn lchown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int;
 }
 
@@ -97,12 +96,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut bit_flag = FTS_PHYSICAL;
     let mut preserve_root = false;
     let mut derefer = -1;
+    let flags: &[char] = &['H', 'L', 'P'];
     for opt in &args {
         match opt.as_str() {
             // If more than one is specified, only the final one takes effect.
-            s if s.contains('H') => bit_flag = FTS_COMFOLLOW | FTS_PHYSICAL,
-            s if s.contains('L') => bit_flag = FTS_LOGICAL,
-            s if s.contains('P') => bit_flag = FTS_PHYSICAL,
+            s if s.contains(flags) => {
+                if let Some(idx) = s.rfind(flags) {
+                    match s.chars().nth(idx).unwrap() {
+                        'H' => bit_flag = FTS_COMFOLLOW | FTS_PHYSICAL,
+                        'L' => bit_flag = FTS_LOGICAL,
+                        'P' => bit_flag = FTS_PHYSICAL,
+                        _ => (),
+                    }
+                }
+            }
             "--no-preserve-root" => preserve_root = false,
             "--preserve-root" => preserve_root = true,
             "--dereference" => derefer = 1,
@@ -167,7 +174,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
     if let Some(file) = matches.opt_str("reference") {
-        // matches.opt_present("reference")
         match fs::metadata(&file) {
             Ok(meta) => {
                 dest_gid = Some(meta.gid());
@@ -238,11 +244,12 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     }
 }
 
+#[derive(PartialEq, Debug)]
 enum Verbosity {
     Silent,
     Changes,
-    Normal,
     Verbose,
+    Normal,
 }
 
 enum IfFrom {
@@ -264,6 +271,15 @@ struct Chowner {
     dereference: bool,
 }
 
+macro_rules! unwrap {
+    ($m:expr, $e:ident, $err:block) => (
+        match $m {
+            Ok(meta) => meta,
+            Err($e) => $err,
+        }
+    )
+}
+
 impl Chowner {
     fn exec(&self) -> i32 {
         let mut ret = 0;
@@ -274,23 +290,19 @@ impl Chowner {
                 ret = 1;
                 continue;
             }
-            ret = self.traverse(f);
+            ret |= self.traverse(f);
         }
         ret
     }
 
-    fn chown<P: AsRef<Path>>(&self, path: P, follow: bool) -> IOResult<()> {
-        let s = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+    fn chown<P: AsRef<Path>>(&self, path: P, duid: uid_t, dgid: gid_t, follow: bool) -> IOResult<()> {
+        let path = path.as_ref();
+        let s = CString::new(path.as_os_str().as_bytes()).unwrap();
         let ret = unsafe {
             if follow {
-                libc::chown(s.as_ptr(),
-                            self.dest_uid.unwrap_or((0 as uid_t).wrapping_sub(1)),
-                            self.dest_gid.unwrap_or((0 as gid_t).wrapping_sub(1)))
-
+                libc::chown(s.as_ptr(), duid, dgid)
             } else {
-                lchown(s.as_ptr(),
-                       self.dest_uid.unwrap_or((0 as uid_t).wrapping_sub(1)),
-                       self.dest_gid.unwrap_or((0 as gid_t).wrapping_sub(1)))
+                lchown(s.as_ptr(), duid, dgid)
             }
         };
         if ret == 0 {
@@ -301,84 +313,118 @@ impl Chowner {
     }
 
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let mut ret = 0;
-        let follow_arg = self.dereference || self.recursive && self.bit_flag != FTS_PHYSICAL;
-        let root_path = root.as_ref();
-        let meta = if follow_arg {
-            match root_path.metadata() {
-                Ok(meta) => meta,
-                Err(e) => {
-                    show_info!("cannot dereference '{}': {}", root_path.display(), e);
-                    return 1;
-                }
-            }
-        } else {
-            match root_path.symlink_metadata() {
-                Ok(meta) => meta,
-                Err(e) => {
-                    show_info!("cannot access '{}': {}", root_path.display(), e);
-                    return 1;
-                }
-            }
+        let follow_arg = self.dereference || self.bit_flag != FTS_PHYSICAL;
+        let path = root.as_ref();
+        let meta = match self.obtain_meta(path, follow_arg) {
+            Some(m) => m,
+            _ => return 1,
         };
-        if self.matched(meta.uid(), meta.gid()) {
-            if let Err(e) = self.chown(root.as_ref(), follow_arg) {
-                show_info!("changing ownership of '{}': {}", root_path.display(), e);
-                ret = 1;
-            }
-        }
 
-        if !meta.is_dir() || !self.recursive {
+        let ret = if self.matched(meta.uid(), meta.gid()) {
+            self.wrap_chown(path, &meta, follow_arg)
+        } else {
+            0
+        };
+
+        if !self.recursive {
             return ret;
         }
 
-        let mut dirs = vec![];
-        dirs.push(Arc::new(root_path.to_path_buf()));
-        while !dirs.is_empty() {
-            let dir = dirs.pop().expect("Poping directory");
-            for entry in dir.read_dir().unwrap() {
-                let entry = entry.unwrap();
-                let path = Arc::new(entry.path());
-                let smeta = if self.bit_flag & FTS_LOGICAL != 0 {
-                    match path.metadata() {
-                        Ok(meta) => meta,
-                        Err(e) => {
-                            show_info!("cannot access '{}': {}", path.display(), e);
-                            ret = 1;
-                            continue;
-                        }
-                    }
-                } else {
-                    match path.symlink_metadata() {
-                        Ok(meta) => meta,
-                        Err(e) => {
-                            show_info!("cannot dereference '{}': {}", path.display(), e);
-                            ret = 1;
-                            continue;
-                        }
-                    }
-                };
-                if smeta.is_dir() {
-                    dirs.push(path.clone());
+        self.dive_into(&root)
+    }
+
+    fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
+        let mut ret = 0;
+        let root = root.as_ref();
+        let follow = self.bit_flag & FTS_LOGICAL != 0;
+        for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
+            let entry = unwrap!(entry, e, {
+                ret = 1;
+                show_info!("{}", e);
+                continue;
+            });
+            let path = entry.path();
+            let meta = match self.obtain_meta(path, follow) {
+                Some(m) => m,
+                _ => {
+                    ret = 1;
+                    continue;
                 }
-                let meta = if self.bit_flag == FTS_PHYSICAL {
-                    smeta
-                } else {
-                    match path.metadata() {
-                        Ok(meta) => meta,
-                        Err(e) => {
-                            show_info!("cannot dereference '{}': {}", path.display(), e);
-                            ret = 1;
-                            continue;
-                        }
-                    }
-                };
-                if self.matched(meta.uid(), meta.gid()) {
-                    if let Err(e) = self.chown(&*path, true) {
-                        ret = 1;
-                        show_info!("changing ownership of '{}': {}", path.display(), e);
-                    }
+            };
+
+            if !self.matched(meta.uid(), meta.gid()) {
+                continue;
+            }
+
+            ret = self.wrap_chown(path, &meta, true);
+        }
+        ret
+    }
+
+    fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
+        use self::Verbosity::*;
+        let path = path.as_ref();
+        let meta = if follow {
+            unwrap!(path.metadata(), e, {
+                match self.verbosity {
+                    Silent => (),
+                    _ => show_info!("cannot access '{}': {}", path.display(), e),
                 }
+                return None;
+            })
+        } else {
+            unwrap!(path.symlink_metadata(), e, {
+                match self.verbosity {
+                    Silent => (),
+                    _ => show_info!("cannot dereference '{}': {}", path.display(), e),
+                }
+                return None;
+            })
+        };
+        Some(meta)
+    }
+
+    fn wrap_chown<P: AsRef<Path>>(&self, path: P, meta: &Metadata, follow: bool) -> i32 {
+        use self::Verbosity::*;
+        let mut ret = 0;
+        let dest_uid = self.dest_uid.unwrap_or(meta.uid());
+        let dest_gid = self.dest_gid.unwrap_or(meta.gid());
+        let path = path.as_ref();
+        if let Err(e) = self.chown(path, dest_uid, dest_gid, follow) {
+            match self.verbosity {
+                Silent => (),
+                _ => {
+                    show_info!("changing ownership of '{}': {}", path.display(), e);
+                    if self.verbosity == Verbose {
+                        println!("failed to change ownership of {} from {}:{} to {}:{}",
+                                 path.display(),
+                                 passwd::uid2usr(meta.uid()).unwrap(),
+                                 passwd::gid2grp(meta.gid()).unwrap(),
+                                 passwd::uid2usr(dest_uid).unwrap(),
+                                 passwd::gid2grp(dest_gid).unwrap());
+                    };
+                }
+            }
+            ret = 1;
+        } else {
+            let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
+            if changed {
+                match self.verbosity {
+                    Changes | Verbose => {
+                        println!("changed ownership of {} from {}:{} to {}:{}",
+                                 path.display(),
+                                 passwd::uid2usr(meta.uid()).unwrap(),
+                                 passwd::gid2grp(meta.gid()).unwrap(),
+                                 passwd::uid2usr(dest_uid).unwrap(),
+                                 passwd::gid2grp(dest_gid).unwrap());
+                    }
+                    _ => (),
+                };
+            } else if self.verbosity == Verbose {
+                println!("ownership of {} retained as {}:{}",
+                         path.display(),
+                         passwd::uid2usr(dest_uid).unwrap(),
+                         passwd::gid2grp(dest_gid).unwrap());
             }
         }
         ret

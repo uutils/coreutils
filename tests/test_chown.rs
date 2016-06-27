@@ -12,7 +12,6 @@ mod test_passwd {
     #[test]
     fn test_getuid() {
         assert_eq!(0, getuid("root").unwrap());
-        assert_eq!(99, getuid("99").unwrap());
         assert!(getuid("88888888").is_err());
         assert!(getuid("agroupthatdoesntexist").is_err());
     }
@@ -20,7 +19,6 @@ mod test_passwd {
     #[test]
     fn test_getgid() {
         assert_eq!(0, getgid("root").unwrap());
-        assert_eq!(99, getgid("99").unwrap());
         assert!(getgid("88888888").is_err());
         assert!(getgid("agroupthatdoesntexist").is_err());
     }
