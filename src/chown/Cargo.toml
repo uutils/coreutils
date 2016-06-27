@@ -12,7 +12,7 @@ getopts = "*"
 glob = "*"
 libc = "*"
 uucore = { path="../uucore" }
-clippy = {version = "*", optional = true}
+walkdir = "0.1"
 
 [[bin]]
 name = "chown"

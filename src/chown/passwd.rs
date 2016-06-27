@@ -18,6 +18,7 @@ macro_rules! gen_func {
                 if !data.is_null() {
                     return Ok(id);
                 } else {
+                    // last_os_error() returns success
                     return Err(Error::new(ErrorKind::NotFound, format!("No such id `{}`", id)));
                 }
             } else {
@@ -30,6 +31,7 @@ macro_rules! gen_func {
                         ptr::read(data).$field
                     });
                 } else {
+                    // last_os_error() returns success
                     return Err(Error::new(ErrorKind::NotFound, format!("No such name `{}`", name_or_id)));
                 }
             }
