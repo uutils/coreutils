@@ -1,0 +1,22 @@
+[package]
+name = "chgrp"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_chgrp"
+path = "chgrp.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+aho-corasick = "*"
+memchr = "*"
+regex = "*"
+regex-syntax = "*"
+uucore = { path="../uucore" }
+walkdir="0.1.5"
+
+[[bin]]
+name = "chgrp"
+path = "main.rs"
