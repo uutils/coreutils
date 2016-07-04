@@ -13,12 +13,16 @@ mod test_passwd {
     fn test_getuid() {
         assert_eq!(0, getuid("root").unwrap());
         assert!(getuid("88888888").is_err());
-        assert!(getuid("agroupthatdoesntexist").is_err());
+        assert!(getuid("auserthatdoesntexist").is_err());
     }
 
     #[test]
     fn test_getgid() {
-        assert_eq!(0, getgid("root").unwrap());
+        if cfg!(target_os = "macos") {
+            assert_eq!(0, getgid("wheel").unwrap());
+        } else {
+            assert_eq!(0, getgid("root").unwrap());
+        }
         assert!(getgid("88888888").is_err());
         assert!(getgid("agroupthatdoesntexist").is_err());
     }
@@ -31,7 +35,11 @@ mod test_passwd {
 
     #[test]
     fn test_gid2grp() {
-        assert_eq!("root", gid2grp(0).unwrap());
+        if cfg!(target_os = "macos") {
+            assert_eq!("wheel", gid2grp(0).unwrap());
+        } else {
+            assert_eq!("root", gid2grp(0).unwrap());
+        }
         assert!(gid2grp(88888888).is_err());
     }
 }
