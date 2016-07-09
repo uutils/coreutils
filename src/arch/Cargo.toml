@@ -1,0 +1,17 @@
+[package]
+name = "arch"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_arch"
+path = "arch.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "arch"
+path = "main.rs"

@@ -98,6 +98,7 @@ PROGS       := \
   yes
 
 UNIX_PROGS := \
+  arch \
   chmod \
   chroot \
   du \
