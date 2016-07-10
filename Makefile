@@ -100,6 +100,7 @@ PROGS       := \
 UNIX_PROGS := \
   arch \
   chmod \
+  chown \
   chroot \
   du \
   groups \
@@ -136,6 +137,7 @@ TEST_PROGS  := \
 	basename \
 	cat \
 	chmod \
+	chown \
 	cksum \
 	comm \
 	cp \

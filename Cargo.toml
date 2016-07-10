@@ -8,6 +8,7 @@ build = "build.rs"
 unix = [
   "arch",
   "chmod",
+  "chown",
   "chroot",
   "du",
   "groups",
@@ -102,6 +103,7 @@ base64   = { optional=true, path="src/base64" }
 basename = { optional=true, path="src/basename" }
 cat      = { optional=true, path="src/cat" }
 chmod    = { optional=true, path="src/chmod" }
+chown    = { optional=true, path="src/chown" }
 chroot   = { optional=true, path="src/chroot" }
 cksum    = { optional=true, path="src/cksum" }
 comm     = { optional=true, path="src/comm" }
