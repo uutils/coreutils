@@ -8,6 +8,9 @@
 // file that was distributed with this source code.
 //
 
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
+
 extern crate libc;
 use libc::{uid_t, gid_t, c_char, c_int};
 
@@ -336,7 +339,7 @@ impl Chowner {
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let mut ret = 0;
         let root = root.as_ref();
-        let follow = self.bit_flag & FTS_LOGICAL != 0;
+        let follow = self.dereference || self.bit_flag & FTS_LOGICAL != 0;
         for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
             let entry = unwrap!(entry, e, {
                 ret = 1;
@@ -356,7 +359,7 @@ impl Chowner {
                 continue;
             }
 
-            ret = self.wrap_chown(path, &meta, true);
+            ret = self.wrap_chown(path, &meta, follow);
         }
         ret
     }

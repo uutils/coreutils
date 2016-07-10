@@ -14,6 +14,13 @@ libc = "*"
 uucore = { path="../uucore" }
 walkdir = "0.1"
 
+[dependencies.clippy]
+version = "*"
+optional = true
+
+[features]
+default = []
+
 [[bin]]
 name = "chown"
 path = "main.rs"
