@@ -62,6 +62,7 @@ dependencies = [
  "regex 0.1.71 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex-syntax 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "relpath 0.0.1",
+ "remove 0.0.1",
  "rm 0.0.1",
  "rmdir 0.0.1",
  "seq 0.0.1",
@@ -817,6 +818,15 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
+name = "remove"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 

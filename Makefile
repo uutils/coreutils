@@ -73,6 +73,7 @@ PROGS       := \
   readlink \
   realpath \
   relpath \
+  remove\
   rm \
   rmdir \
   seq \
@@ -167,6 +168,7 @@ TEST_PROGS  := \
 	pwd \
 	readlink \
 	realpath \
+	remove\
 	rm \
 	rmdir \
 	seq \

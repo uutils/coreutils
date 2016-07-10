@@ -167,7 +167,6 @@ To do
 - pinky
 - pr
 - printf
-- remove
 - runcon
 - setuidgid
 - sort (a couple of options implemented)

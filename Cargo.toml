@@ -69,6 +69,7 @@ generic = [
   "readlink",
   "realpath",
   "relpath",
+  "remove",
   "rm",
   "rmdir",
   "seq",
@@ -150,6 +151,7 @@ pwd      = { optional=true, path="src/pwd" }
 readlink = { optional=true, path="src/readlink" }
 realpath = { optional=true, path="src/realpath" }
 relpath  = { optional=true, path="src/relpath" }
+remove   = { optional=true, path="src/remove" }
 rm       = { optional=true, path="src/rm" }
 rmdir    = { optional=true, path="src/rmdir" }
 seq      = { optional=true, path="src/seq" }

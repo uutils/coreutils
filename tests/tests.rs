@@ -76,6 +76,7 @@ generic! {
     "pwd", test_pwd;
     "readlink", test_readlink;
     "realpath", test_realpath;
+    "remove", test_remove;
     "rm", test_rm;
     "rmdir", test_rmdir;
     "seq", test_seq;

@@ -1,0 +1,17 @@
+[package]
+name = "remove"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_remove"
+path = "remove.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "remove"
+path = "main.rs"
