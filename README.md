@@ -158,7 +158,6 @@ To do
 - df
 - expr (almost done, no regular expressions)
 - getlimits
-- install
 - join
 - ls
 - mv (almost done, one more option)
