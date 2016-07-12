@@ -1,0 +1,24 @@
+[package]
+name = "pinky"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_pinky"
+path = "pinky.rs"
+
+[dependencies]
+getopts = "*"
+libc = "^0.2"
+uucore = { path="../uucore" }
+
+[dependencies.clippy]
+version = "*"
+optional = true
+
+[features]
+default = []
+
+[[bin]]
+name = "pinky"
+path = "main.rs"
