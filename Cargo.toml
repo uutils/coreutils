@@ -15,6 +15,7 @@ unix = [
   "hostid",
   "hostname",
   "id",
+  "install",
   "kill",
   "logname",
   "mkfifo",
@@ -126,6 +127,7 @@ head     = { optional=true, path="src/head" }
 hostid   = { optional=true, path="src/hostid" }
 hostname = { optional=true, path="src/hostname" }
 id       = { optional=true, path="src/id" }
+install  = { optional=true, path="src/install" }
 kill     = { optional=true, path="src/kill" }
 link     = { optional=true, path="src/link" }
 ln       = { optional=true, path="src/ln" }

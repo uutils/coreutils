@@ -107,6 +107,7 @@ UNIX_PROGS := \
   hostid \
   hostname \
   id \
+	install \
   kill \
   logname \
   mkfifo \
@@ -152,6 +153,7 @@ TEST_PROGS  := \
 	fold \
 	hashsum \
 	head \
+	install \
 	link \
 	ln \
 	ls \
