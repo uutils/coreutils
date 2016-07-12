@@ -149,7 +149,6 @@ To do
 
 - chcon
 - chgrp
-- chown
 - copy
 - cp (not much done)
 - csplit
@@ -164,7 +163,6 @@ To do
 - mv (almost done, one more option)
 - numfmt
 - od (in progress, needs lots of work)
-- pinky
 - pr
 - printf
 - remove
