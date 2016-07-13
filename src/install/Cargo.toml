@@ -9,7 +9,7 @@ path = "install.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
+libc = ">= 0.2"
 uucore = { path="../uucore" }
 
 [dev-dependencies]

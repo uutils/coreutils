@@ -12,21 +12,26 @@
 extern crate getopts;
 extern crate libc;
 
+mod mode;
+
 #[macro_use]
 extern crate uucore;
 
 use std::fs;
-use std::io::{Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
 static NAME: &'static str = "install";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+const DEFAULT_MODE: libc::mode_t = 755;
+
 pub struct Behaviour {
     main_function: MainFunction,
+    specified_mode: Option<u16>,
     suffix: String,
-    verbose: bool,
+    verbose: bool
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -39,6 +44,16 @@ pub enum MainFunction {
     Directory,
     /// Install files to locations (primary functionality)
     Standard
+}
+
+impl Behaviour {
+    /// Determine the mode for chmod after copy.
+    pub fn mode(&self) -> libc::mode_t {
+        match self.specified_mode {
+            Some(x) => x,
+            None => DEFAULT_MODE
+        }
+    }
 }
 
 /// Main install utility function, called from main.rs.
@@ -129,8 +144,7 @@ fn opts() -> getopts::Options {
     opts.optflagopt("g", "group", "(unimplemented) set group ownership, instead of process'\n \
                                    current group", "GROUP");
 
-    // TODO implement flag
-    opts.optflagopt("m", "mode", "(unimplemented) set permission mode (as in chmod), instead\n \
+    opts.optflagopt("m", "mode", "set permission mode (as in chmod), instead\n \
                                   of rwxr-xr-x", "MODE");
 
     // TODO implement flag
@@ -193,8 +207,6 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
         Err("-D")
     } else if matches.opt_present("group") {
         Err("--group, -g")
-    } else if matches.opt_present("mode") {
-        Err("--mode, -m")
     } else if matches.opt_present("owner") {
         Err("--owner, -o")
     } else if matches.opt_present("preserve-timestamps") {
@@ -239,6 +251,29 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
         MainFunction::Standard
     };
 
+    let considering_dir: bool = MainFunction::Directory == main_function;
+
+    let specified_mode: Option<libc::mode_t> = if matches.opt_present("mode") {
+        match matches.opt_str("mode") {
+            Some(x) => {
+                match mode::parse(&x[..], considering_dir) {
+                    Ok(y) => Some(y),
+                    Err(err) => {
+                        show_error!("Invalid mode string: {}", err);
+                        return Err(1);
+                    }
+                }
+            },
+            None => {
+                show_error!("option '--mode' requires an argument\n \
+                            Try '{} --help' for more information.", NAME);
+                return Err(1);
+            }
+        }
+    } else {
+        None
+    };
+
     let backup_suffix = if matches.opt_present("suffix") {
         match matches.opt_str("suffix") {
             Some(x) => x,
@@ -254,6 +289,7 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 
     Ok(Behaviour {
         main_function: main_function,
+        specified_mode: specified_mode,
         suffix: backup_suffix,
         verbose: matches.opt_present("v"),
     })
@@ -292,6 +328,10 @@ fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
 
             if let Err(e) = fs::create_dir(directory) {
                 show_info!("{}: {}", path.display(), e.to_string());
+                all_successful = false;
+            }
+
+            if mode::chmod(&path, b.mode()).is_err() {
                 all_successful = false;
             }
 
@@ -355,7 +395,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
     if all_successful { 0 } else { 1 }
 }
 
-/// Copy one file to a new location.
+/// Copy one file to a new location, changing metadata.
 ///
 /// # Parameters
 ///
@@ -372,7 +412,11 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<(), ()> {
     if let Err(err) = io_result {
         show_error!("install: cannot install ‘{}’ to ‘{}’: {}",
                     from.display(), to.display(), err);
-        return Err(())
+        return Err(());
+    }
+
+    if mode::chmod(&to, b.mode()).is_err() {
+        return Err(());
     }
 
     if b.verbose {

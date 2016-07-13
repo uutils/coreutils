@@ -6,6 +6,7 @@ extern crate filetime;
 
 use self::filetime::*;
 use common::util::*;
+use std::os::unix::fs::PermissionsExt;
 
 static UTIL_NAME: &'static str = "install";
 
@@ -88,4 +89,82 @@ fn test_install_component_directories_failing() {
 
     assert!(!result.success);
     assert!(result.stderr.contains("File exists"));
+}
+
+#[test]
+fn test_install_mode_numeric() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let dir = "test_install_target_dir_dir_e";
+    let file = "test_install_target_dir_file_e";
+    let mode_arg = "--mode=333";
+
+    at.touch(file);
+    at.mkdir(dir);
+    let result = ucmd.arg(file).arg(dir).arg(mode_arg).run();
+
+    assert!(result.success);
+    assert_empty_stderr!(result);
+
+    let dest_file = &format!("{}/{}", dir, file);
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o333 as u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_symbolic() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let dir = "test_install_target_dir_dir_f";
+    let file = "test_install_target_dir_file_f";
+    let mode_arg = "--mode=o+wx";
+
+    at.touch(file);
+    at.mkdir(dir);
+    let result = ucmd.arg(file).arg(dir).arg(mode_arg).run();
+
+    assert!(result.success);
+    assert_empty_stderr!(result);
+
+    let dest_file = &format!("{}/{}", dir, file);
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o003 as u32, PermissionsExt::mode(&permissions));
+}
+
+#[test]
+fn test_install_mode_failing() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let dir = "test_install_target_dir_dir_g";
+    let file = "test_install_target_dir_file_g";
+    let mode_arg = "--mode=999";
+
+    at.touch(file);
+    at.mkdir(dir);
+    let result = ucmd.arg(file).arg(dir).arg(mode_arg).run();
+
+    assert!(!result.success);
+    assert!(result.stderr.contains("Invalid mode string: numeric parsing error"));
+
+    let dest_file = &format!("{}/{}", dir, file);
+    assert!(at.file_exists(file));
+    assert!(!at.file_exists(dest_file));
+}
+
+#[test]
+fn test_install_mode_directories() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let component = "test_install_target_dir_component_h";
+    let directories_arg = "-d";
+    let mode_arg = "--mode=333";
+
+    let result = ucmd.arg(directories_arg).arg(component).arg(mode_arg).run();
+
+    assert!(result.success);
+    assert_empty_stderr!(result);
+
+    assert!(at.dir_exists(component));
+    let permissions = at.metadata(component).permissions();
+    assert_eq!(0o333 as u32, PermissionsExt::mode(&permissions));
 }
