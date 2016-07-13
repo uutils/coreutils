@@ -17,13 +17,13 @@ fn test_install_help() {
     assert_empty_stderr!(result);
     assert!(result.success);
 
-//    assert!(result.stdout.contains("Usage:"));
+    assert!(result.stdout.contains("Usage:"));
 }
 
 #[test]
 fn test_install_basic() {
     let (at, mut ucmd) = testing(UTIL_NAME);
-    let dir = "test_install_target_dir_dir";
+    let dir = "test_install_target_dir_dir_a";
     let file = "test_install_target_dir_file_a";
 
     at.touch(file);
@@ -35,4 +35,21 @@ fn test_install_basic() {
 
     assert!(!at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
+}
+
+#[test]
+fn test_install_unimplemented_arg() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let dir = "test_install_target_dir_dir_b";
+    let file = "test_install_target_dir_file_b";
+    let context_arg = "--context";
+
+    at.touch(file);
+    at.mkdir(dir);
+    let result = ucmd.arg(context_arg).arg(file).arg(dir).run();
+
+    assert!(!result.success);
+    assert!(result.stderr.contains("Unimplemented"));
+
+    assert!(!at.file_exists(&format!("{}/{}", dir, file)));
 }

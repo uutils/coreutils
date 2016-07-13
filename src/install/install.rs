@@ -50,6 +50,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let usage = opts.usage("Copy SOURCE to DEST or multiple SOURCE(s) to the existing\n \
                             DIRECTORY, while setting permission modes and owner/group");
 
+    if let Err(s) = check_unimplemented(&matches) {
+        show_error!("Unimplemented feature: {}", s);
+        return 2;
+    }
+
     let behaviour = match behaviour(&matches) {
         Ok(x) => x,
         Err(ret) => {
@@ -100,7 +105,7 @@ fn opts() -> getopts::Options {
                                     components of the specified directories");
 
 
-    // TODO implement flagd
+    // TODO implement flag
     opts.optflag("D", "", "create all leading components of DEST except the last, then copy\n \
                            SOURCE to DEST");
 
@@ -148,6 +153,46 @@ fn opts() -> getopts::Options {
     opts.optflag("V", "version", "output version information and exit");
 
     opts
+}
+
+fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
+    if matches.opt_present("backup") {
+        Err("--backup")
+    } else if matches.opt_present("b") {
+        Err("-b")
+    } else if matches.opt_present("compare") {
+        Err("--compare, -C")
+    } else if matches.opt_present("directory") {
+        Err("--directory, -d")
+    } else if matches.opt_present("D") {
+        Err("-D")
+    } else if matches.opt_present("group") {
+        Err("--group, -g")
+    } else if matches.opt_present("mode") {
+        Err("--mode, -m")
+    } else if matches.opt_present("owner") {
+        Err("--owner, -o")
+    } else if matches.opt_present("preserve-timestamps") {
+        Err("--preserve-timestamps, -p")
+    } else if matches.opt_present("strip") {
+        Err("--strip, -s")
+    } else if matches.opt_present("strip-program") {
+        Err("--strip-program")
+    } else if matches.opt_present("suffix") {
+        Err("--suffix, -S")
+    } else if matches.opt_present("target-directory") {
+        Err("--target-directory, -t")
+    } else if matches.opt_present("no-target-directory") {
+        Err("--no-target-directory, -T")
+    } else if matches.opt_present("verbose") {
+        Err("--verbose, -v")
+    } else if matches.opt_present("preserve-context") {
+        Err("--preserve-context, -P")
+    } else if matches.opt_present("context") {
+        Err("--context, -Z")
+    } else {
+        Ok(())
+    }
 }
 
 fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
