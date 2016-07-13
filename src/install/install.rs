@@ -31,8 +31,13 @@ pub struct Behaviour {
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum MainFunction {
+    /// Display version information.
     Version,
+    /// Display help, including command line arguments.
     Help,
+    /// Create directories
+    Directory,
+    /// Install files to locations (primary functionality)
     Standard
 }
 
@@ -85,6 +90,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
             help(&usage);
             0
         },
+        MainFunction::Directory => {
+            directory(&paths[..], behaviour)
+        },
         MainFunction::Standard => {
             standard(&paths[..], behaviour)
         }
@@ -109,8 +117,7 @@ fn opts() -> getopts::Options {
     opts.optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
                                   files, and in some cases, do not modify the destination at all");
 
-    // TODO implement flag
-    opts.optflag("d", "directory", "(unimplemented) treat all arguments as directory names;\n \
+    opts.optflag("d", "directory", "treat all arguments as directory names;\n \
                                     create all components of the specified directories");
 
 
@@ -182,8 +189,6 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
         Err("-b")
     } else if matches.opt_present("compare") {
         Err("--compare, -C")
-    } else if matches.opt_present("directory") {
-        Err("--directory, -d")
     } else if matches.opt_present("D") {
         Err("-D")
     } else if matches.opt_present("group") {
@@ -228,6 +233,8 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
         MainFunction::Version
     } else if matches.opt_present("help") {
         MainFunction::Help
+    } else if matches.opt_present("directory") {
+        MainFunction::Directory
     } else {
         MainFunction::Standard
     };
@@ -259,6 +266,41 @@ fn help(usage: &str) {
     Usage: {0} SOURCE DEST\n   \
        or: {0} SOURCE... DIRECTORY\n\n\
     {2}", NAME, VERSION, usage);
+}
+
+/// Creates directories.
+///
+/// GNU man pages describe this functionality as creating 'all components of
+/// the specified directories'.
+///
+/// Returns an integer intended as a program return code.
+///
+fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
+    if paths.len() < 1 {
+        println!("{} with -d requires at least one argument.", NAME);
+        1
+    } else {
+        let mut all_successful = true;
+
+        for directory in paths.iter() {
+            let path = directory.as_path();
+
+            if path.exists() {
+                show_info!("cannot create directory '{}': File exists", path.display());
+                all_successful = false;
+            }
+
+            if let Err(e) = fs::create_dir(directory) {
+                show_info!("{}: {}", path.display(), e.to_string());
+                all_successful = false;
+            }
+
+            if b.verbose {
+                show_info!("created directory '{}'", path.display());
+            }
+        }
+        if all_successful { 0 } else { 1 }
+    }
 }
 
 /// Perform an install, given a list of paths and behaviour.

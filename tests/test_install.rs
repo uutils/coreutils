@@ -14,8 +14,9 @@ fn test_install_help() {
     let (at, mut ucmd) = testing(UTIL_NAME);
 
     let result = ucmd.arg("--help").run();
-    assert_empty_stderr!(result);
+
     assert!(result.success);
+    assert_empty_stderr!(result);
 
     assert!(result.stdout.contains("Usage:"));
 }
@@ -32,8 +33,8 @@ fn test_install_basic() {
     at.mkdir(dir);
     let result = ucmd.arg(file1).arg(file2).arg(dir).run();
 
-    assert_empty_stderr!(result);
     assert!(result.success);
+    assert_empty_stderr!(result);
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
@@ -56,4 +57,35 @@ fn test_install_unimplemented_arg() {
     assert!(result.stderr.contains("Unimplemented"));
 
     assert!(!at.file_exists(&format!("{}/{}", dir, file)));
+}
+
+#[test]
+fn test_install_component_directories() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let component1 = "test_install_target_dir_component_c1";
+    let component2 = "test_install_target_dir_component_c2";
+    let component3 = "test_install_target_dir_component_c3";
+    let directories_arg = "-d";
+
+    let result = ucmd.arg(directories_arg).arg(component1).arg(component2).arg(component3).run();
+
+    assert!(result.success);
+    assert_empty_stderr!(result);
+
+    assert!(at.dir_exists(component1));
+    assert!(at.dir_exists(component2));
+    assert!(at.dir_exists(component3));
+}
+
+#[test]
+fn test_install_component_directories_failing() {
+    let (at, mut ucmd) = testing(UTIL_NAME);
+    let component = "test_install_target_dir_component_d1";
+    let directories_arg = "-d";
+
+    at.mkdir(component);
+    let result = ucmd.arg(directories_arg).arg(component).run();
+
+    assert!(!result.success);
+    assert!(result.stderr.contains("File exists"));
 }
