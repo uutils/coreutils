@@ -24,17 +24,21 @@ fn test_install_help() {
 fn test_install_basic() {
     let (at, mut ucmd) = testing(UTIL_NAME);
     let dir = "test_install_target_dir_dir_a";
-    let file = "test_install_target_dir_file_a";
+    let file1 = "test_install_target_dir_file_a1";
+    let file2 = "test_install_target_dir_file_a2";
 
-    at.touch(file);
+    at.touch(file1);
+    at.touch(file2);
     at.mkdir(dir);
-    let result = ucmd.arg(file).arg(dir).run();
+    let result = ucmd.arg(file1).arg(file2).arg(dir).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
 
-    assert!(!at.file_exists(file));
-    assert!(at.file_exists(&format!("{}/{}", dir, file)));
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.file_exists(&format!("{}/{}", dir, file1)));
+    assert!(at.file_exists(&format!("{}/{}", dir, file2)));
 }
 
 #[test]
