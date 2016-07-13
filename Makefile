@@ -107,7 +107,7 @@ UNIX_PROGS := \
   hostid \
   hostname \
   id \
-	install \
+  install \
   kill \
   logname \
   mkfifo \
