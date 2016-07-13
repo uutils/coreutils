@@ -29,7 +29,7 @@ const DEFAULT_MODE: libc::mode_t = 755;
 
 pub struct Behaviour {
     main_function: MainFunction,
-    specified_mode: Option<u16>,
+    specified_mode: Option<libc::mode_t>,
     suffix: String,
     verbose: bool
 }
