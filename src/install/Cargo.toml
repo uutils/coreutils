@@ -1,0 +1,20 @@
+[package]
+name = "install"
+version = "0.0.1"
+authors = ["Ben Eills <ben@beneills.com>"]
+
+[lib]
+name = "uu_install"
+path = "install.rs"
+
+[dependencies]
+getopts = "*"
+libc = ">= 0.2"
+uucore = { path="../uucore" }
+
+[dev-dependencies]
+time = "*"
+
+[[bin]]
+name = "install"
+path = "main.rs"
