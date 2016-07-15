@@ -34,7 +34,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
     opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    opts.optflag("v", "version", "output version information and exit");
+    opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DEST");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -70,26 +71,40 @@ fn help(usage: &str) {
     let msg = format!("{0} {1}\n\n\
                        Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY\n  \
-                         or:  {0} -t DIRECTORY SOURCE\n\
+                         or:  {0} -t DIRECTORY SOURCE...\n\
                        \n\
                        {2}", NAME, VERSION, usage);
     println!("{}", msg);
 }
 
 fn copy(matches: getopts::Matches) {
+
     let sources: Vec<String> = if matches.free.is_empty() {
-        show_error!("Missing SOURCE argument. Try --help.");
+        show_error!("Missing SOURCE or DEST argument. Try --help.");
         panic!()
-    } else {
-        // All but the last argument:
+    } else if !matches.opt_present("target-directory") {
         matches.free[..matches.free.len() - 1].iter().cloned().collect()
+    } else {
+        matches.free.iter().cloned().collect()
     };
-    let dest = if matches.free.len() < 2 {
+    let dest_str = if matches.opt_present("target-directory") {
+        matches.opt_str("target-directory").expect("Option -t/--target-directory requires an argument")
+    } else {
+        matches.free[matches.free.len() - 1].clone()
+    };
+    let dest = if matches.free.len() < 2 && !matches.opt_present("target-directory") {
         show_error!("Missing DEST argument. Try --help.");
         panic!()
     } else {
-        // Only the last argument:
-        Path::new(&matches.free[matches.free.len() - 1])
+        //the argument to the -t/--target-directory= options
+        let path = Path::new(&dest_str);
+        if !path.is_dir() && matches.opt_present("target-directory") {
+            show_error!("Argument to -t/--target-directory must be a directory");
+            panic!()
+        } else {
+            path
+        }
+
     };
 
     assert!(sources.len() >= 1);
@@ -112,8 +127,11 @@ fn copy(matches: getopts::Matches) {
                 dest.display());
             panic!();
         }
-
-        if let Err(err) = fs::copy(source, dest) {
+        let mut full_dest = dest.to_path_buf();
+        if dest.is_dir() {
+            full_dest.push(source.file_name().unwrap()); //the destination path is the destination
+        } // directory + the file name we're copying
+        if let Err(err) = fs::copy(source, full_dest) {
             show_error!("{}", err);
             panic!();
         }
@@ -122,7 +140,6 @@ fn copy(matches: getopts::Matches) {
             show_error!("TARGET must be a directory");
             panic!();
         }
-
         for src in &sources {
             let source = Path::new(&src);
 
@@ -133,7 +150,7 @@ fn copy(matches: getopts::Matches) {
 
             let mut full_dest = dest.to_path_buf();
 
-            full_dest.push(source.to_str().unwrap());
+            full_dest.push(source.file_name().unwrap());
 
             println!("{}", full_dest.display());
 
