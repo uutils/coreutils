@@ -34,9 +34,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
     opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("v", "version", "output version information and exit");
+    opts.optflag("", "version", "output version information and exit");
     opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DEST");
     opts.optflag("T", "no-target-directory", "Treat DEST as a regular file and not a directory");
+    opts.optflag("v", "verbose", "explicitly state what is being done");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -45,7 +46,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
             panic!()
         },
     };
-
     let usage = opts.usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
     let mode = if matches.opt_present("version") {
         Mode::Version
@@ -79,7 +79,7 @@ fn help(usage: &str) {
 }
 
 fn copy(matches: getopts::Matches) {
-
+    let verbose = matches.opt_present("verbose");
     let sources: Vec<String> = if matches.free.is_empty() {
         show_error!("Missing SOURCE or DEST argument. Try --help.");
         panic!()
@@ -136,6 +136,9 @@ fn copy(matches: getopts::Matches) {
         if dest.is_dir() {
             full_dest.push(source.file_name().unwrap()); //the destination path is the destination
         } // directory + the file name we're copying
+        if verbose {
+            println!("{} -> {}", source.display(), full_dest.display());
+        }
         if let Err(err) = fs::copy(source, full_dest) {
             show_error!("{}", err);
             panic!();
@@ -157,7 +160,9 @@ fn copy(matches: getopts::Matches) {
 
             full_dest.push(source.file_name().unwrap());
 
-            println!("{}", full_dest.display());
+            if verbose {
+                println!("{} -> {}", source.display(), full_dest.display());
+            }
 
             let io_result = fs::copy(source, full_dest);
 
