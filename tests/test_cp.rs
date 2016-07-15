@@ -44,17 +44,17 @@ fn test_cp_with_dirs() {
     let at = &ts.fixtures;
 
     //using -t option
-    let result_to_dir_t = ts.util_cmd()
+    let result_to_dir = ts.util_cmd()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .run();
-    assert!(result_to_dir_t.success);
+    assert!(result_to_dir.success);
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 
-    let result_from_dir_t = ts.util_cmd()
+    let result_from_dir = ts.util_cmd()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
-    assert!(result_from_dir_t.success);
+    assert!(result_from_dir.success);
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
