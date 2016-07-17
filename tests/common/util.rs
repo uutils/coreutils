@@ -38,6 +38,8 @@ pub fn repeat_str(s: &str, n: u32) -> String {
     repeated
 }
 
+/// A command result is the outputs of a command (streams and status code)
+/// within a struct which has convenience assertion functions about those outputs
 pub struct CmdResult {
     pub success: bool,
     pub stdout: String,
@@ -45,40 +47,67 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
+    /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> Box<&CmdResult> {
         assert!(self.success);
         Box::new(self)
     }
 
+    /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> Box<&CmdResult> {
         assert!(!self.success);
         Box::new(self)
     }
-
+    
+    /// asserts that the command resulted in empty (zero-length) stderr stream output
+    /// generally, it's better to use stdout_only() instead,
+    /// but you might find yourself using this function if
+    /// 1. you can not know exactly what stdout will be
+    /// or 2. you know that stdout will also be empty
     pub fn no_stderr(&self) -> Box<&CmdResult> {
         assert!(self.stderr.len() == 0);
         Box::new(self)
     }
-
+    
+    /// asserts that the command resulted in empty (zero-length) stderr stream output
+    /// unless asserting there was neither stdout or stderr, stderr_only is usually a better choice
+    /// generally, it's better to use stderr_only() instead,
+    /// but you might find yourself using this function if
+    /// 1. you can not know exactly what stderr will be
+    /// or 2. you know that stderr will also be empty
     pub fn no_stdout(&self) -> Box<&CmdResult> {
         assert!(self.stdout.len() == 0);
         Box::new(self)
     }
 
+    /// asserts that the command resulted in stdout stream output that equals the
+    /// passed in value, when both are trimmed of trailing whitespace
+    /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert!(self.stdout.trim_right() == String::from(msg.as_ref()).trim_right());
         Box::new(self)
     }
 
+    /// asserts that the command resulted in stderr stream output that equals the
+    /// passed in value, when both are trimmed of trailing whitespace
+    /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert!(self.stderr.trim_right() == String::from(msg.as_ref()).trim_right());
         Box::new(self)
     }
 
+    /// asserts that
+    /// 1. the command resulted in stdout stream output that equals the
+    /// passed in value, when both are trimmed of trailing whitespace
+    /// and 2. the command resulted in empty (zero-length) stderr stream output
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stdout_is(msg).no_stderr()
     }
 
+    /// asserts that
+    /// 1. the command resulted in stderr stream output that equals the
+    /// passed in value, when both are trimmed of trailing whitespace
+    /// and 2. the command resulted in empty (zero-length) stdout stream output
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stderr_is(msg).no_stdout()
     }
@@ -119,6 +148,8 @@ pub fn get_root_path() -> &'static str {
     }
 }
 
+/// Object-oriented path struct that represents and operates on
+/// paths relative to the directory it was constructed for.
 pub struct AtPath {
     pub subdir: PathBuf,
 }
@@ -286,6 +317,10 @@ impl AtPath {
     }
 }
 
+/// An environment for running a single uutils test case, serves three functions:
+/// 1. centralizes logic for locating the uutils binary and calling the utility
+/// 2. provides a temporary directory for the test case
+/// 3. copies over fixtures for the utility to the temporary directory
 pub struct TestSet {
     bin_path: PathBuf,
     util_name: String,
@@ -344,6 +379,12 @@ impl TestSet {
     }
 }
 
+/// A UCommand is a wrapper around an individual Command that provides several additional features
+/// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
+///       and asserting on the results.
+/// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
+///     the test failure can display the exact call which preceded an assertion failure.
+/// 3. it provides convenience construction arguments to set the Command working directory and/or clear its environment.
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
@@ -412,6 +453,15 @@ impl UCommand {
         Box::new(self)
     }
 
+    /// provides stdinput to feed in to the command when spawned
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
+        if self.stdin.is_some() {
+            panic!(MULTIPLE_STDIN_MEANINGLESS);
+        }
+        self.stdin = Some(input.into());
+        Box::new(self)
+    }
+
     pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand> where K: AsRef<OsStr>, V: AsRef<OsStr> {
         if self.has_run {
             panic!(ALREADY_RUN);
@@ -420,7 +470,8 @@ impl UCommand {
         Box::new(self)
     }
 
-    /// Spawns the command, feeds the stdin if any, and returns immediately.
+    /// Spawns the command, feeds the stdin if any, and returns the
+    /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
         if self.has_run {
             panic!(ALREADY_RUN);
@@ -448,7 +499,8 @@ impl UCommand {
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result
-    /// and returns it.
+    /// and returns a command result.
+    /// It is recommended that you instead use succeeds() or fails()
     pub fn run(&mut self) -> CmdResult {
         let prog = self.run_no_wait().wait_with_output().unwrap();
 
@@ -459,24 +511,24 @@ impl UCommand {
         }
     }
 
-    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
-        if self.stdin.is_some() {
-            panic!(MULTIPLE_STDIN_MEANINGLESS);
-        }
-        self.stdin = Some(input.into());
-        Box::new(self)
-    }
-
+    /// Spawns the command, feeding the passed in stdin, waits for the result
+    /// and returns a command result.
+    /// It is recommended that, instead of this, you use a combination of pipe_in()
+    /// with succeeds() or fails()
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
         self.pipe_in(input).run()
     }
 
+    /// Spawns the command, feeds the stdin if any, waits for the result,
+    /// asserts success, and returns a command result.
     pub fn succeeds(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.success();
         cmd_result
     }
 
+    /// Spawns the command, feeds the stdin if any, waits for the result,
+    /// asserts success, and returns a command result.
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
@@ -492,8 +544,8 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
     String::from_utf8(output).unwrap()
 }
 
-// returns a testSet and a ucommand initialized to the utility binary
-// operating in the fixtures directory with a cleared environment
+/// returns a testSet and a ucommand initialized to the utility binary
+/// operating in the fixtures directory with a cleared environment
 pub fn testset_and_ucommand(utilname: &str) -> (TestSet, UCommand) {
     let ts = TestSet::new(utilname);
     let ucmd = ts.util_cmd();
