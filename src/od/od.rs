@@ -10,6 +10,7 @@
  */
 
 extern crate getopts;
+extern crate unindent;
 
 use std::fs::File;
 use std::io::Read;
@@ -17,6 +18,7 @@ use std::mem;
 use std::io::BufReader;
 use std::io::Write;
 use std::io;
+use unindent::*;
 
 //This is available in some versions of std, but not all that we target.
 macro_rules! hashmap {
@@ -27,6 +29,8 @@ macro_rules! hashmap {
     }}
 }
 
+static NAME: &'static str = "od";
+static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
@@ -76,6 +80,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(m) => m,
         Err(f) => panic!("Invalid options\n{}", f)
     };
+
+    if matches.opt_present("h") {
+        let msg = unindent(&format!("
+                Usage:
+                    {0} [OPTION]... [FILENAME]...
+
+                Displays data in various human-readable formats.", NAME));
+        println!("{}", opts.usage(&msg));
+        return 0;
+    }
+    if matches.opt_present("version") {
+        println!("{} {}", NAME, VERSION);
+        return 0;
+    }
 
     let input_offset_base = match parse_radix(matches.opt_str("A")) {
         Ok(r) => r,

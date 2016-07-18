@@ -10,6 +10,7 @@ path = "od.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
+unindent = "*"
 
 [[bin]]
 name = "od"
