@@ -1,13 +1,20 @@
+extern crate unindent;
+
 use common::util::*;
 use std::path::Path;
 use std::env;
 use std::io::Write;
 use std::fs::File;
 use std::fs::remove_file;
+use self::unindent::*;
 
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
-static ALPHA_OUT: &'static str = "0000000    061141  062143  063145  064147  065151  066153  067155  070157\n0000020    071161  072163  073165  074167  075171  000012                \n0000033\n";
+static ALPHA_OUT: &'static str = "
+        0000000    061141  062143  063145  064147  065151  066153  067155  070157
+        0000020    071161  072163  073165  074167  075171  000012                
+        0000033
+        ";
 
 // XXX We could do a better job of ensuring that we have a fresh temp dir to ourself,
 // not a general one ful of other proc's leftovers.
@@ -32,7 +39,7 @@ fn test_file() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, ALPHA_OUT);
+    assert_eq!(result.stdout, unindent(ALPHA_OUT));
 
     let _ = remove_file(file);
 }
@@ -61,7 +68,7 @@ fn test_2files() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, ALPHA_OUT);
+    assert_eq!(result.stdout, unindent(ALPHA_OUT));
 
     let _ = remove_file(file1);
     let _ = remove_file(file2);
@@ -88,7 +95,7 @@ fn test_from_stdin() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, ALPHA_OUT);
+    assert_eq!(result.stdout, unindent(ALPHA_OUT));
 
 }
 
@@ -114,7 +121,7 @@ fn test_from_mixed() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, ALPHA_OUT);
+    assert_eq!(result.stdout, unindent(ALPHA_OUT));
 
 }
 
@@ -126,7 +133,13 @@ fn test_multiple_formats() {
 
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout, "0000000    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p\n          141 142 143 144 145 146 147 150 151 152 153 154 155 156 157 160\n0000020    q   r   s   t   u   v   w   x   y   z  \\n                \n          161 162 163 164 165 166 167 170 171 172 012                \n0000033\n");
+    assert_eq!(result.stdout, unindent("
+            0000000    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+                      141 142 143 144 145 146 147 150 151 152 153 154 155 156 157 160
+            0000020    q   r   s   t   u   v   w   x   y   z  \\n                
+                      161 162 163 164 165 166 167 170 171 172 012                
+            0000033
+            "));
 
 }
 
@@ -142,7 +155,10 @@ fn test_dec() {
     	0xffu8,0x7fu8,
     	0x00u8,0x80u8,
     	0x01u8,0x80u8,];
-    let expected_output = "0000000         0       1       2       3   32767  -32768  -32767        \n0000016\n";
+    let expected_output = unindent("
+            0000000         0       1       2       3   32767  -32768  -32767        
+            0000016
+            ");
     let result = new_ucmd!().arg("-i").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);

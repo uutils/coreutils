@@ -203,6 +203,7 @@ libc = "*"
 regex="*"
 rand="*"
 tempdir="*"
+unindent="*"
 
 [[bin]]
 name = "uutils"
