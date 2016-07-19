@@ -38,6 +38,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DIRECTORY");
     opts.optflag("T", "no-target-directory", "Treat DEST as a regular file and not a directory");
     opts.optflag("v", "verbose", "explicitly state what is being done");
+    opts.optflag("n", "no-clobber", "don't overwrite a file that already exists");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -80,6 +81,7 @@ fn help(usage: &str) {
 
 fn copy(matches: getopts::Matches) {
     let verbose = matches.opt_present("verbose");
+    let no_clobber = matches.opt_present("no-clobber");
     let sources: Vec<String> = if matches.free.is_empty() {
         show_error!("Missing SOURCE or DEST argument. Try --help.");
         panic!()
@@ -114,8 +116,19 @@ fn copy(matches: getopts::Matches) {
         panic!()
     }
 
-    if sources.len() == 1 {
-        let source = Path::new(&sources[0]);
+
+    if !dest.is_dir() && sources.len() != 1 {
+        show_error!("TARGET must be a directory");
+        panic!();
+    }
+
+    for src in &sources {
+        let source = Path::new(&src);
+
+        if !source.is_file() {
+            show_error!("\"{}\" is not a file", source.display());
+            continue;
+        }
         let same_file = paths_refer_to_same_file(source, dest).unwrap_or_else(|err| {
             match err.kind() {
                 ErrorKind::NotFound => false,
@@ -128,50 +141,28 @@ fn copy(matches: getopts::Matches) {
 
         if same_file {
             show_error!("\"{}\" and \"{}\" are the same file",
-                source.display(),
-                dest.display());
+            source.display(),
+            dest.display());
             panic!();
         }
         let mut full_dest = dest.to_path_buf();
         if dest.is_dir() {
-            full_dest.push(source.file_name().unwrap()); //the destination path is the destination
-        } // directory + the file name we're copying
+            full_dest.push(source.file_name().unwrap());
+        } //if we're copying to a directory
+        if no_clobber && full_dest.exists() {
+            continue; //if the destination file exists, we promised not to overwrite
+        }
         if verbose {
             println!("{} -> {}", source.display(), full_dest.display());
         }
-        if let Err(err) = fs::copy(source, full_dest) {
+
+        let io_result = fs::copy(source, full_dest);
+        if let Err(err) = io_result {
             show_error!("{}", err);
-            panic!();
-        }
-    } else {
-        if !dest.is_dir() {
-            show_error!("TARGET must be a directory");
-            panic!();
-        }
-        for src in &sources {
-            let source = Path::new(&src);
-
-            if !source.is_file() {
-                show_error!("\"{}\" is not a file", source.display());
-                continue;
-            }
-
-            let mut full_dest = dest.to_path_buf();
-
-            full_dest.push(source.file_name().unwrap());
-
-            if verbose {
-                println!("{} -> {}", source.display(), full_dest.display());
-            }
-
-            let io_result = fs::copy(source, full_dest);
-
-            if let Err(err) = io_result {
-                show_error!("{}", err);
-                panic!()
-            }
+            panic!()
         }
     }
+
 }
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
