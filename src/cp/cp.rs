@@ -35,7 +35,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
-    opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DEST");
+    opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DIRECTORY");
     opts.optflag("T", "no-target-directory", "Treat DEST as a regular file and not a directory");
     opts.optflag("v", "verbose", "explicitly state what is being done");
 
