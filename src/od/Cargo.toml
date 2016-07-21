@@ -11,6 +11,7 @@ path = "od.rs"
 getopts = "*"
 libc = "*"
 unindent = "*"
+byteorder = "*"
 
 [[bin]]
 name = "od"

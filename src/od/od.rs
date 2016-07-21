@@ -11,14 +11,15 @@
 
 extern crate getopts;
 extern crate unindent;
+extern crate byteorder;
 
 use std::fs::File;
 use std::io::Read;
-use std::mem;
 use std::io::BufReader;
 use std::io::Write;
 use std::io;
 use unindent::*;
+use byteorder::*;
 
 //This is available in some versions of std, but not all that we target.
 macro_rules! hashmap {
@@ -233,21 +234,35 @@ fn odfunc(input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat
                     first = false;
                     print!("{:>width$}", "", width = f.offmarg);// 4 spaces after offset - we print 2 more before each word
 
-                    for b in 0..n / f.itembytes {
-                        let mut p: u64 = 0;
-                        for i in 0..f.itembytes {
-                            p |= (bytes[(f.itembytes * b) + i] as u64) << (8 * i);
-                        }
-                        (f.writer)(p, f.itembytes);
-                    }
                     // not enough byte for a whole element, this should only happen on the last line.
                     if n % f.itembytes != 0 {
                         let b = n / f.itembytes;
-                        let mut p2: u64 = 0;
-                        for i in 0..(n % f.itembytes) {
-                            p2 |= (bytes[(f.itembytes * b) + i] as u64) << (8 * i);
+                        // set zero bytes in the part of the buffer that will be used, but is not filled.
+                        for i in n..(b + 1) * f.itembytes {
+                            bytes[i] = 0;
                         }
-                        (f.writer)(p2, f.itembytes);
+                    }
+
+                    let mut b = 0;
+                    while b < n {
+                        let nextb = b + f.itembytes;
+                        let p: u64 = match f.itembytes {
+                            1 => {
+                                bytes[b] as u64
+                            }
+                            2 => {
+                                LittleEndian::read_u16(&bytes[b..nextb]) as u64
+                            }
+                            4 => {
+                                LittleEndian::read_u32(&bytes[b..nextb]) as u64
+                            }
+                            8 => {
+                                LittleEndian::read_u64(&bytes[b..nextb])
+                            }
+                            _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                        };
+                        (f.writer)(p, f.itembytes);
+                        b = nextb;
                     }
                     // Add extra spaces to pad out the short, presumably last, line.
                     if n < LINEBYTES {
