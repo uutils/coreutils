@@ -18,6 +18,7 @@ use std::io::Read;
 use std::io::BufReader;
 use std::io::Write;
 use std::io;
+use std::f32;
 use unindent::*;
 use byteorder::*;
 
@@ -67,6 +68,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("O", "", "octal 4-byte units");
     opts.optflag("s", "", "decimal 4-byte units");
+
+    opts.optflag("f", "", "floating point IEEE-754 single precision (32-bit) units");
 
     opts.optopt("t", "format", "select output format or formats", "TYPE");
     opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
@@ -130,26 +133,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
         // At the moment, char (-a & -c)formats need the driver to set up a
         // line by inserting a different # of of spaces at the start.
         struct OdFormater {
-            writer: fn(p: u64, itembytes: usize),
+            writer: FormatWriter,
             offmarg: usize,
         };
         let oct = OdFormater {
-            writer: print_item_oct,  offmarg: 2
+            writer: FormatWriter::IntWriter(print_item_oct), offmarg: 2
         };
         let hex = OdFormater {
-            writer: print_item_hex, offmarg: 2
+            writer: FormatWriter::IntWriter(print_item_hex), offmarg: 2
         };
         let dec_u = OdFormater {
-            writer: print_item_dec_u, offmarg: 2
+            writer: FormatWriter::IntWriter(print_item_dec_u), offmarg: 2
         };
         let dec_s = OdFormater {
-            writer: print_item_dec_s, offmarg: 2
+            writer: FormatWriter::IntWriter(print_item_dec_s), offmarg: 2
         };
         let a_char = OdFormater {
-            writer: print_item_a, offmarg: 1
+            writer: FormatWriter::IntWriter(print_item_a), offmarg: 1
         };
         let c_char = OdFormater {
-            writer: print_item_c, offmarg: 1
+            writer: FormatWriter::IntWriter(print_item_c), offmarg: 1
+        };
+        let flo32 = OdFormater {
+            writer: FormatWriter::FloatWriter(print_item_flo32), offmarg: 0
         };
 
         fn mkfmt(itembytes: usize, fmtspec: &OdFormater) -> OdFormat {
@@ -170,7 +176,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // TODO: support floats
     //		"e" => (8, &flo64),
     //		"F" => (8, &flo64),
-    //		"F" => (4, &flo32),
+    		"f" => (4, &flo32),
     		"H" => (4, &hex),
     		"X" => (4, &hex) ,
     		"o" => (2, &oct),
@@ -246,22 +252,38 @@ fn odfunc(input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat
                     let mut b = 0;
                     while b < n {
                         let nextb = b + f.itembytes;
-                        let p: u64 = match f.itembytes {
-                            1 => {
-                                bytes[b] as u64
+                        match f.writer {
+                            FormatWriter::IntWriter(func) => {
+                                let p: u64 = match f.itembytes {
+                                    1 => {
+                                        bytes[b] as u64
+                                    }
+                                    2 => {
+                                        LittleEndian::read_u16(&bytes[b..nextb]) as u64
+                                    }
+                                    4 => {
+                                        LittleEndian::read_u32(&bytes[b..nextb]) as u64
+                                    }
+                                    8 => {
+                                        LittleEndian::read_u64(&bytes[b..nextb])
+                                    }
+                                    _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                                };
+                                func(p, f.itembytes);
                             }
-                            2 => {
-                                LittleEndian::read_u16(&bytes[b..nextb]) as u64
+                            FormatWriter::FloatWriter(func) => {
+                                let p: f64 = match f.itembytes {
+                                    4 => {
+                                        LittleEndian::read_f32(&bytes[b..nextb]) as f64
+                                    }
+                                    8 => {
+                                        LittleEndian::read_f64(&bytes[b..nextb])
+                                    }
+                                    _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                                };
+                                func(p);
                             }
-                            4 => {
-                                LittleEndian::read_u32(&bytes[b..nextb]) as u64
-                            }
-                            8 => {
-                                LittleEndian::read_u64(&bytes[b..nextb])
-                            }
-                            _ => { panic!("Invalid itembytes: {}", f.itembytes); }
-                        };
-                        (f.writer)(p, f.itembytes);
+                        }
                         b = nextb;
                     }
                     // Add extra spaces to pad out the short, presumably last, line.
@@ -407,10 +429,15 @@ impl<'b> MultifileReader<'b> {
     }
 }
 
+#[derive(Clone, Copy)]
+enum FormatWriter {
+    IntWriter(fn(u64, usize)),
+    FloatWriter(fn(f64)),
+}
 
 struct OdFormat {
     itembytes: usize,
-    writer: fn(u64, usize),
+    writer: FormatWriter,
     offmarg: usize,
 }
 
@@ -515,4 +542,117 @@ fn print_item_c(p: u64, _: usize) {
             None => print!("{:>4}", b),
         }
     }
+}
+
+fn print_item_flo32(f: f64) {
+    print!(" {}", format_flo32(f as f32))
+}
+
+// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
+// always retuns a string of 14 characters
+fn format_flo32(f: f32) -> String {
+
+    if !f.is_normal() {
+        if f == -0.0 && f.is_sign_negative() { return format!("{:>14}", "-0") }
+        if f == 0.0 || !f.is_finite() { return format!("{:14}", f) }
+        return format!("{:14e}", f) // subnormal numbers
+    }
+
+    let mut l = f.abs().log10().floor() as i32;
+
+    let r = 10f32.powi(l);
+    if (f > 0.0 && r > f) || (f < 0.0 && -r < f) {
+        // fix precision error
+        l = l - 1;
+    }
+
+    if l >=0  && l <= 7 {
+        format!("{:width$.dec$}", f,
+            width=14,
+            dec=7-l as usize)
+    }
+    else if l == -1 {
+        format!("{:width$.dec$}", f,
+            width=14,
+            dec=8)
+    }
+    else {
+        format!("{:14.7e}", f)
+    }
+}
+
+#[test]
+fn test_format_flo32() {
+    assert_eq!(format_flo32(1.0),           "     1.0000000");
+    assert_eq!(format_flo32(9.9999990),     "     9.9999990");
+    assert_eq!(format_flo32(10.0),          "     10.000000");
+    assert_eq!(format_flo32(99.999977),     "     99.999977");
+    assert_eq!(format_flo32(99.999992),     "     99.999992");
+    assert_eq!(format_flo32(100.0),         "     100.00000");
+    assert_eq!(format_flo32(999.99994),     "     999.99994");
+    assert_eq!(format_flo32(1000.0),        "     1000.0000");
+    assert_eq!(format_flo32(9999.9990),     "     9999.9990");
+    assert_eq!(format_flo32(10000.0),       "     10000.000");
+    assert_eq!(format_flo32(99999.992),     "     99999.992");
+    assert_eq!(format_flo32(100000.0),      "     100000.00");
+    assert_eq!(format_flo32(999999.94),     "     999999.94");
+    assert_eq!(format_flo32(1000000.0),     "     1000000.0");
+    assert_eq!(format_flo32(9999999.4),     "     9999999.0");
+    assert_eq!(format_flo32(10000000.0),    "      10000000");
+    assert_eq!(format_flo32(99999992.0),    "      99999992");
+    assert_eq!(format_flo32(100000000.0),   "   1.0000000e8");
+    assert_eq!(format_flo32(9.9999994e8),   "   9.9999994e8");
+    assert_eq!(format_flo32(1.0e9),         "   1.0000000e9");
+    assert_eq!(format_flo32(9.9999990e9),   "   9.9999990e9");
+    assert_eq!(format_flo32(1.0e10),        "  1.0000000e10");
+
+    assert_eq!(format_flo32(0.1),           "    0.10000000");
+    assert_eq!(format_flo32(0.99999994),    "    0.99999994");
+    assert_eq!(format_flo32(0.010000001),   "  1.0000001e-2");
+    //assert_eq!(format_flo32(0.01),          "  1.0000000e-2"); // 9.9999998e-3
+    assert_eq!(format_flo32(0.099999994),   "  9.9999994e-2");
+    assert_eq!(format_flo32(0.001),         "  1.0000000e-3");
+
+    assert_eq!(format_flo32(-1.0),          "    -1.0000000");
+    assert_eq!(format_flo32(-9.9999990),    "    -9.9999990");
+    assert_eq!(format_flo32(-10.0),         "    -10.000000");
+    assert_eq!(format_flo32(-99.999977),    "    -99.999977");
+    assert_eq!(format_flo32(-99.999992),    "    -99.999992");
+    assert_eq!(format_flo32(-100.0),        "    -100.00000");
+    assert_eq!(format_flo32(-999.99994),    "    -999.99994");
+    assert_eq!(format_flo32(-1000.0),       "    -1000.0000");
+    assert_eq!(format_flo32(-9999.9990),    "    -9999.9990");
+    assert_eq!(format_flo32(-10000.0),      "    -10000.000");
+    assert_eq!(format_flo32(-99999.992),    "    -99999.992");
+    assert_eq!(format_flo32(-100000.0),     "    -100000.00");
+    assert_eq!(format_flo32(-999999.94),    "    -999999.94");
+    assert_eq!(format_flo32(-1000000.0),    "    -1000000.0");
+    assert_eq!(format_flo32(-9999999.4),    "    -9999999.0");
+    assert_eq!(format_flo32(-10000000.0),   "     -10000000");
+    assert_eq!(format_flo32(-99999992.0),   "     -99999992");
+    assert_eq!(format_flo32(-100000000.0),  "  -1.0000000e8");
+    assert_eq!(format_flo32(-9.9999994e8),  "  -9.9999994e8");
+    assert_eq!(format_flo32(-1.0e9),        "  -1.0000000e9");
+    assert_eq!(format_flo32(-9.9999990e9),  "  -9.9999990e9");
+    assert_eq!(format_flo32(-1.0e10),       " -1.0000000e10");
+
+    assert_eq!(format_flo32(-0.1),          "   -0.10000000");
+    assert_eq!(format_flo32(-0.99999994),   "   -0.99999994");
+    assert_eq!(format_flo32(-0.010000001),  " -1.0000001e-2");
+    //assert_eq!(format_flo32(-0.01),         " -1.0000000e-2"); // -9.9999998e-3
+    assert_eq!(format_flo32(-0.099999994),  " -9.9999994e-2");
+    assert_eq!(format_flo32(-0.001),        " -1.0000000e-3");
+
+    assert_eq!(format_flo32(3.4028233e38),  "  3.4028233e38");
+    assert_eq!(format_flo32(-3.4028233e38), " -3.4028233e38");
+    //assert_eq!(format_flo32(-3.4028235E38), " -3.4028235e38"); // literal out of range for f32
+
+    assert_eq!(format_flo32(-1.1663108e-38),"-1.1663108e-38");
+    assert_eq!(format_flo32(-4.701977e-38), "-4.7019771e-38");
+
+    assert_eq!(format_flo32(f32::NAN),          "           NaN");
+    assert_eq!(format_flo32(f32::INFINITY),     "           inf");
+    assert_eq!(format_flo32(f32::NEG_INFINITY), "          -inf");
+    assert_eq!(format_flo32(-0.0),              "            -0");
+    assert_eq!(format_flo32(0.0),               "             0");
 }

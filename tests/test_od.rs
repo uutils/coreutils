@@ -146,7 +146,6 @@ fn test_multiple_formats() {
 #[test]
 fn test_dec() {
 
-
     let input = [
     	0u8, 0u8,
     	1u8, 0u8,
@@ -167,6 +166,27 @@ fn test_dec() {
 
 }
 
+#[test]
+fn test_f32(){
+
+    let input : [u8; 24] = [
+        0x52, 0x06, 0x9e, 0xbf, // 0xbf9e0652 -1.2345679
+        0x4e, 0x61, 0x3c, 0x4b, // 0x4b3c614e 12345678
+        0x0f, 0x9b, 0x94, 0xfe, // 0xfe949b0f -9.876543E37
+        0x00, 0x00, 0x00, 0x80, // 0x80000000 -0.0
+        0xff, 0xff, 0xff, 0x7f, // 0x7fffffff NaN
+        0x00, 0x00, 0x7f, 0x80];// 0x807f0000 -1.1663108E-38
+    let expected_output = unindent("
+            0000000     -1.2345679       12345678  -9.8765427e37             -0
+            0000020            NaN -1.1663108e-38                                
+            0000030
+            ");
+    let result = new_ucmd!().arg("-f").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
 
 // We don't support multibyte chars, so big NEIN to this
 /*
