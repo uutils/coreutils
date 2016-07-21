@@ -424,14 +424,8 @@ fn print_item_hex(p: u64, itembytes: usize) {
 
 
 fn sign_extend(item: u64, itembytes: usize) -> i64{
-	// https://graphics.stanford.edu/~seander/bithacks.html#VariableSignExtend
-	unsafe{
-		let b = 8 * itembytes; // number of bits representing the number in p
-		let m =  mem::transmute::<u64,i64>(1u64 << (b - 1));
-		let x =  mem::transmute::<u64,i64>(item) & (mem::transmute::<u64,i64>(1u64 << b) - 1);
-		let r = (x ^ m) - m;
-		r
-	}
+    let shift = 64 - itembytes * 8;
+    (item << shift) as i64 >> shift
 }
 
 
