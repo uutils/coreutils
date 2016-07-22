@@ -4,21 +4,26 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Jordy Dickinson <jordy.dickinson@gmail.com>
+ * (c) Jeremy Neptune <jerenept@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE file
  * that was distributed with this source code.
+ *
+ * Some parts of this program are modeled after Orvar Segerström and Sokovikov Evgeniy's work on
+ * mv.rs .
  */
 
 extern crate getopts;
-
+extern crate walkdir;
 #[macro_use]
 extern crate uucore;
 
 use getopts::Options;
 use std::fs;
-use std::io::{ErrorKind, Result, Write};
+use std::io::{BufReader, BufRead, stdin, ErrorKind, Result, Write};
 use std::path::Path;
 use uucore::fs::{canonicalize, CanonicalizeMode};
+use walkdir::WalkDir;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -27,6 +32,32 @@ pub enum Mode {
     Version,
 }
 
+#[derive (Clone, Eq, PartialEq)]
+pub enum OverwriteMode {
+    NoClobber,
+    Interactive,
+    Force,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum BackupMode {
+    NoBackup,
+    SimpleBackup,
+    NumberedBackup,
+    ExistingBackup,
+}
+
+pub struct Behaviour {
+    overwrite: OverwriteMode,
+    backup: BackupMode,
+    suffix: String,
+    update: bool,
+    target_dir: Option<String>,
+    no_target_dir: bool,
+    verbose: bool,
+    link : bool,
+    recursive : bool,
+}
 static NAME: &'static str = "cp";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -34,11 +65,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
     opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    opts.optflag("V", "version", "output version information and exit");
     opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DIRECTORY");
     opts.optflag("T", "no-target-directory", "Treat DEST as a regular file and not a directory");
     opts.optflag("v", "verbose", "explicitly state what is being done");
     opts.optflag("n", "no-clobber", "don't overwrite a file that already exists");
+    opts.optflag("r", "recursive", "copy directories recursively");
+    opts.optflag("l", "link", "hard-link files instead of copying");
+    opts.optflag("i", "interactive", "ask before overwriting files");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -80,29 +114,48 @@ fn help(usage: &str) {
 }
 
 fn copy(matches: getopts::Matches) {
-    let verbose = matches.opt_present("verbose");
-    let no_clobber = matches.opt_present("no-clobber");
+    let behavior = Behaviour {
+        overwrite : if matches.opt_present("no-clobber") {
+            OverwriteMode::NoClobber
+        } else if matches.opt_present("interactive") {
+            OverwriteMode::Interactive
+        } else {
+            OverwriteMode::Force
+        },
+        recursive : matches.opt_present("recursive"),
+        backup : BackupMode::NoBackup, //TODO: actually do backup
+        suffix : String::from("~"), //TODO: implement backup with suffix
+        update : false, //TODO: implement updating
+        //target_dir = if matches.opt_present("no-target-dir"){
+        //    None todo: implement this shit
+        //}
+        verbose : matches.opt_present("verbose"),
+        no_target_dir : matches.opt_present("no-target-directory"),
+        link : matches.opt_present("link"),
+        target_dir : matches.opt_str("target-directory"),
+
+    };
     let sources: Vec<String> = if matches.free.is_empty() {
         show_error!("Missing SOURCE or DEST argument. Try --help.");
         panic!()
-    } else if !matches.opt_present("target-directory") {
+    } else if !behavior.target_dir.is_some() {
         matches.free[..matches.free.len() - 1].iter().cloned().collect()
     } else {
         matches.free.iter().cloned().collect()
     };
-    let dest_str = if matches.opt_present("target-directory") {
+    let dest_str = if behavior.target_dir.is_some() {
         matches.opt_str("target-directory").expect("Option -t/--target-directory requires an argument")
     } else {
         matches.free[matches.free.len() - 1].clone()
     };
-    let dest = if matches.free.len() < 2 && !matches.opt_present("target-directory") {
+    let dest = if matches.free.len() < 2 && !behavior.target_dir.is_some() {
         show_error!("Missing DEST argument. Try --help.");
         panic!()
     } else {
         //the argument to the -t/--target-directory= options
         let path = Path::new(&dest_str);
-        if !path.is_dir() && matches.opt_present("target-directory") {
-            show_error!("Target {} is not a directory", matches.opt_str("target-directory").unwrap());
+        if !path.is_dir() && behavior.target_dir.is_some() {
+            show_error!("Target {} is not a directory",behavior.target_dir.unwrap());
             panic!()
         } else {
             path
@@ -111,58 +164,121 @@ fn copy(matches: getopts::Matches) {
     };
 
     assert!(sources.len() >= 1);
-    if matches.opt_present("no-target-directory") && dest.is_dir() {
+    if behavior.no_target_dir && dest.is_dir() {
         show_error!("Can't overwrite directory {} with non-directory", dest.display());
         panic!()
     }
 
 
-    if !dest.is_dir() && sources.len() != 1 {
+    if !dest.is_dir() && sources.len() != 1  {
         show_error!("TARGET must be a directory");
         panic!();
     }
 
-    for src in &sources {
-        let source = Path::new(&src);
+    'outer: for src in &sources {
+        for item in WalkDir::new(src){
+            let item1 = item.unwrap();
+            let item=item1.path();
+            //println!("{}", item.display());
+            if !((dest.is_dir() || dest.is_file()) && (item.is_dir() || item.is_file())) {
+                show_error!("{} or {} are invalid or inaccessible", dest.display(), item.display());
+                panic!()
+            }
+            let full_dest = if Path::new(src).is_dir() {
+                //println!("here!");
+                dest.join(item.strip_prefix(Path::new(src).parent().unwrap()).unwrap()) //Christmas day!
+            } else if dest.is_file() {
+                dest.to_path_buf()
+            } else  {
+                dest.join(item)
+                /*match Path::new(src).parent() {
+                    None =>,
+                    Some(x) => dest.join(item.strip_prefix(src).unwrap())
+                }*/
 
-        if !source.is_file() {
-            show_error!("\"{}\" is not a file", source.display());
-            continue;
-        }
-        let same_file = paths_refer_to_same_file(source, dest).unwrap_or_else(|err| {
-            match err.kind() {
-                ErrorKind::NotFound => false,
-                _ => {
-                    show_error!("{}", err);
-                    panic!()
+            };
+            //println!("{:?}", None);
+            if item.is_dir() {
+                if !behavior.recursive {
+                    println!("{}: skipping directory '{}'", NAME, item.display());
+                    continue 'outer;
+                }
+                if behavior.verbose {
+                    println!("{} -> {}", item.display(), full_dest.display());
+                }
+                if full_dest.is_dir() {
+                    continue; //merge the directories that already exist
+                }
+                match fs::create_dir(full_dest.clone()) {
+                    Err(e) => {
+                        show_error!("{}", e);
+                        panic!();
+                    },
+                    Ok(t) => {
+                        let permissions = fs::metadata(item).unwrap().permissions();
+                         match fs::set_permissions(full_dest, permissions) {
+                             Ok(t) => t,
+                             Err(t) => show_error!("{}", t)
+                         }
+                        t
+                    },
+                }
+            } else {
+                let same_file = paths_refer_to_same_file(item, full_dest.as_path()).unwrap_or_else(|err| {
+                    match err.kind() {
+                        ErrorKind::NotFound => false,
+                        _ => {
+                            show_error!("{}", err);
+                            panic!()
+                        }
+                    }
+                });
+                if !item.is_file() {
+                    show_error!("\"{}\" is not a file", item.display());
+                    continue;
+                }
+                if same_file {
+                    show_error!("\"{}\" and \"{}\" are the same file",
+                        item.display(),
+                        full_dest.display());
+                    panic!();
+                }
+                if full_dest.exists() {
+                    match behavior.overwrite {
+                        OverwriteMode::NoClobber => {
+                            show_error!("Not overwriting {} because of option 'no-clobber'", full_dest.display());
+                            continue; //if the destination file exists, we promised not to overwrite
+                        },
+                        OverwriteMode::Interactive => {
+                            let mut input = String::new();
+                            if !read_yes() {
+                                continue;
+                            }
+                        },
+                        OverwriteMode::Force => {
+                            fs::remove_file(full_dest.clone());
+                        },
+
+                    }
+                }
+                if behavior.verbose {
+                    println!("{} -> {}", item.display(), full_dest.display());
+                }
+                let io_result = if behavior.link {
+                    fs::hard_link(item, full_dest).err()
+                } else {
+                    fs::copy(item, full_dest).err() //carry out the copy
+                };
+                match io_result {
+                    None => continue,
+                    Some(t) => {
+                        show_error!("{}", t);
+                        panic!()
+                    }
                 }
             }
-        });
-
-        if same_file {
-            show_error!("\"{}\" and \"{}\" are the same file",
-            source.display(),
-            dest.display());
-            panic!();
-        }
-        let mut full_dest = dest.to_path_buf();
-        if dest.is_dir() {
-            full_dest.push(source.file_name().unwrap());
-        } //if we're copying to a directory
-        if no_clobber && full_dest.exists() {
-            continue; //if the destination file exists, we promised not to overwrite
-        }
-        if verbose {
-            println!("{} -> {}", source.display(), full_dest.display());
-        }
-
-        let io_result = fs::copy(source, full_dest);
-        if let Err(err) = io_result {
-            show_error!("{}", err);
-            panic!()
         }
     }
-
 }
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
@@ -171,4 +287,15 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
     let pathbuf2 = try!(canonicalize(p2, CanonicalizeMode::Normal));
 
     Ok(pathbuf1 == pathbuf2)
+}
+
+fn read_yes() -> bool {
+    let mut s = String::new();
+    match BufReader::new(stdin()).read_line(&mut s) {
+        Ok(_) => match s.char_indices().nth(0) {
+            Some((_, x)) => x == 'y' || x == 'Y',
+            _ => false
+        },
+        _ => false
+    }
 }
