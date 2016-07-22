@@ -148,6 +148,10 @@ fn copy(matches: getopts::Matches) {
     } else {
         matches.free[matches.free.len() - 1].clone()
     };
+    if behavior.no_target_dir && behavior.target_dir.is_some() {
+        show_error!("Options --no-target-dir and --target-dir are mutually exclusive");
+        panic!()
+    }
     let dest = if matches.free.len() < 2 && !behavior.target_dir.is_some() {
         show_error!("Missing DEST argument. Try --help.");
         panic!()
@@ -174,28 +178,33 @@ fn copy(matches: getopts::Matches) {
         show_error!("TARGET must be a directory");
         panic!();
     }
-
+    if !dest.exists() && (sources.len() != 1 && Path::new(&sources[0]).is_dir()) {
+        fs::create_dir(dest.clone());
+    }
     'outer: for src in &sources {
         for item in WalkDir::new(src){
             let item1 = item.unwrap();
             let item=item1.path();
-            //println!("{}", item.display());
-            if !((dest.is_dir() || dest.is_file()) && (item.is_dir() || item.is_file())) {
-                show_error!("{} or {} are invalid or inaccessible", dest.display(), item.display());
+            if !(item.is_dir() || item.is_file()) {
+                show_error!("{} is invalid or inaccessible", item.display());
                 panic!()
             }
-            let full_dest = if Path::new(src).is_dir() {
-                //println!("here!");
+            let full_dest = if Path::new(src).is_dir() && dest.exists() {
+                println!("안녕");
                 dest.join(item.strip_prefix(Path::new(src).parent().unwrap()).unwrap()) //Christmas day!
-            } else if dest.is_file() {
-                dest.to_path_buf()
+            /*
+                If the source of the files (as given by the user args) is a directory
+                the ending destination of a particular file is:
+                the
+
+            */
+            } else if Path::new(src).is_dir() && !dest.exists() {
+                println!("Hello!");
+                dest.join(item.canonicalize().unwrap().strip_prefix(&Path::new(src).canonicalize().unwrap()).unwrap())
+            } else if !dest.is_dir() { //source is not a directory, for the rest
+                dest.to_path_buf() //figure out how to copy a directory; not copy a directory into another
             } else  {
                 dest.join(item)
-                /*match Path::new(src).parent() {
-                    None =>,
-                    Some(x) => dest.join(item.strip_prefix(src).unwrap())
-                }*/
-
             };
             //println!("{:?}", None);
             if item.is_dir() {
@@ -209,7 +218,7 @@ fn copy(matches: getopts::Matches) {
                 if full_dest.is_dir() {
                     continue; //merge the directories that already exist
                 }
-                match fs::create_dir(full_dest.clone()) {
+                match fs::create_dir_all(full_dest.clone()) {
                     Err(e) => {
                         show_error!("{}", e);
                         panic!();
@@ -250,7 +259,6 @@ fn copy(matches: getopts::Matches) {
                             continue; //if the destination file exists, we promised not to overwrite
                         },
                         OverwriteMode::Interactive => {
-                            let mut input = String::new();
                             if !read_yes() {
                                 continue;
                             }
