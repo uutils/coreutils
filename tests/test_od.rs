@@ -169,19 +169,42 @@ fn test_dec() {
 #[test]
 fn test_f32(){
 
-    let input : [u8; 24] = [
+    let input : [u8; 28] = [
         0x52, 0x06, 0x9e, 0xbf, // 0xbf9e0652 -1.2345679
         0x4e, 0x61, 0x3c, 0x4b, // 0x4b3c614e 12345678
         0x0f, 0x9b, 0x94, 0xfe, // 0xfe949b0f -9.876543E37
         0x00, 0x00, 0x00, 0x80, // 0x80000000 -0.0
         0xff, 0xff, 0xff, 0x7f, // 0x7fffffff NaN
+        0xc2, 0x16, 0x01, 0x00, // 0x000116c2 1e-40
         0x00, 0x00, 0x7f, 0x80];// 0x807f0000 -1.1663108E-38
     let expected_output = unindent("
             0000000     -1.2345679       12345678  -9.8765427e37             -0
-            0000020            NaN -1.1663108e-38                                
-            0000030
+            0000020            NaN          1e-40 -1.1663108e-38                
+            0000034
             ");
     let result = new_ucmd!().arg("-f").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_f64(){
+
+    let input : [u8; 40] = [
+        0x27, 0x6b, 0x0a, 0x2f, 0x2a, 0xee, 0x45, 0x43, // 0x4345EE2A2F0A6B27 12345678912345678
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x0000000000000000 0
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x80, // 0x8010000000000000 -2.2250738585072014e-308
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x0000000000000001 5e-324 (subnormal)
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0];// 0xc000000000000000 -2
+    let expected_output = unindent("
+            0000000        12345678912345678                        0
+            0000020 -2.2250738585072014e-308                   5e-324
+            0000040      -2.0000000000000000                                
+            0000050
+            ");
+    let result = new_ucmd!().arg("-F").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);

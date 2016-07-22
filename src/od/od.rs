@@ -18,7 +18,9 @@ use std::io::Read;
 use std::io::BufReader;
 use std::io::Write;
 use std::io;
+use std::num::FpCategory;
 use std::f32;
+use std::f64;
 use unindent::*;
 use byteorder::*;
 
@@ -69,7 +71,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("O", "", "octal 4-byte units");
     opts.optflag("s", "", "decimal 4-byte units");
 
-    opts.optflag("f", "", "floating point IEEE-754 single precision (32-bit) units");
+    opts.optflag("e", "", "floating point double precision (64-bit) units");
+    opts.optflag("f", "", "floating point single precision (32-bit) units");
+    opts.optflag("F", "", "floating point double precision (64-bit) units");
 
     opts.optopt("t", "format", "select output format or formats", "TYPE");
     opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
@@ -157,6 +161,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let flo32 = OdFormater {
             writer: FormatWriter::FloatWriter(print_item_flo32), offmarg: 0
         };
+        let flo64 = OdFormater {
+            writer: FormatWriter::FloatWriter(print_item_flo64), offmarg: 0
+        };
 
         fn mkfmt(itembytes: usize, fmtspec: &OdFormater) -> OdFormat {
             OdFormat {
@@ -173,9 +180,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     		"b" => (1, &oct),
     		"c" => (1, &c_char),
     		"D" => (4, &dec_u),
-    // TODO: support floats
-    //		"e" => (8, &flo64),
-    //		"F" => (8, &flo64),
+    		"e" => (8, &flo64),
+    		"F" => (8, &flo64),
     		"f" => (4, &flo32),
     		"H" => (4, &hex),
     		"X" => (4, &hex) ,
@@ -548,36 +554,59 @@ fn print_item_flo32(f: f64) {
     print!(" {}", format_flo32(f as f32))
 }
 
+fn print_item_flo64(f: f64) {
+    print!(" {}", format_flo64(f))
+}
+
 // formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
 // always retuns a string of 14 characters
 fn format_flo32(f: f32) -> String {
+    let width: usize = 14;
+    let precision: usize = 8;
+
+    if f.classify() == FpCategory::Subnormal {
+        // subnormal numbers will be normal as f64, so will print with a wrong precision
+        format!("{:width$e}", f, width = width) // subnormal numbers
+    }
+    else {
+        format_float(f as f64, width, precision)
+    }
+}
+
+fn format_flo64(f: f64) -> String {
+    format_float(f, 24, 17)
+}
+
+fn format_float(f: f64, width: usize, precision: usize) -> String {
 
     if !f.is_normal() {
-        if f == -0.0 && f.is_sign_negative() { return format!("{:>14}", "-0") }
-        if f == 0.0 || !f.is_finite() { return format!("{:14}", f) }
-        return format!("{:14e}", f) // subnormal numbers
+        if f == -0.0 && f.is_sign_negative() { return format!("{:>width$}", "-0", width = width) }
+        if f == 0.0 || !f.is_finite() { return format!("{:width$}", f, width = width) }
+        return format!("{:width$e}", f, width = width) // subnormal numbers
     }
 
     let mut l = f.abs().log10().floor() as i32;
 
-    let r = 10f32.powi(l);
+    let r = 10f64.powi(l);
     if (f > 0.0 && r > f) || (f < 0.0 && -r < f) {
         // fix precision error
         l = l - 1;
     }
 
-    if l >=0  && l <= 7 {
+    if l >= 0  && l <= (precision as i32 - 1) {
         format!("{:width$.dec$}", f,
-            width=14,
-            dec=7-l as usize)
+            width = width,
+            dec = (precision-1) - l as usize)
     }
     else if l == -1 {
         format!("{:width$.dec$}", f,
-            width=14,
-            dec=8)
+            width = width,
+            dec = precision)
     }
     else {
-        format!("{:14.7e}", f)
+        format!("{:width$.dec$e}", f,
+            width = width,
+            dec = precision - 1)
     }
 }
 
@@ -597,7 +626,7 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(100000.0),      "     100000.00");
     assert_eq!(format_flo32(999999.94),     "     999999.94");
     assert_eq!(format_flo32(1000000.0),     "     1000000.0");
-    assert_eq!(format_flo32(9999999.4),     "     9999999.0");
+    assert_eq!(format_flo32(9999999.0),     "     9999999.0");
     assert_eq!(format_flo32(10000000.0),    "      10000000");
     assert_eq!(format_flo32(99999992.0),    "      99999992");
     assert_eq!(format_flo32(100000000.0),   "   1.0000000e8");
@@ -609,9 +638,9 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(0.1),           "    0.10000000");
     assert_eq!(format_flo32(0.99999994),    "    0.99999994");
     assert_eq!(format_flo32(0.010000001),   "  1.0000001e-2");
-    //assert_eq!(format_flo32(0.01),          "  1.0000000e-2"); // 9.9999998e-3
     assert_eq!(format_flo32(0.099999994),   "  9.9999994e-2");
     assert_eq!(format_flo32(0.001),         "  1.0000000e-3");
+    assert_eq!(format_flo32(0.0099999998),  "  9.9999998e-3");
 
     assert_eq!(format_flo32(-1.0),          "    -1.0000000");
     assert_eq!(format_flo32(-9.9999990),    "    -9.9999990");
@@ -627,7 +656,7 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(-100000.0),     "    -100000.00");
     assert_eq!(format_flo32(-999999.94),    "    -999999.94");
     assert_eq!(format_flo32(-1000000.0),    "    -1000000.0");
-    assert_eq!(format_flo32(-9999999.4),    "    -9999999.0");
+    assert_eq!(format_flo32(-9999999.0),    "    -9999999.0");
     assert_eq!(format_flo32(-10000000.0),   "     -10000000");
     assert_eq!(format_flo32(-99999992.0),   "     -99999992");
     assert_eq!(format_flo32(-100000000.0),  "  -1.0000000e8");
@@ -639,20 +668,40 @@ fn test_format_flo32() {
     assert_eq!(format_flo32(-0.1),          "   -0.10000000");
     assert_eq!(format_flo32(-0.99999994),   "   -0.99999994");
     assert_eq!(format_flo32(-0.010000001),  " -1.0000001e-2");
-    //assert_eq!(format_flo32(-0.01),         " -1.0000000e-2"); // -9.9999998e-3
     assert_eq!(format_flo32(-0.099999994),  " -9.9999994e-2");
     assert_eq!(format_flo32(-0.001),        " -1.0000000e-3");
+    assert_eq!(format_flo32(-0.0099999998), " -9.9999998e-3");
 
     assert_eq!(format_flo32(3.4028233e38),  "  3.4028233e38");
     assert_eq!(format_flo32(-3.4028233e38), " -3.4028233e38");
-    //assert_eq!(format_flo32(-3.4028235E38), " -3.4028235e38"); // literal out of range for f32
-
     assert_eq!(format_flo32(-1.1663108e-38),"-1.1663108e-38");
-    assert_eq!(format_flo32(-4.701977e-38), "-4.7019771e-38");
+    assert_eq!(format_flo32(-4.7019771e-38),"-4.7019771e-38");
+    assert_eq!(format_flo32(1e-45),         "         1e-45");
 
+    assert_eq!(format_flo32(-3.402823466e+38),  " -3.4028235e38");
     assert_eq!(format_flo32(f32::NAN),          "           NaN");
     assert_eq!(format_flo32(f32::INFINITY),     "           inf");
     assert_eq!(format_flo32(f32::NEG_INFINITY), "          -inf");
     assert_eq!(format_flo32(-0.0),              "            -0");
     assert_eq!(format_flo32(0.0),               "             0");
+}
+
+#[test]
+fn test_format_flo64() {
+    assert_eq!(format_flo64(1.0),                     "      1.0000000000000000");
+    assert_eq!(format_flo64(10.0),                    "      10.000000000000000");
+    assert_eq!(format_flo64(1000000000000000.0),      "      1000000000000000.0");
+    assert_eq!(format_flo64(10000000000000000.0),     "       10000000000000000");
+    assert_eq!(format_flo64(100000000000000000.0),    "   1.0000000000000000e17");
+
+    assert_eq!(format_flo64(-0.1),                    "    -0.10000000000000001");
+    assert_eq!(format_flo64(-0.01),                   "  -1.0000000000000000e-2");
+
+    assert_eq!(format_flo64(-2.2250738585072014e-308),"-2.2250738585072014e-308");
+    assert_eq!(format_flo64(4e-320),                  "                  4e-320");
+    assert_eq!(format_flo64(f64::NAN),                "                     NaN");
+    assert_eq!(format_flo64(f64::INFINITY),           "                     inf");
+    assert_eq!(format_flo64(f64::NEG_INFINITY),       "                    -inf");
+    assert_eq!(format_flo64(-0.0),                    "                      -0");
+    assert_eq!(format_flo64(0.0),                     "                       0");
 }
