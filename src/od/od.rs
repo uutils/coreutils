@@ -39,7 +39,6 @@ macro_rules! hashmap {
     }}
 }
 
-static NAME: &'static str = "od";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
@@ -86,7 +85,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!("Invalid options\n{}", f)
+        Err(f) => {
+            disp_err!("{}", f);
+            return 1;
+        }
     };
 
     if matches.opt_present("h") {
@@ -94,18 +96,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 Usage:
                     {0} [OPTION]... [FILENAME]...
 
-                Displays data in various human-readable formats.", NAME));
+                Displays data in various human-readable formats.", executable!()));
         println!("{}", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
+        println!("{} {}", executable!(), VERSION);
         return 0;
     }
 
     let input_offset_base = match parse_radix(matches.opt_str("A")) {
         Ok(r) => r,
-        Err(f) => { panic!("Invalid -A/--address-radix\n{}", f) }
+        Err(f) => {
+            disp_err!("Invalid -A/--address-radix\n{}", f);
+            return 1;
+        }
     };
 
     // Gather up file names - args which don't start with '-'

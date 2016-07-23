@@ -53,8 +53,9 @@ impl<'b> MultifileReader<'b> {
                                     // print an error at the time that the file is needed,
                                     // then move on the the next file.
                                     // This matches the behavior of the original `od`
-                                    let _ =
-                                        writeln!(&mut std::io::stderr(), "od: '{}': {}", fname, e);
+                                    eprintln!("{}: '{}': {}",
+                                        executable!().split("::").next().unwrap(), // remove module
+                                        fname, e);
                                     self.any_err = true
                                 }
                             }
