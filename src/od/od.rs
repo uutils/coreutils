@@ -213,7 +213,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 const LINEBYTES:usize = 16;
-const WORDBYTES:usize = 2;
 
 fn odfunc(input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat]) -> i32 {
 
@@ -287,13 +286,6 @@ fn odfunc(input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat
                             }
                         }
                         b = nextb;
-                    }
-                    // Add extra spaces to pad out the short, presumably last, line.
-                    if n < LINEBYTES {
-                        // calc # of items we did not print, must be short at least WORDBYTES to be missing any.
-                        let words_short = (LINEBYTES - n) / WORDBYTES;
-                        // XXX this is running short for -c & -a
-                        print!("{:>width$}", "", width = (words_short) * (6 + 2));
                     }
                     print!("\n");
                 }
