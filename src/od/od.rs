@@ -13,12 +13,16 @@ extern crate getopts;
 extern crate unindent;
 extern crate byteorder;
 
+#[macro_use]
+extern crate uucore;
+
 mod multifilereader;
 mod prn_int;
 mod prn_char;
 mod prn_float;
 
-use std::f64;
+use std::cmp;
+use std::io::Write;
 use unindent::*;
 use byteorder::*;
 use multifilereader::*;
@@ -73,7 +77,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optopt("t", "format", "select output format or formats", "TYPE");
     opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
-    opts.optopt("w", "width",
+    opts.optflagopt("w", "width",
                 ("output BYTES bytes per output line. 32 is implied when BYTES is not \
                  specified."),
                 "BYTES");
@@ -209,23 +213,36 @@ pub fn uumain(args: Vec<String>) -> i32 {
             formats.push(mkfmt(2, &oct)); // 2 byte octal is the default
         }
 
-        odfunc(&input_offset_base, &inputs, &formats[..])
+        let mut line_bytes = match matches.opt_default("w", "32") {
+            None => 16,
+            Some(s) => {
+                match s.parse::<usize>() {
+                    Ok(i) => { i }
+                    Err(_) => { 2 }
+                }
+            }
+        };
+        let min_bytes = formats.iter().fold(2, |max, next| cmp::max(max, next.itembytes));
+        if line_bytes % min_bytes != 0 {
+            show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
+            line_bytes = min_bytes;
+        }
+
+        odfunc(line_bytes, &input_offset_base, &inputs, &formats[..])
 }
 
-const LINEBYTES:usize = 16;
-
-fn odfunc(input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat]) -> i32 {
+fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat]) -> i32 {
 
     let mut mf = MultifileReader::new(fnames);
     let mut addr = 0;
-    let bytes = &mut [b'\x00'; LINEBYTES];
+    let mut bytes: Vec<u8> = vec![b'\x00'; line_bytes];
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
 
         print_with_radix(input_offset_base, addr); // print offset
 		// if printing in multiple formats offset is printed only once
 
-        match mf.f_read(bytes) {
+        match mf.f_read(bytes.as_mut_slice()) {
             Ok(0) => {
                 print!("\n");
                 break;

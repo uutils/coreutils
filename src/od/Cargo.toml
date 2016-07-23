@@ -12,6 +12,7 @@ getopts = "*"
 libc = "*"
 unindent = "*"
 byteorder = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name = "od"
