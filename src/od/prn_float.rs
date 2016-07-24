@@ -2,12 +2,12 @@ use std::num::FpCategory;
 use std::f32;
 use std::f64;
 
-pub fn print_item_flo32(f: f64) {
-    print!(" {}", format_flo32(f as f32))
+pub fn format_item_flo32(f: f64) -> String {
+    format!(" {}", format_flo32(f as f32))
 }
 
-pub fn print_item_flo64(f: f64) {
-    print!(" {}", format_flo64(f))
+pub fn format_item_flo64(f: f64) -> String {
+    format!(" {}", format_flo64(f))
 }
 
 // formats float with 8 significant digits, eg 12345678 or -1.2345678e+12

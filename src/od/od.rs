@@ -150,28 +150,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
             offmarg: usize,
         };
         let oct = OdFormater {
-            writer: FormatWriter::IntWriter(print_item_oct), offmarg: 2
+            writer: FormatWriter::IntWriter(format_item_oct), offmarg: 2
         };
         let hex = OdFormater {
-            writer: FormatWriter::IntWriter(print_item_hex), offmarg: 2
+            writer: FormatWriter::IntWriter(format_item_hex), offmarg: 2
         };
         let dec_u = OdFormater {
-            writer: FormatWriter::IntWriter(print_item_dec_u), offmarg: 2
+            writer: FormatWriter::IntWriter(format_item_dec_u), offmarg: 2
         };
         let dec_s = OdFormater {
-            writer: FormatWriter::IntWriter(print_item_dec_s), offmarg: 2
+            writer: FormatWriter::IntWriter(format_item_dec_s), offmarg: 2
         };
         let a_char = OdFormater {
-            writer: FormatWriter::IntWriter(print_item_a), offmarg: 1
+            writer: FormatWriter::IntWriter(format_item_a), offmarg: 1
         };
         let c_char = OdFormater {
-            writer: FormatWriter::IntWriter(print_item_c), offmarg: 1
+            writer: FormatWriter::IntWriter(format_item_c), offmarg: 1
         };
         let flo32 = OdFormater {
-            writer: FormatWriter::FloatWriter(print_item_flo32), offmarg: 0
+            writer: FormatWriter::FloatWriter(format_item_flo32), offmarg: 0
         };
         let flo64 = OdFormater {
-            writer: FormatWriter::FloatWriter(print_item_flo64), offmarg: 0
+            writer: FormatWriter::FloatWriter(format_item_flo64), offmarg: 0
         };
 
         fn mkfmt(itembytes: usize, fmtspec: &OdFormater) -> OdFormat {
@@ -248,24 +248,17 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
 
-        print_with_radix(input_offset_base, addr); // print offset
-		// if printing in multiple formats offset is printed only once
-
         match mf.f_read(bytes.as_mut_slice()) {
             Ok(0) => {
-                print!("\n");
+                print!("{}\n", print_with_radix(input_offset_base, addr)); // print final offset
                 break;
             }
             Ok(n) => {
                 let mut first = true; // First line of a multi-format raster.
                 for f in formats {
-                    if !first {
-                        // this takes the space of the file offset on subsequent
-                        // lines of multi-format rasters.
-                        print!("       ");
-                    }
-                    first = false;
-                    print!("{:>width$}", "", width = f.offmarg);// 4 spaces after offset - we print 2 more before each word
+                    let mut output_text = String::new();
+
+                    output_text.push_str(&format!("{:>width$}", "", width = f.offmarg));// 4 spaces after offset - we print 2 more before each word
 
                     // not enough byte for a whole element, this should only happen on the last line.
                     if n % f.itembytes != 0 {
@@ -296,7 +289,7 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
                                     }
                                     _ => { panic!("Invalid itembytes: {}", f.itembytes); }
                                 };
-                                func(p, f.itembytes);
+                                output_text.push_str(&func(p, f.itembytes));
                             }
                             FormatWriter::FloatWriter(func) => {
                                 let p: f64 = match f.itembytes {
@@ -308,12 +301,23 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
                                     }
                                     _ => { panic!("Invalid itembytes: {}", f.itembytes); }
                                 };
-                                func(p);
+                                output_text.push_str(&func(p));
                             }
                         }
                         b = nextb;
                     }
-                    print!("\n");
+
+                    if first {
+                        print!("{}", print_with_radix(input_offset_base, addr)); // print offset
+                        // if printing in multiple formats offset is printed only once
+                        first = false;
+                    }
+                    else {
+                        // this takes the space of the file offset on subsequent
+                        // lines of multi-format rasters.
+                        print!("       ");
+                    }
+                    print!("{}\n", output_text);
                 }
                 addr += n;
             }
@@ -322,6 +326,7 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
             }
         };
     }
+
     if mf.any_err {
         1
     } else {
@@ -352,21 +357,21 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
     }
 }
 
-fn print_with_radix(r: &Radix, x: usize) {
+fn print_with_radix(r: &Radix, x: usize) -> String{
     // TODO(keunwoo): field widths should be based on sizeof(x), or chosen dynamically based on the
     // expected range of address values.  Binary in particular is not great here.
     match *r {
-        Radix::Decimal => print!("{:07}", x),
-        Radix::Hexadecimal => print!("{:07X}", x),
-        Radix::Octal => print!("{:07o}", x),
-        Radix::Binary => print!("{:07b}", x)
+        Radix::Decimal => format!("{:07}", x),
+        Radix::Hexadecimal => format!("{:07X}", x),
+        Radix::Octal => format!("{:07o}", x),
+        Radix::Binary => format!("{:07b}", x)
     }
 }
 
 #[derive(Clone, Copy)]
 enum FormatWriter {
-    IntWriter(fn(u64, usize)),
-    FloatWriter(fn(f64)),
+    IntWriter(fn(u64, usize) -> String),
+    FloatWriter(fn(f64) -> String),
 }
 
 struct OdFormat {

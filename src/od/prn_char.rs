@@ -24,11 +24,11 @@ static A_CHRS : [&'static str; 160]  =
  "90",    "91",    "92",    "93",    "94",    "95",    "96",    "97",
  "98",    "99",    "9a",    "9b",    "9c",    "9d",    "9e",    "9f"];
 
-pub fn print_item_a(p: u64, _: usize) {
+pub fn format_item_a(p: u64, _: usize) -> String {
     // itembytes == 1
     let b = (p & 0xff) as u8;
-    print!("{:>4}", A_CHRS.get(b as usize).unwrap_or(&"?") // XXX od dose not actually do this, it just prints the byte
-  );
+    format!("{:>4}", A_CHRS.get(b as usize).unwrap_or(&"?") // XXX od dose not actually do this, it just prints the byte
+  )
 }
 
 
@@ -51,14 +51,15 @@ static C_CHRS : [&'static str; 127]  = [
   "x",     "y",     "z",     "{",     "|",     "}",     "~" ];
 
 
-pub fn print_item_c(p: u64, _: usize) {
+pub fn format_item_c(p: u64, _: usize) -> String {
     // itembytes == 1
     let b = (p & 0xff) as usize;
 
     if b < C_CHRS.len() {
         match C_CHRS.get(b as usize) {
-            Some(s) => print!("{:>4}", s),
-            None => print!("{:>4}", b),
+            Some(s) => format!("{:>4}", s),
+            None => format!("{:>4}", b),
         }
     }
+    else { String::new() }
 }
