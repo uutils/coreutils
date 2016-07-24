@@ -167,6 +167,38 @@ fn test_dec() {
 }
 
 #[test]
+fn test_hex16(){
+
+    let input : [u8; 9] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
+    let expected_output = unindent("
+            0000000      2301    6745    ab89    efcd    00ff
+            0000011
+            ");
+    let result = new_ucmd!().arg("-x").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_hex32(){
+
+    let input : [u8; 9] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
+    let expected_output = unindent("
+            0000000          67452301        efcdab89        000000ff
+            0000011
+            ");
+    let result = new_ucmd!().arg("-X").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
 fn test_f32(){
 
     let input : [u8; 28] = [

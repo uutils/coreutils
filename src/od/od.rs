@@ -66,9 +66,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("I", "", "decimal 2-byte units");
     opts.optflag("L", "", "decimal 2-byte units");
     opts.optflag("i", "", "decimal 2-byte units");
+    opts.optflag("x", "", "hexadecimal 2-byte units");
+    opts.optflag("h", "", "hexadecimal 2-byte units");
 
     opts.optflag("O", "", "octal 4-byte units");
     opts.optflag("s", "", "decimal 4-byte units");
+    opts.optflag("X", "", "hexadecimal 4-byte units");
+    opts.optflag("H", "", "hexadecimal 4-byte units");
 
     opts.optflag("e", "", "floating point double precision (64-bit) units");
     opts.optflag("f", "", "floating point single precision (32-bit) units");
