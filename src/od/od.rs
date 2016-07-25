@@ -254,71 +254,16 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
                 break;
             }
             Ok(n) => {
-                let mut first = true; // First line of a multi-format raster.
-                for f in formats {
-                    let mut output_text = String::new();
-
-                    output_text.push_str(&format!("{:>width$}", "", width = f.offmarg));// 4 spaces after offset - we print 2 more before each word
-
-                    // not enough byte for a whole element, this should only happen on the last line.
-                    if n % f.itembytes != 0 {
-                        let b = n / f.itembytes;
-                        // set zero bytes in the part of the buffer that will be used, but is not filled.
-                        for i in n..(b + 1) * f.itembytes {
-                            bytes[i] = 0;
-                        }
+                // not enough byte for a whole element, this should only happen on the last line.
+                if n != line_bytes {
+                    // set zero bytes in the part of the buffer that will be used, but is not filled.
+                    for i in n..line_bytes {
+                        bytes[i] = 0;
                     }
-
-                    let mut b = 0;
-                    while b < n {
-                        let nextb = b + f.itembytes;
-                        match f.writer {
-                            FormatWriter::IntWriter(func) => {
-                                let p: u64 = match f.itembytes {
-                                    1 => {
-                                        bytes[b] as u64
-                                    }
-                                    2 => {
-                                        LittleEndian::read_u16(&bytes[b..nextb]) as u64
-                                    }
-                                    4 => {
-                                        LittleEndian::read_u32(&bytes[b..nextb]) as u64
-                                    }
-                                    8 => {
-                                        LittleEndian::read_u64(&bytes[b..nextb])
-                                    }
-                                    _ => { panic!("Invalid itembytes: {}", f.itembytes); }
-                                };
-                                output_text.push_str(&func(p, f.itembytes));
-                            }
-                            FormatWriter::FloatWriter(func) => {
-                                let p: f64 = match f.itembytes {
-                                    4 => {
-                                        LittleEndian::read_f32(&bytes[b..nextb]) as f64
-                                    }
-                                    8 => {
-                                        LittleEndian::read_f64(&bytes[b..nextb])
-                                    }
-                                    _ => { panic!("Invalid itembytes: {}", f.itembytes); }
-                                };
-                                output_text.push_str(&func(p));
-                            }
-                        }
-                        b = nextb;
-                    }
-
-                    if first {
-                        print!("{}", print_with_radix(input_offset_base, addr)); // print offset
-                        // if printing in multiple formats offset is printed only once
-                        first = false;
-                    }
-                    else {
-                        // this takes the space of the file offset on subsequent
-                        // lines of multi-format rasters.
-                        print!("       ");
-                    }
-                    print!("{}\n", output_text);
                 }
+                
+                print_bytes(&bytes, n, &print_with_radix(input_offset_base, addr), formats);
+                
                 addr += n;
             }
             Err(_) => {
@@ -331,6 +276,65 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
         1
     } else {
         0
+    }
+}
+
+fn print_bytes(bytes: &[u8], length: usize, prefix: &str, formats: &[OdFormat]) {
+    let mut first = true; // First line of a multi-format raster.
+    for f in formats {
+        let mut output_text = String::new();
+
+        output_text.push_str(&format!("{:>width$}", "", width = f.offmarg));// 4 spaces after offset - we print 2 more before each word
+
+        let mut b = 0;
+        while b < length {
+            let nextb = b + f.itembytes;
+            match f.writer {
+                FormatWriter::IntWriter(func) => {
+                    let p: u64 = match f.itembytes {
+                        1 => {
+                            bytes[b] as u64
+                        }
+                        2 => {
+                            LittleEndian::read_u16(&bytes[b..nextb]) as u64
+                        }
+                        4 => {
+                            LittleEndian::read_u32(&bytes[b..nextb]) as u64
+                        }
+                        8 => {
+                            LittleEndian::read_u64(&bytes[b..nextb])
+                        }
+                        _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                    };
+                    output_text.push_str(&func(p, f.itembytes));
+                }
+                FormatWriter::FloatWriter(func) => {
+                    let p: f64 = match f.itembytes {
+                        4 => {
+                            LittleEndian::read_f32(&bytes[b..nextb]) as f64
+                        }
+                        8 => {
+                            LittleEndian::read_f64(&bytes[b..nextb])
+                        }
+                        _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                    };
+                    output_text.push_str(&func(p));
+                }
+            }
+            b = nextb;
+        }
+
+        if first {
+            print!("{}", prefix); // print offset
+            // if printing in multiple formats offset is printed only once
+            first = false;
+        }
+        else {
+            // this takes the space of the file offset on subsequent
+            // lines of multi-format rasters.
+            print!("{:>width$}", "", width=prefix.chars().count());
+        }
+        print!("{}\n", output_text);
     }
 }
 
