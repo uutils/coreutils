@@ -9,6 +9,7 @@ path = "pinky.rs"
 
 [dependencies]
 getopts = "*"
+time = "*"
 libc = "^0.2"
 uucore = { path="../uucore" }
 
