@@ -237,14 +237,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
             line_bytes = min_bytes;
         }
 
-        odfunc(line_bytes, &input_offset_base, &inputs, &formats[..])
+        let output_duplicates = matches.opt_present("v");
+
+        odfunc(line_bytes, &input_offset_base, &inputs, &formats[..], output_duplicates)
 }
 
-fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], formats: &[OdFormat]) -> i32 {
+fn odfunc(line_bytes: usize, input_offset_base: &Radix,
+        fnames: &[InputSource], formats: &[OdFormat], output_duplicates: bool) -> i32 {
 
     let mut mf = MultifileReader::new(fnames);
     let mut addr = 0;
     let mut bytes: Vec<u8> = vec![b'\x00'; line_bytes];
+    let mut previous_bytes = Vec::<u8>::with_capacity(line_bytes);
+    let mut duplicate_line = false;
+
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
 
@@ -261,9 +267,20 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, fnames: &[InputSource], 
                         bytes[i] = 0;
                     }
                 }
-                
-                print_bytes(&bytes, n, &print_with_radix(input_offset_base, addr), formats);
-                
+
+                if !output_duplicates && previous_bytes == bytes && n == line_bytes {
+                    if !duplicate_line {
+                        duplicate_line = true;
+                        println!("*");
+                    }
+                }
+                else {
+                    duplicate_line = false;
+                    previous_bytes.clone_from(&bytes);
+
+                    print_bytes(&bytes, n, &print_with_radix(input_offset_base, addr), formats);
+                }
+
                 addr += n;
             }
             Err(_) => {

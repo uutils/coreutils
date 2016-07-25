@@ -266,7 +266,7 @@ fn test_width(){
             0000010
             ");
 
-    let result = new_ucmd!().arg("-w4").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-w4").arg("-v").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -283,7 +283,7 @@ fn test_invalid_width(){
             0000004
             ");
 
-    let result = new_ucmd!().arg("-w5").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-w5").arg("-v").run_piped_stdin(&input[..]);
 
     assert_eq!(result.stderr, "od: warning: invalid width 5; using 2 instead\n");
     assert!(result.success);
@@ -301,6 +301,26 @@ fn test_width_without_value(){
             ");
 
     let result = new_ucmd!().arg("-w").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_suppress_duplicates(){
+
+    let input = [0u8 ; 41];
+    let expected_output = unindent("
+            0000000      000000000000
+                         0000    0000
+            *
+            0000050      000000000000
+                         0000
+            0000051
+            ");
+
+    let result = new_ucmd!().arg("-w4").arg("-O").arg("-x").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
