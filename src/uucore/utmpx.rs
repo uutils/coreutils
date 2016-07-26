@@ -26,12 +26,6 @@ mod utmpx {
     pub const ACCOUNTING: libc::c_short = 9;
 
     #[repr(C)]
-    pub struct timeval {
-        pub tv_sec: libc::int32_t,
-        pub tv_usec: libc::int32_t,
-    }
-
-    #[repr(C)]
     pub struct c_exit_status {
         pub e_termination: libc::c_short,
         pub e_exit: libc::c_short,
@@ -47,8 +41,8 @@ mod utmpx {
         pub ut_user: [libc::c_char; UT_NAMESIZE],
         pub ut_host: [libc::c_char; UT_HOSTSIZE],
         pub ut_exit: c_exit_status,
-        pub ut_session: libc::int32_t,
-        pub ut_tv: timeval,
+        pub ut_session: libc::c_long,
+        pub ut_tv: libc::timeval,
 
         pub ut_addr_v6: [libc::int32_t; 4],
         pub __unused: [libc::c_char; 20],
