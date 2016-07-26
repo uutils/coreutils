@@ -2,7 +2,7 @@
 
 extern crate libc;
 
-pub use self::utmpx::{DEFAULT_FILE,USER_PROCESS,BOOT_TIME,c_utmp};
+pub use self::utmpx::{UT_NAMESIZE,UT_LINESIZE,DEFAULT_FILE,USER_PROCESS,BOOT_TIME,c_utmp};
 #[cfg(target_os = "linux")]
 mod utmpx {
     use super::libc;

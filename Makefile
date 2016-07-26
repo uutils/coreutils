@@ -116,6 +116,7 @@ UNIX_PROGS := \
   nice \
   nohup \
   pathchk \
+  pinky \
   stat \
   stdbuf \
   timeout \
@@ -164,6 +165,7 @@ TEST_PROGS  := \
 	od \
 	paste \
 	pathchk \
+	pinky \
 	printf \
 	ptx \
 	pwd \

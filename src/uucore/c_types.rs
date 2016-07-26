@@ -8,6 +8,8 @@ use self::libc::{
     uid_t,
     gid_t,
 };
+pub use self::libc::passwd as c_passwd;
+
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use self::libc::time_t;
 #[cfg(target_os = "macos")]
@@ -21,35 +23,6 @@ use std::iter::repeat;
 use std::vec::Vec;
 
 use std::ptr::{null_mut, read};
-
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct c_passwd {
-    pub pw_name:    *const c_char,    /* user name */
-    pub pw_passwd:  *const c_char,    /* user name */
-    pub pw_uid:     uid_t,      /* user uid */
-    pub pw_gid:     gid_t,      /* user gid */
-    pub pw_change:  time_t,
-    pub pw_class:   *const c_char,
-    pub pw_gecos:   *const c_char,
-    pub pw_dir:     *const c_char,
-    pub pw_shell:   *const c_char,
-    pub pw_expire:  time_t
-}
-
-#[cfg(target_os = "linux")]
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct c_passwd {
-    pub pw_name:    *const c_char,    /* user name */
-    pub pw_passwd:  *const c_char,    /* user name */
-    pub pw_uid:     uid_t,      /* user uid */
-    pub pw_gid:     gid_t,      /* user gid */
-    pub pw_gecos:   *const c_char,
-    pub pw_dir:     *const c_char,
-    pub pw_shell:   *const c_char,
-}
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 #[repr(C)]
