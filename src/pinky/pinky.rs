@@ -282,6 +282,47 @@ fn time_string(ut: &utmpx::c_utmp) -> String {
     time::strftime("%Y-%m-%d %H:%M", &tm).unwrap()
 }
 
+const AI_CANONNAME: libc::c_int = 0x2;
+
+fn canon_host(host: &str) -> Option<String> {
+    let hints = libc::addrinfo {
+        ai_flags: AI_CANONNAME,
+        ai_family: 0,
+        ai_socktype: 0,
+        ai_protocol: 0,
+        ai_addrlen: 0,
+        ai_addr: ptr::null_mut(),
+        ai_canonname: ptr::null_mut(),
+        ai_next: ptr::null_mut(),
+    };
+    let c_host = CString::new(host).unwrap();
+    let mut res = ptr::null_mut();
+    let status = unsafe {
+        libc::getaddrinfo(c_host.as_ptr(), ptr::null(), &hints as *const _, &mut res as *mut _)
+    };
+    if status == 0 {
+        let info: libc::addrinfo = unsafe {
+            ptr::read(res as *const _)
+        };
+        // http://lists.gnu.org/archive/html/bug-coreutils/2006-09/msg00300.html
+        // says Darwin 7.9.0 getaddrinfo returns 0 but sets
+        // res->ai_canonname to NULL.
+        let ret = if info.ai_canonname.is_null() {
+            Some(String::from(host))
+        } else {
+            Some(unsafe {
+                CString::from_raw(info.ai_canonname).into_string().unwrap()
+            })
+        };
+        unsafe {
+            libc::freeaddrinfo(res);
+        }
+        ret
+    } else {
+        None
+    }
+}
+
 impl Pinky {
     fn print_entry(&self, ut: &utmpx::c_utmp) {
         let mut pts_path = PathBuf::from("/dev");
@@ -337,10 +378,15 @@ impl Pinky {
 
         if self.include_where && ut.ut_host[0] != 0 {
             let ut_host = String::from_chars(ut.ut_host.as_ref().as_ptr());
-            //if let Some(n) = ut_host.find(':') {
-                //ut_host.truncate(n + 1);
-            //}
-            print!(" {}", ut_host);
+            let mut res = ut_host.split(':');
+            let host = match res.next() {
+                Some(h) => canon_host(&h).unwrap_or(ut_host.clone()),
+                None => ut_host.clone(),
+            };
+            match res.next() {
+                Some(d) => print!(" {}:{}", host, d),
+                None => print!(" {}", host),
+            }
         }
 
         println!("");
