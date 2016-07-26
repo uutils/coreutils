@@ -30,8 +30,7 @@ use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
 use std::ptr;
-use std::ffi::CStr;
-use std::ffi::OsStr;
+use std::ffi::{CStr, CString, OsStr};
 use std::os::unix::ffi::OsStrExt;
 
 use std::path::Path;
@@ -209,7 +208,9 @@ impl FromChars for String {
 }
 
 pub fn getpw(u: &str) -> Option<Passwd> {
-    let pw = unsafe { getpwnam(u.as_ptr() as *const i8) };
+    let pw = unsafe {
+        getpwnam(CString::new(u).unwrap().as_ptr())
+    };
     if !pw.is_null() {
         let data = unsafe { ptr::read(pw) };
         Some(Passwd {
@@ -364,12 +365,6 @@ impl Pinky {
     fn short_pinky(&self) -> IOResult<()> {
         if self.include_heading {
             self.print_heading();
-        } else {
-            // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-            // FIXME: WEIRD!!! If the following line is removed,
-            // getpwnam() will return NULL.
-            // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-            print!("");
         }
         for ut in utmp::read_utmps() {
             if ut.is_user_process() {
