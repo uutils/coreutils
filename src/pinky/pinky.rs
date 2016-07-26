@@ -277,7 +277,7 @@ fn idle_string(when: i64) -> String {
 }
 
 fn time_string(ut: &utmpx::c_utmp) -> String {
-    let tm = time::at(time::Timespec::new(ut.ut_tv.tv_sec as i64, ut.ut_tv.tv_usec));
+    let tm = time::at(time::Timespec::new(ut.ut_tv.tv_sec, ut.ut_tv.tv_usec as i32));
     time::strftime("%Y-%m-%d %H:%M", &tm).unwrap()
 }
 
@@ -371,7 +371,7 @@ impl Pinky {
             // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
             print!("");
         }
-        for ut in try!(utmp::read_utmps()) {
+        for ut in utmp::read_utmps() {
             if ut.is_user_process() {
                 if self.names.is_empty() {
                     self.print_entry(&ut)
