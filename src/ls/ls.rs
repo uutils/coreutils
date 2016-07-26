@@ -146,23 +146,46 @@ fn list(options: getopts::Matches) {
     }
 }
 
-fn enter_directory(contents: ReadDir, options: &getopts::Matches) {
-    for entry in contents {
-        let entry = match entry {
-            Err(err) => {
-                show_error!("{}", err);
-                panic!();
-            }
-            Ok(en) => en,
-        };
-
-        // Currently have a DirEntry that we can believe in.
-        display_dir_entry(entry, options);
+fn max(lhs: usize, rhs: usize) -> usize {
+    if lhs > rhs {
+      lhs
+    } else {
+      rhs
     }
 }
 
-fn display_dir_entry(entry: DirEntry, options: &getopts::Matches) {
-    let md = match entry.metadata() {
+fn enter_directory(contents: ReadDir, options: &getopts::Matches) {
+    let contents = contents.collect::<Vec<_>>();
+    let (mut max_links, mut max_size) = (1, 1);
+    for entry in &contents {
+        let entry = match *entry {
+            Err(ref err) => {
+                show_error!("{}", err);
+                panic!();
+            }
+            Ok(ref en) => en,
+        };
+        let (links, size) = display_dir_entry_size(entry, options);
+        max_links = max(links, max_links);
+        max_size = max(size, max_size);
+    }
+
+    for entry in &contents {
+        let entry = match *entry {
+            Err(ref err) => {
+                show_error!("{}", err);
+                panic!();
+            }
+            Ok(ref en) => en,
+        };
+
+        // Currently have a DirEntry that we can believe in.
+        display_dir_entry(entry, options, max_links, max_size);
+    }
+}
+
+fn get_metadata(entry: &DirEntry) -> Metadata {
+    match entry.metadata() {
         Err(e) => {
             show_error!("Unable to retrieve metadata for {}. \n Error: {}",
                         display_file_name(entry.file_name()),
@@ -170,15 +193,33 @@ fn display_dir_entry(entry: DirEntry, options: &getopts::Matches) {
             panic!();
         }
         Ok(md) => md,
-    };
+    }
+}
 
-    println!("{}{} {} {} {} {: >9} {}",
+fn display_dir_entry_size(entry: &DirEntry, options: &getopts::Matches) -> (usize, usize) {
+    let md = get_metadata(entry);
+    (display_symlink_count(&md).len(), display_file_size(&md, options).len())
+}
+
+fn pad_left(string: String, count: usize) -> String {
+    if count > string.len() {
+        let pad = count - string.len();
+        let pad = String::from_utf8(vec![' ' as u8; pad]).unwrap();
+        format!("{}{}", pad, string)
+    } else {
+        string
+    }
+}
+
+fn display_dir_entry(entry: &DirEntry, options: &getopts::Matches, max_links: usize, max_size: usize) {
+    let md = get_metadata(entry);
+    println!("{}{} {} {} {} {} {}",
              display_file_type(entry.file_type()),
              display_permissions(&md),
-             display_symlink_count(&md),
+             pad_left(display_symlink_count(&md), max_links),
              display_uname(&md),
              display_group(&md),
-             display_file_size(&md, options),
+             pad_left(display_file_size(&md, options), max_size),
              display_file_name(entry.file_name()));
 }
 
