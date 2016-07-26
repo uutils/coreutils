@@ -17,8 +17,7 @@ use uucore::utmpx;
 
 extern crate getopts;
 extern crate libc;
-use libc::{uid_t, gid_t, c_char};
-use libc::S_IWGRP;
+use libc::{uid_t, gid_t, c_char, S_IWGRP};
 
 extern crate time;
 
@@ -227,7 +226,7 @@ pub fn getpw(u: &str) -> Option<Passwd> {
     }
 }
 
-trait Capitalize {
+pub trait Capitalize {
     fn capitalize(&self) -> String;
 }
 
@@ -278,7 +277,7 @@ fn idle_string(when: i64) -> String {
 }
 
 fn time_string(ut: &utmpx::c_utmp) -> String {
-    let tm = time::at(time::Timespec::new(ut.ut_tv.tv_sec, ut.ut_tv.tv_usec as i32));
+    let tm = time::at(time::Timespec::new(ut.ut_tv.tv_sec as i64, ut.ut_tv.tv_usec as i32));
     time::strftime("%Y-%m-%d %H:%M", &tm).unwrap()
 }
 
@@ -374,6 +373,8 @@ impl Pinky {
             }
         }
 
+        // WARNING: Because of the definition of `struct utmp`,
+        // pinky cannot get the correct value of utmp.ut_tv
         print!(" {}", time_string(&ut));
 
         if self.include_where && ut.ut_host[0] != 0 {

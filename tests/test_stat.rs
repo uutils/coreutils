@@ -145,8 +145,11 @@ fn test_invalid_option() {
     ucmd.fails();
 }
 
+#[allow(unused_variable)]
 const NORMAL_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %w %W %x %X %y %Y %z %Z";
+#[allow(unused_variable)]
 const DEV_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
+#[allow(unused_variable)]
 const FS_FMTSTR: &'static str = "%a %b %c %d %f %i %l %n %s %S %t %T";
 
 #[test]
@@ -230,6 +233,7 @@ fn test_printf() {
     assert_eq!(ucmd.run().stdout, "123?\r\"\\\x07\x08\x1B\x0C\x0B                   /\x12wZJ\n");
 }
 
+#[allow(dead_code)]
 fn expected_result(args: &[&str]) -> String {
     use std::process::Command;
 
