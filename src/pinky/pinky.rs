@@ -256,7 +256,7 @@ impl UtmpUtils for utmpx::c_utmp {
 
 fn idle_string(when: i64) -> String {
     thread_local! {
-        static NOW: time::Tm = time::now();
+        static NOW: time::Tm = time::now()
     }
     NOW.with(|n| {
         let duration = n.to_timespec().sec - when;
@@ -293,7 +293,7 @@ impl Pinky {
         let last_change;
         match pts_path.metadata() {
             Ok(meta) => {
-                mesg = if meta.mode() & S_IWGRP != 0 {
+                mesg = if meta.mode() & (S_IWGRP as u32) != 0 {
                     ' '
                 } else {
                     '*'
@@ -366,7 +366,7 @@ impl Pinky {
             self.print_heading();
         } else {
             // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-            // FIXME: WIERD!!! If the following line is removed,
+            // FIXME: WEIRD!!! If the following line is removed,
             // getpwnam() will return NULL.
             // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
             print!("");
