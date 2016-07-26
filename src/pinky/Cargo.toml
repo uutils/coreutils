@@ -13,13 +13,6 @@ time = "*"
 libc = "^0.2"
 uucore = { path="../uucore" }
 
-[dependencies.clippy]
-version = "*"
-optional = true
-
-[features]
-default = []
-
 [[bin]]
 name = "pinky"
 path = "main.rs"

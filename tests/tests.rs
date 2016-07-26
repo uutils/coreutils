@@ -29,6 +29,7 @@ unix_only! {
     "chown", test_chown;
     "mv", test_mv;
     "pathchk", test_pathchk;
+    "pinky", test_pinky;
     "stdbuf", test_stdbuf;
     "touch", test_touch;
     "unlink", test_unlink;
