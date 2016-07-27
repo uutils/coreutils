@@ -154,9 +154,23 @@ fn max(lhs: usize, rhs: usize) -> usize {
     }
 }
 
+fn should_cull_dot(file_name: &DirEntry, view_all: bool) -> bool {
+    let file_name = file_name.file_name();
+    file_name.to_str().map_or(false, |x| {
+        if view_all {
+            false
+        } else if x.chars().next().unwrap() == '.' {
+            true
+        } else {
+            false
+        }
+    })
+}
+
 fn enter_directory(contents: ReadDir, options: &getopts::Matches) {
     let contents = contents.collect::<Vec<_>>();
     let (mut max_links, mut max_size) = (1, 1);
+    let culling_dot = options.opt_present("a");
     for entry in &contents {
         let entry = match *entry {
             Err(ref err) => {
@@ -165,6 +179,9 @@ fn enter_directory(contents: ReadDir, options: &getopts::Matches) {
             }
             Ok(ref en) => en,
         };
+        if should_cull_dot(&entry, culling_dot) {
+            continue;
+        }
         let (links, size) = display_dir_entry_size(entry, options);
         max_links = max(links, max_links);
         max_size = max(size, max_size);
@@ -178,7 +195,9 @@ fn enter_directory(contents: ReadDir, options: &getopts::Matches) {
             }
             Ok(ref en) => en,
         };
-
+        if should_cull_dot(&entry, culling_dot) {
+            continue;
+        }
         // Currently have a DirEntry that we can believe in.
         display_dir_entry(entry, options, max_links, max_size);
     }
