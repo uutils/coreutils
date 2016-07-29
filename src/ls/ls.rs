@@ -8,8 +8,6 @@
 // that was distributed with this source code.
 //
 
-#![feature(slice_patterns)]
-
 extern crate getopts;
 extern crate pretty_bytes;
 extern crate termsize;
@@ -71,8 +69,8 @@ lazy_static! {
         let mut map = HashMap::new();
         for c in codes {
             let p: Vec<_> = c.split("=").collect();
-            if let [k, v] = p[..] {
-                map.insert(k,v);
+            if p.len() == 2 {
+                map.insert(p[0], p[1]);
             }
         }
         map
