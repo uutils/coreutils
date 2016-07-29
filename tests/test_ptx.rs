@@ -1,6 +1,9 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "ptx";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[test]
 fn gnu_ext_disabled_roff_no_ref() {
@@ -45,9 +48,5 @@ fn gnu_ext_disabled_ignore_and_only_file() {
 }
 
 fn test_ptx(opts: &Vec<&str>, expected: &str) {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(opts).arg("input").run();
-    assert!(result.success);
-    assert_eq!(result.stdout, at.read(expected));
-    assert_empty_stderr!(&result);
+    new_ucmd().args(opts).arg("input").succeeds().stdout_only_fixture(expected);
 }

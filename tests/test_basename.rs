@@ -1,10 +1,13 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "basename";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 fn expect_successful_stdout(input: Vec<&str>, expected: &str) {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let results = ucmd.args(&input).run();
+    let results = new_ucmd()
+        .args(&input).run();
     assert_empty_stderr!(results);
     assert!(results.success);
     assert_eq!(expected, results.stdout.trim_right());
@@ -35,8 +38,8 @@ fn test_dont_remove_suffix() {
 }
 
 fn expect_error(input: Vec<&str>, expected_stdout: &str) {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let results = ucmd.args(&input).run();
+    let results = new_ucmd()
+        .args(&input).run();
     assert!(!results.success);
     assert!(results.stderr.len() > 0);
     assert_eq!(expected_stdout, results.stdout.trim_right());

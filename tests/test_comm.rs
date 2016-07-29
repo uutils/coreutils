@@ -1,12 +1,20 @@
-use common::util::testing;
+use common::util::*;
 use std::ffi::OsStr;
 
 static UTIL_NAME: &'static str = "comm";
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 fn comm<A: AsRef<OsStr>, B: AsRef<str>>(args: &[A],
                                                        file_stdout_relpath_opt: Option<B>,
                                                        error_message_opt: Option<B>) {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let result = ucmd.args(args)
                      .run();
     assert!(result.success == error_message_opt.is_none());
@@ -146,8 +154,8 @@ fn unintuitive_default_behavior_1() {
 #[ignore] //bug? should help be stdout if not called via -h|--help?
 #[test]
 fn no_arguments() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.run();
+    let result = new_ucmd()
+        .run();
     assert!(!result.success);
     assert!(result.stdout.len() == 0);
     assert!(result.stderr.len() > 0);
@@ -156,8 +164,8 @@ fn no_arguments() {
 #[ignore] //bug? should help be stdout if not called via -h|--help?
 #[test]
 fn one_argument() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg("a").run();
+    let result = new_ucmd()
+        .arg("a").run();
     assert!(!result.success);
     assert!(result.stdout.len() == 0);
     assert!(result.stderr.len() > 0);

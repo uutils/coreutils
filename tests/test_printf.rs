@@ -1,10 +1,13 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "printf";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 fn expect_stdout(input: Vec<&str>, expected: &str) {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let results = ucmd.args(&input).run();
+    let results = new_ucmd()
+        .args(&input).run();
     // assert_empty_stderr!(result);
     // assert!(result.success);
     assert_eq!(expected, results.stdout);

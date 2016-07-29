@@ -6,6 +6,14 @@ use std::io::Write;
 use self::uu_tail::parse_size;
 
 static UTIL_NAME: &'static str = "tail";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
 static FOOBAR_2_TXT: &'static str = "foobar2.txt";
@@ -13,35 +21,28 @@ static FOOBAR_WITH_NULL_TXT: &'static str = "foobar_with_null.txt";
 
 #[test]
 fn test_stdin_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.run_piped_stdin(at.read(FOOBAR_TXT));
-    assert_eq!(result.stdout, at.read("foobar_stdin_default.expected"));
+    new_ucmd().pipe_in_fixture(FOOBAR_TXT).run().stdout_is_fixture("foobar_stdin_default.expected");
 }
 
 #[test]
 fn test_single_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg(FOOBAR_TXT).run();
-    assert_eq!(result.stdout, at.read("foobar_single_default.expected"));
+    new_ucmd().arg(FOOBAR_TXT).run().stdout_is_fixture("foobar_single_default.expected");
 }
 
 #[test]
 fn test_n_greater_than_number_of_lines() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg("-n").arg("99999999").arg(FOOBAR_TXT).run();
-    assert_eq!(result.stdout, at.read(FOOBAR_TXT));
+    new_ucmd().arg("-n").arg("99999999").arg(FOOBAR_TXT).run()
+        .stdout_is_fixture(FOOBAR_TXT);
 }
 
 #[test]
 fn test_null_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg("-z").arg(FOOBAR_WITH_NULL_TXT).run();
-    assert_eq!(result.stdout, at.read("foobar_with_null_default.expected"));
+    new_ucmd().arg("-z").arg(FOOBAR_WITH_NULL_TXT).run().stdout_is_fixture("foobar_with_null_default.expected");
 }
 
 #[test]
 fn test_follow() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
 
     let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
 
@@ -59,7 +60,7 @@ fn test_follow() {
 
 #[test]
 fn test_follow_multiple() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run_no_wait();
 
     let expected = at.read("foobar_follow_multiple.expected");
@@ -79,7 +80,7 @@ fn test_follow_multiple() {
 
 #[test]
 fn test_follow_stdin() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let mut child = ucmd.arg("-f").pipe_in(at.read(FOOBAR_TXT)).run_no_wait();
 
     let expected = at.read("follow_stdin.expected");
@@ -95,7 +96,7 @@ fn test_single_big_args() {
     const LINES: usize = 1_000_000;
     const N_ARG: usize = 100_000;
 
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
@@ -115,16 +116,14 @@ fn test_single_big_args() {
 
 #[test]
 fn test_bytes_single() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg("-c").arg("10").arg(FOOBAR_TXT).run();
-    assert_eq!(result.stdout, at.read("foobar_bytes_single.expected"));
+    new_ucmd().arg("-c").arg("10").arg(FOOBAR_TXT).run()
+        .stdout_is_fixture("foobar_bytes_single.expected");
 }
 
 #[test]
 fn test_bytes_stdin() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg("-c").arg("13").run_piped_stdin(at.read(FOOBAR_TXT));
-    assert_eq!(result.stdout, at.read("foobar_bytes_stdin.expected"));
+    new_ucmd().arg("-c").arg("13").pipe_in_fixture(FOOBAR_TXT).run()
+            .stdout_is_fixture("foobar_bytes_stdin.expected");
 }
 
 #[test]
@@ -134,7 +133,7 @@ fn test_bytes_big() {
     const BYTES: usize = 1_000_000;
     const N_ARG: usize = 100_000;
 
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
 
     let mut big_input = at.make_file(FILE);
     for i in 0..BYTES {
@@ -201,7 +200,7 @@ fn test_lines_with_size_suffix() {
     const LINES: usize = 3_000;
     const N_ARG: usize = 2 * 1024;
 
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {

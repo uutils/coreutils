@@ -5,6 +5,11 @@ use common::util::*;
 use self::filetime::FileTime;
 
 static UTIL_NAME: &'static str = "touch";
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);
@@ -26,7 +31,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
 
 #[test]
 fn test_touch_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_default_file";
 
     let result = ucmd.arg(file).run();
@@ -38,7 +43,7 @@ fn test_touch_default() {
 
 #[test]
 fn test_touch_no_create_file_absent() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_no_create_file_absent";
 
     let result = ucmd.arg("-c").arg(file).run();
@@ -50,7 +55,7 @@ fn test_touch_no_create_file_absent() {
 
 #[test]
 fn test_touch_no_create_file_exists() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_no_create_file_exists";
 
     at.touch(file);
@@ -65,7 +70,7 @@ fn test_touch_no_create_file_exists() {
 
 #[test]
 fn test_touch_set_mdhm_time() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_mdhm_time";
 
     let result = ucmd.args(&["-t", "01011234", file]).run();
@@ -85,7 +90,7 @@ fn test_touch_set_mdhm_time() {
 
 #[test]
 fn test_touch_set_mdhms_time() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_mdhms_time";
 
     let result = ucmd.args(&["-t", "01011234.56", file]).run();
@@ -105,7 +110,7 @@ fn test_touch_set_mdhms_time() {
 
 #[test]
 fn test_touch_set_ymdhm_time() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_ymdhm_time";
 
     let result = ucmd.args(&["-t", "1501011234", file]).run();
@@ -125,7 +130,7 @@ fn test_touch_set_ymdhm_time() {
 
 #[test]
 fn test_touch_set_ymdhms_time() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_ymdhms_time";
 
     let result = ucmd.args(&["-t", "1501011234.56", file]).run();
@@ -145,7 +150,7 @@ fn test_touch_set_ymdhms_time() {
 
 #[test]
 fn test_touch_set_cymdhm_time() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_cymdhm_time";
 
     let result = ucmd.args(&["-t", "201501011234", file]).run();
@@ -165,7 +170,7 @@ fn test_touch_set_cymdhm_time() {
 
 #[test]
 fn test_touch_set_cymdhms_time() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_cymdhms_time";
 
     let result = ucmd.args(&["-t", "201501011234.56", file]).run();
@@ -185,7 +190,7 @@ fn test_touch_set_cymdhms_time() {
 
 #[test]
 fn test_touch_set_only_atime() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_only_atime";
 
     let result = ucmd.args(&["-t", "201501011234", "-a", file]).run();
@@ -203,7 +208,7 @@ fn test_touch_set_only_atime() {
 
 #[test]
 fn test_touch_set_only_mtime() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_only_mtime";
 
     let result = ucmd.args(&["-t", "201501011234", "-m", file]).run();
@@ -221,7 +226,7 @@ fn test_touch_set_only_mtime() {
 
 #[test]
 fn test_touch_set_both() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_both";
 
     let result = ucmd.args(&["-t", "201501011234", "-a", "-m", file]).run();
@@ -241,7 +246,7 @@ fn test_touch_set_both() {
 
 #[test]
 fn test_touch_reference() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
@@ -264,7 +269,7 @@ fn test_touch_reference() {
 
 #[test]
 fn test_touch_set_date() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_touch_set_date";
 
     let result = ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", file]).run();

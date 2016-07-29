@@ -6,6 +6,9 @@ use std::fs::File;
 use std::fs::remove_file;
 
 static UTIL_NAME: &'static str = "od";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &'static str = "0000000    061141  062143  063145  064147  065151  066153  067155  070157\n0000020    071161  072163  073165  074167  075171  000012                \n0000033\n";
@@ -16,7 +19,6 @@ static ALPHA_OUT: &'static str = "0000000    061141  062143  063145  064147  065
 // Test that od can read one file and dump with default format
 #[test]
 fn test_file() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     use std::env;
     let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
@@ -30,7 +32,7 @@ fn test_file() {
         }
     }
 
-    let result = ucmd.arg(file.as_os_str()).run();
+    let result = new_ucmd().arg(file.as_os_str()).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -42,7 +44,6 @@ fn test_file() {
 // Test that od can read 2 files and concatenate the contents
 #[test]
 fn test_2files() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file1 = tmpdir.join("test1");
@@ -60,7 +61,7 @@ fn test_2files() {
         }
     }
 
-    let result = ucmd.arg(file1.as_os_str()).arg(file2.as_os_str()).run();
+    let result = new_ucmd().arg(file1.as_os_str()).arg(file2.as_os_str()).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -73,12 +74,11 @@ fn test_2files() {
 // Test that od gives non-0 exit val for filename that dosen't exist.
 #[test]
 fn test_no_file() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file = tmpdir.join("}surely'none'would'thus'a'file'name");
 
-    let result = ucmd.arg(file.as_os_str()).run();
+    let result = new_ucmd().arg(file.as_os_str()).run();
 
     assert!(!result.success);
 }
@@ -86,10 +86,9 @@ fn test_no_file() {
 // Test that od reads from stdin instead of a file
 #[test]
 fn test_from_stdin() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
 
     let input = "abcdefghijklmnopqrstuvwxyz\n";
-    let result = ucmd.run_piped_stdin(input.as_bytes());
+    let result = new_ucmd().run_piped_stdin(input.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -100,7 +99,6 @@ fn test_from_stdin() {
 // Test that od reads from stdin and also from files
 #[test]
 fn test_from_mixed() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
 
     let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
@@ -116,7 +114,7 @@ fn test_from_mixed() {
         }
     }
 
-    let result = ucmd.arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
+    let result = new_ucmd().arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -126,10 +124,9 @@ fn test_from_mixed() {
 
 #[test]
 fn test_multiple_formats() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
 
     let input = "abcdefghijklmnopqrstuvwxyz\n";
-    let result = ucmd.arg("-c").arg("-b").run_piped_stdin(input.as_bytes());
+    let result = new_ucmd().arg("-c").arg("-b").run_piped_stdin(input.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -139,7 +136,6 @@ fn test_multiple_formats() {
 
 #[test]
 fn test_dec() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
 
 
     let input = [
@@ -151,7 +147,7 @@ fn test_dec() {
     	0x00u8,0x80u8,
     	0x01u8,0x80u8,];
     let expected_output = "0000000         0       1       2       3   32767  -32768  -32767        \n0000016\n";
-    let result = ucmd.arg("-i").run_piped_stdin(&input[..]);
+    let result = new_ucmd().arg("-i").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -164,8 +160,8 @@ fn test_dec() {
 /*
 #[test]
 fn mit_die_umlauten_getesten() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.run_piped_stdin("Universität Tübingen".as_bytes());
+    let result = new_ucmd()
+        .run_piped_stdin("Universität Tübingen".as_bytes());
     assert_empty_stderr!(result);
     assert!(result.success);
     assert_eq!(result.stdout,
