@@ -1,8 +1,12 @@
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
+matrix:
+  include:
+    - rust: stable
+      env: FEATURES=''
+    - rust: beta
+      env: FEATURES=''
+    - rust: nightly
+      env: FEATURES=nightly
 os:
  - linux
  - osx
@@ -11,5 +15,5 @@ cache:
   - $HOME/.cargo
 sudo: false
 script:
-  - cargo build
-  - cargo test --no-fail-fast
+  - cargo build --features "$FEATURES"
+  - cargo test --features "$FEATURES" --no-fail-fast
