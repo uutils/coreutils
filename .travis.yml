@@ -2,14 +2,23 @@ language: rust
 matrix:
   include:
     - rust: stable
+      os: linux
+      env: FEATURES=''
+    - rust: stable
+      os: osx
       env: FEATURES=''
     - rust: beta
+      os: linux
+      env: FEATURES=''
+    - rust: beta
+      os: osx
       env: FEATURES=''
     - rust: nightly
+      os: linux
       env: FEATURES=nightly
-os:
- - linux
- - osx
+    - rust: nightly
+      os: osx
+      env: FEATURES=nightly
 cache:
  directories:
   - $HOME/.cargo
