@@ -1,3 +1,16 @@
+use formatteriteminfo::*;
+
+pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 1,
+    print_width: 3,
+    formatter: FormatWriter::IntWriter(format_item_a),
+};
+
+pub static FORMAT_ITEM_C: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 1,
+    print_width: 3,
+    formatter: FormatWriter::IntWriter(format_item_c),
+};
 
 // TODO: multi-byte chars
 // Quoth the man page: Multi-byte characters are displayed in the area corresponding to the first byte of the character. The remaining bytes are shown as `**'.
@@ -24,7 +37,7 @@ static A_CHRS : [&'static str; 160]  =
  "90",    "91",    "92",    "93",    "94",    "95",    "96",    "97",
  "98",    "99",    "9a",    "9b",    "9c",    "9d",    "9e",    "9f"];
 
-pub fn format_item_a(p: u64, _: usize) -> String {
+pub fn format_item_a(p: u64, _: usize, _: usize) -> String {
     // itembytes == 1
     let b = (p & 0xff) as u8;
     format!("{:>4}", A_CHRS.get(b as usize).unwrap_or(&"?") // XXX od dose not actually do this, it just prints the byte
@@ -51,7 +64,7 @@ static C_CHRS : [&'static str; 127]  = [
   "x",     "y",     "z",     "{",     "|",     "}",     "~" ];
 
 
-pub fn format_item_c(p: u64, _: usize) -> String {
+pub fn format_item_c(p: u64, _: usize, _: usize) -> String {
     // itembytes == 1
     let b = (p & 0xff) as usize;
 

@@ -11,8 +11,8 @@ use self::unindent::*;
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &'static str = "
-        0000000    061141  062143  063145  064147  065151  066153  067155  070157
-        0000020    071161  072163  073165  074167  075171  000012
+        0000000 061141 062143 063145 064147 065151 066153 067155 070157
+        0000020 071161 072163 073165 074167 075171 000012
         0000033
         ";
 
@@ -134,10 +134,10 @@ fn test_multiple_formats() {
     assert_empty_stderr!(result);
     assert!(result.success);
     assert_eq!(result.stdout, unindent("
-            0000000    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
-                      141 142 143 144 145 146 147 150 151 152 153 154 155 156 157 160
-            0000020    q   r   s   t   u   v   w   x   y   z  \\n
-                      161 162 163 164 165 166 167 170 171 172 012
+            0000000   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+                    141 142 143 144 145 146 147 150 151 152 153 154 155 156 157 160
+            0000020   q   r   s   t   u   v   w   x   y   z  \\n
+                    161 162 163 164 165 166 167 170 171 172 012
             0000033
             "));
 
@@ -155,7 +155,7 @@ fn test_dec() {
     	0x00u8,0x80u8,
     	0x01u8,0x80u8,];
     let expected_output = unindent("
-            0000000         0       1       2       3   32767  -32768  -32767
+            0000000      0      1      2      3  32767 -32768 -32767
             0000016
             ");
     let result = new_ucmd!().arg("--endian=little").arg("-i").run_piped_stdin(&input[..]);
@@ -172,7 +172,7 @@ fn test_hex16(){
     let input : [u8; 9] = [
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
     let expected_output = unindent("
-            0000000      2301    6745    ab89    efcd    00ff
+            0000000 2301 6745 ab89 efcd 00ff
             0000011
             ");
     let result = new_ucmd!().arg("--endian=little").arg("-x").run_piped_stdin(&input[..]);
@@ -188,7 +188,7 @@ fn test_hex32(){
     let input : [u8; 9] = [
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
     let expected_output = unindent("
-            0000000          67452301        efcdab89        000000ff
+            0000000 67452301 efcdab89 000000ff
             0000011
             ");
     let result = new_ucmd!().arg("--endian=little").arg("-X").run_piped_stdin(&input[..]);
@@ -261,8 +261,8 @@ fn test_width(){
 
     let input : [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent("
-            0000000    000000  000000
-            0000004    000000  000000
+            0000000 000000 000000
+            0000004 000000 000000
             0000010
             ");
 
@@ -278,8 +278,8 @@ fn test_invalid_width(){
 
     let input : [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent("
-            0000000    000000
-            0000002    000000
+            0000000 000000
+            0000002 000000
             0000004
             ");
 
@@ -295,8 +295,8 @@ fn test_width_without_value(){
 
     let input : [u8; 40] = [0 ; 40];
     let expected_output = unindent("
-            0000000    000000  000000  000000  000000  000000  000000  000000  000000  000000  000000  000000  000000  000000  000000  000000  000000
-            0000040    000000  000000  000000  000000
+            0000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000
+            0000040 000000 000000 000000 000000
             0000050
             ");
 
@@ -312,11 +312,11 @@ fn test_suppress_duplicates(){
 
     let input = [0u8 ; 41];
     let expected_output = unindent("
-            0000000      000000000000
-                         0000    0000
+            0000000 000000000000
+                    0000 0000
             *
-            0000050      000000000000
-                         0000
+            0000050 000000000000
+                    0000
             0000051
             ");
 
@@ -335,8 +335,8 @@ fn test_big_endian() {
     let expected_output = unindent("
             0000000      -2.0000000000000000
                         -2.0000000              0
-                             c0000000        00000000
-                         c000    0000    0000    0000
+                    c0000000 00000000
+                    c000 0000 0000 0000
             0000010
             ");
     let result = new_ucmd!().arg("--endian=big").arg("-F").arg("-f").arg("-X").arg("-x").run_piped_stdin(&input[..]);

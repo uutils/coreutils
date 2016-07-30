@@ -1,6 +1,20 @@
 use std::num::FpCategory;
 use std::f32;
 use std::f64;
+use formatteriteminfo::*;
+
+pub static FORMAT_ITEM_F32: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 4,
+    print_width: 14,
+    formatter: FormatWriter::FloatWriter(format_item_flo32),
+};
+
+pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 8,
+    print_width: 24,
+    formatter: FormatWriter::FloatWriter(format_item_flo64),
+};
+
 
 pub fn format_item_flo32(f: f64) -> String {
     format!(" {}", format_flo32(f as f32))

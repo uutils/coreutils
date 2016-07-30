@@ -18,6 +18,7 @@ extern crate uucore;
 
 mod multifilereader;
 mod byteorder_io;
+mod formatteriteminfo;
 mod prn_int;
 mod prn_char;
 mod prn_float;
@@ -30,6 +31,7 @@ use multifilereader::*;
 use prn_int::*;
 use prn_char::*;
 use prn_float::*;
+use formatteriteminfo::*;
 
 //This is available in some versions of std, but not all that we target.
 macro_rules! hashmap {
@@ -155,68 +157,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
         })
         .collect::<Vec<_>>();
 
-        // At the moment, char (-a & -c)formats need the driver to set up a
-        // line by inserting a different # of of spaces at the start.
-        struct OdFormater {
-            writer: FormatWriter,
-            offmarg: usize,
-        };
-        let oct = OdFormater {
-            writer: FormatWriter::IntWriter(format_item_oct), offmarg: 2
-        };
-        let hex = OdFormater {
-            writer: FormatWriter::IntWriter(format_item_hex), offmarg: 2
-        };
-        let dec_u = OdFormater {
-            writer: FormatWriter::IntWriter(format_item_dec_u), offmarg: 2
-        };
-        let dec_s = OdFormater {
-            writer: FormatWriter::IntWriter(format_item_dec_s), offmarg: 2
-        };
-        let a_char = OdFormater {
-            writer: FormatWriter::IntWriter(format_item_a), offmarg: 1
-        };
-        let c_char = OdFormater {
-            writer: FormatWriter::IntWriter(format_item_c), offmarg: 1
-        };
-        let flo32 = OdFormater {
-            writer: FormatWriter::FloatWriter(format_item_flo32), offmarg: 0
-        };
-        let flo64 = OdFormater {
-            writer: FormatWriter::FloatWriter(format_item_flo64), offmarg: 0
-        };
-
-        fn mkfmt(itembytes: usize, fmtspec: &OdFormater) -> OdFormat {
-            OdFormat {
-                itembytes: itembytes,
-                writer: fmtspec.writer,
-                offmarg: fmtspec.offmarg,
-            }
-        }
-
 // TODO: -t fmts
         let known_formats = hashmap![
-    		"a" => (1, &a_char),
-    		"B" => (2, &oct) ,
-    		"b" => (1, &oct),
-    		"c" => (1, &c_char),
-    		"D" => (4, &dec_u),
-    		"e" => (8, &flo64),
-    		"F" => (8, &flo64),
-    		"f" => (4, &flo32),
-    		"H" => (4, &hex),
-    		"X" => (4, &hex) ,
-    		"o" => (2, &oct),
-    		"x" => (2, &hex),
-    		"h" => (2, &hex),
+            "a" => FORMAT_ITEM_A,
+            "B" => FORMAT_ITEM_OCT16,
+            "b" => FORMAT_ITEM_OCT8,
+            "c" => FORMAT_ITEM_C,
+            "D" => FORMAT_ITEM_DEC32U,
+            "e" => FORMAT_ITEM_F64,
+            "F" => FORMAT_ITEM_F64,
+            "f" => FORMAT_ITEM_F32,
+            "H" => FORMAT_ITEM_HEX32,
+            "X" => FORMAT_ITEM_HEX32,
+            "o" => FORMAT_ITEM_OCT16,
+            "x" => FORMAT_ITEM_HEX16,
+            "h" => FORMAT_ITEM_HEX16,
 
-    		"I" => (2, &dec_s),
-    		"L" => (2, &dec_s),
-    		"i" => (2, &dec_s),
+            "I" => FORMAT_ITEM_DEC16S,
+            "L" => FORMAT_ITEM_DEC16S,
+            "i" => FORMAT_ITEM_DEC16S,
 
-    		"O" => (4, &oct),
-    		"s" => (2, &dec_u)
-    	];
+            "O" => FORMAT_ITEM_OCT32,
+            "s" => FORMAT_ITEM_DEC16U
+        ];
 
         let mut formats = Vec::new();
 
@@ -224,14 +187,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
             match known_formats.get(flag) {
                 None => {} // not every option is a format
                 Some(r) => {
-                    let (itembytes, fmtspec) = *r;
-                    formats.push(mkfmt(itembytes, fmtspec))
+                    formats.push(*r)
                 }
             }
         }
 
         if formats.is_empty() {
-            formats.push(mkfmt(2, &oct)); // 2 byte octal is the default
+            formats.push(FORMAT_ITEM_OCT16); // 2 byte octal is the default
         }
 
         let mut line_bytes = match matches.opt_default("w", "32") {
@@ -243,7 +205,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         };
-        let min_bytes = formats.iter().fold(2, |max, next| cmp::max(max, next.itembytes));
+        let min_bytes = formats.iter().fold(2, |max, next| cmp::max(max, next.byte_size));
         if line_bytes % min_bytes != 0 {
             show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
             line_bytes = min_bytes;
@@ -255,7 +217,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
-        fnames: &[InputSource], formats: &[OdFormat], output_duplicates: bool) -> i32 {
+        fnames: &[InputSource], formats: &[FormatterItemInfo], output_duplicates: bool) -> i32 {
 
     let mut mf = MultifileReader::new(fnames);
     let mut addr = 0;
@@ -308,19 +270,17 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
     }
 }
 
-fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str, formats: &[OdFormat]) {
+fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str, formats: &[FormatterItemInfo]) {
     let mut first = true; // First line of a multi-format raster.
     for f in formats {
         let mut output_text = String::new();
 
-        output_text.push_str(&format!("{:>width$}", "", width = f.offmarg));// 4 spaces after offset - we print 2 more before each word
-
         let mut b = 0;
         while b < length {
-            let nextb = b + f.itembytes;
-            match f.writer {
+            let nextb = b + f.byte_size;
+            match f.formatter {
                 FormatWriter::IntWriter(func) => {
-                    let p: u64 = match f.itembytes {
+                    let p: u64 = match f.byte_size {
                         1 => {
                             bytes[b] as u64
                         }
@@ -333,19 +293,19 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str,
                         8 => {
                             byte_order.read_u64(&bytes[b..nextb])
                         }
-                        _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                        _ => { panic!("Invalid byte_size: {}", f.byte_size); }
                     };
-                    output_text.push_str(&func(p, f.itembytes));
+                    output_text.push_str(&func(p, f.byte_size, f.print_width));
                 }
                 FormatWriter::FloatWriter(func) => {
-                    let p: f64 = match f.itembytes {
+                    let p: f64 = match f.byte_size {
                         4 => {
                             byte_order.read_f32(&bytes[b..nextb]) as f64
                         }
                         8 => {
                             byte_order.read_f64(&bytes[b..nextb])
                         }
-                        _ => { panic!("Invalid itembytes: {}", f.itembytes); }
+                        _ => { panic!("Invalid byte_size: {}", f.byte_size); }
                     };
                     output_text.push_str(&func(p));
                 }
@@ -399,16 +359,4 @@ fn print_with_radix(r: &Radix, x: usize) -> String{
         Radix::Octal => format!("{:07o}", x),
         Radix::Binary => format!("{:07b}", x)
     }
-}
-
-#[derive(Clone, Copy)]
-enum FormatWriter {
-    IntWriter(fn(u64, usize) -> String),
-    FloatWriter(fn(f64) -> String),
-}
-
-struct OdFormat {
-    itembytes: usize,
-    writer: FormatWriter,
-    offmarg: usize,
 }
