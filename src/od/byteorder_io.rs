@@ -1,32 +1,36 @@
-// from: https://github.com/netvl/immeta/blob/4460ee/src/utils.rs#L76
+// workaround until https://github.com/BurntSushi/byteorder/issues/41 has been fixed
+// based on: https://github.com/netvl/immeta/blob/4460ee/src/utils.rs#L76
 
-use std::io::{self, Read, BufRead, ErrorKind};
-
-use byteorder::{self, ReadBytesExt, LittleEndian, BigEndian};
+use byteorder::{NativeEndian, LittleEndian, BigEndian};
 use byteorder::ByteOrder as ByteOrderTrait;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ByteOrder {
     Little,
     Big,
+    Native,
 }
 
 macro_rules! gen_byte_order_ops {
     ($($read_name:ident, $write_name:ident -> $tpe:ty),+) => {
         impl ByteOrder {
             $(
+            #[allow(dead_code)]
             #[inline]
             pub fn $read_name(self, source: &[u8]) -> $tpe {
                 match self {
                     ByteOrder::Little => LittleEndian::$read_name(source),
                     ByteOrder::Big => BigEndian::$read_name(source),
+                    ByteOrder::Native => NativeEndian::$read_name(source),
                 }
             }
 
+            #[allow(dead_code)]
             pub fn $write_name(self, target: &mut [u8], n: $tpe) {
                 match self {
                     ByteOrder::Little => LittleEndian::$write_name(target, n),
                     ByteOrder::Big => BigEndian::$write_name(target, n),
+                    ByteOrder::Native => NativeEndian::$write_name(target, n),
                 }
             }
             )+

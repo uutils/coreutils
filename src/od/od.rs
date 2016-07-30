@@ -17,6 +17,7 @@ extern crate byteorder;
 extern crate uucore;
 
 mod multifilereader;
+mod byteorder_io;
 mod prn_int;
 mod prn_char;
 mod prn_float;
@@ -24,7 +25,7 @@ mod prn_float;
 use std::cmp;
 use std::io::Write;
 use unindent::*;
-use byteorder::*;
+use byteorder_io::*;
 use multifilereader::*;
 use prn_int::*;
 use prn_char::*;
@@ -53,6 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 "Skip bytes input bytes before formatting and writing.", "BYTES");
     opts.optopt("N", "read-bytes",
                 "limit dump to BYTES input bytes", "BYTES");
+    opts.optopt("", "endian", "byte order to use for multi-byte formats", "big|little");
     opts.optopt("S", "strings",
                 ("output strings of at least BYTES graphic chars. 3 is assumed when \
                  BYTES is not specified."),
@@ -113,6 +115,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(r) => r,
         Err(f) => {
             disp_err!("Invalid -A/--address-radix\n{}", f);
+            return 1;
+        }
+    };
+
+    let byte_order = match matches.opt_str("endian").as_ref().map(String::as_ref) {
+        None => { ByteOrder::Native },
+        Some("little") => { ByteOrder::Little },
+        Some("big") => { ByteOrder::Big },
+        Some(s) => {
+            disp_err!("Invalid argument --endian={}", s);
             return 1;
         }
     };
@@ -239,10 +251,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         let output_duplicates = matches.opt_present("v");
 
-        odfunc(line_bytes, &input_offset_base, &inputs, &formats[..], output_duplicates)
+        odfunc(line_bytes, &input_offset_base, byte_order, &inputs, &formats[..], output_duplicates)
 }
 
-fn odfunc(line_bytes: usize, input_offset_base: &Radix,
+fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
         fnames: &[InputSource], formats: &[OdFormat], output_duplicates: bool) -> i32 {
 
     let mut mf = MultifileReader::new(fnames);
@@ -278,7 +290,7 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix,
                     duplicate_line = false;
                     previous_bytes.clone_from(&bytes);
 
-                    print_bytes(&bytes, n, &print_with_radix(input_offset_base, addr), formats);
+                    print_bytes(byte_order, &bytes, n, &print_with_radix(input_offset_base, addr), formats);
                 }
 
                 addr += n;
@@ -296,7 +308,7 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix,
     }
 }
 
-fn print_bytes(bytes: &[u8], length: usize, prefix: &str, formats: &[OdFormat]) {
+fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str, formats: &[OdFormat]) {
     let mut first = true; // First line of a multi-format raster.
     for f in formats {
         let mut output_text = String::new();
@@ -313,13 +325,13 @@ fn print_bytes(bytes: &[u8], length: usize, prefix: &str, formats: &[OdFormat]) 
                             bytes[b] as u64
                         }
                         2 => {
-                            LittleEndian::read_u16(&bytes[b..nextb]) as u64
+                            byte_order.read_u16(&bytes[b..nextb]) as u64
                         }
                         4 => {
-                            LittleEndian::read_u32(&bytes[b..nextb]) as u64
+                            byte_order.read_u32(&bytes[b..nextb]) as u64
                         }
                         8 => {
-                            LittleEndian::read_u64(&bytes[b..nextb])
+                            byte_order.read_u64(&bytes[b..nextb])
                         }
                         _ => { panic!("Invalid itembytes: {}", f.itembytes); }
                     };
@@ -328,10 +340,10 @@ fn print_bytes(bytes: &[u8], length: usize, prefix: &str, formats: &[OdFormat]) 
                 FormatWriter::FloatWriter(func) => {
                     let p: f64 = match f.itembytes {
                         4 => {
-                            LittleEndian::read_f32(&bytes[b..nextb]) as f64
+                            byte_order.read_f32(&bytes[b..nextb]) as f64
                         }
                         8 => {
-                            LittleEndian::read_f64(&bytes[b..nextb])
+                            byte_order.read_f64(&bytes[b..nextb])
                         }
                         _ => { panic!("Invalid itembytes: {}", f.itembytes); }
                     };

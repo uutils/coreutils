@@ -35,7 +35,7 @@ fn test_file() {
         }
     }
 
-    let result = new_ucmd!().arg(file.as_os_str()).run();
+    let result = new_ucmd!().arg("--endian=little").arg(file.as_os_str()).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -64,7 +64,7 @@ fn test_2files() {
         }
     }
 
-    let result = new_ucmd!().arg(file1.as_os_str()).arg(file2.as_os_str()).run();
+    let result = new_ucmd!().arg("--endian=little").arg(file1.as_os_str()).arg(file2.as_os_str()).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -91,7 +91,7 @@ fn test_no_file() {
 fn test_from_stdin() {
 
     let input = "abcdefghijklmnopqrstuvwxyz\n";
-    let result = new_ucmd!().run_piped_stdin(input.as_bytes());
+    let result = new_ucmd!().arg("--endian=little").run_piped_stdin(input.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -117,7 +117,7 @@ fn test_from_mixed() {
         }
     }
 
-    let result = new_ucmd!().arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
+    let result = new_ucmd!().arg("--endian=little").arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -158,7 +158,7 @@ fn test_dec() {
             0000000         0       1       2       3   32767  -32768  -32767
             0000016
             ");
-    let result = new_ucmd!().arg("-i").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--endian=little").arg("-i").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -175,7 +175,7 @@ fn test_hex16(){
             0000000      2301    6745    ab89    efcd    00ff
             0000011
             ");
-    let result = new_ucmd!().arg("-x").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--endian=little").arg("-x").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -191,7 +191,7 @@ fn test_hex32(){
             0000000          67452301        efcdab89        000000ff
             0000011
             ");
-    let result = new_ucmd!().arg("-X").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--endian=little").arg("-X").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -214,7 +214,7 @@ fn test_f32(){
             0000020            NaN          1e-40 -1.1663108e-38
             0000034
             ");
-    let result = new_ucmd!().arg("-f").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--endian=little").arg("-f").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -236,7 +236,7 @@ fn test_f64(){
             0000040      -2.0000000000000000
             0000050
             ");
-    let result = new_ucmd!().arg("-F").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--endian=little").arg("-F").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -321,6 +321,25 @@ fn test_suppress_duplicates(){
             ");
 
     let result = new_ucmd!().arg("-w4").arg("-O").arg("-x").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_big_endian() {
+
+    let input : [u8; 8] = [
+        0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];// 0xc000000000000000 -2
+    let expected_output = unindent("
+            0000000      -2.0000000000000000
+                        -2.0000000              0
+                             c0000000        00000000
+                         c000    0000    0000    0000
+            0000010
+            ");
+    let result = new_ucmd!().arg("--endian=big").arg("-F").arg("-f").arg("-X").arg("-x").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
