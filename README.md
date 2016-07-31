@@ -148,15 +148,21 @@ To do
 -----
 
 - chcon
+- runcon
+- base32
+- md5sum
+- sha1sum
+- sha224sum
+- sha256sum
+- sha384sum
+- sha512sum
 - chgrp
-- copy
 - cp (not much done)
 - csplit
 - date
 - dd
 - df
 - expr (almost done, no regular expressions)
-- getlimits
 - join
 - ls
 - mv (almost done, one more option)
@@ -164,9 +170,6 @@ To do
 - od (in progress, needs lots of work)
 - pr
 - printf
-- remove
-- runcon
-- setuidgid
 - sort (a couple of options implemented)
 - split (a couple of missing options)
 - stty
