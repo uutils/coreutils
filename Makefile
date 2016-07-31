@@ -207,11 +207,6 @@ build_exe_$(1):
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} -p $(1)
 endef
 
-define TEST_INTEGRATION
-test_integration_$(1):
-	${CARGO} test ${CARGOFLAGS} --features "$(1) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
-endef
-
 define TEST_BUSYBOX
 test_busybox_$(1):
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
@@ -255,10 +250,10 @@ build-uutils:
 
 build: build-uutils build-pkgs
 
-$(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
-test: $(addprefix test_integration_,$(TESTS))
+test:
+	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
 
 busybox-src:
 	if [ ! -e $(BUSYBOX_SRC) ]; then \
