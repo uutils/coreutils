@@ -2,13 +2,13 @@ use formatteriteminfo::*;
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
-    print_width: 3,
+    print_width: 4,
     formatter: FormatWriter::IntWriter(format_item_a),
 };
 
 pub static FORMAT_ITEM_C: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
-    print_width: 3,
+    print_width: 4,
     formatter: FormatWriter::IntWriter(format_item_c),
 };
 

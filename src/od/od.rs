@@ -43,6 +43,7 @@ macro_rules! hashmap {
 }
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const MAX_BYTES_PER_UNIT: usize = 8;
 
 #[derive(Debug)]
 enum Radix { Decimal, Hexadecimal, Octal, Binary }
@@ -65,6 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("b", "", "octal bytes");
     opts.optflag("c", "", "ASCII characters or backslash escapes");
     opts.optflag("d", "", "unsigned decimal 2-byte units");
+    opts.optflag("D", "", "unsigned decimal 4-byte units");
     opts.optflag("o", "", "unsigned decimal 2-byte units");
 
     opts.optflag("I", "", "decimal 2-byte units");
@@ -164,6 +166,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             "b" => FORMAT_ITEM_OCT8,
             "c" => FORMAT_ITEM_C,
             "D" => FORMAT_ITEM_DEC32U,
+            "d" => FORMAT_ITEM_DEC16U,
             "e" => FORMAT_ITEM_F64,
             "F" => FORMAT_ITEM_F64,
             "f" => FORMAT_ITEM_F32,
@@ -225,6 +228,43 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
     let mut previous_bytes = Vec::<u8>::with_capacity(line_bytes);
     let mut duplicate_line = false;
 
+    let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
+    let print_width_block = formats
+        .iter()
+        .fold(1, |max, next| {
+            cmp::max(max, next.print_width * (byte_size_block / next.byte_size))
+        });
+
+    if byte_size_block > MAX_BYTES_PER_UNIT {
+        panic!("{}-bits types are unsupported. Current max={}-bits.",
+                8 * byte_size_block,
+                8 * MAX_BYTES_PER_UNIT);
+    }
+
+    let mut spaced_formatters: Vec<SpacedFormatterItemInfo> = formats
+        .iter()
+        .map(|f| SpacedFormatterItemInfo { frm: *f, spacing: [0; MAX_BYTES_PER_UNIT] })
+        .collect();
+
+    // calculate proper alignment for each item
+    for sf in &mut spaced_formatters {
+        let mut byte_size = sf.frm.byte_size;
+        let mut items_in_block = byte_size_block / byte_size;
+        let thisblock_width = sf.frm.print_width * items_in_block;
+        let mut missing_spacing = print_width_block - thisblock_width;
+
+        while items_in_block > 0 {
+            let avg_spacing: usize = missing_spacing / items_in_block;
+            for i in 0..items_in_block {
+                sf.spacing[i * byte_size] += avg_spacing;
+                missing_spacing -= avg_spacing;
+            }
+            // this assumes the size of all types is a power of 2 (1, 2, 4, 8, 16, ...)
+            items_in_block /= 2;
+            byte_size *= 2;
+        }
+    }
+
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
 
@@ -252,7 +292,8 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
                     duplicate_line = false;
                     previous_bytes.clone_from(&bytes);
 
-                    print_bytes(byte_order, &bytes, n, &print_with_radix(input_offset_base, addr), formats);
+                    print_bytes(byte_order, &bytes, n, &print_with_radix(input_offset_base, addr),
+                        &spaced_formatters, byte_size_block);
                 }
 
                 addr += n;
@@ -270,17 +311,23 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
     }
 }
 
-fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str, formats: &[FormatterItemInfo]) {
+fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str,
+        formats: &[SpacedFormatterItemInfo], byte_size_block: usize) {
     let mut first = true; // First line of a multi-format raster.
     for f in formats {
         let mut output_text = String::new();
 
         let mut b = 0;
         while b < length {
-            let nextb = b + f.byte_size;
-            match f.formatter {
+            let nextb = b + f.frm.byte_size;
+
+            output_text.push_str(&format!("{:>width$}",
+                    "",
+                    width = f.spacing[b % byte_size_block]));
+
+            match f.frm.formatter {
                 FormatWriter::IntWriter(func) => {
-                    let p: u64 = match f.byte_size {
+                    let p: u64 = match f.frm.byte_size {
                         1 => {
                             bytes[b] as u64
                         }
@@ -293,19 +340,19 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str,
                         8 => {
                             byte_order.read_u64(&bytes[b..nextb])
                         }
-                        _ => { panic!("Invalid byte_size: {}", f.byte_size); }
+                        _ => { panic!("Invalid byte_size: {}", f.frm.byte_size); }
                     };
-                    output_text.push_str(&func(p, f.byte_size, f.print_width));
+                    output_text.push_str(&func(p, f.frm.byte_size, f.frm.print_width));
                 }
                 FormatWriter::FloatWriter(func) => {
-                    let p: f64 = match f.byte_size {
+                    let p: f64 = match f.frm.byte_size {
                         4 => {
                             byte_order.read_f32(&bytes[b..nextb]) as f64
                         }
                         8 => {
                             byte_order.read_f64(&bytes[b..nextb])
                         }
-                        _ => { panic!("Invalid byte_size: {}", f.byte_size); }
+                        _ => { panic!("Invalid byte_size: {}", f.frm.byte_size); }
                     };
                     output_text.push_str(&func(p));
                 }
@@ -359,4 +406,9 @@ fn print_with_radix(r: &Radix, x: usize) -> String{
         Radix::Octal => format!("{:07o}", x),
         Radix::Binary => format!("{:07b}", x)
     }
+}
+
+struct SpacedFormatterItemInfo {
+    frm: FormatterItemInfo,
+    spacing: [usize; MAX_BYTES_PER_UNIT],
 }

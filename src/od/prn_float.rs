@@ -5,13 +5,13 @@ use formatteriteminfo::*;
 
 pub static FORMAT_ITEM_F32: FormatterItemInfo = FormatterItemInfo {
     byte_size: 4,
-    print_width: 14,
+    print_width: 15,
     formatter: FormatWriter::FloatWriter(format_item_flo32),
 };
 
 pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
     byte_size: 8,
-    print_width: 24,
+    print_width: 25,
     formatter: FormatWriter::FloatWriter(format_item_flo64),
 };
 

@@ -312,11 +312,11 @@ fn test_suppress_duplicates(){
 
     let input = [0u8 ; 41];
     let expected_output = unindent("
-            0000000 000000000000
-                    0000 0000
+            0000000 00000000000
+                     0000  0000
             *
-            0000050 000000000000
-                    0000
+            0000050 00000000000
+                     0000
             0000051
             ");
 
@@ -332,14 +332,79 @@ fn test_big_endian() {
 
     let input : [u8; 8] = [
         0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];// 0xc000000000000000 -2
+
     let expected_output = unindent("
-            0000000      -2.0000000000000000
-                        -2.0000000              0
-                    c0000000 00000000
-                    c000 0000 0000 0000
+        0000000           -2.0000000000000000
+                    -2.0000000              0
+                      c0000000       00000000
+                   c000   0000    0000   0000
+        0000010
+        ");
+
+    let result = new_ucmd!().arg("--endian=big").arg("-F").arg("-f").arg("-X").arg("-x").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_alignment_Xxa() {
+
+    let input : [u8; 8] = [
+        0x0A, 0x0D, 0x65, 0x66, 0x67, 0x00, 0x9e, 0x9f];
+
+    let expected_output = unindent("
+        0000000        66650d0a        9f9e0067
+                   0d0a    6665    0067    9f9e
+                 nl  cr   e   f   g nul  9e  9f
+        0000010
+        ");
+
+    // in this case the width of the -a (8-bit) determines the alignment for the other fields
+    let result = new_ucmd!().arg("--endian=little").arg("-X").arg("-x").arg("-a").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_alignment_Fx() {
+
+    let input : [u8; 8] = [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0];// 0xc000000000000000 -2
+
+    let expected_output = unindent("
+        0000000      -2.0000000000000000
+                  0000  0000  0000  c000
+        0000010
+        ");
+
+    // in this case the width of the -F (64-bit) determines the alignment for the other field
+    let result = new_ucmd!().arg("--endian=little").arg("-F").arg("-x").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_maxuint(){
+
+    let input = [0xFFu8 ; 8];
+    let expected_output = unindent("
+            0000000     37777777777     37777777777
+                     177777  177777  177777  177777
+                    377 377 377 377 377 377 377 377
+                         4294967295      4294967295
+                      65535   65535   65535   65535
             0000010
             ");
-    let result = new_ucmd!().arg("--endian=big").arg("-F").arg("-f").arg("-X").arg("-x").run_piped_stdin(&input[..]);
+
+    let result = new_ucmd!().arg("-O").arg("-o").arg("-b").arg("-D").arg("-d").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
