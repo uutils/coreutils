@@ -410,3 +410,65 @@ fn test_maxuint(){
     assert!(result.success);
     assert_eq!(result.stdout, expected_output);
 }
+
+#[test]
+fn test_hex_offset(){
+
+    let input = [0u8 ; 0x1F];
+    let expected_output = unindent("
+            000000 00000000 00000000 00000000 00000000
+                   00000000 00000000 00000000 00000000
+            000010 00000000 00000000 00000000 00000000
+                   00000000 00000000 00000000 00000000
+            00001F
+            ");
+
+    let result = new_ucmd!().arg("-Ax").arg("-X").arg("-X").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_dec_offset(){
+
+    let input = [0u8 ; 19];
+    let expected_output = unindent("
+            0000000 00000000 00000000 00000000 00000000
+                    00000000 00000000 00000000 00000000
+            0000016 00000000
+                    00000000
+            0000019
+            ");
+
+    let result = new_ucmd!().arg("-Ad").arg("-X").arg("-X").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_no_offset(){
+
+    let input = [0u8 ; 31];
+    const LINE: &'static str = " 00000000 00000000 00000000 00000000\n";
+    let expected_output = [LINE, LINE, LINE, LINE].join("");
+
+    let result = new_ucmd!().arg("-An").arg("-X").arg("-X").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
+fn test_invalid_offset(){
+
+    let input = [0u8 ; 4];
+
+    let result = new_ucmd!().arg("-Ab").run_piped_stdin(&input[..]);
+
+    assert!(!result.success);
+}

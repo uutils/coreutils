@@ -45,8 +45,8 @@ macro_rules! hashmap {
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
 
-#[derive(Debug)]
-enum Radix { Decimal, Hexadecimal, Octal, Binary }
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum Radix { Decimal, Hexadecimal, Octal, NoPrefix }
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -62,27 +62,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 ("output strings of at least BYTES graphic chars. 3 is assumed when \
                  BYTES is not specified."),
                 "BYTES");
-    opts.optflag("a", "", "named characters, ignoring high-order bit");
-    opts.optflag("b", "", "octal bytes");
-    opts.optflag("c", "", "ASCII characters or backslash escapes");
-    opts.optflag("d", "", "unsigned decimal 2-byte units");
-    opts.optflag("D", "", "unsigned decimal 4-byte units");
-    opts.optflag("o", "", "unsigned decimal 2-byte units");
+    opts.optflagmulti("a", "", "named characters, ignoring high-order bit");
+    opts.optflagmulti("b", "", "octal bytes");
+    opts.optflagmulti("c", "", "ASCII characters or backslash escapes");
+    opts.optflagmulti("d", "", "unsigned decimal 2-byte units");
+    opts.optflagmulti("D", "", "unsigned decimal 4-byte units");
+    opts.optflagmulti("o", "", "unsigned decimal 2-byte units");
 
-    opts.optflag("I", "", "decimal 2-byte units");
-    opts.optflag("L", "", "decimal 2-byte units");
-    opts.optflag("i", "", "decimal 2-byte units");
-    opts.optflag("x", "", "hexadecimal 2-byte units");
-    opts.optflag("h", "", "hexadecimal 2-byte units");
+    opts.optflagmulti("I", "", "decimal 2-byte units");
+    opts.optflagmulti("L", "", "decimal 2-byte units");
+    opts.optflagmulti("i", "", "decimal 2-byte units");
+    opts.optflagmulti("x", "", "hexadecimal 2-byte units");
+    opts.optflagmulti("h", "", "hexadecimal 2-byte units");
 
-    opts.optflag("O", "", "octal 4-byte units");
-    opts.optflag("s", "", "decimal 4-byte units");
-    opts.optflag("X", "", "hexadecimal 4-byte units");
-    opts.optflag("H", "", "hexadecimal 4-byte units");
+    opts.optflagmulti("O", "", "octal 4-byte units");
+    opts.optflagmulti("s", "", "decimal 4-byte units");
+    opts.optflagmulti("X", "", "hexadecimal 4-byte units");
+    opts.optflagmulti("H", "", "hexadecimal 4-byte units");
 
-    opts.optflag("e", "", "floating point double precision (64-bit) units");
-    opts.optflag("f", "", "floating point single precision (32-bit) units");
-    opts.optflag("F", "", "floating point double precision (64-bit) units");
+    opts.optflagmulti("e", "", "floating point double precision (64-bit) units");
+    opts.optflagmulti("f", "", "floating point single precision (32-bit) units");
+    opts.optflagmulti("F", "", "floating point double precision (64-bit) units");
 
     opts.optopt("t", "format", "select output format or formats", "TYPE");
     opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
@@ -216,10 +216,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         let output_duplicates = matches.opt_present("v");
 
-        odfunc(line_bytes, &input_offset_base, byte_order, &inputs, &formats[..], output_duplicates)
+        odfunc(line_bytes, input_offset_base, byte_order, &inputs, &formats[..], output_duplicates)
 }
 
-fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
+fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
         fnames: &[InputSource], formats: &[FormatterItemInfo], output_duplicates: bool) -> i32 {
 
     let mut mf = MultifileReader::new(fnames);
@@ -270,7 +270,9 @@ fn odfunc(line_bytes: usize, input_offset_base: &Radix, byte_order: ByteOrder,
 
         match mf.f_read(bytes.as_mut_slice()) {
             Ok(0) => {
-                print!("{}\n", print_with_radix(input_offset_base, addr)); // print final offset
+                if input_offset_base != Radix::NoPrefix {
+                    print!("{}\n", print_with_radix(input_offset_base, addr)); // print final offset
+                }
                 break;
             }
             Ok(n) => {
@@ -381,7 +383,7 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
         Some(s) => {
             let st = s.into_bytes();
             if st.len() != 1 {
-                Err("Radix must be one of [d, o, b, x]\n")
+                Err("Radix must be one of [d, o, n, x]\n")
             } else {
                 let radix: char = *(st.get(0)
                                       .expect("byte string of length 1 lacks a 0th elem")) as char;
@@ -389,22 +391,20 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
                     'd' => Ok(Radix::Decimal),
                     'x' => Ok(Radix::Hexadecimal),
                     'o' => Ok(Radix::Octal),
-                    'b' => Ok(Radix::Binary),
-                    _ => Err("Radix must be one of [d, o, b, x]\n")
+                    'n' => Ok(Radix::NoPrefix),
+                    _ => Err("Radix must be one of [d, o, n, x]\n")
                 }
             }
         }
     }
 }
 
-fn print_with_radix(r: &Radix, x: usize) -> String{
-    // TODO(keunwoo): field widths should be based on sizeof(x), or chosen dynamically based on the
-    // expected range of address values.  Binary in particular is not great here.
-    match *r {
+fn print_with_radix(r: Radix, x: usize) -> String{
+    match r {
         Radix::Decimal => format!("{:07}", x),
-        Radix::Hexadecimal => format!("{:07X}", x),
+        Radix::Hexadecimal => format!("{:06X}", x),
         Radix::Octal => format!("{:07o}", x),
-        Radix::Binary => format!("{:07b}", x)
+        Radix::NoPrefix => String::from(""),
     }
 }
 
