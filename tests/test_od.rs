@@ -243,18 +243,21 @@ fn test_f64(){
     assert_eq!(result.stdout, expected_output);
 }
 
-// We don't support multibyte chars, so big NEIN to this
-/*
 #[test]
-fn mit_die_umlauten_getesten() {
-    let result = new_ucmd!()
-        .run_piped_stdin("Universität Tübingen".as_bytes());
+fn test_multibyte() {
+
+    // TODO: replace **** with \u{1B000}
+    let result = new_ucmd!().arg("-c").arg("-w12").run_piped_stdin("Universität Tübingen ****".as_bytes());
+
     assert_empty_stderr!(result);
     assert!(result.success);
-    assert_eq!(result.stdout,
-    "0000000    U   n   i   v   e   r   s   i   t   ä  **   t       T   ü  **\n0000020    b   i   n   g   e   n\n0000026")
+    assert_eq!(result.stdout, unindent("
+            0000000   U   n   i   v   e   r   s   i   t   ä  **   t
+            0000014       T   ü  **   b   i   n   g   e   n       *
+            0000030   *   *   *
+            0000033
+            "));
 }
-*/
 
 #[test]
 fn test_width(){
@@ -358,7 +361,7 @@ fn test_alignment_Xxa() {
     let expected_output = unindent("
         0000000        66650d0a        9f9e0067
                    0d0a    6665    0067    9f9e
-                 nl  cr   e   f   g nul  9e  9f
+                 nl  cr   e   f   g nul  rs  us
         0000010
         ");
 

@@ -208,7 +208,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         };
-        let min_bytes = formats.iter().fold(2, |max, next| cmp::max(max, next.byte_size));
+        let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
         if line_bytes % min_bytes != 0 {
             show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
             line_bytes = min_bytes;
@@ -267,6 +267,7 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
+        // TODO: we need to read more data in case a multi-byte sequence starts at the end of the line
 
         match mf.f_read(bytes.as_mut_slice()) {
             Ok(0) => {
@@ -357,6 +358,9 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str,
                         _ => { panic!("Invalid byte_size: {}", f.frm.byte_size); }
                     };
                     output_text.push_str(&func(p));
+                }
+                FormatWriter::MultibyteWriter(func) => {
+                    output_text.push_str(&func(&bytes[b..length]));
                 }
             }
             b = nextb;
