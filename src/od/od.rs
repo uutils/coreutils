@@ -224,9 +224,10 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
     let mut mf = MultifileReader::new(fnames);
     let mut addr = 0;
-    let mut bytes: Vec<u8> = vec![b'\x00'; line_bytes];
-    let mut previous_bytes = Vec::<u8>::with_capacity(line_bytes);
     let mut duplicate_line = false;
+    let mut previous_bytes: Vec<u8> = Vec::new();
+    let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes);
+    unsafe { bytes.set_len(line_bytes); } // fast but uninitialized
 
     let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
     let print_width_block = formats
@@ -280,12 +281,17 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
                 // not enough byte for a whole element, this should only happen on the last line.
                 if n != line_bytes {
                     // set zero bytes in the part of the buffer that will be used, but is not filled.
-                    for i in n..line_bytes {
+                    let mut max_used = n + MAX_BYTES_PER_UNIT;
+                    if max_used > line_bytes {
+                        max_used = line_bytes;
+                    }
+
+                    for i in n..max_used {
                         bytes[i] = 0;
                     }
                 }
 
-                if !output_duplicates && previous_bytes == bytes && n == line_bytes {
+                if !output_duplicates && n == line_bytes && previous_bytes == bytes {
                     if !duplicate_line {
                         duplicate_line = true;
                         println!("*");
@@ -293,7 +299,10 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
                 }
                 else {
                     duplicate_line = false;
-                    previous_bytes.clone_from(&bytes);
+                    if n == line_bytes {
+                        // save a copy of the input unless it is the last line
+                        previous_bytes.clone_from(&bytes);
+                    }
 
                     print_bytes(byte_order, &bytes, n, &print_with_radix(input_offset_base, addr),
                         &spaced_formatters, byte_size_block);
