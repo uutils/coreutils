@@ -22,8 +22,11 @@ mod formatteriteminfo;
 mod prn_int;
 mod prn_char;
 mod prn_float;
+#[cfg(test)]
+mod mockstream;
 
 use std::cmp;
+use std::io::Read;
 use std::io::Write;
 use unindent::*;
 use byteorder_io::*;
@@ -134,8 +137,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     // Gather up file names - args which don't start with '-'
-    let stdnionly = [InputSource::Stdin];
-    let inputs = args[1..]
+    let mut inputs = args[1..]
         .iter()
         .filter_map(|w| match w as &str {
             "--" => Some(InputSource::Stdin),
@@ -143,12 +145,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             x => Some(InputSource::FileName(x)),
         })
         .collect::<Vec<_>>();
-    // If no input files named, use stdin.
-    let inputs = if inputs.len() == 0 {
-        &stdnionly[..]
-    } else {
-        &inputs[..]
-    };
+    if inputs.len() == 0 {
+        inputs.push(InputSource::Stdin);
+    }
+
     // Gather up format flags, we don't use getopts becase we need keep them in order.
     let flags = args[1..]
         .iter()
@@ -216,11 +216,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         let output_duplicates = matches.opt_present("v");
 
-        odfunc(line_bytes, input_offset_base, byte_order, &inputs, &formats[..], output_duplicates)
+        odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..], output_duplicates)
 }
 
 fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
-        fnames: &[InputSource], formats: &[FormatterItemInfo], output_duplicates: bool) -> i32 {
+        fnames: Vec<InputSource>, formats: &[FormatterItemInfo], output_duplicates: bool) -> i32 {
 
     let mut mf = MultifileReader::new(fnames);
     let mut addr = 0;
@@ -270,7 +270,7 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
         // print each line data (or multi-format raster of several lines describing the same data).
         // TODO: we need to read more data in case a multi-byte sequence starts at the end of the line
 
-        match mf.f_read(bytes.as_mut_slice()) {
+        match mf.read(bytes.as_mut_slice()) {
             Ok(0) => {
                 if input_offset_base != Radix::NoPrefix {
                     print!("{}\n", print_with_radix(input_offset_base, addr)); // print final offset
