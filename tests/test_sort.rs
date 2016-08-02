@@ -38,6 +38,11 @@ fn test_month_default() {
 }
 
 #[test]
+fn test_month_stable() {
+    test_helper("month_stable", "-Ms");
+}
+
+#[test]
 fn test_default_unsorted_ints() {
     test_helper("default_unsorted_ints", "");
 }
