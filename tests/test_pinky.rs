@@ -1,6 +1,9 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "pinky";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 extern crate uu_pinky;
 pub use self::uu_pinky::*;
@@ -16,65 +19,54 @@ fn test_capitalize() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_long_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-l").arg("root");
-    let expected = "Login name: root                        In real life:  root\nDirectory: /root                        Shell:  /bin/bash\n\n";
-    assert_eq!(expected, ucmd.run().stdout);
+    new_ucmd()
+        .arg("-l").arg("root")
+        .run()
+        .stdout_is("Login name: root                        In real life:  root\nDirectory: /root                        Shell:  /bin/bash\n\n");
 
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-lb").arg("root");
-    let expected = "Login name: root                        In real life:  root\n\n";
-    assert_eq!(expected, ucmd.run().stdout);
+    new_ucmd()
+        .arg("-lb").arg("root")
+        .run()
+        .stdout_is("Login name: root                        In real life:  root\n\n");
 }
 
 #[test]
 #[cfg(target_os = "macos")]
 fn test_long_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-l").arg("root");
-    let expected = "Login name: root                        In real life:  System Administrator\nDirectory: /var/root                    Shell:  /bin/sh\n\n";
-    assert_eq!(expected, ucmd.run().stdout);
+    new_ucmd()
+        .arg("-l").arg("root")
+        .run()
+        .stdout_is("Login name: root                        In real life:  System Administrator\nDirectory: /var/root                    Shell:  /bin/sh\n\n");
 
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-lb").arg("root");
-    let expected = "Login name: root                        In real life:  System Administrator\n\n";
-    assert_eq!(expected, ucmd.run().stdout);
+    new_ucmd()
+        .arg("-lb").arg("root")
+        .run()
+        .stdout_is("Login name: root                        In real life:  System Administrator\n\n");
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 #[ignore]
 fn test_short_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
+    let scene = TestScenario::new(UTIL_NAME);
+    
     let args = ["-s"];
-    ucmd.args(&args);
-    assert_eq!(expected_result(&args), ucmd.run().stdout);
+    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
 
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-f"];
-    ucmd.args(&args);
-    assert_eq!(expected_result(&args), ucmd.run().stdout);
+    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
 
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-w"];
-    ucmd.args(&args);
-    assert_eq!(expected_result(&args), ucmd.run().stdout);
+    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
 
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-i"];
-    ucmd.args(&args);
-    assert_eq!(expected_result(&args), ucmd.run().stdout);
+    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
 
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-q"];
-    ucmd.args(&args);
-    assert_eq!(expected_result(&args), ucmd.run().stdout);
+    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
 }
 
 #[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
-    use std::process::Command;
-
-    let output = Command::new(UTIL_NAME).args(args).output().unwrap();
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    TestScenario::new(UTIL_NAME).cmd(UTIL_NAME).args(args).run().stdout
 }

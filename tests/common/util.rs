@@ -25,10 +25,14 @@ static TESTS_DIR: &'static str = "tests";
 static FIXTURES_DIR: &'static str = "fixtures";
 
 static ALREADY_RUN: &'static str = " you have already run this UCommand, if you want to run \
-                                    another command in the same test, use TestSet::new instead of \
+                                    another command in the same test, use TestScenario::new instead of \
                                     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
+fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
+    let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
+    AtPath::new(tmpdir_path).read(file_rel_path.as_ref().to_str().unwrap())
+}
 
 pub fn repeat_str(s: &str, n: u32) -> String {
     let mut repeated = String::new();
@@ -41,6 +45,8 @@ pub fn repeat_str(s: &str, n: u32) -> String {
 /// A command result is the outputs of a command (streams and status code)
 /// within a struct which has convenience assertion functions about those outputs
 pub struct CmdResult {
+    //tmpd is used for convenience functions for asserts against fixtures
+    tmpd: Option<Rc<TempDir>>,
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
@@ -87,6 +93,12 @@ impl CmdResult {
         assert_eq!(String::from(msg.as_ref()).trim_right(), self.stdout.trim_right());
         Box::new(self)
     }
+    
+    /// like stdout_is(...), but expects the contents of the file at the provided relative path
+    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stdout_is(contents)
+    }
 
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
@@ -94,6 +106,12 @@ impl CmdResult {
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(String::from(msg.as_ref()).trim_right(), self.stderr.trim_right());
         Box::new(self)
+    }
+
+    /// like stderr_is(...), but expects the contents of the file at the provided relative path
+    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stderr_is(contents)
     }
 
     /// asserts that
@@ -104,12 +122,24 @@ impl CmdResult {
         self.stdout_is(msg).no_stderr()
     }
 
+    /// like stdout_only(...), but expects the contents of the file at the provided relative path
+    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stdout_only(contents)
+    }
+
     /// asserts that
     /// 1. the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stdout stream output
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.stderr_is(msg).no_stdout()
+    }
+
+    /// like stderr_only(...), but expects the contents of the file at the provided relative path
+    pub fn stderr_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stderr_only(contents)
     }
 
     pub fn fails_silently(&self) -> Box<&CmdResult> {
@@ -321,17 +351,17 @@ impl AtPath {
 /// 1. centralizes logic for locating the uutils binary and calling the utility
 /// 2. provides a temporary directory for the test case
 /// 3. copies over fixtures for the utility to the temporary directory
-pub struct TestSet {
+pub struct TestScenario {
     bin_path: PathBuf,
     util_name: String,
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
 }
 
-impl TestSet {
-    pub fn new(util_name: &str) -> TestSet {
+impl TestScenario {
+    pub fn new(util_name: &str) -> TestScenario {
         let tmpd = Rc::new(TempDir::new("uutils").unwrap());
-        let ts = TestSet {
+        let ts = TestScenario {
             bin_path: {
                 // Instead of hardcoding the path relative to the current
                 // directory, use Cargo's OUT_DIR to find path to executable.
@@ -356,7 +386,7 @@ impl TestSet {
         ts
     }
 
-    pub fn util_cmd(&self) -> UCommand {
+    pub fn ucmd(&self) -> UCommand {
         let mut cmd = self.cmd(&self.bin_path);
         cmd.arg(&self.util_name);
         cmd
@@ -368,7 +398,7 @@ impl TestSet {
 
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
-    pub fn util_cmd_keepenv(&self) -> UCommand {
+    pub fn ucmd_keepenv(&self) -> UCommand {
         let mut cmd = self.cmd_keepenv(&self.bin_path);
         cmd.arg(&self.util_name);
         cmd
@@ -440,6 +470,12 @@ impl UCommand {
         Box::new(self)
     }
 
+    /// like arg(...), but uses the contents of the file at the provided relative path as the argument
+    pub fn arg_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.arg(contents)
+    }
+
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
         if self.has_run {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
@@ -460,6 +496,12 @@ impl UCommand {
         }
         self.stdin = Some(input.into());
         Box::new(self)
+    }
+
+    /// like pipe_in(...), but uses the contents of the file at the provided relative path as the piped in data
+    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.pipe_in(contents)
     }
 
     pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand> where K: AsRef<OsStr>, V: AsRef<OsStr> {
@@ -505,6 +547,7 @@ impl UCommand {
         let prog = self.run_no_wait().wait_with_output().unwrap();
 
         CmdResult {
+            tmpd: self.tmpd.clone(),
             success: prog.status.success(),
             stdout: from_utf8(&prog.stdout).unwrap().to_string(),
             stderr: from_utf8(&prog.stderr).unwrap().to_string(),
@@ -542,18 +585,4 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
     sleep(Duration::from_secs(1));
     child.stdout.as_mut().unwrap().read(output.as_mut_slice()).unwrap();
     String::from_utf8(output).unwrap()
-}
-
-/// returns a testSet and a ucommand initialized to the utility binary
-/// operating in the fixtures directory with a cleared environment
-pub fn testset_and_ucommand(utilname: &str) -> (TestSet, UCommand) {
-    let ts = TestSet::new(utilname);
-    let ucmd = ts.util_cmd();
-    (ts, ucmd)
-}
-
-pub fn testing(utilname: &str) -> (AtPath, UCommand) {
-    let ts = TestSet::new(utilname);
-    let ucmd = ts.util_cmd();
-    (ts.fixtures, ucmd)
 }

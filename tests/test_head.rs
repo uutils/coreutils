@@ -1,71 +1,74 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "head";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 static INPUT: &'static str = "lorem_ipsum.txt";
 
 #[test]
 fn test_stdin_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.run_piped_stdin(at.read(INPUT));
-    assert_eq!(result.stdout, at.read("lorem_ipsum_default.expected"));
+    new_ucmd()
+        .pipe_in_fixture(INPUT)
+        .run().stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
 #[test]
 fn test_stdin_1_line_obsolete() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-1"])
-                     .run_piped_stdin(at.read(INPUT));
-    assert_eq!(result.stdout, at.read("lorem_ipsum_1_line.expected"));
+    new_ucmd()
+        .args(&["-1"])
+        .pipe_in_fixture(INPUT)
+        .run().stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
 #[test]
 fn test_stdin_1_line() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-n", "1"])
-                     .run_piped_stdin(at.read(INPUT));
-    assert_eq!(result.stdout, at.read("lorem_ipsum_1_line.expected"));
+    new_ucmd()
+        .args(&["-n", "1"])
+        .pipe_in_fixture(INPUT)
+        .run().stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
 #[test]
 fn test_stdin_5_chars() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-c", "5"])
-                     .run_piped_stdin(at.read(INPUT));
-    assert_eq!(result.stdout, at.read("lorem_ipsum_5_chars.expected"));
+    new_ucmd()
+        .args(&["-c", "5"])
+        .pipe_in_fixture(INPUT)
+        .run().stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
 #[test]
 fn test_single_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.arg(INPUT).run();
-    assert_eq!(result.stdout, at.read("lorem_ipsum_default.expected"));
+    new_ucmd()
+        .arg(INPUT)
+        .run().stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
 #[test]
 fn test_single_1_line_obsolete() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-1", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lorem_ipsum_1_line.expected"));
+    new_ucmd()
+        .args(&["-1", INPUT])
+        .run().stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
 #[test]
 fn test_single_1_line() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-n", "1", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lorem_ipsum_1_line.expected"));
+    new_ucmd()
+        .args(&["-n", "1", INPUT])
+        .run().stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
 #[test]
 fn test_single_5_chars() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-c", "5", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lorem_ipsum_5_chars.expected"));
+    new_ucmd()
+        .args(&["-c", "5", INPUT])
+        .run().stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
 #[test]
 fn test_verbose() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-v", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lorem_ipsum_verbose.expected"));
+    new_ucmd()
+        .args(&["-v", INPUT])
+        .run().stdout_is_fixture("lorem_ipsum_verbose.expected");
 }

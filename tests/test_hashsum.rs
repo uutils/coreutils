@@ -8,14 +8,19 @@ macro_rules! test_digest {
     ($($t:ident)*) => ($(
 
     mod $t {
-        use common::util::*;
+        use::common::util::*;
         static UTIL_NAME: &'static str = "hashsum";
+        fn at_and_ucmd() -> (AtPath, UCommand) {
+            let ts = TestScenario::new(UTIL_NAME);
+            let ucmd = ts.ucmd();
+            (ts.fixtures, ucmd)
+        }
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static EXPECTED_FILE: &'static str = concat!(stringify!($t), ".expected");
 
         #[test]
         fn test_single_file() {
-            let (at, mut ucmd) = testing(UTIL_NAME);
+            let (at, mut ucmd) = at_and_ucmd();
             let result = ucmd.arg(DIGEST_ARG).arg("input.txt").run();
 
             assert_empty_stderr!(result);
@@ -25,7 +30,7 @@ macro_rules! test_digest {
 
         #[test]
         fn test_stdin() {
-            let (at, mut ucmd) = testing(UTIL_NAME);
+            let (at, mut ucmd) = at_and_ucmd();
             let input = at.read("input.txt");
             let result = ucmd.arg(DIGEST_ARG).run_piped_stdin(input);
 

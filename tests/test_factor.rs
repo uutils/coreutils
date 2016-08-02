@@ -18,6 +18,9 @@ const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))
 const NUM_TESTS: usize = 100;
 
 static UTIL_NAME: &'static str = "factor";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[test]
 fn test_random() {
@@ -157,9 +160,8 @@ fn test_big_primes() {
 }
 
 fn run(instring: &[u8], outstring: &[u8]) {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     // now run factor
-    let out = ucmd.run_piped_stdin(instring).stdout;
+    let out = new_ucmd().run_piped_stdin(instring).stdout;
     assert_eq!(out, String::from_utf8(outstring.to_owned()).unwrap());
 }
 
