@@ -43,6 +43,7 @@ struct Settings {
     mode: SortMode,
     reverse: bool,
     outfile: Option<String>,
+    stable: bool,
     unique: bool,
     check: bool,
 }
@@ -53,6 +54,7 @@ impl Default for Settings {
             mode: SortMode::Default,
             reverse: false,
             outfile: None,
+            stable: false,
             unique: false,
             check: false,
         }
@@ -70,6 +72,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
     opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
+    opts.optflag("s", "stable", "stabilize sort by disabling last-resort comparison");
     opts.optflag("u", "unique", "output only the first of an equal run");
     opts.optflag("V", "version-sort", "Sort by SemVer version number, eg 1.12.2 > 1.1.2");
     opts.optflag("c", "check", "check for sorted input; do not sort");
@@ -112,6 +115,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
 
     settings.reverse = matches.opt_present("reverse");
     settings.outfile = matches.opt_str("output");
+    settings.stable = matches.opt_present("stable");
     settings.unique = matches.opt_present("unique");
     settings.check = matches.opt_present("check");
 
@@ -146,13 +150,24 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
     let original_lines = lines.to_vec();
 
-    match settings.mode {
-        SortMode::Numeric => lines.sort_by(numeric_compare),
-        SortMode::HumanNumeric => lines.sort_by(human_numeric_size_compare),
-        SortMode::Month => lines.sort_by(month_compare),
-        SortMode::Version => lines.sort_by(version_compare),
-        SortMode::Default => lines.sort()
+    let mut compare_fns = Vec::new();
+
+    compare_fns.push(match settings.mode {
+        SortMode::Numeric => numeric_compare,
+        SortMode::HumanNumeric => human_numeric_size_compare,
+        SortMode::Month => month_compare,
+        SortMode::Version => version_compare,
+        SortMode::Default => String::cmp
+    });
+
+    if !settings.stable {
+        match settings.mode {
+            SortMode::Default => {}
+            _ => compare_fns.push(String::cmp)
+        }
     }
+
+    sort_by(&mut lines, compare_fns);
 
     if settings.unique {
         lines.dedup()
@@ -176,6 +191,20 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
     0
 
+}
+
+fn sort_by<F>(lines: &mut Vec<String>, compare_fns: Vec<F>)
+    where F: Fn( &String, &String ) -> Ordering
+{
+    lines.sort_by(|a, b| {
+        for compare_fn in &compare_fns {
+            let cmp = compare_fn(a, b);
+            if cmp != Ordering::Equal {
+                return cmp;
+            }
+        }
+        return Ordering::Equal;
+    })
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
