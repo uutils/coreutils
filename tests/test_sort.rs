@@ -71,6 +71,16 @@ fn test_multiple_files() {
 }
 
 #[test]
+fn test_merge_interleaved() {
+    new_ucmd()
+        .arg("-m")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .succeeds().stdout_is_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
 fn test_check() {
     new_ucmd()
         .arg("-c")
