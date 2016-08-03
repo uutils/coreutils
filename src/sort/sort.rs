@@ -46,6 +46,7 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
+    compare_fns: Vec<fn(&String, &String) -> Ordering>,
 }
 
 impl Default for Settings {
@@ -57,6 +58,7 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
+            compare_fns: Vec::new(),
         }
     }
 }
@@ -125,6 +127,21 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         files.push("-".to_owned());
     }
 
+    settings.compare_fns.push(match settings.mode {
+        SortMode::Numeric => numeric_compare,
+        SortMode::HumanNumeric => human_numeric_size_compare,
+        SortMode::Month => month_compare,
+        SortMode::Version => version_compare,
+        SortMode::Default => String::cmp
+    });
+
+    if !settings.stable {
+        match settings.mode {
+            SortMode::Default => {}
+            _ => settings.compare_fns.push(String::cmp)
+        }
+    }
+
     exec(files, &settings)
 }
 
@@ -150,24 +167,7 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
     let original_lines = lines.to_vec();
 
-    let mut compare_fns = Vec::new();
-
-    compare_fns.push(match settings.mode {
-        SortMode::Numeric => numeric_compare,
-        SortMode::HumanNumeric => human_numeric_size_compare,
-        SortMode::Month => month_compare,
-        SortMode::Version => version_compare,
-        SortMode::Default => String::cmp
-    });
-
-    if !settings.stable {
-        match settings.mode {
-            SortMode::Default => {}
-            _ => compare_fns.push(String::cmp)
-        }
-    }
-
-    sort_by(&mut lines, compare_fns);
+    sort_by(&mut lines, &settings);
 
     if settings.unique {
         lines.dedup()
@@ -193,18 +193,20 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
 }
 
-fn sort_by<F>(lines: &mut Vec<String>, compare_fns: Vec<F>)
-    where F: Fn( &String, &String ) -> Ordering
-{
+fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.sort_by(|a, b| {
-        for compare_fn in &compare_fns {
-            let cmp = compare_fn(a, b);
-            if cmp != Ordering::Equal {
-                return cmp;
-            }
-        }
-        return Ordering::Equal;
+        compare_by(a, b, &settings)
     })
+}
+
+fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
+    for compare_fn in &settings.compare_fns {
+        let cmp = compare_fn(a, b);
+        if cmp != Ordering::Equal {
+            return cmp;
+        }
+    }
+    return Ordering::Equal;
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
