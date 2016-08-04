@@ -10,6 +10,8 @@ ifeq ($(PROFILE),release)
 	PROFILE_CMD = --release
 endif
 
+RM := rm -rf
+
 # Binaries
 CARGO  ?= cargo
 CARGOFLAGS ?=
@@ -278,7 +280,7 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	$(RM) -rf $(BUILDDIR)
+	$(RM) $(BUILDDIR)
 
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
