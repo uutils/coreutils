@@ -1,5 +1,4 @@
 extern crate libc;
-extern crate time;
 #[cfg(windows)] extern crate winapi;
 
 #[macro_use]
