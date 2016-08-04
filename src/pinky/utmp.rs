@@ -6,37 +6,30 @@
 // file that was distributed with this source code.
 //
 extern crate uucore;
-use uucore::utmpx::c_utmp;
+use uucore::utmpx;
 
 use std::ptr;
-
-#[cfg(unix)]
-extern "C" {
-    fn getutxent() -> *const c_utmp;
-    fn setutxent();
-    fn endutxent();
-}
 
 pub struct UtmpIter;
 
 impl UtmpIter {
     fn new() -> Self {
         unsafe {
-            setutxent();
+            utmpx::setutxent();
         }
         UtmpIter
     }
 }
 
 impl Iterator for UtmpIter {
-    type Item = c_utmp;
+    type Item = utmpx::c_utmp;
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            let line = getutxent();
+            let line = utmpx::getutxent();
 
             if line.is_null() {
-                endutxent();
+                utmpx::endutxent();
                 return None;
             }
 

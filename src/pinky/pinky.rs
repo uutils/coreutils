@@ -373,8 +373,6 @@ impl Pinky {
             }
         }
 
-        // WARNING: Because of the definition of `struct utmp`,
-        // pinky cannot get the correct value of utmp.ut_tv
         print!(" {}", time_string(&ut));
 
         if self.include_where && ut.ut_host[0] != 0 {
