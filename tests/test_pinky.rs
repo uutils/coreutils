@@ -46,18 +46,8 @@ fn test_long_format() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore]
 fn test_short_format() {
     let scene = TestScenario::new(UTIL_NAME);
-    
-    let args = ["-s"];
-    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
-
-    let args = ["-f"];
-    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
-
-    let args = ["-w"];
-    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
 
     let args = ["-i"];
     scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
@@ -68,5 +58,5 @@ fn test_short_format() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
-    TestScenario::new(UTIL_NAME).cmd(UTIL_NAME).args(args).run().stdout
+    TestScenario::new(UTIL_NAME).cmd_keepenv(UTIL_NAME).args(args).run().stdout
 }
