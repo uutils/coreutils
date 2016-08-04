@@ -26,25 +26,6 @@ use std::mem;
 use std::ptr;
 use uucore::utmpx::*;
 
-extern {
-    fn getutxent() -> *const c_utmp;
-    fn getutxid(ut: *const c_utmp) -> *const c_utmp;
-    fn getutxline(ut: *const c_utmp) -> *const c_utmp;
-
-    fn pututxline(ut: *const c_utmp) -> *const c_utmp;
-
-    fn setutxent();
-    fn endutxent();
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    fn utmpxname(file: *const libc::c_char) -> libc::c_int;
-}
-
-#[cfg(target_os = "freebsd")]
-unsafe extern fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
-    0
-}
-
 static NAME: &'static str = "users";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
