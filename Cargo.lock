@@ -53,6 +53,7 @@ dependencies = [
  "od 0.0.1",
  "paste 0.0.1",
  "pathchk 0.0.1",
+ "pinky 0.0.1",
  "primal 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "printenv 0.0.1",
  "printf 0.0.1",
@@ -718,6 +719,16 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
+name = "pinky"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
