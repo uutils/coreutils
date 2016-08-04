@@ -20,10 +20,6 @@ use std::io::{ErrorKind, Write};
 use std::process::{Command, Stdio};
 use uucore::process::ChildExt;
 
-extern {
-    pub fn setpgid(_: libc::pid_t, _: libc::pid_t) -> libc::c_int;
-}
-
 static NAME: &'static str = "timeout";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -96,7 +92,7 @@ Usage:
 
 fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_after: f64, foreground: bool, preserve_status: bool) -> i32 {
     if !foreground {
-        unsafe { setpgid(0, 0) };
+        unsafe { libc::setpgid(0, 0) };
     }
     let mut process = match Command::new(cmdname).args(args)
                                                  .stdin(Stdio::inherit())
