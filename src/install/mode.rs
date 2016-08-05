@@ -1,7 +1,7 @@
 extern crate libc;
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.
 pub fn parse(mode_string: &str, considering_dir: bool) -> Result<libc::mode_t, String> {
@@ -68,7 +68,7 @@ mod chmod_rs {
                         _ => unreachable!()
                     })
                 }
-                Err(err) => Err(String::from("numeric parsing error"))
+                Err(_) => Err(String::from("numeric parsing error"))
             }
         }
     }
