@@ -68,7 +68,7 @@ mod chmod_rs {
                         _ => unreachable!()
                     })
                 }
-                Err(err) => Err(String::from("numeric parsing error"))
+                Err(_) => Err(String::from("numeric parsing error"))
             }
         }
     }
