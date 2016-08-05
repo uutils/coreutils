@@ -116,21 +116,15 @@ impl ChildExt for Child {
         let mut exitstatus = lock.lock().unwrap();
         // Condvar::wait_timeout_ms() can wake too soon, in this case wait again
         let start = Instant::now();
-        while exitstatus.is_none() {
+        loop {
+            if let Some(exitstatus) = exitstatus.take() {
+                return exitstatus.map(Some);
+            }
             if start.elapsed() >= timeout {
                 return Ok(None)
             }
             let cvar_timeout = timeout - start.elapsed();
             exitstatus = cvar.wait_timeout(exitstatus, cvar_timeout).unwrap().0;
-        }
-
-        // Turn Option<Result<ExitStatus>> into Result<Option<ExitStatus>>
-        match exitstatus.take() {
-            Some(r) => match r {
-                Ok(s) => Ok(Some(s)),
-                Err(e) => Err(e),
-            },
-            None => panic!(),
         }
     }
 }
