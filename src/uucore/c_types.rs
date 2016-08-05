@@ -10,8 +10,6 @@ use self::libc::{
 };
 pub use self::libc::passwd as c_passwd;
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-use self::libc::time_t;
 #[cfg(target_os = "macos")]
 use self::libc::int32_t;
 
