@@ -61,19 +61,12 @@ specified by the sum of their values.", NAME, VERSION);
     0
 }
 
-fn float_to_duration(dur_f: f64) -> Duration {
-    let seconds = dur_f as u64;
-    let nanos = ((dur_f - seconds as f64) * 1e9) as u32;
-    Duration::new(seconds, nanos)
-}
-
 fn sleep(args: Vec<String>) {
-    let sleep_time = args.iter().fold(0.0, |result, arg|
+    let sleep_dur = args.iter().fold(Duration::new(0, 0), |result, arg|
         match uucore::parse_time::from_str(&arg[..]) {
             Ok(m) => m + result,
             Err(f) => crash!(1, "{}", f),
         });
-    let sleep_dur = float_to_duration(sleep_time);
 
     thread::sleep(sleep_dur);
 }
