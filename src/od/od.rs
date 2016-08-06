@@ -17,11 +17,13 @@ extern crate byteorder;
 extern crate uucore;
 
 mod multifilereader;
+mod partialreader;
 mod byteorder_io;
 mod formatteriteminfo;
 mod prn_int;
 mod prn_char;
 mod prn_float;
+mod parse_nrofbytes;
 #[cfg(test)]
 mod mockstream;
 
@@ -31,10 +33,12 @@ use std::io::Write;
 use unindent::*;
 use byteorder_io::*;
 use multifilereader::*;
+use partialreader::*;
 use prn_int::*;
 use prn_char::*;
 use prn_float::*;
 use formatteriteminfo::*;
+use parse_nrofbytes::*;
 
 //This is available in some versions of std, but not all that we target.
 macro_rules! hashmap {
@@ -216,14 +220,42 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         let output_duplicates = matches.opt_present("v");
 
-        odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..], output_duplicates)
+        let skip_bytes = match matches.opt_default("skip-bytes", "0") {
+            None => 0,
+            Some(s) => {
+                match parse_number_of_bytes(&s) {
+                    Ok(i) => { i }
+                    Err(_) => {
+                        disp_err!("Invalid argument --skip-bytes={}", s);
+                        return 1;
+                    }
+                }
+            }
+        };
+        let read_bytes = match matches.opt_str("read-bytes") {
+            None => None,
+            Some(s) => {
+                match  parse_number_of_bytes(&s) {
+                    Ok(i) => { Some(i) }
+                    Err(_) => {
+                        disp_err!("Invalid argument --read-bytes={}", s);
+                        return 1;
+                    }
+                }
+            }
+        };
+
+        odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..],
+                output_duplicates, skip_bytes, read_bytes)
 }
 
 fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
-        fnames: Vec<InputSource>, formats: &[FormatterItemInfo], output_duplicates: bool) -> i32 {
+        fnames: Vec<InputSource>, formats: &[FormatterItemInfo], output_duplicates: bool,
+        skip_bytes: usize, read_bytes: Option<usize>) -> i32 {
 
-    let mut mf = MultifileReader::new(fnames);
-    let mut addr = 0;
+    let mf = MultifileReader::new(fnames);
+    let mut input = PartialReader::new(mf, skip_bytes, read_bytes);
+    let mut addr = skip_bytes;
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
     let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes);
@@ -270,11 +302,9 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
         // print each line data (or multi-format raster of several lines describing the same data).
         // TODO: we need to read more data in case a multi-byte sequence starts at the end of the line
 
-        match mf.read(bytes.as_mut_slice()) {
+        match input.read(bytes.as_mut_slice()) {
             Ok(0) => {
-                if input_offset_base != Radix::NoPrefix {
-                    print!("{}\n", print_with_radix(input_offset_base, addr)); // print final offset
-                }
+                print_final_offset(input_offset_base, addr);
                 break;
             }
             Ok(n) => {
@@ -310,13 +340,15 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
                 addr += n;
             }
-            Err(_) => {
-                break;
+            Err(e) => {
+                show_error!("{}", e);
+                print_final_offset(input_offset_base, addr);
+                return 1;
             }
         };
     }
 
-    if mf.any_err {
+    if input.has_error() {
         1
     } else {
         0
@@ -418,6 +450,12 @@ fn print_with_radix(r: Radix, x: usize) -> String{
         Radix::Hexadecimal => format!("{:06X}", x),
         Radix::Octal => format!("{:07o}", x),
         Radix::NoPrefix => String::from(""),
+    }
+}
+
+fn print_final_offset(r: Radix, x: usize) {
+    if r != Radix::NoPrefix {
+        print!("{}\n", print_with_radix(r, x));
     }
 }
 

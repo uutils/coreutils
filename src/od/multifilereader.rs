@@ -16,7 +16,11 @@ pub enum InputSource<'a> {
 pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
     curr_file: Option<Box<io::Read>>,
-    pub any_err: bool,
+    any_err: bool,
+}
+
+pub trait HasError {
+    fn has_error(&self) -> bool;
 }
 
 impl<'b> MultifileReader<'b> {
@@ -108,6 +112,13 @@ impl<'b> io::Read for MultifileReader<'b> {
         Ok(xfrd)
     }
 }
+
+impl<'b> HasError for MultifileReader<'b> {
+    fn has_error(&self) -> bool {
+        self.any_err
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

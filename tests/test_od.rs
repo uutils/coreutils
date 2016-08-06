@@ -475,3 +475,37 @@ fn test_invalid_offset(){
 
     assert!(!result.success);
 }
+
+#[test]
+fn test_skip_bytes(){
+
+    let input = "abcdefghijklmnopq";
+    let result = new_ucmd!().arg("-c").arg("--skip-bytes=5").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent("
+            0000005   f   g   h   i   j   k   l   m   n   o   p   q
+            0000021
+            "));
+}
+
+#[test]
+fn test_skip_bytes_error(){
+
+    let input = "12345";
+    let result = new_ucmd!().arg("--skip-bytes=10").run_piped_stdin(input.as_bytes());
+
+    assert!(!result.success);
+}
+
+#[test]
+fn test_read_bytes(){
+
+    let input = "abcdefghijklmnopqrstuvwxyz\n12345678";
+    let result = new_ucmd!().arg("--endian=little").arg("--read-bytes=27").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(ALPHA_OUT));
+}
