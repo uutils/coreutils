@@ -149,12 +149,7 @@ To do
 
 - chcon
 - runcon
-- md5sum
-- sha1sum
-- sha224sum
-- sha256sum
-- sha384sum
-- sha512sum
+- ~~md5sum~~, ~~sha1sum~~, ~~sha224sum~~, ~~sha256sum~~, ~~sha384sum~~, ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs))
 - chgrp
 - cp (not much done)
 - csplit
