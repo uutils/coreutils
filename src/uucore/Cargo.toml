@@ -6,6 +6,7 @@ authors = []
 [dependencies]
 libc = "*"
 winapi = "*"
+data-encoding = "^1.1"
 
 [lib]
 path = "lib.rs"
