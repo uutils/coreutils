@@ -9,8 +9,6 @@ path = "base64.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
-rustc-serialize = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
