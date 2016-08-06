@@ -8,9 +8,14 @@
 //
 
 use common::util::*;
-use rand::{weak_rng, Rng};
-use rand::distributions::{IndependentSample, Range};
-use sieve::Sieve;
+
+#[path="../src/factor/sieve.rs"]
+mod sieve;
+use self::sieve::Sieve;
+
+extern crate rand;
+use self::rand::{weak_rng, Rng};
+use self::rand::distributions::{IndependentSample, Range};
 
 const NUM_PRIMES: usize = 10000;
 const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))

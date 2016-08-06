@@ -4,8 +4,8 @@ extern crate regex;
 use std::fs::{File, read_dir};
 use std::io::{Read, Write};
 use std::path::Path;
-use rand::{Rng, thread_rng};
-use regex::Regex;
+use self::rand::{Rng, thread_rng};
+use self::regex::Regex;
 use common::util::*;
 
 static UTIL_NAME: &'static str = "split";
