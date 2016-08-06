@@ -1,7 +1,4 @@
-extern crate libc;
 extern crate time;
-extern crate kernel32;
-extern crate winapi;
 extern crate filetime;
 
 use self::filetime::*;

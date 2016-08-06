@@ -1,18 +1,5 @@
-extern crate filetime;
-extern crate libc;
-extern crate rand;
-extern crate regex;
-extern crate tempdir;
-extern crate time;
-
-#[cfg(windows)] extern crate kernel32;
-#[cfg(windows)] extern crate winapi;
-
 #[macro_use]
 mod common;
-
-#[path="../src/factor/sieve.rs"]
-mod sieve;
 
 // For conditional compilation
 macro_rules! unix_only {

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+extern crate tempdir;
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -14,7 +15,7 @@ use std::ffi::OsStr;
 use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
-use tempdir::TempDir;
+use self::tempdir::TempDir;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "uutils.exe";
@@ -64,7 +65,7 @@ impl CmdResult {
         assert!(!self.success);
         Box::new(self)
     }
-    
+
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// generally, it's better to use stdout_only() instead,
     /// but you might find yourself using this function if
@@ -74,7 +75,7 @@ impl CmdResult {
         assert_eq!(0, self.stderr.len());
         Box::new(self)
     }
-    
+
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// unless asserting there was neither stdout or stderr, stderr_only is usually a better choice
     /// generally, it's better to use stderr_only() instead,
@@ -93,7 +94,7 @@ impl CmdResult {
         assert_eq!(String::from(msg.as_ref()).trim_right(), self.stdout.trim_right());
         Box::new(self)
     }
-    
+
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);

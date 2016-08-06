@@ -1,5 +1,6 @@
 use common::util::*;
-use tempdir::TempDir;
+extern crate tempdir;
+use self::tempdir::TempDir;
 
 static UTIL_NAME: &'static str = "mktemp";
 

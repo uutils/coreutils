@@ -1,10 +1,3 @@
-extern crate libc;
-extern crate time;
-extern crate kernel32;
-extern crate winapi;
-extern crate filetime;
-
-use self::filetime::*;
 use common::util::*;
 use std::os::unix::fs::PermissionsExt;
 
@@ -17,7 +10,7 @@ fn at_and_ucmd() -> (AtPath, UCommand) {
 
 #[test]
 fn test_install_help() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (_, mut ucmd) = at_and_ucmd();
 
     let result = ucmd.arg("--help").run();
 
