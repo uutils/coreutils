@@ -40,6 +40,7 @@ BUSYBOX_SRC:=$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)/
 
 # Possible programs
 PROGS       := \
+  base32 \
   base64 \
   basename \
   cat \
@@ -137,6 +138,7 @@ UTILS ?= $(PROGS)
 
 # Programs with usable tests
 TEST_PROGS  := \
+	base32 \
 	base64 \
 	basename \
 	cat \

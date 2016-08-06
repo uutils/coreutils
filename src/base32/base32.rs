@@ -1,13 +1,12 @@
-#![crate_name = "uu_base64"]
-
 // This file is part of the uutils coreutils package.
 //
-// (c) Jordy Dickinson <jordy.dickinson@gmail.com>
 // (c) Jian Zeng <anonymousknight96@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 //
+
+#![crate_name = "uu_base32"]
 
 extern crate getopts;
 
@@ -20,7 +19,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, stdin, Write};
 use std::path::Path;
 
-static NAME: &'static str = "base64";
+static NAME: &'static str = "base32";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -74,7 +73,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         BufReader::new(Box::new(file_buf) as Box<Read>)
     };
 
-    let mut data = Data::new(input, Format::Base64)
+    let mut data = Data::new(input, Format::Base32)
         .line_wrap(line_wrap)
         .ignore_garbage(matches.opt_present("ignore-garbage"));
 
@@ -92,11 +91,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn help(opts: &Options) -> i32 {
     let msg = format!("Usage: {} [OPTION]... [FILE]\n\n\
-    Base64 encode or decode FILE, or standard input, to standard output.\n\
+    Base32 encode or decode FILE, or standard input, to standard output.\n\
     With no FILE, or when FILE is -, read standard input.\n\n\
-    The data are encoded as described for the base64 alphabet in RFC \
-    3548. When\ndecoding, the input may contain newlines in addition \
-    to the bytes of the formal\nbase64 alphabet. Use --ignore-garbage \
+    The data are encoded as described for the base32 alphabet in RFC \
+    4648.\nWhen decoding, the input may contain newlines in addition \
+    to the bytes of the formal\nbase32 alphabet. Use --ignore-garbage \
     to attempt to recover from any other\nnon-alphabet bytes in the \
     encoded stream.",
                       NAME);

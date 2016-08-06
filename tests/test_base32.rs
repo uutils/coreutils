@@ -1,28 +1,36 @@
+// This file is part of the uutils coreutils package.
+//
+// (c) Jian Zeng <anonymousknight96@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
+//
+
 use common::util::*;
 
-static UTIL_NAME: &'static str = "base64";
+static UTIL_NAME: &'static str = "base32";
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
 
 #[test]
 fn test_encode() {
-    let input = "hello, world!";
+    let input = "Hello, World!";
     new_ucmd()
         .pipe_in(input)
         .succeeds()
-        .stdout_only("aGVsbG8sIHdvcmxkIQ==\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
 }
 
 #[test]
 fn test_decode() {
     for decode_param in vec!["-d", "--decode"] {
-        let input = "aGVsbG8sIHdvcmxkIQ==";
+        let input = "JBSWY3DPFQQFO33SNRSCC===\n";
         new_ucmd()
             .arg(decode_param)
             .pipe_in(input)
             .succeeds()
-            .stdout_only("hello, world!");
+            .stdout_only("Hello, World!");
     }
 }
 
@@ -33,19 +41,19 @@ fn test_garbage() {
         .arg("-d")
         .pipe_in(input)
         .fails()
-        .stderr_only("base64: error: invalid input\n");
+        .stderr_only("base32: error: invalid input\n");
 }
 
 #[test]
 fn test_ignore_garbage() {
     for ignore_garbage_param in vec!["-i", "--ignore-garbage"] {
-        let input = "aGVsbG8sIHdvcmxkIQ==\0";
+        let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n";
         new_ucmd()
             .arg("-d")
             .arg(ignore_garbage_param)
             .pipe_in(input)
             .succeeds()
-            .stdout_only("hello, world!");
+            .stdout_only("Hello, World!");
     }
 }
 
@@ -58,7 +66,7 @@ fn test_wrap() {
             .arg("20")
             .pipe_in(input)
             .succeeds()
-            .stdout_only("VGhlIHF1aWNrIGJyb3du\nIGZveCBqdW1wcyBvdmVy\nIHRoZSBsYXp5IGRvZy4=\n");
+            .stdout_only("KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n");
     }
 }
 
@@ -68,7 +76,7 @@ fn test_wrap_no_arg() {
         new_ucmd()
             .arg(wrap_param)
             .fails()
-            .stderr_only(format!("base64: Argument to option '{}' missing.\nTry 'base64 --help' for more information.\n",
+            .stderr_only(format!("base32: Argument to option '{}' missing.\nTry 'base32 --help' for more information.\n",
                                  if wrap_param == "-w" { "w" } else { "wrap" }));
     }
 }
@@ -77,9 +85,8 @@ fn test_wrap_no_arg() {
 fn test_wrap_bad_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
         new_ucmd()
-            .arg(wrap_param)
-            .arg("b")
+            .arg(wrap_param).arg("b")
             .fails()
-            .stderr_only("base64: error: invalid wrap size: ‘b’: invalid digit found in string\n");
+            .stderr_only("base32: error: invalid wrap size: ‘b’: invalid digit found in string\n");
     }
 }
