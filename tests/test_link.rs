@@ -1,5 +1,3 @@
-extern crate libc;
-
 use common::util::*;
 
 static UTIL_NAME: &'static str = "link";
