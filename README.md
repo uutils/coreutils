@@ -149,7 +149,6 @@ To do
 
 - chcon
 - runcon
-- base32
 - md5sum
 - sha1sum
 - sha224sum
