@@ -8,6 +8,7 @@ fn new_ucmd() -> UCommand {
 static INPUT: &'static str = "sorted.txt";
 static SKIP_CHARS: &'static str = "skip-chars.txt";
 static SKIP_FIELDS: &'static str = "skip-fields.txt";
+static SORTED_ZERO_TERMINATED: &'static str = "sorted-zero-terminated.txt";
 
 #[test]
 fn test_stdin_default() {
@@ -91,4 +92,11 @@ fn test_stdin_repeated_only() {
     new_ucmd()
         .args(&["-d"]).pipe_in_fixture(INPUT)
         .run().stdout_is_fixture("sorted-repeated-only.expected");
+}
+
+#[test]
+fn test_stdin_zero_terminated() {
+    new_ucmd()
+        .args(&["-z"]).pipe_in_fixture(SORTED_ZERO_TERMINATED)
+        .run().stdout_is_fixture("sorted-zero-terminated.expected");
 }
