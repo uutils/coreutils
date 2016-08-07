@@ -34,6 +34,7 @@ struct Uniq {
     slice_start: Option<usize>,
     slice_stop: Option<usize>,
     ignore_case: bool,
+    zero_terminated: bool,
 }
 
 impl Uniq {
@@ -41,9 +42,10 @@ impl Uniq {
         let mut lines: Vec<String> = vec!();
         let mut first_line_printed = false;
         let delimiters = &self.delimiters[..];
+        let line_terminator = self.get_line_terminator();
 
-        for io_line in reader.lines() {
-            let line = crash_if_err!(1, io_line);
+        for io_line in reader.split(line_terminator) {
+            let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
             if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
                 let print_delimiter = delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
@@ -77,6 +79,14 @@ impl Uniq {
             }
         } else {
             line[..].to_owned()
+        }
+    }
+
+    fn get_line_terminator(&self) -> u8 {
+        if self.zero_terminated {
+            0
+        } else {
+            '\n' as u8
         }
     }
 
@@ -116,8 +126,10 @@ impl Uniq {
     }
 
     fn print_line<W: Write>(&self, writer: &mut BufWriter<W>, line: &str, count: usize, print_delimiter: bool) {
+        let line_terminator = self.get_line_terminator();
+
         if print_delimiter {
-            crash_if_err!(1, writer.write_all(&['\n' as u8]));
+            crash_if_err!(1, writer.write_all(&[line_terminator]));
         }
 
         crash_if_err!(1, if self.show_counts {
@@ -125,7 +137,7 @@ impl Uniq {
         } else {
             writer.write_all(line.as_bytes())
         });
-        crash_if_err!(1, writer.write_all("\n".as_bytes()));
+        crash_if_err!(1, writer.write_all(&[line_terminator]));
     }
 }
 
@@ -153,6 +165,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("w", "check-chars", "compare no more than N characters in lines", "N");
     opts.optflag("i", "ignore-case", "ignore differences in case when comparing");
     opts.optflag("u", "unique", "only print unique lines");
+    opts.optflag("z", "zero-terminated", "end lines with 0 byte, not newline");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -202,6 +215,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             slice_start: opt_parsed("skip-chars", &matches),
             slice_stop: opt_parsed("check-chars", &matches),
             ignore_case: matches.opt_present("ignore-case"),
+            zero_terminated: matches.opt_present("zero-terminated"),
         };
         uniq.print_uniq(&mut open_input_file(in_file_name),
                         &mut open_output_file(out_file_name));
