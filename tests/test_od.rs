@@ -246,15 +246,14 @@ fn test_f64(){
 #[test]
 fn test_multibyte() {
 
-    // TODO: replace **** with \u{1B000}
-    let result = new_ucmd!().arg("-c").arg("-w12").run_piped_stdin("Universität Tübingen ****".as_bytes());
+    let result = new_ucmd!().arg("-c").arg("-w12").run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
     assert_eq!(result.stdout, unindent("
             0000000   U   n   i   v   e   r   s   i   t   ä  **   t
-            0000014       T   ü  **   b   i   n   g   e   n       *
-            0000030   *   *   *
+            0000014       T   ü  **   b   i   n   g   e   n       \u{1B000}
+            0000030  **  **  **
             0000033
             "));
 }
@@ -313,9 +312,25 @@ fn test_width_without_value(){
 #[test]
 fn test_suppress_duplicates(){
 
-    let input = [0u8 ; 41];
+    let input: [u8; 41] =  [
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            1, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+            0];
     let expected_output = unindent("
             0000000 00000000000
+                     0000  0000
+            *
+            0000020 00000000001
+                     0001  0000
+            0000024 00000000000
                      0000  0000
             *
             0000050 00000000000

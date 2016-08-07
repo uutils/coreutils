@@ -18,6 +18,7 @@ extern crate uucore;
 
 mod multifilereader;
 mod partialreader;
+mod peekreader;
 mod byteorder_io;
 mod formatteriteminfo;
 mod prn_int;
@@ -28,12 +29,12 @@ mod parse_nrofbytes;
 mod mockstream;
 
 use std::cmp;
-use std::io::Read;
 use std::io::Write;
 use unindent::*;
 use byteorder_io::*;
 use multifilereader::*;
 use partialreader::*;
+use peekreader::*;
 use prn_int::*;
 use prn_char::*;
 use prn_float::*;
@@ -51,6 +52,7 @@ macro_rules! hashmap {
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
+const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum Radix { Decimal, Hexadecimal, Octal, NoPrefix }
@@ -254,12 +256,13 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
         skip_bytes: usize, read_bytes: Option<usize>) -> i32 {
 
     let mf = MultifileReader::new(fnames);
-    let mut input = PartialReader::new(mf, skip_bytes, read_bytes);
+    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
+    let mut input = PeekReader::new(pr);
     let mut addr = skip_bytes;
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
-    let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes);
-    unsafe { bytes.set_len(line_bytes); } // fast but uninitialized
+    let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes + PEEK_BUFFER_SIZE);
+    unsafe { bytes.set_len(line_bytes + PEEK_BUFFER_SIZE); } // fast but uninitialized
 
     let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
     let print_width_block = formats
@@ -302,12 +305,12 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
         // print each line data (or multi-format raster of several lines describing the same data).
         // TODO: we need to read more data in case a multi-byte sequence starts at the end of the line
 
-        match input.read(bytes.as_mut_slice()) {
-            Ok(0) => {
+        match input.peek_read(bytes.as_mut_slice(), PEEK_BUFFER_SIZE) {
+            Ok((0, _)) => {
                 print_final_offset(input_offset_base, addr);
                 break;
             }
-            Ok(n) => {
+            Ok((n, peekbytes)) => {
                 // not enough byte for a whole element, this should only happen on the last line.
                 if n != line_bytes {
                     // set zero bytes in the part of the buffer that will be used, but is not filled.
@@ -321,7 +324,10 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
                     }
                 }
 
-                if !output_duplicates && n == line_bytes && previous_bytes == bytes {
+                if !output_duplicates
+                        && n == line_bytes
+                        && !previous_bytes.is_empty()
+                        && previous_bytes[..line_bytes] == bytes[..line_bytes] {
                     if !duplicate_line {
                         duplicate_line = true;
                         println!("*");
@@ -334,7 +340,8 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
                         previous_bytes.clone_from(&bytes);
                     }
 
-                    print_bytes(byte_order, &bytes, n, &print_with_radix(input_offset_base, addr),
+                    print_bytes(byte_order, &bytes, n, peekbytes,
+                        &print_with_radix(input_offset_base, addr),
                         &spaced_formatters, byte_size_block);
                 }
 
@@ -355,7 +362,7 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
     }
 }
 
-fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str,
+fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: usize, prefix: &str,
         formats: &[SpacedFormatterItemInfo], byte_size_block: usize) {
     let mut first = true; // First line of a multi-format raster.
     for f in formats {
@@ -401,7 +408,7 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, prefix: &str,
                     output_text.push_str(&func(p));
                 }
                 FormatWriter::MultibyteWriter(func) => {
-                    output_text.push_str(&func(&bytes[b..length]));
+                    output_text.push_str(&func(&bytes[b..length+peekbytes]));
                 }
             }
             b = nextb;
