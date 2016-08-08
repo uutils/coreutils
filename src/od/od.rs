@@ -25,6 +25,7 @@ mod prn_int;
 mod prn_char;
 mod prn_float;
 mod parse_nrofbytes;
+mod parse_formats;
 #[cfg(test)]
 mod mockstream;
 
@@ -35,20 +36,9 @@ use byteorder_io::*;
 use multifilereader::*;
 use partialreader::*;
 use peekreader::*;
-use prn_int::*;
-use prn_char::*;
-use prn_float::*;
 use formatteriteminfo::*;
 use parse_nrofbytes::*;
-
-//This is available in some versions of std, but not all that we target.
-macro_rules! hashmap {
-    ($( $key: expr => $val: expr ),*) => {{
-         let mut map = ::std::collections::HashMap::new();
-         $( map.insert($key, $val); )*
-         map
-    }}
-}
+use parse_formats::parse_format_flags;
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
@@ -155,100 +145,52 @@ pub fn uumain(args: Vec<String>) -> i32 {
         inputs.push(InputSource::Stdin);
     }
 
-    // Gather up format flags, we don't use getopts becase we need keep them in order.
-    let flags = args[1..]
-        .iter()
-        .filter_map(|w| match w as &str {
-            "--" => None,
-            o if o.starts_with("-") => Some(&o[1..]),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+    let formats = parse_format_flags(&args);
 
-// TODO: -t fmts
-        let known_formats = hashmap![
-            "a" => FORMAT_ITEM_A,
-            "B" => FORMAT_ITEM_OCT16,
-            "b" => FORMAT_ITEM_OCT8,
-            "c" => FORMAT_ITEM_C,
-            "D" => FORMAT_ITEM_DEC32U,
-            "d" => FORMAT_ITEM_DEC16U,
-            "e" => FORMAT_ITEM_F64,
-            "F" => FORMAT_ITEM_F64,
-            "f" => FORMAT_ITEM_F32,
-            "H" => FORMAT_ITEM_HEX32,
-            "X" => FORMAT_ITEM_HEX32,
-            "o" => FORMAT_ITEM_OCT16,
-            "x" => FORMAT_ITEM_HEX16,
-            "h" => FORMAT_ITEM_HEX16,
+    let mut line_bytes = match matches.opt_default("w", "32") {
+        None => 16,
+        Some(s) => {
+            match s.parse::<usize>() {
+                Ok(i) => { i }
+                Err(_) => { 2 }
+            }
+        }
+    };
+    let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
+    if line_bytes % min_bytes != 0 {
+        show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
+        line_bytes = min_bytes;
+    }
 
-            "I" => FORMAT_ITEM_DEC16S,
-            "L" => FORMAT_ITEM_DEC16S,
-            "i" => FORMAT_ITEM_DEC16S,
+    let output_duplicates = matches.opt_present("v");
 
-            "O" => FORMAT_ITEM_OCT32,
-            "s" => FORMAT_ITEM_DEC16U
-        ];
-
-        let mut formats = Vec::new();
-
-        for flag in flags.iter() {
-            match known_formats.get(flag) {
-                None => {} // not every option is a format
-                Some(r) => {
-                    formats.push(*r)
+    let skip_bytes = match matches.opt_default("skip-bytes", "0") {
+        None => 0,
+        Some(s) => {
+            match parse_number_of_bytes(&s) {
+                Ok(i) => { i }
+                Err(_) => {
+                    disp_err!("Invalid argument --skip-bytes={}", s);
+                    return 1;
                 }
             }
         }
-
-        if formats.is_empty() {
-            formats.push(FORMAT_ITEM_OCT16); // 2 byte octal is the default
+    };
+    let read_bytes = match matches.opt_str("read-bytes") {
+        None => None,
+        Some(s) => {
+            match  parse_number_of_bytes(&s) {
+                Ok(i) => { Some(i) }
+                Err(_) => {
+                    disp_err!("Invalid argument --read-bytes={}", s);
+                    return 1;
+                }
+            }
         }
+    };
 
-        let mut line_bytes = match matches.opt_default("w", "32") {
-            None => 16,
-            Some(s) => {
-                match s.parse::<usize>() {
-                    Ok(i) => { i }
-                    Err(_) => { 2 }
-                }
-            }
-        };
-        let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
-        if line_bytes % min_bytes != 0 {
-            show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
-            line_bytes = min_bytes;
-        }
-
-        let output_duplicates = matches.opt_present("v");
-
-        let skip_bytes = match matches.opt_default("skip-bytes", "0") {
-            None => 0,
-            Some(s) => {
-                match parse_number_of_bytes(&s) {
-                    Ok(i) => { i }
-                    Err(_) => {
-                        disp_err!("Invalid argument --skip-bytes={}", s);
-                        return 1;
-                    }
-                }
-            }
-        };
-        let read_bytes = match matches.opt_str("read-bytes") {
-            None => None,
-            Some(s) => {
-                match  parse_number_of_bytes(&s) {
-                    Ok(i) => { Some(i) }
-                    Err(_) => {
-                        disp_err!("Invalid argument --read-bytes={}", s);
-                        return 1;
-                    }
-                }
-            }
-        };
-
-        odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..],
-                output_duplicates, skip_bytes, read_bytes)
+    odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..],
+            output_duplicates, skip_bytes, read_bytes)
 }
 
 fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
