@@ -239,3 +239,112 @@ macro_rules! safe_unwrap(
         }
     )
 );
+
+//-- message templates
+
+//-- message templates : general
+
+#[macro_export]
+macro_rules! snippet_list_join_oxford {
+    ($conjunction:expr, $valOne:expr, $valTwo:expr) => (
+        format!("{}, {} {}", $valOne, $conjunction, $valTwo)
+    );
+    ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remainingVals:expr)*) => (
+        format!("{}, {}", $valOne, snippet_list_join_inner!($conjunction, $valTwo $(, $remainingVals)*))
+    );
+}
+
+#[macro_export]
+macro_rules! snippet_list_join_or {
+    ($valOne:expr, $valTwo:expr) => (
+        format!("{} or {}", $valOne, $valTwo)
+    );
+    ($valOne:expr, $valTwo:expr $(, $remainingVals:expr)*) => (
+        format!("{}, {}", $valOne, snippet_list_join_oxford!("or", $valTwo $(, $remainingVals)*))
+    ); 
+}
+
+//-- message templates : help and version
+
+#[macro_export]
+macro_rules! msg_version {
+    () => (
+        format!("{} {}", executable!(), env!("CARGO_PKG_VERSION"))
+    )
+}
+
+//-- message templates : invalid input
+
+#[macro_export]
+macro_rules! msg_invalid_input { ($reason: expr) => (
+    format!("invalid input: {}", $reason) ); }
+
+#[macro_export]
+macro_rules! snippet_no_file_at_path { ($path:expr) => (
+    format!("nonexistent path {}", $path) ); }
+
+// -- message templates : invalid input : flag
+
+#[macro_export]
+macro_rules! msg_invalid_opt_use {
+    ($about:expr, $flag:expr) => (
+        msg_invalid_input!(format!("The '{}' option {}", $flag, $about))
+    );
+    ($about:expr, $longflag:expr, $shortflag:expr) => {
+        msg_invalid_input!(format!("The '{}' ('{}') option {}", $longflag, $shortflag, $about))
+    };
+}
+    
+#[macro_export]
+macro_rules! msg_opt_only_usable_if {
+    ($clause:expr, $flag:expr) => (
+        msg_invalid_opt_use!(format!("only usable if {}", $clause), $flag)
+    );
+    ($clause:expr, $longflag:expr, $shortflag:expr) => (
+        msg_invalid_opt_use!(format!("only usable if {}", $clause), $longflag, $shortflag)
+    );
+}
+
+#[macro_export]
+macro_rules! msg_opt_invalid_should_be {
+    ($expects:expr, $received:expr, $flag:expr) => (
+        msg_invalid_opt_use!(format!("expects {}, but was provided {}", $expects, $received), $flag)
+    );
+    ($expects:expr, $received:expr, $longflag:expr, $shortflag:expr) => (
+        msg_invalid_opt_use!(format!("expects {}, but was provided {}", $expects, $received), $longflag, $shortflag)
+    );
+}
+
+// -- message templates : invalid input : args
+
+#[macro_export]
+macro_rules! msg_arg_invalid_value { ($expects:expr, $received:expr) => (
+    msg_invalid_input!(format!("expects its argument to be {}, but was provided {}", $expects, $received)) ); }
+
+#[macro_export]
+macro_rules! msg_args_invalid_value { ($expects:expr, $received:expr) => (
+    msg_invalid_input!(format!("expects its arguments to be {}, but was provided {}", $expects, $received)) ); }
+
+#[macro_export]
+macro_rules! msg_args_nonexistent_file { ($received:expr) => (
+    msg_args_invalid_value!("paths to files", snippet_no_file_at_path!($received)));} 
+
+#[macro_export]
+macro_rules! msg_wrong_number_of_arguments { ($received:expr) => (
+    msg_args_invalid_value!("wrong number of arguments") ); }
+    
+// -- message templates : invalid input : input combinations 
+
+#[macro_export]
+macro_rules! msg_expects_one_of {
+    ($valOne:expr $(, $remainingVals:expr)*) => (
+        msg_invalid_input!(format!("expects one of {}", snippet_list_join_or!($valOne $(, $remainingVals)*))) 
+    ); 
+}
+
+#[macro_export]
+macro_rules! msg_expects_no_more_than_one_of {
+    ($valOne:expr $(, $remainingVals:expr)*) => (
+        msg_invalid_input!(format!("expects no more than one of {}", snippet_list_join_or!($valOne $(, $remainingVals)*))) ;
+    ); 
+}
