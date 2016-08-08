@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
@@ -379,7 +378,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
             let path = Path::new(&filename[..]);
 
             if !path.exists() {
-                show_error!("{}: No such file or directory", filename);
+                show_error!("{}", msg_args_nonexistent_file!(filename));
                 continue
             }
 
@@ -403,7 +402,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
+    let mut opts = uucore::coreopts::CoreOptions::new();
 
     opts.optopt("b", "bytes", "filter byte columns from the input source", "sequence");
     opts.optopt("c", "characters", "alias for character mode", "sequence");
@@ -413,19 +412,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "complement", "invert the filter - instead of displaying only the filtered columns, display all but those columns");
     opts.optflag("s", "only-delimited", "in field mode, only print lines which contain the delimiter");
     opts.optopt("", "output-delimiter", "in field mode, replace the delimiter in output lines with this option's argument", "new delimiter");
-    opts.optflag("", "help", "print usage information");
-    opts.optflag("", "version", "print version information");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("Invalid options\n{}", f);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("help") {
-        print!("
+    let usage = opts.usage("Prints specified byte or field columns from each line of stdin or the input files");
+    opts.help(format!("
  {0} {1}
 
  {0} [-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+
@@ -501,14 +489,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         it will replace the delimiter character in each line printed. This is
         useful for transforming tabular data - e.g. to convert a CSV to a 
         TSV (tab-separated file)
-", NAME, VERSION, opts.usage("Prints specified byte or field columns from each line of stdin or the input files"));
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+", NAME, VERSION, usage));
+    let matches = opts.parse(args);
 
     let complement = matches.opt_present("complement");
 
@@ -542,7 +524,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     match matches.opt_str("delimiter") {
                         Some(delim) => {
                             if delim.chars().count() > 1 {
-                                Err("the delimiter must be a single character, or the empty string for null".to_owned())
+                                Err(msg_opt_invalid_should_be!("empty or 1 character long", "a value 2 characters or longer", "--delimiter", "-d").to_owned())
                             } else {
                                 let delim = if delim.is_empty() {
                                     "\0".to_owned()
@@ -569,9 +551,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
             )
         }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => {
-            Err("only one type of list may be specified".to_owned())
+            Err(msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)").to_owned())
         }
-        _ => Err("you must specify a list of bytes, characters, or fields".to_owned())
+        _ => Err(msg_expects_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)").to_owned())
     };
 
     let mode_parse = match mode_parse {
@@ -579,9 +561,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(mode) => {
             match mode {
                 Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("delimiter") =>
-                    Err("an input delimiter may be specified only when operating on fields".to_owned()),
+                    Err(msg_opt_only_usable_if!("printing a sequence of fields", "--delimiter", "-d").to_owned()),
                 Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("only-delimited") =>
-                    Err("suppressing non-delimited lines makes sense only when operating on fields".to_owned()),
+                    Err(msg_opt_only_usable_if!("printing a sequence of fields", "--only-delimited", "-s").to_owned()),
                 _ => Ok(mode),
             }
         }
@@ -590,9 +572,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     match mode_parse {
         Ok(mode) => cut_files(matches.free, mode),
         Err(err_msg) => {
-            show_error!("{}\n\
-                         Try '{} --help' for more information",
-                        err_msg, args[0]);
+            show_error!("{}", err_msg);
             1
         }
     }
