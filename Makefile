@@ -1,6 +1,7 @@
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
+INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
@@ -242,7 +243,7 @@ endif
 
 all: build
 
-do_install = install ${1}
+do_install = $(INSTALL) ${1}
 use_default := 1
 
 $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
@@ -290,14 +291,14 @@ distclean: clean
 install: build
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
-	install $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
+	$(INSTALL) $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
 	$(foreach prog, $(INSTALLEES), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
 else
 	$(foreach prog, $(INSTALLEES), \
-		install $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
+		$(INSTALL) $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
 	mkdir -p $(INSTALLDIR_LIB)
-	$(foreach lib, $(LIBS), install $(BUILDDIR)/$$lib $(INSTALLDIR_LIB)/$(lib);)
+	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/$$lib $(INSTALLDIR_LIB)/$(lib);)
 
 uninstall:
 ifeq (${MULTICALL}, y)
