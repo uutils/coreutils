@@ -5,44 +5,26 @@ fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
 
-fn expect_successful_stdout(input: Vec<&str>, expected: &str) {
-    let results = new_ucmd()
-        .args(&input).run();
-    assert_empty_stderr!(results);
-    assert!(results.success);
-    assert_eq!(expected, results.stdout.trim_right());
-}
-
 #[test]
 fn test_directory() {
-    let dir = "/root/alpha/beta/gamma/delta/epsilon/omega/";
-    expect_successful_stdout(vec![dir], "omega");
+    new_ucmd().args(&["/root/alpha/beta/gamma/delta/epsilon/omega/"])
+        .succeeds().stdout_only("omega");
 }
 
 #[test]
 fn test_file() {
-    let file = "/etc/passwd";
-    expect_successful_stdout(vec![file], "passwd");
+    new_ucmd().args(&["/etc/passwd"]).succeeds().stdout_only("passwd");
 }
 
 #[test]
 fn test_remove_suffix() {
-    let path = "/usr/local/bin/reallylongexecutable.exe";
-    expect_successful_stdout(vec![path, ".exe"], "reallylongexecutable");
+    new_ucmd().args(&["/usr/local/bin/reallylongexecutable.exe", ".exe"])
+        .succeeds().stdout_only("reallylongexecutable");
 }
 
 #[test]
 fn test_dont_remove_suffix() {
-    let path = "/foo/bar/baz";
-    expect_successful_stdout(vec![path, "baz"], "baz");
-}
-
-fn expect_error(input: Vec<&str>, expected_stdout: &str) {
-    let results = new_ucmd()
-        .args(&input).run();
-    assert!(!results.success);
-    assert!(results.stderr.len() > 0);
-    assert_eq!(expected_stdout, results.stdout.trim_right());
+    new_ucmd().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only( "baz");
 }
 
 #[cfg_attr(not(feature="test_unimplemented"),ignore)]
@@ -50,7 +32,8 @@ fn expect_error(input: Vec<&str>, expected_stdout: &str) {
 fn test_multiple_param() {
     for multiple_param in vec!["-a", "--multiple"] {
         let path = "/foo/bar/baz";
-        expect_successful_stdout(vec![multiple_param, path, path], "baz\nbaz");
+        new_ucmd().args(&[multiple_param, path, path])
+            .succeeds().stdout_only("baz\nbaz");
     }
 }
 
@@ -59,11 +42,9 @@ fn test_multiple_param() {
 fn test_suffix_param() {
     for suffix_param in vec!["-s", "--suffix"] {
         let path = "/foo/bar/baz.exe";
-        let suffix = ".exe";
-        expect_successful_stdout(
-            vec![suffix_param, suffix, path, path],
-            "baz\nbaz"
-        );
+        new_ucmd()
+            .args(&[suffix_param, ".exe", path, path])
+            .succeeds().stdout_only("baz\nbaz");
     }
 }
 
@@ -72,22 +53,29 @@ fn test_suffix_param() {
 fn test_zero_param() {
     for zero_param in vec!["-z", "--zero"] {
         let path = "/foo/bar/baz";
-        expect_successful_stdout(vec![zero_param, "-a", path, path], "baz\0baz\0");
+        new_ucmd().args(&[zero_param, "-a", path, path])
+            .succeeds().stdout_only("baz\0baz\0");
     }
+}
+
+
+fn expect_error(input: Vec<&str>) {
+    assert!(new_ucmd().args(&input)
+                .fails().no_stdout().stderr.len() > 0);
 }
 
 #[test]
 fn test_invalid_option() {
     let path = "/foo/bar/baz";
-    expect_error(vec!["-q", path], "");
+    expect_error(vec!["-q", path]);
 }
 
 #[test]
 fn test_no_args() {
-    expect_error(vec![], "");
+    expect_error(vec![]);
 }
 
 #[test]
 fn test_too_many_args() {
-    expect_error(vec!["a", "b", "c"], "");
+    expect_error(vec!["a", "b", "c"]);
 }
