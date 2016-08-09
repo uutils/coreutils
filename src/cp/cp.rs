@@ -179,7 +179,14 @@ fn copy(matches: getopts::Matches) {
         panic!();
     }
     if !dest.exists() && (sources.len() != 1 && Path::new(&sources[0]).is_dir()) {
-        fs::create_dir(dest.clone());
+        let io_result = fs::create_dir(dest.clone()).err();
+        match io_result {
+            None => {},
+            Some(t) => {
+                show_error!("{}", t);
+                panic!()
+            }
+        }
     }
     let folder_copy = !dest.exists();
     'outer: for src in &sources {
@@ -191,7 +198,6 @@ fn copy(matches: getopts::Matches) {
                 panic!()
             }
             let full_dest = if Path::new(src).is_dir() && !folder_copy {
-                println!("안녕");
                 dest.join(item.strip_prefix(Path::new(src).parent().unwrap()).unwrap()) //Christmas day!
             /*
                 If the source of the files (as given by the user args) is a directory
@@ -199,7 +205,6 @@ fn copy(matches: getopts::Matches) {
                 the
             */
             } else if Path::new(src).is_dir() && folder_copy {
-                println!("Hello!");
                 dest.join(item.canonicalize().unwrap().strip_prefix(&Path::new(src).canonicalize().unwrap()).unwrap())
             } else if !dest.is_dir() { //source is not a directory, for the rest
                 dest.to_path_buf() //figure out how to copy a directory; not copy a directory into another
@@ -264,7 +269,14 @@ fn copy(matches: getopts::Matches) {
                             }
                         },
                         OverwriteMode::Force => {
-                            fs::remove_file(full_dest.clone());
+                            let io_result = fs::remove_file(full_dest.clone()).err();
+                            match io_result {
+                                None => {},
+                                Some(t) => {
+                                    show_error!("{}", t);
+                                    panic!()
+                                }
+                            }
                         },
 
                     }
