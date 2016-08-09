@@ -30,12 +30,14 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 struct Options {
     out_delim: Option<String>,
+    zero_terminated: bool,
 }
 
 struct FieldOptions {
     delimiter: String,  // one char long, String because of UTF8 representation
     out_delimeter: Option<String>,
     only_delimited: bool,
+    zero_terminated: bool,
 }
 
 enum Mode {
@@ -56,7 +58,9 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
     use buffer::Bytes::Select;
     use buffer::Bytes::Selected::*;
 
-    let mut buf_read = buffer::ByteReader::new(reader);
+    let newline_char = 
+        if opts.zero_terminated { b'\0' } else { b'\n' };
+    let mut buf_read = buffer::ByteReader::new(reader, newline_char);
     let mut out = stdout();
 
     'newline: loop {
@@ -69,7 +73,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
             loop {
                 match buf_read.select(low - cur_pos, None::<&mut Stdout>) {
                     NewlineFound => {
-                        pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+                        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
                         continue 'newline
                     }
                     Complete(len) => {
@@ -79,7 +83,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
                     Partial(len) => cur_pos += len,
                     EndOfFile => {
                         if orig_pos != cur_pos {
-                            pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+                            pipe_crash_if_err!(1, out.write_all(&[newline_char]));
                         }
 
                         break 'newline
@@ -108,7 +112,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
                     }
                     EndOfFile => {
                         if cur_pos != low || low == high {
-                            pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+                            pipe_crash_if_err!(1, out.write_all(&[newline_char]));
                         }
 
                         break 'newline
@@ -118,7 +122,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         }
 
         buf_read.consume_line();
-        pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
     }
 
     0
@@ -194,14 +198,14 @@ fn cut_characters<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
     0
 }
 
-fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_delimited: bool, out_delim: &str) -> i32 {
+fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_delimited: bool, newline_char: u8, out_delim: &str) -> i32 {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout();
     let mut buffer = Vec::new();
 
     'newline: loop {
         buffer.clear();
-        match buf_in.read_until(b'\n', &mut buffer) {
+        match buf_in.read_until(newline_char, &mut buffer) {
             Ok(n) if n == 0 => break,
             Err(e) => {
                 if buffer.is_empty() {
@@ -220,8 +224,8 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
         if delim_search.peek().is_none() {
             if ! only_delimited {
                 pipe_crash_if_err!(1, out.write_all(line));
-                if line[line.len() - 1] != b'\n' {
-                    pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+                if line[line.len() - 1] != newline_char {
+                    pipe_crash_if_err!(1, out.write_all(&[newline_char]));
                 }
             }
 
@@ -257,7 +261,7 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
 
                         pipe_crash_if_err!(1, out.write_all(segment));
 
-                        if line[line.len() - 1] == b'\n' {
+                        if line[line.len() - 1] == newline_char {
                             continue 'newline
                         }
                         break
@@ -266,17 +270,19 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
             }
         }
 
-        pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
     }
 
     0
 }
 
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
+    let newline_char = 
+        if opts.zero_terminated { b'\0' } else { b'\n' };
     match opts.out_delimeter {
         Some(ref o_delim) => {
             return cut_fields_delimiter(reader, ranges, &opts.delimiter,
-                                        opts.only_delimited, o_delim);
+                                        opts.only_delimited, newline_char, o_delim);
         }
         None => ()
     }
@@ -287,7 +293,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
 
     'newline: loop {
         buffer.clear();
-        match buf_in.read_until(b'\n', &mut buffer) {
+        match buf_in.read_until(newline_char, &mut buffer) {
             Ok(n) if n == 0 => break,
             Err(e) => {
                 if buffer.is_empty() {
@@ -306,8 +312,8 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
         if delim_search.peek().is_none() {
             if ! opts.only_delimited {
                 pipe_crash_if_err!(1, out.write_all(line));
-                if line[line.len() - 1] != b'\n' {
-                    pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+                if line[line.len() - 1] != newline_char {
+                    pipe_crash_if_err!(1, out.write_all(&[newline_char]));
                 }
             }
 
@@ -343,7 +349,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
 
                     pipe_crash_if_err!(1, out.write_all(segment));
 
-                    if line[line.len() - 1] == b'\n' {
+                    if line[line.len() - 1] == newline_char {
                         continue 'newline
                     }
                     break
@@ -351,7 +357,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
             }
         }
 
-        pipe_crash_if_err!(1, out.write_all(&[b'\n']));
+        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
     }
 
     0
@@ -411,6 +417,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("n", "", "legacy option - has no effect.");
     opts.optflag("", "complement", "invert the filter - instead of displaying only the filtered columns, display all but those columns");
     opts.optflag("s", "only-delimited", "in field mode, only print lines which contain the delimiter");
+    opts.optflag("z", "zero-terminated", "instead of filtering columns based on line, filter columns based on \\0 (NULL character)");
     opts.optopt("", "output-delimiter", "in field mode, replace the delimiter in output lines with this option's argument", "new delimiter");
     let usage = opts.usage("Prints specified byte or field columns from each line of stdin or the input files");
     opts.help(format!("
@@ -489,6 +496,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
         it will replace the delimiter character in each line printed. This is
         useful for transforming tabular data - e.g. to convert a CSV to a 
         TSV (tab-separated file)
+        
+ Line endings
+    
+    When the --zero-terminated (-z) option is used, cut sees \\0 (null) as the
+    'line ending' character (both for the purposes of reading lines and 
+    separating printed lines) instead of \\n (newline). This is useful for
+    tabular data where some of the cells may contain newlines
+    
+    echo 'ab\\0cd' | cut -z -c 1
+    will result in 'a\\0c\\0'
+    
 ", NAME, VERSION, usage));
     let matches = opts.parse(args);
 
@@ -499,11 +517,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
                             matches.opt_str("fields")) {
         (Some(byte_ranges), None, None) => {
             list_to_ranges(&byte_ranges[..], complement)
-                .map(|ranges| Mode::Bytes(ranges, Options { out_delim: matches.opt_str("output-delimiter") }))
+                .map(|ranges| Mode::Bytes(ranges, Options { out_delim: matches.opt_str("output-delimiter"), zero_terminated : matches.opt_present("zero-terminated") }))
         }
         (None, Some(char_ranges), None) => {
             list_to_ranges(&char_ranges[..], complement)
-                .map(|ranges| Mode::Characters(ranges, Options { out_delim: matches.opt_str("output-delimiter") }))
+                .map(|ranges| Mode::Characters(ranges, Options { out_delim: matches.opt_str("output-delimiter"), zero_terminated : matches.opt_present("zero-terminated") }))
         }
         (None, None, Some(field_ranges)) => {
             list_to_ranges(&field_ranges[..], complement).and_then(|ranges|
@@ -520,6 +538,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     };
 
                     let only_delimited = matches.opt_present("only-delimited");
+                    let zero_terminated = matches.opt_present("zero-terminated");
 
                     match matches.opt_str("delimiter") {
                         Some(delim) => {
@@ -536,7 +555,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                           FieldOptions {
                                               delimiter: delim,
                                               out_delimeter: out_delim,
-                                              only_delimited: only_delimited
+                                              only_delimited: only_delimited,
+                                              zero_terminated: zero_terminated
                                           }))
                             }
                         }
@@ -544,7 +564,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                           FieldOptions {
                                               delimiter: "\t".to_owned(),
                                               out_delimeter: out_delim,
-                                              only_delimited: only_delimited
+                                              only_delimited: only_delimited,
+                                              zero_terminated: zero_terminated
                                           }))
                     }
                 }
