@@ -58,8 +58,8 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
     use buffer::Bytes::Select;
     use buffer::Bytes::Selected::*;
 
-    let newline_char = 
-        if opts.zero_terminated { b'\0' } else { b'\n' };
+    let newline_char =
+    if opts.zero_terminated { b'\0' } else { b'\n' };
     let mut buf_read = buffer::ByteReader::new(reader, newline_char);
     let mut out = stdout();
 
@@ -277,8 +277,8 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
 }
 
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
-    let newline_char = 
-        if opts.zero_terminated { b'\0' } else { b'\n' };
+    let newline_char =
+    if opts.zero_terminated { b'\0' } else { b'\n' };
     match opts.out_delimeter {
         Some(ref o_delim) => {
             return cut_fields_delimiter(reader, ranges, &opts.delimiter,
@@ -517,11 +517,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
                             matches.opt_str("fields")) {
         (Some(byte_ranges), None, None) => {
             list_to_ranges(&byte_ranges[..], complement)
-                .map(|ranges| Mode::Bytes(ranges, Options { out_delim: matches.opt_str("output-delimiter"), zero_terminated : matches.opt_present("zero-terminated") }))
+                .map(|ranges| Mode::Bytes(ranges, Options { out_delim: matches.opt_str("output-delimiter"), zero_terminated: matches.opt_present("zero-terminated") }))
         }
         (None, Some(char_ranges), None) => {
             list_to_ranges(&char_ranges[..], complement)
-                .map(|ranges| Mode::Characters(ranges, Options { out_delim: matches.opt_str("output-delimiter"), zero_terminated : matches.opt_present("zero-terminated") }))
+                .map(|ranges| Mode::Characters(ranges, Options { out_delim: matches.opt_str("output-delimiter"), zero_terminated: matches.opt_present("zero-terminated") }))
         }
         (None, None, Some(field_ranges)) => {
             list_to_ranges(&field_ranges[..], complement).and_then(|ranges|

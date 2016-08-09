@@ -6,6 +6,7 @@ use std::fs::File;
 use std::fs::remove_file;
 
 static UTIL_NAME: &'static str = "od";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }

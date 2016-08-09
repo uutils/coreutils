@@ -9,11 +9,13 @@
 
 use common::util::*;
 
-#[path="../src/factor/sieve.rs"]
+#[path = "../src/factor/sieve.rs"]
 mod sieve;
+
 use self::sieve::Sieve;
 
 extern crate rand;
+
 use self::rand::{weak_rng, Rng};
 use self::rand::distributions::{IndependentSample, Range};
 
@@ -23,6 +25,7 @@ const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))
 const NUM_TESTS: usize = 100;
 
 static UTIL_NAME: &'static str = "factor";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }

@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "mkdir";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
@@ -30,7 +31,7 @@ fn test_mkdir_dup_dir() {
 #[test]
 fn test_mkdir_mode() {
     let exit_success = new_ucmd()
-                           .arg("-m")
+        .arg("-m")
                            .arg("755")
                            .arg(TEST_DIR3)
                            .run()

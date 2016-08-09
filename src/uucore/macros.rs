@@ -294,7 +294,7 @@ macro_rules! msg_invalid_opt_use {
         msg_invalid_input!(format!("The '{}' ('{}') option {}", $longflag, $shortflag, $about))
     };
 }
-    
+
 #[macro_export]
 macro_rules! msg_opt_only_usable_if {
     ($clause:expr, $flag:expr) => (
@@ -327,12 +327,12 @@ macro_rules! msg_args_invalid_value { ($expects:expr, $received:expr) => (
 
 #[macro_export]
 macro_rules! msg_args_nonexistent_file { ($received:expr) => (
-    msg_args_invalid_value!("paths to files", snippet_no_file_at_path!($received)));} 
+    msg_args_invalid_value!("paths to files", snippet_no_file_at_path!($received)));}
 
 #[macro_export]
 macro_rules! msg_wrong_number_of_arguments { ($received:expr) => (
     msg_args_invalid_value!("wrong number of arguments") ); }
-    
+
 // -- message templates : invalid input : input combinations 
 
 #[macro_export]

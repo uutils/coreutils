@@ -7,6 +7,7 @@
 //
 
 extern crate data_encoding;
+
 use self::data_encoding::{base64, base32, decode};
 use std::io::Read;
 
@@ -17,6 +18,7 @@ pub enum Format {
     Base32,
     Base64,
 }
+
 use self::Format::*;
 
 pub fn encode(f: Format, input: &[u8]) -> String {
@@ -70,12 +72,12 @@ impl<R: Read> Data<R> {
         self.input.read_to_string(&mut buf).unwrap();
         let clean = if self.ignore_garbage {
             buf.chars()
-               .filter(|&c| self.alphabet.contains(c))
-               .collect::<String>()
+                .filter(|&c| self.alphabet.contains(c))
+                .collect::<String>()
         } else {
             buf.chars()
-               .filter(|&c| c != '\r' && c != '\n')
-               .collect::<String>()
+                .filter(|&c| c != '\r' && c != '\n')
+                .collect::<String>()
         };
         decode(self.format, clean.as_bytes())
     }

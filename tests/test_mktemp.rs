@@ -1,5 +1,7 @@
 use common::util::*;
+
 extern crate tempdir;
+
 use self::tempdir::TempDir;
 
 static UTIL_NAME: &'static str = "mktemp";
@@ -136,7 +138,7 @@ fn test_mktemp_suffix() {
 fn test_mktemp_tmpdir() {
     let scene = TestScenario::new(UTIL_NAME);
 
-   let path = TempDir::new_in(scene.fixtures.as_string(), UTIL_NAME).unwrap();
+    let path = TempDir::new_in(scene.fixtures.as_string(), UTIL_NAME).unwrap();
    let pathname = path.path().as_os_str();
 
     let exit_success1 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE1).run().success;

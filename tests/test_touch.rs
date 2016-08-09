@@ -5,6 +5,7 @@ use common::util::*;
 use self::filetime::FileTime;
 
 static UTIL_NAME: &'static str = "touch";
+
 fn at_and_ucmd() -> (AtPath, UCommand) {
     let ts = TestScenario::new(UTIL_NAME);
     let ucmd = ts.ucmd();
