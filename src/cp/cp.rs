@@ -181,6 +181,7 @@ fn copy(matches: getopts::Matches) {
     if !dest.exists() && (sources.len() != 1 && Path::new(&sources[0]).is_dir()) {
         fs::create_dir(dest.clone());
     }
+    let folder_copy = !dest.exists();
     'outer: for src in &sources {
         for item in WalkDir::new(src){
             let item1 = item.unwrap();
@@ -189,16 +190,15 @@ fn copy(matches: getopts::Matches) {
                 show_error!("{} is invalid or inaccessible", item.display());
                 panic!()
             }
-            let full_dest = if Path::new(src).is_dir() && dest.exists() {
+            let full_dest = if Path::new(src).is_dir() && !folder_copy {
                 println!("안녕");
                 dest.join(item.strip_prefix(Path::new(src).parent().unwrap()).unwrap()) //Christmas day!
             /*
                 If the source of the files (as given by the user args) is a directory
                 the ending destination of a particular file is:
                 the
-
             */
-            } else if Path::new(src).is_dir() && !dest.exists() {
+            } else if Path::new(src).is_dir() && folder_copy {
                 println!("Hello!");
                 dest.join(item.canonicalize().unwrap().strip_prefix(&Path::new(src).canonicalize().unwrap()).unwrap())
             } else if !dest.is_dir() { //source is not a directory, for the rest
