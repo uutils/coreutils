@@ -72,11 +72,11 @@ fn test_cp_with_dirs() {
 
 #[test]
 fn test_cp_no_clobber() {
-    let ts = TestSet::new(UTIL_NAME);
-    let at = &ts.fixtures;
+    let scene = TestScenario::new(UTIL_NAME);
+    let at = &scene.fixtures;
 
     //using -n option
-    let result = ts.util_cmd()
+    let result = scene.ucmd()
         .arg("-n")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_NOT_HELLO_WORLD)
@@ -86,7 +86,7 @@ fn test_cp_no_clobber() {
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), HELLO_WORLD_TEXT);
 
     //this time, copying to a directory
-    let result_dir = ts.util_cmd()
+    let result_dir = scene.ucmd()
         .arg("-n")
         .arg(TEST_NOT_HELLO_WORLD)
         .arg(TEST_COPY_FROM_FOLDER_FILE)
@@ -95,7 +95,7 @@ fn test_cp_no_clobber() {
     assert_eq!(at.read(TEST_COPY_FROM_FOLDER_FILE), HELLO_WORLD_TEXT);
     assert_eq!(at.read(TEST_NOT_HELLO_WORLD), NOT_HELLO_WORLD_TEXT);
 
-    let result_implicit_dir = ts.util_cmd()
+    let result_implicit_dir = scene.ucmd()
         .arg("-n")
         .arg(TEST_NOT_HELLO_WORLD)
         .arg(HELLO_FOLDER_WITH_FILES)
@@ -103,5 +103,4 @@ fn test_cp_no_clobber() {
     assert!(result_implicit_dir.success);
     assert_eq!(at.read(HELLO_WORLD_IN_DIRECTORY), HELLO_WORLD_TEXT);
     assert_eq!(at.read(TEST_NOT_HELLO_WORLD), NOT_HELLO_WORLD_TEXT);
-    assert_eq!(at.read(TEST_HELLO_WORLD_DEST), HELLO_WORLD_TEXT);
 }
