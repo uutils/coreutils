@@ -66,16 +66,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflagmulti("c", "", "ASCII characters or backslash escapes");
     opts.optflagmulti("d", "", "unsigned decimal 2-byte units");
     opts.optflagmulti("D", "", "unsigned decimal 4-byte units");
-    opts.optflagmulti("o", "", "unsigned decimal 2-byte units");
+    opts.optflagmulti("o", "", "octal 2-byte units");
 
-    opts.optflagmulti("I", "", "decimal 2-byte units");
-    opts.optflagmulti("L", "", "decimal 2-byte units");
-    opts.optflagmulti("i", "", "decimal 2-byte units");
+    opts.optflagmulti("I", "", "decimal 8-byte units");
+    opts.optflagmulti("L", "", "decimal 8-byte units");
+    opts.optflagmulti("i", "", "decimal 4-byte units");
+    opts.optflagmulti("l", "", "decimal 8-byte units");
     opts.optflagmulti("x", "", "hexadecimal 2-byte units");
     opts.optflagmulti("h", "", "hexadecimal 2-byte units");
 
     opts.optflagmulti("O", "", "octal 4-byte units");
-    opts.optflagmulti("s", "", "decimal 4-byte units");
+    opts.optflagmulti("s", "", "decimal 2-byte units");
     opts.optflagmulti("X", "", "hexadecimal 4-byte units");
     opts.optflagmulti("H", "", "hexadecimal 4-byte units");
 

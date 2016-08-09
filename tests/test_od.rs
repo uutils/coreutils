@@ -158,7 +158,7 @@ fn test_dec() {
             0000000      0      1      2      3  32767 -32768 -32767
             0000016
             ");
-    let result = new_ucmd!().arg("--endian=little").arg("-i").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--endian=little").arg("-s").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
