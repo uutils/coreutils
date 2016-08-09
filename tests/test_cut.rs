@@ -78,7 +78,6 @@ fn test_complement() {
         .succeeds().stdout_only("9\n8\n7\n");
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
 #[test]
 fn test_zero_terminated() {
     new_ucmd().args(&["-d_","-z", "-f", "1"])
@@ -95,7 +94,6 @@ fn test_only_delimited() {
     }
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
 #[test]
 fn test_zero_terminated_only_delimited() {
     new_ucmd().args(&["-d_","-z", "-s", "-f", "1"])
