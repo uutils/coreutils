@@ -32,12 +32,12 @@ PROG_PREFIX ?=
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
 BASEDIR       ?= $(shell pwd)
-BUILDDIR      := $(BASEDIR)/target/${PROFILE}/
-PKG_BUILDDIR  := $(BUILDDIR)/deps/
+BUILDDIR      := $(BASEDIR)/target/${PROFILE}
+PKG_BUILDDIR  := $(BUILDDIR)/deps
 
-BUSYBOX_ROOT := $(BASEDIR)/tmp/
-BUSYBOX_VER := 1.24.1
-BUSYBOX_SRC:=$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)/
+BUSYBOX_ROOT := $(BASEDIR)/tmp
+BUSYBOX_VER  := 1.24.1
+BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 # Possible programs
 PROGS       := \
@@ -298,7 +298,7 @@ else
 		$(INSTALL) $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
 	mkdir -p $(INSTALLDIR_LIB)
-	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/$$lib $(INSTALLDIR_LIB)/$(lib);)
+	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/$(lib) $(INSTALLDIR_LIB)/$(lib);)
 
 uninstall:
 ifeq (${MULTICALL}, y)
