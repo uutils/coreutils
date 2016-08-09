@@ -72,7 +72,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stdout will be
     /// or 2. you know that stdout will also be empty
     pub fn no_stderr(&self) -> Box<&CmdResult> {
-        assert_eq!(0, self.stderr.len());
+        assert_eq!("", self.stderr);
         Box::new(self)
     }
 
@@ -83,7 +83,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stderr will be
     /// or 2. you know that stderr will also be empty
     pub fn no_stdout(&self) -> Box<&CmdResult> {
-        assert_eq!(0, self.stdout.len());
+        assert_eq!("", self.stdout);
         Box::new(self)
     }
 
@@ -120,7 +120,7 @@ impl CmdResult {
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stderr stream output
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
-        self.stdout_is(msg).no_stderr()
+        self.no_stderr().stdout_is(msg)
     }
 
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
@@ -134,7 +134,7 @@ impl CmdResult {
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stdout stream output
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
-        self.stderr_is(msg).no_stdout()
+        self.no_stdout().stderr_is(msg)
     }
 
     /// like stderr_only(...), but expects the contents of the file at the provided relative path
@@ -145,7 +145,7 @@ impl CmdResult {
 
     pub fn fails_silently(&self) -> Box<&CmdResult> {
         assert!(!self.success);
-        assert_eq!(0, self.stderr.len());
+        assert_eq!("", self.stderr);
         Box::new(self)
     }
 }
