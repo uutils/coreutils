@@ -4,6 +4,9 @@ use self::uu_dircolors::{StrUtils, guess_syntax, OutputFmt};
 use common::util::*;
 
 static UTIL_NAME: &'static str = "dircolors";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[test]
 fn test_shell_syntax() {
@@ -57,55 +60,46 @@ fn test_keywords() {
 
 #[test]
 fn test_internal_db() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-p");
-    let out = ucmd.run().stdout;
-    let filename = "internal.expected";
-    assert_eq!(out, at.read(filename));
+    new_ucmd()
+        .arg("-p")
+        .run()
+        .stdout_is_fixture("internal.expected");
 }
 
 #[test]
 fn test_bash_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-b");
-    let out = ucmd.env("TERM", "screen").run().stdout;
-    let filename = "bash_def.expected";
-    assert_eq!(out, at.read(filename));
+    new_ucmd().env("TERM", "screen").arg("-b").run().stdout_is_fixture("bash_def.expected");
 }
 
 #[test]
 fn test_csh_default() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-c");
-    let out = ucmd.env("TERM", "screen").run().stdout;
-    let filename = "csh_def.expected";
-    assert_eq!(out, at.read(filename));
+    new_ucmd().env("TERM", "screen").arg("-c").run().stdout_is_fixture("csh_def.expected");
 }
 
 #[test]
 fn test_no_env() {
     // no SHELL and TERM
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.fails();
+    new_ucmd()
+        .fails();
 }
 
 #[test]
 fn test_exclusive_option() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-cp");
-    ucmd.fails();
+    new_ucmd()
+        .arg("-cp")
+        .fails();
 }
 
 fn test_helper(file_name: &str, term: &str) {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-c").env("TERM", term);
-    let out = ucmd.arg(format!("{}.txt", file_name)).run().stdout;
-    let filename = format!("{}.csh.expected", file_name);
-    assert_eq!(out, at.read(&filename));
+    new_ucmd()
+        .env("TERM", term)
+        .arg("-c")
+        .arg(format!("{}.txt", file_name))
+        .run().stdout_is_fixture(format!("{}.csh.expected", file_name));
 
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-b").env("TERM", term);
-    let out = ucmd.arg(format!("{}.txt", file_name)).run().stdout;
-    let filename = format!("{}.sh.expected", file_name);
-    assert_eq!(out, at.read(&filename));
+    new_ucmd()
+        .env("TERM", term)
+        .arg("-b")
+        .arg(format!("{}.txt", file_name))
+        .run().stdout_is_fixture(format!("{}.sh.expected", file_name));
 }

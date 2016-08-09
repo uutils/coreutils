@@ -24,6 +24,7 @@ unix = [
   "nice",
   "nohup",
   "pathchk",
+  "pinky",
   "stat",
   "stdbuf",
   "timeout",
@@ -35,6 +36,7 @@ unix = [
   "users",
 ]
 generic = [
+  "base32",
   "base64",
   "basename",
   "cat",
@@ -94,12 +96,14 @@ generic = [
   "whoami",
   "yes",
 ]
-default = ["generic", "unix"]
 test_unimplemented = []
+nightly = []
+default = ["generic", "unix"]
 
 [dependencies]
 uucore   = { path="src/uucore" }
 arch     = { optional=true, path="src/arch" }
+base32   = { optional=true, path="src/base32" }
 base64   = { optional=true, path="src/base64" }
 basename = { optional=true, path="src/basename" }
 cat      = { optional=true, path="src/cat" }
@@ -145,6 +149,7 @@ nproc    = { optional=true, path="src/nproc" }
 od       = { optional=true, path="src/od" }
 paste    = { optional=true, path="src/paste" }
 pathchk  = { optional=true, path="src/pathchk" }
+pinky    = { optional=true, path="src/pinky" }
 printenv = { optional=true, path="src/printenv" }
 printf   = { optional=true, path="src/printf" }
 ptx      = { optional=true, path="src/ptx" }
@@ -187,14 +192,8 @@ yes      = { optional=true, path="src/yes" }
 
 [dev-dependencies]
 time = "*"
-kernel32-sys = "*"
-winapi = "*"
 filetime = "*"
 libc = "*"
-memchr = "*"
-primal = "*"
-aho-corasick= "*"
-regex-syntax= "*"
 regex="*"
 rand="*"
 tempdir="*"

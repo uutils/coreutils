@@ -1,6 +1,7 @@
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
+INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
@@ -9,6 +10,8 @@ PROFILE_CMD :=
 ifeq ($(PROFILE),release)
 	PROFILE_CMD = --release
 endif
+
+RM := rm -rf
 
 # Binaries
 CARGO  ?= cargo
@@ -29,15 +32,16 @@ PROG_PREFIX ?=
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
 BASEDIR       ?= $(shell pwd)
-BUILDDIR      := $(BASEDIR)/target/${PROFILE}/
-PKG_BUILDDIR  := $(BUILDDIR)/deps/
+BUILDDIR      := $(BASEDIR)/target/${PROFILE}
+PKG_BUILDDIR  := $(BUILDDIR)/deps
 
-BUSYBOX_ROOT := $(BASEDIR)/tmp/
-BUSYBOX_VER := 1.24.1
-BUSYBOX_SRC:=$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)/
+BUSYBOX_ROOT := $(BASEDIR)/tmp
+BUSYBOX_VER  := 1.24.1
+BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 # Possible programs
 PROGS       := \
+  base32 \
   base64 \
   basename \
   cat \
@@ -116,6 +120,7 @@ UNIX_PROGS := \
   nice \
   nohup \
   pathchk \
+  pinky \
   stat \
   stdbuf \
   timeout \
@@ -134,6 +139,7 @@ UTILS ?= $(PROGS)
 
 # Programs with usable tests
 TEST_PROGS  := \
+	base32 \
 	base64 \
 	basename \
 	cat \
@@ -164,6 +170,7 @@ TEST_PROGS  := \
 	od \
 	paste \
 	pathchk \
+	pinky \
 	printf \
 	ptx \
 	pwd \
@@ -205,11 +212,6 @@ build_exe_$(1):
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} -p $(1)
 endef
 
-define TEST_INTEGRATION
-test_integration_$(1): build_exe_$(1)
-	${CARGO} test ${CARGOFLAGS} --features "$(1) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
-endef
-
 define TEST_BUSYBOX
 test_busybox_$(1):
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
@@ -241,7 +243,7 @@ endif
 
 all: build
 
-do_install = install ${1}
+do_install = $(INSTALL) ${1}
 use_default := 1
 
 $(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
@@ -253,10 +255,10 @@ build-uutils:
 
 build: build-uutils build-pkgs
 
-$(foreach test,$(TESTS),$(eval $(call TEST_INTEGRATION,$(test))))
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
-test: $(addprefix test_integration_,$(TESTS))
+test:
+	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
 
 busybox-src:
 	if [ ! -e $(BUSYBOX_SRC) ]; then \
@@ -281,7 +283,7 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	$(RM) -rf $(BUILDDIR)
+	$(RM) $(BUILDDIR)
 
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
@@ -289,14 +291,14 @@ distclean: clean
 install: build
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
-	install $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
+	$(INSTALL) $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
 	$(foreach prog, $(INSTALLEES), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
 else
 	$(foreach prog, $(INSTALLEES), \
-		install $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
+		$(INSTALL) $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
 	mkdir -p $(INSTALLDIR_LIB)
-	$(foreach lib, $(LIBS), install $(BUILDDIR)/$$lib $(INSTALLDIR_LIB)/$(lib);)
+	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/$(lib) $(INSTALLDIR_LIB)/$(lib);)
 
 uninstall:
 ifeq (${MULTICALL}, y)

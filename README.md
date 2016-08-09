@@ -148,27 +148,22 @@ To do
 -----
 
 - chcon
+- runcon
+- ~~md5sum~~, ~~sha1sum~~, ~~sha224sum~~, ~~sha256sum~~, ~~sha384sum~~, ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs))
 - chgrp
-- chown
-- copy
 - cp (not much done)
 - csplit
 - date
 - dd
 - df
 - expr (almost done, no regular expressions)
-- getlimits
 - join
 - ls
 - mv (almost done, one more option)
 - numfmt
 - od (in progress, needs lots of work)
-- pinky
 - pr
 - printf
-- remove
-- runcon
-- setuidgid
 - sort (a couple of options implemented)
 - split (a couple of missing options)
 - stty

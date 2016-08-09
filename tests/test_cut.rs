@@ -1,57 +1,102 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "cut";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 static INPUT: &'static str = "lists.txt";
 
+struct TestedSequence<'b> {
+   name : &'b str,
+   sequence: &'b str
+}
+
+static EXAMPLE_SEQUENCES: &'static [TestedSequence<'static>] = &[
+    TestedSequence{ name: "singular", sequence:"2" },
+    TestedSequence{ name: "prefix", sequence: "-2" },
+    TestedSequence{ name: "suffix", sequence: "2-" },
+    TestedSequence{ name: "range", sequence: "2-4" },
+    TestedSequence{ name: "aggregate", sequence: "9-,6-7,-2,4" },
+    TestedSequence{ name: "subsumed", sequence: "2-,3" }
+];
+
+static COMPLEX_SEQUENCE: &'static TestedSequence<'static> = &TestedSequence{ name: "", sequence: "9-,6-7,-2,4" };
 
 #[test]
-fn test_prefix() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-c", "-10", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lists_prefix.expected"));
+fn test_byte_sequence() {
+    for param in vec!["-b", "--bytes"] {
+        for example_seq in EXAMPLE_SEQUENCES {
+            new_ucmd().args(&[param, example_seq.sequence, INPUT])
+                .succeeds().stdout_only_fixture(format!("sequences/byte_{}.expected", example_seq.name));
+        }
+    }
+}
+
+#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[test]
+fn test_char_sequence() {
+    for param in vec!["-c", "--characters"] {
+        for example_seq in EXAMPLE_SEQUENCES {
+            //as of coreutils 8.25 a char range is effectively the same as a byte range; there is no distinct treatment of utf8 chars.
+            new_ucmd().args(&[param, example_seq.sequence, INPUT])
+                .succeeds().stdout_only_fixture(format!("sequences/byte_{}.expected", example_seq.name));
+        }
+    }
 }
 
 #[test]
-fn test_char_range() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-c", "4-10", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lists_char_range.expected"));
+fn test_field_sequence() {
+    for param in vec!["-f", "--fields"] {
+        for example_seq in EXAMPLE_SEQUENCES {
+            new_ucmd().args(&[param, example_seq.sequence, INPUT])
+                .succeeds().stdout_only_fixture(format!("sequences/field_{}.expected", example_seq.name));
+        }
+    }
 }
 
 #[test]
-fn test_column_to_end_of_line() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-d", ":", "-f", "5-", INPUT]).run();
-    assert_eq!(result.stdout,
-               at.read("lists_column_to_end_of_line.expected"));
+fn test_specify_delimiter() {
+    for param in vec!["-d", "--delimiter"] {
+        new_ucmd().args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
+            .succeeds().stdout_only_fixture("delimiter_specified.expected");
+    }
 }
 
 #[test]
-fn test_specific_field() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-d", " ", "-f", "3", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lists_specific_field.expected"));
+fn test_output_delimiter() {
+    // we use -d here to ensure output delimiter 
+    // is applied to the current, and not just the default, input delimiter
+    new_ucmd().args(&["-d:", "--output-delimiter=@", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
+        .succeeds().stdout_only_fixture("output_delimiter.expected");
 }
 
 #[test]
-fn test_multiple_fields() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-d", ":", "-f", "1,3", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lists_multiple_fields.expected"));
+fn test_complement() {
+    new_ucmd().args(&["-d_","--complement", "-f", "2"])
+        .pipe_in("9_1\n8_2\n7_3")
+        .succeeds().stdout_only("9\n8\n7\n");
 }
 
 #[test]
-fn test_tail() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-d", ":", "--complement", "-f", "1", INPUT]).run();
-    assert_eq!(result.stdout, at.read("lists_tail.expected"));
+fn test_zero_terminated() {
+    new_ucmd().args(&["-d_","-z", "-f", "1"])
+        .pipe_in("9_1\n8_2\n\07_3")
+        .succeeds().stdout_only("9\07\0");
 }
 
 #[test]
-fn test_change_delimiter() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    let result = ucmd.args(&["-d", ":", "--complement", "--output-delimiter=#", "-f", "1", INPUT])
-                     .run();
-    assert_eq!(result.stdout, at.read("lists_change_delimiter.expected"));
+fn test_only_delimited() {
+    for param in vec!["-s", "--only-delimited"] {
+        new_ucmd().args(&["-d_", param, "-f", "1"])
+            .pipe_in("91\n82\n7_3")
+            .succeeds().stdout_only("7\n");
+    }
+}
+
+#[test]
+fn test_zero_terminated_only_delimited() {
+    new_ucmd().args(&["-d_","-z", "-s", "-f", "1"])
+        .pipe_in("91\n\082\n7_3")
+        .succeeds().stdout_only("82\n7\0");
 }

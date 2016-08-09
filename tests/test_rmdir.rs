@@ -1,12 +1,15 @@
-extern crate libc;
-
 use common::util::*;
 
 static UTIL_NAME: &'static str = "rmdir";
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
 
 #[test]
 fn test_rmdir_empty_directory_no_parents() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_rmdir_empty_no_parents";
 
     at.mkdir(dir);
@@ -21,7 +24,7 @@ fn test_rmdir_empty_directory_no_parents() {
 
 #[test]
 fn test_rmdir_empty_directory_with_parents() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_rmdir_empty/with/parents";
 
     at.mkdir_all(dir);
@@ -36,7 +39,7 @@ fn test_rmdir_empty_directory_with_parents() {
 
 #[test]
 fn test_rmdir_nonempty_directory_no_parents() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_rmdir_nonempty_no_parents";
     let file = "test_rmdir_nonempty_no_parents/foo";
 
@@ -57,7 +60,7 @@ fn test_rmdir_nonempty_directory_no_parents() {
 
 #[test]
 fn test_rmdir_nonempty_directory_with_parents() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_rmdir_nonempty/with/parents";
     let file = "test_rmdir_nonempty/with/parents/foo";
 
@@ -80,7 +83,7 @@ fn test_rmdir_nonempty_directory_with_parents() {
 
 #[test]
 fn test_rmdir_ignore_nonempty_directory_no_parents() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_rmdir_ignore_nonempty_no_parents";
     let file = "test_rmdir_ignore_nonempty_no_parents/foo";
 
@@ -99,7 +102,7 @@ fn test_rmdir_ignore_nonempty_directory_no_parents() {
 
 #[test]
 fn test_rmdir_ignore_nonempty_directory_with_parents() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_rmdir_ignore_nonempty/with/parents";
     let file = "test_rmdir_ignore_nonempty/with/parents/foo";
 

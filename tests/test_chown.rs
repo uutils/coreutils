@@ -4,6 +4,9 @@ extern crate uu_chown;
 pub use self::uu_chown::*;
 
 static UTIL_NAME: &'static str = "chown";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[cfg(test)]
 mod test_passwd {
@@ -46,7 +49,7 @@ mod test_passwd {
 
 #[test]
 fn test_invalid_option() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-w").arg("-q").arg("/");
-    ucmd.fails();
+    new_ucmd()
+        .arg("-w").arg("-q").arg("/")
+        .fails();
 }

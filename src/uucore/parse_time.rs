@@ -7,7 +7,9 @@
  * file that was distributed with this source code.
  */
 
-pub fn from_str(string: &str) -> Result<f64, String> {
+use std::time::Duration;
+
+pub fn from_str(string: &str) -> Result<Duration, String> {
     let len = string.len();
     if len == 0 {
         return Err("empty string".to_owned())
@@ -28,8 +30,14 @@ pub fn from_str(string: &str) -> Result<f64, String> {
             }
         }
     };
-    match numstr.parse::<f64>() {
-        Ok(m) => Ok(m * times as f64),
-        Err(e) => Err(format!("invalid time interval '{}': {}", string, e))
-    }
+    let num = match numstr.parse::<f64>() {
+        Ok(m) => m,
+        Err(e) => return Err(format!("invalid time interval '{}': {}", string, e))
+    };
+
+    const NANOS_PER_SEC: u32 = 1_000_000_000;
+    let whole_secs = num.trunc();
+    let nanos = (num.fract() * (NANOS_PER_SEC as f64)).trunc();
+    let duration = Duration::new(whole_secs as u64, nanos as u32);
+    Ok(duration * times)
 }

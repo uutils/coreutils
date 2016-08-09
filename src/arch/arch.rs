@@ -9,14 +9,12 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
 use std::ffi::CStr;
-use std::io::Write;
 use std::mem::uninitialized;
 use uucore::c_types::utsname;
 
@@ -44,28 +42,15 @@ static NAME: &'static str = "arch";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
+    let mut opts = uucore::coreopts::CoreOptions::new();
+    let usage = opts.usage("Determine architecture name for current machine.");
+    opts.help(format!("
+{0} {1}
 
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+{0}
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry '{} --help' for more information.", f, NAME),
-    };
-
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS]...", NAME);
-        println!("");
-        print!("{}", opts.usage("Print machine architecture name."));
-        return 0;
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+{2}
+", NAME, VERSION, usage)).parse(args);
 
     let machine_arch = unsafe { get_machine_arch() };
     let mut output = String::new();

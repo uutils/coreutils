@@ -4,6 +4,9 @@ extern crate uu_stat;
 pub use self::uu_stat::*;
 
 static UTIL_NAME: &'static str = "stat";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[cfg(test)]
 mod test_fsext {
@@ -140,96 +143,99 @@ mod test_generate_tokens {
 
 #[test]
 fn test_invalid_option() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-w").arg("-q").arg("/");
-    ucmd.fails();
+    new_ucmd()
+        .arg("-w").arg("-q").arg("/").fails();
 }
 
+#[cfg(target_os = "linux")]
 const NORMAL_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %w %W %x %X %y %Y %z %Z";
+#[cfg(target_os = "linux")]
 const DEV_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
+#[cfg(target_os = "linux")]
 const FS_FMTSTR: &'static str = "%a %b %c %d %f %i %l %n %s %S %t %T";
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_terse_fs_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-f", "-t", "/proc"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_fs_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-f", "-c", FS_FMTSTR, "/dev/shm"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_terse_normal_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-t", "/"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_normal_format() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-c", NORMAL_FMTSTR, "/boot"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_follow_symlink() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-L", "-c", DEV_FMTSTR, "/dev/cdrom"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_symlink() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-c", DEV_FMTSTR, "/dev/cdrom"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_char() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-c", DEV_FMTSTR, "/dev/zero"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_multi_files() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["-c", NORMAL_FMTSTR, "/dev", "/usr/lib", "/etc/fstab", "/var"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, expected_result(&args));
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_printf() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     let args = ["--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n", "/"];
-    ucmd.args(&args);
-    assert_eq!(ucmd.run().stdout, "123?\r\"\\\x07\x08\x1B\x0C\x0B                   /\x12wZJ\n");
+    new_ucmd().args(&args)
+        .run()
+        .stdout_is(expected_result(&args));
 }
 
+#[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
     use std::process::Command;
 

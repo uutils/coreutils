@@ -2,6 +2,10 @@ use common::util::*;
 
 static UTIL_NAME: &'static str = "sort";
 
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
+
 #[test]
 fn test_numeric_floats_and_ints() {
     test_helper("numeric_floats_and_ints", "-n");
@@ -38,6 +42,11 @@ fn test_month_default() {
 }
 
 #[test]
+fn test_month_stable() {
+    test_helper("month_stable", "-Ms");
+}
+
+#[test]
 fn test_default_unsorted_ints() {
     test_helper("default_unsorted_ints", "");
 }
@@ -54,39 +63,27 @@ fn test_version() {
 
 #[test]
 fn test_multiple_files() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-n");
-    ucmd.arg("multiple_files1.txt");
-    ucmd.arg("multiple_files2.txt");
-    let res = ucmd.run();
-    assert_eq!(res.success, true);
-    assert_eq!(res.stdout, at.read("multiple_files.expected"));
+    new_ucmd()
+        .arg("-n")
+        .arg("multiple_files1.txt")
+        .arg("multiple_files2.txt")
+        .succeeds().stdout_is_fixture("multiple_files.expected");
 }
 
 #[test]
 fn test_check() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-c");
-    let res = ucmd.arg("check_fail.txt").run();
+    new_ucmd()
+        .arg("-c")
+        .arg("check_fail.txt")
+        .fails().stdout_is("sort: disorder in line 4\n");
 
-    assert_eq!(res.success, false);
-    assert_eq!(res.stdout, "sort: disorder in line 4\n");
-
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg("-c");
-    let res = ucmd.arg("multiple_files.expected").run();
-
-    assert_eq!(res.success, true);
-    assert_eq!(res.stdout, "");
+    new_ucmd()
+        .arg("-c")
+        .arg("multiple_files.expected")
+        .succeeds().stdout_is("");
 }
 
 fn test_helper(file_name: &str, args: &str) {
-    let (at, mut ucmd) = testing(UTIL_NAME);
-    ucmd.arg(args);
-    let res = ucmd.arg(format!("{}{}", file_name, ".txt")).run();
-
-    assert_eq!(res.success, true);
-
-    let filename = format!("{}{}", file_name, ".expected");
-    assert_eq!(res.stdout, at.read(&filename));
+    new_ucmd().arg(args).arg(format!("{}{}", file_name, ".txt"))
+        .succeeds().stdout_is_fixture(format!("{}{}", file_name, ".expected"));
 }

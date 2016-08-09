@@ -18,11 +18,8 @@ extern crate uucore;
 
 use std::io::{ErrorKind, Write};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 use uucore::process::ChildExt;
-
-extern {
-    pub fn setpgid(_: libc::pid_t, _: libc::pid_t) -> libc::c_int;
-}
 
 static NAME: &'static str = "timeout";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -69,7 +66,7 @@ Usage:
                     return ERR_EXIT_STATUS;
                 }
             },
-            None => 0f64
+            None => Duration::new(0, 0),
         };
         let signal = match matches.opt_str("signal") {
             Some(sigstr) => match uucore::signals::signal_by_name_or_value(&sigstr) {
@@ -94,9 +91,9 @@ Usage:
     0
 }
 
-fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_after: f64, foreground: bool, preserve_status: bool) -> i32 {
+fn timeout(cmdname: &str, args: &[String], duration: Duration, signal: usize, kill_after: Duration, foreground: bool, preserve_status: bool) -> i32 {
     if !foreground {
-        unsafe { setpgid(0, 0) };
+        unsafe { libc::setpgid(0, 0) };
     }
     let mut process = match Command::new(cmdname).args(args)
                                                  .stdin(Stdio::inherit())
@@ -128,7 +125,7 @@ fn timeout(cmdname: &str, args: &[String], duration: f64, signal: usize, kill_af
                     }
                 },
                 Ok(None) => {
-                    if kill_after == 0f64 {
+                    if kill_after == Duration::new(0, 0) {
                         // XXX: this may not be right
                         return 124;
                     }

@@ -33,12 +33,14 @@ pub mod Bytes {
 #[derive(Debug)]
 pub struct ByteReader<R> where R: Read {
     inner: BufReader<R>,
+    newline_char: u8,
 }
 
 impl<R: Read> ByteReader<R> {
-    pub fn new(read: R) -> ByteReader<R> {
+    pub fn new(read: R, newline_char: u8) -> ByteReader<R> {
         ByteReader {
             inner: BufReader::with_capacity(4096, read),
+            newline_char: newline_char
         }
     }
 }
@@ -63,6 +65,7 @@ impl<R: Read> ByteReader<R> {
     pub fn consume_line(&mut self) -> usize {
         let mut bytes_consumed = 0;
         let mut consume_val;
+        let newline_char = self.newline_char;
 
         loop {
             { // need filled_buf to go out of scope
@@ -77,7 +80,7 @@ impl<R: Read> ByteReader<R> {
                     Err(e) => crash!(1, "read error: {}", e),
                 };
 
-                if let Some(idx) = filled_buf.iter().position(|byte| *byte == b'\n') {
+                if let Some(idx) = filled_buf.iter().position(|byte| *byte == newline_char) {
                     consume_val = idx + 1;
                     bytes_consumed += consume_val;
                     break;
@@ -105,6 +108,7 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
 
         use self::Bytes::Selected::*;
 
+        let newline_char = self.newline_char;
         let (res, consume_val) = {
             let buffer = match self.fill_buf() {
                 Err(e) => crash!(1, "read error: {}", e),
@@ -118,13 +122,13 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
                     // segments check if the byte after bytes is a newline
                     let buf_slice = &buffer[0..bytes + 1];
 
-                    match buf_slice.iter().position(|byte| *byte == b'\n') {
+                    match buf_slice.iter().position(|byte| *byte == newline_char) {
                         Some(idx) => (SRes::Newl, idx+1),
                         None => (SRes::Comp, bytes),
                     }
                 },
                 _ => {
-                    match buffer.iter().position(|byte| *byte == b'\n') {
+                    match buffer.iter().position(|byte| *byte == newline_char) {
                         Some(idx) => (SRes::Newl, idx+1),
                         None => (SRes::Part, buffer.len()),
                     }

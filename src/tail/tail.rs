@@ -165,6 +165,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
             first_header = false;
 
             let path = Path::new(filename);
+            if path.is_dir() {
+                continue;
+            }
             let file = File::open(&path).unwrap();
             bounded_tail(&file, &settings);
 

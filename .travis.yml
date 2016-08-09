@@ -1,15 +1,28 @@
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
-os:
- - linux
- - osx
+matrix:
+  include:
+    - rust: stable
+      os: linux
+      env: FEATURES=''
+    - rust: stable
+      os: osx
+      env: FEATURES=''
+    - rust: beta
+      os: linux
+      env: FEATURES=''
+    - rust: beta
+      os: osx
+      env: FEATURES=''
+    - rust: nightly
+      os: linux
+      env: FEATURES=nightly
+    - rust: nightly
+      os: osx
+      env: FEATURES=nightly
 cache:
  directories:
   - $HOME/.cargo
 sudo: false
 script:
-  - cargo build
-  - cargo test --no-fail-fast
+  - cargo build --features "$FEATURES"
+  - cargo test --features "$FEATURES" --no-fail-fast

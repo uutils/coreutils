@@ -1,12 +1,14 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "ls";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[test]
 fn test_ls_ls() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
     
-    let result = ucmd.run();
+    let result = new_ucmd().run();
     
     let exit_success = result.success;
     assert_eq!(exit_success, true);

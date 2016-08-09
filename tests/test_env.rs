@@ -1,19 +1,22 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "env";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[test]
 fn test_single_name_value_pair() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let out = ucmd.arg("FOO=bar").run().stdout;
+    let out = new_ucmd()
+        .arg("FOO=bar").run().stdout;
 
     assert!(out.lines().any(|line| line == "FOO=bar"));
 }
 
 #[test]
 fn test_multiple_name_value_pairs() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let out = ucmd.arg("FOO=bar")
+    let out = new_ucmd()
+        .arg("FOO=bar")
                   .arg("ABC=xyz")
                   .run()
                   .stdout;
@@ -24,16 +27,16 @@ fn test_multiple_name_value_pairs() {
 
 #[test]
 fn test_ignore_environment() {
-    let ts = TestSet::new(UTIL_NAME);
+    let scene = TestScenario::new(UTIL_NAME);
 
-    let out = ts.util_cmd()
+    let out = scene.ucmd()
                 .arg("-i")
                 .run()
                 .stdout;
 
     assert_eq!(out, "");
 
-    let out = ts.util_cmd()
+    let out = scene.ucmd()
                 .arg("-")
                 .run()
                 .stdout;
@@ -43,8 +46,8 @@ fn test_ignore_environment() {
 
 #[test]
 fn test_null_delimiter() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let out = ucmd.arg("-i")
+    let out = new_ucmd()
+                  .arg("-i")
                   .arg("--null")
                   .arg("FOO=bar")
                   .arg("ABC=xyz")
@@ -63,8 +66,8 @@ fn test_null_delimiter() {
 fn test_unset_variable() {
     // This test depends on the HOME variable being pre-defined by the
     // default shell
-    let out = TestSet::new(UTIL_NAME)
-                  .util_cmd_keepenv()
+    let out = TestScenario::new(UTIL_NAME)
+                  .ucmd_keepenv()
                   .arg("-u")
                   .arg("HOME")
                   .run()

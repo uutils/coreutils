@@ -19,7 +19,7 @@ extern crate time as rtime;
 extern crate uucore;
 
 use getopts::Options;
-use libc::{time_t, c_double, c_int, c_char};
+use libc::{time_t, c_double};
 use std::ffi::CString;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -31,25 +31,11 @@ static NAME: &'static str = "uptime";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
-extern {
-    fn getloadavg(loadavg: *mut c_double, nelem: c_int) -> c_int;
-
-    fn getutxent() -> *const c_utmp;
-    fn setutxent();
-    fn endutxent();
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    fn utmpxname(file: *const c_char) -> c_int;
-}
+use libc::getloadavg;
 
 #[cfg(windows)]
 extern {
     fn GetTickCount() -> libc::uint32_t;
-}
-
-#[cfg(target_os = "freebsd")]
-unsafe extern fn utmpxname(_file: *const c_char) -> c_int {
-    0
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -128,7 +114,7 @@ fn process_utmpx() -> (Option<time_t>, usize) {
                 BOOT_TIME => {
                     let t = (*line).ut_tv;
                     if t.tv_sec > 0 {
-                        boot_time = Some(t.tv_sec);
+                        boot_time = Some(t.tv_sec as time_t);
                     }
                 },
                 _ => continue

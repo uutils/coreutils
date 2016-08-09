@@ -1,10 +1,15 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "ln";
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
 
 #[test]
 fn test_symlink_existing_file() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_existing_file";
     let link = "test_symlink_existing_file_link";
 
@@ -20,7 +25,7 @@ fn test_symlink_existing_file() {
 
 #[test]
 fn test_symlink_dangling_file() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_dangling_file";
     let link = "test_symlink_dangling_file_link";
 
@@ -34,7 +39,7 @@ fn test_symlink_dangling_file() {
 
 #[test]
 fn test_symlink_existing_directory() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_symlink_existing_dir";
     let link = "test_symlink_existing_dir_link";
 
@@ -50,7 +55,7 @@ fn test_symlink_existing_directory() {
 
 #[test]
 fn test_symlink_dangling_directory() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_symlink_dangling_dir";
     let link = "test_symlink_dangling_dir_link";
 
@@ -64,7 +69,7 @@ fn test_symlink_dangling_directory() {
 
 #[test]
 fn test_symlink_circular() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let link = "test_symlink_circular";
 
     let result = ucmd.args(&["-s", link]).run();
@@ -76,7 +81,7 @@ fn test_symlink_circular() {
 
 #[test]
 fn test_symlink_dont_overwrite() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_dont_overwrite";
     let link = "test_symlink_dont_overwrite_link";
 
@@ -92,7 +97,7 @@ fn test_symlink_dont_overwrite() {
 
 #[test]
 fn test_symlink_overwrite_force() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file_a = "test_symlink_overwrite_force_a";
     let file_b = "test_symlink_overwrite_force_b";
     let link = "test_symlink_overwrite_force_link";
@@ -111,15 +116,15 @@ fn test_symlink_overwrite_force() {
 
 #[test]
 fn test_symlink_interactive() {
-    let ts = TestSet::new(UTIL_NAME);
-    let at = &ts.fixtures;
+    let scene = TestScenario::new(UTIL_NAME);
+    let at = &scene.fixtures;
     let file = "test_symlink_interactive_file";
     let link = "test_symlink_interactive_file_link";
 
     at.touch(file);
     at.touch(link);
 
-    let result1 = ts.util_cmd()
+    let result1 = scene.ucmd()
                     .args(&["-i", "-s", file, link])
                     .run_piped_stdin("n");
 
@@ -129,7 +134,7 @@ fn test_symlink_interactive() {
     assert!(at.file_exists(file));
     assert!(!at.is_symlink(link));
 
-    let result2 = ts.util_cmd()
+    let result2 = scene.ucmd()
                     .args(&["-i", "-s", file, link])
                     .run_piped_stdin("Yesh");
 
@@ -143,7 +148,7 @@ fn test_symlink_interactive() {
 
 #[test]
 fn test_symlink_simple_backup() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_simple_backup";
     let link = "test_symlink_simple_backup_link";
 
@@ -169,7 +174,7 @@ fn test_symlink_simple_backup() {
 
 #[test]
 fn test_symlink_custom_backup_suffix() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_custom_backup_suffix";
     let link = "test_symlink_custom_backup_suffix_link";
     let suffix = "super-suffix-of-the-century";
@@ -197,7 +202,7 @@ fn test_symlink_custom_backup_suffix() {
 
 #[test]
 fn test_symlink_backup_numbering() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_backup_numbering";
     let link = "test_symlink_backup_numbering_link";
 
@@ -223,7 +228,7 @@ fn test_symlink_backup_numbering() {
 
 #[test]
 fn test_symlink_existing_backup() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let file = "test_symlink_existing_backup";
     let link = "test_symlink_existing_backup_link";
     let link_backup = "test_symlink_existing_backup_link.~1~";
@@ -257,7 +262,7 @@ fn test_symlink_existing_backup() {
 
 #[test]
 fn test_symlink_target_dir() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_ln_target_dir_dir";
     let file_a = "test_ln_target_dir_file_a";
     let file_b = "test_ln_target_dir_file_b";
@@ -282,7 +287,7 @@ fn test_symlink_target_dir() {
 
 #[test]
 fn test_symlink_overwrite_dir() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let path_a = "test_symlink_overwrite_dir_a";
     let path_b = "test_symlink_overwrite_dir_b";
 
@@ -301,7 +306,7 @@ fn test_symlink_overwrite_dir() {
 
 #[test]
 fn test_symlink_overwrite_nonempty_dir() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let path_a = "test_symlink_overwrite_nonempty_dir_a";
     let path_b = "test_symlink_overwrite_nonempty_dir_b";
     let dummy = "test_symlink_overwrite_nonempty_dir_b/file";
@@ -328,7 +333,7 @@ fn test_symlink_overwrite_nonempty_dir() {
 
 #[test]
 fn test_symlink_errors() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_symlink_errors_dir";
     let file_a = "test_symlink_errors_file_a";
     let file_b = "test_symlink_errors_file_b";
@@ -348,21 +353,21 @@ fn test_symlink_errors() {
 
 #[test]
 fn test_symlink_verbose() {
-    let ts = TestSet::new(UTIL_NAME);
-    let at = &ts.fixtures;
+    let scene = TestScenario::new(UTIL_NAME);
+    let at = &scene.fixtures;
     let file_a = "test_symlink_verbose_file_a";
     let file_b = "test_symlink_verbose_file_b";
 
     at.touch(file_a);
 
-    let result = ts.util_cmd().args(&["-v", file_a, file_b]).run();
+    let result = scene.ucmd().args(&["-v", file_a, file_b]).run();
     assert_empty_stderr!(result);
     assert_eq!(result.stdout, format!("'{}' -> '{}'\n", file_b, file_a));
     assert!(result.success);
 
     at.touch(file_b);
 
-    let result = ts.util_cmd().args(&["-v", "-b", file_a, file_b]).run();
+    let result = scene.ucmd().args(&["-v", "-b", file_a, file_b]).run();
     assert_empty_stderr!(result);
     assert_eq!(result.stdout,
                format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));

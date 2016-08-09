@@ -1,18 +1,16 @@
-extern crate libc;
-extern crate time;
-extern crate kernel32;
-extern crate winapi;
-extern crate filetime;
-
-use self::filetime::*;
 use common::util::*;
 use std::os::unix::fs::PermissionsExt;
 
 static UTIL_NAME: &'static str = "install";
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
 
 #[test]
 fn test_install_help() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (_, mut ucmd) = at_and_ucmd();
 
     let result = ucmd.arg("--help").run();
 
@@ -24,7 +22,7 @@ fn test_install_help() {
 
 #[test]
 fn test_install_basic() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_install_target_dir_dir_a";
     let file1 = "test_install_target_dir_file_a1";
     let file2 = "test_install_target_dir_file_a2";
@@ -45,7 +43,7 @@ fn test_install_basic() {
 
 #[test]
 fn test_install_unimplemented_arg() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_install_target_dir_dir_b";
     let file = "test_install_target_dir_file_b";
     let context_arg = "--context";
@@ -62,7 +60,7 @@ fn test_install_unimplemented_arg() {
 
 #[test]
 fn test_install_component_directories() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let component1 = "test_install_target_dir_component_c1";
     let component2 = "test_install_target_dir_component_c2";
     let component3 = "test_install_target_dir_component_c3";
@@ -80,7 +78,7 @@ fn test_install_component_directories() {
 
 #[test]
 fn test_install_component_directories_failing() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let component = "test_install_target_dir_component_d1";
     let directories_arg = "-d";
 
@@ -93,7 +91,7 @@ fn test_install_component_directories_failing() {
 
 #[test]
 fn test_install_mode_numeric() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_install_target_dir_dir_e";
     let file = "test_install_target_dir_file_e";
     let mode_arg = "--mode=333";
@@ -114,7 +112,7 @@ fn test_install_mode_numeric() {
 
 #[test]
 fn test_install_mode_symbolic() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_install_target_dir_dir_f";
     let file = "test_install_target_dir_file_f";
     let mode_arg = "--mode=o+wx";
@@ -135,7 +133,7 @@ fn test_install_mode_symbolic() {
 
 #[test]
 fn test_install_mode_failing() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let dir = "test_install_target_dir_dir_g";
     let file = "test_install_target_dir_file_g";
     let mode_arg = "--mode=999";
@@ -154,7 +152,7 @@ fn test_install_mode_failing() {
 
 #[test]
 fn test_install_mode_directories() {
-    let (at, mut ucmd) = testing(UTIL_NAME);
+    let (at, mut ucmd) = at_and_ucmd();
     let component = "test_install_target_dir_component_h";
     let directories_arg = "-d";
     let mode_arg = "--mode=333";

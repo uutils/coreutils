@@ -10,11 +10,14 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "test";
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
 
 #[test]
 fn test_op_prec_and_or_1() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let exit_success = ucmd.arg(" ")
+    let exit_success = new_ucmd()
+                           .arg(" ")
                            .arg("-o")
                            .arg("")
                            .arg("-a")
@@ -26,8 +29,8 @@ fn test_op_prec_and_or_1() {
 
 #[test]
 fn test_op_prec_and_or_2() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let exit_success = ucmd.arg("")
+    let exit_success = new_ucmd()
+                           .arg("")
                            .arg("-a")
                            .arg("")
                            .arg("-o")
@@ -41,8 +44,8 @@ fn test_op_prec_and_or_2() {
 
 #[test]
 fn test_or_as_filename() {
-    let (_, mut ucmd) = testing(UTIL_NAME);
-    let exit_success = ucmd.arg("x")
+    let exit_success = new_ucmd()
+        .arg("x")
                            .arg("-a")
                            .arg("-z")
                            .arg("-o")

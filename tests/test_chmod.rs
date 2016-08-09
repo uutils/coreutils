@@ -6,6 +6,12 @@ extern crate libc;
 use self::libc::umask;
 
 static UTIL_NAME: &'static str = "chmod";
+fn at_and_ucmd() -> (AtPath, UCommand) {
+    let ts = TestScenario::new(UTIL_NAME);
+    let ucmd = ts.ucmd();
+    (ts.fixtures, ucmd)
+}
+
 static TEST_FILE: &'static str = "file";
 static REFERENCE_FILE: &'static str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
@@ -47,7 +53,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
 
 fn run_tests(tests: Vec<TestCase>) {
     for test in tests {
-        let (at, ucmd) = testing(UTIL_NAME);
+        let (at, ucmd) = at_and_ucmd();
         run_single_test(&test, at, ucmd);
     }
 }
@@ -129,7 +135,7 @@ fn test_chmod_reference_file() {
         TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
         TestCase{args: vec!{"a-w", "--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
     };
-    let (at, ucmd) = testing(UTIL_NAME);
+    let (at, ucmd) = at_and_ucmd();
     mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
     run_single_test(&tests[0], at, ucmd);
 }

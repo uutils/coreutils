@@ -12,6 +12,11 @@ getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
 pretty-bytes = "0.1.0"
+term_grid = "*"
+termsize = "*"
+time = "*"
+lazy_static = "*"
+unicode-width = "*"
 
 [[bin]]
 name = "ls"
