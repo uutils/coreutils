@@ -4,8 +4,7 @@ version = "0.0.1"
 authors = []
 
 [dependencies]
-libc = "*"
-winapi = "*"
+libc = { git = "https://github.com/rust-lang/libc.git" }
 getopts = "*"
 data-encoding = "^1.1"
 
