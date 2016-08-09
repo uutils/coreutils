@@ -1,5 +1,4 @@
-extern crate libc;
-#[cfg(windows)] extern crate winapi;
+pub extern crate libc;
 
 #[macro_use]
 mod macros;
