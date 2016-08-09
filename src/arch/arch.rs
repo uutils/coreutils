@@ -42,7 +42,7 @@ static NAME: &'static str = "arch";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = uucore::coreopts::CoreOptions::new();
+    let mut opts = uucore::coreopts::CoreOptions::new(NAME);
     let usage = opts.usage("Determine architecture name for current machine.");
     opts.help(format!("
 {0} {1}

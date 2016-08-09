@@ -3,14 +3,16 @@ use std::io::Write;
 
 pub struct CoreOptions {
     pub options : getopts::Options,
+    pkgname: &'static str,
     longhelp : Option<String>
 }
 
 impl<'a> CoreOptions {
-    pub fn new() -> Self {
+    pub fn new(name: &'static str) -> Self {
         let mut ret = CoreOptions {
             options : getopts::Options::new(),
-            longhelp : None
+            pkgname: name,
+            longhelp: None
         };
         ret.options
             .optflag("", "help", "print usage information")
@@ -36,16 +38,18 @@ impl<'a> CoreOptions {
         let matches = match self.options.parse(&args[1..]) {
             Ok(m) => { Some(m) },
             Err(f) => {
-                crash!(1, "{}", msg_invalid_input!(format!("{}", f)));
+                eprintln!("{}: {}", self.pkgname, f);
+                eprintln!("Try '{} --help' for more information.", self.pkgname);
+                exit!(1)
             }
         }.unwrap();
         if matches.opt_present("help") {
             exit!(match self.longhelp {
-                Some(ref lhelp) => { print!("{}", lhelp); 0}
+                Some(ref lhelp) => { println!("{}", lhelp); 0}
                 None => 1
             });
         } else if matches.opt_present("version") {
-            print!("{}", msg_version!());
+            println!("{} {}", self.pkgname, env!("CARGO_PKG_VERSION"));
             exit!(0);
         }
         matches
