@@ -4,6 +4,7 @@ extern crate uu_stat;
 pub use self::uu_stat::*;
 
 static UTIL_NAME: &'static str = "stat";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }

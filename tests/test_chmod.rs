@@ -6,6 +6,7 @@ extern crate libc;
 use self::libc::umask;
 
 static UTIL_NAME: &'static str = "chmod";
+
 fn at_and_ucmd() -> (AtPath, UCommand) {
     let ts = TestScenario::new(UTIL_NAME);
     let ucmd = ts.ucmd();

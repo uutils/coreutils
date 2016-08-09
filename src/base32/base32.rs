@@ -12,6 +12,7 @@ extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
+
 use uucore::encoding::{Data, Format, wrap_print};
 
 use getopts::Options;

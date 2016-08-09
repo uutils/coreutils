@@ -1,16 +1,17 @@
 extern crate getopts;
+
 use std::io::Write;
 
 pub struct CoreOptions {
-    pub options : getopts::Options,
-    longhelp : Option<String>
+    pub options: getopts::Options,
+    longhelp: Option<String>
 }
 
 impl<'a> CoreOptions {
     pub fn new() -> Self {
         let mut ret = CoreOptions {
-            options : getopts::Options::new(),
-            longhelp : None
+            options: getopts::Options::new(),
+            longhelp: None
         };
         ret.options
             .optflag("", "help", "print usage information")
@@ -25,14 +26,14 @@ impl<'a> CoreOptions {
         self.options.optflag(short_name, long_name, desc);
         self
     }
-    pub fn help<T: Into<String>>(&mut self, longhelp : T) -> &mut CoreOptions {
+    pub fn help<T: Into<String>>(&mut self, longhelp: T) -> &mut CoreOptions {
         self.longhelp = Some(longhelp.into());
         self
     }
-    pub fn usage(&self, summary : &str) -> String {
+    pub fn usage(&self, summary: &str) -> String {
         self.options.usage(summary)
     }
-    pub fn parse(&mut self, args : Vec<String>) -> getopts::Matches {
+    pub fn parse(&mut self, args: Vec<String>) -> getopts::Matches {
         let matches = match self.options.parse(&args[1..]) {
             Ok(m) => { Some(m) },
             Err(f) => {

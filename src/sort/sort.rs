@@ -190,11 +190,10 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     }
 
     0
-
 }
 
 fn sort_by<F>(lines: &mut Vec<String>, compare_fns: Vec<F>)
-    where F: Fn( &String, &String ) -> Ordering
+    where F: Fn(&String, &String) -> Ordering
 {
     lines.sort_by(|a, b| {
         for compare_fn in &compare_fns {

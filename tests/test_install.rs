@@ -2,6 +2,7 @@ use common::util::*;
 use std::os::unix::fs::PermissionsExt;
 
 static UTIL_NAME: &'static str = "install";
+
 fn at_and_ucmd() -> (AtPath, UCommand) {
     let ts = TestScenario::new(UTIL_NAME);
     let ucmd = ts.ucmd();

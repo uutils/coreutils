@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "fold";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }

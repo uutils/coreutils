@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "cat";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
@@ -50,7 +51,7 @@ fn test_stdin_show_tabs() {
 fn test_stdin_show_ends() {
     for same_param in vec!["-E", "--show-ends"] {
         new_ucmd()
-            .args(&[same_param,"-"])
+            .args(&[same_param, "-"])
             .pipe_in("\t\0\n")
             .succeeds()
             .stdout_only("\t\0$");
@@ -117,7 +118,7 @@ fn test_non_blank_overrides_number() {
             .pipe_in("\na\nb\n\n\nc")
             .succeeds()
             .stdout_only("\n     1\ta\n     2\tb\n\n\n     3\tc");
-    }    
+    }
 }
 
 #[test]

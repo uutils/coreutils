@@ -4,6 +4,7 @@ use self::uu_dircolors::{StrUtils, guess_syntax, OutputFmt};
 use common::util::*;
 
 static UTIL_NAME: &'static str = "dircolors";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }

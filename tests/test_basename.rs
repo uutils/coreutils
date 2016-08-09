@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "basename";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
@@ -24,7 +25,7 @@ fn test_remove_suffix() {
 
 #[test]
 fn test_dont_remove_suffix() {
-    new_ucmd().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only( "baz");
+    new_ucmd().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only("baz");
 }
 
 #[cfg_attr(not(feature="test_unimplemented"),ignore)]

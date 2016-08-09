@@ -6,9 +6,11 @@ use std::io::Write;
 use self::uu_tail::parse_size;
 
 static UTIL_NAME: &'static str = "tail";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
+
 fn at_and_ucmd() -> (AtPath, UCommand) {
     let ts = TestScenario::new(UTIL_NAME);
     let ucmd = ts.ucmd();
@@ -123,7 +125,7 @@ fn test_bytes_single() {
 #[test]
 fn test_bytes_stdin() {
     new_ucmd().arg("-c").arg("13").pipe_in_fixture(FOOBAR_TXT).run()
-            .stdout_is_fixture("foobar_bytes_stdin.expected");
+        .stdout_is_fixture("foobar_bytes_stdin.expected");
 }
 
 #[test]

@@ -1,11 +1,13 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "pinky";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
 
 extern crate uu_pinky;
+
 pub use self::uu_pinky::*;
 
 #[test]

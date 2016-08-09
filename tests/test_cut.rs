@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "cut";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
@@ -8,20 +9,20 @@ fn new_ucmd() -> UCommand {
 static INPUT: &'static str = "lists.txt";
 
 struct TestedSequence<'b> {
-   name : &'b str,
-   sequence: &'b str
+    name: &'b str,
+    sequence: &'b str
 }
 
 static EXAMPLE_SEQUENCES: &'static [TestedSequence<'static>] = &[
-    TestedSequence{ name: "singular", sequence:"2" },
-    TestedSequence{ name: "prefix", sequence: "-2" },
-    TestedSequence{ name: "suffix", sequence: "2-" },
-    TestedSequence{ name: "range", sequence: "2-4" },
-    TestedSequence{ name: "aggregate", sequence: "9-,6-7,-2,4" },
-    TestedSequence{ name: "subsumed", sequence: "2-,3" }
+    TestedSequence { name: "singular", sequence: "2" },
+    TestedSequence { name: "prefix", sequence: "-2" },
+    TestedSequence { name: "suffix", sequence: "2-" },
+    TestedSequence { name: "range", sequence: "2-4" },
+    TestedSequence { name: "aggregate", sequence: "9-,6-7,-2,4" },
+    TestedSequence { name: "subsumed", sequence: "2-,3" }
 ];
 
-static COMPLEX_SEQUENCE: &'static TestedSequence<'static> = &TestedSequence{ name: "", sequence: "9-,6-7,-2,4" };
+static COMPLEX_SEQUENCE: &'static TestedSequence<'static> = &TestedSequence { name: "", sequence: "9-,6-7,-2,4" };
 
 #[test]
 fn test_byte_sequence() {
@@ -33,7 +34,7 @@ fn test_byte_sequence() {
     }
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn test_char_sequence() {
     for param in vec!["-c", "--characters"] {
@@ -73,14 +74,14 @@ fn test_output_delimiter() {
 
 #[test]
 fn test_complement() {
-    new_ucmd().args(&["-d_","--complement", "-f", "2"])
+    new_ucmd().args(&["-d_", "--complement", "-f", "2"])
         .pipe_in("9_1\n8_2\n7_3")
         .succeeds().stdout_only("9\n8\n7\n");
 }
 
 #[test]
 fn test_zero_terminated() {
-    new_ucmd().args(&["-d_","-z", "-f", "1"])
+    new_ucmd().args(&["-d_", "-z", "-f", "1"])
         .pipe_in("9_1\n8_2\n\07_3")
         .succeeds().stdout_only("9\07\0");
 }
@@ -96,7 +97,7 @@ fn test_only_delimited() {
 
 #[test]
 fn test_zero_terminated_only_delimited() {
-    new_ucmd().args(&["-d_","-z", "-s", "-f", "1"])
+    new_ucmd().args(&["-d_", "-z", "-s", "-f", "1"])
         .pipe_in("91\n\082\n7_3")
         .succeeds().stdout_only("82\n7\0");
 }

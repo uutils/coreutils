@@ -7,16 +7,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
+
 use uucore::c_types::getpwnam;
 use uucore::utmpx;
 
 extern crate getopts;
 extern crate libc;
+
 use libc::{uid_t, gid_t, c_char, S_IWGRP};
 
 extern crate time;
@@ -166,7 +168,6 @@ The utmp file will be {}",
     } else {
         pk.long_pinky()
     }
-
 }
 
 struct Pinky {
@@ -255,7 +256,7 @@ impl UtmpUtils for utmpx::c_utmp {
 }
 
 fn idle_string(when: i64) -> String {
-    thread_local! {
+    thread_local!{
         static NOW: time::Tm = time::now()
     }
     NOW.with(|n| {
@@ -360,7 +361,6 @@ impl Pinky {
             } else {
                 print!(" {:19}", "        ???");
             }
-
         }
 
         print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, String::from_chars(ut.ut_line.as_ref().as_ptr()));

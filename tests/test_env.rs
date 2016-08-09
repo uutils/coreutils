@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "env";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
@@ -47,7 +48,7 @@ fn test_ignore_environment() {
 #[test]
 fn test_null_delimiter() {
     let out = new_ucmd()
-                  .arg("-i")
+        .arg("-i")
                   .arg("--null")
                   .arg("FOO=bar")
                   .arg("ABC=xyz")
@@ -67,7 +68,7 @@ fn test_unset_variable() {
     // This test depends on the HOME variable being pre-defined by the
     // default shell
     let out = TestScenario::new(UTIL_NAME)
-                  .ucmd_keepenv()
+        .ucmd_keepenv()
                   .arg("-u")
                   .arg("HOME")
                   .run()

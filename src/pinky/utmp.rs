@@ -6,6 +6,7 @@
 // file that was distributed with this source code.
 //
 extern crate uucore;
+
 use uucore::utmpx;
 
 use std::ptr;

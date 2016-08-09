@@ -1,6 +1,7 @@
 use common::util::*;
 
 static UTIL_NAME: &'static str = "wc";
+
 fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
@@ -20,7 +21,7 @@ fn test_stdin_only_bytes() {
 #[test]
 fn test_stdin_all_counts() {
     let result = new_ucmd().args(&["-c", "-m", "-l", "-L", "-w"])
-                     .pipe_in_fixture("alice_in_wonderland.txt").run();
+        .pipe_in_fixture("alice_in_wonderland.txt").run();
     assert_eq!(result.stdout, "   5  57 302 302  66\n");
 }
 
