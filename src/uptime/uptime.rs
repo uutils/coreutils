@@ -4,6 +4,7 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Jordi Boggiano <j.boggiano@seld.be>
+ * (c) Jian Zeng <anonymousknight86@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,20 +13,18 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 extern crate getopts;
-extern crate libc;
-extern crate time as rtime;
 
 #[macro_use]
 extern crate uucore;
+// import crate time from utmpx
+use uucore::utmpx::*;
+use uucore::libc::{time_t, c_double};
+pub use uucore::libc;
 
 use getopts::Options;
-use libc::{time_t, c_double};
-use std::ffi::CString;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::mem::transmute;
-use std::ptr::null;
-use uucore::utmpx::*;
 
 static NAME: &'static str = "uptime";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -92,38 +91,21 @@ fn print_loadavg() {
 
 #[cfg(unix)]
 fn process_utmpx() -> (Option<time_t>, usize) {
-    unsafe {
-        utmpxname(CString::new(DEFAULT_FILE).unwrap().as_ptr());
-    }
-
     let mut nusers = 0;
     let mut boot_time = None;
 
-    unsafe {
-        setutxent();
-
-        loop {
-            let line = getutxent();
-
-            if line == null() {
-                break;
-            }
-
-            match (*line).ut_type {
-                USER_PROCESS => nusers += 1,
-                BOOT_TIME => {
-                    let t = (*line).ut_tv;
-                    if t.tv_sec > 0 {
-                        boot_time = Some(t.tv_sec as time_t);
-                    }
-                },
-                _ => continue
-            }
+    for line in Utmpx::iter_all_records() {
+        match line.record_type() {
+            USER_PROCESS => nusers += 1,
+            BOOT_TIME => {
+                let t = line.login_time().to_timespec();
+                if t.sec > 0 {
+                    boot_time = Some(t.sec as time_t);
+                }
+            },
+            _ => continue
         }
-
-        endutxent();
     }
-
     (boot_time, nusers)
 }
 
@@ -141,7 +123,7 @@ fn print_nusers(nusers: usize) {
 }
 
 fn print_time() {
-    let local_time = rtime::now();
+    let local_time = time::now();
 
     print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
            local_time.tm_min, local_time.tm_sec);
@@ -160,9 +142,9 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     } else {
         match boot_time {
             Some(t) => {
-                let now = rtime::get_time().sec;
-                let time = t as i64;
-                ((now - time) * 100)
+                let now = time::get_time().sec;
+                let boottime = t as i64;
+                ((now - boottime) * 100)
             },
             _ => -1,
         }

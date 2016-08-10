@@ -9,8 +9,11 @@ path = "users.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+default-features = false
+features = ["utmpx"]
+path = "../uucore"
 
 [[bin]]
 name = "users"

@@ -13,13 +13,9 @@
 #[macro_use]
 extern crate uucore;
 use uucore::c_types::getpwnam;
-use uucore::utmpx;
-
-extern crate getopts;
-extern crate libc;
-use libc::{uid_t, gid_t, c_char, S_IWGRP};
-
-extern crate time;
+use uucore::utmpx::{self, time, Utmpx};
+use uucore::coreopts;
+use uucore::libc::{uid_t, gid_t, c_char, S_IWGRP};
 
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -29,21 +25,16 @@ use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
 use std::ptr;
-use std::ffi::{CStr, CString, OsStr};
-use std::os::unix::ffi::OsStrExt;
+use std::ffi::{CStr, CString};
 
-use std::path::Path;
 use std::path::PathBuf;
 
-mod utmp;
-
 static NAME: &'static str = "pinky";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 const BUFSIZE: usize = 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
+    let mut opts = coreopts::CoreOptions::new(NAME);
     opts.optflag("l",
                  "l",
                  "produce long format output for the specified USERs");
@@ -64,16 +55,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            disp_err!("{}", f);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("help") {
-        println!("Usage: {} [OPTION]... [USER]...
+    opts.help(format!(
+        "Usage: {} [OPTION]... [USER]...
 
   -l              produce long format output for the specified USERs
   -b              omit the user's home directory and shell in long format
@@ -91,14 +74,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 A lightweight 'finger' program;  print user information.
 The utmp file will be {}",
                  NAME,
-                 utmpx::DEFAULT_FILE);
-        return 0;
-    }
+                 utmpx::DEFAULT_FILE));
 
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = opts.parse(args);
 
     // If true, display the hours:minutes since each user has touched
     // the keyboard, or blank if within the last minute, or days followed
@@ -244,16 +222,6 @@ impl Capitalize for str {
     }
 }
 
-trait UtmpUtils {
-    fn is_user_process(&self) -> bool;
-}
-
-impl UtmpUtils for utmpx::c_utmp {
-    fn is_user_process(&self) -> bool {
-        self.ut_user[0] != 0 && self.ut_type == utmpx::USER_PROCESS
-    }
-}
-
 fn idle_string(when: i64) -> String {
     thread_local! {
         static NOW: time::Tm = time::now()
@@ -276,59 +244,14 @@ fn idle_string(when: i64) -> String {
     })
 }
 
-fn time_string(ut: &utmpx::c_utmp) -> String {
-    let tm = time::at(time::Timespec::new(ut.ut_tv.tv_sec as i64, ut.ut_tv.tv_usec as i32));
-    time::strftime("%Y-%m-%d %H:%M", &tm).unwrap()
-}
-
-const AI_CANONNAME: libc::c_int = 0x2;
-
-fn canon_host(host: &str) -> Option<String> {
-    let hints = libc::addrinfo {
-        ai_flags: AI_CANONNAME,
-        ai_family: 0,
-        ai_socktype: 0,
-        ai_protocol: 0,
-        ai_addrlen: 0,
-        ai_addr: ptr::null_mut(),
-        ai_canonname: ptr::null_mut(),
-        ai_next: ptr::null_mut(),
-    };
-    let c_host = CString::new(host).unwrap();
-    let mut res = ptr::null_mut();
-    let status = unsafe {
-        libc::getaddrinfo(c_host.as_ptr(), ptr::null(), &hints as *const _, &mut res as *mut _)
-    };
-    if status == 0 {
-        let info: libc::addrinfo = unsafe {
-            ptr::read(res as *const _)
-        };
-        // http://lists.gnu.org/archive/html/bug-coreutils/2006-09/msg00300.html
-        // says Darwin 7.9.0 getaddrinfo returns 0 but sets
-        // res->ai_canonname to NULL.
-        let ret = if info.ai_canonname.is_null() {
-            Some(String::from(host))
-        } else {
-            Some(unsafe {
-                CString::from_raw(info.ai_canonname).into_string().unwrap()
-            })
-        };
-        unsafe {
-            libc::freeaddrinfo(res);
-        }
-        ret
-    } else {
-        None
-    }
+fn time_string(ut: &Utmpx) -> String {
+    time::strftime("%Y-%m-%d %H:%M", &ut.login_time()).unwrap()
 }
 
 impl Pinky {
-    fn print_entry(&self, ut: &utmpx::c_utmp) {
+    fn print_entry(&self, ut: &Utmpx) {
         let mut pts_path = PathBuf::from("/dev");
-        let line: &Path = OsStr::from_bytes(unsafe {
-            CStr::from_ptr(ut.ut_line.as_ref().as_ptr()).to_bytes()
-        }).as_ref();
-        pts_path.push(line);
+        pts_path.push(ut.tty_device().as_ref());
 
         let mesg;
         let last_change;
@@ -347,11 +270,10 @@ impl Pinky {
             }
         }
 
-        let ut_user = String::from_chars(ut.ut_user.as_ref().as_ptr());
-        print!("{1:<8.0$}", utmpx::UT_NAMESIZE, ut_user);
+        print!("{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
 
         if self.include_fullname {
-            if let Some(pw) = getpw(&ut_user) {
+            if let Some(pw) = getpw(ut.user().as_ref()) {
                 let mut gecos = pw.pw_gecos;
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
@@ -363,7 +285,7 @@ impl Pinky {
 
         }
 
-        print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, String::from_chars(ut.ut_line.as_ref().as_ptr()));
+        print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, ut.tty_device());
 
         if self.include_idle {
             if last_change != 0 {
@@ -375,11 +297,11 @@ impl Pinky {
 
         print!(" {}", time_string(&ut));
 
-        if self.include_where && ut.ut_host[0] != 0 {
-            let ut_host = String::from_chars(ut.ut_host.as_ref().as_ptr());
+        if self.include_where && !ut.host().is_empty() {
+            let ut_host = ut.host().into_owned();
             let mut res = ut_host.split(':');
             let host = match res.next() {
-                Some(h) => canon_host(&h).unwrap_or(ut_host.clone()),
+                Some(_) => ut.canon_host().unwrap_or(ut_host.clone()),
                 None => ut_host.clone(),
             };
             match res.next() {
@@ -411,15 +333,12 @@ impl Pinky {
         if self.include_heading {
             self.print_heading();
         }
-        for ut in utmp::read_utmps() {
+        for ut in Utmpx::iter_all_records() {
             if ut.is_user_process() {
                 if self.names.is_empty() {
                     self.print_entry(&ut)
                 } else {
-                    let ut_user = unsafe {
-                        CStr::from_ptr(ut.ut_user.as_ref().as_ptr()).to_bytes()
-                    };
-                    if self.names.iter().any(|n| n.as_bytes() == ut_user) {
+                    if self.names.iter().any(|n| n.as_str() == ut.user()) {
                         self.print_entry(&ut);
                     }
                 }

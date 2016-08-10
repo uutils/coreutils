@@ -7,11 +7,10 @@ authors = []
 name = "uu_pinky"
 path = "pinky.rs"
 
-[dependencies]
-getopts = "*"
-time = "*"
-libc = "^0.2"
-uucore = { path="../uucore" }
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["utmpx", "c_types"]
 
 [[bin]]
 name = "pinky"

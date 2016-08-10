@@ -9,9 +9,11 @@ path = "uptime.rs"
 
 [dependencies]
 getopts = "*"
-libc = { git = "https://github.com/rust-lang/libc.git" }
-time = "*"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["utmpx"]
 
 [[bin]]
 name = "uptime"
