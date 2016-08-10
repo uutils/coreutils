@@ -34,6 +34,7 @@ unix = [
   "unlink",
   "uptime",
   "users",
+  "who",
 ]
 generic = [
   "base32",
@@ -187,6 +188,7 @@ unlink   = { optional=true, path="src/unlink" }
 uptime   = { optional=true, path="src/uptime" }
 users    = { optional=true, path="src/users" }
 wc       = { optional=true, path="src/wc" }
+who      = { optional=true, path="src/who" }
 whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
 

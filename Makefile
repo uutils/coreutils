@@ -129,7 +129,8 @@ UNIX_PROGS := \
   uname \
   unlink \
   uptime \
-  users
+  users \
+  who
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
