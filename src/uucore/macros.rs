@@ -322,15 +322,21 @@ macro_rules! msg_arg_invalid_value { ($expects:expr, $received:expr) => (
     msg_invalid_input!(format!("expects its argument to be {}, but was provided {}", $expects, $received)) ); }
 
 #[macro_export]
-macro_rules! msg_args_invalid_value { ($expects:expr, $received:expr) => (
-    msg_invalid_input!(format!("expects its arguments to be {}, but was provided {}", $expects, $received)) ); }
+macro_rules! msg_args_invalid_value {
+    ($expects:expr, $received:expr) => (
+        msg_invalid_input!(format!("expects its arguments to be {}, but was provided {}", $expects, $received))
+    );
+    ($msg:expr) => (
+        msg_invalid_input!($msg)
+    );
+}
 
 #[macro_export]
 macro_rules! msg_args_nonexistent_file { ($received:expr) => (
     msg_args_invalid_value!("paths to files", snippet_no_file_at_path!($received)));}
 
 #[macro_export]
-macro_rules! msg_wrong_number_of_arguments { ($received:expr) => (
+macro_rules! msg_wrong_number_of_arguments { () => (
     msg_args_invalid_value!("wrong number of arguments") ); }
 
 // -- message templates : invalid input : input combinations
