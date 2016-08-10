@@ -4,6 +4,7 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) KokaKiwi <kokakiwi@kokakiwi.net>
+ * (c) Jian Zeng <anonymousknight86@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -15,16 +16,12 @@
 #![allow(dead_code)]
 
 extern crate getopts;
-extern crate libc;
 
 #[macro_use]
 extern crate uucore;
+use uucore::utmpx::*;
 
 use getopts::Options;
-use std::ffi::{CStr, CString};
-use std::mem;
-use std::ptr;
-use uucore::utmpx::*;
 
 static NAME: &'static str = "users";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -67,30 +64,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn exec(filename: &str) {
-    unsafe {
-        utmpxname(CString::new(filename).unwrap().as_ptr());
-    }
-
-    let mut users = vec!();
-
-    unsafe {
-        setutxent();
-
-        loop {
-            let line = getutxent();
-
-            if line == ptr::null() {
-                break;
-            }
-
-            if (*line).ut_type == USER_PROCESS {
-                let user = String::from_utf8_lossy(CStr::from_ptr(mem::transmute(&(*line).ut_user)).to_bytes()).to_string();
-                users.push(user);
-            }
-        }
-
-        endutxent();
-    }
+    let mut users = Utmpx::iter_all_records()
+        .read_from(filename)
+        .filter(|ut| ut.is_user_process())
+        .map(|ut| ut.user().into_owned())
+        .collect::<Vec<_>>();
 
     if !users.is_empty() {
         users.sort();
