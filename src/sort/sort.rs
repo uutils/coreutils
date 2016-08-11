@@ -265,10 +265,6 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         lines.dedup()
     }
 
-    if settings.reverse {
-        lines.reverse()
-    }
-
     if settings.check {
         for (i, line) in lines.iter().enumerate() {
             if line != &original_lines[i] {
@@ -298,7 +294,12 @@ fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
     for compare_fn in &settings.compare_fns {
         let cmp = compare_fn(a, b);
         if cmp != Ordering::Equal {
-            return cmp;
+            if settings.reverse {
+                return cmp.reverse();
+            }
+            else {
+                return cmp;
+            }
         }
     }
     return Ordering::Equal;

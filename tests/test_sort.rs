@@ -81,6 +81,17 @@ fn test_merge_interleaved() {
 }
 
 #[test]
+fn test_merge_reversed() {
+    new_ucmd()
+        .arg("-m")
+        .arg("--reverse")
+        .arg("merge_ints_reversed_1.txt")
+        .arg("merge_ints_reversed_2.txt")
+        .arg("merge_ints_reversed_3.txt")
+        .succeeds().stdout_is_fixture("merge_ints_reversed.expected");
+}
+
+#[test]
 fn test_check() {
     new_ucmd()
         .arg("-c")
