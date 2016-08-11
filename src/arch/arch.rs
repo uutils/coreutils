@@ -18,6 +18,10 @@ use std::ffi::CStr;
 use std::mem::uninitialized;
 use uucore::c_types::utsname;
 
+static SYNTAX: &'static str = "";
+static SUMMARY: &'static str = "Determine architecture name for current machine.";
+static LONG_HELP: &'static str = "";
+
 struct Arch {
     arch_name: String
 }
@@ -38,19 +42,8 @@ unsafe fn get_machine_arch() -> Arch {
     }
 }
 
-static NAME: &'static str = "arch";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = uucore::coreopts::CoreOptions::new(NAME);
-    let usage = opts.usage("Determine architecture name for current machine.");
-    opts.help(format!("
-{0} {1}
-
-{0}
-
-{2}
-", NAME, VERSION, usage)).parse(args);
+    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     let machine_arch = unsafe { get_machine_arch() };
     let mut output = String::new();
