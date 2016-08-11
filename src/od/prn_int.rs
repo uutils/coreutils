@@ -18,14 +18,12 @@ pub static FORMAT_ITEM_OCT32: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::IntWriter(format_item_oct),
 };
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_OCT64: FormatterItemInfo = FormatterItemInfo {
     byte_size: 8,
-    print_width: 23, // max: 2000000000000000000000
+    print_width: 23, // max: 1777777777777777777777
     formatter: FormatWriter::IntWriter(format_item_oct),
 };
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_HEX8: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
     print_width: 3, // max: ff
@@ -44,7 +42,6 @@ pub static FORMAT_ITEM_HEX32: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::IntWriter(format_item_hex),
 };
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_HEX64: FormatterItemInfo = FormatterItemInfo {
     byte_size: 8,
     print_width: 17, // max: ffffffffffffffff
@@ -52,7 +49,6 @@ pub static FORMAT_ITEM_HEX64: FormatterItemInfo = FormatterItemInfo {
 };
 
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_DEC8U: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
     print_width: 4, // max: 255
@@ -71,7 +67,6 @@ pub static FORMAT_ITEM_DEC32U: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::IntWriter(format_item_dec_u),
 };
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_DEC64U: FormatterItemInfo = FormatterItemInfo {
     byte_size: 8,
     print_width: 21, // max:  18446744073709551615
@@ -79,7 +74,6 @@ pub static FORMAT_ITEM_DEC64U: FormatterItemInfo = FormatterItemInfo {
 };
 
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_DEC8S: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
     print_width: 5, // max: -128
@@ -92,14 +86,12 @@ pub static FORMAT_ITEM_DEC16S: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::IntWriter(format_item_dec_s),
 };
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_DEC32S: FormatterItemInfo = FormatterItemInfo {
     byte_size: 4,
     print_width: 12, // max: -2147483648
     formatter: FormatWriter::IntWriter(format_item_dec_s),
 };
 
-#[allow(dead_code)]
 pub static FORMAT_ITEM_DEC64S: FormatterItemInfo = FormatterItemInfo {
     byte_size: 8,
     print_width: 21, // max: -9223372036854775808

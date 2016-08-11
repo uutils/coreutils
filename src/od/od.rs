@@ -84,7 +84,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflagmulti("f", "", "floating point single precision (32-bit) units");
     opts.optflagmulti("F", "", "floating point double precision (64-bit) units");
 
-    opts.optopt("t", "format", "select output format or formats", "TYPE");
+    opts.optmulti("t", "format", "select output format or formats", "TYPE");
     opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
     opts.optflagopt("w", "width",
                 ("output BYTES bytes per output line. 32 is implied when BYTES is not \
@@ -146,7 +146,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         inputs.push(InputSource::Stdin);
     }
 
-    let formats = parse_format_flags(&args);
+    let formats = match parse_format_flags(&args) {
+        Ok(f) => f,
+        Err(e) => {
+            disp_err!("{}", e);
+            return 1;
+        }
+    };
 
     let mut line_bytes = match matches.opt_default("w", "32") {
         None => 16,

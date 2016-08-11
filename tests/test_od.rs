@@ -414,15 +414,18 @@ fn test_maxuint(){
 
     let input = [0xFFu8 ; 8];
     let expected_output = unindent("
-            0000000     37777777777     37777777777
+            0000000          1777777777777777777777
+                        37777777777     37777777777
                      177777  177777  177777  177777
                     377 377 377 377 377 377 377 377
+                               18446744073709551615
                          4294967295      4294967295
                       65535   65535   65535   65535
+                    255 255 255 255 255 255 255 255
             0000010
             ");
 
-    let result = new_ucmd!().arg("-O").arg("-o").arg("-b").arg("-D").arg("-d").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("--format=o8").arg("-Oobtu8").arg("-Dd").arg("--format=u1").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
