@@ -196,7 +196,8 @@ TEST_PROGS  := \
 	unexpand \
 	uniq \
 	unlink \
-	wc
+	wc \
+	who
 
 TESTS       := \
 	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))
