@@ -67,7 +67,7 @@ fn exec(filename: &str) {
     let mut users = Utmpx::iter_all_records()
         .read_from(filename)
         .filter(|ut| ut.is_user_process())
-        .map(|ut| ut.user().into_owned())
+        .map(|ut| ut.user())
         .collect::<Vec<_>>();
 
     if !users.is_empty() {

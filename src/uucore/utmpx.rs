@@ -2,6 +2,14 @@
 //!
 //! **ONLY** support linux, macos and freebsd for the time being
 
+// This file is part of the uutils coreutils package.
+//
+// (c) Jian Zeng <anonymousknight96@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+
 use super::libc;
 pub extern crate time;
 use self::time::{Tm, Timespec};
@@ -9,8 +17,6 @@ use self::time::{Tm, Timespec};
 use ::std::io::Result as IOResult;
 use ::std::io::Error as IOError;
 use ::std::ptr;
-use ::std::borrow::Cow;
-use ::std::ffi::CStr;
 use ::std::ffi::CString;
 
 pub use self::ut::*;
@@ -28,11 +34,10 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-macro_rules! bytes2cow {
-    ($name:expr) => (
-        unsafe {
-            CStr::from_ptr($name.as_ref().as_ptr()).to_string_lossy()
-        }
+// In case the c_char array doesn' t end with NULL
+macro_rules! chars2string {
+    ($arr:expr) => (
+        $arr.iter().take_while(|i| **i > 0).map(|&i| i as u8 as char).collect::<String>()
     )
 }
 
@@ -138,25 +143,39 @@ impl Utmpx {
         self.inner.ut_pid as i32
     }
     /// A.K.A. ut.ut_id
-    pub fn terminal_suffix(&self) -> Cow<str> {
-        bytes2cow!(self.inner.ut_id)
+    pub fn terminal_suffix(&self) -> String {
+        chars2string!(self.inner.ut_id)
     }
     /// A.K.A. ut.ut_user
-    pub fn user(&self) -> Cow<str> {
-        bytes2cow!(self.inner.ut_user)
+    pub fn user(&self) -> String {
+        chars2string!(self.inner.ut_user)
     }
     /// A.K.A. ut.ut_host
-    pub fn host(&self) -> Cow<str> {
-        bytes2cow!(self.inner.ut_host)
+    pub fn host(&self) -> String {
+        chars2string!(self.inner.ut_host)
     }
     /// A.K.A. ut.ut_line
-    pub fn tty_device(&self) -> Cow<str> {
-        bytes2cow!(self.inner.ut_line)
+    pub fn tty_device(&self) -> String {
+        chars2string!(self.inner.ut_line)
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> Tm {
         time::at(Timespec::new(self.inner.ut_tv.tv_sec as i64,
                                self.inner.ut_tv.tv_usec as i32))
+    }
+    /// A.K.A. ut.ut_exit
+    ///
+    /// Return (e_termination, e_exit)
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn exit_status(&self) -> (i16, i16) {
+        (self.inner.ut_exit.e_termination, self.inner.ut_exit.e_exit)
+    }
+    /// A.K.A. ut.ut_exit
+    ///
+    /// Return (0, 0) on Non-Linux platform
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    pub fn exit_status(&self) -> (i16, i16) {
+        (0, 0)
     }
     /// Consumes the `Utmpx`, returning the underlying C struct utmpx
     pub fn into_inner(self) -> utmpx {
@@ -170,6 +189,7 @@ impl Utmpx {
     pub fn canon_host(&self) -> IOResult<String> {
         const AI_CANONNAME: libc::c_int = 0x2;
         let host = self.host();
+        let host = host.split(':').nth(0).unwrap();
         let hints = libc::addrinfo {
             ai_flags: AI_CANONNAME,
             ai_family: 0,
@@ -180,7 +200,7 @@ impl Utmpx {
             ai_canonname: ptr::null_mut(),
             ai_next: ptr::null_mut(),
         };
-        let c_host = CString::new(host.as_ref()).unwrap();
+        let c_host = CString::new(host).unwrap();
         let mut res = ptr::null_mut();
         let status = unsafe {
             libc::getaddrinfo(c_host.as_ptr(),
@@ -194,7 +214,7 @@ impl Utmpx {
             // says Darwin 7.9.0 getaddrinfo returns 0 but sets
             // res->ai_canonname to NULL.
             let ret = if info.ai_canonname.is_null() {
-                Ok(String::from(host.as_ref()))
+                Ok(String::from(host))
             } else {
                 Ok(unsafe { CString::from_raw(info.ai_canonname).into_string().unwrap() })
             };
@@ -236,9 +256,7 @@ impl Iterator for UtmpxIter {
         unsafe {
             let res = getutxent();
             if !res.is_null() {
-                Some(Utmpx {
-                    inner: ptr::read(res as *const _)
-                })
+                Some(Utmpx { inner: ptr::read(res as *const _) })
             } else {
                 endutxent();
                 None

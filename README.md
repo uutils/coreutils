@@ -170,7 +170,6 @@ To do
 - tail (not all features implemented)
 - test (not all features implemented)
 - uniq (a couple of missing options)
-- who
 
 License
 -------

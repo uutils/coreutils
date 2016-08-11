@@ -129,7 +129,8 @@ UNIX_PROGS := \
   uname \
   unlink \
   uptime \
-  users
+  users \
+  who
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
@@ -195,7 +196,8 @@ TEST_PROGS  := \
 	unexpand \
 	uniq \
 	unlink \
-	wc
+	wc \
+	who
 
 TESTS       := \
 	$(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(TEST_PROGS))))

@@ -21,6 +21,7 @@ unix_only! {
     "stdbuf", test_stdbuf;
     "touch", test_touch;
     "unlink", test_unlink;
+    "who", test_who;
     // Be aware of the trailing semicolon after the last item
     "stat", test_stat
 }
