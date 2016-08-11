@@ -33,7 +33,6 @@ fn test_byte_sequence() {
     }
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
 #[test]
 fn test_char_sequence() {
     for param in vec!["-c", "--characters"] {

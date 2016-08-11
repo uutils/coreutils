@@ -128,76 +128,6 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
     0
 }
 
-fn cut_characters<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
-    let mut buf_in = BufReader::new(reader);
-    let mut out = stdout();
-    let mut buffer = String::new();
-
-    'newline: loop {
-        buffer.clear();
-        match buf_in.read_line(&mut buffer) {
-            Ok(n) if n == 0 => break,
-            Err(e) => {
-                if buffer.is_empty() {
-                    crash!(1, "read error: {}", e);
-                }
-            },
-            _ => (),
-        };
-
-        let line = &buffer[..];
-        let mut char_pos = 0;
-        let mut char_indices = line.char_indices();
-        let mut print_delim = false;
-        let mut low_idx = 0;
-
-        for &Range { low, high } in ranges.iter() {
-            low_idx = if low - char_pos > 0 {
-                match char_indices.nth(low - char_pos - 1) {
-                    Some((low_idx, _)) => low_idx,
-                    None => break,
-                }
-            } else {
-                low_idx
-            };
-
-            match opts.out_delim {
-                Some(ref delim) => {
-                    if print_delim {
-                        pipe_crash_if_err!(1, out.write_all(delim.as_bytes()));
-                    }
-                    print_delim = true;
-                }
-                None => ()
-            }
-
-            match char_indices.nth(high - low) {
-                Some((high_idx, _)) => {
-                    let segment = &line.as_bytes()[low_idx..high_idx];
-                    low_idx = high_idx;
-
-                    pipe_crash_if_err!(1, out.write_all(segment));
-                }
-                None => {
-                    let bytes = line.as_bytes();
-                    let segment = &bytes[low_idx..];
-
-                    pipe_crash_if_err!(1, out.write_all(segment));
-
-                    if line.as_bytes()[bytes.len() - 1] == b'\n' {
-                        continue 'newline
-                    }
-                }
-            }
-
-            char_pos = high + 1;
-        }
-        pipe_crash_if_err!(1, out.write_all(&[b'\n']));
-    }
-
-    0
-}
-
 fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_delimited: bool, newline_char: u8, out_delim: &str) -> i32 {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout();
@@ -375,7 +305,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 
             exit_code |= match mode {
                 Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Characters(ref ranges, ref opts) => cut_characters(stdin(), ranges, opts),
+                Mode::Characters(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
                 Mode::Fields(ref ranges, ref opts) => cut_fields(stdin(), ranges, opts),
             };
 
@@ -398,7 +328,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 
             exit_code |= match mode {
                 Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                Mode::Characters(ref ranges, ref opts) => cut_characters(file, ranges, opts),
+                Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
                 Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
             };
         }
