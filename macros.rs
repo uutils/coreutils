@@ -264,15 +264,6 @@ macro_rules! snippet_list_join_or {
     );
 }
 
-//-- message templates : help and version
-
-#[macro_export]
-macro_rules! msg_version {
-    () => (
-        format!("{} {}", executable!(), env!("CARGO_PKG_VERSION"))
-    )
-}
-
 //-- message templates : invalid input
 
 #[macro_export]
