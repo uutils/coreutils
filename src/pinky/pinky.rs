@@ -251,7 +251,7 @@ fn time_string(ut: &Utmpx) -> String {
 impl Pinky {
     fn print_entry(&self, ut: &Utmpx) {
         let mut pts_path = PathBuf::from("/dev");
-        pts_path.push(ut.tty_device().as_ref());
+        pts_path.push(ut.tty_device().as_str());
 
         let mesg;
         let last_change;
@@ -298,7 +298,7 @@ impl Pinky {
         print!(" {}", time_string(&ut));
 
         if self.include_where && !ut.host().is_empty() {
-            let ut_host = ut.host().into_owned();
+            let ut_host = ut.host();
             let mut res = ut_host.split(':');
             let host = match res.next() {
                 Some(_) => ut.canon_host().unwrap_or(ut_host.clone()),
