@@ -17,6 +17,8 @@ extern crate semver;
 
 #[macro_use]
 extern crate uucore;
+#[macro_use]
+extern crate itertools;
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -26,6 +28,7 @@ use std::mem::replace;
 use std::path::Path;
 use uucore::fs::is_stdin_interactive;
 use semver::Version;
+use itertools::Itertools; // for Iterator::dedup()
 
 static NAME: &'static str = "sort";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -261,10 +264,6 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
     sort_by(&mut lines, &settings);
 
-    if settings.unique {
-        lines.dedup()
-    }
-
     if settings.check {
         for (i, line) in lines.iter().enumerate() {
             if line != &original_lines[i] {
@@ -274,10 +273,20 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         }
     }
     else if settings.merge {
-        print_sorted(file_merger, &settings.outfile)
+        if settings.unique {
+            print_sorted(file_merger.dedup(), &settings.outfile)
+        }
+        else {
+            print_sorted(file_merger, &settings.outfile)
+        }
     }
     else {
-        print_sorted(lines.iter(), &settings.outfile)
+        if settings.unique {
+            print_sorted(lines.iter().dedup(), &settings.outfile)
+        }
+        else {
+            print_sorted(lines.iter(), &settings.outfile)
+        }
     }
 
     0
