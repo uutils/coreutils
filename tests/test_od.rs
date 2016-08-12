@@ -527,3 +527,24 @@ fn test_read_bytes(){
     assert!(result.success);
     assert_eq!(result.stdout, unindent(ALPHA_OUT));
 }
+
+#[test]
+fn test_ascii_dump(){
+
+    let input : [u8; 22] = [
+        0x00, 0x01, 0x0a, 0x0d, 0x10, 0x1f, 0x20, 0x61, 0x62, 0x63, 0x7d,
+        0x7e, 0x7f, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0xff];
+    let result = new_ucmd!().arg("-tx1zacz").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(r"
+            0000000  00  01  0a  0d  10  1f  20  61  62  63  7d  7e  7f  80  90  a0  >...... abc}~....<
+                    nul soh  nl  cr dle  us  sp   a   b   c   }   ~ del nul dle  sp
+                     \0 001  \n  \r 020 037       a   b   c   }   ~ 177  **  **  **  >...... abc}~....<
+            0000020  b0  c0  d0  e0  f0  ff                                          >......<
+                      0   @   P   `   p del
+                     ** 300 320 340 360 377                                          >......<
+            0000026
+            "));
+}

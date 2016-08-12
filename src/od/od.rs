@@ -38,7 +38,8 @@ use partialreader::*;
 use peekreader::*;
 use formatteriteminfo::*;
 use parse_nrofbytes::*;
-use parse_formats::parse_format_flags;
+use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
+use prn_char::format_ascii_dump;
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
@@ -163,7 +164,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
     };
-    let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
+    let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
     if line_bytes % min_bytes != 0 {
         show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
         line_bytes = min_bytes;
@@ -201,7 +202,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
-        fnames: Vec<InputSource>, formats: &[FormatterItemInfo], output_duplicates: bool,
+        fnames: Vec<InputSource>, formats: &[ParsedFormatterItemInfo], output_duplicates: bool,
         skip_bytes: usize, read_bytes: Option<usize>) -> i32 {
 
     let mf = MultifileReader::new(fnames);
@@ -213,12 +214,13 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
     let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes + PEEK_BUFFER_SIZE);
     unsafe { bytes.set_len(line_bytes + PEEK_BUFFER_SIZE); } // fast but uninitialized
 
-    let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.byte_size));
+    let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
     let print_width_block = formats
         .iter()
         .fold(1, |max, next| {
-            cmp::max(max, next.print_width * (byte_size_block / next.byte_size))
+            cmp::max(max, next.formatter_item_info.print_width * (byte_size_block / next.formatter_item_info.byte_size))
         });
+    let print_width_line = print_width_block * (line_bytes / byte_size_block);
 
     if byte_size_block > MAX_BYTES_PER_UNIT {
         panic!("{}-bits types are unsupported. Current max={}-bits.",
@@ -233,9 +235,9 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
     // calculate proper alignment for each item
     for sf in &mut spaced_formatters {
-        let mut byte_size = sf.frm.byte_size;
+        let mut byte_size = sf.frm.formatter_item_info.byte_size;
         let mut items_in_block = byte_size_block / byte_size;
-        let thisblock_width = sf.frm.print_width * items_in_block;
+        let thisblock_width = sf.frm.formatter_item_info.print_width * items_in_block;
         let mut missing_spacing = print_width_block - thisblock_width;
 
         while items_in_block > 0 {
@@ -291,7 +293,7 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
                     print_bytes(byte_order, &bytes, n, peekbytes,
                         &print_with_radix(input_offset_base, addr),
-                        &spaced_formatters, byte_size_block);
+                        &spaced_formatters, byte_size_block, print_width_line);
                 }
 
                 addr += n;
@@ -312,22 +314,22 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 }
 
 fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: usize, prefix: &str,
-        formats: &[SpacedFormatterItemInfo], byte_size_block: usize) {
+        formats: &[SpacedFormatterItemInfo], byte_size_block: usize, print_width_line: usize) {
     let mut first = true; // First line of a multi-format raster.
     for f in formats {
         let mut output_text = String::new();
 
         let mut b = 0;
         while b < length {
-            let nextb = b + f.frm.byte_size;
+            let nextb = b + f.frm.formatter_item_info.byte_size;
 
             output_text.push_str(&format!("{:>width$}",
                     "",
                     width = f.spacing[b % byte_size_block]));
 
-            match f.frm.formatter {
+            match f.frm.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
-                    let p: u64 = match f.frm.byte_size {
+                    let p: u64 = match f.frm.formatter_item_info.byte_size {
                         1 => {
                             bytes[b] as u64
                         }
@@ -340,19 +342,19 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: us
                         8 => {
                             byte_order.read_u64(&bytes[b..nextb])
                         }
-                        _ => { panic!("Invalid byte_size: {}", f.frm.byte_size); }
+                        _ => { panic!("Invalid byte_size: {}", f.frm.formatter_item_info.byte_size); }
                     };
-                    output_text.push_str(&func(p, f.frm.byte_size, f.frm.print_width));
+                    output_text.push_str(&func(p, f.frm.formatter_item_info.byte_size, f.frm.formatter_item_info.print_width));
                 }
                 FormatWriter::FloatWriter(func) => {
-                    let p: f64 = match f.frm.byte_size {
+                    let p: f64 = match f.frm.formatter_item_info.byte_size {
                         4 => {
                             byte_order.read_f32(&bytes[b..nextb]) as f64
                         }
                         8 => {
                             byte_order.read_f64(&bytes[b..nextb])
                         }
-                        _ => { panic!("Invalid byte_size: {}", f.frm.byte_size); }
+                        _ => { panic!("Invalid byte_size: {}", f.frm.formatter_item_info.byte_size); }
                     };
                     output_text.push_str(&func(p));
                 }
@@ -361,6 +363,14 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: us
                 }
             }
             b = nextb;
+        }
+
+        if f.frm.add_ascii_dump {
+            let missing_spacing = print_width_line.saturating_sub(output_text.chars().count());
+            output_text.push_str(&format!("{:>width$}  {}",
+                    "",
+                    format_ascii_dump(&bytes[..length]),
+                    width=missing_spacing));
         }
 
         if first {
@@ -416,6 +426,6 @@ fn print_final_offset(r: Radix, x: usize) {
 }
 
 struct SpacedFormatterItemInfo {
-    frm: FormatterItemInfo,
+    frm: ParsedFormatterItemInfo,
     spacing: [usize; MAX_BYTES_PER_UNIT],
 }

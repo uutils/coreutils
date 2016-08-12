@@ -13,6 +13,22 @@ macro_rules! hashmap {
     }}
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct ParsedFormatterItemInfo {
+    pub formatter_item_info:  FormatterItemInfo,
+    pub add_ascii_dump: bool,
+}
+
+impl ParsedFormatterItemInfo {
+    pub fn new(formatter_item_info: FormatterItemInfo, add_ascii_dump: bool) -> ParsedFormatterItemInfo {
+        ParsedFormatterItemInfo {
+            formatter_item_info: formatter_item_info,
+            add_ascii_dump: add_ascii_dump,
+        }
+    }
+}
+
+
 /// Parses format flags from commandline
 ///
 /// getopts, docopt, clap don't seem suitable to parse the commandline
@@ -24,7 +40,7 @@ macro_rules! hashmap {
 /// arguments with parameters like -w16 can only appear at the end: -fvoxw16
 /// parameters of -t/--format specify 1 or more formats.
 /// if -- appears on the commandline, parsing should stop.
-pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<FormatterItemInfo>, String> {
+pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemInfo>, String> {
 
     let known_formats = hashmap![
     'a' => FORMAT_ITEM_A,
@@ -97,7 +113,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<FormatterItemInfo>, 
                     match known_formats.get(&c) {
                         None => {} // not every option is a format
                         Some(r) => {
-                            formats.push(*r)
+                            formats.push(ParsedFormatterItemInfo::new(*r, false))
                         }
                     }
                 }
@@ -116,7 +132,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<FormatterItemInfo>, 
     }
 
     if formats.is_empty() {
-        formats.push(FORMAT_ITEM_OCT16); // 2 byte octal is the default
+        formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_OCT16, false)); // 2 byte octal is the default
     }
 
     Ok(formats)
@@ -130,7 +146,7 @@ enum ParseState {
     Finished        // no more characters may appear.
 }
 
-fn parse_type_string(params: &String) -> Result<Vec<FormatterItemInfo>, String> {
+fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, String> {
 
     let type_chars: HashSet<_> = ['a', 'c'].iter().cloned().collect();
     let type_ints: HashSet<_> = ['d', 'o', 'u', 'x'].iter().cloned().collect();
@@ -233,50 +249,50 @@ fn parse_type_string(params: &String) -> Result<Vec<FormatterItemInfo>, String> 
         }
 
         match type_char {
-            'a' => formats.push(FORMAT_ITEM_A),
-            'c' => formats.push(FORMAT_ITEM_C),
+            'a' => formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_A, show_ascii_dump)),
+            'c' => formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_C, show_ascii_dump)),
             'd' => {
-                formats.push(match byte_size {
+                formats.push(ParsedFormatterItemInfo::new(match byte_size {
                     1 => FORMAT_ITEM_DEC8S,
                     2 => FORMAT_ITEM_DEC16S,
                     4|0 => FORMAT_ITEM_DEC32S,
                     8 => FORMAT_ITEM_DEC64S,
                     _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                });
+                }, show_ascii_dump));
             },
             'o' => {
-                formats.push(match byte_size {
+                formats.push(ParsedFormatterItemInfo::new(match byte_size {
                     1 => FORMAT_ITEM_OCT8,
                     2 => FORMAT_ITEM_OCT16,
                     4|0 => FORMAT_ITEM_OCT32,
                     8 => FORMAT_ITEM_OCT64,
                     _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                });
+                }, show_ascii_dump));
             },
             'u' => {
-                formats.push(match byte_size {
+                formats.push(ParsedFormatterItemInfo::new(match byte_size {
                     1 => FORMAT_ITEM_DEC8U,
                     2 => FORMAT_ITEM_DEC16U,
                     4|0 => FORMAT_ITEM_DEC32U,
                     8 => FORMAT_ITEM_DEC64U,
                     _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                });
+                }, show_ascii_dump));
             },
             'x' => {
-                formats.push(match byte_size {
+                formats.push(ParsedFormatterItemInfo::new(match byte_size {
                     1 => FORMAT_ITEM_HEX8,
                     2 => FORMAT_ITEM_HEX16,
                     4|0 => FORMAT_ITEM_HEX32,
                     8 => FORMAT_ITEM_HEX64,
                     _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                });
+                }, show_ascii_dump));
             },
             'f' => {
-                formats.push(match byte_size {
+                formats.push(ParsedFormatterItemInfo::new(match byte_size {
                     4|0 => FORMAT_ITEM_F32,
                     8 => FORMAT_ITEM_F64,
                     _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                });
+                }, show_ascii_dump));
             },
             _ => unreachable!(),
         }
@@ -287,11 +303,21 @@ fn parse_type_string(params: &String) -> Result<Vec<FormatterItemInfo>, String> 
     Ok(formats)
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn parse_format_flags_str(args_str: &Vec<&'static str>) -> Result<Vec<FormatterItemInfo>, String> {
     let args = args_str.iter().map(|s| s.to_string()).collect();
-    parse_format_flags(&args)
+    match parse_format_flags(&args) {
+        Err(e) => Err(e),
+        Ok(v) => {
+            // tests using this function asume add_ascii_dump is not set
+            Ok(v.into_iter()
+                .inspect(|f| assert!(!f.add_ascii_dump))
+                .map(|f| f.formatter_item_info)
+                .collect())
+        },
+    }
 }
+
 
 #[test]
 fn test_no_options() {
@@ -372,9 +398,9 @@ fn test_long_format_a() {
 
 #[test]
 fn test_long_format_cz() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=cz")).unwrap(),
-       vec!(FORMAT_ITEM_C)); // TODO 'z'
+   assert_eq!(parse_format_flags(
+       &vec!("od".to_string(), "--format=cz".to_string())).unwrap(),
+       vec!(ParsedFormatterItemInfo::new(FORMAT_ITEM_C, true)));
 }
 
 #[test]
@@ -448,36 +474,35 @@ fn test_format_next_arg_invalid() {
     parse_format_flags_str(&vec!("od", "-t")).unwrap_err();
 }
 
-
 #[test]
 fn test_mixed_formats() {
-   assert_eq!(parse_format_flags_str(
+   assert_eq!(parse_format_flags(
        &vec!(
-           "od",
-           "--skip-bytes=2",
-           "-vItu1z",
-           "-N",
-           "1000",
-           "-xt",
-           "acdx1",
-           "--format=u2c",
-           "--format",
-           "f",
-           "-xAx",
-           "--",
-           "-h",
-           "--format=f8")).unwrap(),
+           "od".to_string(),
+           "--skip-bytes=2".to_string(),
+           "-vItu1z".to_string(),
+           "-N".to_string(),
+           "1000".to_string(),
+           "-xt".to_string(),
+           "acdx1".to_string(),
+           "--format=u2c".to_string(),
+           "--format".to_string(),
+           "f".to_string(),
+           "-xAx".to_string(),
+           "--".to_string(),
+           "-h".to_string(),
+           "--format=f8".to_string())).unwrap(),
        vec!(
-           FORMAT_ITEM_DEC64S,  // I
-           FORMAT_ITEM_DEC8U,   // tu1z
-           FORMAT_ITEM_HEX16,   // x
-           FORMAT_ITEM_A,       // ta
-           FORMAT_ITEM_C,       // tc
-           FORMAT_ITEM_DEC32S,  // td
-           FORMAT_ITEM_HEX8,    // tx1
-           FORMAT_ITEM_DEC16U,  // tu2
-           FORMAT_ITEM_C,       // tc
-           FORMAT_ITEM_F32,     // tf
-           FORMAT_ITEM_HEX16,   // x
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC64S, false),  // I
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC8U, true),    // tu1z
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),   // x
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_A, false),       // ta
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),       // tc
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC32S, false),  // td
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false),    // tx1
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC16U, false),  // tu2
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),       // tc
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_F32, false),     // tf
+           ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),   // x
        ));
 }

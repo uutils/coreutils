@@ -100,6 +100,23 @@ fn format_item_c(bytes: &[u8]) -> String {
     }
 }
 
+pub fn format_ascii_dump(bytes: &[u8]) -> String {
+    let mut result = String::new();
+
+    result.push('>');
+    for c in bytes.iter() {
+        if *c >= 0x20 && *c <= 0x7e {
+            result.push_str(C_CHRS[*c as usize]);
+        }
+        else {
+            result.push('.');
+        }
+    }
+    result.push('<');
+
+    result
+}
+
 #[test]
 fn test_format_item_a() {
     assert_eq!(" nul", format_item_a(0x00, 1, 4));
@@ -146,4 +163,10 @@ fn test_format_item_c() {
     assert_eq!(" 364", format_item_c(&[0xf4, 0x90, 0x00, 0x00])); // invalid utf-8
     assert_eq!(" 365", format_item_c(&[0xf5, 0x80, 0x80, 0x80])); // invalid utf-8
     assert_eq!(" 377", format_item_c(&[0xff])); // invalid utf-8
+}
+
+#[test]
+fn test_format_ascii_dump() {
+    assert_eq!(">.<", format_ascii_dump(&[0x00]));
+    assert_eq!(">. A~.<", format_ascii_dump(&[0x1f, 0x20, 0x41, 0x7e, 0x7f]));
 }
