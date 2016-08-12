@@ -6,7 +6,8 @@ pub struct HelpText<'a> {
     pub version : &'a str,
     pub syntax : &'a str,
     pub summary : &'a str,
-    pub long_help : &'a str
+    pub long_help : &'a str,
+    pub display_usage : bool
 }
 
 pub struct CoreOptions<'a> {
@@ -43,21 +44,21 @@ impl<'a> CoreOptions<'a> {
                 crash!(1, "{}", f);
             }
         }.unwrap();
-        if matches.opt_present("help") {
+        if matches.opt_present("help") {            
+            let usage_str = if self.help_text.display_usage {
+                    format!("\n {}\n\n Reference\n", 
+                        self.options.usage(self.help_text.summary)
+                    ).replace("Options:", " Options:") 
+                } else { String::new() };
             print!("
  {0} {1}
 
  {0} {2}
-
- {3}
-
- Reference
-{4}
-",
-self.help_text.name, self.help_text.version, self.help_text.syntax, self.options.usage(self.help_text.summary), self.help_text.long_help);
+{3}{4}
+", self.help_text.name, self.help_text.version, self.help_text.syntax, usage_str, self.help_text.long_help);
             exit!(0);
         } else if matches.opt_present("version") {
-            print!("{} {}", self.help_text.name, self.help_text.version);
+            println!("{} {}", self.help_text.name, self.help_text.version);
             exit!(0);
         }
         matches
@@ -72,7 +73,18 @@ macro_rules! new_coreopts {
             version: env!("CARGO_PKG_VERSION"),
             syntax: $syntax,
             summary: $summary,
-            long_help: $long_help
+            long_help: $long_help,
+            display_usage: true
+        })
+    );
+    ($syntax: expr, $summary: expr, $long_help: expr, $display_usage: expr) => (
+        uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
+            name: executable!(),
+            version: env!("CARGO_PKG_VERSION"),
+            syntax: $syntax,
+            summary: $summary,
+            long_help: $long_help,
+            display_usage: $display_usage
         })
     );
 }
