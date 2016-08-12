@@ -214,6 +214,10 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         /* if no file, default to stdin */
         files.push("-".to_owned());
     }
+    else if settings.check && files.len() != 1 {
+        crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
+
+    }
 
     settings.compare_fns.push(match settings.mode {
         SortMode::Numeric => numeric_compare,
@@ -248,6 +252,9 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         if settings.merge {
             file_merger.push_file(buf_reader.lines());
         }
+        else if settings.check {
+            return exec_check_file(buf_reader.lines(), &settings)
+        }
         else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
@@ -260,19 +267,9 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         }
     }
 
-    let original_lines = lines.to_vec();
-
     sort_by(&mut lines, &settings);
 
-    if settings.check {
-        for (i, line) in lines.iter().enumerate() {
-            if line != &original_lines[i] {
-                println!("sort: disorder in line {}", i);
-                return 1;
-            }
-        }
-    }
-    else if settings.merge {
+    if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings.outfile)
         }
@@ -291,6 +288,44 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
     0
 
+}
+
+fn exec_check_file(lines: Lines<BufReader<Box<Read>>>, settings: &Settings) -> i32 {
+    // errors yields the line before each disorder,
+    // plus the last line (quirk of .coalesce())
+    let unwrapped_lines = lines.filter_map(|maybe_line| {
+        if let Ok(line) = maybe_line {
+            Some(line)
+        }
+        else {
+            None
+        }
+    });
+    let mut errors = unwrapped_lines.enumerate().coalesce(
+        |(last_i, last_line), (i, line)| {
+            if compare_by(&last_line, &line, &settings) == Ordering::Greater {
+                Err(((last_i, last_line), (i, line)))
+            }
+            else {
+                Ok((i, line))
+            }
+    });
+    if let Some((first_error_index, _line)) = errors.next() {
+        // Check for a second "error", as .coalesce() always returns the last
+        // line, no matter what our merging function does.
+        if let Some(_last_line_or_next_error) = errors.next() {
+            println!("sort: disorder in line {}", first_error_index);
+            return 1;
+        }
+        else {
+            // first "error" was actually the last line. 
+            return 0;
+        }
+    }
+    else {
+        // unwrapped_lines was empty. Empty files are defined to be sorted.
+        return 0;
+    }
 }
 
 fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
