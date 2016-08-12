@@ -147,29 +147,106 @@ To contribute to coreutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 To do
 -----
 
-- chcon
-- runcon
-- ~~md5sum~~, ~~sha1sum~~, ~~sha224sum~~, ~~sha256sum~~, ~~sha384sum~~, ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs))
-- chgrp
-- cp (not much done)
-- csplit
-- date
-- dd
-- df
-- expr (almost done, no regular expressions)
-- join
-- ls
-- mv (almost done, one more option)
-- numfmt
-- od (in progress, needs lots of work)
-- pr
-- printf
-- sort (a couple of options implemented)
-- split (a couple of missing options)
-- stty
-- tail (not all features implemented)
-- test (not all features implemented)
-- uniq (a couple of missing options)
+* [x] arch
+* [x] base32
+* [x] base64
+* [x] basename
+* [x] cat
+* [ ] chcon
+* [ ] chgrp
+* [x] chmod
+* [x] chown
+* [x] chroot
+* [x] cksum
+* [x] comm
+* [ ] cp (not much done)
+* [ ] csplit
+* [x] cut
+* [ ] date
+* [ ] dd
+* [ ] df
+* [x] dircolors
+* [x] dirname
+* [x] du
+* [x] echo
+* [x] env
+* [x] expand
+* [ ] expr (almost done, no regular expressions)
+* [x] factor
+* [x] false
+* [x] fmt
+* [x] fold
+* [x] groups
+* [x] hashsum
+* [x] head
+* [x] hostid
+* [x] hostname
+* [x] id
+* [ ] install (a couple of missing options)
+* [ ] join
+* [x] kill
+* [x] link
+* [x] ln
+* [x] logname
+* [ ] ls
+* [x] ~~md5sum~~, ~~sha1sum~~, ~~sha224sum~~, ~~sha256sum~~, ~~sha384sum~~, ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs))
+* [x] mkdir
+* [x] mkfifo
+* [x] mknod
+* [x] mktemp
+* [ ] mv (almost done, one more option)
+* [x] nice
+* [x] nl
+* [x] nohup
+* [x] nproc
+* [ ] numfmt
+* [ ] od (in progress, needs lots of work)
+* [x] paste
+* [x] pathchk
+* [x] pinky
+* [ ] pr
+* [x] printenv
+* [ ] printf
+* [x] ptx
+* [x] pwd
+* [x] readlink
+* [x] realpath
+* [x] relpath
+* [x] rm
+* [x] rmdir
+* [ ] runcon
+* [x] seq
+* [x] shred
+* [x] shuf
+* [x] sleep
+* [ ] sort (a couple of options implemented)
+* [ ] split (a couple of missing options)
+* [x] stat
+* [x] stdbuf
+* [ ] stty
+* [x] sum
+* [x] sync
+* [x] tac
+* [ ] tail (not all features implemented)
+* [x] tee
+* [ ] test (not all features implemented)
+* [x] timeout
+* [x] touch
+* [x] tr
+* [x] true
+* [x] truncate
+* [x] tsort
+* [x] tty
+* [x] uname
+* [x] unexpand
+* [x] uniq
+* [x] unlink
+* [x] uptime
+* [x] users
+* [x] wc
+* [x] who
+* [x] whoami
+* [x] yes
 
 License
 -------
