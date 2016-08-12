@@ -3,6 +3,7 @@ pub extern crate libc;
 #[macro_use]
 mod macros;
 
+#[macro_use]
 pub mod coreopts;
 
 #[cfg(feature = "fs")]

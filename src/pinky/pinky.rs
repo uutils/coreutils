@@ -14,7 +14,6 @@
 extern crate uucore;
 use uucore::c_types::getpwnam;
 use uucore::utmpx::{self, time, Utmpx};
-use uucore::coreopts;
 use uucore::libc::{uid_t, gid_t, c_char, S_IWGRP};
 
 use std::io::prelude::*;
@@ -29,12 +28,28 @@ use std::ffi::{CStr, CString};
 
 use std::path::PathBuf;
 
-static NAME: &'static str = "pinky";
-
+static SYNTAX: &'static str = "[OPTION]... [USER]...";
+static SUMMARY: &'static str = "A lightweight 'finger' program;  print user information.";
+                 
 const BUFSIZE: usize = 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = coreopts::CoreOptions::new(NAME);
+    let long_help = &format!("
+  -l              produce long format output for the specified USERs
+  -b              omit the user's home directory and shell in long format
+  -h              omit the user's project file in long format
+  -p              omit the user's plan file in long format
+  -s              do short format output, this is the default
+  -f              omit the line of column headings in short format
+  -w              omit the user's full name in short format
+  -i              omit the user's full name and remote host in short format
+  -q              omit the user's full name, remote host and idle time
+                  in short format
+      --help     display this help and exit
+      --version  output version information and exit
+
+The utmp file will be {}", utmpx::DEFAULT_FILE);
+    let mut opts = new_coreopts!(SYNTAX, SUMMARY, &long_help);
     opts.optflag("l",
                  "l",
                  "produce long format output for the specified USERs");
@@ -54,27 +69,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  "omit the user's full name, remote host and idle time in short format");
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
-
-    opts.help(format!(
-        "Usage: {} [OPTION]... [USER]...
-
-  -l              produce long format output for the specified USERs
-  -b              omit the user's home directory and shell in long format
-  -h              omit the user's project file in long format
-  -p              omit the user's plan file in long format
-  -s              do short format output, this is the default
-  -f              omit the line of column headings in short format
-  -w              omit the user's full name in short format
-  -i              omit the user's full name and remote host in short format
-  -q              omit the user's full name, remote host and idle time
-                  in short format
-      --help     display this help and exit
-      --version  output version information and exit
-
-A lightweight 'finger' program;  print user information.
-The utmp file will be {}",
-                 NAME,
-                 utmpx::DEFAULT_FILE));
 
     let matches = opts.parse(args);
 
