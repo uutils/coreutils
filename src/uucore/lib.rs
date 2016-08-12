@@ -1,3 +1,4 @@
+#[cfg(feature = "libc")]
 pub extern crate libc;
 
 #[macro_use]

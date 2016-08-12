@@ -95,6 +95,13 @@ fn test_stdin_repeated_only() {
 }
 
 #[test]
+fn test_stdin_ignore_case() {
+    new_ucmd()
+        .args(&["-i"]).pipe_in_fixture(INPUT)
+        .run().stdout_is_fixture("sorted-ignore-case.expected");
+}
+
+#[test]
 fn test_stdin_zero_terminated() {
     new_ucmd()
         .args(&["-z"]).pipe_in_fixture(SORTED_ZERO_TERMINATED)
