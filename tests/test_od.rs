@@ -117,7 +117,7 @@ fn test_from_mixed() {
         }
     }
 
-    let result = new_ucmd!().arg("--endian=little").arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
+    let result = new_ucmd!().arg("--endian=little").arg(file1.as_os_str()).arg("-").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -546,5 +546,21 @@ fn test_ascii_dump(){
                       0   @   P   `   p del
                      ** 300 320 340 360 377                                          >......<
             0000026
+            "));
+}
+
+#[test]
+fn test_filename_parsing(){
+    // files "a" and "x" both exists, but are no filenames in the commandline below
+    // "-f" must be treated as a filename, it contains the text: minus lowercase f
+    // so "-f" should not be interpreted as a formatting option.
+    let result = new_ucmd!().arg("--format").arg("a").arg("-A").arg("x").arg("--").arg("-f").run();
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent("
+            000000   m   i   n   u   s  sp   l   o   w   e   r   c   a   s   e  sp
+            000010   f  nl
+            000012
             "));
 }

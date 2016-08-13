@@ -134,12 +134,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    // Gather up file names - args which don't start with '-'
-    let mut inputs = args[1..]
+    // Gather up file names
+    let mut inputs = matches.free
         .iter()
         .filter_map(|w| match w as &str {
-            "--" => Some(InputSource::Stdin),
-            o if o.starts_with("-") => None,
+            "-" => Some(InputSource::Stdin),
             x => Some(InputSource::FileName(x)),
         })
         .collect::<Vec<_>>();
