@@ -67,7 +67,42 @@ fn test_multiple_files() {
         .arg("-n")
         .arg("multiple_files1.txt")
         .arg("multiple_files2.txt")
-        .succeeds().stdout_is_fixture("multiple_files.expected");
+        .succeeds().stdout_only_fixture("multiple_files.expected");
+}
+
+#[test]
+fn test_merge_interleaved() {
+    new_ucmd()
+        .arg("-m")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .succeeds().stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+fn test_merge_unique() {
+    new_ucmd()
+        .arg("-m")
+        .arg("--unique")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_1.txt")
+        .succeeds().stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+fn test_merge_reversed() {
+    new_ucmd()
+        .arg("-m")
+        .arg("--reverse")
+        .arg("merge_ints_reversed_1.txt")
+        .arg("merge_ints_reversed_2.txt")
+        .arg("merge_ints_reversed_3.txt")
+        .succeeds().stdout_only_fixture("merge_ints_reversed.expected");
 }
 
 #[test]

@@ -17,13 +17,18 @@ extern crate semver;
 
 #[macro_use]
 extern crate uucore;
+#[macro_use]
+extern crate itertools;
 
 use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, stdin, stdout, Write};
+use std::io::{BufRead, BufReader, BufWriter, Lines, Read, stdin, stdout, Write};
+use std::mem::replace;
 use std::path::Path;
 use uucore::fs::is_stdin_interactive;
 use semver::Version;
+use itertools::Itertools; // for Iterator::dedup()
 
 static NAME: &'static str = "sort";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -41,22 +46,105 @@ enum SortMode {
 
 struct Settings {
     mode: SortMode,
+    merge: bool,
     reverse: bool,
     outfile: Option<String>,
     stable: bool,
     unique: bool,
     check: bool,
+    compare_fns: Vec<fn(&String, &String) -> Ordering>,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
             mode: SortMode::Default,
+            merge: false,
             reverse: false,
             outfile: None,
             stable: false,
             unique: false,
             check: false,
+            compare_fns: Vec::new(),
+        }
+    }
+}
+
+struct MergeableFile<'a> {
+    lines: Lines<BufReader<Box<Read>>>,
+    current_line: String,
+    settings: &'a Settings,
+}
+
+// BinaryHeap depends on `Ord`. Note that we want to pop smallest items
+// from the heap first, and BinaryHeap.pop() returns the largest, so we
+// trick it into the right order by calling reverse() here.
+impl<'a> Ord for MergeableFile<'a> {
+    fn cmp(&self, other: &MergeableFile) -> Ordering {
+        compare_by(&self.current_line, &other.current_line, &self.settings).reverse()
+    }
+}
+
+impl<'a> PartialOrd for MergeableFile<'a> {
+    fn partial_cmp(&self, other: &MergeableFile) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> PartialEq for MergeableFile<'a> {
+    fn eq(&self, other: &MergeableFile) -> bool {
+        Ordering::Equal == compare_by(&self.current_line, &other.current_line, &self.settings)
+    }
+}
+
+impl<'a> Eq for MergeableFile<'a> {}
+
+struct FileMerger<'a> {
+    heap: BinaryHeap<MergeableFile<'a>>,
+    settings: &'a Settings,
+}
+
+impl<'a> FileMerger<'a> {
+    fn new(settings: &'a Settings) -> FileMerger<'a> {
+        FileMerger {
+            heap: BinaryHeap::new(),
+            settings: settings,
+        }
+    }
+    fn push_file(&mut self, mut lines: Lines<BufReader<Box<Read>>>){
+        match lines.next() {
+            Some(Ok(next_line)) => {
+                let mergeable_file = MergeableFile {
+                    lines: lines,
+                    current_line: next_line,
+                    settings: &self.settings,
+                };
+                self.heap.push(mergeable_file);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl<'a> Iterator for FileMerger<'a> {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        match self.heap.pop() {
+            Some(mut current) => {
+                match current.lines.next() {
+                    Some(Ok(next_line)) => {
+                        let ret = replace(&mut current.current_line, next_line);
+                        self.heap.push(current);
+                        Some(ret)
+                    },
+                    _ => {
+                        // Don't put it back in the heap (it's empty/erroring)
+                        // but its first line is still valid.
+                        Some(current.current_line)
+                    },
+                }
+            },
+            None => None,
         }
     }
 }
@@ -71,6 +159,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
+    opts.optflag("m", "merge", "merge already sorted files; do not sort");
     opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
     opts.optflag("s", "stable", "stabilize sort by disabling last-resort comparison");
     opts.optflag("u", "unique", "output only the first of an equal run");
@@ -113,6 +202,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         SortMode::Default
     };
 
+    settings.merge = matches.opt_present("merge");
     settings.reverse = matches.opt_present("reverse");
     settings.outfile = matches.opt_str("output");
     settings.stable = matches.opt_present("stable");
@@ -124,35 +214,12 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         /* if no file, default to stdin */
         files.push("-".to_owned());
     }
+    else if settings.check && files.len() != 1 {
+        crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
 
-    exec(files, &settings)
-}
-
-fn exec(files: Vec<String>, settings: &Settings) -> i32 {
-    let mut lines = Vec::new();
-    for path in &files {
-        let (reader, _) = match open(path) {
-            Some(x) => x,
-            None => continue,
-        };
-
-        let buf_reader = BufReader::new(reader);
-
-        for line in buf_reader.lines() {
-            match line {
-                Ok(n) => {
-                    lines.push(n);
-                },
-                _ => break
-            }
-        }
     }
 
-    let original_lines = lines.to_vec();
-
-    let mut compare_fns = Vec::new();
-
-    compare_fns.push(match settings.mode {
+    settings.compare_fns.push(match settings.mode {
         SortMode::Numeric => numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
@@ -163,48 +230,123 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     if !settings.stable {
         match settings.mode {
             SortMode::Default => {}
-            _ => compare_fns.push(String::cmp)
+            _ => settings.compare_fns.push(String::cmp)
         }
     }
 
-    sort_by(&mut lines, compare_fns);
+    exec(files, &settings)
+}
 
-    if settings.unique {
-        lines.dedup()
-    }
+fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+    let mut lines = Vec::new();
+    let mut file_merger = FileMerger::new(&settings);
 
-    if settings.reverse {
-        lines.reverse()
-    }
+    for path in &files {
+        let (reader, _) = match open(path) {
+            Some(x) => x,
+            None => continue,
+        };
 
-    if settings.check {
-        for (i, line) in lines.iter().enumerate() {
-            if line != &original_lines[i] {
-                println!("sort: disorder in line {}", i);
-                return 1;
+        let buf_reader = BufReader::new(reader);
+
+        if settings.merge {
+            file_merger.push_file(buf_reader.lines());
+        }
+        else if settings.check {
+            return exec_check_file(buf_reader.lines(), &settings)
+        }
+        else {
+            for line in buf_reader.lines() {
+                if let Ok(n) = line {
+                        lines.push(n);
+                }
+                else {
+                    break;
+                }
             }
         }
     }
+
+    sort_by(&mut lines, &settings);
+
+    if settings.merge {
+        if settings.unique {
+            print_sorted(file_merger.dedup(), &settings.outfile)
+        }
+        else {
+            print_sorted(file_merger, &settings.outfile)
+        }
+    }
     else {
-        print_sorted(lines.iter(), &settings.outfile)
+        if settings.unique {
+            print_sorted(lines.iter().dedup(), &settings.outfile)
+        }
+        else {
+            print_sorted(lines.iter(), &settings.outfile)
+        }
     }
 
     0
 
 }
 
-fn sort_by<F>(lines: &mut Vec<String>, compare_fns: Vec<F>)
-    where F: Fn( &String, &String ) -> Ordering
-{
+fn exec_check_file(lines: Lines<BufReader<Box<Read>>>, settings: &Settings) -> i32 {
+    // errors yields the line before each disorder,
+    // plus the last line (quirk of .coalesce())
+    let unwrapped_lines = lines.filter_map(|maybe_line| {
+        if let Ok(line) = maybe_line {
+            Some(line)
+        }
+        else {
+            None
+        }
+    });
+    let mut errors = unwrapped_lines.enumerate().coalesce(
+        |(last_i, last_line), (i, line)| {
+            if compare_by(&last_line, &line, &settings) == Ordering::Greater {
+                Err(((last_i, last_line), (i, line)))
+            }
+            else {
+                Ok((i, line))
+            }
+    });
+    if let Some((first_error_index, _line)) = errors.next() {
+        // Check for a second "error", as .coalesce() always returns the last
+        // line, no matter what our merging function does.
+        if let Some(_last_line_or_next_error) = errors.next() {
+            println!("sort: disorder in line {}", first_error_index);
+            return 1;
+        }
+        else {
+            // first "error" was actually the last line. 
+            return 0;
+        }
+    }
+    else {
+        // unwrapped_lines was empty. Empty files are defined to be sorted.
+        return 0;
+    }
+}
+
+fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.sort_by(|a, b| {
-        for compare_fn in &compare_fns {
-            let cmp = compare_fn(a, b);
-            if cmp != Ordering::Equal {
+        compare_by(a, b, &settings)
+    })
+}
+
+fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
+    for compare_fn in &settings.compare_fns {
+        let cmp = compare_fn(a, b);
+        if cmp != Ordering::Equal {
+            if settings.reverse {
+                return cmp.reverse();
+            }
+            else {
                 return cmp;
             }
         }
-        return Ordering::Equal;
-    })
+    }
+    return Ordering::Equal;
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.

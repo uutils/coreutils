@@ -11,6 +11,7 @@ path = "sort.rs"
 getopts = "*"
 libc = "*"
 semver = "*"
+itertools = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
