@@ -24,24 +24,14 @@ fn test_mktemp_mktemp() {
 
     let pathname = scene.fixtures.as_string();
 
-    let exit_success1 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE8).run().success;
-
-
-    assert!(exit_success1);
-    assert!(!exit_success2);
-    assert!(!exit_success3);
-    assert!(!exit_success4);
-    assert!(exit_success5);
-    assert!(exit_success6);
-    assert!(exit_success7);
-    assert!(!exit_success8);
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE1).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE2).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE3).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE4).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE5).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE6).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE7).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg(TEST_TEMPLATE8).fails();
 }
 
 #[test]
@@ -50,23 +40,14 @@ fn test_mktemp_make_temp_dir() {
 
     let pathname = scene.fixtures.as_string();
 
-    let exit_success1 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE8).run().success;
-
-    assert!(exit_success1);
-    assert!(!exit_success2);
-    assert!(!exit_success3);
-    assert!(!exit_success4);
-    assert!(exit_success5);
-    assert!(exit_success6);
-    assert!(exit_success7);
-    assert!(!exit_success8);
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE1).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE2).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE3).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE4).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE5).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE6).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE7).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-d").arg(TEST_TEMPLATE8).fails();
 }
 
 #[test]
@@ -75,35 +56,25 @@ fn test_mktemp_dry_run() {
 
     let pathname = scene.fixtures.as_string();
 
-    let exit_success1 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE8).run().success;
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE1).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE2).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE3).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE4).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE5).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE6).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE7).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("-u").arg(TEST_TEMPLATE8).fails();
 
-
-    assert!(exit_success1);
-    assert!(!exit_success2);
-    assert!(!exit_success3);
-    assert!(!exit_success4);
-    assert!(exit_success5);
-    assert!(exit_success6);
-    assert!(exit_success7);
-    assert!(!exit_success8);
 }
 
 #[test]
 fn test_mktemp_quiet() {
     let scene = TestScenario::new(UTIL_NAME);
 
-    let result1 = scene.ucmd().arg("-p").arg("/definitely/not/exist/I/promise").arg("-q").run();
-    let result2 = scene.ucmd().arg("-d").arg("-p").arg("/definitely/not/exist/I/promise").arg("-q").run();
-
-    assert!(result1.stderr.is_empty() && result1.stdout.is_empty() && !result1.success);
-    assert!(result2.stderr.is_empty() && result2.stdout.is_empty() && !result2.success);
+    scene.ucmd().arg("-p").arg("/definitely/not/exist/I/promise").arg("-q")
+        .fails().no_stdout().no_stderr();
+    scene.ucmd().arg("-d").arg("-p").arg("/definitely/not/exist/I/promise").arg("-q")
+        .fails().no_stdout().no_stderr();
 }
 
 #[test]
@@ -112,49 +83,29 @@ fn test_mktemp_suffix() {
 
     let pathname = scene.fixtures.as_string();
 
-    let exit_success1 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE8).run().success;
-
-
-    assert!(exit_success1);
-    assert!(!exit_success2);
-    assert!(!exit_success3);
-    assert!(!exit_success4);
-    assert!(exit_success5);
-    assert!(!exit_success6);
-    assert!(!exit_success7);
-    assert!(!exit_success8);
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE1).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE2).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE3).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE4).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE5).succeeds();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE6).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE7).fails();
+    scene.ucmd().env(TMPDIR, &pathname).arg("--suffix").arg("suf").arg(TEST_TEMPLATE8).fails();
 }
 
 #[test]
 fn test_mktemp_tmpdir() {
     let scene = TestScenario::new(UTIL_NAME);
 
-   let path = TempDir::new_in(scene.fixtures.as_string(), UTIL_NAME).unwrap();
-   let pathname = path.path().as_os_str();
+    let path = TempDir::new_in(scene.fixtures.as_string(), UTIL_NAME).unwrap();
+    let pathname = path.path().as_os_str();
 
-    let exit_success1 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE1).run().success;
-    let exit_success2 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE2).run().success;
-    let exit_success3 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE3).run().success;
-    let exit_success4 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE4).run().success;
-    let exit_success5 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE5).run().success;
-    let exit_success6 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE6).run().success;
-    let exit_success7 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE7).run().success;
-    let exit_success8 = scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE8).run().success;
-
-
-    assert!(exit_success1);
-    assert!(!exit_success2);
-    assert!(!exit_success3);
-    assert!(!exit_success4);
-    assert!(exit_success5);
-    assert!(exit_success6);
-    assert!(exit_success7);
-    assert!(!exit_success8);
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE1).succeeds();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE2).fails();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE3).fails();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE4).fails();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE5).succeeds();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE6).succeeds();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE7).succeeds();
+    scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE8).fails();
 }

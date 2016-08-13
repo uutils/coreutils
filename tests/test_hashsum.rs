@@ -21,22 +21,16 @@ macro_rules! test_digest {
         #[test]
         fn test_single_file() {
             let (at, mut ucmd) = at_and_ucmd();
-            let result = ucmd.arg(DIGEST_ARG).arg("input.txt").run();
-
-            assert_empty_stderr!(result);
-            assert!(result.success);
-            assert_eq!(get_hash!(result.stdout), at.read(EXPECTED_FILE));
+            assert_eq!(at.read(EXPECTED_FILE),
+                       get_hash!(ucmd.arg(DIGEST_ARG).arg("input.txt").succeeds().no_stderr().stdout));
         }
 
         #[test]
         fn test_stdin() {
             let (at, mut ucmd) = at_and_ucmd();
             let input = at.read("input.txt");
-            let result = ucmd.arg(DIGEST_ARG).run_piped_stdin(input);
-
-            assert_empty_stderr!(result);
-            assert!(result.success);
-            assert_eq!(get_hash!(result.stdout), at.read(EXPECTED_FILE));
+            assert_eq!(at.read(EXPECTED_FILE),
+                       get_hash!(ucmd.arg(DIGEST_ARG).pipe_in(input).succeeds().no_stderr().stdout));
         }
     }
     )*)

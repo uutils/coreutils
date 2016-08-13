@@ -110,8 +110,7 @@ fn test_single_big_args() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    let result = ucmd.arg(FILE).arg("-n").arg(format!("{}", N_ARG)).run();
-    assert_eq!(result.stdout, at.read(EXPECTED_FILE));
+    ucmd.arg(FILE).arg("-n").arg(format!("{}", N_ARG)).run().stdout_is(at.read(EXPECTED_FILE));
 }
 
 #[test]
@@ -214,6 +213,5 @@ fn test_lines_with_size_suffix() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    let result = ucmd.arg(FILE).arg("-n").arg("2K").run();
-    assert_eq!(result.stdout, at.read(EXPECTED_FILE));
+    ucmd.arg(FILE).arg("-n").arg("2K").run().stdout_is_fixture(EXPECTED_FILE);
 }

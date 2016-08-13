@@ -7,48 +7,30 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_simple_arithmetic() {
-    let out = new_ucmd()
-        .args(&["1", "+", "1"]).run().stdout;
-    assert_eq!(out, "2\n");
+    new_ucmd().args(&["1", "+", "1"]).run().stdout_is("2\n");
 
-    let out = new_ucmd()
-        .args(&["1", "-", "1"]).run().stdout;
-    assert_eq!(out, "0\n");
+    new_ucmd().args(&["1", "-", "1"]).run().stdout_is("0\n");
 
-    let out = new_ucmd()
-        .args(&["3", "*", "2"]).run().stdout;
-    assert_eq!(out, "6\n");
+    new_ucmd().args(&["3", "*", "2"]).run().stdout_is("6\n");
 
-    let out = new_ucmd()
-        .args(&["4", "/", "2"]).run().stdout;
-    assert_eq!(out, "2\n");
+    new_ucmd().args(&["4", "/", "2"]).run().stdout_is("2\n");
 }
 
 #[test]
 fn test_parenthesis() {
-    let out = new_ucmd()
-        .args(&["(", "1", "+", "1", ")", "*", "2"]).run().stdout;
-    assert_eq!(out, "4\n");
+    new_ucmd().args(&["(", "1", "+", "1", ")", "*", "2"]).run().stdout_is("4\n");
 }
 
 #[test]
 fn test_or() {
-    let out = new_ucmd()
-        .args(&["0", "|", "foo"]).run().stdout;
-    assert_eq!(out, "foo\n");
+    new_ucmd().args(&["0", "|", "foo"]).run().stdout_is("foo\n");
 
-    let out = new_ucmd()
-        .args(&["foo", "|", "bar"]).run().stdout;
-    assert_eq!(out, "foo\n");
+    new_ucmd().args(&["foo", "|", "bar"]).run().stdout_is("foo\n");
 }
 
 #[test]
 fn test_and() {
-    let out = new_ucmd()
-        .args(&["foo", "&", "1"]).run().stdout;
-    assert_eq!(out, "foo\n");
+    new_ucmd().args(&["foo", "&", "1"]).run().stdout_is("foo\n");
 
-    let out = new_ucmd()
-        .args(&["", "&", "1"]).run().stdout;
-    assert_eq!(out, "0\n");
+    new_ucmd().args(&["", "&", "1"]).run().stdout_is("0\n");
 }

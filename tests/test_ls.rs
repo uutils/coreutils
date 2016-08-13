@@ -7,9 +7,5 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_ls_ls() {
-    
-    let result = new_ucmd().run();
-    
-    let exit_success = result.success;
-    assert_eq!(exit_success, true);
+    new_ucmd().succeeds();
 }

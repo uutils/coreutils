@@ -2,87 +2,75 @@ use common::util::*;
 
 static UTIL_NAME: &'static str = "who";
 
+fn new_ucmd() -> UCommand {
+    TestScenario::new(UTIL_NAME).ucmd()
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_count() {
-    for opt in ["-q", "--count"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-q", "--count"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_boot() {
-    for opt in ["-b", "--boot"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-b", "--boot"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_heading() {
-    for opt in ["-H"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-H"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_short() {
-    for opt in ["-s", "--short"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-s", "--short"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_login() {
-    for opt in ["-l", "--login"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-l", "--login"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_m() {
-    for opt in ["-m"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-m"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_dead() {
-    for opt in ["-d", "--dead"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-d", "--dead"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn test_all() {
-    for opt in ["-a", "--all"].into_iter() {
-        let scene = TestScenario::new(UTIL_NAME);
-        let args = [*opt];
-        scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    for opt in vec!["-a", "--all"] {
+        new_ucmd().arg(opt).run().stdout_is(expected_result(opt));
     }
 }
 
 #[cfg(target_os = "linux")]
-fn expected_result(args: &[&str]) -> String {
-    TestScenario::new(UTIL_NAME).cmd_keepenv(UTIL_NAME).args(args).run().stdout
+fn expected_result(arg: &str) -> String {
+    TestScenario::new(UTIL_NAME).cmd_keepenv(UTIL_NAME).args(&[arg]).run().stdout
 }

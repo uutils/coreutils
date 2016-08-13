@@ -16,40 +16,21 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_op_prec_and_or_1() {
-    let exit_success = new_ucmd()
-                           .arg(" ")
-                           .arg("-o")
-                           .arg("")
-                           .arg("-a")
-                           .arg("")
-                           .run()
-                           .success;
-    assert!(exit_success);
+    new_ucmd()
+        .args(&[" ", "-o", "", "-a", ""])
+        .succeeds();
 }
 
 #[test]
 fn test_op_prec_and_or_2() {
-    let exit_success = new_ucmd()
-                           .arg("")
-                           .arg("-a")
-                           .arg("")
-                           .arg("-o")
-                           .arg(" ")
-                           .arg("-a")
-                           .arg(" ")
-                           .run()
-                           .success;
-    assert!(exit_success);
+    new_ucmd()
+        .args(&["", "-a", "", "-o", " ", "-a", " "])
+        .succeeds();
 }
 
 #[test]
 fn test_or_as_filename() {
-    let exit_success = new_ucmd()
-        .arg("x")
-                           .arg("-a")
-                           .arg("-z")
-                           .arg("-o")
-                           .run()
-                           .success;
-    assert!(!exit_success);
+    new_ucmd()
+        .args(&["x", "-a", "-z", "-o"])
+        .fails();
 }

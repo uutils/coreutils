@@ -7,23 +7,28 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_stdin_default() {
-    let result = new_ucmd()
-        .run_piped_stdin("100\n200\n300\n400\n500");
-    assert_eq!(result.stdout, "500400\n300\n200\n100\n");
+    new_ucmd()
+        .pipe_in("100\n200\n300\n400\n500")
+        .run()
+        .stdout_is("500400\n300\n200\n100\n");
 }
 
 #[test]
 fn test_stdin_non_newline_separator() {
-    let result = new_ucmd()
-        .args(&["-s", ":"]).run_piped_stdin("100:200:300:400:500");
-    assert_eq!(result.stdout, "500400:300:200:100:");
+    new_ucmd()
+        .args(&["-s", ":"])
+        .pipe_in("100:200:300:400:500")
+        .run()
+        .stdout_is("500400:300:200:100:");
 }
 
 #[test]
 fn test_stdin_non_newline_separator_before() {
-    let result = new_ucmd()
-        .args(&["-b", "-s", ":"]).run_piped_stdin("100:200:300:400:500");
-    assert_eq!(result.stdout, "500:400:300:200:100");
+    new_ucmd()
+        .args(&["-b", "-s", ":"])
+        .pipe_in("100:200:300:400:500")
+        .run()
+        .stdout_is("500:400:300:200:100");
 }
 
 #[test]

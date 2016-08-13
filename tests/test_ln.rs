@@ -15,9 +15,8 @@ fn test_symlink_existing_file() {
 
     at.touch(file);
 
-    let result = ucmd.args(&["-s", file, link]).run();
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", file, link]).succeeds().no_stderr();
+    
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
@@ -29,9 +28,7 @@ fn test_symlink_dangling_file() {
     let file = "test_symlink_dangling_file";
     let link = "test_symlink_dangling_file_link";
 
-    let result = ucmd.args(&["-s", file, link]).run();
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", file, link]).succeeds().no_stderr();
     assert!(!at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
@@ -45,9 +42,7 @@ fn test_symlink_existing_directory() {
 
     at.mkdir(dir);
 
-    let result = ucmd.args(&["-s", dir, link]).run();
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", dir, link]).succeeds().no_stderr();
     assert!(at.dir_exists(dir));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), dir);
@@ -59,9 +54,7 @@ fn test_symlink_dangling_directory() {
     let dir = "test_symlink_dangling_dir";
     let link = "test_symlink_dangling_dir_link";
 
-    let result = ucmd.args(&["-s", dir, link]).run();
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", dir, link]).succeeds().no_stderr();
     assert!(!at.dir_exists(dir));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), dir);
@@ -72,9 +65,7 @@ fn test_symlink_circular() {
     let (at, mut ucmd) = at_and_ucmd();
     let link = "test_symlink_circular";
 
-    let result = ucmd.args(&["-s", link]).run();
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", link]).succeeds().no_stderr();
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), link);
 }
@@ -88,8 +79,7 @@ fn test_symlink_dont_overwrite() {
     at.touch(file);
     at.touch(link);
 
-    let result = ucmd.args(&["-s", file, link]).run();
-    assert!(!result.success);
+    ucmd.args(&["-s", file, link]).fails();
     assert!(at.file_exists(file));
     assert!(at.file_exists(link));
     assert!(!at.is_symlink(link));
@@ -108,8 +98,7 @@ fn test_symlink_overwrite_force() {
     assert_eq!(at.resolve_link(link), file_a);
 
     // Force overwrite of existing symlink
-    let result = ucmd.args(&["--force", "-s", file_b, link]).run();
-    assert!(result.success);
+    ucmd.args(&["--force", "-s", file_b, link]).succeeds();
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file_b);
 }
@@ -124,22 +113,16 @@ fn test_symlink_interactive() {
     at.touch(file);
     at.touch(link);
 
-    let result1 = scene.ucmd()
-                    .args(&["-i", "-s", file, link])
-                    .run_piped_stdin("n");
-
-    assert_empty_stderr!(result1);
-    assert!(result1.success);
+    scene.ucmd()
+        .args(&["-i", "-s", file, link])
+        .pipe_in("n").succeeds().no_stderr();
 
     assert!(at.file_exists(file));
     assert!(!at.is_symlink(link));
 
-    let result2 = scene.ucmd()
-                    .args(&["-i", "-s", file, link])
-                    .run_piped_stdin("Yesh");
-
-    assert_empty_stderr!(result2);
-    assert!(result2.success);
+    scene.ucmd()
+        .args(&["-i", "-s", file, link])
+        .pipe_in("Yesh").succeeds().no_stderr();
 
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
@@ -158,10 +141,8 @@ fn test_symlink_simple_backup() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let result = ucmd.args(&["-b", "-s", file, link]).run();
+    ucmd.args(&["-b", "-s", file, link]).succeeds().no_stderr();
 
-    assert_empty_stderr!(result);
-    assert!(result.success);
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link));
@@ -186,10 +167,7 @@ fn test_symlink_custom_backup_suffix() {
     assert_eq!(at.resolve_link(link), file);
 
     let arg = &format!("--suffix={}", suffix);
-    let result = ucmd.args(&["-b", arg, "-s", file, link]).run();
-
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-b", arg, "-s", file, link]).succeeds().no_stderr();
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link));
@@ -212,10 +190,7 @@ fn test_symlink_backup_numbering() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let result = ucmd.args(&["-s", "--backup=t", file, link]).run();
-
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", "--backup=t", file, link]).succeeds().no_stderr();
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link));
@@ -247,10 +222,7 @@ fn test_symlink_existing_backup() {
     assert!(at.is_symlink(link_backup));
     assert_eq!(at.resolve_link(link_backup), file);
 
-    let result = ucmd.args(&["-s", "--backup=nil", file, link]).run();
-
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", "--backup=nil", file, link]).succeeds().no_stderr();
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link_backup));
@@ -271,10 +243,7 @@ fn test_symlink_target_dir() {
     at.touch(file_b);
     at.mkdir(dir);
 
-    let result = ucmd.args(&["-s", "-t", dir, file_a, file_b]).run();
-
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", "-t", dir, file_a, file_b]).succeeds().no_stderr();
 
     let file_a_link = &format!("{}/{}", dir, file_a);
     assert!(at.is_symlink(file_a_link));
@@ -294,10 +263,7 @@ fn test_symlink_overwrite_dir() {
     at.touch(path_a);
     at.mkdir(path_b);
 
-    let result = ucmd.args(&["-s", "-T", path_a, path_b]).run();
-
-    assert_empty_stderr!(result);
-    assert!(result.success);
+    ucmd.args(&["-s", "-T", path_a, path_b]).succeeds().no_stderr();
 
     assert!(at.file_exists(path_a));
     assert!(at.is_symlink(path_b));
@@ -315,18 +281,15 @@ fn test_symlink_overwrite_nonempty_dir() {
     at.mkdir(path_b);
     at.touch(dummy);
 
-    let result = ucmd.args(&["-v", "-T", "-s", path_a, path_b]).run();
-
     // Not same error as GNU; the error message is a Rust builtin
     // TODO: test (and implement) correct error message (or at least decide whether to do so)
     // Current: "ln: error: Directory not empty (os error 66)"
     // GNU:     "ln: cannot link 'a' to 'b': Directory not empty"
-    assert!(result.stderr.len() > 0);
-
+    
     // Verbose output for the link should not be shown on failure
-    assert!(result.stdout.len() == 0);
+    assert!(ucmd.args(&["-v", "-T", "-s", path_a, path_b])
+            .fails().no_stdout().stderr.len() > 0);
 
-    assert!(!result.success);
     assert!(at.file_exists(path_a));
     assert!(at.dir_exists(path_b));
 }
@@ -344,11 +307,9 @@ fn test_symlink_errors() {
 
     // $ ln -T -t a b
     // ln: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    let result = ucmd.args(&["-T", "-t", dir, file_a, file_b]).run();
-    assert_eq!(result.stderr,
-               "ln: error: cannot combine --target-directory (-t) and --no-target-directory \
+    ucmd.args(&["-T", "-t", dir, file_a, file_b]).fails()
+        .stderr_is("ln: error: cannot combine --target-directory (-t) and --no-target-directory \
                 (-T)\n");
-    assert!(!result.success);
 }
 
 #[test]
@@ -360,16 +321,11 @@ fn test_symlink_verbose() {
 
     at.touch(file_a);
 
-    let result = scene.ucmd().args(&["-v", file_a, file_b]).run();
-    assert_empty_stderr!(result);
-    assert_eq!(result.stdout, format!("'{}' -> '{}'\n", file_b, file_a));
-    assert!(result.success);
+    scene.ucmd().args(&["-v", file_a, file_b])
+        .succeeds().stdout_only(format!("'{}' -> '{}'\n", file_b, file_a));
 
     at.touch(file_b);
 
-    let result = scene.ucmd().args(&["-v", "-b", file_a, file_b]).run();
-    assert_empty_stderr!(result);
-    assert_eq!(result.stdout,
-               format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));
-    assert!(result.success);
+    scene.ucmd().args(&["-v", "-b", file_a, file_b])
+        .succeeds().stdout_only(format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));
 }

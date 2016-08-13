@@ -2,7 +2,7 @@ extern crate rand;
 extern crate regex;
 
 use std::fs::{File, read_dir};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 use self::rand::{Rng, thread_rng};
 use self::regex::Regex;
@@ -101,7 +101,7 @@ fn test_split_default() {
     let name = "split_default";
     let glob = Glob::new(&at, ".", r"x[:alpha:][:alpha:]$");
     RandomFile::new(&at, name).add_lines(2000);
-    assert!(ucmd.args(&[name]).run().success);
+    ucmd.args(&[name]).succeeds();
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
@@ -112,7 +112,7 @@ fn test_split_num_prefixed_chunks_by_bytes() {
     let name = "split_num_prefixed_chunks_by_bytes";
     let glob = Glob::new(&at, ".", r"a\d\d$");
     RandomFile::new(&at, name).add_bytes(10000);
-    assert!(ucmd.args(&["-d", "-b", "1000", name, "a"]).run().success);
+    ucmd.args(&["-d", "-b", "1000", name, "a"]).succeeds();
     assert_eq!(glob.count(), 10);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
@@ -123,7 +123,7 @@ fn test_split_str_prefixed_chunks_by_bytes() {
     let name = "split_str_prefixed_chunks_by_bytes";
     let glob = Glob::new(&at, ".", r"b[:alpha:][:alpha:]$");
     RandomFile::new(&at, name).add_bytes(10000);
-    assert!(ucmd.args(&["-b", "1000", name, "b"]).run().success);
+    ucmd.args(&["-b", "1000", name, "b"]).succeeds();
     assert_eq!(glob.count(), 10);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
@@ -134,7 +134,7 @@ fn test_split_num_prefixed_chunks_by_lines() {
     let name = "split_num_prefixed_chunks_by_lines";
     let glob = Glob::new(&at, ".", r"c\d\d$");
     RandomFile::new(&at, name).add_lines(10000);
-    assert!(ucmd.args(&["-d", "-l", "1000", name, "c"]).run().success);
+    ucmd.args(&["-d", "-l", "1000", name, "c"]).succeeds();
     assert_eq!(glob.count(), 10);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
@@ -145,7 +145,7 @@ fn test_split_str_prefixed_chunks_by_lines() {
     let name = "split_str_prefixed_chunks_by_lines";
     let glob = Glob::new(&at, ".", r"d[:alpha:][:alpha:]$");
     RandomFile::new(&at, name).add_lines(10000);
-    assert!(ucmd.args(&["-l", "1000", name, "d"]).run().success);
+    ucmd.args(&["-l", "1000", name, "d"]).succeeds();
     assert_eq!(glob.count(), 10);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }

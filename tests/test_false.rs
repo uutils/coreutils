@@ -7,7 +7,5 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_exit_code() {
-    let exit_status = new_ucmd()
-        .run().success;
-    assert_eq!(exit_status, false);
+    new_ucmd().fails();
 }
