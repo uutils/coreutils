@@ -166,8 +166,7 @@ fn test_big_primes() {
 
 fn run(instring: &[u8], outstring: &[u8]) {
     // now run factor
-    let out = new_ucmd().run_piped_stdin(instring).stdout;
-    assert_eq!(out, String::from_utf8(outstring.to_owned()).unwrap());
+    new_ucmd().pipe_in(instring).run().stdout_is(String::from_utf8(outstring.to_owned()).unwrap());
 }
 
 const PRIMES_BY_BITS: &'static [&'static [u64]] = &[PRIMES14, PRIMES15, PRIMES16, PRIMES17,

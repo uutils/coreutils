@@ -7,36 +7,32 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_toupper() {
-    let result = new_ucmd()
-        .args(&["a-z", "A-Z"]).run_piped_stdin("!abcd!");
-    assert_eq!(result.stdout, "!ABCD!");
+    new_ucmd()
+        .args(&["a-z", "A-Z"]).pipe_in("!abcd!").run().stdout_is("!ABCD!");
 }
 
 #[test]
 fn test_small_set2() {
-    let result = new_ucmd()
-        .args(&["0-9", "X"]).run_piped_stdin("@0123456789");
-    assert_eq!(result.stdout, "@XXXXXXXXXX");
+    new_ucmd()
+        .args(&["0-9", "X"]).pipe_in("@0123456789").run().stdout_is("@XXXXXXXXXX");
 }
 
 #[test]
 fn test_unicode() {
-    let result = new_ucmd()
+    new_ucmd()
         .args(&[", ┬─┬", "╯︵┻━┻"])
-                     .run_piped_stdin("(,°□°）, ┬─┬".as_bytes());
-    assert_eq!(result.stdout, "(╯°□°）╯︵┻━┻");
+        .pipe_in("(,°□°）, ┬─┬").run()
+        .stdout_is("(╯°□°）╯︵┻━┻");
 }
 
 #[test]
 fn test_delete() {
-    let result = new_ucmd()
-        .args(&["-d", "a-z"]).run_piped_stdin("aBcD");
-    assert_eq!(result.stdout, "BD");
+    new_ucmd()
+        .args(&["-d", "a-z"]).pipe_in("aBcD").run().stdout_is("BD");
 }
 
 #[test]
 fn test_delete_complement() {
-    let result = new_ucmd()
-        .args(&["-d", "-c", "a-z"]).run_piped_stdin("aBcD");
-    assert_eq!(result.stdout, "ac");
+    new_ucmd()
+        .args(&["-d", "-c", "a-z"]).pipe_in("aBcD").run().stdout_is("ac");
 }

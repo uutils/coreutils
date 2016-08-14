@@ -8,10 +8,7 @@ fn new_ucmd() -> UCommand {
 #[test]
 fn test_combine_pairs_of_lines() {
     new_ucmd()
-        .arg("-s")
-        .arg("-d")
-        .arg("\t\n")
-        .arg("html_colors.txt")
+        .args(&["-s", "-d", "\t\n", "html_colors.txt"])
         .run()
         .stdout_is_fixture("html_colors.expected");
 }

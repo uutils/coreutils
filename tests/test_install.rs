@@ -12,12 +12,8 @@ fn at_and_ucmd() -> (AtPath, UCommand) {
 fn test_install_help() {
     let (_, mut ucmd) = at_and_ucmd();
 
-    let result = ucmd.arg("--help").run();
-
-    assert!(result.success);
-    assert_empty_stderr!(result);
-
-    assert!(result.stdout.contains("Usage:"));
+    assert!(
+        ucmd.arg("--help").succeeds().no_stderr().stdout.contains("Usage:"));
 }
 
 #[test]
@@ -30,10 +26,7 @@ fn test_install_basic() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
-    let result = ucmd.arg(file1).arg(file2).arg(dir).run();
-
-    assert!(result.success);
-    assert_empty_stderr!(result);
+    ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
@@ -50,10 +43,8 @@ fn test_install_unimplemented_arg() {
 
     at.touch(file);
     at.mkdir(dir);
-    let result = ucmd.arg(context_arg).arg(file).arg(dir).run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("Unimplemented"));
+    assert!(ucmd.arg(context_arg).arg(file).arg(dir)
+            .fails().stderr.contains("Unimplemented"));
 
     assert!(!at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -66,10 +57,8 @@ fn test_install_component_directories() {
     let component3 = "test_install_target_dir_component_c3";
     let directories_arg = "-d";
 
-    let result = ucmd.arg(directories_arg).arg(component1).arg(component2).arg(component3).run();
-
-    assert!(result.success);
-    assert_empty_stderr!(result);
+    ucmd.args(&[directories_arg, component1, component2, component3])
+        .succeeds().no_stderr();
 
     assert!(at.dir_exists(component1));
     assert!(at.dir_exists(component2));
@@ -83,10 +72,8 @@ fn test_install_component_directories_failing() {
     let directories_arg = "-d";
 
     at.mkdir(component);
-    let result = ucmd.arg(directories_arg).arg(component).run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("File exists"));
+    assert!(ucmd.arg(directories_arg).arg(component)
+            .fails().stderr.contains("File exists"));
 }
 
 #[test]
@@ -98,10 +85,7 @@ fn test_install_mode_numeric() {
 
     at.touch(file);
     at.mkdir(dir);
-    let result = ucmd.arg(file).arg(dir).arg(mode_arg).run();
-
-    assert!(result.success);
-    assert_empty_stderr!(result);
+    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));
@@ -119,10 +103,7 @@ fn test_install_mode_symbolic() {
 
     at.touch(file);
     at.mkdir(dir);
-    let result = ucmd.arg(file).arg(dir).arg(mode_arg).run();
-
-    assert!(result.success);
-    assert_empty_stderr!(result);
+    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));
@@ -140,10 +121,8 @@ fn test_install_mode_failing() {
 
     at.touch(file);
     at.mkdir(dir);
-    let result = ucmd.arg(file).arg(dir).arg(mode_arg).run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("Invalid mode string: numeric parsing error"));
+    assert!(ucmd.arg(file).arg(dir).arg(mode_arg)
+            .fails().stderr.contains("Invalid mode string: numeric parsing error"));
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));
@@ -157,10 +136,7 @@ fn test_install_mode_directories() {
     let directories_arg = "-d";
     let mode_arg = "--mode=333";
 
-    let result = ucmd.arg(directories_arg).arg(component).arg(mode_arg).run();
-
-    assert!(result.success);
-    assert_empty_stderr!(result);
+    ucmd.arg(directories_arg).arg(component).arg(mode_arg).succeeds().no_stderr();
 
     assert!(at.dir_exists(component));
     let permissions = at.metadata(component).permissions();

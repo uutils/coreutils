@@ -10,8 +10,5 @@ fn at_and_ucmd() -> (AtPath, UCommand) {
 #[test]
 fn test_default() {
     let (at, mut ucmd) = at_and_ucmd();
-    let out = ucmd.run().stdout;
-
-    let expected = at.root_dir_resolved();
-    assert_eq!(out.trim_right(), expected);
+    ucmd.run().stdout_is(at.root_dir_resolved());
 }

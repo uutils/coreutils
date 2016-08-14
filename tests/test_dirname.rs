@@ -7,40 +7,27 @@ fn new_ucmd() -> UCommand {
 
 #[test]
 fn test_path_with_trailing_slashes() {
-    let dir = "/root/alpha/beta/gamma/delta/epsilon/omega//";
-    let out = new_ucmd().arg(dir).run().stdout;
-
-    assert_eq!(out.trim_right(), "/root/alpha/beta/gamma/delta/epsilon");
+    new_ucmd().arg("/root/alpha/beta/gamma/delta/epsilon/omega//")
+        .run().stdout_is("/root/alpha/beta/gamma/delta/epsilon");
 }
 
 #[test]
 fn test_path_without_trailing_slashes() {
-    let dir = "/root/alpha/beta/gamma/delta/epsilon/omega";
-    let out = new_ucmd().arg(dir).run().stdout;
-
-    assert_eq!(out.trim_right(), "/root/alpha/beta/gamma/delta/epsilon");
+    new_ucmd().arg("/root/alpha/beta/gamma/delta/epsilon/omega")
+        .run().stdout_is("/root/alpha/beta/gamma/delta/epsilon");
 }
 
 #[test]
 fn test_root() {
-    let dir = "/";
-    let out = new_ucmd().arg(dir).run().stdout;
-
-    assert_eq!(out.trim_right(), "/");
+    new_ucmd().arg("/").run().stdout_is("/");
 }
 
 #[test]
 fn test_pwd() {
-    let dir = ".";
-    let out = new_ucmd().arg(dir).run().stdout;
-
-    assert_eq!(out.trim_right(), ".");
+    new_ucmd().arg(".").run().stdout_is(".");
 }
 
 #[test]
 fn test_empty() {
-    let dir = "";
-    let out = new_ucmd().arg(dir).run().stdout;
-
-    assert_eq!(out.trim_right(), ".");
+    new_ucmd().arg("").run().stdout_is(".");
 }
