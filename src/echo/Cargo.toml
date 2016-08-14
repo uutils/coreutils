@@ -8,7 +8,6 @@ name = "uu_echo"
 path = "echo.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
 

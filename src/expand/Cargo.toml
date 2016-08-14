@@ -8,9 +8,9 @@ name = "uu_expand"
 path = "expand.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 unicode-width = "*"
+getopts = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

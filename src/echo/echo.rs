@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
@@ -19,8 +18,25 @@ use std::io::Write;
 use std::str::from_utf8;
 
 #[allow(dead_code)]
-static NAME: &'static str = "echo";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTIONS]... [STRING]..."; 
+static SUMMARY: &'static str = "display a line of text"; 
+static LONG_HELP: &'static str = r#"
+ Echo the STRING(s) to standard output.
+ If -e is in effect, the following sequences are recognized:
+
+ \\\\      backslash
+ \\a      alert (BEL)
+ \\b      backspace
+ \\c      produce no further output
+ \\e      escape
+ \\f      form feed
+ \\n      new line
+ \\r      carriage return
+ \\t      horizontal tab
+ \\v      vertical tab
+ \\0NNN   byte with octal value NNN (1 to 3 digits)
+ \\xHH    byte with hexadecimal value HH (1 to 2 digits)
+"#; 
 
 #[derive(Clone)]
 struct EchoOptions {
@@ -77,101 +93,21 @@ fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
     }
 }
 
-fn parse_options(args: Vec<String>, options: &mut EchoOptions) -> Option<Vec<String>> {
-    let mut echo_args = vec!();
-    'argloop: for arg in args.into_iter().skip(1) {
-        match arg.as_ref() {
-            "--help" | "-h" => {
-                print_help();
-                return None;
-            }
-            "--version" | "-V" => {
-                print_version();
-                return None;
-            }
-            "-n" => options.newline = true,
-            "-e" => options.escape = true,
-            "-E" => options.escape = false,
-            _ => {
-                if arg.len() > 1 && arg.chars().next().unwrap_or('_') == '-' {
-                    let mut newopts = options.clone();
-                    for ch in arg.chars().skip(1) {
-                        match ch {
-                            'h' => {
-                                print_help();
-                                return None;
-                            }
-                            'V' => {
-                                print_version();
-                                return None;
-                            }
-                            'n' => newopts.newline = true,
-                            'e' => newopts.escape = true,
-                            'E' => newopts.escape = false,
-                            _ => {
-                                echo_args.push(arg.clone());
-                                continue 'argloop;
-                            }
-                        }
-                    }
-                    *options = newopts;
-                } else {
-                    echo_args.push(arg);
-                }
-            }
-        }
-    }
-    Some(echo_args)
-}
-
-fn print_help() {
-    let mut opts = getopts::Options::new();
-    opts.optflag("n", "", "do not output the trailing newline");
-    opts.optflag("e", "", "enable interpretation of backslash escapes");
-    opts.optflag("E", "", "disable interpretation of backslash escapes (default)");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let msg = format!("{0} {1} - display a line of text
-
-Usage:
-  {0} [SHORT-OPTION]... [STRING]...
-  {0} LONG-OPTION
-
-Echo the STRING(s) to standard output.
-If -e is in effect, the following sequences are recognized:
-
-\\\\      backslash
-\\a      alert (BEL)
-\\b      backspace
-\\c      produce no further output
-\\e      escape
-\\f      form feed
-\\n      new line
-\\r      carriage return
-\\t      horizontal tab
-\\v      vertical tab
-\\0NNN   byte with octal value NNN (1 to 3 digits)
-\\xHH    byte with hexadecimal value HH (1 to 2 digits)", NAME, VERSION);
-
-    print!("{}", opts.usage(&msg));
-}
-
-fn print_version() {
-    println!("{} {}", NAME, VERSION);
-}
-
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut options = EchoOptions {
         newline: false,
         escape: false
     };
 
-    let free = match parse_options(args, &mut options) {
-        Some(vec) => vec,
-        None => return 0
-    };
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("n", "", "do not output the trailing newline")
+        .optflag("e", "", "enable interpretation of backslash escapes")
+        .optflag("E", "", "disable interpretation of backslash escapes (default)")
+        .parse(args);
 
+    options.newline = matches.opt_present("n");
+    options.escape = matches.opt_present("e");
+    let free = matches.free;
     if !free.is_empty() {
         let string = free.join(" ");
         if options.escape {

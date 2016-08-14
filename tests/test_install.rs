@@ -13,7 +13,7 @@ fn test_install_help() {
     let (_, mut ucmd) = at_and_ucmd();
 
     assert!(
-        ucmd.arg("--help").succeeds().no_stderr().stdout.contains("Usage:"));
+        ucmd.arg("--help").succeeds().no_stderr().stdout.contains("Options:"));
 }
 
 #[test]

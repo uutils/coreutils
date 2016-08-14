@@ -9,14 +9,12 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 extern crate walker;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::error::Error;
 use std::ffi::CString;
 use std::io::{self, Write};
@@ -25,19 +23,25 @@ use std::path::Path;
 use walker::Walker;
 
 const NAME: &'static str = "chmod";
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SUMMARY: &'static str = "Change the mode of each FILE to MODE.
+ With --reference, change the mode of each FILE to that of RFILE."; 
+static LONG_HELP: &'static str = "
+ Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
+";
 
 pub fn uumain(mut args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-    opts.optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)");
-    opts.optflag("f", "quiet", "suppress most error messages (unimplemented)"); // TODO: support --silent
-    opts.optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)");
-    opts.optflag("", "no-preserve-root", "do not treat '/' specially (the default)");
-    opts.optflag("", "preserve-root", "fail to operate recursively on '/'");
-    opts.optopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE");
-    opts.optflag("R", "recursive", "change files and directories recursively");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let syntax = format!("[OPTION]... MODE[,MODE]... FILE...
+ {0} [OPTION]... OCTAL-MODE FILE...
+ {0} [OPTION]... --reference=RFILE FILE...", NAME);
+    let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
+    opts.optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)")
+        .optflag("f", "quiet", "suppress most error messages (unimplemented)") // TODO: support --silent
+        .optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)")
+        .optflag("", "no-preserve-root", "do not treat '/' specially (the default)")
+        .optflag("", "preserve-root", "fail to operate recursively on '/'")
+        .optopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE")
+        .optflag("R", "recursive", "change files and directories recursively");
+
     // sanitize input for - at beginning (e.g. chmod -x testfile). Remove
     // the option and save it for later, after parsing is finished.
     let mut negative_option = None;
@@ -59,28 +63,8 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
         }
     }
 
-    let mut matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => { crash!(1, "{}", f) }
-    };
-    if matches.opt_present("help") {
-        let msg = format!("{name} {version}
-
-Usage:
-  {program} [OPTION]... MODE[,MODE]... FILE...
-  {program} [OPTION]... OCTAL-MODE FILE...
-  {program} [OPTION]... --reference=RFILE FILE...
-
-Change the mode of each FILE to MODE.
-With --reference, change the mode of each FILE to that of RFILE.
-Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.",
-            name = NAME, version = VERSION, program = NAME);
-
-        print!("{}", opts.usage(&msg));
-        return 0;
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() {
+    let mut matches = opts.parse(args);
+    if matches.free.is_empty() {
         show_error!("missing an argument");
         show_error!("for help, try '{} --help'", NAME);
         return 1;

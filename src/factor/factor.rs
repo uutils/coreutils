@@ -13,7 +13,6 @@
 * that was distributed with this source code.
 */
 
-extern crate getopts;
 extern crate libc;
 extern crate rand;
 
@@ -31,8 +30,10 @@ use std::mem::swap;
 mod numeric;
 mod prime_table;
 
-static NAME: &'static str = "factor";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION] [NUMBER]..."; 
+static SUMMARY: &'static str = "Print the prime factors of the given number(s).
+ If none are specified, read from standard input."; 
+static LONG_HELP: &'static str = ""; 
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {
@@ -158,33 +159,8 @@ fn print_factors_str(num_str: &str) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-    opts.optflag("h", "help", "show this help message");
-    opts.optflag("v", "version", "print the version and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!("{0} {1}
-
-Usage:
-\t{0} [NUMBER]...
-\t{0} [OPTION]
-
-Print the prime factors of the given number(s). If none are specified,
-read from standard input.", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-        return 1;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .parse(args);
 
     if matches.free.is_empty() {
         for line in BufReader::new(stdin()).lines() {

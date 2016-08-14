@@ -8,7 +8,6 @@ name = "uu_chmod"
 path = "chmod.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
 walker = "*"

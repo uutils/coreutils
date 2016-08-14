@@ -9,49 +9,29 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::io::Write;
 use std::path::{is_separator, PathBuf};
 
 static NAME: &'static str = "basename";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "NAME [SUFFIX]"; 
+static SUMMARY: &'static str = "Print NAME with any leading directory components removed
+ If specified, also remove a trailing SUFFIX"; 
+static LONG_HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     //
     // Argument parsing
     //
-    let mut opts = Options::new();
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m)  => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!("Usage: {0} NAME [SUFFIX]\n   or: {0} OPTION\n\n\
-        Print NAME with any leading directory components removed.\n\
-        If specified, also remove a trailing SUFFIX.", NAME);
-
-        print!("{}", opts.usage(&msg));
-
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .parse(args);
 
     // too few arguments
-    if args.len() < 2 {
+    if matches.free.len() < 1 {
         crash!(
             1,
             "{0}: {1}\nTry '{0} --help' for more information.",
@@ -60,12 +40,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         );
     }
     // too many arguments
-    else if args.len() > 3 {
+    else if matches.free.len() > 2 {
         crash!(
             1,
             "{0}: extra operand '{1}'\nTry '{0} --help' for more information.",
             NAME,
-            args[3]
+            matches.free[2]
         );
     }
 
@@ -73,10 +53,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Main Program Processing
     //
 
-    let mut name = strip_dir(&args[1]);
+    let mut name = strip_dir(&matches.free[0]);
 
-    if args.len() > 2 {
-        let suffix = args[2].clone();
+    if matches.free.len() > 1 {
+        let suffix = matches.free[1].clone();
         name = strip_suffix(name.as_ref(), suffix.as_ref());
     }
 

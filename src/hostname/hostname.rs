@@ -13,21 +13,20 @@
  * https://www.opensource.apple.com/source/shell_cmds/shell_cmds-170/hostname/hostname.c?txt
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::collections::hash_set::HashSet;
 use std::iter::repeat;
 use std::str;
 use std::io::Write;
 use std::net::ToSocketAddrs;
 
-static NAME: &'static str = "hostname";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [HOSTNAME]"; 
+static SUMMARY: &'static str = "Print or set the system's host name."; 
+static LONG_HELP: &'static str = ""; 
 
 extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
@@ -44,26 +43,12 @@ extern {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let program = &args[0];
-
-    let mut opts = Options::new();
-    opts.optflag("d", "domain", "Display the name of the DNS domain if possible");
-    opts.optflag("i", "ip-address", "Display the network address(es) of the host");
-    opts.optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)");   // TODO: support --long
-    opts.optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible");
-    opts.optflag("h", "help", "Show help");
-    opts.optflag("V", "version", "Show program's version");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        _ => { help_menu(program, opts); return 0; }
-    };
-
-    if matches.opt_present("h") {
-        help_menu(program, opts);
-        return 0
-    }
-    if matches.opt_present("V") { version(); return 0 }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("d", "domain", "Display the name of the DNS domain if possible")
+        .optflag("i", "ip-address", "Display the network address(es) of the host")
+        .optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)")   // TODO: support --long
+        .optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible")
+        .parse(args);
 
     match matches.free.len() {
         0 => {
@@ -120,23 +105,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         }
         1 => xsethostname(matches.free.last().unwrap()),
-        _ => help_menu(program, opts)
+        _ => crash!(1, "{}", msg_wrong_number_of_arguments!(0, 1))
     };
 
     0
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help_menu(program: &str, options: Options) {
-    version();
-    println!("");
-    println!("Usage:");
-    println!("  {} [OPTION]... [HOSTNAME]", program);
-    println!("");
-    print!("{}", options.usage("Print or set the system's host name."));
 }
 
 fn xgethostname() -> String {

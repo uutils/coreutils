@@ -20,8 +20,12 @@ use std::env;
 use std::io::Write;
 use std::process::Command;
 
-static NAME: &'static str = "env";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &'static str = "env"; 
+static SYNTAX: &'static str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]"; 
+static SUMMARY: &'static str = "Set each NAME to VALUE in the environment and run COMMAND"; 
+static LONG_HELP: &'static str = "
+ A mere - implies -i. If no COMMAND, print the resulting environment
+"; 
 
 struct options {
     ignore_env: bool,
@@ -29,22 +33,6 @@ struct options {
     unsets: Vec<String>,
     sets: Vec<(String, String)>,
     program: Vec<String>
-}
-
-fn usage() {
-    println!("Usage: {} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]", NAME);
-    println!("Set each NAME to VALUE in the environment and run COMMAND\n");
-    println!("Possible options are:");
-    println!("  -i --ignore-environment\t start with an empty environment");
-    println!("  -0 --null              \t end each output line with a 0 byte rather than newline");
-    println!("  -u --unset NAME        \t remove variable from the environment");
-    println!("  -h --help              \t display this help and exit");
-    println!("  -V --version           \t output version information and exit\n");
-    println!("A mere - implies -i. If no COMMAND, print the resulting environment");
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
 }
 
 // print name=value env pairs on screen
@@ -56,7 +44,11 @@ fn print_env(null: bool) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    // to handle arguments the same way than GNU env, we can't use getopts
+    let mut core_opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
+    core_opts.optflag("i", "ignore-environment", "start with an empty environment")
+        .optflag("0", "null", "end each output line with a 0 byte rather than newline")
+        .optopt("u", "unset", "remove variable from the environment", "NAME");
+        
     let mut opts = Box::new(options {
         ignore_env: false,
         null: false,
@@ -94,8 +86,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else if opt.starts_with("--") {
             match opt.as_ref() {
-                "--help" => { usage(); return 0; }
-                "--version" => { version(); return 0; }
+                "--help" => { core_opts.parse(vec![String::from("--help")]); return 0; }
+                "--version" => { core_opts.parse(vec![String::from("--version")]); return 0; }
 
                 "--ignore-environment" => opts.ignore_env = true,
                 "--null" => opts.null = true,
@@ -128,8 +120,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
             for c in chars {
                 // short versions of options
                 match c {
-                    'h' => { usage(); return 0; }
-                    'V' => { version(); return 0; }
                     'i' => opts.ignore_env = true,
                     '0' => opts.null = true,
                     'u' => {
@@ -172,7 +162,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // read program arguments
     for opt in iter {
-        opts.program.push(opt.clone());
+        opts.program.push(opt.clone())
     }
 
     if opts.ignore_env {

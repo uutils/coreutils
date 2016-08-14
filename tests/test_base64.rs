@@ -68,7 +68,7 @@ fn test_wrap_no_arg() {
         new_ucmd()
             .arg(wrap_param)
             .fails()
-            .stderr_only(format!("base64: Argument to option '{}' missing.\nTry 'base64 --help' for more information.\n",
+            .stderr_only(format!("base64: error: Argument to option '{}' missing.\n",
                                  if wrap_param == "-w" { "w" } else { "wrap" }));
     }
 }

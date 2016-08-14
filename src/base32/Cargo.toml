@@ -8,7 +8,6 @@ name = "uu_base32"
 path = "base32.rs"
 
 [dependencies]
-getopts = "*"
 uucore = { path="../uucore" }
 
 [dependencies.clippy]
