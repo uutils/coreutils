@@ -41,7 +41,9 @@ impl<'a> CoreOptions<'a> {
         let matches = match self.options.parse(&args[1..]) {
             Ok(m) => { Some(m) },
             Err(f) => {
-                crash!(1, "{}", f);
+                pipe_write!(&mut ::std::io::stderr(), "{}: error: ", self.help_text.name);
+                pipe_writeln!(&mut ::std::io::stderr(), "{}", f);
+                ::std::process::exit(1);
             }
         }.unwrap();
         if matches.opt_present("help") {
