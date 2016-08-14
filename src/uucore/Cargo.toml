@@ -21,8 +21,9 @@ utmpx = ["time", "libc"]
 c_types = ["libc"]
 process = ["libc"]
 signals = []
+entries = ["libc"]
 wide = []
-default = ["fs", "libc", "utf8", "encoding", "parse_time", "utmpx", "c_types", "process", "signals", "wide"]
+default = ["fs", "libc", "utf8", "encoding", "parse_time", "utmpx", "c_types", "process", "entries", "signals", "wide"]
 
 [lib]
 path = "lib.rs"

@@ -44,11 +44,11 @@ impl<'a> CoreOptions<'a> {
                 crash!(1, "{}", f);
             }
         }.unwrap();
-        if matches.opt_present("help") {            
+        if matches.opt_present("help") {
             let usage_str = if self.help_text.display_usage {
-                    format!("\n {}\n\n Reference\n", 
+                    format!("\n {}\n\n Reference\n",
                         self.options.usage(self.help_text.summary)
-                    ).replace("Options:", " Options:") 
+                    ).replace("Options:", " Options:")
                 } else { String::new() };
             print!("
  {0} {1}
@@ -66,7 +66,7 @@ impl<'a> CoreOptions<'a> {
 }
 
 #[macro_export]
-macro_rules! new_coreopts { 
+macro_rules! new_coreopts {
     ($syntax: expr, $summary: expr, $long_help: expr) => (
         uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
             name: executable!(),
