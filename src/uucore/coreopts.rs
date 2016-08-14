@@ -26,12 +26,16 @@ impl<'a> CoreOptions<'a> {
             .optflag("", "version", "print name and version number");
         ret
     }
-    pub fn optopt(&mut self, short_name: &str, long_name: &str, desc: &str, hint: &str) -> &mut CoreOptions<'a> {
-        self.options.optopt(short_name, long_name, desc, hint);
+    pub fn optflagopt(&mut self, short_name: &str, long_name: &str, desc: &str, hint: &str) -> &mut CoreOptions<'a> {
+        self.options.optflagopt(short_name, long_name, desc, hint);
         self
     }
     pub fn optflag(&mut self, short_name: &str, long_name: &str, desc: &str) -> &mut CoreOptions<'a> {
         self.options.optflag(short_name, long_name, desc);
+        self
+    }
+    pub fn optopt(&mut self, short_name: &str, long_name: &str, desc: &str, hint: &str) -> &mut CoreOptions<'a> {
+        self.options.optopt(short_name, long_name, desc, hint);
         self
     }
     pub fn usage(&self, summary : &str) -> String {
