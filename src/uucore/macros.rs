@@ -327,8 +327,21 @@ macro_rules! msg_args_nonexistent_file { ($received:expr) => (
     msg_args_invalid_value!("paths to files", snippet_no_file_at_path!($received)));}
 
 #[macro_export]
-macro_rules! msg_wrong_number_of_arguments { () => (
-    msg_args_invalid_value!("wrong number of arguments") ); }
+macro_rules! msg_wrong_number_of_arguments {
+    () => (
+        msg_args_invalid_value!("wrong number of arguments")
+    );
+    ($min:expr, $max:expr) => (
+        msg_args_invalid_value!(format!("expects {}-{} arguments", $min, $max))
+    );
+    ($exact:expr) => (
+        if $exact == 1 {
+            msg_args_invalid_value!("expects 1 argument")
+        } else {
+            msg_args_invalid_value!(format!("expects {} arguments", $exact))
+        }
+    );
+}
 
 // -- message templates : invalid input : input combinations
 
