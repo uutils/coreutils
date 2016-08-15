@@ -26,6 +26,7 @@ mod prn_char;
 mod prn_float;
 mod parse_nrofbytes;
 mod parse_formats;
+mod parse_inputs;
 #[cfg(test)]
 mod mockstream;
 
@@ -37,9 +38,10 @@ use multifilereader::*;
 use partialreader::*;
 use peekreader::*;
 use formatteriteminfo::*;
-use parse_nrofbytes::*;
+use parse_nrofbytes::parse_number_of_bytes;
 use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
+use parse_inputs::{parse_inputs, CommandLineInputs};
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
@@ -134,17 +136,33 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    // Gather up file names
-    let mut inputs = matches.free
+    let mut skip_bytes = match matches.opt_default("skip-bytes", "0") {
+        None => 0,
+        Some(s) => {
+            match parse_number_of_bytes(&s) {
+                Ok(i) => { i }
+                Err(_) => {
+                    disp_err!("Invalid argument --skip-bytes={}", s);
+                    return 1;
+                }
+            }
+        }
+    };
+
+    let input_strings = match parse_inputs(&matches) {
+        CommandLineInputs::FileNames(v) => v,
+        CommandLineInputs::FileAndOffset((f, s, _)) => {
+            skip_bytes = s;
+            vec!{f}
+        },
+    };
+    let inputs = input_strings
         .iter()
-        .filter_map(|w| match w as &str {
-            "-" => Some(InputSource::Stdin),
-            x => Some(InputSource::FileName(x)),
+        .map(|w| match w as &str {
+            "-" => InputSource::Stdin,
+            x => InputSource::FileName(x),
         })
         .collect::<Vec<_>>();
-    if inputs.len() == 0 {
-        inputs.push(InputSource::Stdin);
-    }
 
     let formats = match parse_format_flags(&args) {
         Ok(f) => f,
@@ -171,18 +189,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let output_duplicates = matches.opt_present("v");
 
-    let skip_bytes = match matches.opt_default("skip-bytes", "0") {
-        None => 0,
-        Some(s) => {
-            match parse_number_of_bytes(&s) {
-                Ok(i) => { i }
-                Err(_) => {
-                    disp_err!("Invalid argument --skip-bytes={}", s);
-                    return 1;
-                }
-            }
-        }
-    };
     let read_bytes = match matches.opt_str("read-bytes") {
         None => None,
         Some(s) => {

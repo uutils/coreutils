@@ -564,3 +564,30 @@ fn test_filename_parsing(){
             000012
             "));
 }
+
+#[test]
+fn test_stdin_offset(){
+
+    let input = "abcdefghijklmnopq";
+    let result = new_ucmd!().arg("-c").arg("+5").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent("
+            0000005   f   g   h   i   j   k   l   m   n   o   p   q
+            0000021
+            "));
+}
+
+#[test]
+fn test_file_offset(){
+
+    let result = new_ucmd!().arg("-c").arg("--").arg("-f").arg("10").run();
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(r"
+            0000010   w   e   r   c   a   s   e       f  \n
+            0000022
+            "));
+}
