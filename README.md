@@ -195,6 +195,7 @@ To do
 * [x] mknod
 * [x] mktemp
 * [x] mv
+* [ ] more (in progress, needs lots of work)
 * [x] nice
 * [x] nl
 * [x] nohup
