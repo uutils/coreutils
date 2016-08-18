@@ -95,6 +95,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 "BYTES");
     opts.optflag("h", "help", "display this help and exit.");
     opts.optflag("", "version", "output version information and exit.");
+    opts.optflag("", "traditional", "compatibility mode with one input, offset and label.");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -149,12 +150,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
+    let mut label: Option<usize> = None;
+
     let input_strings = match parse_inputs(&matches) {
-        CommandLineInputs::FileNames(v) => v,
-        CommandLineInputs::FileAndOffset((f, s, _)) => {
+        Ok(CommandLineInputs::FileNames(v)) => v,
+        Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
             skip_bytes = s;
+            label = l;
             vec!{f}
         },
+        Err(e) => {
+            disp_err!("Invalid inputs: {}", e);
+            return 1;
+        }
     };
     let inputs = input_strings
         .iter()
@@ -203,12 +211,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..],
-            output_duplicates, skip_bytes, read_bytes)
+            output_duplicates, skip_bytes, read_bytes, label)
 }
 
+// TODO: refactor, too many arguments
 fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
         fnames: Vec<InputSource>, formats: &[ParsedFormatterItemInfo], output_duplicates: bool,
-        skip_bytes: usize, read_bytes: Option<usize>) -> i32 {
+        skip_bytes: usize, read_bytes: Option<usize>, mut label: Option<usize>) -> i32 {
 
     let mf = MultifileReader::new(fnames);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
@@ -263,7 +272,7 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
         match input.peek_read(bytes.as_mut_slice(), PEEK_BUFFER_SIZE) {
             Ok((0, _)) => {
-                print_final_offset(input_offset_base, addr);
+                print_final_offset(input_offset_base, addr, label);
                 break;
             }
             Ok((n, peekbytes)) => {
@@ -297,15 +306,18 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
                     }
 
                     print_bytes(byte_order, &bytes, n, peekbytes,
-                        &print_with_radix(input_offset_base, addr),
+                        &print_with_radix(input_offset_base, addr, label),
                         &spaced_formatters, byte_size_block, print_width_line);
                 }
 
                 addr += n;
+                if let Some(l) = label {
+                    label = Some(l + n);
+                }
             }
             Err(e) => {
                 show_error!("{}", e);
-                print_final_offset(input_offset_base, addr);
+                print_final_offset(input_offset_base, addr, label);
                 return 1;
             }
         };
@@ -415,18 +427,24 @@ fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
     }
 }
 
-fn print_with_radix(r: Radix, x: usize) -> String{
-    match r {
-        Radix::Decimal => format!("{:07}", x),
-        Radix::Hexadecimal => format!("{:06X}", x),
-        Radix::Octal => format!("{:07o}", x),
-        Radix::NoPrefix => String::from(""),
+fn print_with_radix(r: Radix, x: usize, label: Option<usize>) -> String{
+    match (r, label) {
+        (Radix::Decimal, None) => format!("{:07}", x),
+        (Radix::Decimal, Some(l)) => format!("{:07} ({:07})", x, l),
+        (Radix::Hexadecimal, None) => format!("{:06X}", x),
+        (Radix::Hexadecimal, Some(l)) => format!("{:06X} ({:06X})", x, l),
+        (Radix::Octal, None) => format!("{:07o}", x),
+        (Radix::Octal, Some(l)) => format!("{:07o} ({:07o})", x, l),
+        (Radix::NoPrefix, None) => String::from(""),
+        (Radix::NoPrefix, Some(l)) => format!("({:07o})", l),
     }
 }
 
-fn print_final_offset(r: Radix, x: usize) {
-    if r != Radix::NoPrefix {
-        print!("{}\n", print_with_radix(r, x));
+/// Prints the byte offset followed by a newline, or nothing at all if
+/// both `Radix::NoPrefix` was set and no label (--traditional) is used.
+fn print_final_offset(r: Radix, x: usize, label: Option<usize>) {
+    if r != Radix::NoPrefix || label.is_some() {
+        print!("{}\n", print_with_radix(r, x, label));
     }
 }
 

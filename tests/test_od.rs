@@ -591,3 +591,71 @@ fn test_file_offset(){
             0000022
             "));
 }
+
+#[test]
+fn test_traditional(){
+    // note gnu od does not align both lines
+    let input = "abcdefghijklmnopq";
+    let result = new_ucmd!().arg("--traditional").arg("-a").arg("-c").arg("-").arg("10").arg("0").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(r"
+            0000010 (0000000)   i   j   k   l   m   n   o   p   q
+                                i   j   k   l   m   n   o   p   q
+            0000021 (0000011)
+            "));
+}
+
+#[test]
+fn test_traditional_with_skip_bytes_override(){
+    // --skip-bytes is ignored in this case
+    let input = "abcdefghijklmnop";
+    let result = new_ucmd!().arg("--traditional").arg("--skip-bytes=10").arg("-c").arg("0").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(r"
+            0000000   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+            0000020
+            "));
+}
+
+#[test]
+fn test_traditional_with_skip_bytes_non_override(){
+    // no offset specified in the traditional way, so --skip-bytes is used
+    let input = "abcdefghijklmnop";
+    let result = new_ucmd!().arg("--traditional").arg("--skip-bytes=10").arg("-c").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(r"
+            0000012   k   l   m   n   o   p
+            0000020
+            "));
+}
+
+#[test]
+fn test_traditional_error(){
+    // file "0" exists - don't fail on that, but --traditional only accepts a single input
+    let input = "abcdefghijklmnopq";
+    let result = new_ucmd!().arg("--traditional").arg("0").arg("0").arg("0").arg("0").run_piped_stdin(input.as_bytes());
+
+    assert!(!result.success);
+}
+
+#[test]
+fn test_traditional_only_label(){
+    let input = "abcdefghijklmnopqrstuvwxyz";
+    let result = new_ucmd!().arg("-An").arg("--traditional").arg("-a").arg("-c").arg("-").arg("10").arg("0x10").run_piped_stdin(input.as_bytes());
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, unindent(r"
+            (0000020)   i   j   k   l   m   n   o   p   q   r   s   t   u   v   w   x
+                        i   j   k   l   m   n   o   p   q   r   s   t   u   v   w   x
+            (0000040)   y   z
+                        y   z
+            (0000042)
+            "));
+}

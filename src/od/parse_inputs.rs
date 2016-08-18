@@ -39,11 +39,16 @@ pub enum CommandLineInputs {
 /// Offset and label are specified in bytes.
 /// '-' is used as filename if stdin is meant. This is also returned if
 /// there is no input, as stdin is the default input.
-pub fn parse_inputs(matches: &CommandLineOpts) -> CommandLineInputs {
+pub fn parse_inputs(matches: &CommandLineOpts) -> Result<CommandLineInputs, String> {
 
     let mut input_strings: Vec<String> = matches.inputs();
 
+    if matches.opts_present(&["traditional"]) {
+        return parse_inputs_traditional(input_strings);
+    }
+
     // test if commandline contains: [file] <offset>
+    // fall-through if no (valid) offset is found
     if input_strings.len() == 1 || input_strings.len() == 2 {
         // if any of the options -A, -j, -N, -t, -v or -w are present there is no offset
         if !matches.opts_present(&["A", "j", "N", "t", "v", "w"]) {
@@ -53,10 +58,10 @@ pub fn parse_inputs(matches: &CommandLineOpts) -> CommandLineInputs {
                 Ok(n) => {
                     // if there is just 1 input (stdin), an offset must start with '+'
                     if input_strings.len() == 1 && input_strings[0].starts_with("+") {
-                        return CommandLineInputs::FileAndOffset(("-".to_string(), n, None));
+                        return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
                     }
                     if input_strings.len() == 2 {
-                        return CommandLineInputs::FileAndOffset((input_strings[0].clone(), n, None));
+                        return Ok(CommandLineInputs::FileAndOffset((input_strings[0].clone(), n, None)));
                     }
                 }
                 _ => {
@@ -69,7 +74,47 @@ pub fn parse_inputs(matches: &CommandLineOpts) -> CommandLineInputs {
     if input_strings.len() == 0 {
         input_strings.push("-".to_string());
     }
-    CommandLineInputs::FileNames(input_strings)
+    Ok(CommandLineInputs::FileNames(input_strings))
+}
+
+/// interprets inputs when --traditional is on the commandline
+///
+/// normally returns CommandLineInputs::FileAndOffset, but if no offset is found,
+/// it returns CommandLineInputs::FileNames (also to differentiate from the offset==0)
+pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLineInputs, String> {
+    match input_strings.len() {
+        0 => {
+            Ok(CommandLineInputs::FileNames(vec!{"-".to_string()}))
+        }
+        1 => {
+            let offset0=parse_offset_operand(&input_strings[0]);
+            Ok(match offset0 {
+                Ok(n) => CommandLineInputs::FileAndOffset(("-".to_string(), n, None)),
+                _ => CommandLineInputs::FileNames(input_strings),
+            })
+        }
+        2 => {
+            let offset0=parse_offset_operand(&input_strings[0]);
+            let offset1=parse_offset_operand(&input_strings[1]);
+            match (offset0, offset1) {
+                (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, Some(m)))),
+                (_, Ok(m)) => Ok(CommandLineInputs::FileAndOffset((input_strings[0].clone(), m, None))),
+                _ => Err(format!("invalid offset: {}", input_strings[1])),
+            }
+        }
+        3 => {
+            let offset=parse_offset_operand(&input_strings[1]);
+            let label=parse_offset_operand(&input_strings[2]);
+            match (offset, label) {
+                (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((input_strings[0].clone(), n, Some(m)))),
+                (Err(_), _) => Err(format!("invalid offset: {}", input_strings[1])),
+                (_, Err(_)) => Err(format!("invalid label: {}", input_strings[2])),
+            }
+        }
+        _ => {
+            Err(format!("too many inputs after --traditional: {}", input_strings[3]))
+        }
+    }
 }
 
 /// parses format used by offset and label on the commandline
@@ -148,27 +193,27 @@ mod tests {
         assert_eq!(CommandLineInputs::FileNames(vec!{"-".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{},
-                vec!{})));
+                vec!{})).unwrap());
 
         assert_eq!(CommandLineInputs::FileNames(vec!{"-".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"-"},
-                vec!{})));
+                vec!{})).unwrap());
 
         assert_eq!(CommandLineInputs::FileNames(vec!{"file1".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"file1"},
-                vec!{})));
+                vec!{})).unwrap());
 
         assert_eq!(CommandLineInputs::FileNames(vec!{"file1".to_string(), "file2".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"file1", "file2"},
-                vec!{})));
+                vec!{})).unwrap());
 
         assert_eq!(CommandLineInputs::FileNames(vec!{"-".to_string(), "file1".to_string(), "file2".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"-", "file1", "file2"},
-                vec!{})));
+                vec!{})).unwrap());
     }
 
     #[test]
@@ -177,58 +222,112 @@ mod tests {
         assert_eq!(CommandLineInputs::FileAndOffset(("-".to_string(), 8, None)),
             parse_inputs(&MockOptions::new(
                 vec!{"+10"},
-                vec!{})));
+                vec!{})).unwrap());
 
         // offset must start with "+" if no input is specified.
         assert_eq!(CommandLineInputs::FileNames(vec!{"10".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"10"},
-                vec!{""})));
+                vec!{""})).unwrap());
 
         // offset is not valid, so it is considered a filename.
         assert_eq!(CommandLineInputs::FileNames(vec!{"+10a".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"+10a"},
-                vec!{""})));
+                vec!{""})).unwrap());
 
         // if -j is included in the commandline, there cannot be an offset.
         assert_eq!(CommandLineInputs::FileNames(vec!{"+10".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"+10"},
-                vec!{"j"})));
+                vec!{"j"})).unwrap());
 
         // if -v is included in the commandline, there cannot be an offset.
         assert_eq!(CommandLineInputs::FileNames(vec!{"+10".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"+10"},
-                vec!{"o", "v"})));
+                vec!{"o", "v"})).unwrap());
 
         assert_eq!(CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None)),
             parse_inputs(&MockOptions::new(
                 vec!{"file1", "+10"},
-                vec!{})));
+                vec!{})).unwrap());
 
         // offset does not need to start with "+" if a filename is included.
         assert_eq!(CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None)),
             parse_inputs(&MockOptions::new(
                 vec!{"file1", "10"},
-                vec!{})));
+                vec!{})).unwrap());
 
         assert_eq!(CommandLineInputs::FileNames(vec!{"file1".to_string(), "+10a".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"file1", "+10a"},
-                vec!{""})));
+                vec!{""})).unwrap());
 
         assert_eq!(CommandLineInputs::FileNames(vec!{"file1".to_string(), "+10".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"file1", "+10"},
-                vec!{"j"})));
+                vec!{"j"})).unwrap());
 
         // offset must be last on the commandline
         assert_eq!(CommandLineInputs::FileNames(vec!{"+10".to_string(), "file1".to_string()}),
             parse_inputs(&MockOptions::new(
                 vec!{"+10", "file1"},
-                vec!{""})));
+                vec!{""})).unwrap());
+    }
+
+    #[test]
+    fn test_parse_inputs_traditional() {
+
+        // it should not return FileAndOffset to signal no offset was entered on the commandline.
+        assert_eq!(CommandLineInputs::FileNames(vec!{"-".to_string()}),
+            parse_inputs(&MockOptions::new(
+                vec!{},
+                vec!{"traditional"})).unwrap());
+
+        assert_eq!(CommandLineInputs::FileNames(vec!{"file1".to_string()}),
+            parse_inputs(&MockOptions::new(
+                vec!{"file1"},
+                vec!{"traditional"})).unwrap());
+
+        // offset does not need to start with a +
+        assert_eq!(CommandLineInputs::FileAndOffset(("-".to_string(), 8, None)),
+            parse_inputs(&MockOptions::new(
+                vec!{"10"},
+                vec!{"traditional"})).unwrap());
+
+        // valid offset and valid label
+        assert_eq!(CommandLineInputs::FileAndOffset(("-".to_string(), 8, Some(8))),
+            parse_inputs(&MockOptions::new(
+                vec!{"10", "10"},
+                vec!{"traditional"})).unwrap());
+
+        assert_eq!(CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None)),
+            parse_inputs(&MockOptions::new(
+                vec!{"file1", "10"},
+                vec!{"traditional"})).unwrap());
+
+        // only one file is allowed, it must be the first
+        parse_inputs(&MockOptions::new(
+                vec!{"10", "file1"},
+                vec!{"traditional"})).unwrap_err();
+
+        assert_eq!(CommandLineInputs::FileAndOffset(("file1".to_string(), 8, Some(8))),
+            parse_inputs(&MockOptions::new(
+                vec!{"file1", "10", "10"},
+                vec!{"traditional"})).unwrap());
+
+        parse_inputs(&MockOptions::new(
+                vec!{"10", "file1", "10"},
+                vec!{"traditional"})).unwrap_err();
+
+        parse_inputs(&MockOptions::new(
+                vec!{"10", "10", "file1"},
+                vec!{"traditional"})).unwrap_err();
+
+        parse_inputs(&MockOptions::new(
+                vec!{"10", "10", "10", "10"},
+                vec!{"traditional"})).unwrap_err();
     }
 
     fn parse_offset_operand_str(s: &str) -> Result<usize, &'static str> {
