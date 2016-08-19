@@ -9,10 +9,13 @@ path = "whoami.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 winapi = "*"
 advapi32-sys = "*"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["entries"]
 
 [[bin]]
 name = "whoami"

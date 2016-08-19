@@ -1,7 +1,3 @@
-//! Aim to provide platform-independent methods to obtain login records
-//!
-//! **ONLY** support linux, macos and freebsd for the time being
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
@@ -9,6 +5,31 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
+//! Aims to provide platform-independent methods to obtain login records
+//!
+//! **ONLY** support linux, macos and freebsd for the time being
+//!
+//! # Examples:
+//!
+//! ```
+//! use uucore::utmpx::Utmpx;
+//! for ut in Utmpx::iter_all_records() {
+//!     if ut.is_user_process() {
+//!         println!("{}: {}", ut.host(), ut.user())
+//!     }
+//! }
+//! ```
+//!
+//! Specifying the path to login record:
+//!
+//! ```
+//! use uucore::utmpx::Utmpx;
+//! for ut in Utmpx::iter_all_records().read_from("/some/where/else") {
+//!     if ut.is_user_process() {
+//!         println!("{}: {}", ut.host(), ut.user())
+//!     }
+//! }
+//! ```
 
 use super::libc;
 pub extern crate time;
@@ -107,28 +128,6 @@ mod ut {
     pub use libc::SHUTDOWN_TIME;
 }
 
-/// Login records
-///
-/// Examples:
-/// ---------
-///
-/// ```
-/// for ut in Utmpx::iter_all_records() {
-///     if ut.is_user_process() {
-///         println!("{}: {}", ut.host(), ut.user())
-///     }
-/// }
-/// ```
-///
-/// Specifying the path to login record:
-///
-/// ```
-/// for ut in Utmpx::iter_all_records().read_from("/some/where/else") {
-///     if ut.is_user_process() {
-///         println!("{}: {}", ut.host(), ut.user())
-///     }
-/// }
-/// ```
 pub struct Utmpx {
     inner: utmpx,
 }

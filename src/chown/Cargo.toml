@@ -8,18 +8,17 @@ name = "uu_chown"
 path = "chown.rs"
 
 [dependencies]
-getopts = "*"
 glob = "*"
-libc = "*"
-uucore = { path="../uucore" }
 walkdir = "0.1"
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["entries"]
 
 [dependencies.clippy]
 version = "*"
 optional = true
-
-[features]
-default = []
 
 [[bin]]
 name = "chown"

@@ -20,6 +20,8 @@ pub mod parse_time;
 pub mod utmpx;
 #[cfg(all(unix, feature = "c_types"))]
 pub mod c_types;
+#[cfg(all(unix, feature = "entries"))]
+pub mod entries;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
 #[cfg(all(unix, feature = "signals"))]

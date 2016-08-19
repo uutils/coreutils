@@ -9,9 +9,12 @@ path = "stat.rs"
 
 [dependencies]
 getopts = "*"
-libc = "^0.2"
 time = "*"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["entries"]
 
 [[bin]]
 name = "stat"

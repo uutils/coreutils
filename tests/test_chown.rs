@@ -9,25 +9,25 @@ fn new_ucmd() -> UCommand {
 }
 
 #[cfg(test)]
-mod test_passwd {
-    use super::passwd::*;
+mod test_passgrp {
+    use super::uu_chown::entries::{usr2uid,grp2gid,uid2usr,gid2grp};
 
     #[test]
-    fn test_getuid() {
-        assert_eq!(0, getuid("root").unwrap());
-        assert!(getuid("88888888").is_err());
-        assert!(getuid("auserthatdoesntexist").is_err());
+    fn test_usr2uid() {
+        assert_eq!(0, usr2uid("root").unwrap());
+        assert!(usr2uid("88888888").is_err());
+        assert!(usr2uid("auserthatdoesntexist").is_err());
     }
 
     #[test]
-    fn test_getgid() {
+    fn test_grp2gid() {
         if cfg!(target_os = "macos") {
-            assert_eq!(0, getgid("wheel").unwrap());
+            assert_eq!(0, grp2gid("wheel").unwrap());
         } else {
-            assert_eq!(0, getgid("root").unwrap());
+            assert_eq!(0, grp2gid("root").unwrap());
         }
-        assert!(getgid("88888888").is_err());
-        assert!(getgid("agroupthatdoesntexist").is_err());
+        assert!(grp2gid("88888888").is_err());
+        assert!(grp2gid("agroupthatdoesntexist").is_err());
     }
 
     #[test]

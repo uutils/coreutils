@@ -4,39 +4,25 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
+ * (c) Jian Zeng <anonymousknight96 AT gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
 extern crate getopts;
-extern crate libc;
 
 #[macro_use]
 extern crate uucore;
+use uucore::libc::{self, setgid, setuid, chroot, setgroups};
+use uucore::entries;
 
 use getopts::Options;
-use libc::{setgid, setuid};
 use std::ffi::CString;
 use std::io::{Error, Write};
 use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
-use uucore::c_types::{get_pw_from_args, get_group};
-
-extern {
-    fn chroot(path: *const libc::c_char) -> libc::c_int;
-}
-
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-extern {
-    fn setgroups(size: libc::c_int, list: *const libc::gid_t) -> libc::c_int;
-}
-
-#[cfg(target_os = "linux")]
-extern {
-    fn setgroups(size: libc::size_t, list: *const libc::gid_t) -> libc::c_int;
-}
 
 static NAME: &'static str = "chroot";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -146,9 +132,9 @@ fn enter_chroot(root: &Path) {
 
 fn set_main_group(group: &str) {
     if !group.is_empty() {
-        let group_id = match get_group(group) {
-            None => crash!(1, "no such group: {}", group),
-            Some(g) => g.gr_gid
+        let group_id = match entries::grp2gid(group) {
+            Ok(g) => g,
+            _ => crash!(1, "no such group: {}", group),
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
@@ -177,9 +163,9 @@ fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
         let groups_vec: Vec<libc::gid_t> = FromIterator::from_iter(
             groups.split(',').map(
-                |x| match get_group(x) {
-                    None => crash!(1, "no such group: {}", x),
-                    Some(g) => g.gr_gid
+                |x| match entries::grp2gid(x) {
+                    Ok(g) => g,
+                    _ => crash!(1, "no such group: {}", x),
                 })
             );
         let err = set_groups(groups_vec);
@@ -191,7 +177,7 @@ fn set_groups_from_str(groups: &str) {
 
 fn set_user(user: &str) {
     if !user.is_empty() {
-        let user_id = get_pw_from_args(&vec!(user.to_owned())).unwrap().pw_uid;
+        let user_id = entries::usr2uid(user).unwrap();
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
             crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())

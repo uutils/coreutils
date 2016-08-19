@@ -17,6 +17,7 @@ pub use fsext::*;
 
 #[macro_use]
 extern crate uucore;
+use uucore::entries;
 
 use std::{fs, iter, cmp};
 use std::fs::File;
@@ -319,31 +320,6 @@ fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32
     }
 }
 
-
-use std::ptr;
-use std::ffi::CStr;
-use uucore::c_types::{getpwuid, getgrgid};
-fn get_grp_name(gid: u32) -> String {
-    let p = unsafe { getgrgid(gid) };
-    if !p.is_null() {
-        unsafe { CStr::from_ptr(ptr::read(p).gr_name).to_string_lossy().into_owned() }
-    } else {
-        "UNKNOWN".to_owned()
-    }
-}
-fn get_usr_name(uid: u32) -> String {
-    let p = unsafe { getpwuid(uid) };
-    if !p.is_null() {
-        unsafe {
-            CStr::from_ptr(ptr::read(p).pw_name)
-                .to_string_lossy()
-                .into_owned()
-        }
-    } else {
-        "UNKNOWN".to_owned()
-    }
-}
-
 impl Stater {
     pub fn generate_tokens(fmtstr: &str, use_printf: bool) -> Result<Vec<Token>, String> {
 
@@ -613,7 +589,7 @@ impl Stater {
                                     }
                                     // group name of owner
                                     'G' => {
-                                        arg = get_grp_name(meta.gid());
+                                        arg = entries::gid2grp(meta.gid()).unwrap_or("UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
                                     // number of hard links
@@ -683,7 +659,7 @@ impl Stater {
                                     }
                                     // user name of owner
                                     'U' => {
-                                        arg = get_usr_name(meta.uid());
+                                        arg = entries::uid2usr(meta.uid()).unwrap_or("UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
 

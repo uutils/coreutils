@@ -6,13 +6,13 @@
 // that was distributed with this source code.
 //
 
-extern crate libc;
+pub use super::uucore::libc;
 extern crate time;
 
 use self::time::Timespec;
-pub use self::libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLNK, S_IFSOCK, S_ISUID, S_ISGID,
-                     S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t,
-                     c_int, strerror};
+pub use libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLNK, S_IFSOCK, S_ISUID, S_ISGID, S_ISVTX,
+               S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_int,
+               strerror};
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -176,12 +176,12 @@ use std::error::Error;
 use std::io::Error as IOError;
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
-use self::libc::statfs as Sstatfs;
+use libc::statfs as Sstatfs;
 // #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
 // use self::libc::statvfs as Sstatfs;
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
-use self::libc::statfs as statfs_fn;
+use libc::statfs as statfs_fn;
 // #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
 // use self::libc::statvfs as statfs_fn;
 

@@ -11,19 +11,13 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
-extern crate libc;
-use libc::{uid_t, gid_t, c_char, c_int};
-
 #[macro_use]
 extern crate uucore;
-
-extern crate getopts;
-use getopts::Options;
+use uucore::libc::{self, uid_t, gid_t, lchown};
+pub use uucore::entries::{self, Locate, Passwd, Group};
 
 extern crate walkdir;
 use walkdir::WalkDir;
-
-pub mod passwd;
 
 use std::fs::{self, Metadata};
 use std::os::unix::fs::MetadataExt;
@@ -37,21 +31,15 @@ use std::convert::AsRef;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static NAME: &'static str = "chown";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [OWNER][:[GROUP]] FILE...\n chown [OPTION]... --reference=RFILE FILE...";
+static SUMMARY: &'static str = "change file owner and group";
 
 const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
-extern "C" {
-    #[cfg_attr(all(target_os = "macos", target_arch = "x86"), link_name = "lchown$UNIX2003")]
-    pub fn lchown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int;
-}
-
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-
+    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
     opts.optflag("c",
                  "changes",
                  "like verbose but report only when a change is made");
@@ -85,16 +73,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  "traverse every symbolic link to a directory encountered");
     opts.optflag("P", "", "do not traverse any symbolic links (default)");
 
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            disp_err!("{}", f);
-            return 1;
-        }
-    };
+    let matches = opts.parse(args.clone());
 
     let mut bit_flag = FTS_PHYSICAL;
     let mut preserve_root = false;
@@ -119,13 +98,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
             "--no-dereference" => derefer = 0,
             _ => (),
         }
-    }
-
-    if matches.opt_present("help") {
-        return help();
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
     }
 
     let recursive = matches.opt_present("recursive");
@@ -222,25 +194,25 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
 
     if usr_only {
-        Ok((Some(match passwd::getuid(args[0]) {
-            Ok(uid) => uid,
-            Err(_) => return Err(format!("invalid user: ‘{}’", spec)),
+        Ok((Some(match Passwd::locate(args[0]) {
+            Ok(v) => v.uid(),
+            _ => return Err(format!("invalid user: ‘{}’", spec)),
         }),
             None))
     } else if grp_only {
         Ok((None,
-            Some(match passwd::getgid(args[1]) {
-            Ok(gid) => gid,
-            Err(_) => return Err(format!("invalid group: ‘{}’", spec)),
+            Some(match Group::locate(args[1]) {
+            Ok(v) => v.gid(),
+            _ => return Err(format!("invalid group: ‘{}’", spec)),
         })))
     } else if usr_grp {
-        Ok((Some(match passwd::getuid(args[0]) {
-            Ok(uid) => uid,
-            Err(_) => return Err(format!("invalid user: ‘{}’", spec)),
+        Ok((Some(match Passwd::locate(args[0]) {
+            Ok(v) => v.uid(),
+            _ => return Err(format!("invalid user: ‘{}’", spec)),
         }),
-            Some(match passwd::getgid(args[1]) {
-            Ok(gid) => gid,
-            Err(_) => return Err(format!("invalid group: ‘{}’", spec)),
+            Some(match Group::locate(args[1]) {
+            Ok(v) => v.gid(),
+            _ => return Err(format!("invalid group: ‘{}’", spec)),
         })))
     } else {
         Ok((None, None))
@@ -401,10 +373,10 @@ impl Chowner {
                     if self.verbosity == Verbose {
                         println!("failed to change ownership of {} from {}:{} to {}:{}",
                                  path.display(),
-                                 passwd::uid2usr(meta.uid()).unwrap(),
-                                 passwd::gid2grp(meta.gid()).unwrap(),
-                                 passwd::uid2usr(dest_uid).unwrap(),
-                                 passwd::gid2grp(dest_gid).unwrap());
+                                 entries::uid2usr(meta.uid()).unwrap(),
+                                 entries::gid2grp(meta.gid()).unwrap(),
+                                 entries::uid2usr(dest_uid).unwrap(),
+                                 entries::gid2grp(dest_gid).unwrap());
                     };
                 }
             }
@@ -416,18 +388,18 @@ impl Chowner {
                     Changes | Verbose => {
                         println!("changed ownership of {} from {}:{} to {}:{}",
                                  path.display(),
-                                 passwd::uid2usr(meta.uid()).unwrap(),
-                                 passwd::gid2grp(meta.gid()).unwrap(),
-                                 passwd::uid2usr(dest_uid).unwrap(),
-                                 passwd::gid2grp(dest_gid).unwrap());
+                                 entries::uid2usr(meta.uid()).unwrap(),
+                                 entries::gid2grp(meta.gid()).unwrap(),
+                                 entries::uid2usr(dest_uid).unwrap(),
+                                 entries::gid2grp(dest_gid).unwrap());
                     }
                     _ => (),
                 };
             } else if self.verbosity == Verbose {
                 println!("ownership of {} retained as {}:{}",
                          path.display(),
-                         passwd::uid2usr(dest_uid).unwrap(),
-                         passwd::gid2grp(dest_gid).unwrap());
+                         entries::uid2usr(dest_uid).unwrap(),
+                         entries::gid2grp(dest_gid).unwrap());
             }
         }
         ret
@@ -444,54 +416,3 @@ impl Chowner {
     }
 }
 
-fn help() -> i32 {
-    println!(r#"
-Usage: {0} [OPTION]... [OWNER][:[GROUP]] FILE...
-  or:  {0} [OPTION]... --reference=RFILE FILE...
-Change the owner and/or group of each FILE to OWNER and/or GROUP.
-With --reference, change the owner and group of each FILE to those of RFILE.
-
-  -c, --changes          like verbose but report only when a change is made
-  -f, --silent, --quiet  suppress most error messages
-  -v, --verbose          output a diagnostic for every file processed
-      --dereference      affect the referent of each symbolic link (this is
-                         the default), rather than the symbolic link itself
-  -h, --no-dereference   affect symbolic links instead of any referenced file
-                         (useful only on systems that can change the
-                         ownership of a symlink)
-      --from=CURRENT_OWNER:CURRENT_GROUP
-                         change the owner and/or group of each file only if
-                         its current owner and/or group match those specified
-                         here.  Either may be omitted, in which case a match
-                         is not required for the omitted attribute
-      --no-preserve-root  do not treat '/' specially (the default)
-      --preserve-root    fail to operate recursively on '/'
-      --reference=RFILE  use RFILE's owner and group rather than
-                         specifying OWNER:GROUP values
-  -R, --recursive        operate on files and directories recursively
-
-The following options modify how a hierarchy is traversed when the -R
-option is also specified.  If more than one is specified, only the final
-one takes effect.
-
-  -H                     if a command line argument is a symbolic link
-                         to a directory, traverse it
-  -L                     traverse every symbolic link to a directory
-                         encountered
-  -P                     do not traverse any symbolic links (default)
-
-      --help     display this help and exit
-      --version  output version information and exit
-
-Owner is unchanged if missing.  Group is unchanged if missing, but changed
-to login group if implied by a ':' following a symbolic OWNER.
-OWNER and GROUP may be numeric as well as symbolic.
-
-Examples:
-  chown root /u        Change the owner of /u to "root".
-  chown root:staff /u  Likewise, but also change its group to "staff".
-  chown -hR root /u    Change the owner of /u and subfiles to "root".
-             "#,
-             NAME);
-    0
-}

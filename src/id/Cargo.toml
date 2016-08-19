@@ -9,8 +9,11 @@ path = "id.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["entries", "process"]
 
 [[bin]]
 name = "id"

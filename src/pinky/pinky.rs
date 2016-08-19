@@ -12,9 +12,9 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::c_types::getpwnam;
 use uucore::utmpx::{self, time, Utmpx};
-use uucore::libc::{uid_t, gid_t, c_char, S_IWGRP};
+use uucore::libc::S_IWGRP;
+use uucore::entries::{Locate, Passwd};
 
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -23,14 +23,11 @@ use std::io::Result as IOResult;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use std::ptr;
-use std::ffi::{CStr, CString};
-
 use std::path::PathBuf;
 
 static SYNTAX: &'static str = "[OPTION]... [USER]...";
 static SUMMARY: &'static str = "A lightweight 'finger' program;  print user information.";
-                 
+
 const BUFSIZE: usize = 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -152,52 +149,6 @@ struct Pinky {
     names: Vec<String>,
 }
 
-#[derive(Debug)]
-pub struct Passwd {
-    pw_name: String,
-    pw_passwd: String,
-    pw_uid: uid_t,
-    pw_gid: gid_t,
-    pw_gecos: String,
-    pw_dir: String,
-    pw_shell: String,
-}
-
-trait FromChars {
-    fn from_chars(*const c_char) -> Self;
-}
-
-impl FromChars for String {
-    #[inline]
-    fn from_chars(ptr: *const c_char) -> Self {
-        if ptr.is_null() {
-            return "".to_owned();
-        }
-        let s = unsafe { CStr::from_ptr(ptr) };
-        s.to_string_lossy().into_owned()
-    }
-}
-
-pub fn getpw(u: &str) -> Option<Passwd> {
-    let pw = unsafe {
-        getpwnam(CString::new(u).unwrap().as_ptr())
-    };
-    if !pw.is_null() {
-        let data = unsafe { ptr::read(pw) };
-        Some(Passwd {
-            pw_name: String::from_chars(data.pw_name),
-            pw_passwd: String::from_chars(data.pw_passwd),
-            pw_uid: data.pw_uid,
-            pw_gid: data.pw_gid,
-            pw_dir: String::from_chars(data.pw_dir),
-            pw_gecos: String::from_chars(data.pw_gecos),
-            pw_shell: String::from_chars(data.pw_shell),
-        })
-    } else {
-        None
-    }
-}
-
 pub trait Capitalize {
     fn capitalize(&self) -> String;
 }
@@ -267,12 +218,12 @@ impl Pinky {
         print!("{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
 
         if self.include_fullname {
-            if let Some(pw) = getpw(ut.user().as_ref()) {
-                let mut gecos = pw.pw_gecos;
+            if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
+                let mut gecos = pw.user_info().into_owned();
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
                 }
-                print!(" {:<19.19}", gecos.replace("&", &pw.pw_name.capitalize()));
+                print!(" {:<19.19}", gecos.replace("&", &pw.name().capitalize()));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -344,14 +295,14 @@ impl Pinky {
     fn long_pinky(&self) -> i32 {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
-            if let Some(pw) = getpw(u) {
-                println!(" {}", pw.pw_gecos.replace("&", &pw.pw_name.capitalize()));
+            if let Ok(pw) = Passwd::locate(u.as_str()) {
+                println!(" {}", pw.user_info().replace("&", &pw.name().capitalize()));
                 if self.include_home_and_shell {
-                    print!("Directory: {:<29}", pw.pw_dir);
-                    println!("Shell:  {}", pw.pw_shell);
+                    print!("Directory: {:<29}", pw.user_dir());
+                    println!("Shell:  {}", pw.user_shell());
                 }
                 if self.include_project {
-                    let mut p = PathBuf::from(&pw.pw_dir);
+                    let mut p = PathBuf::from(pw.user_dir().as_ref());
                     p.push(".project");
                     if let Ok(f) = File::open(p) {
                         print!("Project: ");
@@ -359,7 +310,7 @@ impl Pinky {
                     }
                 }
                 if self.include_plan {
-                    let mut p = PathBuf::from(&pw.pw_dir);
+                    let mut p = PathBuf::from(pw.user_dir().as_ref());
                     p.push(".plan");
                     if let Ok(f) = File::open(p) {
                         println!("Plan:");

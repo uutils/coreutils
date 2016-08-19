@@ -23,11 +23,9 @@ extern crate lazy_static;
 
 #[macro_use]
 extern crate uucore;
-
-extern crate libc;
 #[cfg(unix)]
-use self::libc::{S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP,
-                 S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_char};
+use uucore::libc::{S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP,
+                   S_IROTH, S_IWOTH, S_IXOTH, mode_t};
 
 use getopts::Options;
 use std::fs;
@@ -40,10 +38,6 @@ use std::collections::HashMap;
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(unix)]
-use std::ptr;
-#[cfg(unix)]
-use std::ffi::CStr;
 #[cfg(unix)]
 use unicode_width::UnicodeWidthStr;
 
@@ -407,32 +401,16 @@ fn display_item_long(item: &PathBuf,
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
-use uucore::c_types::{getpwuid, getgrgid};
-
-// Only used in `display_uname` and `display_group`
-#[cfg(unix)]
-fn cstr2string(cstr: *const c_char) -> String {
-    unsafe { CStr::from_ptr(cstr).to_string_lossy().into_owned() }
-}
+use uucore::entries;
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata) -> String {
-    let pw = unsafe { getpwuid(metadata.uid()) };
-    if !pw.is_null() {
-        cstr2string(unsafe { ptr::read(pw).pw_name })
-    } else {
-        metadata.uid().to_string()
-    }
+    entries::uid2usr(metadata.uid()).unwrap_or(metadata.uid().to_string())
 }
 
 #[cfg(unix)]
 fn display_group(metadata: &Metadata) -> String {
-    let ent = unsafe { getgrgid(metadata.gid()) };
-    if !ent.is_null() {
-        cstr2string(unsafe { ptr::read(ent).gr_name })
-    } else {
-        metadata.gid().to_string()
-    }
+    entries::gid2grp(metadata.gid()).unwrap_or(metadata.gid().to_string())
 }
 
 #[cfg(not(unix))]
