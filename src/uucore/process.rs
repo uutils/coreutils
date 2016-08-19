@@ -1,21 +1,44 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Maciej Dziardziel <fiedzia@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Maciej Dziardziel <fiedzia@gmail.com>
+// (c) Jian Zeng <anonymousknight96 AT gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
+//
 
-extern crate libc;
-
-use libc::{c_int, pid_t};
+use super::libc;
+use libc::{c_int, pid_t, uid_t, gid_t};
 use std::fmt;
 use std::io;
 use std::process::Child;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+pub fn geteuid() -> uid_t {
+    unsafe {
+        libc::geteuid()
+    }
+}
+
+pub fn getegid() -> gid_t {
+    unsafe {
+        libc::getegid()
+    }
+}
+
+pub fn getgid() -> gid_t {
+    unsafe {
+        libc::getgid()
+    }
+}
+
+pub fn getuid() -> uid_t {
+    unsafe {
+        libc::getuid()
+    }
+}
 
 // This is basically sys::unix::process::ExitStatus
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -26,7 +49,8 @@ pub enum ExitStatus {
 
 impl ExitStatus {
     fn from_status(status: c_int) -> ExitStatus {
-        if status & 0x7F != 0 { // WIFSIGNALED(status)
+        if status & 0x7F != 0 {
+            // WIFSIGNALED(status)
             ExitStatus::Signal(status & 0x7F)
         } else {
             ExitStatus::Code(status & 0xFF00 >> 8)
@@ -75,8 +99,7 @@ pub trait ChildExt {
 
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        if unsafe { libc::kill(self.id() as pid_t,
-                               signal as i32) } != 0 {
+        if unsafe { libc::kill(self.id() as pid_t, signal as i32) } != 0 {
             Err(io::Error::last_os_error())
         } else {
             Ok(())
@@ -86,10 +109,7 @@ impl ChildExt for Child {
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>> {
         // The result will be written to that Option, protected by a Mutex
         // Then the Condvar will be signaled
-        let state = Arc::new((
-            Mutex::new(Option::None::<io::Result<ExitStatus>>),
-            Condvar::new(),
-        ));
+        let state = Arc::new((Mutex::new(Option::None::<io::Result<ExitStatus>>), Condvar::new()));
 
         // Start the waiting thread
         let state_th = state.clone();
@@ -121,7 +141,7 @@ impl ChildExt for Child {
                 return exitstatus.map(Some);
             }
             if start.elapsed() >= timeout {
-                return Ok(None)
+                return Ok(None);
             }
             let cvar_timeout = timeout - start.elapsed();
             exitstatus = cvar.wait_timeout(exitstatus, cvar_timeout).unwrap().0;
