@@ -13,7 +13,6 @@
 
 extern crate bit_set;
 extern crate getopts;
-extern crate vec_map;
 
 #[macro_use]
 extern crate uucore;
@@ -21,7 +20,7 @@ extern crate uucore;
 use bit_set::BitSet;
 use getopts::Options;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
-use vec_map::VecMap;
+use std::collections::HashMap;
 
 use expand::ExpandSet;
 
@@ -62,7 +61,8 @@ fn delete(set: ExpandSet, complement: bool) {
 }
 
 fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
-    let mut map = VecMap::new();
+    //let mut map = VecMap::new();
+    let mut map = HashMap::new();
     let stdout = stdout();
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
 
@@ -82,10 +82,10 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
         {
             let mut chars = buf.chars();
 
-            while let Some(char) = chars.next() {
-                let trc = match map.get(char as usize) {
+            while let Some(ch) = chars.next() {
+                let trc = match map.get(&(ch as usize)) {
                     Some(t) => *t,
-                    None => char,
+                    None => ch,
                 };
                 safe_unwrap!(writer.write_all(format!("{}", trc).as_ref()));
             }

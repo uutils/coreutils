@@ -9,10 +9,11 @@ path = "tr.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 bit-set = "*"
-vec_map = "0.6.0"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
 
 [[bin]]
 name = "tr"
