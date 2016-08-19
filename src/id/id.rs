@@ -1,54 +1,51 @@
 #![crate_name = "uu_id"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alan Andrade <alan.andradec@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- *
- * Synced with:
- *  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
- *  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alan Andrade <alan.andradec@gmail.com>
+// (c) Jian Zeng <anonymousknight96 AT gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+// Synced with:
+//  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
+//  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
+//
 
 #![allow(non_camel_case_types)]
-extern crate getopts;
-extern crate libc;
+#![allow(dead_code)]
 
 #[macro_use]
 extern crate uucore;
-
-use libc::{getgid, getuid, uid_t, getegid, geteuid, getlogin};
-use std::ffi::CStr;
+pub use uucore::libc;
+use uucore::libc::{getlogin, uid_t};
+use uucore::entries::{self, Passwd, Group, Locate};
+use uucore::process::{getgid, getuid, getegid, geteuid};
 use std::io::Write;
-use std::ptr::read;
-use uucore::c_types::{
-    c_passwd,
-    c_group,
-    get_groups,
-    get_group_list,
-    get_pw_from_args,
-    getpwuid,
-    group
-};
+use std::ffi::CStr;
 
-#[cfg(not(target_os = "linux"))]
+macro_rules! cstr2cow {
+    ($v:expr) => (
+        unsafe { CStr::from_ptr($v).to_string_lossy() }
+    )
+}
+
+#[cfg(not(target_os = "linu"))]
 mod audit {
     pub use std::mem::uninitialized;
-    use libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
+    use super::libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
 
-    pub type au_id_t    = uid_t;
-    pub type au_asid_t  = pid_t;
+    pub type au_id_t = uid_t;
+    pub type au_asid_t = pid_t;
     pub type au_event_t = c_uint;
-    pub type au_emod_t  = c_uint;
+    pub type au_emod_t = c_uint;
     pub type au_class_t = c_int;
 
     #[repr(C)]
     pub struct au_mask {
         pub am_success: c_uint,
-        pub am_failure: c_uint
+        pub am_failure: c_uint,
     }
     pub type au_mask_t = au_mask;
 
@@ -60,56 +57,52 @@ mod audit {
 
     #[repr(C)]
     pub struct c_auditinfo_addr {
-        pub ai_auid: au_id_t,           /* Audit user ID */
-        pub ai_mask: au_mask_t,         /* Audit masks. */
-        pub ai_termid: au_tid_addr_t,   /* Terminal ID. */
-        pub ai_asid: au_asid_t,         /* Audit session ID. */
-        pub ai_flags: uint64_t          /* Audit session flags */
+        pub ai_auid: au_id_t, // Audit user ID
+        pub ai_mask: au_mask_t, // Audit masks.
+        pub ai_termid: au_tid_addr_t, // Terminal ID.
+        pub ai_asid: au_asid_t, // Audit session ID.
+        pub ai_flags: uint64_t, // Audit session flags
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
-    extern {
+    extern "C" {
         pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
     }
 }
 
-extern {
-    fn getgrgid(gid: uid_t) -> *const c_group;
-}
-
-static NAME: &'static str = "id";
+static SYNTAX: &'static str = "[OPTION]... [USER]";
+static SUMMARY: &'static str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-    opts.optflag("h", "", "Show help");
-    opts.optflag("A", "", "Display the process audit (not available on Linux)");
+    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
+    opts.optflag("A",
+                 "",
+                 "Display the process audit (not available on Linux)");
     opts.optflag("G", "", "Display the different group IDs");
     opts.optflag("g", "", "Display the effective group ID as a number");
-    opts.optflag("n", "", "Display the name of the user or group ID for the -G, -g and -u options");
+    opts.optflag("n",
+                 "",
+                 "Display the name of the user or group ID for the -G, -g and -u options");
     opts.optflag("P", "", "Display the id as a password file entry");
     opts.optflag("p", "", "Make the output human-readable");
     opts.optflag("r", "", "Display the real ID for the -g and -u options");
     opts.optflag("u", "", "Display the effective user ID as a number");
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m },
-        Err(_) => {
-            println!("{}", opts.usage(NAME));
-            return 1;
-        }
-    };
-
-    if matches.opt_present("h") {
-        println!("{}", opts.usage(NAME));
-        return 0;
-    }
+    let matches = opts.parse(args);
 
     if matches.opt_present("A") {
         auditid();
         return 0;
     }
 
-    let possible_pw = get_pw_from_args(&matches.free);
+    let possible_pw = if matches.free.is_empty() {
+        None
+    } else {
+        match Passwd::locate(matches.free[0].as_str()) {
+            Ok(p) => Some(p),
+            Err(_) => crash!(1, "No such user/group: {}", matches.free[0]),
+        }
+    };
 
     let nflag = matches.opt_present("n");
     let uflag = matches.opt_present("u");
@@ -117,55 +110,57 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let rflag = matches.opt_present("r");
 
     if gflag {
-        let id = if possible_pw.is_some() {
-            possible_pw.unwrap().pw_gid
+        let id = possible_pw.map(|p| p.gid()).unwrap_or(if rflag {
+            getgid()
         } else {
-            if rflag {
-                unsafe { getgid() }
-            } else {
-                unsafe { getegid() }
-            }
-        };
-        let gr = unsafe { getgrgid(id) };
-
-        if nflag && !gr.is_null() {
-            let gr_name = unsafe { String::from_utf8_lossy(CStr::from_ptr(read(gr).gr_name).to_bytes()).to_string() };
-            println!("{}", gr_name);
-        } else {
-            println!("{}", id);
-        }
+            getegid()
+        });
+        println!("{}",
+                 if nflag {
+                     entries::gid2grp(id).unwrap_or(id.to_string())
+                 } else {
+                     id.to_string()
+                 });
         return 0;
     }
 
     if uflag {
-        let id = if possible_pw.is_some() {
-            possible_pw.unwrap().pw_uid
-        } else if rflag {
-            unsafe { getuid() }
+        let id = possible_pw.map(|p| p.uid()).unwrap_or(if rflag {
+            getuid()
         } else {
-            unsafe { geteuid() }
-        };
-
-        let pw = unsafe { getpwuid(id) };
-        if nflag && !pw.is_null() {
-            let pw_name = unsafe {
-                String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string()
-            };
-            println!("{}", pw_name);
-        } else {
-            println!("{}", id);
-        }
-
+            geteuid()
+        });
+        println!("{}",
+                 if nflag {
+                     entries::uid2usr(id).unwrap_or(id.to_string())
+                 } else {
+                     id.to_string()
+                 });
         return 0;
     }
 
     if matches.opt_present("G") {
-        group(possible_pw, nflag);
+        println!("{}",
+                 if nflag {
+                     possible_pw.map(|p| p.belongs_to())
+                                .unwrap_or(entries::get_groups().unwrap())
+                                .iter()
+                                .map(|&id| entries::gid2grp(id).unwrap())
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                 } else {
+                     possible_pw.map(|p| p.belongs_to())
+                                .unwrap_or(entries::get_groups().unwrap())
+                                .iter()
+                                .map(|&id| id.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                 });
         return 0;
     }
 
     if matches.opt_present("P") {
-        pline(possible_pw);
+        pline(possible_pw.map(|v| v.uid()));
         return 0;
     };
 
@@ -183,126 +178,92 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn pretty(possible_pw: Option<c_passwd>) {
-    if possible_pw.is_some() {
-        let pw = possible_pw.unwrap();
-
-        let pw_name = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_name).to_bytes()).to_string() };
-        print!("uid\t{}\ngroups\t", pw_name);
-        group(possible_pw, true);
+fn pretty(possible_pw: Option<Passwd>) {
+    if let Some(p) = possible_pw {
+        print!("uid\t{}\ngroups\t", p.name());
+        println!("{}",
+                 p.belongs_to().iter().map(|&gr| entries::gid2grp(gr).unwrap()).collect::<Vec<_>>().join(" "));
     } else {
-        let login = unsafe { String::from_utf8_lossy(CStr::from_ptr((getlogin() as *const _)).to_bytes()).to_string() };
-        let rid = unsafe { getuid() };
-        let pw = unsafe { getpwuid(rid) };
-
-        let is_same_user = unsafe {
-            String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()) == login
-        };
-
-        if pw.is_null() || is_same_user {
-            println!("login\t{}", login);
-        }
-
-        if !pw.is_null() {
-            println!(
-                "uid\t{}",
-                unsafe { String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() })
+        let login = cstr2cow!(getlogin() as *const _);
+        let rid = getuid();
+        if let Ok(p) = Passwd::locate(rid) {
+            if login == p.name() {
+                println!("login\t{}", login);
+            }
+            println!("uid\t{}", p.name());
         } else {
-            println!("uid\t{}\n", rid);
+            println!("uid\t{}", rid);
         }
 
-        let eid = unsafe { getegid() };
+        let eid = getegid();
         if eid == rid {
-            let pw = unsafe { getpwuid(eid) };
-            if !pw.is_null() {
-                println!(
-                    "euid\t{}",
-                    unsafe { String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() });
+            if let Ok(p) = Passwd::locate(eid) {
+                println!("euid\t{}", p.name());
             } else {
                 println!("euid\t{}", eid);
             }
         }
 
-        let rid = unsafe { getgid() };
-
+        let rid = getgid();
         if rid != eid {
-            let gr = unsafe { getgrgid(rid) };
-            if !gr.is_null() {
-                println!(
-                    "rgid\t{}",
-                    unsafe { String::from_utf8_lossy(CStr::from_ptr(read(gr).gr_name).to_bytes()).to_string() });
+            if let Ok(g) = Group::locate(rid) {
+                println!("euid\t{}", g.name());
             } else {
-                println!("rgid\t{}", rid);
+                println!("euid\t{}", rid);
             }
         }
 
-        print!("groups\t");
-        group(None, true);
+        println!("groups\t{}",
+                 entries::get_groups()
+                     .unwrap()
+                     .iter()
+                     .map(|&gr| entries::gid2grp(gr).unwrap())
+                     .collect::<Vec<_>>()
+                     .join(" "));
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-fn pline(possible_pw: Option<c_passwd>) {
-    let pw = if possible_pw.is_none() {
-        unsafe { read(getpwuid(getuid())) }
-    } else {
-        possible_pw.unwrap()
-    };
+fn pline(possible_uid: Option<uid_t>) {
+    let uid = possible_uid.unwrap_or(getuid());
+    let pw = Passwd::locate(uid).unwrap();
 
-    let pw_name     = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_name  ).to_bytes()).to_string()};
-    let pw_passwd   = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_passwd).to_bytes()).to_string()};
-    let pw_class    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_class ).to_bytes()).to_string()};
-    let pw_gecos    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_gecos ).to_bytes()).to_string()};
-    let pw_dir      = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_dir   ).to_bytes()).to_string()};
-    let pw_shell    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_shell ).to_bytes()).to_string()};
-
-    println!(
-        "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
-        pw_name,
-        pw_passwd,
-        pw.pw_uid,
-        pw.pw_gid,
-        pw_class,
-        pw.pw_change,
-        pw.pw_expire,
-        pw_gecos,
-        pw_dir,
-        pw_shell);
+    println!("{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+             pw.name(),
+             pw.user_passwd(),
+             pw.uid(),
+             pw.gid(),
+             pw.user_access_class(),
+             pw.passwd_change_time(),
+             pw.expiration(),
+             pw.user_info(),
+             pw.user_dir(),
+             pw.user_shell());
 }
 
 #[cfg(target_os = "linux")]
-fn pline(possible_pw: Option<c_passwd>) {
-    let pw = if possible_pw.is_none() {
-        unsafe { read(getpwuid(getuid())) }
-    } else {
-        possible_pw.unwrap()
-    };
+fn pline(possible_uid: Option<uid_t>) {
+    let uid = possible_uid.unwrap_or(getuid());
+    let pw = Passwd::locate(uid).unwrap();
 
-    let pw_name     = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_name  ).to_bytes()).to_string()};
-    let pw_passwd   = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_passwd).to_bytes()).to_string()};
-    let pw_gecos    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_gecos ).to_bytes()).to_string()};
-    let pw_dir      = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_dir   ).to_bytes()).to_string()};
-    let pw_shell    = unsafe { String::from_utf8_lossy(CStr::from_ptr(pw.pw_shell ).to_bytes()).to_string()};
-
-    println!(
-        "{}:{}:{}:{}:{}:{}:{}",
-        pw_name,
-        pw_passwd,
-        pw.pw_uid,
-        pw.pw_gid,
-        pw_gecos,
-        pw_dir,
-        pw_shell);
+    println!("{}:{}:{}:{}:{}:{}:{}",
+             pw.name(),
+             pw.user_passwd(),
+             pw.uid(),
+             pw.gid(),
+             pw.user_info(),
+             pw.user_dir(),
+             pw.user_shell());
 }
 
 #[cfg(target_os = "linux")]
-fn auditid() { }
+fn auditid() {}
 
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
     let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
     let address = &mut auditinfo as *mut audit::c_auditinfo_addr_t;
-    if  unsafe { audit::getaudit(address) } < 0 {
+    if unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");
         return;
     }
@@ -314,83 +275,27 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(possible_pw: Option<c_passwd>, p_euid: bool, p_egid: bool) {
-    let uid;
-    let gid;
+fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
+    let (uid, gid) = possible_pw.map(|p| (p.uid(), p.gid())).unwrap_or((getuid(), getgid()));;
 
-    if possible_pw.is_some() {
-        uid = possible_pw.unwrap().pw_uid;
-        gid = possible_pw.unwrap().pw_gid;
-    } else {
-        uid = unsafe { getuid() };
-        gid = unsafe { getgid() };
-    }
+    let groups = Passwd::locate(uid).unwrap().belongs_to();
 
-    let groups = match possible_pw {
-        Some(pw) => Ok(get_group_list(pw.pw_name, pw.pw_gid)),
-        None => get_groups(),
-    };
+    print!("uid={}({})", uid, entries::uid2usr(uid).unwrap());
+    print!(" gid={}({})", gid, entries::gid2grp(gid).unwrap());
 
-    let groups = groups.unwrap_or_else(|errno| {
-        crash!(1, "failed to get group list (errno={})", errno);
-    });
-
-    if possible_pw.is_some() {
-        print!(
-            "uid={}({})",
-            uid,
-            unsafe { String::from_utf8_lossy(CStr::from_ptr(possible_pw.unwrap().pw_name).to_bytes()).to_string() });
-    } else {
-        print!("uid={}", unsafe { getuid() });
-    }
-
-    print!(" gid={}", gid);
-    let gr = unsafe { getgrgid(gid) };
-    if !gr.is_null() {
-        print!(
-            "({})",
-            unsafe { String::from_utf8_lossy(CStr::from_ptr(read(gr).gr_name).to_bytes()).to_string() });
-    }
-
-    let euid = unsafe { geteuid() };
+    let euid = geteuid();
     if p_euid && (euid != uid) {
-        print!(" euid={}", euid);
-        let pw = unsafe { getpwuid(euid) };
-        if !pw.is_null() {
-            print!(
-                "({})",
-                unsafe { String::from_utf8_lossy(CStr::from_ptr(read(pw).pw_name).to_bytes()).to_string() });
-        }
+        print!(" euid={}({})", euid, entries::uid2usr(euid).unwrap());
     }
 
-    let egid = unsafe { getegid() };
+    let egid = getegid();
     if p_egid && (egid != gid) {
-        print!(" egid={}", egid);
-        unsafe {
-            let grp = getgrgid(egid);
-            if !grp.is_null() {
-                print!("({})", String::from_utf8_lossy(CStr::from_ptr(read(grp).gr_name).to_bytes()).to_string());
-            }
-        }
+        print!(" egid={}({})", euid, entries::gid2grp(egid).unwrap());
     }
 
-    if !groups.is_empty() {
-        print!(" groups=");
-
-        let mut first = true;
-        for &gr in &groups {
-            if !first { print!(",") }
-            print!("{}", gr);
-            let group = unsafe { getgrgid(gr) };
-            if !group.is_null() {
-                let name = unsafe {
-                    String::from_utf8_lossy(CStr::from_ptr(read(group).gr_name).to_bytes()).to_string()
-                };
-                print!("({})", name);
-            }
-            first = false
-        }
-    }
-
-    println!("");
+    println!(" groups={}",
+             groups.iter()
+                   .map(|&gr| format!("{}({})", gr, entries::gid2grp(gr).unwrap()))
+                   .collect::<Vec<_>>()
+                   .join(","));
 }
