@@ -26,6 +26,7 @@ mod prn_float;
 mod parse_nrofbytes;
 mod parse_formats;
 mod parse_inputs;
+mod inputoffset;
 #[cfg(test)]
 mod mockstream;
 
@@ -40,13 +41,11 @@ use parse_nrofbytes::parse_number_of_bytes;
 use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
 use parse_inputs::{parse_inputs, CommandLineInputs};
+use inputoffset::{InputOffset, Radix};
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum Radix { Decimal, Hexadecimal, Octal, NoPrefix }
 
 static USAGE: &'static str =
 r#"Usage:
@@ -156,14 +155,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let input_offset_base = match parse_radix(matches.opt_str("A")) {
-        Ok(r) => r,
-        Err(f) => {
-            disp_err!("Invalid -A/--address-radix\n{}", f);
-            return 1;
-        }
-    };
-
     let byte_order = match matches.opt_str("endian").as_ref().map(String::as_ref) {
         None => { ByteOrder::Native },
         Some("little") => { ByteOrder::Little },
@@ -201,13 +192,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
             return 1;
         }
     };
-    let inputs = input_strings
-        .iter()
-        .map(|w| match w as &str {
-            "-" => InputSource::Stdin,
-            x => InputSource::FileName(x),
-        })
-        .collect::<Vec<_>>();
 
     let formats = match parse_format_flags(&args) {
         Ok(f) => f,
@@ -247,19 +231,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    odfunc(line_bytes, input_offset_base, byte_order, inputs, &formats[..],
-            output_duplicates, skip_bytes, read_bytes, label)
+    let mut input = open_input_peek_reader(&input_strings, skip_bytes, read_bytes);
+
+    let mut input_offset = InputOffset::new(Radix::Octal, skip_bytes, label);
+    if let Err(e) = input_offset.parse_radix_from_commandline(matches.opt_str("A")) {
+        disp_err!("Invalid -A/--address-radix\n{}", e);
+        return 1;
+    }
+
+    odfunc(&mut input, &mut input_offset, line_bytes, byte_order, &formats[..],
+            output_duplicates)
 }
 
 // TODO: refactor, too many arguments
-fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
-        fnames: Vec<InputSource>, formats: &[ParsedFormatterItemInfo], output_duplicates: bool,
-        skip_bytes: usize, read_bytes: Option<usize>, mut label: Option<usize>) -> i32 {
+fn odfunc<I>(input: &mut I, input_offset: &mut InputOffset, line_bytes: usize, byte_order: ByteOrder,
+        formats: &[ParsedFormatterItemInfo], output_duplicates: bool) -> i32
+        where I : PeekRead+HasError {
 
-    let mf = MultifileReader::new(fnames);
-    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
-    let mut input = PeekReader::new(pr);
-    let mut addr = skip_bytes;
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
     let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes + PEEK_BUFFER_SIZE);
@@ -305,11 +293,10 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
 
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
-        // TODO: we need to read more data in case a multi-byte sequence starts at the end of the line
 
         match input.peek_read(bytes.as_mut_slice(), PEEK_BUFFER_SIZE) {
             Ok((0, _)) => {
-                print_final_offset(input_offset_base, addr, label);
+                input_offset.print_final_offset();
                 break;
             }
             Ok((n, peekbytes)) => {
@@ -343,18 +330,15 @@ fn odfunc(line_bytes: usize, input_offset_base: Radix, byte_order: ByteOrder,
                     }
 
                     print_bytes(byte_order, &bytes, n, peekbytes,
-                        &print_with_radix(input_offset_base, addr, label),
+                        &input_offset.format_byte_offset(),
                         &spaced_formatters, byte_size_block, print_width_line);
                 }
 
-                addr += n;
-                if let Some(l) = label {
-                    label = Some(l + n);
-                }
+                input_offset.increase_position(n);
             }
             Err(e) => {
                 show_error!("{}", e);
-                print_final_offset(input_offset_base, addr, label);
+                input_offset.print_final_offset();
                 return 1;
             }
         };
@@ -441,48 +425,25 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: us
     }
 }
 
-// For file byte offset printed at left margin.
-fn parse_radix(radix_str: Option<String>) -> Result<Radix, &'static str> {
-    match radix_str {
-        None => Ok(Radix::Octal),
-        Some(s) => {
-            let st = s.into_bytes();
-            if st.len() != 1 {
-                Err("Radix must be one of [d, o, n, x]\n")
-            } else {
-                let radix: char = *(st.get(0)
-                                      .expect("byte string of length 1 lacks a 0th elem")) as char;
-                match radix {
-                    'd' => Ok(Radix::Decimal),
-                    'x' => Ok(Radix::Hexadecimal),
-                    'o' => Ok(Radix::Octal),
-                    'n' => Ok(Radix::NoPrefix),
-                    _ => Err("Radix must be one of [d, o, n, x]\n")
-                }
-            }
-        }
-    }
-}
+/// returns a reader implementing `PeekRead+Read+HasError` providing the combined input
+///
+/// `skip_bytes` is the number of bytes skipped from the input
+/// `read_bytes` is an optinal limit to the number of bytes to read
+fn open_input_peek_reader<'a>(input_strings: &'a Vec<String>, skip_bytes: usize,
+        read_bytes: Option<usize>) -> PeekReader<PartialReader<MultifileReader<'a>>> {
+    // should return  "impl PeekRead+Read+HasError" when supported in (stable) rust
+    let inputs = input_strings
+        .iter()
+        .map(|w| match w as &str {
+            "-" => InputSource::Stdin,
+            x => InputSource::FileName(x),
+        })
+        .collect::<Vec<_>>();
 
-fn print_with_radix(r: Radix, x: usize, label: Option<usize>) -> String{
-    match (r, label) {
-        (Radix::Decimal, None) => format!("{:07}", x),
-        (Radix::Decimal, Some(l)) => format!("{:07} ({:07})", x, l),
-        (Radix::Hexadecimal, None) => format!("{:06X}", x),
-        (Radix::Hexadecimal, Some(l)) => format!("{:06X} ({:06X})", x, l),
-        (Radix::Octal, None) => format!("{:07o}", x),
-        (Radix::Octal, Some(l)) => format!("{:07o} ({:07o})", x, l),
-        (Radix::NoPrefix, None) => String::from(""),
-        (Radix::NoPrefix, Some(l)) => format!("({:07o})", l),
-    }
-}
-
-/// Prints the byte offset followed by a newline, or nothing at all if
-/// both `Radix::NoPrefix` was set and no label (--traditional) is used.
-fn print_final_offset(r: Radix, x: usize, label: Option<usize>) {
-    if r != Radix::NoPrefix || label.is_some() {
-        print!("{}\n", print_with_radix(r, x, label));
-    }
+    let mf = MultifileReader::new(inputs);
+    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
+    let input = PeekReader::new(pr);
+    input
 }
 
 struct SpacedFormatterItemInfo {
