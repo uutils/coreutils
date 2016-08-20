@@ -7,9 +7,10 @@ authors = []
 name = "uu_arch"
 path = "arch.rs"
 
-[dependencies]
-libc = "*"
-uucore = { path="../uucore" }
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["utsname"]
 
 [[bin]]
 name = "arch"
