@@ -80,13 +80,7 @@ fn test_follow_multiple() {
 
 #[test]
 fn test_follow_stdin() {
-    let (at, mut ucmd) = at_and_ucmd();
-    let mut child = ucmd.arg("-f").pipe_in(at.read(FOOBAR_TXT)).run_no_wait();
-
-    let expected = at.read("follow_stdin.expected");
-    assert_eq!(read_size(&mut child, expected.len()), expected);
-
-    child.kill().unwrap();
+    new_ucmd().arg("-f").pipe_in_fixture(FOOBAR_TXT).run().stdout_is_fixture("follow_stdin.expected");
 }
 
 #[test]

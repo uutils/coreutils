@@ -146,8 +146,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let files = given_options.free;
 
     if files.is_empty() {
-        let buffer = BufReader::new(stdin());
-        unbounded_tail(buffer, &settings);
+        let mut buffer = BufReader::new(stdin());
+        unbounded_tail(&mut buffer, &settings);
     } else {
         let mut multiple = false;
         let mut first_header = true;
@@ -168,12 +168,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if path.is_dir() {
                 continue;
             }
-            let file = File::open(&path).unwrap();
-            bounded_tail(&file, &settings);
-
-            if settings.follow {
-                let reader = BufReader::new(file);
-                readers.push(reader);
+            let mut file = File::open(&path).unwrap();
+            if is_seekable(&mut file) {
+                bounded_tail(&file, &settings);
+                if settings.follow {
+                    let reader = BufReader::new(file);
+                    readers.push(reader);
+                }
+            } else {
+                let mut reader = BufReader::new(file);
+                unbounded_tail(&mut reader, &settings);
+                if settings.follow {
+                    readers.push(reader);
+                }
             }
         }
 
@@ -419,7 +426,7 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
     }
 }
 
-fn unbounded_tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
+fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
     // Read through each line/char and store them in a ringbuffer that always
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
@@ -487,10 +494,10 @@ fn unbounded_tail<T: Read>(mut reader: BufReader<T>, settings: &Settings) {
             }
         }
     }
+}
 
-    if settings.follow {
-        follow(&mut [reader], &["stdin".to_string()], settings);
-    }
+fn is_seekable<T: Seek>(file: &mut T) -> bool {
+    file.seek(SeekFrom::Current(0)).is_ok()
 }
 
 #[inline]
