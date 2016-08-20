@@ -8,7 +8,6 @@ name = "uu_cksum"
 path = "cksum.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
 

@@ -76,7 +76,7 @@ fn test_wrap_no_arg() {
         new_ucmd()
             .arg(wrap_param)
             .fails()
-            .stderr_only(format!("base32: Argument to option '{}' missing.\nTry 'base32 --help' for more information.\n",
+            .stderr_only(format!("base32: error: Argument to option '{}' missing.\n",
                                  if wrap_param == "-w" { "w" } else { "wrap" }));
     }
 }

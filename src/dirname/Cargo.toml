@@ -8,8 +8,8 @@ name = "uu_dirname"
 path = "dirname.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name = "dirname"

@@ -11,7 +11,6 @@
 
 /* last synced with: logname (GNU coreutils) 8.22 */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
@@ -36,38 +35,12 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-static NAME: &'static str = "logname";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = ""; 
+static SUMMARY: &'static str = "Print user's login name"; 
+static LONG_HELP: &'static str = ""; 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    //
-    // Argument parsing
-    //
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!("{0} {1}
-
-Usage:
-  {0}
-
-Print user's login name.", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     exec();
 
@@ -77,6 +50,6 @@ Print user's login name.", NAME, VERSION);
 fn exec() {
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
-        None => println!("{}: no login name", NAME)
+        None => show_error!("no login name")
     }
 }

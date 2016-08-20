@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate unicode_width;
 
 #[macro_use]
@@ -35,8 +34,9 @@ mod linebreak;
 mod parasplit;
 
 // program's NAME and VERSION are used for -V and -h
-static NAME: &'static str = "fmt";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
+static SUMMARY: &'static str = "Reformat paragraphs from input files (or stdin) to stdout.";
+static LONG_HELP: &'static str = "";
 
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 pub struct FmtOptions {
@@ -58,43 +58,21 @@ pub struct FmtOptions {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.");
-    opts.optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.");
-    opts.optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.");
-    opts.optflag("s", "split-only", "Split lines only, do not reflow.");
-    opts.optflag("u", "uniform-spacing", "Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.");
-
-    opts.optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX");
-    opts.optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP");
-
-    opts.optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace.");
-    opts.optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace.");
-
-    opts.optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH");
-    opts.optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL");
-
-    opts.optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance.");
-
-    opts.optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH");
-
-    opts.optflag("V", "version", "Output version information and exit.");
-    opts.optflag("h", "help", "Display this help message and exit.");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry `{} --help' for more information.", f, NAME)
-    };
-
-    if matches.opt_present("h") {
-        println!("Usage: {} [OPTION]... [FILE]...\n\n{}", NAME, opts.usage("Reformat paragraphs from input files (or stdin) to stdout."));
-    }
-
-    if matches.opt_present("V") || matches.opt_present("h") {
-        println!("{} {}", NAME, VERSION);
-        return 0
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")
+        .optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.")
+        .optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.")
+        .optflag("s", "split-only", "Split lines only, do not reflow.")
+        .optflag("u", "uniform-spacing", "Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.")
+        .optopt("p", "prefix", "Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless -x is specified, leading whitespace will be ignored when matching PREFIX.", "PREFIX")
+        .optopt("P", "skip-prefix", "Do not reformat lines beginning with PSKIP. Unless -X is specified, leading whitespace will be ignored when matching PSKIP", "PSKIP")
+        .optflag("x", "exact-prefix", "PREFIX must match at the beginning of the line with no preceding whitespace.")
+        .optflag("X", "exact-skip-prefix", "PSKIP must match at the beginning of the line with no preceding whitespace.")
+        .optopt("w", "width", "Fill output lines up to a maximum of WIDTH columns, default 79.", "WIDTH")
+        .optopt("g", "goal", "Goal width, default ~0.94*WIDTH. Must be less than WIDTH.", "GOAL")
+        .optflag("q", "quick", "Break lines more quickly at the expense of a potentially more ragged appearance.")
+        .optopt("T", "tab-width", "Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.", "TABWIDTH")
+        .parse(args);
 
     let mut fmt_opts = FmtOptions {
         crown           : false,

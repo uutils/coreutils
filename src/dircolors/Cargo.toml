@@ -8,7 +8,6 @@ name = "uu_dircolors"
 path = "dircolors.rs"
 
 [dependencies]
-getopts = "*"
 glob = "*"
 libc = "*"
 uucore = { path="../uucore" }

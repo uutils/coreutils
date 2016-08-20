@@ -11,9 +11,9 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 extern crate unicode_width;
+extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
@@ -24,8 +24,10 @@ use std::iter::repeat;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
-static NAME: &'static str = "expand";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
+static SUMMARY: &'static str = "Convert tabs in each FILE to spaces, writing to standard output.
+ With no FILE, or when FILE is -, read standard input."; 
+static LONG_HELP: &'static str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
 
@@ -89,32 +91,12 @@ impl Options {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("i", "initial", "do not convert tabs after non blanks");
-    opts.optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER");
-    opts.optopt("t", "tabs", "use comma separated list of explicit tab positions", "LIST");
-    opts.optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
-    };
-
-    if matches.opt_present("help") {
-        println!("Usage: {} [OPTION]... [FILE]...", NAME);
-        println!("{}", opts.usage(
-            "Convert tabs in each FILE to spaces, writing to standard output.\n\
-            With no FILE, or when FILE is -, read standard input."));
-        return 0;
-    }
-
-    if matches.opt_present("V") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("i", "initial", "do not convert tabs after non blanks")
+        .optopt("t", "tabs", "have tabs NUMBER characters apart, not 8", "NUMBER")
+        .optopt("t", "tabs", "use comma separated list of explicit tab positions", "LIST")
+        .optflag("U", "no-utf8", "interpret input file as 8-bit ASCII rather than UTF-8")
+        .parse(args);
 
     expand(Options::new(matches));
 

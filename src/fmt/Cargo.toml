@@ -8,7 +8,6 @@ name = "uu_fmt"
 path = "fmt.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 unicode-width = "*"
 uucore = { path="../uucore" }

@@ -8,7 +8,6 @@ name = "uu_hostid"
 path = "hostid.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
 

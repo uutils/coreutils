@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
@@ -20,8 +19,18 @@ use std::io::{BufRead, BufReader, Result, stdin, Write};
 #[cfg(windows)] use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "ln";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &'static str = "ln"; 
+static SUMMARY: &'static str = ""; 
+static LONG_HELP: &'static str = "
+ In the 1st form, create a link to TARGET with the name LINK_NAME.
+ In the 2nd form, create a link to TARGET in the current directory.
+ In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
+ Create hard links by default, symbolic links with --symbolic.
+ By default, each destination (name of new link) should not already exist.
+ When creating hard links, each TARGET must exist.  Symbolic links
+ can hold arbitrary text; if later resolved, a relative link is
+ interpreted in relation to its parent directory.
+"; 
 
 pub struct Settings {
     overwrite: OverwriteMode,
@@ -49,29 +58,26 @@ pub enum BackupMode {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("b", "", "make a backup of each file that would otherwise be overwritten or removed");
-    opts.optflagopt("", "backup", "make a backup of each file that would otherwise be overwritten or removed", "METHOD");
+    let syntax = format!("[OPTION]... [-T] TARGET LINK_NAME   (1st form)
+ {0} [OPTION]... TARGET                  (2nd form)
+ {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
+ {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)", NAME);
+    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+        .optflag("b", "", "make a backup of each file that would otherwise be overwritten or removed")
+        .optflagopt("", "backup", "make a backup of each file that would otherwise be overwritten or removed", "METHOD")
     // TODO: opts.optflag("d", "directory", "allow users with appropriate privileges to attempt to make hard links to directories");
-    opts.optflag("f", "force", "remove existing destination files");
-    opts.optflag("i", "interactive", "prompt whether to remove existing destination files");
+        .optflag("f", "force", "remove existing destination files")
+        .optflag("i", "interactive", "prompt whether to remove existing destination files")
     // TODO: opts.optflag("L", "logical", "dereference TARGETs that are symbolic links");
     // TODO: opts.optflag("n", "no-dereference", "treat LINK_NAME as a normal file if it is a symbolic link to a directory");
     // TODO: opts.optflag("P", "physical", "make hard links directly to symbolic links");
     // TODO: opts.optflag("r", "relative", "create symbolic links relative to link location");
-    opts.optflag("s", "symbolic", "make symbolic links instead of hard links");
-    opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
-    opts.optopt("t", "target-directory", "specify the DIRECTORY in which to create the links", "DIRECTORY");
-    opts.optflag("T", "no-target-directory", "treat LINK_NAME as a normal file always");
-    opts.optflag("v", "verbose", "print name of each linked file");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "{}", e),
-    };
+        .optflag("s", "symbolic", "make symbolic links instead of hard links")
+        .optopt("S", "suffix", "override the usual backup suffix", "SUFFIX")
+        .optopt("t", "target-directory", "specify the DIRECTORY in which to create the links", "DIRECTORY")
+        .optflag("T", "no-target-directory", "treat LINK_NAME as a normal file always")
+        .optflag("v", "verbose", "print name of each linked file")
+        .parse(args);
 
     let overwrite_mode = if matches.opt_present("force") {
         OverwriteMode::Force
@@ -133,31 +139,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let string_to_path = |s: &String| { PathBuf::from(s) };
     let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
 
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        0 
-    } else if matches.opt_present("help") {
-        let msg = format!("{0} {1}
-
-Usage: {0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
-   or: {0} [OPTION]... TARGET                  (2nd form)
-   or: {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
-   or: {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)
-
-In the 1st form, create a link to TARGET with the name LINK_NAME.
-In the 2nd form, create a link to TARGET in the current directory.
-In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
-Create hard links by default, symbolic links with --symbolic.
-By default, each destination (name of new link) should not already exist.
-When creating hard links, each TARGET must exist.  Symbolic links
-can hold arbitrary text; if later resolved, a relative link is
-interpreted in relation to its parent directory.", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-        0
-    } else {
-        exec(&paths[..], &settings)
-    }
+    exec(&paths[..], &settings)
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> i32 {

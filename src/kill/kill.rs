@@ -9,7 +9,6 @@
  * that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
@@ -19,8 +18,9 @@ use libc::{c_int, pid_t};
 use std::io::{Error, Write};
 use uucore::signals::ALL_SIGNALS;
 
-static NAME: &'static str = "kill";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[options] <pid> [...]"; 
+static SUMMARY: &'static str = ""; 
+static LONG_HELP: &'static str = ""; 
 
 static EXIT_OK:  i32 = 0;
 static EXIT_ERR: i32 = 1;
@@ -30,34 +30,17 @@ pub enum Mode {
     Kill,
     Table,
     List,
-    Help,
-    Version,
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    opts.optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL");
-    opts.optflagopt("l", "list", "list all signal names, or convert one to a name", "LIST");
-    opts.optflag("L", "table", "list all signal names in a nice table");
-
     let (args, obs_signal) = handle_obsolete(args);
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL")
+        .optflagopt("l", "list", "list all signal names, or convert one to a name", "LIST")
+        .optflag("L", "table", "list all signal names in a nice table")
+        .parse(args);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(_) => {
-            help(&opts);
-            return EXIT_ERR;
-        },
-    };
-
-    let mode = if matches.opt_present("version") {
-        Mode::Version
-    } else if matches.opt_present("help") {
-        Mode::Help
-    } else if matches.opt_present("table") {
+    let mode = if matches.opt_present("table") {
         Mode::Table
     } else if matches.opt_present("list") {
         Mode::List
@@ -69,15 +52,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Mode::Kill    => return kill(&matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_owned())), matches.free),
         Mode::Table   => table(),
         Mode::List    => list(matches.opt_str("list")),
-        Mode::Help    => help(&opts),
-        Mode::Version => version(),
     }
 
     0
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
 }
 
 fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
@@ -154,15 +131,6 @@ fn list(arg: Option<String>) {
       Some(ref x) => print_signal(x),
       None => print_signals(),
     };
-}
-
-fn help(opts: &getopts::Options) {
-    let msg = format!("{0} {1}
-
-Usage:
- {0} [options] <pid> [...]", NAME, VERSION);
-
-    println!("{}", opts.usage(&msg));
 }
 
 fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {

@@ -8,8 +8,9 @@ name = "uu_comm"
 path = "comm.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
+getopts = "*"
+uucore = { path="../uucore" }
 
 [[bin]]
 name = "comm"

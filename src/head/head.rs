@@ -21,8 +21,9 @@ use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
 
-static NAME: &'static str = "head";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "";
+static SUMMARY: &'static str = "";
+static LONG_HELP: &'static str = "";
 
 enum FilterMode {
     Bytes(usize),
@@ -47,35 +48,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut settings: Settings = Default::default();
 
     // handle obsolete -number syntax
-    let options = match obsolete(&args[1..]) {
+    let new_args = match obsolete(&args[0..]) {
         (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
         (args, None) => args
     };
 
-    let args = options;
-
-    let mut opts = getopts::Options::new();
-
-    opts.optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K");
-    opts.optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K");
-    opts.optflag("q", "quiet", "never print headers giving file names");
-    opts.optflag("v", "verbose", "always print headers giving file names");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args) {
-        Ok (m) => { m }
-        Err(_) => {
-            println!("{}", opts.usage(""));
-            return 1;
-        }
-    };
-
-    if matches.opt_present("h") {
-        println!("{}", opts.usage(""));
-        return 0;
-    }
-    if matches.opt_present("V") { version(); return 0 }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K")
+        .optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K")
+        .optflag("q", "quiet", "never print headers giving file names")
+        .optflag("v", "verbose", "always print headers giving file names")
+        .optflag("h", "help", "display this help and exit")
+        .optflag("V", "version", "output version information and exit")
+        .parse(new_args);
 
     let use_bytes = matches.opt_present("c");
 
@@ -155,7 +140,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 // getopts works correctly.
 fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     let mut options: Vec<String> = options.to_vec();
-    let mut a = 0;
+    let mut a = 1;
     let b = options.len();
 
     while a < b {
@@ -202,8 +187,4 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
         }
     }
     true
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
 }

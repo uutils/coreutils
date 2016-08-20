@@ -23,10 +23,13 @@ use std::path::{Path, PathBuf};
 use std::result::Result;
 
 static NAME: &'static str = "install";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SUMMARY: &'static str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+ DIRECTORY, while setting permission modes and owner/group";
+static LONG_HELP: &'static str = "";
 
 const DEFAULT_MODE: libc::mode_t = 755;
 
+#[allow(dead_code)]
 pub struct Behaviour {
     main_function: MainFunction,
     specified_mode: Option<libc::mode_t>,
@@ -36,10 +39,6 @@ pub struct Behaviour {
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum MainFunction {
-    /// Display version information.
-    Version,
-    /// Display help, including command line arguments.
-    Help,
     /// Create directories
     Directory,
     /// Install files to locations (primary functionality)
@@ -61,18 +60,7 @@ impl Behaviour {
 /// Returns a program return code.
 ///
 pub fn uumain(args: Vec<String>) -> i32 {
-    let opts = opts();
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("Invalid options\n{}", f);
-            return 1;
-        }
-    };
-
-    let usage = opts.usage("Copy SOURCE to DEST or multiple SOURCE(s) to the existing\n \
-                            DIRECTORY, while setting permission modes and owner/group");
+    let matches = parse_opts(args);
 
     if let Err(s) = check_unimplemented(&matches) {
         show_error!("Unimplemented feature: {}", s);
@@ -97,14 +85,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match behaviour.main_function {
-        MainFunction::Version => {
-            println!("{} {}", NAME, VERSION);
-            0
-        },
-        MainFunction::Help => {
-            help(&usage);
-            0
-        },
         MainFunction::Directory => {
             directory(&paths[..], behaviour)
         },
@@ -118,74 +98,54 @@ pub fn uumain(args: Vec<String>) -> i32 {
 ///
 /// Returns a getopts::Options struct.
 ///
-fn opts() -> getopts::Options {
-    let mut opts = getopts::Options::new();
-
+fn parse_opts(args: Vec<String>) -> getopts::Matches {
+    let syntax = format!("SOURCE DEST
+ {} SOURCE... DIRECTORY", NAME);
+     new_coreopts!(&syntax, SUMMARY, LONG_HELP)
     // TODO implement flag
-    opts.optflagopt("",  "backup", "(unimplemented) make a backup of each existing destination\n \
-                                    file", "CONTROL");
-
+        .optflagopt("",  "backup", "(unimplemented) make a backup of each existing destination\n \
+                                    file", "CONTROL")
     // TODO implement flag
-    opts.optflag("b", "", "(unimplemented) like --backup but does not accept an argument");
-
+        .optflag("b", "", "(unimplemented) like --backup but does not accept an argument")
     // TODO implement flag
-    opts.optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
-                                  files, and in some cases, do not modify the destination at all");
-
-    opts.optflag("d", "directory", "treat all arguments as directory names;\n \
-                                    create all components of the specified directories");
-
-
+        .optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
+                                  files, and in some cases, do not modify the destination at all")
+        .optflag("d", "directory", "treat all arguments as directory names\n \
+                                    create all components of the specified directories")
     // TODO implement flag
-    opts.optflag("D", "", "(unimplemented) create all leading components of DEST except the\n \
-                           last, then copy SOURCE to DEST");
-
+        .optflag("D", "", "(unimplemented) create all leading components of DEST except the\n \
+                           last, then copy SOURCE to DEST")
     // TODO implement flag
-    opts.optflagopt("g", "group", "(unimplemented) set group ownership, instead of process'\n \
-                                   current group", "GROUP");
-
-    opts.optflagopt("m", "mode", "set permission mode (as in chmod), instead\n \
-                                  of rwxr-xr-x", "MODE");
-
+        .optflagopt("g", "group", "(unimplemented) set group ownership, instead of process'\n \
+                                   current group", "GROUP")
+        .optflagopt("m", "mode", "set permission mode (as in chmod), instead\n \
+                                  of rwxr-xr-x", "MODE")
     // TODO implement flag
-    opts.optflagopt("o", "owner", "(unimplemented) set ownership (super-user only)",
-                    "OWNER");
-
+        .optflagopt("o", "owner", "(unimplemented) set ownership (super-user only)",
+                    "OWNER")
     // TODO implement flag
-    opts.optflag("p", "preserve-timestamps", "(unimplemented) apply access/modification times\n \
-                                              of SOURCE files to corresponding destination files");
-
+        .optflag("p", "preserve-timestamps", "(unimplemented) apply access/modification times\n \
+                                              of SOURCE files to corresponding destination files")
     // TODO implement flag
-    opts.optflag("s", "strip", "(unimplemented) strip symbol tables");
-
+        .optflag("s", "strip", "(unimplemented) strip symbol tables")
     // TODO implement flag
-    opts.optflagopt("", "strip-program", "(unimplemented) program used to strip binaries",
-                    "PROGRAM");
-
+        .optflagopt("", "strip-program", "(unimplemented) program used to strip binaries",
+                    "PROGRAM")
     // TODO implement flag
-    opts.optopt("S", "suffix", "(unimplemented) override the usual backup suffix", "SUFFIX");
-
+        .optopt("S", "suffix", "(unimplemented) override the usual backup suffix", "SUFFIX")
     // TODO implement flag
-    opts.optopt("t", "target-directory", "(unimplemented) move all SOURCE arguments into\n \
-                                          DIRECTORY", "DIRECTORY");
-
+        .optopt("t", "target-directory", "(unimplemented) move all SOURCE arguments into\n \
+                                          DIRECTORY", "DIRECTORY")
     // TODO implement flag
-    opts.optflag("T", "no-target-directory", "(unimplemented) treat DEST as a normal file");
-
+        .optflag("T", "no-target-directory", "(unimplemented) treat DEST as a normal file")
     // TODO implement flag
-    opts.optflag("v", "verbose", "(unimplemented) explain what is being done");
-
+        .optflag("v", "verbose", "(unimplemented) explain what is being done")
     // TODO implement flag
-    opts.optflag("P", "preserve-context", "(unimplemented) preserve security context");
-
+        .optflag("P", "preserve-context", "(unimplemented) preserve security context")
     // TODO implement flag
-    opts.optflagopt("Z", "context", "(unimplemented) set security context of files and\n \
-                                     directories", "CONTEXT");
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    opts
+        .optflagopt("Z", "context", "(unimplemented) set security context of files and\n \
+                                     directories", "CONTEXT")
+        .parse(args)
 }
 
 /// Check for unimplemented command line arguments.
@@ -241,11 +201,7 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
 /// In event of failure, returns an integer intended as a program return code.
 ///
 fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
-    let main_function = if matches.opt_present("version") {
-        MainFunction::Version
-    } else if matches.opt_present("help") {
-        MainFunction::Help
-    } else if matches.opt_present("directory") {
+    let main_function = if matches.opt_present("directory") {
         MainFunction::Directory
     } else {
         MainFunction::Standard
@@ -293,15 +249,6 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
         suffix: backup_suffix,
         verbose: matches.opt_present("v"),
     })
-}
-
-/// Print utility help to stdout.
-///
-fn help(usage: &str) {
-    println!("{0} {1}\n\n\
-    Usage: {0} SOURCE DEST\n   \
-       or: {0} SOURCE... DIRECTORY\n\n\
-    {2}", NAME, VERSION, usage);
 }
 
 /// Creates directories.

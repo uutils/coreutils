@@ -19,8 +19,8 @@ static SYNTAX: &'static str = "[user]";
 static SUMMARY: &'static str = "display current group names";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
-    let matches = opts.parse(args);
+    let matches = new_coreopts!(SYNTAX, SUMMARY, "")
+          .parse(args);
 
     if matches.free.is_empty() {
         println!("{}", get_groups().unwrap().iter().map(|&g| gid2grp(g).unwrap()).collect::<Vec<_>>().join(" "));

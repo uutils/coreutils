@@ -8,7 +8,6 @@ name = "uu_factor"
 path = "factor.rs"
 
 [dependencies]
-getopts = "*"
 libc = "*"
 rand = "*"
 uucore = { path="../uucore" }

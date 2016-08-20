@@ -10,20 +10,23 @@
 
 extern crate libc;
 extern crate glob;
-extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::borrow::Borrow;
 use std::env;
 
-static NAME: &'static str = "dircolors";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [FILE]";
+static SUMMARY: &'static str = "Output commands to set the LS_COLORS environment variable."; 
+static LONG_HELP: &'static str = "
+ If FILE is specified, read it to determine which colors to use for which
+ file types and extensions.  Otherwise, a precompiled database is used.
+ For details on the format of these files, run 'dircolors --print-database'
+"; 
 
 mod colors;
 use colors::INTERNAL_DB;
@@ -55,49 +58,15 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-
-    opts.optflag("b", "sh", "output Bourne shell code to set LS_COLORS");
-    opts.optflag("",
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
+        .optflag("",
                  "bourne-shell",
-                 "output Bourne shell code to set LS_COLORS");
-    opts.optflag("c", "csh", "output C shell code to set LS_COLORS");
-    opts.optflag("", "c-shell", "output C shell code to set LS_COLORS");
-    opts.optflag("p", "print-database", "print the byte counts");
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            disp_err!("{}", f);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("help") {
-        println!("Usage: {} [OPTION]... [FILE]
-Output commands to set the LS_COLORS environment variable.
-
-Determine format of output:
-  -b, --sh, --bourne-shell    output Bourne shell code to set LS_COLORS
-  -c, --csh, --c-shell        output C shell code to set LS_COLORS
-  -p, --print-database        output defaults
-      --help     display this help and exit
-      --version  output version information and exit
-
-If FILE is specified, read it to determine which colors to use for which
-file types and extensions.  Otherwise, a precompiled database is used.
-For details on the format of these files, run 'dircolors --print-database'.",
-                 NAME);
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+                 "output Bourne shell code to set LS_COLORS")
+        .optflag("c", "csh", "output C shell code to set LS_COLORS")
+        .optflag("", "c-shell", "output C shell code to set LS_COLORS")
+        .optflag("p", "print-database", "print the byte counts")
+        .parse(args);
 
     if (matches.opt_present("csh") || matches.opt_present("c-shell") ||
         matches.opt_present("sh") || matches.opt_present("bourne-shell")) &&

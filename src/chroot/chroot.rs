@@ -17,7 +17,6 @@ extern crate uucore;
 use uucore::libc::{self, setgid, setuid, chroot, setgroups};
 use uucore::entries;
 
-use getopts::Options;
 use std::ffi::CString;
 use std::io::{Error, Write};
 use std::iter::FromIterator;
@@ -25,31 +24,22 @@ use std::path::Path;
 use std::process::Command;
 
 static NAME: &'static str = "chroot";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... NEWROOT [COMMAND [ARG]...]"; 
+static SUMMARY: &'static str = "Run COMMAND with root directory set to NEWROOT."; 
+static LONG_HELP: &'static str = "
+ If COMMAND is not specified, it defaults to '$(SHELL) -i'.
+ If $(SHELL) is not set, /bin/sh is used.
+"; 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-
-    opts.optopt("u", "user", "User (ID or name) to switch before running the program", "USER");
-    opts.optopt("g", "group", "Group (ID or name) to switch to", "GROUP");
-    opts.optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2...");
-    opts.optopt("", "userspec", "Colon-separated user and group to switch to. \
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optopt("u", "user", "User (ID or name) to switch before running the program", "USER")
+        .optopt("g", "group", "Group (ID or name) to switch to", "GROUP")
+        .optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2...")
+        .optopt("", "userspec", "Colon-separated user and group to switch to. \
         Same as -u USER -g GROUP. \
-        Userspec has higher preference than -u and/or -g", "USER:GROUP");
-    opts.optflag("h", "help", "Show help");
-    opts.optflag("V", "version", "Show program's version");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f);
-            help_menu(opts);
-            return 1
-        }
-    };
-
-    if matches.opt_present("V") { version(); return 0 }
-    if matches.opt_present("h") { help_menu(opts); return 0 }
+        Userspec has higher preference than -u and/or -g", "USER:GROUP")
+        .parse(args);
 
     if matches.free.is_empty() {
         println!("Missing operand: NEWROOT");
@@ -183,21 +173,4 @@ fn set_user(user: &str) {
             crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())
         }
     }
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION)
-}
-
-fn help_menu(options: Options) {
-    let msg = format!("{0} {1}
-
-Usage:
-  {0} [OPTION]... NEWROOT [COMMAND [ARG]...]
-
-Run COMMAND with root directory set to NEWROOT.
-If COMMAND is not specified, it defaults to '$(SHELL) -i'.
-If $(SHELL) is not set, /bin/sh is used.", NAME, VERSION);
-
-    print!("{}", options.usage(&msg));
 }

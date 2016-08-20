@@ -9,7 +9,6 @@
  * that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
@@ -17,10 +16,9 @@ extern crate uucore;
 
 use libc::c_long;
 
-static NAME: &'static str = "hostid";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-static EXIT_ERR: i32 = 1;
+static SYNTAX: &'static str = "[options]"; 
+static SUMMARY: &'static str = ""; 
+static LONG_HELP: &'static str = ""; 
 
 pub enum Mode {
     HostId,
@@ -34,42 +32,10 @@ extern {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(_) => {
-            help(&opts);
-            return EXIT_ERR;
-        },
-    };
-
-    let mode = if matches.opt_present("version") {
-        Mode::Version
-    } else if matches.opt_present("help") {
-        Mode::Help
-    } else {
-        Mode::HostId
-    };
-
-    match mode {
-        Mode::HostId  => hostid(),
-        Mode::Help    => help(&opts),
-        Mode::Version => version(),
-    }
-
+    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .parse(args);
+    hostid();
     0
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help(opts: &getopts::Options) {
-    let msg = format!("Usage:\n {} [options]", NAME);
-    print!("{}", opts.usage(&msg));
 }
 
 fn hostid() {

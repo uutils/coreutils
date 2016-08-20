@@ -9,12 +9,10 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::fs::File;
 use std::io::{self, stdin, Read, Write, BufReader};
 #[cfg(not(windows))]
@@ -25,8 +23,9 @@ use crc_table::CRC_TABLE;
 
 mod crc_table;
 
-static NAME: &'static str = "cksum";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTIONS] [FILE]..."; 
+static SUMMARY: &'static str = "Print CRC and size for each file"; 
+static LONG_HELP: &'static str = ""; 
 
 #[inline]
 fn crc_update(crc: u32, input: u8) -> u32 {
@@ -88,31 +87,8 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(err) => panic!("{}", err),
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!("{0} {1}
-
-Usage:
-  {0} [OPTIONS] [FILE]...
-
-Print CRC and size for each file.", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .parse(args);
 
     let files = matches.free;
 

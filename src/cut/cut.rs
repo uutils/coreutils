@@ -291,7 +291,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
     match opts.out_delimeter {
         Some(ref o_delim) => {
             return cut_fields_delimiter(reader, ranges, &opts.delimiter,
-                                        opts.only_delimited, newline_char, o_delim);
+                                            opts.only_delimited, newline_char, o_delim)
         }
         None => ()
     }
@@ -417,18 +417,17 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
-    opts.optopt("b", "bytes", "filter byte columns from the input source", "sequence");
-    opts.optopt("c", "characters", "alias for character mode", "sequence");
-    opts.optopt("d", "delimiter", "specify the delimiter character that separates fields in the input source. Defaults to Tab.", "delimiter");
-    opts.optopt("f", "fields", "filter field columns from the input source", "sequence");
-    opts.optflag("n", "", "legacy option - has no effect.");
-    opts.optflag("", "complement", "invert the filter - instead of displaying only the filtered columns, display all but those columns");
-    opts.optflag("s", "only-delimited", "in field mode, only print lines which contain the delimiter");
-    opts.optflag("z", "zero-terminated", "instead of filtering columns based on line, filter columns based on \\0 (NULL character)");
-    opts.optopt("", "output-delimiter", "in field mode, replace the delimiter in output lines with this option's argument", "new delimiter");
-    let matches = opts.parse(args);
-
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optopt("b", "bytes", "filter byte columns from the input source", "sequence")
+        .optopt("c", "characters", "alias for character mode", "sequence")
+        .optopt("d", "delimiter", "specify the delimiter character that separates fields in the input source. Defaults to Tab.", "delimiter")
+        .optopt("f", "fields", "filter field columns from the input source", "sequence")
+        .optflag("n", "", "legacy option - has no effect.")
+        .optflag("", "complement", "invert the filter - instead of displaying only the filtered columns, display all but those columns")
+        .optflag("s", "only-delimited", "in field mode, only print lines which contain the delimiter")
+        .optflag("z", "zero-terminated", "instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
+        .optopt("", "output-delimiter", "in field mode, replace the delimiter in output lines with this option's argument", "new delimiter")
+        .parse(args);
     let complement = matches.opt_present("complement");
 
     let mode_parse = match (matches.opt_str("bytes"),

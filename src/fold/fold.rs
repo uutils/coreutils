@@ -9,7 +9,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
@@ -19,56 +18,40 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::path::Path;
 
-static NAME: &'static str = "fold";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
+static SUMMARY: &'static str = "Writes each file (or standard input if no files are given) 
+ to standard output whilst breaking long lines"; 
+static LONG_HELP: &'static str = ""; 
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let mut opts = getopts::Options::new();
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)")
+        .optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off")
+        .optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH")
+        .parse(args);
 
-    opts.optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)");
-    opts.optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off");
-    opts.optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
-    };
-
-    if matches.opt_present("h") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTION]... [FILE]...", NAME);
-        println!("");
-        print!("{}", opts.usage("Writes each file (or standard input if no files are given) to standard output whilst breaking long lines"));
-    } else if matches.opt_present("V") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        let bytes = matches.opt_present("b");
-        let spaces = matches.opt_present("s");
-        let poss_width =
-            if matches.opt_present("w") {
-                matches.opt_str("w")
-            } else {
-                obs_width
-            };
-        let width = match poss_width {
-            Some(inp_width) => match inp_width.parse::<usize>() {
-                Ok(width) => width,
-                Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e)
-            },
-            None => 80
-        };
-        let files = if matches.free.is_empty() {
-            vec!("-".to_owned())
+    let bytes = matches.opt_present("b");
+    let spaces = matches.opt_present("s");
+    let poss_width =
+        if matches.opt_present("w") {
+            matches.opt_str("w")
         } else {
-            matches.free
+            obs_width
         };
-        fold(files, bytes, spaces, width);
-    }
+    let width = match poss_width {
+        Some(inp_width) => match inp_width.parse::<usize>() {
+            Ok(width) => width,
+            Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e)
+        },
+        None => 80
+    };
+    let files = if matches.free.is_empty() {
+        vec!("-".to_owned())
+    } else {
+        matches.free
+    };
+    fold(files, bytes, spaces, width);
 
     0
 }

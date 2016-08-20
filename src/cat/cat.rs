@@ -11,53 +11,35 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-extern crate getopts;
 extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::fs::File;
 use std::intrinsics::{copy_nonoverlapping};
 use std::io::{stdout, stdin, stderr, Write, Read, Result};
 use uucore::fs::is_stdin_interactive;
 
-static NAME: &'static str = "cat";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
+static SUMMARY: &'static str = "Concatenate FILE(s), or standard input, to standard output
+ With no FILE, or when FILE is -, read standard input."; 
+static LONG_HELP: &'static str = ""; 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-    opts.optflag("A", "show-all", "equivalent to -vET");
-    opts.optflag("b", "number-nonblank",
-                 "number nonempty output lines, overrides -n");
-    opts.optflag("e", "", "equivalent to -vE");
-    opts.optflag("E", "show-ends", "display $ at end of each line");
-    opts.optflag("n", "number", "number all output lines");
-    opts.optflag("s", "squeeze-blank", "suppress repeated empty output lines");
-    opts.optflag("t", "", "equivalent to -vT");
-    opts.optflag("T", "show-tabs", "display TAB characters as ^I");
-    opts.optflag("v", "show-nonprinting",
-                 "use ^ and M- notation, except for LF (\\n) and TAB (\\t)");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => panic!("Invalid options\n{}", f)
-    };
-    if matches.opt_present("help") {
-        let msg = format!("{} {}\n\n\
-        Usage:\n  {0} [OPTION]... [FILE]...\n\n\
-        Concatenate FILE(s), or standard input, to standard output.\n\n\
-        With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("A", "show-all", "equivalent to -vET")
+        .optflag("b", "number-nonblank",
+                 "number nonempty output lines, overrides -n")
+        .optflag("e", "", "equivalent to -vE")
+        .optflag("E", "show-ends", "display $ at end of each line")
+        .optflag("n", "number", "number all output lines")
+        .optflag("s", "squeeze-blank", "suppress repeated empty output lines")
+        .optflag("t", "", "equivalent to -vT")
+        .optflag("T", "show-tabs", "display TAB characters as ^I")
+        .optflag("v", "show-nonprinting",
+                 "use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+        .parse(args);
 
     let number_mode = if matches.opt_present("b") {
         NumberingMode::NumberNonEmpty

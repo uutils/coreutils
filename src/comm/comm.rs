@@ -11,14 +11,17 @@
 
 extern crate getopts;
 
-use getopts::Options;
+#[macro_use]
+extern crate uucore;
+
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, stdin, Stdin};
 use std::path::Path;
 
-static NAME: &'static str = "comm";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2"; 
+static SUMMARY: &'static str = "Compare sorted files line by line"; 
+static LONG_HELP: &'static str = ""; 
 
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
@@ -122,39 +125,12 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-    opts.optflag("1", "", "suppress column 1 (lines uniq to FILE1)");
-    opts.optflag("2", "", "suppress column 2 (lines uniq to FILE2)");
-    opts.optflag("3", "", "suppress column 3 (lines that appear in both files)");
-    opts.optopt("", "output-delimiter", "separate columns with STR", "STR");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(err) => panic!("{}", err),
-    };
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    if matches.opt_present("help") || matches.free.len() != 2 {
-        let msg = format!("{0} {1}
-
-Usage:
-  {0} [OPTIONS] FILE1 FILE2
-
-Compare sorted files line by line.", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-
-        if matches.free.len() != 2 {
-            return 1;
-        }
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("1", "", "suppress column 1 (lines uniq to FILE1)")
+        .optflag("2", "", "suppress column 2 (lines uniq to FILE2)")
+        .optflag("3", "", "suppress column 3 (lines that appear in both files)")
+        .optopt("", "output-delimiter", "separate columns with STR", "STR")
+        .parse(args);
 
     let mut f1 = open_file(matches.free[0].as_ref()).unwrap();
     let mut f2 = open_file(matches.free[1].as_ref()).unwrap();

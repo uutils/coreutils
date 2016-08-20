@@ -9,42 +9,24 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
+#[macro_use]
+extern crate uucore;
 
 use std::path::Path;
 
-static NAME: &'static str = "dirname";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &'static str = "dirname"; 
+static SYNTAX: &'static str = "[OPTION] NAME..."; 
+static SUMMARY: &'static str = "strip last component from file name"; 
+static LONG_HELP: &'static str = "
+ Output each NAME with its last non-slash component and trailing slashes
+ removed; if NAME contains no /'s, output '.' (meaning the current
+ directory).
+"; 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
-    opts.optflag("z", "zero", "separate output with NUL rather than newline");
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => panic!("Invalid options\n{}", f)
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!("{0} {1} - strip last component from file name
-
-Usage:
-  {0} [OPTION] NAME...
-
-Output each NAME with its last non-slash component and trailing slashes
-removed; if NAME contains no  /'s,  output  '.'  (meaning  the  current
-directory).", NAME, VERSION);
-
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("z", "zero", "separate output with NUL rather than newline")
+        .parse(args);
 
     let separator = if matches.opt_present("zero") {"\0"} else {"\n"};
 
