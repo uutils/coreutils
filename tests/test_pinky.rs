@@ -5,6 +5,21 @@ fn new_ucmd() -> UCommand {
     TestScenario::new(UTIL_NAME).ucmd()
 }
 
+use ::std::fs::File;
+use ::std::io::BufReader;
+use ::std::io::BufRead;
+
+thread_local! {
+    static PASSWD: Vec<String> = BufReader::new(File::open("/etc/passwd").unwrap())
+        .lines()
+        .filter_map(|l| l.ok())
+        .filter(|l| l.starts_with("root:"))
+        .map(|l| {
+            l.split(':').map(|s| s.to_owned()).collect::<Vec<_>>()
+        })
+        .next().unwrap();
+}
+
 extern crate uu_pinky;
 pub use self::uu_pinky::*;
 
@@ -17,31 +32,20 @@ fn test_capitalize() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
 fn test_long_format() {
-    new_ucmd()
-        .arg("-l").arg("root")
-        .run()
-        .stdout_is("Login name: root                        In real life:  root\nDirectory: /root                        Shell:  /bin/bash\n\n");
+    PASSWD.with(|v| {
+        let gecos = v[4].replace("&", &v[4].capitalize());
+        new_ucmd()
+            .arg("-l").arg("root")
+            .run()
+            .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n", v[0], gecos, v[5], v[6]));
 
-    new_ucmd()
-        .arg("-lb").arg("root")
-        .run()
-        .stdout_is("Login name: root                        In real life:  root\n\n");
-}
-
-#[test]
-#[cfg(target_os = "macos")]
-fn test_long_format() {
-    new_ucmd()
-        .arg("-l").arg("root")
-        .run()
-        .stdout_is("Login name: root                        In real life:  System Administrator\nDirectory: /var/root                    Shell:  /bin/sh\n\n");
-
-    new_ucmd()
-        .arg("-lb").arg("root")
-        .run()
-        .stdout_is("Login name: root                        In real life:  System Administrator\n\n");
+        new_ucmd()
+            .arg("-lb")
+            .arg("root")
+            .run()
+            .stdout_is(format!("Login name: {:<28}In real life:  {1}\n\n", v[0], gecos));
+    })
 }
 
 #[cfg(target_os = "linux")]

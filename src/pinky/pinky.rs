@@ -244,7 +244,7 @@ impl Pinky {
 
         if self.include_where && !ut.host().is_empty() {
             let ut_host = ut.host();
-            let mut res = ut_host.split(':');
+            let mut res = ut_host.splitn(2, ':');
             let host = match res.next() {
                 Some(_) => ut.canon_host().unwrap_or(ut_host.clone()),
                 None => ut_host.clone(),
