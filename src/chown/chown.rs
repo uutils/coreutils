@@ -42,38 +42,35 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
     opts.optflag("c",
                  "changes",
-                 "like verbose but report only when a change is made");
-    opts.optflag("f", "silent", "");
-    opts.optflag("", "quiet", "suppress most error messages");
-    opts.optflag("v",
+                 "like verbose but report only when a change is made")
+        .optflag("f", "silent", "")
+        .optflag("", "quiet", "suppress most error messages")
+        .optflag("v",
                  "verbose",
-                 "output a diagnostic for every file processed");
-    opts.optflag("", "dereference", "affect the referent of each symbolic link (this is the default), rather than the symbolic link itself");
-    opts.optflag("h", "no-dereference", "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)");
+                 "output a diagnostic for every file processed")
+        .optflag("", "dereference", "affect the referent of each symbolic link (this is the default), rather than the symbolic link itself")
+        .optflag("h", "no-dereference", "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)")
 
-    opts.optopt("", "from", "change the owner and/or group of each file only if its current owner and/or group match those specified here. Either may be omitted, in which case a match is not required for the omitted attribute", "CURRENT_OWNER:CURRENT_GROUP");
-    opts.optopt("",
+        .optopt("", "from", "change the owner and/or group of each file only if its current owner and/or group match those specified here. Either may be omitted, in which case a match is not required for the omitted attribute", "CURRENT_OWNER:CURRENT_GROUP")
+        .optopt("",
                 "reference",
                 "use RFILE's owner and group rather than specifying OWNER:GROUP values",
-                "RFILE");
-
-    opts.optflag("",
+                "RFILE")
+        .optflag("",
                  "no-preserve-root",
-                 "do not treat '/' specially (the default)");
-    opts.optflag("", "preserve-root", "fail to operate recursively on '/'");
+                 "do not treat '/' specially (the default)")
+        .optflag("", "preserve-root", "fail to operate recursively on '/'")
 
-    opts.optflag("R",
+        .optflag("R",
                  "recursive",
-                 "operate on files and directories recursively");
-    opts.optflag("H",
+                 "operate on files and directories recursively")
+        .optflag("H",
                  "",
-                 "if a command line argument is a symbolic link to a directory, traverse it");
-    opts.optflag("L",
+                 "if a command line argument is a symbolic link to a directory, traverse it")
+        .optflag("L",
                  "",
-                 "traverse every symbolic link to a directory encountered");
-    opts.optflag("P", "", "do not traverse any symbolic links (default)");
-
-    let matches = opts.parse(args.clone());
+                 "traverse every symbolic link to a directory encountered")
+        .optflag("P", "", "do not traverse any symbolic links (default)");
 
     let mut bit_flag = FTS_PHYSICAL;
     let mut preserve_root = false;
@@ -100,6 +97,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
 
+    let matches = opts.parse(args);
     let recursive = matches.opt_present("recursive");
     if recursive {
         if bit_flag == FTS_PHYSICAL {
