@@ -27,6 +27,7 @@ mod parse_nrofbytes;
 mod parse_formats;
 mod parse_inputs;
 mod inputoffset;
+mod inputdecoder;
 #[cfg(test)]
 mod mockstream;
 
@@ -42,6 +43,7 @@ use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
 use parse_inputs::{parse_inputs, CommandLineInputs};
 use inputoffset::{InputOffset, Radix};
+use inputdecoder::{InputDecoder,MemoryDecoder};
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const MAX_BYTES_PER_UNIT: usize = 8;
@@ -233,25 +235,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut input = open_input_peek_reader(&input_strings, skip_bytes, read_bytes);
 
+    let mut input_decoder = InputDecoder::new(&mut input, line_bytes, PEEK_BUFFER_SIZE, byte_order);
+
     let mut input_offset = InputOffset::new(Radix::Octal, skip_bytes, label);
     if let Err(e) = input_offset.parse_radix_from_commandline(matches.opt_str("A")) {
         disp_err!("Invalid -A/--address-radix\n{}", e);
         return 1;
     }
 
-    odfunc(&mut input, &mut input_offset, line_bytes, byte_order, &formats[..],
+    odfunc(&mut input_decoder, &mut input_offset, line_bytes, &formats[..],
             output_duplicates)
 }
 
 // TODO: refactor, too many arguments
-fn odfunc<I>(input: &mut I, input_offset: &mut InputOffset, line_bytes: usize, byte_order: ByteOrder,
+fn odfunc<I>(input_decoder: &mut InputDecoder<I>, input_offset: &mut InputOffset, line_bytes: usize,
         formats: &[ParsedFormatterItemInfo], output_duplicates: bool) -> i32
         where I : PeekRead+HasError {
 
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
-    let mut bytes: Vec<u8> = Vec::with_capacity(line_bytes + PEEK_BUFFER_SIZE);
-    unsafe { bytes.set_len(line_bytes + PEEK_BUFFER_SIZE); } // fast but uninitialized
 
     let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
     let print_width_block = formats
@@ -294,29 +296,29 @@ fn odfunc<I>(input: &mut I, input_offset: &mut InputOffset, line_bytes: usize, b
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
 
-        match input.peek_read(bytes.as_mut_slice(), PEEK_BUFFER_SIZE) {
-            Ok((0, _)) => {
-                input_offset.print_final_offset();
-                break;
-            }
-            Ok((n, peekbytes)) => {
+        match input_decoder.peek_read() {
+            Ok(mut memory_decoder) => {
+                let length=memory_decoder.length();
+
+                if length == 0 {
+                    input_offset.print_final_offset();
+                    break;
+                }
+
                 // not enough byte for a whole element, this should only happen on the last line.
-                if n != line_bytes {
+                if length != line_bytes {
                     // set zero bytes in the part of the buffer that will be used, but is not filled.
-                    let mut max_used = n + MAX_BYTES_PER_UNIT;
+                    let mut max_used = length + MAX_BYTES_PER_UNIT;
                     if max_used > line_bytes {
                         max_used = line_bytes;
                     }
 
-                    for i in n..max_used {
-                        bytes[i] = 0;
-                    }
+                    memory_decoder.zero_out_buffer(length, max_used);
                 }
 
                 if !output_duplicates
-                        && n == line_bytes
-                        && !previous_bytes.is_empty()
-                        && previous_bytes[..line_bytes] == bytes[..line_bytes] {
+                        && length == line_bytes
+                        && memory_decoder.get_buffer(0) == &previous_bytes[..] {
                     if !duplicate_line {
                         duplicate_line = true;
                         println!("*");
@@ -324,17 +326,16 @@ fn odfunc<I>(input: &mut I, input_offset: &mut InputOffset, line_bytes: usize, b
                 }
                 else {
                     duplicate_line = false;
-                    if n == line_bytes {
+                    if length == line_bytes {
                         // save a copy of the input unless it is the last line
-                        previous_bytes.clone_from(&bytes);
+                        memory_decoder.clone_buffer(&mut previous_bytes);
                     }
 
-                    print_bytes(byte_order, &bytes, n, peekbytes,
-                        &input_offset.format_byte_offset(),
+                    print_bytes(&input_offset.format_byte_offset(), &memory_decoder,
                         &spaced_formatters, byte_size_block, print_width_line);
                 }
 
-                input_offset.increase_position(n);
+                input_offset.increase_position(length);
             }
             Err(e) => {
                 show_error!("{}", e);
@@ -344,70 +345,47 @@ fn odfunc<I>(input: &mut I, input_offset: &mut InputOffset, line_bytes: usize, b
         };
     }
 
-    if input.has_error() {
+    if input_decoder.has_error() {
         1
     } else {
         0
     }
 }
 
-fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: usize, prefix: &str,
+fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder,
         formats: &[SpacedFormatterItemInfo], byte_size_block: usize, print_width_line: usize) {
     let mut first = true; // First line of a multi-format raster.
     for f in formats {
         let mut output_text = String::new();
 
         let mut b = 0;
-        while b < length {
-            let nextb = b + f.frm.formatter_item_info.byte_size;
-
+        while b < input_decoder.length() {
             output_text.push_str(&format!("{:>width$}",
                     "",
                     width = f.spacing[b % byte_size_block]));
 
             match f.frm.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
-                    let p: u64 = match f.frm.formatter_item_info.byte_size {
-                        1 => {
-                            bytes[b] as u64
-                        }
-                        2 => {
-                            byte_order.read_u16(&bytes[b..nextb]) as u64
-                        }
-                        4 => {
-                            byte_order.read_u32(&bytes[b..nextb]) as u64
-                        }
-                        8 => {
-                            byte_order.read_u64(&bytes[b..nextb])
-                        }
-                        _ => { panic!("Invalid byte_size: {}", f.frm.formatter_item_info.byte_size); }
-                    };
+                    let p = input_decoder.read_uint(b, f.frm.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
                 FormatWriter::FloatWriter(func) => {
-                    let p: f64 = match f.frm.formatter_item_info.byte_size {
-                        4 => {
-                            byte_order.read_f32(&bytes[b..nextb]) as f64
-                        }
-                        8 => {
-                            byte_order.read_f64(&bytes[b..nextb])
-                        }
-                        _ => { panic!("Invalid byte_size: {}", f.frm.formatter_item_info.byte_size); }
-                    };
+                    let p = input_decoder.read_float(b, f.frm.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
                 FormatWriter::MultibyteWriter(func) => {
-                    output_text.push_str(&func(&bytes[b..length+peekbytes]));
+                    output_text.push_str(&func(input_decoder.get_full_buffer(b)));
                 }
             }
-            b = nextb;
+
+            b += f.frm.formatter_item_info.byte_size;
         }
 
         if f.frm.add_ascii_dump {
             let missing_spacing = print_width_line.saturating_sub(output_text.chars().count());
             output_text.push_str(&format!("{:>width$}  {}",
                     "",
-                    format_ascii_dump(&bytes[..length]),
+                    format_ascii_dump(input_decoder.get_buffer(0)),
                     width=missing_spacing));
         }
 
