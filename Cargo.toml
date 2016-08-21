@@ -7,6 +7,7 @@ build = "build.rs"
 [features]
 unix = [
   "arch",
+  "chgrp",
   "chmod",
   "chown",
   "chroot",
@@ -108,6 +109,7 @@ base32   = { optional=true, path="src/base32" }
 base64   = { optional=true, path="src/base64" }
 basename = { optional=true, path="src/basename" }
 cat      = { optional=true, path="src/cat" }
+chgrp    = { optional=true, path="src/chgrp" }
 chmod    = { optional=true, path="src/chmod" }
 chown    = { optional=true, path="src/chown" }
 chroot   = { optional=true, path="src/chroot" }
