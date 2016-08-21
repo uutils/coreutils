@@ -2,7 +2,7 @@ use std::fmt;
 
 #[derive(Copy, Eq)]
 pub enum FormatWriter {
-    IntWriter(fn(u64, usize, usize) -> String),
+    IntWriter(fn(u64) -> String),
     FloatWriter(fn(f64) -> String),
     MultibyteWriter(fn(&[u8]) -> String),
 }

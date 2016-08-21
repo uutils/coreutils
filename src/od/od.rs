@@ -382,7 +382,7 @@ fn print_bytes(byte_order: ByteOrder, bytes: &[u8], length: usize, peekbytes: us
                         }
                         _ => { panic!("Invalid byte_size: {}", f.frm.formatter_item_info.byte_size); }
                     };
-                    output_text.push_str(&func(p, f.frm.formatter_item_info.byte_size, f.frm.formatter_item_info.print_width));
+                    output_text.push_str(&func(p));
                 }
                 FormatWriter::FloatWriter(func) => {
                     let p: f64 = match f.frm.formatter_item_info.byte_size {

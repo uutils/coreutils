@@ -32,7 +32,7 @@ static A_CHRS : [&'static str; 128]  =
   "p",     "q",     "r",     "s",     "t",     "u",     "v",     "w",
   "x",     "y",     "z",     "{",     "|",     "}",     "~",   "del"];
 
-fn format_item_a(p: u64, _: usize, _: usize) -> String {
+fn format_item_a(p: u64) -> String {
     // itembytes == 1
     let b = (p & 0x7f) as u8;
     format!("{:>4}", A_CHRS.get(b as usize).unwrap_or(&"??")
@@ -119,17 +119,17 @@ pub fn format_ascii_dump(bytes: &[u8]) -> String {
 
 #[test]
 fn test_format_item_a() {
-    assert_eq!(" nul", format_item_a(0x00, 1, 4));
-    assert_eq!(" soh", format_item_a(0x01, 1, 4));
-    assert_eq!("  sp", format_item_a(0x20, 1, 4));
-    assert_eq!("   A", format_item_a(0x41, 1, 4));
-    assert_eq!("   ~", format_item_a(0x7e, 1, 4));
-    assert_eq!(" del", format_item_a(0x7f, 1, 4));
+    assert_eq!(" nul", format_item_a(0x00));
+    assert_eq!(" soh", format_item_a(0x01));
+    assert_eq!("  sp", format_item_a(0x20));
+    assert_eq!("   A", format_item_a(0x41));
+    assert_eq!("   ~", format_item_a(0x7e));
+    assert_eq!(" del", format_item_a(0x7f));
 
-    assert_eq!(" nul", format_item_a(0x80, 1, 4));
-    assert_eq!("   A", format_item_a(0xc1, 1, 4));
-    assert_eq!("   ~", format_item_a(0xfe, 1, 4));
-    assert_eq!(" del", format_item_a(0xff, 1, 4));
+    assert_eq!(" nul", format_item_a(0x80));
+    assert_eq!("   A", format_item_a(0xc1));
+    assert_eq!("   ~", format_item_a(0xfe));
+    assert_eq!(" del", format_item_a(0xff));
 }
 
 #[test]
