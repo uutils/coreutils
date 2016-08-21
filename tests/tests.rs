@@ -14,6 +14,7 @@ macro_rules! unix_only {
 unix_only! {
     "chmod", test_chmod;
     "chown", test_chown;
+    "chgrp", test_chgrp;
     "install", test_install;
     "mv", test_mv;
     "pathchk", test_pathchk;
