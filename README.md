@@ -153,7 +153,7 @@ To do
 * [x] basename
 * [x] cat
 * [ ] chcon
-* [ ] chgrp
+* [x] chgrp
 * [x] chmod
 * [x] chown
 * [x] chroot
