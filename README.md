@@ -194,7 +194,7 @@ To do
 * [x] mkfifo
 * [x] mknod
 * [x] mktemp
-* [ ] mv (almost done, one more option)
+* [x] mv
 * [x] nice
 * [x] nl
 * [x] nohup
