@@ -8,15 +8,11 @@
 
 use common::util::*;
 
-static UTIL_NAME: &'static str = "base32";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[test]
 fn test_encode() {
     let input = "Hello, World!";
-    new_ucmd()
+    new_ucmd!()
         .pipe_in(input)
         .succeeds()
         .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
@@ -26,7 +22,7 @@ fn test_encode() {
 fn test_decode() {
     for decode_param in vec!["-d", "--decode"] {
         let input = "JBSWY3DPFQQFO33SNRSCC===\n";
-        new_ucmd()
+        new_ucmd!()
             .arg(decode_param)
             .pipe_in(input)
             .succeeds()
@@ -37,7 +33,7 @@ fn test_decode() {
 #[test]
 fn test_garbage() {
     let input = "aGVsbG8sIHdvcmxkIQ==\0";
-    new_ucmd()
+    new_ucmd!()
         .arg("-d")
         .pipe_in(input)
         .fails()
@@ -48,7 +44,7 @@ fn test_garbage() {
 fn test_ignore_garbage() {
     for ignore_garbage_param in vec!["-i", "--ignore-garbage"] {
         let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n";
-        new_ucmd()
+        new_ucmd!()
             .arg("-d")
             .arg(ignore_garbage_param)
             .pipe_in(input)
@@ -61,7 +57,7 @@ fn test_ignore_garbage() {
 fn test_wrap() {
     for wrap_param in vec!["-w", "--wrap"] {
         let input = "The quick brown fox jumps over the lazy dog.";
-        new_ucmd()
+        new_ucmd!()
             .arg(wrap_param)
             .arg("20")
             .pipe_in(input)
@@ -73,7 +69,7 @@ fn test_wrap() {
 #[test]
 fn test_wrap_no_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
-        new_ucmd()
+        new_ucmd!()
             .arg(wrap_param)
             .fails()
             .stderr_only(format!("base32: error: Argument to option '{}' missing.\n",
@@ -84,7 +80,7 @@ fn test_wrap_no_arg() {
 #[test]
 fn test_wrap_bad_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
-        new_ucmd()
+        new_ucmd!()
             .arg(wrap_param).arg("b")
             .fails()
             .stderr_only("base32: error: invalid wrap size: ‘b’: invalid digit found in string\n");

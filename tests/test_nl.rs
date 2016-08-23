@@ -1,17 +1,13 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "nl";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[test]
 fn test_stdin_nonewline() {
-    new_ucmd().pipe_in("No Newline").run().stdout_is("     1\tNo Newline\n");
+    new_ucmd!().pipe_in("No Newline").run().stdout_is("     1\tNo Newline\n");
 }
 #[test]
 fn test_stdin_newline() {
-    new_ucmd()
+    new_ucmd!()
         .args(&["-s", "-", "-w", "1"])
         .pipe_in("Line One\nLine Two\n")
         .run()
@@ -20,7 +16,7 @@ fn test_stdin_newline() {
 
 #[test]
 fn test_padding_without_overflow() {
-    new_ucmd()
+    new_ucmd!()
         .args(&["-i", "1000", "-s", "x", "-n", "rz", "simple.txt"]).run()
         .stdout_is(
                "000001xL1\n001001xL2\n002001xL3\n003001xL4\n004001xL5\n005001xL6\n006001xL7\n0070\
@@ -30,7 +26,7 @@ fn test_padding_without_overflow() {
 
 #[test]
 fn test_padding_with_overflow() {
-    new_ucmd()
+    new_ucmd!()
         .args(&["-i", "1000", "-s", "x", "-n", "rz", "-w", "4", "simple.txt"]).run()
         .stdout_is(
                "0001xL1\n1001xL2\n2001xL3\n3001xL4\n4001xL5\n5001xL6\n6001xL7\n7001xL8\n8001xL9\n\
@@ -49,7 +45,7 @@ fn test_sections_and_styles() {
                                  |Followed by 4x empty\n\n\n\n\n9  |Nonempty\n10 |Nonempty\n11 \
                                  |Nonempty.\n")]
                                   .iter() {
-        new_ucmd()
+        new_ucmd!()
             .args(&["-s", "|", "-n", "ln", "-w", "3", "-b", "a", "-l", "5", fixture])
             .run()
             .stdout_is(output);

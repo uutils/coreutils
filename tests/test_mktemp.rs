@@ -2,7 +2,6 @@ use common::util::*;
 extern crate tempdir;
 use self::tempdir::TempDir;
 
-static UTIL_NAME: &'static str = "mktemp";
 
 static TEST_TEMPLATE1: &'static str = "tempXXXXXX";
 static TEST_TEMPLATE2: &'static str = "temp";
@@ -20,7 +19,7 @@ const TMPDIR: &'static str = "TMPDIR";
 
 #[test]
 fn test_mktemp_mktemp() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
     let pathname = scene.fixtures.as_string();
 
@@ -36,7 +35,7 @@ fn test_mktemp_mktemp() {
 
 #[test]
 fn test_mktemp_make_temp_dir() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
     let pathname = scene.fixtures.as_string();
 
@@ -52,7 +51,7 @@ fn test_mktemp_make_temp_dir() {
 
 #[test]
 fn test_mktemp_dry_run() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
     let pathname = scene.fixtures.as_string();
 
@@ -69,7 +68,7 @@ fn test_mktemp_dry_run() {
 
 #[test]
 fn test_mktemp_quiet() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
     scene.ucmd().arg("-p").arg("/definitely/not/exist/I/promise").arg("-q")
         .fails().no_stdout().no_stderr();
@@ -79,7 +78,7 @@ fn test_mktemp_quiet() {
 
 #[test]
 fn test_mktemp_suffix() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
     let pathname = scene.fixtures.as_string();
 
@@ -95,9 +94,9 @@ fn test_mktemp_suffix() {
 
 #[test]
 fn test_mktemp_tmpdir() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
-    let path = TempDir::new_in(scene.fixtures.as_string(), UTIL_NAME).unwrap();
+    let path = TempDir::new_in(scene.fixtures.as_string(), util_name!()).unwrap();
     let pathname = path.path().as_os_str();
 
     scene.ucmd().arg("-p").arg(pathname).arg(TEST_TEMPLATE1).succeeds();

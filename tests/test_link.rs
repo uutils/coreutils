@@ -1,15 +1,9 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "link";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
 
 #[test]
 fn test_link_existing_file() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_link_existing_file";
     let link = "test_link_existing_file_link";
 
@@ -25,7 +19,7 @@ fn test_link_existing_file() {
 
 #[test]
 fn test_link_no_circular() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let link = "test_link_no_circular";
 
     ucmd.args(&[link, link]).fails()
@@ -35,7 +29,7 @@ fn test_link_no_circular() {
 
 #[test]
 fn test_link_nonexistent_file() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_link_nonexistent_file";
     let link = "test_link_nonexistent_file_link";
 

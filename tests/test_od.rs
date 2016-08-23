@@ -5,10 +5,6 @@ use std::io::Write;
 use std::fs::File;
 use std::fs::remove_file;
 
-static UTIL_NAME: &'static str = "od";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &'static str = "0000000    061141  062143  063145  064147  065151  066153  067155  070157\n0000020    071161  072163  073165  074167  075171  000012                \n0000033\n";
@@ -32,7 +28,7 @@ fn test_file() {
         }
     }
 
-    let result = new_ucmd().arg(file.as_os_str()).run();
+    let result = new_ucmd!().arg(file.as_os_str()).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -61,7 +57,7 @@ fn test_2files() {
         }
     }
 
-    let result = new_ucmd().arg(file1.as_os_str()).arg(file2.as_os_str()).run();
+    let result = new_ucmd!().arg(file1.as_os_str()).arg(file2.as_os_str()).run();
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -78,7 +74,7 @@ fn test_no_file() {
     let tmpdir = Path::new(&temp);
     let file = tmpdir.join("}surely'none'would'thus'a'file'name");
 
-    let result = new_ucmd().arg(file.as_os_str()).run();
+    let result = new_ucmd!().arg(file.as_os_str()).run();
 
     assert!(!result.success);
 }
@@ -88,7 +84,7 @@ fn test_no_file() {
 fn test_from_stdin() {
 
     let input = "abcdefghijklmnopqrstuvwxyz\n";
-    let result = new_ucmd().run_piped_stdin(input.as_bytes());
+    let result = new_ucmd!().run_piped_stdin(input.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -114,7 +110,7 @@ fn test_from_mixed() {
         }
     }
 
-    let result = new_ucmd().arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
+    let result = new_ucmd!().arg(file1.as_os_str()).arg("--").arg(file3.as_os_str()).run_piped_stdin(data2.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -126,7 +122,7 @@ fn test_from_mixed() {
 fn test_multiple_formats() {
 
     let input = "abcdefghijklmnopqrstuvwxyz\n";
-    let result = new_ucmd().arg("-c").arg("-b").run_piped_stdin(input.as_bytes());
+    let result = new_ucmd!().arg("-c").arg("-b").run_piped_stdin(input.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -147,7 +143,7 @@ fn test_dec() {
     	0x00u8,0x80u8,
     	0x01u8,0x80u8,];
     let expected_output = "0000000         0       1       2       3   32767  -32768  -32767        \n0000016\n";
-    let result = new_ucmd().arg("-i").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-i").run_piped_stdin(&input[..]);
 
     assert_empty_stderr!(result);
     assert!(result.success);
@@ -160,7 +156,7 @@ fn test_dec() {
 /*
 #[test]
 fn mit_die_umlauten_getesten() {
-    let result = new_ucmd()
+    let result = new_ucmd!()
         .run_piped_stdin("Universität Tübingen".as_bytes());
     assert_empty_stderr!(result);
     assert!(result.success);

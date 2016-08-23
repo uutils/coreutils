@@ -1,13 +1,9 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "cat";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[test]
 fn test_output_multi_files_print_all_chars() {
-    new_ucmd()
+    new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
         .succeeds()
         .stdout_only("     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
@@ -26,7 +22,7 @@ fn test_output_multi_files_print_all_chars() {
 #[test]
 fn test_stdin_show_nonprinting() {
     for same_param in vec!["-v", "--show-nonprinting"] {
-        new_ucmd()
+        new_ucmd!()
             .args(&vec![same_param])
             .pipe_in("\t\0\n")
             .succeeds()
@@ -37,7 +33,7 @@ fn test_stdin_show_nonprinting() {
 #[test]
 fn test_stdin_show_tabs() {
     for same_param in vec!["-T", "--show-tabs"] {
-        new_ucmd()
+        new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
             .succeeds()
@@ -49,7 +45,7 @@ fn test_stdin_show_tabs() {
 #[test]
 fn test_stdin_show_ends() {
     for same_param in vec!["-E", "--show-ends"] {
-        new_ucmd()
+        new_ucmd!()
             .args(&[same_param,"-"])
             .pipe_in("\t\0\n")
             .succeeds()
@@ -60,7 +56,7 @@ fn test_stdin_show_ends() {
 #[test]
 fn test_stdin_show_all() {
     for same_param in vec!["-A", "--show-all"] {
-        new_ucmd()
+        new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
             .succeeds()
@@ -70,7 +66,7 @@ fn test_stdin_show_all() {
 
 #[test]
 fn test_stdin_nonprinting_and_endofline() {
-    new_ucmd()
+    new_ucmd!()
         .args(&["-e"])
         .pipe_in("\t\0\n")
         .succeeds()
@@ -79,7 +75,7 @@ fn test_stdin_nonprinting_and_endofline() {
 
 #[test]
 fn test_stdin_nonprinting_and_tabs() {
-    new_ucmd()
+    new_ucmd!()
         .args(&["-t"])
         .pipe_in("\t\0\n")
         .succeeds()
@@ -89,7 +85,7 @@ fn test_stdin_nonprinting_and_tabs() {
 #[test]
 fn test_stdin_squeeze_blank() {
     for same_param in vec!["-s", "--squeeze-blank"] {
-        new_ucmd()
+        new_ucmd!()
             .arg(same_param)
             .pipe_in("\n\na\n\n\n\n\nb\n\n\n")
             .succeeds()
@@ -100,7 +96,7 @@ fn test_stdin_squeeze_blank() {
 #[test]
 fn test_stdin_number_non_blank() {
     for same_param in vec!["-b", "--number-nonblank"] {
-        new_ucmd()
+        new_ucmd!()
             .arg(same_param)
             .arg("-")
             .pipe_in("\na\nb\n\n\nc")
@@ -112,7 +108,7 @@ fn test_stdin_number_non_blank() {
 #[test]
 fn test_non_blank_overrides_number() {
     for same_param in vec!["-b", "--number-nonblank"] {
-        new_ucmd()
+        new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\na\nb\n\n\nc")
             .succeeds()
@@ -123,7 +119,7 @@ fn test_non_blank_overrides_number() {
 #[test]
 fn test_squeeze_blank_before_numbering() {
     for same_param in vec!["-s", "--squeeze-blank"] {
-        new_ucmd()
+        new_ucmd!()
             .args(&[same_param, "-n", "-"])
             .pipe_in("a\n\n\nb")
             .succeeds()

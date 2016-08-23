@@ -1,15 +1,9 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "rm";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
 
 #[test]
 fn test_rm_one_file() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_rm_one_file";
 
     at.touch(file);
@@ -21,7 +15,7 @@ fn test_rm_one_file() {
 
 #[test]
 fn test_rm_multiple_files() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_multiple_file_a";
     let file_b = "test_rm_multiple_file_b";
 
@@ -36,7 +30,7 @@ fn test_rm_multiple_files() {
 
 #[test]
 fn test_rm_interactive() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     let file_a = "test_rm_interactive_file_a";
@@ -68,7 +62,7 @@ fn test_rm_interactive() {
 
 #[test]
 fn test_rm_force() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
 
@@ -84,7 +78,7 @@ fn test_rm_force() {
 
 #[test]
 fn test_rm_empty_directory() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_empty_directory";
 
     at.mkdir(dir);
@@ -96,7 +90,7 @@ fn test_rm_empty_directory() {
 
 #[test]
 fn test_rm_recursive() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
     let file_a = "test_rm_recursive_directory/test_rm_recursive_file_a";
     let file_b = "test_rm_recursive_directory/test_rm_recursive_file_b";
@@ -114,7 +108,7 @@ fn test_rm_recursive() {
 
 #[test]
 fn test_rm_errors() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_errors_directory";
     let file_a = "test_rm_errors_directory/test_rm_errors_file_a";
     let file_b = "test_rm_errors_directory/test_rm_errors_file_b";
@@ -132,7 +126,7 @@ fn test_rm_errors() {
 
 #[test]
 fn test_rm_verbose() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_verbose_file_a";
     let file_b = "test_rm_verbose_file_b";
 

@@ -8,12 +8,6 @@ use self::rand::{Rng, thread_rng};
 use self::regex::Regex;
 use common::util::*;
 
-static UTIL_NAME: &'static str = "split";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
 
 fn random_chars(n: usize) -> String {
     thread_rng().gen_ascii_chars().take(n).collect::<String>()
@@ -97,7 +91,7 @@ impl RandomFile {
 
 #[test]
 fn test_split_default() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_default";
     let glob = Glob::new(&at, ".", r"x[:alpha:][:alpha:]$");
     RandomFile::new(&at, name).add_lines(2000);
@@ -108,7 +102,7 @@ fn test_split_default() {
 
 #[test]
 fn test_split_num_prefixed_chunks_by_bytes() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_num_prefixed_chunks_by_bytes";
     let glob = Glob::new(&at, ".", r"a\d\d$");
     RandomFile::new(&at, name).add_bytes(10000);
@@ -119,7 +113,7 @@ fn test_split_num_prefixed_chunks_by_bytes() {
 
 #[test]
 fn test_split_str_prefixed_chunks_by_bytes() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_str_prefixed_chunks_by_bytes";
     let glob = Glob::new(&at, ".", r"b[:alpha:][:alpha:]$");
     RandomFile::new(&at, name).add_bytes(10000);
@@ -130,7 +124,7 @@ fn test_split_str_prefixed_chunks_by_bytes() {
 
 #[test]
 fn test_split_num_prefixed_chunks_by_lines() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_num_prefixed_chunks_by_lines";
     let glob = Glob::new(&at, ".", r"c\d\d$");
     RandomFile::new(&at, name).add_lines(10000);
@@ -141,7 +135,7 @@ fn test_split_num_prefixed_chunks_by_lines() {
 
 #[test]
 fn test_split_str_prefixed_chunks_by_lines() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_str_prefixed_chunks_by_lines";
     let glob = Glob::new(&at, ".", r"d[:alpha:][:alpha:]$");
     RandomFile::new(&at, name).add_lines(10000);

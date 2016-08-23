@@ -3,10 +3,6 @@ use common::util::*;
 extern crate uu_stat;
 pub use self::uu_stat::*;
 
-static UTIL_NAME: &'static str = "stat";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[cfg(test)]
 mod test_fsext {
@@ -143,7 +139,7 @@ mod test_generate_tokens {
 
 #[test]
 fn test_invalid_option() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-w").arg("-q").arg("/").fails();
 }
 
@@ -158,7 +154,7 @@ const FS_FMTSTR: &'static str = "%a %b %c %d %f %i %l %n %s %S %t %T";
 #[cfg(target_os = "linux")]
 fn test_terse_fs_format() {
     let args = ["-f", "-t", "/proc"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -167,7 +163,7 @@ fn test_terse_fs_format() {
 #[cfg(target_os = "linux")]
 fn test_fs_format() {
     let args = ["-f", "-c", FS_FMTSTR, "/dev/shm"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -176,7 +172,7 @@ fn test_fs_format() {
 #[cfg(target_os = "linux")]
 fn test_terse_normal_format() {
     let args = ["-t", "/"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -185,7 +181,7 @@ fn test_terse_normal_format() {
 #[cfg(target_os = "linux")]
 fn test_normal_format() {
     let args = ["-c", NORMAL_FMTSTR, "/boot"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -194,7 +190,7 @@ fn test_normal_format() {
 #[cfg(target_os = "linux")]
 fn test_follow_symlink() {
     let args = ["-L", "-c", DEV_FMTSTR, "/dev/cdrom"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -203,7 +199,7 @@ fn test_follow_symlink() {
 #[cfg(target_os = "linux")]
 fn test_symlink() {
     let args = ["-c", DEV_FMTSTR, "/dev/cdrom"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -212,7 +208,7 @@ fn test_symlink() {
 #[cfg(target_os = "linux")]
 fn test_char() {
     let args = ["-c", DEV_FMTSTR, "/dev/zero"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -221,7 +217,7 @@ fn test_char() {
 #[cfg(target_os = "linux")]
 fn test_multi_files() {
     let args = ["-c", NORMAL_FMTSTR, "/dev", "/usr/lib", "/etc/fstab", "/var"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -230,7 +226,7 @@ fn test_multi_files() {
 #[cfg(target_os = "linux")]
 fn test_printf() {
     let args = ["--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n", "/"];
-    new_ucmd().args(&args)
+    new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -239,6 +235,6 @@ fn test_printf() {
 fn expected_result(args: &[&str]) -> String {
     use std::process::Command;
 
-    let output = Command::new(UTIL_NAME).args(args).output().unwrap();
+    let output = Command::new(util_name!()).args(args).output().unwrap();
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
