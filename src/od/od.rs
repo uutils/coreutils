@@ -28,6 +28,7 @@ mod parse_formats;
 mod parse_inputs;
 mod inputoffset;
 mod inputdecoder;
+mod output_info;
 #[cfg(test)]
 mod mockstream;
 
@@ -39,14 +40,14 @@ use partialreader::*;
 use peekreader::*;
 use formatteriteminfo::*;
 use parse_nrofbytes::parse_number_of_bytes;
-use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
+use parse_formats::parse_format_flags;
 use prn_char::format_ascii_dump;
 use parse_inputs::{parse_inputs, CommandLineInputs};
 use inputoffset::{InputOffset, Radix};
 use inputdecoder::{InputDecoder,MemoryDecoder};
+use output_info::OutputInfo;
 
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const MAX_BYTES_PER_UNIT: usize = 8;
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
 static USAGE: &'static str =
@@ -93,6 +94,8 @@ Any type specification can have a "z" suffic, which will add a ASCII dump at
 If an error occurred, a diagnostic message will be printed to stderr, and the
 exitcode will be non-zero."#;
 
+/// parses and validates commandline parameters, prepares data structures,
+/// opens the input and calls `odfunc` to process the input.
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
@@ -233,65 +236,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    let mut input = open_input_peek_reader(&input_strings, skip_bytes, read_bytes);
-
-    let mut input_decoder = InputDecoder::new(&mut input, line_bytes, PEEK_BUFFER_SIZE, byte_order);
-
     let mut input_offset = InputOffset::new(Radix::Octal, skip_bytes, label);
     if let Err(e) = input_offset.parse_radix_from_commandline(matches.opt_str("A")) {
         disp_err!("Invalid -A/--address-radix\n{}", e);
         return 1;
     }
 
-    odfunc(&mut input_decoder, &mut input_offset, line_bytes, &formats[..],
-            output_duplicates)
+    let mut input = open_input_peek_reader(&input_strings, skip_bytes, read_bytes);
+    let mut input_decoder = InputDecoder::new(&mut input, line_bytes, PEEK_BUFFER_SIZE, byte_order);
+
+    let output_info = OutputInfo::new(line_bytes, &formats[..], output_duplicates);
+
+    odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-// TODO: refactor, too many arguments
-fn odfunc<I>(input_decoder: &mut InputDecoder<I>, input_offset: &mut InputOffset, line_bytes: usize,
-        formats: &[ParsedFormatterItemInfo], output_duplicates: bool) -> i32
+/// Loops through the input line by line, calling print_bytes to take care of the output.
+fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>,
+        output_info: &OutputInfo) -> i32
         where I : PeekRead+HasError {
-
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
-
-    let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
-    let print_width_block = formats
-        .iter()
-        .fold(1, |max, next| {
-            cmp::max(max, next.formatter_item_info.print_width * (byte_size_block / next.formatter_item_info.byte_size))
-        });
-    let print_width_line = print_width_block * (line_bytes / byte_size_block);
-
-    if byte_size_block > MAX_BYTES_PER_UNIT {
-        panic!("{}-bits types are unsupported. Current max={}-bits.",
-                8 * byte_size_block,
-                8 * MAX_BYTES_PER_UNIT);
-    }
-
-    let mut spaced_formatters: Vec<SpacedFormatterItemInfo> = formats
-        .iter()
-        .map(|f| SpacedFormatterItemInfo { frm: *f, spacing: [0; MAX_BYTES_PER_UNIT] })
-        .collect();
-
-    // calculate proper alignment for each item
-    for sf in &mut spaced_formatters {
-        let mut byte_size = sf.frm.formatter_item_info.byte_size;
-        let mut items_in_block = byte_size_block / byte_size;
-        let thisblock_width = sf.frm.formatter_item_info.print_width * items_in_block;
-        let mut missing_spacing = print_width_block - thisblock_width;
-
-        while items_in_block > 0 {
-            let avg_spacing: usize = missing_spacing / items_in_block;
-            for i in 0..items_in_block {
-                sf.spacing[i * byte_size] += avg_spacing;
-                missing_spacing -= avg_spacing;
-            }
-            // this assumes the size of all types is a power of 2 (1, 2, 4, 8, 16, ...)
-            items_in_block /= 2;
-            byte_size *= 2;
-        }
-    }
+    let line_bytes = output_info.byte_size_line;
 
     loop {
         // print each line data (or multi-format raster of several lines describing the same data).
@@ -308,7 +273,7 @@ fn odfunc<I>(input_decoder: &mut InputDecoder<I>, input_offset: &mut InputOffset
                 // not enough byte for a whole element, this should only happen on the last line.
                 if length != line_bytes {
                     // set zero bytes in the part of the buffer that will be used, but is not filled.
-                    let mut max_used = length + MAX_BYTES_PER_UNIT;
+                    let mut max_used = length + output_info.byte_size_block;
                     if max_used > line_bytes {
                         max_used = line_bytes;
                     }
@@ -316,7 +281,7 @@ fn odfunc<I>(input_decoder: &mut InputDecoder<I>, input_offset: &mut InputOffset
                     memory_decoder.zero_out_buffer(length, max_used);
                 }
 
-                if !output_duplicates
+                if !output_info.output_duplicates
                         && length == line_bytes
                         && memory_decoder.get_buffer(0) == &previous_bytes[..] {
                     if !duplicate_line {
@@ -332,7 +297,7 @@ fn odfunc<I>(input_decoder: &mut InputDecoder<I>, input_offset: &mut InputOffset
                     }
 
                     print_bytes(&input_offset.format_byte_offset(), &memory_decoder,
-                        &spaced_formatters, byte_size_block, print_width_line);
+                        &output_info);
                 }
 
                 input_offset.increase_position(length);
@@ -352,25 +317,25 @@ fn odfunc<I>(input_decoder: &mut InputDecoder<I>, input_offset: &mut InputOffset
     }
 }
 
-fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder,
-        formats: &[SpacedFormatterItemInfo], byte_size_block: usize, print_width_line: usize) {
+/// Outputs a single line of input, into one or more lines human readable output.
+fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &OutputInfo) {
     let mut first = true; // First line of a multi-format raster.
-    for f in formats {
+    for f in output_info.spaced_formatters_iter() {
         let mut output_text = String::new();
 
         let mut b = 0;
         while b < input_decoder.length() {
             output_text.push_str(&format!("{:>width$}",
                     "",
-                    width = f.spacing[b % byte_size_block]));
+                    width = f.spacing[b % output_info.byte_size_block]));
 
-            match f.frm.formatter_item_info.formatter {
+            match f.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
-                    let p = input_decoder.read_uint(b, f.frm.formatter_item_info.byte_size);
+                    let p = input_decoder.read_uint(b, f.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
                 FormatWriter::FloatWriter(func) => {
-                    let p = input_decoder.read_float(b, f.frm.formatter_item_info.byte_size);
+                    let p = input_decoder.read_float(b, f.formatter_item_info.byte_size);
                     output_text.push_str(&func(p));
                 }
                 FormatWriter::MultibyteWriter(func) => {
@@ -378,11 +343,11 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder,
                 }
             }
 
-            b += f.frm.formatter_item_info.byte_size;
+            b += f.formatter_item_info.byte_size;
         }
 
-        if f.frm.add_ascii_dump {
-            let missing_spacing = print_width_line.saturating_sub(output_text.chars().count());
+        if f.add_ascii_dump {
+            let missing_spacing = output_info.print_width_line.saturating_sub(output_text.chars().count());
             output_text.push_str(&format!("{:>width$}  {}",
                     "",
                     format_ascii_dump(input_decoder.get_buffer(0)),
@@ -422,9 +387,4 @@ fn open_input_peek_reader<'a>(input_strings: &'a Vec<String>, skip_bytes: usize,
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
     let input = PeekReader::new(pr);
     input
-}
-
-struct SpacedFormatterItemInfo {
-    frm: ParsedFormatterItemInfo,
-    spacing: [usize; MAX_BYTES_PER_UNIT],
 }
