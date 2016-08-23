@@ -205,12 +205,12 @@ impl OdOptions {
             Some(s) => {
                 match s.parse::<usize>() {
                     Ok(i) => { i }
-                    Err(_) => { 2 }
+                    Err(_) => { 0 }
                 }
             }
         };
         let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
-        if line_bytes % min_bytes != 0 {
+        if line_bytes == 0 || line_bytes % min_bytes != 0 {
             show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
             line_bytes = min_bytes;
         }

@@ -293,6 +293,23 @@ fn test_invalid_width(){
 }
 
 #[test]
+fn test_zero_width(){
+
+    let input : [u8; 4] = [0x00, 0x00, 0x00, 0x00];
+    let expected_output = unindent("
+            0000000 000000
+            0000002 000000
+            0000004
+            ");
+
+    let result = new_ucmd!().arg("-w0").arg("-v").run_piped_stdin(&input[..]);
+
+    assert_eq!(result.stderr, "od: warning: invalid width 0; using 2 instead\n");
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
 fn test_width_without_value(){
 
     let input : [u8; 40] = [0 ; 40];
