@@ -1,0 +1,7 @@
+[package]
+name = "choose"
+version = "0.1.0"
+authors = ["Knight <anonymousknight96@gmail.com>"]
+
+[lib]
+plugin = true

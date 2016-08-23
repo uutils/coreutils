@@ -1,88 +1,71 @@
+#![cfg_attr(test, feature(plugin))]
+#![cfg_attr(test, plugin(choose))]
+
 #[macro_use]
 mod common;
 
-// For conditional compilation
-macro_rules! unix_only {
-    ($($fea:expr, $m:ident);+) => {
-        $(
-            #[cfg(unix)]
-            #[cfg(feature = $fea)]
-            mod $m;
-         )+
-    };
-}
-unix_only! {
-    "chmod", test_chmod;
-    "chown", test_chown;
-    "chgrp", test_chgrp;
-    "install", test_install;
-    "mv", test_mv;
-    "pathchk", test_pathchk;
-    "pinky", test_pinky;
-    "stdbuf", test_stdbuf;
-    "touch", test_touch;
-    "unlink", test_unlink;
-    "who", test_who;
-    // Be aware of the trailing semicolon after the last item
-    "stat", test_stat
-}
-
-
-macro_rules! generic {
-    ($($fea:expr, $m:ident);+) => {
-        $(
-            #[cfg(feature = $fea)]
-            mod $m;
-         )+
-    };
-}
-generic! {
-    "base32", test_base32;
-    "base64", test_base64;
-    "basename", test_basename;
-    "cat", test_cat;
-    "cksum", test_cksum;
-    "comm", test_comm;
-    "cp", test_cp;
-    "cut", test_cut;
-    "dircolors", test_dircolors;
-    "dirname", test_dirname;
-    "echo", test_echo;
-    "env", test_env;
-    "expr", test_expr;
-    "factor", test_factor;
-    "false", test_false;
-    "fold", test_fold;
-    "hashsum", test_hashsum;
-    "head", test_head;
-    "link", test_link;
-    "ln", test_ln;
-    "ls", test_ls;
-    "mkdir", test_mkdir;
-    "mktemp", test_mktemp;
-    "nl", test_nl;
-    "od", test_od;
-    "paste", test_paste;
-    "printf", test_printf;
-    "ptx", test_ptx;
-    "pwd", test_pwd;
-    "readlink", test_readlink;
-    "realpath", test_realpath;
-    "rm", test_rm;
-    "rmdir", test_rmdir;
-    "seq", test_seq;
-    "sort", test_sort;
-    "split", test_split;
-    "sum", test_sum;
-    "tac", test_tac;
-    "tail", test_tail;
-    "test", test_test;
-    "tr", test_tr;
-    "true", test_true;
-    "truncate", test_truncate;
-    "tsort", test_tsort;
-    "unexpand", test_unexpand;
-    "uniq", test_uniq;
-    // Be aware of the trailing semicolon after the last item
-    "wc", test_wc
+choose! {
+    unix => {
+        test_chmod
+        test_chown
+        test_chgrp
+        test_install
+        test_mv
+        test_pathchk
+        test_pinky
+        test_stdbuf
+        test_touch
+        test_unlink
+        test_who
+        test_stat
+    }
+    generic => {
+        test_base32
+        test_base64
+        test_basename
+        test_cat
+        test_cksum
+        test_comm
+        test_cp
+        test_cut
+        test_dircolors
+        test_dirname
+        test_echo
+        test_env
+        test_expr
+        test_factor
+        test_false
+        test_fold
+        test_hashsum
+        test_head
+        test_link
+        test_ln
+        test_ls
+        test_mkdir
+        test_mktemp
+        test_nl
+        test_od
+        test_paste
+        test_printf
+        test_ptx
+        test_pwd
+        test_readlink
+        test_realpath
+        test_rm
+        test_rmdir
+        test_seq
+        test_sort
+        test_split
+        test_sum
+        test_tac
+        test_tail
+        test_test
+        test_tr
+        test_true
+        test_truncate
+        test_tsort
+        test_unexpand
+        test_uniq
+        test_wc
+    }
 }

@@ -203,6 +203,7 @@ libc = "*"
 regex="*"
 rand="*"
 tempdir="*"
+choose = { path = "tests/choose" }
 
 [[bin]]
 name = "uutils"
