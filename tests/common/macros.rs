@@ -46,3 +46,23 @@ macro_rules! path_concat {
         pb.to_str().unwrap().to_owned()
     }};
 }
+
+#[macro_export]
+macro_rules! util_name {
+  () => ( module_path!().split("_").nth(1).expect("no test name") )
+}
+
+#[macro_export]
+macro_rules! new_ucmd {
+  () => ( TestScenario::new(util_name!()).ucmd() )
+}
+
+#[macro_export]
+macro_rules! at_and_ucmd {
+  () => ({
+    let ts = TestScenario::new(util_name!());
+    #[allow(unused_mut)]
+    let mut ucmd = ts.ucmd();
+    (ts.fixtures, ucmd) 
+  })
+}

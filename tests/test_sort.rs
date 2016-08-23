@@ -1,10 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "sort";
 
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[test]
 fn test_numeric_floats_and_ints() {
@@ -63,7 +59,7 @@ fn test_version() {
 
 #[test]
 fn test_multiple_files() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-n")
         .arg("multiple_files1.txt")
         .arg("multiple_files2.txt")
@@ -72,7 +68,7 @@ fn test_multiple_files() {
 
 #[test]
 fn test_merge_interleaved() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-m")
         .arg("merge_ints_interleaved_1.txt")
         .arg("merge_ints_interleaved_2.txt")
@@ -82,7 +78,7 @@ fn test_merge_interleaved() {
 
 #[test]
 fn test_merge_unique() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-m")
         .arg("--unique")
         .arg("merge_ints_interleaved_1.txt")
@@ -96,7 +92,7 @@ fn test_merge_unique() {
 
 #[test]
 fn test_merge_reversed() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-m")
         .arg("--reverse")
         .arg("merge_ints_reversed_1.txt")
@@ -107,18 +103,18 @@ fn test_merge_reversed() {
 
 #[test]
 fn test_check() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-c")
         .arg("check_fail.txt")
         .fails().stdout_is("sort: disorder in line 4\n");
 
-    new_ucmd()
+    new_ucmd!()
         .arg("-c")
         .arg("multiple_files.expected")
         .succeeds().stdout_is("");
 }
 
 fn test_helper(file_name: &str, args: &str) {
-    new_ucmd().arg(args).arg(format!("{}{}", file_name, ".txt"))
+    new_ucmd!().arg(args).arg(format!("{}{}", file_name, ".txt"))
         .succeeds().stdout_is_fixture(format!("{}{}", file_name, ".expected"));
 }

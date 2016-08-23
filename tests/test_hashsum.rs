@@ -9,28 +9,21 @@ macro_rules! test_digest {
 
     mod $t {
         use::common::util::*;
-        static UTIL_NAME: &'static str = "hashsum";
-        fn at_and_ucmd() -> (AtPath, UCommand) {
-            let ts = TestScenario::new(UTIL_NAME);
-            let ucmd = ts.ucmd();
-            (ts.fixtures, ucmd)
-        }
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static EXPECTED_FILE: &'static str = concat!(stringify!($t), ".expected");
 
         #[test]
         fn test_single_file() {
-            let (at, mut ucmd) = at_and_ucmd();
-            assert_eq!(at.read(EXPECTED_FILE),
-                       get_hash!(ucmd.arg(DIGEST_ARG).arg("input.txt").succeeds().no_stderr().stdout));
+            let ts = TestScenario::new("hashsum");
+            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg("input.txt").succeeds().no_stderr().stdout));
         }
 
         #[test]
         fn test_stdin() {
-            let (at, mut ucmd) = at_and_ucmd();
-            let input = at.read("input.txt");
-            assert_eq!(at.read(EXPECTED_FILE),
-                       get_hash!(ucmd.arg(DIGEST_ARG).pipe_in(input).succeeds().no_stderr().stdout));
+            let ts = TestScenario::new("hashsum");
+            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).pipe_in_fixture("input.txt").succeeds().no_stderr().stdout));
         }
     }
     )*)

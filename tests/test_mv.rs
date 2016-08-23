@@ -4,16 +4,10 @@ extern crate filetime;
 use self::filetime::*;
 use common::util::*;
 
-static UTIL_NAME: &'static str = "mv";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
 
 #[test]
 fn test_mv_rename_dir() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir1 = "test_mv_rename_dir";
     let dir2 = "test_mv_rename_dir2";
 
@@ -26,7 +20,7 @@ fn test_mv_rename_dir() {
 
 #[test]
 fn test_mv_rename_file() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_mv_rename_file";
     let file2 = "test_mv_rename_file2";
 
@@ -38,7 +32,7 @@ fn test_mv_rename_file() {
 
 #[test]
 fn test_mv_move_file_into_dir() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_mv_move_file_into_dir_dir";
     let file = "test_mv_move_file_into_dir_file";
 
@@ -52,7 +46,7 @@ fn test_mv_move_file_into_dir() {
 
 #[test]
 fn test_mv_strip_slashes() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir = "test_mv_strip_slashes_dir";
     let file = "test_mv_strip_slashes_file";
@@ -73,7 +67,7 @@ fn test_mv_strip_slashes() {
 
 #[test]
 fn test_mv_multiple_files() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let target_dir = "test_mv_multiple_files_dir";
     let file_a = "test_mv_multiple_file_a";
     let file_b = "test_mv_multiple_file_b";
@@ -90,7 +84,7 @@ fn test_mv_multiple_files() {
 
 #[test]
 fn test_mv_multiple_folders() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let target_dir = "test_mv_multiple_dirs_dir";
     let dir_a = "test_mv_multiple_dir_a";
     let dir_b = "test_mv_multiple_dir_b";
@@ -107,7 +101,7 @@ fn test_mv_multiple_folders() {
 
 #[test]
 fn test_mv_interactive() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file_a = "test_mv_interactive_file_a";
     let file_b = "test_mv_interactive_file_b";
@@ -130,7 +124,7 @@ fn test_mv_interactive() {
 
 #[test]
 fn test_mv_no_clobber() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_no_clobber_file_a";
     let file_b = "test_mv_no_clobber_file_b";
 
@@ -145,7 +139,7 @@ fn test_mv_no_clobber() {
 
 #[test]
 fn test_mv_replace_file() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_replace_file_a";
     let file_b = "test_mv_replace_file_b";
 
@@ -160,7 +154,7 @@ fn test_mv_replace_file() {
 
 #[test]
 fn test_mv_force_replace_file() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_force_replace_file_a";
     let file_b = "test_mv_force_replace_file_b";
 
@@ -175,7 +169,7 @@ fn test_mv_force_replace_file() {
 
 #[test]
 fn test_mv_simple_backup() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_simple_backup_file_a";
     let file_b = "test_mv_simple_backup_file_b";
 
@@ -190,7 +184,7 @@ fn test_mv_simple_backup() {
 
 #[test]
 fn test_mv_custom_backup_suffix() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_custom_backup_suffix_file_a";
     let file_b = "test_mv_custom_backup_suffix_file_b";
     let suffix = "super-suffix-of-the-century";
@@ -210,7 +204,7 @@ fn test_mv_custom_backup_suffix() {
 
 #[test]
 fn test_mv_custom_backup_suffix_via_env() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_custom_backup_suffix_file_a";
     let file_b = "test_mv_custom_backup_suffix_file_b";
     let suffix = "super-suffix-of-the-century";
@@ -229,7 +223,7 @@ fn test_mv_custom_backup_suffix_via_env() {
 
 #[test]
 fn test_mv_backup_numbering() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_backup_numbering_file_a";
     let file_b = "test_mv_backup_numbering_file_b";
 
@@ -244,7 +238,7 @@ fn test_mv_backup_numbering() {
 
 #[test]
 fn test_mv_existing_backup() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_existing_backup_file_a";
     let file_b = "test_mv_existing_backup_file_b";
     let file_b_backup = "test_mv_existing_backup_file_b.~1~";
@@ -263,7 +257,7 @@ fn test_mv_existing_backup() {
 
 #[test]
 fn test_mv_update_option() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file_a = "test_mv_update_option_file_a";
     let file_b = "test_mv_update_option_file_b";
@@ -289,7 +283,7 @@ fn test_mv_update_option() {
 
 #[test]
 fn test_mv_target_dir() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_mv_target_dir_dir";
     let file_a = "test_mv_target_dir_file_a";
     let file_b = "test_mv_target_dir_file_b";
@@ -307,7 +301,7 @@ fn test_mv_target_dir() {
 
 #[test]
 fn test_mv_overwrite_dir() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_overwrite_dir_a";
     let dir_b = "test_mv_overwrite_dir_b";
 
@@ -321,7 +315,7 @@ fn test_mv_overwrite_dir() {
 
 #[test]
 fn test_mv_overwrite_nonempty_dir() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_overwrite_nonempty_dir_a";
     let dir_b = "test_mv_overwrite_nonempty_dir_b";
     let dummy = "test_mv_overwrite_nonempty_dir_b/file";
@@ -343,7 +337,7 @@ fn test_mv_overwrite_nonempty_dir() {
 
 #[test]
 fn test_mv_backup_dir() {
-    let (at, mut ucmd) = at_and_ucmd();
+    let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_backup_dir_dir_a";
     let dir_b = "test_mv_backup_dir_dir_b";
 
@@ -362,7 +356,7 @@ fn test_mv_backup_dir() {
 
 #[test]
 fn test_mv_errors() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir = "test_mv_errors_dir";
     let file_a = "test_mv_errors_file_a";
@@ -392,7 +386,7 @@ fn test_mv_errors() {
 
 #[test]
 fn test_mv_verbose() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir = "test_mv_verbose_dir";
     let file_a = "test_mv_verbose_file_a";

@@ -1,13 +1,9 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "chgrp";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[test]
 fn test_invalid_option() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-w")
         .arg("/")
         .fails();
@@ -17,7 +13,7 @@ static DIR: &'static str = "/tmp";
 
 #[test]
 fn test_invalid_group() {
-    new_ucmd()
+    new_ucmd!()
         .arg("nosuchgroup")
         .arg("/")
         .fails()
@@ -26,7 +22,7 @@ fn test_invalid_group() {
 
 #[test]
 fn test_1() {
-    new_ucmd()
+    new_ucmd!()
         .arg("bin")
         .arg(DIR)
         .fails()
@@ -36,7 +32,7 @@ fn test_1() {
 #[test]
 fn test_fail_silently() {
     for opt in &["-f", "--silent", "--quiet"] {
-        new_ucmd()
+        new_ucmd!()
             .arg(opt)
             .arg("bin")
             .arg(DIR)
@@ -47,7 +43,7 @@ fn test_fail_silently() {
 
 #[test]
 fn test_preserve_root() {
-    new_ucmd()
+    new_ucmd!()
         .arg("--preserve-root")
         .arg("-R")
         .arg("bin").arg("/")
@@ -58,7 +54,7 @@ fn test_preserve_root() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_reference() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-v")
         .arg("--reference=/etc/passwd")
         .arg("/etc")
@@ -70,7 +66,7 @@ fn test_reference() {
 #[test]
 #[cfg(target_os = "macos")]
 fn test_reference() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-v")
         .arg("--reference=/etc/passwd")
         .arg("/etc")
@@ -80,7 +76,7 @@ fn test_reference() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_big_p() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-RP")
         .arg("bin")
         .arg("/proc/self/cwd")
@@ -91,7 +87,7 @@ fn test_big_p() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_big_h() {
-    assert!(new_ucmd()
+    assert!(new_ucmd!()
         .arg("-RH")
         .arg("bin")
         .arg("/proc/self/fd")

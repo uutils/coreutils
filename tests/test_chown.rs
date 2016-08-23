@@ -3,10 +3,6 @@ use common::util::*;
 extern crate uu_chown;
 pub use self::uu_chown::*;
 
-static UTIL_NAME: &'static str = "chown";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[cfg(test)]
 mod test_passgrp {
@@ -49,7 +45,7 @@ mod test_passgrp {
 
 #[test]
 fn test_invalid_option() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-w").arg("-q").arg("/")
         .fails();
 }

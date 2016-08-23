@@ -1,9 +1,5 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "pinky";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 use ::std::fs::File;
 use ::std::io::BufReader;
@@ -35,12 +31,12 @@ fn test_capitalize() {
 fn test_long_format() {
     PASSWD.with(|v| {
         let gecos = v[4].replace("&", &v[4].capitalize());
-        new_ucmd()
+        new_ucmd!()
             .arg("-l").arg("root")
             .run()
             .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n", v[0], gecos, v[5], v[6]));
 
-        new_ucmd()
+        new_ucmd!()
             .arg("-lb")
             .arg("root")
             .run()
@@ -51,7 +47,7 @@ fn test_long_format() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_short_format() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name!());
 
     let args = ["-i"];
     scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
@@ -62,5 +58,5 @@ fn test_short_format() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
-    TestScenario::new(UTIL_NAME).cmd_keepenv(UTIL_NAME).args(args).run().stdout
+    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).args(args).run().stdout
 }

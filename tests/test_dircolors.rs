@@ -3,10 +3,6 @@ use self::uu_dircolors::{StrUtils, guess_syntax, OutputFmt};
 
 use common::util::*;
 
-static UTIL_NAME: &'static str = "dircolors";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[test]
 fn test_shell_syntax() {
@@ -60,7 +56,7 @@ fn test_keywords() {
 
 #[test]
 fn test_internal_db() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-p")
         .run()
         .stdout_is_fixture("internal.expected");
@@ -68,36 +64,36 @@ fn test_internal_db() {
 
 #[test]
 fn test_bash_default() {
-    new_ucmd().env("TERM", "screen").arg("-b").run().stdout_is_fixture("bash_def.expected");
+    new_ucmd!().env("TERM", "screen").arg("-b").run().stdout_is_fixture("bash_def.expected");
 }
 
 #[test]
 fn test_csh_default() {
-    new_ucmd().env("TERM", "screen").arg("-c").run().stdout_is_fixture("csh_def.expected");
+    new_ucmd!().env("TERM", "screen").arg("-c").run().stdout_is_fixture("csh_def.expected");
 }
 
 #[test]
 fn test_no_env() {
     // no SHELL and TERM
-    new_ucmd()
+    new_ucmd!()
         .fails();
 }
 
 #[test]
 fn test_exclusive_option() {
-    new_ucmd()
+    new_ucmd!()
         .arg("-cp")
         .fails();
 }
 
 fn test_helper(file_name: &str, term: &str) {
-    new_ucmd()
+    new_ucmd!()
         .env("TERM", term)
         .arg("-c")
         .arg(format!("{}.txt", file_name))
         .run().stdout_is_fixture(format!("{}.csh.expected", file_name));
 
-    new_ucmd()
+    new_ucmd!()
         .env("TERM", term)
         .arg("-b")
         .arg(format!("{}.txt", file_name))
