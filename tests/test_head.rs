@@ -1,9 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "head";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 static INPUT: &'static str = "lorem_ipsum.txt";
 

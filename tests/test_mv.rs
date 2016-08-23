@@ -4,12 +4,7 @@ extern crate filetime;
 use self::filetime::*;
 use common::util::*;
 
-static UTIL_NAME: &'static str = "mv";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 #[test]
 fn test_mv_rename_dir() {
@@ -52,7 +47,7 @@ fn test_mv_move_file_into_dir() {
 
 #[test]
 fn test_mv_strip_slashes() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let dir = "test_mv_strip_slashes_dir";
     let file = "test_mv_strip_slashes_file";
@@ -107,7 +102,7 @@ fn test_mv_multiple_folders() {
 
 #[test]
 fn test_mv_interactive() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let file_a = "test_mv_interactive_file_a";
     let file_b = "test_mv_interactive_file_b";
@@ -263,7 +258,7 @@ fn test_mv_existing_backup() {
 
 #[test]
 fn test_mv_update_option() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let file_a = "test_mv_update_option_file_a";
     let file_b = "test_mv_update_option_file_b";
@@ -362,7 +357,7 @@ fn test_mv_backup_dir() {
 
 #[test]
 fn test_mv_errors() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let dir = "test_mv_errors_dir";
     let file_a = "test_mv_errors_file_a";
@@ -392,7 +387,7 @@ fn test_mv_errors() {
 
 #[test]
 fn test_mv_verbose() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let dir = "test_mv_verbose_dir";
     let file_a = "test_mv_verbose_file_a";

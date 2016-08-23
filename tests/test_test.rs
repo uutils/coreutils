@@ -9,10 +9,7 @@
 
 use common::util::*;
 
-static UTIL_NAME: &'static str = "test";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[test]
 fn test_op_prec_and_or_1() {

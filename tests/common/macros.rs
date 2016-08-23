@@ -46,3 +46,37 @@ macro_rules! path_concat {
         pb.to_str().unwrap().to_owned()
     }};
 }
+
+#[macro_export]
+macro_rules! utility_test {
+    () => (
+        fn util_name<'a>() -> &'a str {
+            module_path!().split("_").nth(1).expect("no test name")
+        }
+        #[allow(dead_code)]
+        fn at_and_ucmd() -> (AtPath, UCommand) {
+            let ts = TestScenario::new(util_name());
+            let ucmd = ts.ucmd();
+            (ts.fixtures, ucmd)
+        }
+        #[allow(dead_code)]
+        fn new_ucmd() -> UCommand {
+            TestScenario::new(util_name()).ucmd()
+        }
+    );
+    ($subcommand: expr) => (
+        fn util_name<'a>() -> &'a str {
+            $subcommand
+        }
+        #[allow(dead_code)]
+        fn at_and_ucmd() -> (AtPath, UCommand) {
+            let ts = TestScenario::new(util_name());
+            let ucmd = ts.ucmd();
+            (ts.fixtures, ucmd)
+        }
+        #[allow(dead_code)]
+        fn new_ucmd() -> UCommand {
+            TestScenario::new(util_name()).ucmd()
+        }
+    );
+}

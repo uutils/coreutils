@@ -22,10 +22,7 @@ const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))
 
 const NUM_TESTS: usize = 100;
 
-static UTIL_NAME: &'static str = "factor";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[test]
 fn test_random() {

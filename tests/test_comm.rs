@@ -1,9 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "comm";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[test]
 fn ab_no_args() {

@@ -9,12 +9,7 @@ macro_rules! test_digest {
 
     mod $t {
         use::common::util::*;
-        static UTIL_NAME: &'static str = "hashsum";
-        fn at_and_ucmd() -> (AtPath, UCommand) {
-            let ts = TestScenario::new(UTIL_NAME);
-            let ucmd = ts.ucmd();
-            (ts.fixtures, ucmd)
-        }
+        utility_test!("hashsum");
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static EXPECTED_FILE: &'static str = concat!(stringify!($t), ".expected");
 

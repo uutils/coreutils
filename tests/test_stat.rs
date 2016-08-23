@@ -3,10 +3,7 @@ use common::util::*;
 extern crate uu_stat;
 pub use self::uu_stat::*;
 
-static UTIL_NAME: &'static str = "stat";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[cfg(test)]
 mod test_fsext {
@@ -239,6 +236,6 @@ fn test_printf() {
 fn expected_result(args: &[&str]) -> String {
     use std::process::Command;
 
-    let output = Command::new(UTIL_NAME).args(args).output().unwrap();
+    let output = Command::new(util_name()).args(args).output().unwrap();
     String::from_utf8_lossy(&output.stdout).into_owned()
 }

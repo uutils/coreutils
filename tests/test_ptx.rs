@@ -1,9 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "ptx";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[test]
 fn gnu_ext_disabled_roff_no_ref() {

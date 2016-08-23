@@ -1,9 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "ls";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[test]
 fn test_ls_ls() {

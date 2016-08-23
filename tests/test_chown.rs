@@ -3,10 +3,7 @@ use common::util::*;
 extern crate uu_chown;
 pub use self::uu_chown::*;
 
-static UTIL_NAME: &'static str = "chown";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 #[cfg(test)]
 mod test_passgrp {
