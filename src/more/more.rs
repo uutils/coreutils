@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::{stdout, stdin, stderr, Write, Read, Result};
+use std::io::{stdout, Write, Read};
 use std::fs::File;
 
 extern crate nix;
@@ -75,12 +75,11 @@ fn help(usage: &str) {
 }
 
 fn more(matches: getopts::Matches) {
-    let mut files = matches.free;
+    let files = matches.free;
     let mut f = File::open(files.first().unwrap()).unwrap();
     let mut buffer = [0; 1024];
 
-    let saved_term = termios::tcgetattr(0).unwrap();
-    let mut term = saved_term;
+    let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
     term.c_lflag.remove(termios::ICANON);
     // Disable local echo
@@ -92,8 +91,7 @@ fn more(matches: getopts::Matches) {
         if sz == 0 { break; }
         stdout().write(&buffer[0..sz]).unwrap();
         for byte in std::io::stdin().bytes() {
-            let byte = byte.unwrap();
-            match byte {
+            match byte.unwrap() {
                 b' ' => break,
                 b'q' | 27 => {
                     end = true;
