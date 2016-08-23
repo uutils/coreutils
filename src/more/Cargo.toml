@@ -1,0 +1,18 @@
+[package]
+name = "more"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_more"
+path = "more.rs"
+
+[dependencies]
+getopts = "*"
+libc = "*"
+nix = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "more"
+path = "main.rs"

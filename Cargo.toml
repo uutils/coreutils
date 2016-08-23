@@ -21,6 +21,7 @@ unix = [
   "logname",
   "mkfifo",
   "mknod",
+  "more",
   "mv",
   "nice",
   "nohup",
@@ -144,6 +145,7 @@ mkdir    = { optional=true, path="src/mkdir" }
 mkfifo   = { optional=true, path="src/mkfifo" }
 mknod    = { optional=true, path="src/mknod" }
 mktemp   = { optional=true, path="src/mktemp" }
+more     = { optional=true, path="src/more" }
 mv       = { optional=true, path="src/mv" }
 nice     = { optional=true, path="src/nice" }
 nl       = { optional=true, path="src/nl" }

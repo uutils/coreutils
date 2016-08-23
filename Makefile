@@ -66,6 +66,7 @@ PROGS       := \
   ls \
   mkdir \
   mktemp \
+  more \
   nl \
   nproc \
   od \
