@@ -31,28 +31,9 @@ impl InputOffset {
         }
     }
 
-    /// set `self.radix` to the value provided by the --address-radix commandline option
-    pub fn parse_radix_from_commandline(&mut self, radix_str: Option<String>) -> Result<(), &'static str> {
-        match radix_str {
-            None => self.radix = Radix::Octal,
-            Some(s) => {
-                let st = s.into_bytes();
-                if st.len() != 1 {
-                    return Err("Radix must be one of [d, o, n, x]\n")
-                } else {
-                    let radix: char = *(st.get(0)
-                                          .expect("byte string of length 1 lacks a 0th elem")) as char;
-                    match radix {
-                        'd' => self.radix = Radix::Decimal,
-                        'x' => self.radix = Radix::Hexadecimal,
-                        'o' => self.radix = Radix::Octal,
-                        'n' => self.radix = Radix::NoPrefix,
-                        _ => return Err("Radix must be one of [d, o, n, x]\n")
-                    }
-                }
-            }
-        }
-        Ok(())
+    #[cfg(test)]
+    fn set_radix(&mut self, radix: Radix) {
+        self.radix = radix;
     }
 
     /// returns a string with the current byte offset
@@ -86,20 +67,20 @@ fn test_input_offset() {
     assert_eq!("000014", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialisation
-    sut.parse_radix_from_commandline(Some("d".to_string())).unwrap();
+    sut.set_radix(Radix::Decimal);
     assert_eq!("0000020", &sut.format_byte_offset());
 
-    sut.parse_radix_from_commandline(Some("x".to_string())).unwrap();
+    sut.set_radix(Radix::Hexadecimal);
     assert_eq!("000014", &sut.format_byte_offset());
 
-    sut.parse_radix_from_commandline(Some("o".to_string())).unwrap();
+    sut.set_radix(Radix::Octal);
     assert_eq!("0000024", &sut.format_byte_offset());
 
-    sut.parse_radix_from_commandline(Some("n".to_string())).unwrap();
+    sut.set_radix(Radix::NoPrefix);
     assert_eq!("", &sut.format_byte_offset());
 
     sut.increase_position(10);
-    sut.parse_radix_from_commandline(None).unwrap();
+    sut.set_radix(Radix::Octal);
     assert_eq!("0000036", &sut.format_byte_offset());
 }
 
@@ -111,19 +92,19 @@ fn test_input_offset_with_label() {
     assert_eq!("000014 (00001E)", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialisation
-    sut.parse_radix_from_commandline(Some("d".to_string())).unwrap();
+    sut.set_radix(Radix::Decimal);
     assert_eq!("0000020 (0000030)", &sut.format_byte_offset());
 
-    sut.parse_radix_from_commandline(Some("x".to_string())).unwrap();
+    sut.set_radix(Radix::Hexadecimal);
     assert_eq!("000014 (00001E)", &sut.format_byte_offset());
 
-    sut.parse_radix_from_commandline(Some("o".to_string())).unwrap();
+    sut.set_radix(Radix::Octal);
     assert_eq!("0000024 (0000036)", &sut.format_byte_offset());
 
-    sut.parse_radix_from_commandline(Some("n".to_string())).unwrap();
+    sut.set_radix(Radix::NoPrefix);
     assert_eq!("(0000036)", &sut.format_byte_offset());
 
     sut.increase_position(10);
-    sut.parse_radix_from_commandline(None).unwrap();
+    sut.set_radix(Radix::Octal);
     assert_eq!("0000036 (0000050)", &sut.format_byte_offset());
 }

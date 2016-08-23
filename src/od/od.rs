@@ -40,7 +40,7 @@ use partialreader::*;
 use peekreader::*;
 use formatteriteminfo::*;
 use parse_nrofbytes::parse_number_of_bytes;
-use parse_formats::parse_format_flags;
+use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
 use parse_inputs::{parse_inputs, CommandLineInputs};
 use inputoffset::{InputOffset, Radix};
@@ -94,9 +94,7 @@ Any type specification can have a "z" suffic, which will add a ASCII dump at
 If an error occurred, a diagnostic message will be printed to stderr, and the
 exitcode will be non-zero."#;
 
-/// parses and validates commandline parameters, prepares data structures,
-/// opens the input and calls `odfunc` to process the input.
-pub fn uumain(args: Vec<String>) -> i32 {
+fn create_getopts_options() -> getopts::Options {
     let mut opts = getopts::Options::new();
 
     opts.optopt("A", "address-radix",
@@ -143,6 +141,133 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "version", "output version information and exit.");
     opts.optflag("", "traditional", "compatibility mode with one input, offset and label.");
 
+    opts
+}
+
+struct OdOptions {
+    byte_order: ByteOrder,
+    skip_bytes : usize,
+    read_bytes : Option<usize>,
+    label: Option<usize>,
+    input_strings: Vec<String>,
+    formats: Vec<ParsedFormatterItemInfo>,
+    line_bytes: usize,
+    output_duplicates: bool,
+    radix: Radix,
+}
+
+impl OdOptions {
+    fn new(matches: getopts::Matches, args: Vec<String>) -> Result<OdOptions, String> {
+        let byte_order = match matches.opt_str("endian").as_ref().map(String::as_ref) {
+            None => { ByteOrder::Native },
+            Some("little") => { ByteOrder::Little },
+            Some("big") => { ByteOrder::Big },
+            Some(s) => {
+                return Err(format!("Invalid argument --endian={}", s));
+            }
+        };
+
+        let mut skip_bytes = match matches.opt_default("skip-bytes", "0") {
+            None => 0,
+            Some(s) => {
+                match parse_number_of_bytes(&s) {
+                    Ok(i) => { i }
+                    Err(_) => {
+                        return Err(format!("Invalid argument --skip-bytes={}", s));
+                    }
+                }
+            }
+        };
+
+        let mut label: Option<usize> = None;
+
+        let input_strings = match parse_inputs(&matches) {
+            Ok(CommandLineInputs::FileNames(v)) => v,
+            Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
+                skip_bytes = s;
+                label = l;
+                vec!{f}
+            },
+            Err(e) => {
+                return Err(format!("Invalid inputs: {}", e));
+            }
+        };
+
+        let formats = match parse_format_flags(&args) {
+            Ok(f) => f,
+            Err(e) => {
+                return Err(format!("{}", e));
+            }
+        };
+
+        let mut line_bytes = match matches.opt_default("w", "32") {
+            None => 16,
+            Some(s) => {
+                match s.parse::<usize>() {
+                    Ok(i) => { i }
+                    Err(_) => { 2 }
+                }
+            }
+        };
+        let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
+        if line_bytes % min_bytes != 0 {
+            show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
+            line_bytes = min_bytes;
+        }
+
+        let output_duplicates = matches.opt_present("v");
+
+        let read_bytes = match matches.opt_str("read-bytes") {
+            None => None,
+            Some(s) => {
+                match  parse_number_of_bytes(&s) {
+                    Ok(i) => { Some(i) }
+                    Err(_) => {
+                        return Err(format!("Invalid argument --read-bytes={}", s));
+                    }
+                }
+            }
+        };
+
+        let radix = match matches.opt_str("A") {
+            None => Radix::Octal,
+            Some(s) => {
+                let st = s.into_bytes();
+                if st.len() != 1 {
+                    return Err(format!("Radix must be one of [d, o, n, x]"))
+                } else {
+                    let radix: char = *(st.get(0)
+                                          .expect("byte string of length 1 lacks a 0th elem")) as char;
+                    match radix {
+                        'd' => Radix::Decimal,
+                        'x' => Radix::Hexadecimal,
+                        'o' => Radix::Octal,
+                        'n' => Radix::NoPrefix,
+                        _ => return Err(format!("Radix must be one of [d, o, n, x]"))
+                    }
+                }
+            }
+        };
+
+        Ok(OdOptions {
+            byte_order: byte_order,
+            skip_bytes: skip_bytes,
+            read_bytes: read_bytes,
+            label: label,
+            input_strings: input_strings,
+            formats: formats,
+            line_bytes: line_bytes,
+            output_duplicates: output_duplicates,
+            radix: radix,
+        })
+    }
+}
+
+/// parses and validates commandline parameters, prepares data structures,
+/// opens the input and calls `odfunc` to process the input.
+pub fn uumain(args: Vec<String>) -> i32 {
+    let opts = create_getopts_options();
+
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
@@ -160,92 +285,24 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let byte_order = match matches.opt_str("endian").as_ref().map(String::as_ref) {
-        None => { ByteOrder::Native },
-        Some("little") => { ByteOrder::Little },
-        Some("big") => { ByteOrder::Big },
-        Some(s) => {
-            disp_err!("Invalid argument --endian={}", s);
+    let od_options = match OdOptions::new(matches, args) {
+        Err(s) => {
+            disp_err!("{}", s);
             return 1;
-        }
-    };
-
-    let mut skip_bytes = match matches.opt_default("skip-bytes", "0") {
-        None => 0,
-        Some(s) => {
-            match parse_number_of_bytes(&s) {
-                Ok(i) => { i }
-                Err(_) => {
-                    disp_err!("Invalid argument --skip-bytes={}", s);
-                    return 1;
-                }
-            }
-        }
-    };
-
-    let mut label: Option<usize> = None;
-
-    let input_strings = match parse_inputs(&matches) {
-        Ok(CommandLineInputs::FileNames(v)) => v,
-        Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
-            skip_bytes = s;
-            label = l;
-            vec!{f}
         },
-        Err(e) => {
-            disp_err!("Invalid inputs: {}", e);
-            return 1;
-        }
+        Ok(o) => o,
     };
 
-    let formats = match parse_format_flags(&args) {
-        Ok(f) => f,
-        Err(e) => {
-            disp_err!("{}", e);
-            return 1;
-        }
-    };
+    let mut input_offset = InputOffset::new(od_options.radix, od_options.skip_bytes,
+        od_options.label);
 
-    let mut line_bytes = match matches.opt_default("w", "32") {
-        None => 16,
-        Some(s) => {
-            match s.parse::<usize>() {
-                Ok(i) => { i }
-                Err(_) => { 2 }
-            }
-        }
-    };
-    let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
-    if line_bytes % min_bytes != 0 {
-        show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
-        line_bytes = min_bytes;
-    }
+    let mut input = open_input_peek_reader(&od_options.input_strings,
+        od_options.skip_bytes, od_options.read_bytes);
+    let mut input_decoder = InputDecoder::new(&mut input, od_options.line_bytes,
+        PEEK_BUFFER_SIZE, od_options.byte_order);
 
-    let output_duplicates = matches.opt_present("v");
-
-    let read_bytes = match matches.opt_str("read-bytes") {
-        None => None,
-        Some(s) => {
-            match  parse_number_of_bytes(&s) {
-                Ok(i) => { Some(i) }
-                Err(_) => {
-                    disp_err!("Invalid argument --read-bytes={}", s);
-                    return 1;
-                }
-            }
-        }
-    };
-
-    let mut input_offset = InputOffset::new(Radix::Octal, skip_bytes, label);
-    if let Err(e) = input_offset.parse_radix_from_commandline(matches.opt_str("A")) {
-        disp_err!("Invalid -A/--address-radix\n{}", e);
-        return 1;
-    }
-
-    let mut input = open_input_peek_reader(&input_strings, skip_bytes, read_bytes);
-    let mut input_decoder = InputDecoder::new(&mut input, line_bytes, PEEK_BUFFER_SIZE, byte_order);
-
-    let output_info = OutputInfo::new(line_bytes, &formats[..], output_duplicates);
+    let output_info = OutputInfo::new(od_options.line_bytes, &od_options.formats[..],
+        od_options.output_duplicates);
 
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
