@@ -181,6 +181,7 @@ pub fn get_root_path() -> &'static str {
 
 /// Object-oriented path struct that represents and operates on
 /// paths relative to the directory it was constructed for.
+#[derive(Clone)]
 pub struct AtPath {
     pub subdir: PathBuf,
 }

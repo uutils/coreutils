@@ -61,8 +61,6 @@ macro_rules! new_ucmd {
 macro_rules! at_and_ucmd {
   () => ({
     let ts = TestScenario::new(util_name!());
-    #[allow(unused_mut)]
-    let mut ucmd = ts.ucmd();
-    (ts.fixtures, ucmd) 
+    (ts.fixtures.clone(), ts.ucmd())
   })
 }
