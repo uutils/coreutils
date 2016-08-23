@@ -1,11 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "rm";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 #[test]
 fn test_rm_one_file() {
@@ -36,7 +31,7 @@ fn test_rm_multiple_files() {
 
 #[test]
 fn test_rm_interactive() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
 
     let file_a = "test_rm_interactive_file_a";

@@ -5,10 +5,7 @@ use std::io::Write;
 use std::fs::File;
 use std::fs::remove_file;
 
-static UTIL_NAME: &'static str = "od";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &'static str = "0000000    061141  062143  063145  064147  065151  066153  067155  070157\n0000020    071161  072163  073165  074167  075171  000012                \n0000033\n";

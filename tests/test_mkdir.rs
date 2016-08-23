@@ -1,9 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "mkdir";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
+utility_test!();
 
 static TEST_DIR1: &'static str = "mkdir_test1";
 static TEST_DIR2: &'static str = "mkdir_test2";
@@ -18,7 +15,7 @@ fn test_mkdir_mkdir() {
 
 #[test]
 fn test_mkdir_dup_dir() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     scene.ucmd().arg(TEST_DIR2).succeeds();
     scene.ucmd().arg(TEST_DIR2).fails();
 }

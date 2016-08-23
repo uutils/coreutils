@@ -1,11 +1,6 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "ln";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 #[test]
 fn test_symlink_existing_file() {
@@ -105,7 +100,7 @@ fn test_symlink_overwrite_force() {
 
 #[test]
 fn test_symlink_interactive() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let file = "test_symlink_interactive_file";
     let link = "test_symlink_interactive_file_link";
@@ -314,7 +309,7 @@ fn test_symlink_errors() {
 
 #[test]
 fn test_symlink_verbose() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
     let file_a = "test_symlink_verbose_file_a";
     let file_b = "test_symlink_verbose_file_b";

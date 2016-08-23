@@ -1,10 +1,7 @@
 use common::util::*;
 
-static UTIL_NAME: &'static str = "who";
+utility_test!();
 
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
 
 #[cfg(target_os = "linux")]
 #[test]
@@ -72,5 +69,5 @@ fn test_all() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(arg: &str) -> String {
-    TestScenario::new(UTIL_NAME).cmd_keepenv(UTIL_NAME).args(&[arg]).run().stdout
+    TestScenario::new(util_name()).cmd_keepenv(util_name()).args(&[arg]).run().stdout
 }

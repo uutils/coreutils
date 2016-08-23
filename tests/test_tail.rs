@@ -5,15 +5,7 @@ use std::char::from_digit;
 use std::io::Write;
 use self::uu_tail::parse_size;
 
-static UTIL_NAME: &'static str = "tail";
-fn new_ucmd() -> UCommand {
-    TestScenario::new(UTIL_NAME).ucmd()
-}
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
 static FOOBAR_2_TXT: &'static str = "foobar2.txt";

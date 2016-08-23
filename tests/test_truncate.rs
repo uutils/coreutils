@@ -1,12 +1,7 @@
 use common::util::*;
 use std::io::{Seek, SeekFrom, Write};
 
-static UTIL_NAME: &'static str = "truncate";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 static TFILE1: &'static str = "truncate_test_1";
 static TFILE2: &'static str = "truncate_test_2";

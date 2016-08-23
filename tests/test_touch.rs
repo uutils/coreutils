@@ -4,12 +4,7 @@ extern crate time;
 use common::util::*;
 use self::filetime::FileTime;
 
-static UTIL_NAME: &'static str = "touch";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);

@@ -1,10 +1,5 @@
 use common::util::*;
-static UTIL_NAME: &'static str = "cp";
-fn at_and_ucmd() -> (AtPath, UCommand) {
-    let ts = TestScenario::new(UTIL_NAME);
-    let ucmd = ts.ucmd();
-    (ts.fixtures, ucmd)
-}
+utility_test!();
 
 static TEST_HELLO_WORLD_SOURCE: &'static str = "hello_world.txt";
 static TEST_HELLO_WORLD_DEST: &'static str = "copy_of_hello_world.txt";
@@ -44,7 +39,7 @@ fn test_cp_with_dirs_t() {
 
 #[test]
 fn test_cp_with_dirs() {
-    let scene = TestScenario::new(UTIL_NAME);
+    let scene = TestScenario::new(util_name());
     let at = &scene.fixtures;
 
     //using -t option
