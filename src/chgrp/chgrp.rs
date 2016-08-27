@@ -12,6 +12,7 @@
 extern crate uucore;
 use uucore::libc::{self, gid_t, lchown};
 pub use uucore::entries;
+use uucore::fs::resolve_relative_path;
 
 extern crate walkdir;
 use walkdir::WalkDir;
@@ -194,12 +195,6 @@ impl Chgrper {
     fn exec(&self) -> i32 {
         let mut ret = 0;
         for f in &self.files {
-            if f == "/" && self.preserve_root && self.recursive {
-                show_info!("it is dangerous to operate recursively on '/'");
-                show_info!("use --no-preserve-root to override this failsafe");
-                ret = 1;
-                continue;
-            }
             ret |= self.traverse(f);
         }
         ret
@@ -229,6 +224,28 @@ impl Chgrper {
             Some(m) => m,
             _ => return 1,
         };
+
+        // Prohibit only if:
+        // (--preserve-root and -R present) &&
+        // (
+        //     (argument is not symlink && resolved to be '/') ||
+        //     (argument is symlink && should follow argument && resolved to be '/')
+        // )
+        if self.recursive && self.preserve_root {
+            let may_exist = if follow_arg {
+                path.canonicalize().ok()
+            } else {
+                Some(resolve_relative_path(path).into_owned())
+            };
+
+            if let Some(p) = may_exist {
+                if p.parent().is_none() {
+                    show_info!("it is dangerous to operate recursively on '/'");
+                    show_info!("use --no-preserve-root to override this failsafe");
+                    return 1;
+                }
+            }
+        }
 
         let ret = self.wrap_chgrp(path, &meta, follow_arg);
 

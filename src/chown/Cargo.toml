@@ -14,7 +14,7 @@ walkdir = "0.1"
 [dependencies.uucore]
 path = "../uucore"
 default-features = false
-features = ["entries"]
+features = ["entries", "fs"]
 
 [dependencies.clippy]
 version = "*"

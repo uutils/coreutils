@@ -13,7 +13,7 @@ walkdir = "*"
 [dependencies.uucore]
 path = "../uucore"
 default-features = false
-features = ["entries"]
+features = ["entries", "fs"]
 
 [[bin]]
 name = "chgrp"

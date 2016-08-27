@@ -15,6 +15,7 @@
 extern crate uucore;
 use uucore::libc::{self, uid_t, gid_t, lchown};
 pub use uucore::entries::{self, Locate, Passwd, Group};
+use uucore::fs::resolve_relative_path;
 
 extern crate walkdir;
 use walkdir::WalkDir;
@@ -257,12 +258,6 @@ impl Chowner {
     fn exec(&self) -> i32 {
         let mut ret = 0;
         for f in &self.files {
-            if f == "/" && self.preserve_root && self.recursive {
-                show_info!("it is dangerous to operate recursively on '/'");
-                show_info!("use --no-preserve-root to override this failsafe");
-                ret = 1;
-                continue;
-            }
             ret |= self.traverse(f);
         }
         ret
@@ -293,6 +288,28 @@ impl Chowner {
             _ => return 1,
         };
 
+        // Prohibit only if:
+        // (--preserve-root and -R present) &&
+        // (
+        //     (argument is not symlink && resolved to be '/') ||
+        //     (argument is symlink && should follow argument && resolved to be '/')
+        // )
+        if self.recursive && self.preserve_root {
+            let may_exist = if follow_arg {
+                path.canonicalize().ok()
+            } else {
+                Some(resolve_relative_path(path).into_owned())
+            };
+
+            if let Some(p) = may_exist {
+                if p.parent().is_none() {
+                    show_info!("it is dangerous to operate recursively on '/'");
+                    show_info!("use --no-preserve-root to override this failsafe");
+                    return 1;
+                }
+            }
+        }
+
         let ret = if self.matched(meta.uid(), meta.gid()) {
             self.wrap_chown(path, &meta, follow_arg)
         } else {
@@ -300,10 +317,10 @@ impl Chowner {
         };
 
         if !self.recursive {
-            return ret;
+            ret
+        } else {
+            ret | self.dive_into(&root)
         }
-
-        self.dive_into(&root)
     }
 
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
@@ -413,4 +430,3 @@ impl Chowner {
         }
     }
 }
-
