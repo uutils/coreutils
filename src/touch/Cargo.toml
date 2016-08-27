@@ -10,9 +10,12 @@ path = "touch.rs"
 [dependencies]
 filetime = "*"
 getopts = "*"
-libc = "*"
 time = "*"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+default-features = false
+features = ["libc"]
 
 [[bin]]
 name = "touch"

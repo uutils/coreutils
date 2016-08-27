@@ -291,6 +291,13 @@ impl AtPath {
         }
     }
 
+    pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
+        match fs::symlink_metadata(&self.plus(path)) {
+            Ok(m) => m,
+            Err(e) => panic!("{}", e),
+        }
+    }
+
     pub fn metadata(&self, path: &str) -> fs::Metadata {
         match fs::metadata(&self.plus(path)) {
             Ok(m) => m,
