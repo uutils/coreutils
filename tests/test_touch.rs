@@ -1,12 +1,18 @@
-extern crate filetime;
+extern crate uu_touch;
+use self::uu_touch::filetime::{self, FileTime};
+
 extern crate time;
 
 use common::util::*;
-use self::filetime::FileTime;
-
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);
+    (FileTime::from_last_access_time(&m),
+     FileTime::from_last_modification_time(&m))
+}
+
+fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
+    let m = at.symlink_metadata(path);
     (FileTime::from_last_access_time(&m),
      FileTime::from_last_modification_time(&m))
 }
@@ -29,7 +35,7 @@ fn test_touch_default() {
     let file = "test_touch_default_file";
 
     ucmd.arg(file).succeeds().no_stderr();
-    
+
 
     assert!(at.file_exists(file));
 }
@@ -213,6 +219,33 @@ fn test_touch_set_both() {
                45240);
     assert_eq!(mtime.seconds_relative_to_1970() - start_of_year.seconds_relative_to_1970(),
                45240);
+}
+
+#[test]
+fn test_touch_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_touch_no_dereference_a";
+    let file_b = "test_touch_no_dereference_b";
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let end_of_year = str_to_filetime("%Y%m%d%H%M", "201512312359");
+
+    at.touch(file_a);
+    set_file_times(&at, file_a, start_of_year, start_of_year);
+    at.symlink(file_a, file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.is_symlink(file_b));
+
+    ucmd.args(&["-t", "201512312359", "-h", file_b]).succeeds().no_stderr();
+
+    let (atime, mtime) = get_symlink_times(&at, file_b);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, end_of_year);
+    assert_eq!(mtime, end_of_year);
+
+    let (atime, mtime) = get_file_times(&at, file_a);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, start_of_year);
+    assert_eq!(mtime, start_of_year);
 }
 
 #[test]
