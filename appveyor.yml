@@ -17,7 +17,7 @@ install:
   - if defined MSYS_BITS set PATH=C:\msys64\mingw%MSYS_BITS%\bin;C:\msys64\usr\bin;%PATH%
 
   # download a custom compiler otherwise
-  - if defined MINGW_ARCHIVE appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
+  - ps: if(Test-Path variable:MINGW_ARCHIVE) { $attempts = 3; while($attempts > 0) { try { appveyor DownloadFile "$MINGW_URL" -FileName "$MINGW_ARCHIVE"; break } catch [Exception] { Start-Sleep 1; $attempts = $attempts - 1 } }; if($attempts -eq 0) { throw "Could not download $MINGW_URL" } }
   - if defined MINGW_ARCHIVE 7z x -y "%MINGW_ARCHIVE%" > nul
   - if defined MINGW_ARCHIVE set PATH=%CD%\%MINGW_DIR%\bin;C:\msys64\usr\bin;%PATH%
 
