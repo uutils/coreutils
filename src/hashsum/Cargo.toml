@@ -13,6 +13,7 @@ libc = "*"
 regex = "*"
 regex-syntax = "*"
 rust-crypto = "*"
+rustc-serialize = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

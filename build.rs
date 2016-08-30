@@ -41,10 +41,13 @@ pub fn main() {
                               map.insert(\"sha256sum\", uu_hashsum::uumain);
                               map.insert(\"sha384sum\", uu_hashsum::uumain);
                               map.insert(\"sha512sum\", uu_hashsum::uumain);
+                              map.insert(\"sha3sum\", uu_hashsum::uumain);
                               map.insert(\"sha3-224sum\", uu_hashsum::uumain);
                               map.insert(\"sha3-256sum\", uu_hashsum::uumain);
                               map.insert(\"sha3-384sum\", uu_hashsum::uumain);
-                              map.insert(\"sha3-512sum\", uu_hashsum::uumain);\n".as_bytes()).unwrap();
+                              map.insert(\"sha3-512sum\", uu_hashsum::uumain);
+                              map.insert(\"shake128sum\", uu_hashsum::uumain);
+                              map.insert(\"shake256sum\", uu_hashsum::uumain);\n".as_bytes()).unwrap();
             },
             _ =>
                 mf.write_all(format!("map.insert(\"{krate}\", uu_{krate}::uumain);\n", krate=krate).as_bytes()).unwrap(),
