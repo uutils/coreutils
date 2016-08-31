@@ -3,6 +3,7 @@ target/
 /build/
 /tmp/
 /busybox/
+/.vscode/
 *~
 .*.swp
 .*.swo
