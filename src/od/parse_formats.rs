@@ -1,17 +1,7 @@
-use std::collections::HashSet;
 use formatteriteminfo::FormatterItemInfo;
 use prn_int::*;
 use prn_char::*;
 use prn_float::*;
-
-//This is available in some versions of std, but not all that we target.
-macro_rules! hashmap {
-    ($( $key: expr => $val: expr ),*) => {{
-         let mut map = ::std::collections::HashMap::new();
-         $( map.insert($key, $val); )*
-         map
-    }}
-}
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ParsedFormatterItemInfo {
@@ -28,6 +18,76 @@ impl ParsedFormatterItemInfo {
     }
 }
 
+fn od_argument_traditional_format(ch: char) -> Option<FormatterItemInfo> {
+    match ch {
+        'a' => Some(FORMAT_ITEM_A),
+        'B' => Some(FORMAT_ITEM_OCT16),
+        'b' => Some(FORMAT_ITEM_OCT8),
+        'c' => Some(FORMAT_ITEM_C),
+        'D' => Some(FORMAT_ITEM_DEC32U),
+        'd' => Some(FORMAT_ITEM_DEC16U),
+        'e' => Some(FORMAT_ITEM_F64),
+        'F' => Some(FORMAT_ITEM_F64),
+        'f' => Some(FORMAT_ITEM_F32),
+        'H' => Some(FORMAT_ITEM_HEX32),
+        'h' => Some(FORMAT_ITEM_HEX16),
+        'i' => Some(FORMAT_ITEM_DEC32S),
+        'I' => Some(FORMAT_ITEM_DEC64S),
+        'L' => Some(FORMAT_ITEM_DEC64S),
+        'l' => Some(FORMAT_ITEM_DEC64S),
+        'O' => Some(FORMAT_ITEM_OCT32),
+        'o' => Some(FORMAT_ITEM_OCT16),
+        's' => Some(FORMAT_ITEM_DEC16S),
+        'X' => Some(FORMAT_ITEM_HEX32),
+        'x' => Some(FORMAT_ITEM_HEX16),
+        _ => None,
+    }
+}
+
+fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemInfo> {
+    match (type_char, byte_size) {
+        (FormatType::Ascii, _) => Some(FORMAT_ITEM_A),
+        (FormatType::Char, _) => Some(FORMAT_ITEM_C),
+
+        (FormatType::DecimalInt, 1) => Some(FORMAT_ITEM_DEC8S),
+        (FormatType::DecimalInt, 2) => Some(FORMAT_ITEM_DEC16S),
+        (FormatType::DecimalInt, 0) |
+        (FormatType::DecimalInt, 4) => Some(FORMAT_ITEM_DEC32S),
+        (FormatType::DecimalInt, 8) => Some(FORMAT_ITEM_DEC64S),
+
+        (FormatType::OctalInt, 1) => Some(FORMAT_ITEM_OCT8),
+        (FormatType::OctalInt, 2) => Some(FORMAT_ITEM_OCT16),
+        (FormatType::OctalInt, 0) |
+        (FormatType::OctalInt, 4) => Some(FORMAT_ITEM_OCT32),
+        (FormatType::OctalInt, 8) => Some(FORMAT_ITEM_OCT64),
+
+        (FormatType::UnsignedInt, 1) => Some(FORMAT_ITEM_DEC8U),
+        (FormatType::UnsignedInt, 2) => Some(FORMAT_ITEM_DEC16U),
+        (FormatType::UnsignedInt, 0) |
+        (FormatType::UnsignedInt, 4) => Some(FORMAT_ITEM_DEC32U),
+        (FormatType::UnsignedInt, 8) => Some(FORMAT_ITEM_DEC64U),
+
+        (FormatType::HexadecimalInt, 1) => Some(FORMAT_ITEM_HEX8),
+        (FormatType::HexadecimalInt, 2) => Some(FORMAT_ITEM_HEX16),
+        (FormatType::HexadecimalInt, 0) |
+        (FormatType::HexadecimalInt, 4) => Some(FORMAT_ITEM_HEX32),
+        (FormatType::HexadecimalInt, 8) => Some(FORMAT_ITEM_HEX64),
+
+        (FormatType::Float, 0) |
+        (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+
+        _ => None,
+    }
+}
+
+fn od_argument_with_option(ch:char) -> bool {
+    match ch {
+        'A' | 'j' | 'N' | 'S' | 'w' => true,
+        _ => false,
+    }
+}
+
 
 /// Parses format flags from commandline
 ///
@@ -41,32 +101,6 @@ impl ParsedFormatterItemInfo {
 /// parameters of -t/--format specify 1 or more formats.
 /// if -- appears on the commandline, parsing should stop.
 pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemInfo>, String> {
-
-    let known_formats = hashmap![
-    'a' => FORMAT_ITEM_A,
-    'B' => FORMAT_ITEM_OCT16,
-    'b' => FORMAT_ITEM_OCT8,
-    'c' => FORMAT_ITEM_C,
-    'D' => FORMAT_ITEM_DEC32U,
-    'd' => FORMAT_ITEM_DEC16U,
-    'e' => FORMAT_ITEM_F64,
-    'F' => FORMAT_ITEM_F64,
-    'f' => FORMAT_ITEM_F32,
-    'H' => FORMAT_ITEM_HEX32,
-    'h' => FORMAT_ITEM_HEX16,
-    'i' => FORMAT_ITEM_DEC32S,
-    'I' => FORMAT_ITEM_DEC64S,
-    'L' => FORMAT_ITEM_DEC64S,
-    'l' => FORMAT_ITEM_DEC64S,
-    'O' => FORMAT_ITEM_OCT32,
-    'o' => FORMAT_ITEM_OCT16,
-    's' => FORMAT_ITEM_DEC16S,
-    'X' => FORMAT_ITEM_HEX32,
-    'x' => FORMAT_ITEM_HEX16
-    ];
-
-    let ignored_arg_opts: HashSet<_> = ['A', 'j', 'N', 'S', 'w'].iter().cloned().collect();
-
     let mut formats = Vec::new();
 
     // args[0] is the name of the binary
@@ -103,17 +137,17 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
                 if expect_type_string {
                     format_spec.push(c);
                 }
-                else if ignored_arg_opts.contains(&c) {
+                else if od_argument_with_option(c) {
                     break;
                 }
                 else if c=='t' {
                     expect_type_string = true;
                 }
                 else {
-                    match known_formats.get(&c) {
+                    match od_argument_traditional_format(c) {
                         None => {} // not every option is a format
                         Some(r) => {
-                            formats.push(ParsedFormatterItemInfo::new(*r, false))
+                            formats.push(ParsedFormatterItemInfo::new(r, false))
                         }
                     }
                 }
@@ -138,166 +172,148 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
     Ok(formats)
 }
 
-#[derive(PartialEq, Eq, Debug)]
-enum ParseState {
-    ExpectSize,     // expect optional size character like L for long.
-    ExpectDecimal,  // expect optional additional digits, like for 16.
-    ExpectDump,     // expect optional 'z'.
-    Finished        // no more characters may appear.
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+enum FormatType {
+    Ascii,
+    Char,
+    DecimalInt,
+    OctalInt,
+    UnsignedInt,
+    HexadecimalInt,
+    Float,
+}
+
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+enum FormatTypeCategory {
+    Char,
+    Integer,
+    Float,
+}
+
+fn format_type(ch: char) -> Option<FormatType> {
+    match ch {
+        'a' => Some(FormatType::Ascii),
+        'c' => Some(FormatType::Char),
+        'd' => Some(FormatType::DecimalInt),
+        'o' => Some(FormatType::OctalInt),
+        'u' => Some(FormatType::UnsignedInt),
+        'x' => Some(FormatType::HexadecimalInt),
+        'f' => Some(FormatType::Float),
+        _ => None,
+    }
+}
+
+
+fn format_type_category(t: FormatType) -> FormatTypeCategory {
+    match t {
+        FormatType::Ascii | FormatType::Char
+            => FormatTypeCategory::Char,
+        FormatType::DecimalInt | FormatType::OctalInt | FormatType::UnsignedInt | FormatType::HexadecimalInt
+            => FormatTypeCategory::Integer,
+        FormatType::Float
+            => FormatTypeCategory::Float,
+    }
+}
+
+fn is_format_size_char(ch: Option<char>, format_type: FormatTypeCategory, byte_size: &mut u8) -> bool {
+
+    match (format_type, ch) {
+        (FormatTypeCategory::Integer, Some('C')) => {
+            *byte_size = 1;
+            true
+        },
+        (FormatTypeCategory::Integer, Some('S')) => {
+            *byte_size = 2;
+            true
+        },
+        (FormatTypeCategory::Integer, Some('I')) => {
+            *byte_size = 4;
+            true
+        },
+        (FormatTypeCategory::Integer, Some('L')) => {
+            *byte_size = 8;
+            true
+        },
+
+        (FormatTypeCategory::Float, Some('F')) => {
+            *byte_size = 4;
+            true
+        },
+        (FormatTypeCategory::Float, Some('D')) => {
+            *byte_size = 8;
+            true
+        },
+        // FormatTypeCategory::Float, 'L' => *byte_size = 16, // TODO support f128
+
+        _ => false,
+    }
+}
+
+fn is_format_size_decimal(ch: Option<char>, format_type: FormatTypeCategory, decimal_size: &mut String) -> bool {
+    if format_type == FormatTypeCategory::Char { return false; }
+    match ch {
+        Some(d) if d.is_digit(10) => {
+            decimal_size.push(d);
+            return true;
+        }
+        _ => false,
+    }
+}
+
+fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
+    match ch {
+        Some('z') => {
+            *show_ascii_dump = true;
+            return true;
+        }
+        _ => false,
+    }
 }
 
 fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, String> {
-
-    let type_chars: HashSet<_> = ['a', 'c'].iter().cloned().collect();
-    let type_ints: HashSet<_> = ['d', 'o', 'u', 'x'].iter().cloned().collect();
-    let type_floats: HashSet<_> = ['f'].iter().cloned().collect();
-    let type_all: HashSet<_> =
-            type_chars.iter()
-            .chain(type_ints.iter())
-            .chain(type_floats.iter())
-            .collect();
-
     let mut formats = Vec::new();
 
-    // first split a type string into parts refering a single type
-    let mut type_parts = Vec::new();
-    let mut s = String::new();
-    for c in params.chars() {
-        if type_all.contains(&c) {
-            if !s.is_empty() {
-                type_parts.push(s);
-                s = String::new();
+    let mut chars=params.chars();
+    let mut ch = chars.next();
+
+    while ch.is_some() {
+        let type_char = ch.unwrap();
+        let type_char = match format_type(type_char) {
+            Some(t) => t,
+            None => {
+                return Err(format!("unexpected char '{}' in format specification '{}'", type_char, params));
             }
-            s.push(c);
-        }
-        else {
-            if s.is_empty() {
-                return Err(format!("unexpected char '{}' in format specification '{}'", c, params));
-            }
-            s.push(c);
-        }
-    }
-    if !s.is_empty() {
-        type_parts.push(s);
-    }
+        };
 
-    for format_type in type_parts.iter() {
-        let mut chars=format_type.chars();
+        let type_cat = format_type_category(type_char);
 
-        let type_char = chars.next().unwrap();
+        ch = chars.next();
 
-        let mut parse_state = ParseState::ExpectSize;
-        let mut decimal_size = String::new();
         let mut byte_size = 0u8;
         let mut show_ascii_dump = false;
-
-        if type_chars.contains(&type_char) {
-            parse_state = ParseState::ExpectDump;
+        if is_format_size_char(ch, type_cat, &mut byte_size) {
+            ch = chars.next();
         }
-
-        loop {
-            match chars.next() {
-                None => break,
-                Some('z') if parse_state != ParseState::Finished => {
-                    show_ascii_dump = true;
-                    parse_state = ParseState::Finished;
-                },
-                Some(d) if d.is_digit(10)
-                        && (parse_state == ParseState::ExpectSize || parse_state == ParseState::ExpectDecimal) => {
-                    decimal_size.push(d);
-                    parse_state = ParseState::ExpectDecimal;
-                },
-
-                Some('C') if type_ints.contains(&type_char) && parse_state == ParseState::ExpectSize => {
-                    byte_size = 1;
-                    parse_state = ParseState::ExpectDump;
-                },
-                Some('S') if type_ints.contains(&type_char) && parse_state == ParseState::ExpectSize => {
-                    byte_size = 2;
-                    parse_state = ParseState::ExpectDump;
-                },
-                Some('I') if type_ints.contains(&type_char) && parse_state == ParseState::ExpectSize => {
-                    byte_size = 4;
-                    parse_state = ParseState::ExpectDump;
-                },
-                Some('L') if type_ints.contains(&type_char) && parse_state == ParseState::ExpectSize => {
-                    byte_size = 8;
-                    parse_state = ParseState::ExpectDump;
-                },
-
-                Some('F') if type_char == 'f' && parse_state == ParseState::ExpectSize => {
-                    byte_size = 4;
-                    parse_state = ParseState::ExpectDump;
-                },
-                Some('D') if type_char == 'f' && parse_state == ParseState::ExpectSize => {
-                    byte_size = 8;
-                    parse_state = ParseState::ExpectDump;
-                },
-                // Some('L') if type_char == 'f' => byte_size = 16, // TODO support f128
-
-                Some(c) => {
-                    return Err(format!("unexpected char '{}' in format specification '{}'", c, format_type));
+        else {
+            let mut decimal_size = String::new();
+            while is_format_size_decimal(ch, type_cat, &mut decimal_size) {
+                ch = chars.next();
+            }
+            if !decimal_size.is_empty() {
+                byte_size=match decimal_size.parse() {
+                    Err(_) => return Err(format!("invalid number '{}' in format specification '{}'", decimal_size, params)),
+                    Ok(n) => n,
                 }
             }
         }
-
-        if !decimal_size.is_empty() {
-            byte_size=match decimal_size.parse() {
-                Err(_) => return Err(format!("invalid number '{}' in format specification '{}'", decimal_size, format_type)),
-                Ok(n) => n,
-            }
+        if is_format_dump_char(ch, &mut show_ascii_dump) {
+            ch = chars.next();
         }
 
-        match type_char {
-            'a' => formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_A, show_ascii_dump)),
-            'c' => formats.push(ParsedFormatterItemInfo::new(FORMAT_ITEM_C, show_ascii_dump)),
-            'd' => {
-                formats.push(ParsedFormatterItemInfo::new(match byte_size {
-                    1 => FORMAT_ITEM_DEC8S,
-                    2 => FORMAT_ITEM_DEC16S,
-                    4|0 => FORMAT_ITEM_DEC32S,
-                    8 => FORMAT_ITEM_DEC64S,
-                    _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                }, show_ascii_dump));
-            },
-            'o' => {
-                formats.push(ParsedFormatterItemInfo::new(match byte_size {
-                    1 => FORMAT_ITEM_OCT8,
-                    2 => FORMAT_ITEM_OCT16,
-                    4|0 => FORMAT_ITEM_OCT32,
-                    8 => FORMAT_ITEM_OCT64,
-                    _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                }, show_ascii_dump));
-            },
-            'u' => {
-                formats.push(ParsedFormatterItemInfo::new(match byte_size {
-                    1 => FORMAT_ITEM_DEC8U,
-                    2 => FORMAT_ITEM_DEC16U,
-                    4|0 => FORMAT_ITEM_DEC32U,
-                    8 => FORMAT_ITEM_DEC64U,
-                    _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                }, show_ascii_dump));
-            },
-            'x' => {
-                formats.push(ParsedFormatterItemInfo::new(match byte_size {
-                    1 => FORMAT_ITEM_HEX8,
-                    2 => FORMAT_ITEM_HEX16,
-                    4|0 => FORMAT_ITEM_HEX32,
-                    8 => FORMAT_ITEM_HEX64,
-                    _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                }, show_ascii_dump));
-            },
-            'f' => {
-                formats.push(ParsedFormatterItemInfo::new(match byte_size {
-                    4|0 => FORMAT_ITEM_F32,
-                    8 => FORMAT_ITEM_F64,
-                    _ => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, format_type)),
-                }, show_ascii_dump));
-            },
-            _ => unreachable!(),
+        match od_format_type(type_char, byte_size) {
+            Some(ft) => formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump)),
+            None => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, params)),
         }
-
-        if show_ascii_dump { /*TODO*/ }
     }
 
     Ok(formats)
