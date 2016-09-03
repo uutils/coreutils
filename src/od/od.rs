@@ -11,6 +11,7 @@
 
 extern crate getopts;
 extern crate byteorder;
+extern crate half;
 
 #[macro_use]
 extern crate uucore;

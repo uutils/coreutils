@@ -1,7 +1,14 @@
 use std::num::FpCategory;
+use half::f16;
 use std::f32;
 use std::f64;
 use formatteriteminfo::*;
+
+pub static FORMAT_ITEM_F16: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 2,
+    print_width: 10,
+    formatter: FormatWriter::FloatWriter(format_item_flo16),
+};
 
 pub static FORMAT_ITEM_F32: FormatterItemInfo = FormatterItemInfo {
     byte_size: 4,
@@ -15,6 +22,9 @@ pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::FloatWriter(format_item_flo64),
 };
 
+pub fn format_item_flo16(f: f64) -> String {
+    format!(" {}", format_flo16(f16::from_f64(f)))
+}
 
 pub fn format_item_flo32(f: f64) -> String {
     format!(" {}", format_flo32(f as f32))
@@ -22,6 +32,10 @@ pub fn format_item_flo32(f: f64) -> String {
 
 pub fn format_item_flo64(f: f64) -> String {
     format!(" {}", format_flo64(f))
+}
+
+fn format_flo16(f: f16) -> String {
+    format_float(f64::from(f), 9, 4)
 }
 
 // formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
@@ -170,4 +184,31 @@ fn test_format_flo64() {
     assert_eq!(format_flo64(f64::NEG_INFINITY),       "                    -inf");
     assert_eq!(format_flo64(-0.0),                    "                      -0");
     assert_eq!(format_flo64(0.0),                     "                       0");
+}
+
+#[test]
+fn test_format_flo16() {
+    use half::consts::*;
+
+    assert_eq!(format_flo16(f16::from_bits(0x8400u16)), "-6.104e-5");
+    assert_eq!(format_flo16(f16::from_bits(0x8401u16)), "-6.109e-5");
+    assert_eq!(format_flo16(f16::from_bits(0x8402u16)), "-6.115e-5");
+    assert_eq!(format_flo16(f16::from_bits(0x8403u16)), "-6.121e-5");
+
+    assert_eq!(format_flo16(f16::from_f32(1.0)),        "    1.000");
+    assert_eq!(format_flo16(f16::from_f32(10.0)),       "    10.00");
+    assert_eq!(format_flo16(f16::from_f32(100.0)),      "    100.0");
+    assert_eq!(format_flo16(f16::from_f32(1000.0)),     "     1000");
+    assert_eq!(format_flo16(f16::from_f32(10000.0)),    "  1.000e4");
+
+    assert_eq!(format_flo16(f16::from_f32(-0.2)),       "  -0.2000");
+    assert_eq!(format_flo16(f16::from_f32(-0.02)),      "-2.000e-2");
+
+    assert_eq!(format_flo16(MIN_POSITIVE_SUBNORMAL),    " 5.966e-8");
+    assert_eq!(format_flo16(MIN),                       " -6.550e4");
+    assert_eq!(format_flo16(NAN),                       "      NaN");
+    assert_eq!(format_flo16(INFINITY),                  "      inf");
+    assert_eq!(format_flo16(NEG_INFINITY),              "     -inf");
+    assert_eq!(format_flo16(NEG_ZERO),                  "       -0");
+    assert_eq!(format_flo16(ZERO),                      "        0");
 }

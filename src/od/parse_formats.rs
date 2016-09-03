@@ -73,6 +73,7 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
         (FormatType::HexadecimalInt, 4) => Some(FORMAT_ITEM_HEX32),
         (FormatType::HexadecimalInt, 8) => Some(FORMAT_ITEM_HEX64),
 
+        (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
         (FormatType::Float, 0) |
         (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
         (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
@@ -402,7 +403,7 @@ fn test_invalid_long_format() {
     parse_format_flags_str(&vec!("od", "--format=c1")).unwrap_err();
     parse_format_flags_str(&vec!("od", "--format=x256")).unwrap_err();
     parse_format_flags_str(&vec!("od", "--format=d5")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=f2")).unwrap_err();
+    parse_format_flags_str(&vec!("od", "--format=f1")).unwrap_err();
 }
 
 #[test]

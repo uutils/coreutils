@@ -2,6 +2,7 @@ use std::io;
 use byteorder_io::ByteOrder;
 use multifilereader::HasError;
 use peekreader::PeekRead;
+use half::f16;
 
 /// Processes an input and provides access to the data read in various formats
 ///
@@ -128,6 +129,7 @@ impl<'a> MemoryDecoder<'a> {
     /// Returns a f32/f64 from the internal buffer at position `start`.
     pub fn read_float(&self, start: usize, byte_size: usize) -> f64 {
         match byte_size {
+            2 => f64::from(f16::from_bits(self.byte_order.read_u16(&self.data[start..start + 2]))),
             4 => self.byte_order.read_f32(&self.data[start..start + 4]) as f64,
             8 => self.byte_order.read_f64(&self.data[start..start + 8]),
             _ => panic!("Invalid byte_size: {}", byte_size),

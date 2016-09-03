@@ -199,6 +199,29 @@ fn test_hex32(){
 }
 
 #[test]
+fn test_f16(){
+
+    let input : [u8; 14] = [
+        0x00, 0x3c, // 0x3C00 1.0
+        0x00, 0x00, // 0x0000 0.0
+        0x00, 0x80, // 0x8000 -0.0
+        0x00, 0x7c, // 0x7C00 Inf
+        0x00, 0xfc, // 0xFC00 -Inf
+        0x00, 0xfe, // 0xFE00 NaN
+        0x00, 0x84];// 0x8400 -6.104e-5
+    let expected_output = unindent("
+            0000000     1.000         0        -0       inf
+            0000010      -inf       NaN -6.104e-5
+            0000016
+            ");
+    let result = new_ucmd!().arg("--endian=little").arg("-tf2").arg("-w8").run_piped_stdin(&input[..]);
+
+    assert_empty_stderr!(result);
+    assert!(result.success);
+    assert_eq!(result.stdout, expected_output);
+}
+
+#[test]
 fn test_f32(){
 
     let input : [u8; 28] = [
