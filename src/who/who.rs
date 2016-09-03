@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 use uucore::utmpx::{self, time, Utmpx};
-use uucore::libc::{STDIN_FILENO, time_t, ttyname, S_IWGRP};
+use uucore::libc::{STDIN_FILENO, ttyname, S_IWGRP};
 
 use std::borrow::Cow;
 use std::io::prelude::*;
@@ -244,7 +244,7 @@ struct Who {
     args: Vec<String>,
 }
 
-fn idle_string<'a>(when: time_t, boottime: time_t) -> Cow<'a, str> {
+fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
     thread_local! {
         static NOW: time::Tm = time::now()
     }
