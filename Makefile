@@ -226,7 +226,10 @@ endef
 EXES        := \
   $(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
 
-INSTALLEES  := ${EXES} uutils
+INSTALLEES  := ${EXES}
+ifeq (${MULTICALL}, y)
+INSTALLEES  := ${INSTALLEES} uutils
+endif
 
 # Shared library extension
 SYSTEM := $(shell uname)
@@ -297,7 +300,8 @@ install: build
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
-	$(foreach prog, $(INSTALLEES), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
+	$(foreach prog, $(filter-out uutils, $(INSTALLEES)), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
