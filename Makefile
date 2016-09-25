@@ -226,7 +226,10 @@ endef
 EXES        := \
   $(sort $(filter $(UTILS),$(filter-out $(SKIP_UTILS),$(PROGS))))
 
-INSTALLEES  := ${EXES} uutils
+INSTALLEES  := ${EXES}
+ifeq (${MULTICALL}, y)
+INSTALLEES  := ${INSTALLEES} uutils
+endif
 
 # Shared library extension
 SYSTEM := $(shell uname)
