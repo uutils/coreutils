@@ -10,8 +10,10 @@ path = "more.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
-nix = "*"
 uucore = { path="../uucore" }
+
+[target."cfg(unix)".dependencies]
+nix = "*"
 
 [[bin]]
 name = "more"

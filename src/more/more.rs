@@ -18,7 +18,9 @@ use getopts::Options;
 use std::io::{stdout, Write, Read};
 use std::fs::File;
 
+#[cfg(unix)]
 extern crate nix;
+#[cfg(unix)]
 use nix::sys::termios;
 
 #[derive(Clone, Eq, PartialEq)]
@@ -74,17 +76,39 @@ fn help(usage: &str) {
     println!("{}", msg);
 }
 
-fn more(matches: getopts::Matches) {
-    let files = matches.free;
-    let mut f = File::open(files.first().unwrap()).unwrap();
-    let mut buffer = [0; 1024];
-
+#[cfg(unix)]
+fn setup_term() -> termios::Termios {
     let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
     term.c_lflag.remove(termios::ICANON);
     // Disable local echo
     term.c_lflag.remove(termios::ECHO);
     termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+    term
+}
+
+#[cfg(windows)]
+fn setup_term() -> usize {
+    0
+}
+
+#[cfg(unix)]
+fn reset_term(term: &mut termios::Termios) {
+    term.c_lflag.insert(termios::ICANON);
+    term.c_lflag.insert(termios::ECHO);
+    termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+}
+
+#[cfg(windows)]
+fn reset_term(_: &mut usize) {
+}
+
+fn more(matches: getopts::Matches) {
+    let files = matches.free;
+    let mut f = File::open(files.first().unwrap()).unwrap();
+    let mut buffer = [0; 1024];
+
+    let mut term = setup_term();
 
     let mut end = false;
     while let Ok(sz) = f.read(&mut buffer) {
@@ -104,8 +128,6 @@ fn more(matches: getopts::Matches) {
         if end { break;}
     }
 
-    term.c_lflag.insert(termios::ICANON);
-    term.c_lflag.insert(termios::ECHO);
-    termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+    reset_term(&mut term);
     println!("");
 }
