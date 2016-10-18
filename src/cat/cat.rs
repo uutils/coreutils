@@ -321,22 +321,32 @@ impl<'a, W: Write> UnsafeWriter<'a, W> {
 }
 
 // This method was used in Write::write only. It must not be called in the correct cat code
-// and is placed in the bottleneck place, so it is not used anymore. 
-// Uncomment this and code in Write::write for more convenient testing of a new cat version.
-//#[inline(never)]
-//fn fail() -> ! {
-//    panic!("assertion failed");
-//}
+// and is placed in the bottleneck place, so it is not used anymore in release build.
+// In debug buld it is used to support bug finding
+#[cfg(debug_assertions)] 
+#[inline(never)]
+fn fail() -> ! {
+    panic!("assertion failed");
+}
 
 impl<'a, W: Write> Write for UnsafeWriter<'a, W> {
+    #[cfg(debug_assertions)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        //let dst = &mut self.buf[self.pos..];
+        let dst = &mut self.buf[self.pos..];
         let len = buf.len();
-        // the condition is false for current code and every correct code
-        // see fail method comment for more information
-        // if len > dst.len() {
-        //     fail();
-        // }
+        if len > dst.len() {
+            fail();
+        }
+        unsafe { copy_nonoverlapping(buf.as_ptr(), dst.as_mut_ptr(), len) }
+        self.pos += len;
+        Ok(len)
+    }
+
+    // a condition check excluded because it is false for current and every correct code
+    // see fail method comment for more information
+    #[cfg(not(debug_assertions))]
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let len = buf.len();
         unsafe { copy_nonoverlapping(buf.as_ptr(), self.buf[self.pos..].as_mut_ptr(), len) }
         self.pos += len;
         Ok(len)
