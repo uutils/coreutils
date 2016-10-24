@@ -3,19 +3,17 @@
 // This file is part of the uutils coreutils package.
 //
 // (c) Jordi Boggiano <j.boggiano@seld.be>
+// (c) Evgeniy Klyuchikov <evgeniy.klyuchikov@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-
-// last synced with: cat (GNU coreutils) 8.13
-
 #[macro_use]
 extern crate uucore;
 
+// last synced with: cat (GNU coreutils) 8.13
 use std::fs::File;
-use std::intrinsics::{copy_nonoverlapping};
-use std::io::{stdout, stdin, stderr, Write, Read, Result};
+use std::io::{stdout, stdin, stderr, Write, Read, BufWriter};
 use uucore::fs::is_stdin_interactive;
 
 static SYNTAX: &'static str = "[OPTION]... [FILE]...";
@@ -57,213 +55,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
         files.push("-".to_owned());
     }
 
-    exec(files,
-         number_mode,
-         show_nonprint,
-         show_ends,
-         show_tabs,
-         squeeze_blank);
-
-    0
-}
-
-#[derive(Eq, PartialEq)]
-enum NumberingMode {
-    NumberNone,
-    NumberNonEmpty,
-    NumberAll,
-}
-
-fn write_lines(files: Vec<String>, number: NumberingMode, squeeze_blank: bool, show_ends: bool) {
-    // initialize end of line
-    let end_of_line = if show_ends {
-        "$\n".as_bytes()
-    } else {
-        "\n".as_bytes()
-    };
-
-    let mut line_counter: usize = 1;
-
-    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
-
-        let mut in_buf = [0; 1024 * 31];
-        let mut out_buf = [0; 1024 * 64];
-        let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
-        let mut at_line_start = true;
-        let mut one_blank_kept = false;
-        while let Ok(n) = reader.read(&mut in_buf) {
-            if n == 0 {
-                break;
-            }
-
-            let in_buf = &in_buf[..n];
-            let mut pos = 0;
-            while pos < n {
-                writer.possibly_flush();
-                if in_buf[pos] == '\n' as u8 {
-                    if !at_line_start || !squeeze_blank || !one_blank_kept {
-                        one_blank_kept = true;
-                        if at_line_start && number == NumberingMode::NumberAll {
-                            (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
-                            line_counter += 1;
-                        }
-                        writer.write_all(end_of_line).unwrap();
-                        if interactive {
-                            writer.flush().unwrap();
-                        }
-                    }
-                    at_line_start = true;
-                    pos += 1;
-                    continue;
-                } else if one_blank_kept {
-                    one_blank_kept = false;
-                }
-                if at_line_start && number != NumberingMode::NumberNone {
-                    (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
-                    line_counter += 1;
-                }
-                match in_buf[pos..].iter().position(|c| *c == '\n' as u8) {
-                    Some(p) => {
-                        writer.write_all(&in_buf[pos..pos + p]).unwrap();
-                        writer.write_all(end_of_line).unwrap();
-                        if interactive {
-                            writer.flush().unwrap();
-                        }
-                        pos += p + 1;
-                        at_line_start = true;
-                    }
-                    None => {
-                        writer.write_all(&in_buf[pos..]).unwrap();
-                        at_line_start = false;
-                        break;
-                    }
-                };
-            }
-        }
-    }
-}
-
-fn write_bytes(files: Vec<String>,
-               number: NumberingMode,
-               squeeze_blank: bool,
-               show_ends: bool,
-               show_tabs: bool,
-               show_nonprint: bool) {
-    // initialize end of line
-    let end_of_line = if show_ends {
-        "$\n".as_bytes()
-    } else {
-        "\n".as_bytes()
-    };
-    // initialize tab simbol
-    let tab = if show_tabs {
-        "^I".as_bytes()
-    } else {
-        "\t".as_bytes()
-    };
-
-    let mut line_counter: usize = 1;
-
-    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
-
-        // Flush all 1024 iterations.
-        let mut flush_counter = 0usize..1024;
-
-        let mut in_buf = [0; 1024 * 32];
-        let mut out_buf = [0; 1024 * 64];
-        let mut writer = UnsafeWriter::new(&mut out_buf[..], stdout());
-        let mut at_line_start = true;
-        while let Ok(n) = reader.read(&mut in_buf) {
-            if n == 0 {
-                break;
-            }
-
-            for &byte in in_buf[..n].iter() {
-                if flush_counter.next().is_none() {
-                    writer.possibly_flush();
-                    flush_counter = 0usize..1024;
-                }
-                if byte == '\n' as u8 {
-                    if !at_line_start || !squeeze_blank {
-                        if at_line_start && number == NumberingMode::NumberAll {
-                            (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
-                            line_counter += 1;
-                        }
-                        writer.write_all(end_of_line).unwrap();
-                        if interactive {
-                            writer.flush().unwrap();
-                        }
-                    }
-                    at_line_start = true;
-                    continue;
-                }
-                if at_line_start && number != NumberingMode::NumberNone {
-                    (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
-                    line_counter += 1;
-                    at_line_start = false;
-                }
-
-                // This code is slow because of the many branches. cat in glibc avoids
-                // this by having the whole loop inside show_nonprint.
-                if byte == '\t' as u8 {
-                        writer.write_all(tab)
-                    } else if show_nonprint {
-                        let byte = match byte {
-                            128...255 => {
-                                writer.write_all("M-".as_bytes()).unwrap();
-                                byte - 128
-                            }
-                            _ => byte,
-                        };
-                        match byte {
-                            0...31 => writer.write_all(&['^' as u8, byte + 64]),
-                            127 => writer.write_all(&['^' as u8, byte - 64]),
-                            _ => writer.write_all(&[byte]),
-                        }
-                    } else {
-                        writer.write_all(&[byte])
-                    }
-                    .unwrap();
-            }
-        }
-    }
-}
-
-fn write_fast(files: Vec<String>) {
-    let mut writer = stdout();
-    let mut in_buf = [0; 1024 * 64];
-
-    for (mut reader, _) in files.iter().filter_map(|p| open(&p[..])) {
-        while let Ok(n) = reader.read(&mut in_buf) {
-            if n == 0 {
-                break;
-            }
-            // This interface is completely broken.
-            writer.write_all(&in_buf[..n]).unwrap();
-        }
-    }
-}
-
-fn exec(files: Vec<String>,
-        number: NumberingMode,
-        show_nonprint: bool,
-        show_ends: bool,
-        show_tabs: bool,
-        squeeze_blank: bool) {
-
-    if show_nonprint || show_tabs {
-        write_bytes(files,
-                    number,
+    if show_tabs || show_nonprint || show_ends || squeeze_blank ||
+       number_mode != NumberingMode::NumberNone {
+        write_lines(files,
+                    number_mode,
                     squeeze_blank,
                     show_ends,
                     show_tabs,
                     show_nonprint);
-    } else if number != NumberingMode::NumberNone || squeeze_blank || show_ends {
-        write_lines(files, number, squeeze_blank, show_ends);
     } else {
         write_fast(files);
     }
     pipe_flush!();
+
+    0
+}
+
+#[derive(PartialEq)]
+enum NumberingMode {
+    NumberNone,
+    NumberNonEmpty,
+    NumberAll,
 }
 
 fn open(path: &str) -> Option<(Box<Read>, bool)> {
@@ -281,84 +93,152 @@ fn open(path: &str) -> Option<(Box<Read>, bool)> {
     }
 }
 
-struct UnsafeWriter<'a, W: Write> {
-    inner: W,
-    buf: &'a mut [u8],
-    pos: usize,
-    threshold: usize,
-}
+fn write_fast(files: Vec<String>) {
+    let mut writer = stdout();
+    let mut in_buf = [0; 1024 * 64];
 
-impl<'a, W: Write> UnsafeWriter<'a, W> {
-    fn new(buf: &'a mut [u8], inner: W) -> UnsafeWriter<'a, W> {
-        let threshold = buf.len() / 2;
-        UnsafeWriter {
-            inner: inner,
-            buf: buf,
-            pos: 0,
-            threshold: threshold,
-        }
-    }
-
-    fn flush_buf(&mut self) -> Result<()> {
-        if self.pos != 0 {
-            let ret = self.inner.write(&self.buf[..self.pos]);
-            self.pos = 0;
-            match ret {
-                Ok(_) => Ok(()),
-                Err(e) => Err(e),
+    for (mut reader, _) in files.iter().filter_map(|p| open(&p[..])) {
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 {
+                break;
             }
-        } else {
-            Ok(())
-        }
-    }
-
-    fn possibly_flush(&mut self) {
-        if self.pos > self.threshold {
-            self.inner.write_all(&self.buf[..self.pos]).unwrap();
-            self.pos = 0;
+            writer.write_all(&in_buf[..n]).unwrap();
         }
     }
 }
 
-// This method was used in Write::write only. It must not be called in the correct cat code
-// and is placed in the bottleneck place, so it is not used anymore in release build.
-// In debug buld it is used to support bug finding
-#[cfg(debug_assertions)] 
-#[inline(never)]
-fn fail() -> ! {
-    panic!("assertion failed");
-}
+fn write_lines(files: Vec<String>,
+               number: NumberingMode,
+               squeeze_blank: bool,
+               show_ends: bool,
+               show_tabs: bool,
+               show_nonprint: bool) {
+    // initialize end of line
+    let end_of_line = if show_ends {
+        "$\n".as_bytes()
+    } else {
+        "\n".as_bytes()
+    };
+    // initialize tab simbol
+    let tab = if show_tabs {
+        "^I".as_bytes()
+    } else {
+        "\t".as_bytes()
+    };
+    let mut line_counter: usize = 1;
 
-impl<'a, W: Write> Write for UnsafeWriter<'a, W> {
-    #[cfg(debug_assertions)]
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let dst = &mut self.buf[self.pos..];
-        let len = buf.len();
-        if len > dst.len() {
-            fail();
+    for (mut reader, interactive) in files.iter().filter_map(|p| open(&p[..])) {
+        let mut in_buf = [0; 1024 * 31];
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let mut at_line_start = true;
+        let mut one_blank_kept = false;
+        while let Ok(n) = reader.read(&mut in_buf) {
+            if n == 0 {
+                break;
+            }
+            let in_buf = &in_buf[..n];
+            let mut pos = 0;
+            while pos < n {
+                // skip empty lines enumerating them if needed
+                if in_buf[pos] == '\n' as u8 {
+                    if !at_line_start || !squeeze_blank || !one_blank_kept {
+                        one_blank_kept = true;
+                        if at_line_start && number == NumberingMode::NumberAll {
+                            (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
+                            line_counter += 1;
+                        }
+                        writer.write_all(end_of_line).unwrap();
+                        if interactive {
+                            writer.flush().unwrap();
+                        }
+                    }
+                    at_line_start = true;
+                    pos += 1;
+                    continue;
+                }
+                one_blank_kept = false;
+                if at_line_start && number != NumberingMode::NumberNone {
+                    (write!(&mut writer, "{0:6}\t", line_counter)).unwrap();
+                    line_counter += 1;
+                }
+
+                // print to end of line or end of buffer
+                let offset = if show_nonprint {
+                    write_nonprint_to_end(&in_buf[pos..], &mut writer, tab)
+                } else if show_tabs {
+                    write_tab_to_end(&in_buf[pos..], &mut writer)
+                } else {
+                    write_to_end(&in_buf[pos..], &mut writer)
+                };
+                // end of buffer?
+                if offset == 0 {
+                    at_line_start = false;
+                    break;
+                }
+                // print suitable end of line
+                writer.write_all(end_of_line).unwrap();
+                if interactive {
+                    writer.flush().unwrap();
+                }
+                at_line_start = true;
+                pos += offset;
+            }
         }
-        unsafe { copy_nonoverlapping(buf.as_ptr(), dst.as_mut_ptr(), len) }
-        self.pos += len;
-        Ok(len)
-    }
-
-    // a condition check excluded because it is false for current and every correct code
-    // see fail method comment for more information
-    #[cfg(not(debug_assertions))]
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let len = buf.len();
-        unsafe { copy_nonoverlapping(buf.as_ptr(), self.buf[self.pos..].as_mut_ptr(), len) }
-        self.pos += len;
-        Ok(len)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.flush_buf().and_then(|()| self.inner.flush())
     }
 }
 
-impl<'a, W: Write> Drop for UnsafeWriter<'a, W> {
-    fn drop(&mut self) {
-        let _ = self.flush_buf();
+// write***_to_end methods
+// Write all simbols till end of line or end of buffer
+// Return the number of written bytes - 1 or 0 if the end of buffer is reached
+fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
+    match in_buf.iter().position(|c| *c == '\n' as u8) {
+        Some(p) => {
+            writer.write_all(&in_buf[..p]).unwrap();
+            p + 1
+        }
+        None => {
+            writer.write_all(in_buf).unwrap();
+            0
+        }
     }
+}
+
+fn write_tab_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
+    match in_buf.iter().position(|c| *c == '\n' as u8 || *c == '\t' as u8) {
+        Some(p) => {
+            writer.write_all(&in_buf[..p]).unwrap();
+            if in_buf[p] == '\n' as u8 {
+                p + 1
+            } else {
+                writer.write_all("^I".as_bytes()).unwrap();
+                write_tab_to_end(&in_buf[p + 1..], writer)
+            }
+        }
+        None => {
+            writer.write_all(in_buf).unwrap();
+            0
+        }
+    }
+}
+
+fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> usize {
+    let mut count = 0;
+
+    for byte in in_buf.iter().map(|c| *c) {
+        if byte == '\n' as u8 {
+            break;
+        }
+        match byte {
+                9 => writer.write_all(tab),
+                0...8 | 10...31 => writer.write_all(&['^' as u8, byte + 64]),
+                32...126 => writer.write_all(&[byte]),
+                127 => writer.write_all(&['^' as u8, byte - 64]),
+                128...159 => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, byte - 64]),
+                160...254 => writer.write_all(&['M' as u8, '-' as u8, byte - 128]),
+                _ => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, 63]),
+            }
+            .unwrap();
+        count += 1;
+    }
+    if count != in_buf.len() { count + 1 } else { 0 }
 }
