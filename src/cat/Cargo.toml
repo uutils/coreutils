@@ -8,7 +8,6 @@ name = "uu_cat"
 path = "cat.rs"
 
 [dependencies]
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
