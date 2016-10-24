@@ -188,8 +188,8 @@ fn write_lines(files: Vec<String>,
 }
 
 // write***_to_end methods
-// Write all simbols till end of line or end of buffer
-// Return the number of written bytes - 1 or 0 if the end of buffer is reached
+// Write all symbols till end of line or end of buffer is reached
+// Return the (number of written symbols + 1) or 0 if the end of buffer is reached
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
     match in_buf.iter().position(|c| *c == '\n' as u8) {
         Some(p) => {
@@ -203,21 +203,23 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
     }
 }
 
-fn write_tab_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == '\n' as u8 || *c == '\t' as u8) {
-        Some(p) => {
-            writer.write_all(&in_buf[..p]).unwrap();
-            if in_buf[p] == '\n' as u8 {
-                p + 1
-            } else {
-                writer.write_all("^I".as_bytes()).unwrap();
-                write_tab_to_end(&in_buf[p + 1..], writer)
+fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
+    loop {
+        match in_buf.iter().position(|c| *c == '\n' as u8 || *c == '\t' as u8) {
+            Some(p) => {
+                writer.write_all(&in_buf[..p]).unwrap();
+                if in_buf[p] == '\n' as u8 {
+                    return p + 1;
+                } else {
+                    writer.write_all("^I".as_bytes()).unwrap();
+                    in_buf = &in_buf[p + 1..];
+                }
             }
-        }
-        None => {
-            writer.write_all(in_buf).unwrap();
-            0
-        }
+            None => {
+                writer.write_all(in_buf).unwrap();
+                return 0;
+            }
+        };
     }
 }
 
