@@ -147,7 +147,7 @@ fn list(options: getopts::Matches) {
 
         if p.is_dir() && !options.opt_present("d") {
             dir = true;
-            if !options.opt_present("L") {
+            if options.opt_present("l") && !(options.opt_present("L")) {
                 if let Ok(md) = p.symlink_metadata() {
                     if md.file_type().is_symlink() {
                         dir = false;
@@ -451,6 +451,21 @@ fn display_file_name(path: &Path,
             name.push('@');
         }
     }
+
+    if options.opt_present("long") && metadata.file_type().is_symlink() {
+        if let Ok(target) = path.read_link() {
+            // We don't bother updating width here because it's not used for long listings
+            let code = if target.exists() {
+                "fi"
+            } else {
+                "mi"
+            };
+            let target_name = target.to_string_lossy().to_string();
+            name.push_str(" -> ");
+            name.push_str(&target_name);
+        }
+    }
+
     name.into()
 }
 
