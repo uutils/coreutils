@@ -15,8 +15,8 @@ extern crate uucore;
 
 use std::fs;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
-#[cfg(unix)] use std::os::unix::fs::symlink as symlink_file;
-#[cfg(windows)] use std::os::windows::fs::symlink_file;
+#[cfg(unix)] use std::os::unix::fs::symlink;
+#[cfg(windows)] use std::os::windows::fs::{symlink_file,symlink_dir};
 use std::path::{Path, PathBuf};
 
 static NAME: &'static str = "ln"; 
@@ -292,8 +292,16 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
     simple_backup_path(path, suffix)
 }
 
+#[cfg(windows)]
 pub fn symlink<P: AsRef<Path>>(src: P, dst: P) -> Result<()> {
-    symlink_file(src, dst)
+    if src.as_ref().is_dir()
+    {
+        symlink_dir(src,dst)
+    }
+    else
+    {
+        symlink_file(src,dst)
+    }
 }
 
 pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
