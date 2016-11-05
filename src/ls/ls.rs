@@ -147,7 +147,7 @@ fn list(options: getopts::Matches) {
 
         if p.is_dir() && !options.opt_present("d") {
             dir = true;
-            if !options.opt_present("L") {
+            if options.opt_present("l") && !(options.opt_present("L")) {
                 if let Ok(md) = p.symlink_metadata() {
                     if md.file_type().is_symlink() {
                         dir = false;
@@ -236,15 +236,21 @@ fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
     }
 
     let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
-
-    if options.opt_present("a") {
-        entries.push(dir.join("."));
-        entries.push(dir.join(".."));
-    }
-
     sort_entries(&mut entries, options);
 
-    display_items(&entries, Some(dir), options);
+
+
+    if options.opt_present("a") {
+        let mut display_entries = entries.clone();
+        display_entries.insert(0, dir.join(".."));
+        display_entries.insert(0, dir.join("."));
+        display_items(&display_entries, Some(dir), options);
+    }
+    else
+    {
+        display_items(&entries, Some(dir), options);
+    }
+
 
     if options.opt_present("R") {
         for e in entries.iter().filter(|p| p.is_dir()) {
@@ -451,6 +457,21 @@ fn display_file_name(path: &Path,
             name.push('@');
         }
     }
+
+    if options.opt_present("long") && metadata.file_type().is_symlink() {
+        if let Ok(target) = path.read_link() {
+            // We don't bother updating width here because it's not used for long listings
+            let code = if target.exists() {
+                "fi"
+            } else {
+                "mi"
+            };
+            let target_name = target.to_string_lossy().to_string();
+            name.push_str(" -> ");
+            name.push_str(&target_name);
+        }
+    }
+
     name.into()
 }
 
