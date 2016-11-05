@@ -236,15 +236,21 @@ fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
     }
 
     let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
-
-    if options.opt_present("a") {
-        entries.push(dir.join("."));
-        entries.push(dir.join(".."));
-    }
-
     sort_entries(&mut entries, options);
 
-    display_items(&entries, Some(dir), options);
+
+
+    if options.opt_present("a") {
+        let mut display_entries = entries.clone();
+        display_entries.insert(0, dir.join(".."));
+        display_entries.insert(0, dir.join("."));
+        display_items(&display_entries, Some(dir), options);
+    }
+    else
+    {
+        display_items(&entries, Some(dir), options);
+    }
+
 
     if options.opt_present("R") {
         for e in entries.iter().filter(|p| p.is_dir()) {
