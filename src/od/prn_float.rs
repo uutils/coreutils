@@ -47,8 +47,7 @@ fn format_flo32(f: f32) -> String {
     if f.classify() == FpCategory::Subnormal {
         // subnormal numbers will be normal as f64, so will print with a wrong precision
         format!("{:width$e}", f, width = width) // subnormal numbers
-    }
-    else {
+    } else {
         format_float(f as f64, width, precision)
     }
 }
@@ -58,7 +57,6 @@ fn format_flo64(f: f64) -> String {
 }
 
 fn format_float(f: f64, width: usize, precision: usize) -> String {
-
     if !f.is_normal() {
         if f == -0.0 && f.is_sign_negative() { return format!("{:>width$}", "-0", width = width) }
         if f == 0.0 || !f.is_finite() { return format!("{:width$}", f, width = width) }
@@ -77,13 +75,11 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
         format!("{:width$.dec$}", f,
             width = width,
             dec = (precision-1) - l as usize)
-    }
-    else if l == -1 {
+    } else if l == -1 {
         format!("{:width$.dec$}", f,
             width = width,
             dec = precision)
-    }
-    else {
+    } else {
         format!("{:width$.dec$e}", f,
             width = width,
             dec = precision - 1)

@@ -49,7 +49,6 @@ impl OutputInfo {
 
     /// Creates a new `OutputInfo` based on the parameters
     pub fn new(line_bytes: usize, formats: &[ParsedFormatterItemInfo], output_duplicates: bool) -> OutputInfo {
-
         let byte_size_block = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
         let print_width_block = formats
             .iter()
@@ -129,7 +128,6 @@ impl OutputInfo {
     /// Increase MAX_BYTES_PER_UNIT to allow larger types.
     fn calculate_alignment(sf: &TypeSizeInfo, byte_size_block: usize,
             print_width_block: usize) -> [usize; MAX_BYTES_PER_UNIT] {
-
         if byte_size_block > MAX_BYTES_PER_UNIT {
             panic!("{}-bits types are unsupported. Current max={}-bits.",
             8 * byte_size_block,
@@ -181,7 +179,6 @@ impl TypeSizeInfo for TypeInfo {
 
 #[test]
 fn test_calculate_alignment() {
-
     // For this example `byte_size_block` is 8 and 'print_width_block' is 23:
     // 1777777777777777777777 1777777777777777777777
     //  4294967295 4294967295  4294967295 4294967295
@@ -214,31 +211,31 @@ fn test_calculate_alignment() {
 
     // 9 tests where 8 .. 16 spaces are spread across 8 positions
     assert_eq!([1, 1, 1, 1, 1, 1, 1, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+8));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 8));
     assert_eq!([2, 1, 1, 1, 1, 1, 1, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+9));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 9));
     assert_eq!([2, 1, 1, 1, 2, 1, 1, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+10));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 10));
     assert_eq!([3, 1, 1, 1, 2, 1, 1, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+11));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 11));
     assert_eq!([2, 1, 2, 1, 2, 1, 2, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+12));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 12));
     assert_eq!([3, 1, 2, 1, 2, 1, 2, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+13));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 13));
     assert_eq!([3, 1, 2, 1, 3, 1, 2, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+14));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 14));
     assert_eq!([4, 1, 2, 1, 3, 1, 2, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+15));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 15));
     assert_eq!([2, 2, 2, 2, 2, 2, 2, 2],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+16));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 16));
 
     // 4 tests where 15 spaces are spread across 8, 4, 2 or 1 position(s)
     assert_eq!([4, 1, 2, 1, 3, 1, 2, 1],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16+15));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:1, print_width:2}, 8, 16 + 15));
     assert_eq!([5, 0, 3, 0, 4, 0, 3, 0],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:2, print_width:4}, 8, 16+15));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:2, print_width:4}, 8, 16 + 15));
     assert_eq!([8, 0, 0, 0, 7, 0, 0, 0],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:4, print_width:8}, 8, 16+15));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:4, print_width:8}, 8, 16 + 15));
     assert_eq!([15, 0, 0, 0, 0, 0, 0, 0],
-        OutputInfo::calculate_alignment(&TypeInfo{byte_size:8, print_width:16}, 8, 16+15));
+        OutputInfo::calculate_alignment(&TypeInfo{byte_size:8, print_width:16}, 8, 16 + 15));
 }

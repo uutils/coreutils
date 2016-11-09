@@ -89,20 +89,17 @@ fn test_no_file() {
 // Test that od reads from stdin instead of a file
 #[test]
 fn test_from_stdin() {
-
     let input = "abcdefghijklmnopqrstuvwxyz\n";
     let result = new_ucmd!().arg("--endian=little").run_piped_stdin(input.as_bytes());
 
     assert_empty_stderr!(result);
     assert!(result.success);
     assert_eq!(result.stdout, unindent(ALPHA_OUT));
-
 }
 
 // Test that od reads from stdin and also from files
 #[test]
 fn test_from_mixed() {
-
     let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
     let file1 = tmpdir.join("test-1");
@@ -122,12 +119,10 @@ fn test_from_mixed() {
     assert_empty_stderr!(result);
     assert!(result.success);
     assert_eq!(result.stdout, unindent(ALPHA_OUT));
-
 }
 
 #[test]
 fn test_multiple_formats() {
-
     let input = "abcdefghijklmnopqrstuvwxyz\n";
     let result = new_ucmd!().arg("-c").arg("-b").run_piped_stdin(input.as_bytes());
 
@@ -140,12 +135,10 @@ fn test_multiple_formats() {
                     161 162 163 164 165 166 167 170 171 172 012
             0000033
             "));
-
 }
 
 #[test]
 fn test_dec() {
-
     let input = [
     	0u8, 0u8,
     	1u8, 0u8,
@@ -163,13 +156,11 @@ fn test_dec() {
     assert_empty_stderr!(result);
     assert!(result.success);
     assert_eq!(result.stdout, expected_output);
-
 }
 
 #[test]
 fn test_hex16(){
-
-    let input : [u8; 9] = [
+    let input: [u8; 9] = [
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
     let expected_output = unindent("
             0000000 2301 6745 ab89 efcd 00ff
@@ -184,8 +175,7 @@ fn test_hex16(){
 
 #[test]
 fn test_hex32(){
-
-    let input : [u8; 9] = [
+    let input: [u8; 9] = [
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
     let expected_output = unindent("
             0000000 67452301 efcdab89 000000ff
@@ -200,8 +190,7 @@ fn test_hex32(){
 
 #[test]
 fn test_f16(){
-
-    let input : [u8; 14] = [
+    let input: [u8; 14] = [
         0x00, 0x3c, // 0x3C00 1.0
         0x00, 0x00, // 0x0000 0.0
         0x00, 0x80, // 0x8000 -0.0
@@ -223,8 +212,7 @@ fn test_f16(){
 
 #[test]
 fn test_f32(){
-
-    let input : [u8; 28] = [
+    let input: [u8; 28] = [
         0x52, 0x06, 0x9e, 0xbf, // 0xbf9e0652 -1.2345679
         0x4e, 0x61, 0x3c, 0x4b, // 0x4b3c614e 12345678
         0x0f, 0x9b, 0x94, 0xfe, // 0xfe949b0f -9.876543E37
@@ -246,8 +234,7 @@ fn test_f32(){
 
 #[test]
 fn test_f64(){
-
-    let input : [u8; 40] = [
+    let input: [u8; 40] = [
         0x27, 0x6b, 0x0a, 0x2f, 0x2a, 0xee, 0x45, 0x43, // 0x4345EE2A2F0A6B27 12345678912345678
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 0x0000000000000000 0
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x80, // 0x8010000000000000 -2.2250738585072014e-308
@@ -268,7 +255,6 @@ fn test_f64(){
 
 #[test]
 fn test_multibyte() {
-
     let result = new_ucmd!().arg("-c").arg("-w12").run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes());
 
     assert_empty_stderr!(result);
@@ -283,8 +269,7 @@ fn test_multibyte() {
 
 #[test]
 fn test_width(){
-
-    let input : [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let input: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent("
             0000000 000000 000000
             0000004 000000 000000
@@ -300,8 +285,7 @@ fn test_width(){
 
 #[test]
 fn test_invalid_width(){
-
-    let input : [u8; 4] = [0x00, 0x00, 0x00, 0x00];
+    let input: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent("
             0000000 000000
             0000002 000000
@@ -317,8 +301,7 @@ fn test_invalid_width(){
 
 #[test]
 fn test_zero_width(){
-
-    let input : [u8; 4] = [0x00, 0x00, 0x00, 0x00];
+    let input: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
     let expected_output = unindent("
             0000000 000000
             0000002 000000
@@ -334,8 +317,7 @@ fn test_zero_width(){
 
 #[test]
 fn test_width_without_value(){
-
-    let input : [u8; 40] = [0 ; 40];
+    let input: [u8; 40] = [0 ; 40];
     let expected_output = unindent("
             0000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000 000000
             0000040 000000 000000 000000 000000
@@ -351,7 +333,6 @@ fn test_width_without_value(){
 
 #[test]
 fn test_suppress_duplicates(){
-
     let input: [u8; 41] =  [
             0, 0, 0, 0,
             0, 0, 0, 0,
@@ -387,8 +368,7 @@ fn test_suppress_duplicates(){
 
 #[test]
 fn test_big_endian() {
-
-    let input : [u8; 8] = [
+    let input: [u8; 8] = [
         0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];// 0xc000000000000000 -2
 
     let expected_output = unindent("
@@ -409,8 +389,7 @@ fn test_big_endian() {
 #[test]
 #[allow(non_snake_case)]
 fn test_alignment_Xxa() {
-
-    let input : [u8; 8] = [
+    let input: [u8; 8] = [
         0x0A, 0x0D, 0x65, 0x66, 0x67, 0x00, 0x9e, 0x9f];
 
     let expected_output = unindent("
@@ -431,8 +410,7 @@ fn test_alignment_Xxa() {
 #[test]
 #[allow(non_snake_case)]
 fn test_alignment_Fx() {
-
-    let input : [u8; 8] = [
+    let input: [u8; 8] = [
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0];// 0xc000000000000000 -2
 
     let expected_output = unindent("
@@ -451,7 +429,6 @@ fn test_alignment_Fx() {
 
 #[test]
 fn test_maxuint(){
-
     let input = [0xFFu8 ; 8];
     let expected_output = unindent("
             0000000          1777777777777777777777
@@ -474,7 +451,6 @@ fn test_maxuint(){
 
 #[test]
 fn test_hex_offset(){
-
     let input = [0u8 ; 0x1F];
     let expected_output = unindent("
             000000 00000000 00000000 00000000 00000000
@@ -493,7 +469,6 @@ fn test_hex_offset(){
 
 #[test]
 fn test_dec_offset(){
-
     let input = [0u8 ; 19];
     let expected_output = unindent("
             0000000 00000000 00000000 00000000 00000000
@@ -512,7 +487,6 @@ fn test_dec_offset(){
 
 #[test]
 fn test_no_offset(){
-
     let input = [0u8 ; 31];
     const LINE: &'static str = " 00000000 00000000 00000000 00000000\n";
     let expected_output = [LINE, LINE, LINE, LINE].join("");
@@ -526,17 +500,13 @@ fn test_no_offset(){
 
 #[test]
 fn test_invalid_offset(){
-
-    let input = [0u8 ; 4];
-
-    let result = new_ucmd!().arg("-Ab").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-Ab").run();
 
     assert!(!result.success);
 }
 
 #[test]
 fn test_skip_bytes(){
-
     let input = "abcdefghijklmnopq";
     let result = new_ucmd!().arg("-c").arg("--skip-bytes=5").run_piped_stdin(input.as_bytes());
 
@@ -550,7 +520,6 @@ fn test_skip_bytes(){
 
 #[test]
 fn test_skip_bytes_error(){
-
     let input = "12345";
     let result = new_ucmd!().arg("--skip-bytes=10").run_piped_stdin(input.as_bytes());
 
@@ -559,7 +528,6 @@ fn test_skip_bytes_error(){
 
 #[test]
 fn test_read_bytes(){
-
     let input = "abcdefghijklmnopqrstuvwxyz\n12345678";
     let result = new_ucmd!().arg("--endian=little").arg("--read-bytes=27").run_piped_stdin(input.as_bytes());
 
@@ -570,8 +538,7 @@ fn test_read_bytes(){
 
 #[test]
 fn test_ascii_dump(){
-
-    let input : [u8; 22] = [
+    let input: [u8; 22] = [
         0x00, 0x01, 0x0a, 0x0d, 0x10, 0x1f, 0x20, 0x61, 0x62, 0x63, 0x7d,
         0x7e, 0x7f, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0xff];
     let result = new_ucmd!().arg("-tx1zacz").run_piped_stdin(&input[..]);
@@ -607,7 +574,6 @@ fn test_filename_parsing(){
 
 #[test]
 fn test_stdin_offset(){
-
     let input = "abcdefghijklmnopq";
     let result = new_ucmd!().arg("-c").arg("+5").run_piped_stdin(input.as_bytes());
 
@@ -621,7 +587,6 @@ fn test_stdin_offset(){
 
 #[test]
 fn test_file_offset(){
-
     let result = new_ucmd!().arg("-c").arg("--").arg("-f").arg("10").run();
 
     assert_empty_stderr!(result);
@@ -678,8 +643,7 @@ fn test_traditional_with_skip_bytes_non_override(){
 #[test]
 fn test_traditional_error(){
     // file "0" exists - don't fail on that, but --traditional only accepts a single input
-    let input = "abcdefghijklmnopq";
-    let result = new_ucmd!().arg("--traditional").arg("0").arg("0").arg("0").arg("0").run_piped_stdin(input.as_bytes());
+    let result = new_ucmd!().arg("--traditional").arg("0").arg("0").arg("0").arg("0").run();
 
     assert!(!result.success);
 }

@@ -5,7 +5,7 @@ use multifilereader::HasError;
 
 /// When a large number of bytes must be skipped, it will be read into a
 /// dynamically allocated buffer. The buffer will be limited to this size.
-const MAX_SKIP_BUFFER: usize = 64*1024;
+const MAX_SKIP_BUFFER: usize = 64 * 1024;
 
 /// Wrapper for `std::io::Read` which can skip bytes at the beginning
 /// of the input, and it can limit the returned bytes to a particular

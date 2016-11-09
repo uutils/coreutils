@@ -62,8 +62,7 @@ impl FailingMockStream {
     fn error(&mut self) -> Result<usize> {
         if self.repeat_count == 0 {
             return Ok(0)
-        }
-        else {
+        } else {
             if self.repeat_count > 0 {
                 self.repeat_count -= 1;
             }

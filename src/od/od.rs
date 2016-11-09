@@ -147,8 +147,8 @@ fn create_getopts_options() -> getopts::Options {
 
 struct OdOptions {
     byte_order: ByteOrder,
-    skip_bytes : usize,
-    read_bytes : Option<usize>,
+    skip_bytes: usize,
+    read_bytes: Option<usize>,
     label: Option<usize>,
     input_strings: Vec<String>,
     formats: Vec<ParsedFormatterItemInfo>,
@@ -187,7 +187,7 @@ impl OdOptions {
             Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
                 skip_bytes = s;
                 label = l;
-                vec!{f}
+                vec![f]
             },
             Err(e) => {
                 return Err(format!("Invalid inputs: {}", e));
@@ -311,7 +311,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 /// Loops through the input line by line, calling print_bytes to take care of the output.
 fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>,
         output_info: &OutputInfo) -> i32
-        where I : PeekRead+HasError {
+        where I: PeekRead + HasError {
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
     let line_bytes = output_info.byte_size_line;
@@ -321,7 +321,7 @@ fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>
 
         match input_decoder.peek_read() {
             Ok(mut memory_decoder) => {
-                let length=memory_decoder.length();
+                let length = memory_decoder.length();
 
                 if length == 0 {
                     input_offset.print_final_offset();
@@ -346,8 +346,7 @@ fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>
                         duplicate_line = true;
                         println!("*");
                     }
-                }
-                else {
+                } else {
                     duplicate_line = false;
                     if length == line_bytes {
                         // save a copy of the input unless it is the last line
@@ -409,15 +408,14 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
             output_text.push_str(&format!("{:>width$}  {}",
                     "",
                     format_ascii_dump(input_decoder.get_buffer(0)),
-                    width=missing_spacing));
+                    width = missing_spacing));
         }
 
         if first {
             print!("{}", prefix); // print offset
             // if printing in multiple formats offset is printed only once
             first = false;
-        }
-        else {
+        } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
             print!("{:>width$}", "", width=prefix.chars().count());
@@ -426,13 +424,13 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
     }
 }
 
-/// returns a reader implementing `PeekRead+Read+HasError` providing the combined input
+/// returns a reader implementing `PeekRead + Read + HasError` providing the combined input
 ///
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optinal limit to the number of bytes to read
 fn open_input_peek_reader<'a>(input_strings: &'a Vec<String>, skip_bytes: usize,
         read_bytes: Option<usize>) -> PeekReader<PartialReader<MultifileReader<'a>>> {
-    // should return  "impl PeekRead+Read+HasError" when supported in (stable) rust
+    // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings
         .iter()
         .map(|w| match w as &str {

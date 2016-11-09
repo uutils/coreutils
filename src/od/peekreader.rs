@@ -91,8 +91,7 @@ impl<R: Read> PeekRead for PeekReader<R> {
                 let unused = out.len() - bytes_in_buffer;
                 if peek_size <= unused {
                     Ok((bytes_in_buffer, 0))
-                }
-                else {
+                } else {
                     let actual_peek_size = peek_size - unused;
                     let real_size = bytes_in_buffer - actual_peek_size;
                     self.write_to_tempbuffer(&out[real_size..bytes_in_buffer]);

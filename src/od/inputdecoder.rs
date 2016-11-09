@@ -26,12 +26,11 @@ pub struct InputDecoder<'a, I> where I: 'a {
 }
 
 impl<'a, I> InputDecoder<'a, I> {
-    /// Creates a new `InputDecoder` with an allocated buffer of `normal_length`+`peek_length` bytes.
+    /// Creates a new `InputDecoder` with an allocated buffer of `normal_length` + `peek_length` bytes.
     /// `byte_order` determines how to read multibyte formats from the buffer.
     pub fn new(input: &mut I, normal_length: usize, peek_length: usize, byte_order: ByteOrder) -> InputDecoder<I> {
-
-        let mut bytes: Vec<u8> = Vec::with_capacity(normal_length+peek_length);
-        unsafe { bytes.set_len(normal_length+peek_length); } // fast but uninitialized
+        let mut bytes: Vec<u8> = Vec::with_capacity(normal_length + peek_length);
+        unsafe { bytes.set_len(normal_length + peek_length); } // fast but uninitialized
 
         InputDecoder {
             input: input,
@@ -45,7 +44,7 @@ impl<'a, I> InputDecoder<'a, I> {
 }
 
 
-impl<'a, I> InputDecoder<'a, I> where I : PeekRead {
+impl<'a, I> InputDecoder<'a, I> where I: PeekRead {
     /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
     /// MemoryDecoder providing access to the result or returns an i/o error.
     pub fn peek_read(&mut self) -> io::Result<MemoryDecoder> {
@@ -66,7 +65,7 @@ impl<'a, I> InputDecoder<'a, I> where I : PeekRead {
     }
 }
 
-impl<'a, I> HasError for InputDecoder<'a, I> where I : HasError {
+impl<'a, I> HasError for InputDecoder<'a, I> where I: HasError {
     /// calls has_error on the internal stream.
     fn has_error(&self) -> bool {
         self.input.has_error()
@@ -112,7 +111,7 @@ impl<'a> MemoryDecoder<'a> {
 
     /// Returns a slice to the internal buffer including the peek data starting at `start`.
     pub fn get_full_buffer(&self, start: usize) -> &[u8] {
-        &self.data[start..self.used_normal_length+self.used_peek_length]
+        &self.data[start..self.used_normal_length + self.used_peek_length]
     }
 
     /// Returns a u8/u16/u32/u64 from the internal buffer at position `start`.
@@ -147,8 +146,8 @@ mod tests {
     #[test]
     fn smoke_test() {
         let data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xff, 0xff];
-        let mut input=PeekReader::new(Cursor::new(&data));
-        let mut sut=InputDecoder::new(&mut input, 8, 2, ByteOrder::Little);
+        let mut input = PeekReader::new(Cursor::new(&data));
+        let mut sut = InputDecoder::new(&mut input, 8, 2, ByteOrder::Little);
 
         match sut.peek_read() {
             Ok(mut mem) => {
@@ -165,7 +164,7 @@ mod tests {
 
                 let mut copy: Vec<u8> = Vec::new();
                 mem.clone_buffer(&mut copy);
-                assert_eq!(vec!{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0}, copy);
+                assert_eq!(vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0], copy);
 
                 mem.zero_out_buffer(7, 8);
                 assert_eq!(&[0, 0, 0xff, 0xff], mem.get_full_buffer(6));

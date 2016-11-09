@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Copy, Eq)]
+#[derive(Copy)]
 pub enum FormatWriter {
     IntWriter(fn(u64) -> String),
     FloatWriter(fn(f64) -> String),
@@ -26,6 +26,8 @@ impl PartialEq for FormatWriter {
         }
     }
 }
+
+impl Eq for FormatWriter {}
 
 impl fmt::Debug for FormatWriter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

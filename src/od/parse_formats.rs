@@ -115,8 +115,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
                 Err(e) => return Err(e),
             }
             expect_type_string = false;
-        }
-        else if arg.starts_with("--") {
+        } else if arg.starts_with("--") {
             if arg.len() == 2 {
                 break;
             }
@@ -130,26 +129,20 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
             if arg == "--format" {
                 expect_type_string = true;
             }
-        }
-        else if arg.starts_with("-") {
+        } else if arg.starts_with("-") {
             let mut flags = arg.chars().skip(1);
             let mut format_spec = String::new();
             while let Some(c) = flags.next() {
                 if expect_type_string {
                     format_spec.push(c);
-                }
-                else if od_argument_with_option(c) {
+                } else if od_argument_with_option(c) {
                     break;
-                }
-                else if c=='t' {
+                } else if c == 't' {
                     expect_type_string = true;
-                }
-                else {
-                    match od_argument_traditional_format(c) {
-                        None => {} // not every option is a format
-                        Some(r) => {
-                            formats.push(ParsedFormatterItemInfo::new(r, false))
-                        }
+                } else {
+                    // not every option is a format
+                    if let Some(r) = od_argument_traditional_format(c) {
+                        formats.push(ParsedFormatterItemInfo::new(r, false))
                     }
                 }
             }
@@ -217,7 +210,6 @@ fn format_type_category(t: FormatType) -> FormatTypeCategory {
 }
 
 fn is_format_size_char(ch: Option<char>, format_type: FormatTypeCategory, byte_size: &mut u8) -> bool {
-
     match (format_type, ch) {
         (FormatTypeCategory::Integer, Some('C')) => {
             *byte_size = 1;
@@ -274,7 +266,7 @@ fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
 fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
-    let mut chars=params.chars();
+    let mut chars = params.chars();
     let mut ch = chars.next();
 
     while ch.is_some() {
@@ -294,14 +286,13 @@ fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, St
         let mut show_ascii_dump = false;
         if is_format_size_char(ch, type_cat, &mut byte_size) {
             ch = chars.next();
-        }
-        else {
+        } else {
             let mut decimal_size = String::new();
             while is_format_size_decimal(ch, type_cat, &mut decimal_size) {
                 ch = chars.next();
             }
             if !decimal_size.is_empty() {
-                byte_size=match decimal_size.parse() {
+                byte_size = match decimal_size.parse() {
                     Err(_) => return Err(format!("invalid number '{}' in format specification '{}'", decimal_size, params)),
                     Ok(n) => n,
                 }

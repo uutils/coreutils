@@ -6,7 +6,7 @@ use std::io::Write;
 use std::vec::Vec;
 
 pub enum InputSource<'a> {
-    FileName(&'a str ),
+    FileName(&'a str),
     Stdin,
     #[allow(dead_code)]
     Stream(Box<io::Read>),
@@ -31,26 +31,26 @@ impl<'b> MultifileReader<'b> {
             any_err: false,
         };
         mf.next_file();
-        return mf;
+        mf
     }
 
     fn next_file(&mut self) {
         // loop retries with subsequent files if err - normally 'loops' once
         loop {
             if self.ni.len() == 0 {
-                    self.curr_file = None;
-                    return;
+                self.curr_file = None;
+                break;
             }
             match self.ni.remove(0) {
                 InputSource::Stdin => {
                     self.curr_file = Some(Box::new(BufReader::new(std::io::stdin())));
-                    return;
+                    break;
                 }
                 InputSource::FileName(fname) => {
                     match File::open(fname) {
                         Ok(f) => {
                             self.curr_file = Some(Box::new(BufReader::new(f)));
-                            return;
+                            break;
                         }
                         Err(e) => {
                             // If any file can't be opened,
@@ -66,7 +66,7 @@ impl<'b> MultifileReader<'b> {
                 }
                 InputSource::Stream(s) => {
                     self.curr_file = Some(s);
-                    return;
+                    break;
                 }
             }
         }
@@ -74,7 +74,6 @@ impl<'b> MultifileReader<'b> {
 }
 
 impl<'b> io::Read for MultifileReader<'b> {
-
     // Fill buf with bytes read from the list of files
     // Returns Ok(<number of bytes read>)
     // Handles io errors itself, thus always returns OK
@@ -192,5 +191,4 @@ mod tests {
         assert_eq!(sut.read(v.as_mut()).unwrap(), 3);
         assert_eq!(v, [0x42, 0x43, 0x44, 0x64, 0x41]); // last two bytes are not overwritten
     }
-
 }

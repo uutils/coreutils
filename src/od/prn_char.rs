@@ -14,7 +14,7 @@ pub static FORMAT_ITEM_C: FormatterItemInfo = FormatterItemInfo {
 };
 
 
-static A_CHRS : [&'static str; 128]  =
+static A_CHRS: [&'static str; 128]  =
 ["nul",   "soh",   "stx",   "etx",   "eot",   "enq",   "ack",   "bel",
  "bs",    "ht",   "nl",     "vt",    "ff",    "cr",    "so",    "si",
  "dle",   "dc1",   "dc2",   "dc3",   "dc4",   "nak",   "syn",   "etb",
@@ -40,7 +40,7 @@ fn format_item_a(p: u64) -> String {
 }
 
 
-static C_CHRS : [&'static str; 128]  = [
+static C_CHRS: [&'static str; 128]  = [
 "\\0",   "001",   "002",   "003",   "004",   "005",   "006",    "\\a",
 "\\b",    "\\t",  "\\n",   "\\v",    "\\f",    "\\r",   "016",   "017",
 "020",   "021",   "022",   "023",   "024",   "025",   "026",   "027",
@@ -68,33 +68,28 @@ fn format_item_c(bytes: &[u8]) -> String {
             Some(s) => format!("{:>4}", s),
             None => format!("{:>4}", b),
         }
-    }
-    else if (b & 0xc0) == 0x80 {
+    } else if (b & 0xc0) == 0x80 {
         // second or subsequent octet of an utf-8 sequence
         String::from("  **")
-    }
-    else if ((b & 0xe0) == 0xc0) && (bytes.len() >= 2) {
+    } else if ((b & 0xe0) == 0xc0) && (bytes.len() >= 2) {
         // start of a 2 octet utf-8 sequence
         match from_utf8(&bytes[0..2]) {
             Ok(s) => { format!("{:>4}", s) },
             Err(_) => { format!(" {:03o}", b) },
         }
-    }
-    else if ((b & 0xf0) == 0xe0) && (bytes.len() >= 3) {
+    } else if ((b & 0xf0) == 0xe0) && (bytes.len() >= 3) {
         // start of a 3 octet utf-8 sequence
         match from_utf8(&bytes[0..3]) {
             Ok(s) => { format!("{:>4}", s) },
             Err(_) => { format!(" {:03o}", b) },
         }
-    }
-    else if ((b & 0xf8) == 0xf0) && (bytes.len() >= 4) {
+    } else if ((b & 0xf8) == 0xf0) && (bytes.len() >= 4) {
         // start of a 4 octet utf-8 sequence
         match from_utf8(&bytes[0..4]) {
             Ok(s) => { format!("{:>4}", s) },
             Err(_) => { format!(" {:03o}", b) },
         }
-    }
-    else {
+    } else {
         // invalid utf-8
         format!(" {:03o}", b)
     }
@@ -107,8 +102,7 @@ pub fn format_ascii_dump(bytes: &[u8]) -> String {
     for c in bytes.iter() {
         if *c >= 0x20 && *c <= 0x7e {
             result.push_str(C_CHRS[*c as usize]);
-        }
-        else {
+        } else {
             result.push('.');
         }
     }
