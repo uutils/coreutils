@@ -201,7 +201,7 @@ To do
 * [x] nohup
 * [x] nproc
 * [ ] numfmt
-* [ ] od (in progress, needs lots of work)
+* [ ] od (almost complete, `--strings` and 128-bit datatypes are missing)
 * [x] paste
 * [x] pathchk
 * [x] pinky
