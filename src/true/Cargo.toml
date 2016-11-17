@@ -7,10 +7,6 @@ authors = []
 name = "uu_true"
 path = "true.rs"
 
-[dependencies]
-getopts = "*"
-libc = "*"
-
 [[bin]]
 name = "true"
 path = "main.rs"
