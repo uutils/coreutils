@@ -9,10 +9,7 @@ path = "mv.rs"
 
 [dependencies]
 getopts = "*"
-
-[dependencies.uucore]
-path = "../uucore"
-default-features = false
+uucore = { path="../uucore" }
 
 [[bin]]
 name = "mv"

@@ -17,7 +17,6 @@ extern crate uucore;
 use std::fs;
 use std::env;
 use std::io::{BufRead, BufReader, Result, stdin, Write};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 static NAME: &'static str = "mv";
@@ -319,7 +318,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         }
 
         if b.update {
-            if try!(fs::metadata(from)).mtime() <= try!(fs::metadata(to)).mtime() {
+            if try!(try!(fs::metadata(from)).modified()) <= try!(try!(fs::metadata(to)).modified()) {
                 return Ok(());
             }
         }
