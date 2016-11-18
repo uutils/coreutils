@@ -67,6 +67,7 @@ PROGS       := \
   mkdir \
   mktemp \
   more \
+  mv \
   nl \
   nproc \
   od \
@@ -118,7 +119,6 @@ UNIX_PROGS := \
   logname \
   mkfifo \
   mknod \
-  mv \
   nice \
   nohup \
   pathchk \
