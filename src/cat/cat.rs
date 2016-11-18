@@ -231,15 +231,14 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             break;
         }
         match byte {
-                9 => writer.write_all(tab),
-                0...8 | 10...31 => writer.write_all(&['^' as u8, byte + 64]),
-                32...126 => writer.write_all(&[byte]),
-                127 => writer.write_all(&['^' as u8, byte - 64]),
-                128...159 => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, byte - 64]),
-                160...254 => writer.write_all(&['M' as u8, '-' as u8, byte - 128]),
-                _ => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, 63]),
-            }
-            .unwrap();
+            9 => writer.write_all(tab),
+            0...8 | 10...31 => writer.write_all(&['^' as u8, byte + 64]),
+            32...126 => writer.write_all(&[byte]),
+            127 => writer.write_all(&['^' as u8, byte - 64]),
+            128...159 => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, byte - 64]),
+            160...254 => writer.write_all(&['M' as u8, '-' as u8, byte - 128]),
+            _ => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, 63]),
+        }.unwrap();
         count += 1;
     }
     if count != in_buf.len() { count + 1 } else { 0 }
