@@ -148,6 +148,7 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
         0
     }
     #[cfg(windows)]
+    #[allow(unused_variables)]
     fn chmod(path: &Path, mode: u16) -> i32 {
         // chmod on Windows only sets the readonly flag, which isn't even honored on directories
         0
