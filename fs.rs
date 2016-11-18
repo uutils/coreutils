@@ -14,6 +14,7 @@ use std::fs;
 use std::io::{Error, ErrorKind};
 use std::io::Result as IOResult;
 use std::path::{Component, Path, PathBuf};
+#[cfg(unix)]
 use std::borrow::Cow;
 
 #[cfg(unix)]
