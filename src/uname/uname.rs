@@ -11,8 +11,6 @@
 
 // last synced with: uname (GNU coreutils) 8.21
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 use uucore::utsname::Uname;

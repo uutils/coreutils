@@ -11,8 +11,6 @@
  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
  */
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 

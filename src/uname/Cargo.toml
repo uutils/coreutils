@@ -7,9 +7,6 @@ authors = []
 name = "uu_uname"
 path = "uname.rs"
 
-[dependencies]
-getopts = "*"
-
 [dependencies.uucore]
 path = "../uucore"
 default-features = false
