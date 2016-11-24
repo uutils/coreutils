@@ -28,6 +28,8 @@ static HOST_OS: &'static str = "FreeBSD";
 static HOST_OS: &'static str = "OpenBSD";
 #[cfg(target_os = "macos")]
 static HOST_OS: &'static str = "Darwin";
+#[cfg(target_os = "fuchsia")]
+static HOST_OS: &'static str = "Fuchsia";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
