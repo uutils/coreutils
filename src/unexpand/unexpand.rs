@@ -12,7 +12,6 @@
  */
 
 extern crate getopts;
-extern crate libc;
 extern crate unicode_width;
 
 #[macro_use]

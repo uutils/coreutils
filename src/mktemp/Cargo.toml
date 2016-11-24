@@ -10,7 +10,6 @@ path = "mktemp.rs"
 [dependencies]
 uucore = { path="../uucore" }
 getopts = "*"
-libc = "*"
 rand = "0.3"
 tempfile = "*"
 

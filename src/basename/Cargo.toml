@@ -8,7 +8,6 @@ name = "uu_basename"
 path = "basename.rs"
 
 [dependencies]
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

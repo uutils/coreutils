@@ -8,7 +8,6 @@ name = "uu_fold"
 path = "fold.rs"
 
 [dependencies]
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

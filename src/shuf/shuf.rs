@@ -10,7 +10,6 @@
  */
 
 extern crate getopts;
-extern crate libc;
 extern crate rand;
 
 #[macro_use]

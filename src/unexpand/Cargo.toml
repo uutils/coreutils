@@ -9,7 +9,6 @@ path = "unexpand.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 unicode-width = "*"
 uucore = { path="../uucore" }
 

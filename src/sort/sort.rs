@@ -12,7 +12,6 @@
 #![allow(dead_code)]
 
 extern crate getopts;
-extern crate libc;
 extern crate semver;
 
 #[macro_use]

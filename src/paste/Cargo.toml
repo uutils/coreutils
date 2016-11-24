@@ -9,7 +9,6 @@ path = "paste.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

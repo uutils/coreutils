@@ -13,7 +13,6 @@
 * that was distributed with this source code.
 */
 
-extern crate libc;
 extern crate rand;
 
 #[macro_use]

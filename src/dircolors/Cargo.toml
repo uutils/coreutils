@@ -9,7 +9,6 @@ path = "dircolors.rs"
 
 [dependencies]
 glob = "*"
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]
