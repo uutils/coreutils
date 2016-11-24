@@ -16,7 +16,7 @@ pub mod encoding;
 #[cfg(feature = "parse_time")]
 pub mod parse_time;
 
-#[cfg(all(unix, feature = "utmpx"))]
+#[cfg(all(unix, not(target_os = "fuchsia"), feature = "utmpx"))]
 pub mod utmpx;
 #[cfg(all(unix, feature = "utsname"))]
 pub mod utsname;
@@ -24,7 +24,7 @@ pub mod utsname;
 pub mod entries;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
-#[cfg(all(unix, feature = "signals"))]
+#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
 
 #[cfg(all(windows, feature = "wide"))]
