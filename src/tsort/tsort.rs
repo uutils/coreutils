@@ -11,7 +11,6 @@
  */
 
 extern crate getopts;
-extern crate libc;
 
 #[macro_use]
 extern crate uucore;

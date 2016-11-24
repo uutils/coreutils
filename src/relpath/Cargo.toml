@@ -9,7 +9,6 @@ path = "relpath.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

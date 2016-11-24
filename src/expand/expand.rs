@@ -11,7 +11,6 @@
  * file that was distributed with this source code.
  */
 
-extern crate libc;
 extern crate unicode_width;
 extern crate getopts;
 

@@ -9,7 +9,6 @@ path = "wc.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

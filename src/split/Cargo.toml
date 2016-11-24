@@ -9,7 +9,6 @@ path = "split.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

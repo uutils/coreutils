@@ -9,7 +9,6 @@ path = "sort.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 semver = "*"
 itertools = "*"
 uucore = { path="../uucore" }
