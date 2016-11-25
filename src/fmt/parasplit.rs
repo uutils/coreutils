@@ -332,7 +332,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
 
                         // in tagged mode, add 4 spaces of additional indenting by default
                         // (gnu fmt's behavior is different: it seems to find the closest column to
-                        // indent_end that is divisible by 3. But honesly that behavior seems
+                        // indent_end that is divisible by 3. But honestly that behavior seems
                         // pretty arbitrary.
                         // Perhaps a better default would be 1 TABWIDTH? But ugh that's so big.
                         if self.opts.tagged {

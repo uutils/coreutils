@@ -317,7 +317,7 @@ pub fn parse_format_flags_str(args_str: &Vec<&'static str>) -> Result<Vec<Format
     match parse_format_flags(&args) {
         Err(e) => Err(e),
         Ok(v) => {
-            // tests using this function asume add_ascii_dump is not set
+            // tests using this function assume add_ascii_dump is not set
             Ok(v.into_iter()
                 .inspect(|f| assert!(!f.add_ascii_dump))
                 .map(|f| f.formatter_item_info)

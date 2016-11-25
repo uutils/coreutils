@@ -427,7 +427,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 /// returns a reader implementing `PeekRead + Read + HasError` providing the combined input
 ///
 /// `skip_bytes` is the number of bytes skipped from the input
-/// `read_bytes` is an optinal limit to the number of bytes to read
+/// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader<'a>(input_strings: &'a Vec<String>, skip_bytes: usize,
         read_bytes: Option<usize>) -> PeekReader<PartialReader<MultifileReader<'a>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust

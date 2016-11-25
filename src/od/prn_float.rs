@@ -39,7 +39,7 @@ fn format_flo16(f: f16) -> String {
 }
 
 // formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
-// always retuns a string of 14 characters
+// always returns a string of 14 characters
 fn format_flo32(f: f32) -> String {
     let width: usize = 14;
     let precision: usize = 8;

@@ -16,8 +16,8 @@ static ALPHA_OUT: &'static str = "
         0000033
         ";
 
-// XXX We could do a better job of ensuring that we have a fresh temp dir to ourself,
-// not a general one ful of other proc's leftovers.
+// XXX We could do a better job of ensuring that we have a fresh temp dir to ourselves,
+// not a general one full of other proc's leftovers.
 
 // Test that od can read one file and dump with default format
 #[test]
@@ -72,7 +72,7 @@ fn test_2files() {
     let _ = remove_file(file2);
 }
 
-// Test that od gives non-0 exit val for filename that dosen't exist.
+// Test that od gives non-0 exit val for filename that doesn't exist.
 #[test]
 fn test_no_file() {
     let temp = env::temp_dir();

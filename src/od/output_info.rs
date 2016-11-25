@@ -92,7 +92,7 @@ impl OutputInfo {
     /// ```
     /// In this example is additional spacing before the first and third decimal number,
     /// and there is additional spacing before the 1st, 3rd, 5th and 7th hexadecimal number.
-    /// This way both the octal and decimal, aswell the decimal and hexadecimal numbers
+    /// This way both the octal and decimal, as well as the decimal and hexadecimal numbers
     /// left align. Note that the alignment below both octal numbers is identical.
     ///
     /// This function calculates the required spacing for a single line, given the size
@@ -110,7 +110,7 @@ impl OutputInfo {
     /// If the blocksize is 8, and the size of the type is 2, the spacing will be
     /// spread across position 0, 2, 4, 6. All 4 positions will get an additional
     /// space as long as there are more then 4 spaces available. If there are 2
-    /// spaces available, they will be assigend to position 0 and 4. If there is
+    /// spaces available, they will be assigned to position 0 and 4. If there is
     /// 1 space available, it will be assigned to position 0. This will be combined,
     /// For example 7 spaces will be assigned to position 0, 2, 4, 6 like: 3, 1, 2, 1.
     /// And 7 spaces with 2 positions will be assigned to position 0 and 4 like 4, 3.

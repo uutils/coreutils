@@ -55,7 +55,7 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-// In case the c_char array doesn' t end with NULL
+// In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
     ($arr:expr) => (
         $arr.iter().take_while(|i| **i > 0).map(|&i| i as u8 as char).collect::<String>()

@@ -137,7 +137,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 pub trait StrUtils {
-    /// Remove comments and trim whitespaces
+    /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
     /// Like split_whitespace() but only produce 2 components
     fn split_two(&self) -> (&str, &str);

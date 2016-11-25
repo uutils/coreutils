@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut item = iter.next();
 
     // the for loop doesn't work here,
-    // because we need sometines to read 2 items forward,
+    // because we need sometimes to read 2 items forward,
     // and the iter can't be borrowed twice
     while item != None {
         let opt = item.unwrap();

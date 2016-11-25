@@ -33,7 +33,7 @@ enum Mode {
 static NAME: &'static str = "pathchk";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-// a few global constants as used in the GNU implememntation
+// a few global constants as used in the GNU implementation
 static POSIX_PATH_MAX: usize = 256;
 static POSIX_NAME_MAX: usize = 14;
 
@@ -207,7 +207,7 @@ fn check_searchable(path: &String) -> bool {
     }
 }
 
-// check for a hypthen at the beginning of a path segment
+// check for a hyphen at the beginning of a path segment
 fn no_leading_hyphen(path_segment: &String) -> bool {
     !path_segment.starts_with('-')
 }
