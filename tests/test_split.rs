@@ -49,7 +49,7 @@ impl Glob {
         let mut files = self.collect();
         files.sort();
         let mut data: Vec<u8> = vec![];
-        for name in files.iter() {
+        for name in &files {
             data.extend(self.directory.read(name).into_bytes());
         }
         data

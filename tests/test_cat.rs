@@ -23,7 +23,7 @@ fn test_output_multi_files_print_all_chars() {
 fn test_stdin_show_nonprinting() {
     for same_param in vec!["-v", "--show-nonprinting"] {
         new_ucmd!()
-            .args(&vec![same_param])
+            .args(&[same_param])
             .pipe_in("\t\0\n")
             .succeeds()
             .stdout_only("\t^@");

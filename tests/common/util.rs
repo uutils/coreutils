@@ -321,13 +321,12 @@ impl AtPath {
 
     pub fn cleanup(&self, path: &'static str) {
         let p = &self.plus(path);
-        match fs::metadata(p) {
-            Ok(m) => if m.is_file() {
+        if let Ok(m) = fs::metadata(p) {
+            if m.is_file() {
                 fs::remove_file(&p).unwrap();
             } else {
                 fs::remove_dir(&p).unwrap();
-            },
-            Err(_) => {}
+            }
         }
     }
 
@@ -376,21 +375,20 @@ impl TestScenario {
                 // directory, use Cargo's OUT_DIR to find path to executable.
                 // This allows tests to be run using profiles other than debug.
                 let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..", PROGNAME);
-                PathBuf::from(AtPath::new(&Path::new(&target_dir)).root_dir_resolved())
+                PathBuf::from(AtPath::new(Path::new(&target_dir)).root_dir_resolved())
             },
             util_name: String::from(util_name),
-            fixtures: AtPath::new(&tmpd.as_ref().path()),
+            fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd: tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
         fixture_path_builder.push(FIXTURES_DIR);
         fixture_path_builder.push(util_name);
-        match fs::metadata(&fixture_path_builder) {
-            Ok(m) => if m.is_dir() {
+        if let Ok(m) = fs::metadata(&fixture_path_builder) {
+            if m.is_dir() {
                 recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
-            },
-            Err(_) => {}
+            }
         }
         ts
     }
@@ -418,7 +416,7 @@ impl TestScenario {
     }
 }
 
-/// A UCommand is a wrapper around an individual Command that provides several additional features
+/// A `UCommand` is a wrapper around an individual Command that provides several additional features
 /// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
 ///       and asserting on the results.
 /// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
@@ -542,7 +540,7 @@ impl UCommand {
                 .unwrap_or_else(
                     || panic!(
                         "Could not take child process stdin"))
-                .write_all(&input)
+                .write_all(input)
                 .unwrap_or_else(|e| panic!("{}", e));
         }
 
