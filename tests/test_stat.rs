@@ -207,7 +207,7 @@ fn test_symlink() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_char() {
-    let args = ["-c", DEV_FMTSTR, "/dev/zero"];
+    let args = ["-c", DEV_FMTSTR, "/dev/pts/ptmx"];
     new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
