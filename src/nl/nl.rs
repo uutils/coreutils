@@ -52,7 +52,7 @@ pub struct Settings {
     number_separator: String
 }
 
-// NumberingStyle stores which lines are to be numberd.
+// NumberingStyle stores which lines are to be numbered.
 // The possible options are:
 // 1. Number all lines
 // 2. Number only nonempty lines

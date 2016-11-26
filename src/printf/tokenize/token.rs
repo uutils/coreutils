@@ -17,7 +17,7 @@ pub trait Token {
 // at a position in a format string, and sees whether
 // it can return a token of a type it knows how to produce
 // if so, return the token, move the iterator past the
-// format string text the token repsresents, and if an
+// format string text the token represents, and if an
 // argument is used move the argument iter forward one
 
 // creating token of a format string segment should also cause

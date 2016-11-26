@@ -94,7 +94,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 }
 
-/// Build a specification of the comamnd line.
+/// Build a specification of the command line.
 ///
 /// Returns a getopts::Options struct.
 ///

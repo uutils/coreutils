@@ -16,7 +16,7 @@ pub fn warn_expected_numeric(pf_arg: &String) {
     cli::err_msg(&format!("{}: expected a numeric value", pf_arg));
 }
 
-// when character costant arguments have excess characters
+// when character constant arguments have excess characters
 // issue a warning when POSIXLY_CORRECT is not set
 fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
     match env::var("POSIXLY_CORRECT") {

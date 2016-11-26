@@ -16,8 +16,8 @@ static ALPHA_OUT: &'static str = "
         0000033
         ";
 
-// XXX We could do a better job of ensuring that we have a fresh temp dir to ourself,
-// not a general one ful of other proc's leftovers.
+// XXX We could do a better job of ensuring that we have a fresh temp dir to ourselves,
+// not a general one full of other proc's leftovers.
 
 // Test that od can read one file and dump with default format
 #[test]
@@ -29,9 +29,8 @@ fn test_file() {
 
     {
         let mut f = File::create(&file).unwrap();
-        match f.write_all(b"abcdefghijklmnopqrstuvwxyz\n") {
-            Err(_)  => panic!("Test setup failed - could not write file"),
-            _ => {}
+        if f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_err() {
+            panic!("Test setup failed - could not write file");
         }
     }
 
@@ -52,15 +51,14 @@ fn test_2files() {
     let file1 = tmpdir.join("test1");
     let file2 = tmpdir.join("test2");
 
-    for &(n,a) in [(1,"a"), (2,"b")].iter() {
+    for &(n,a) in &[(1,"a"), (2,"b")] {
         println!("number: {} letter:{}", n, a);
      }
 
     for &(path,data)in &[(&file1, "abcdefghijklmnop"),(&file2, "qrstuvwxyz\n")] {
         let mut f = File::create(&path).unwrap();
-        match f.write_all(data.as_bytes()) {
-            Err(_)  => panic!("Test setup failed - could not write file"),
-            _ => {}
+        if f.write_all(data.as_bytes()).is_err() {
+            panic!("Test setup failed - could not write file");
         }
     }
 
@@ -74,7 +72,7 @@ fn test_2files() {
     let _ = remove_file(file2);
 }
 
-// Test that od gives non-0 exit val for filename that dosen't exist.
+// Test that od gives non-0 exit val for filename that doesn't exist.
 #[test]
 fn test_no_file() {
     let temp = env::temp_dir();
@@ -108,9 +106,8 @@ fn test_from_mixed() {
     let (data1, data2, data3) = ("abcdefg","hijklmnop","qrstuvwxyz\n");
     for &(path,data)in &[(&file1, data1),(&file3, data3)] {
         let mut f = File::create(&path).unwrap();
-        match f.write_all(data.as_bytes()) {
-            Err(_)  => panic!("Test setup failed - could not write file"),
-            _ => {}
+        if f.write_all(data.as_bytes()).is_err() {
+            panic!("Test setup failed - could not write file");
         }
     }
 

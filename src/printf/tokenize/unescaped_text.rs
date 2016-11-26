@@ -170,7 +170,7 @@ impl UnescapedText {
 
     }
 
-    // take an iteratator to a string,
+    // take an iterator to a string,
     // and return a wrapper around a Vec<u8> of unescaped bytes
     // break on encounter of sub symbol ('%[^%]') unless called
     // through %b subst.

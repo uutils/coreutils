@@ -214,7 +214,7 @@ fn exec(tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool
     println!("{}", tmpname);
 
     // CAUTION: Not to call `drop` of tmpfile, which removes the tempfile,
-    // I call a dengeros function `forget`.
+    // I call a dangerous function `forget`.
     forget(tmpfile);
 
     0

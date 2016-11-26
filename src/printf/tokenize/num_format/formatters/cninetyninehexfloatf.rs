@@ -41,7 +41,7 @@ impl Formatter for CninetyNineHexFloatf {
 
 // c99 hex has unique requirements of all floating point subs in pretty much every part of building a primitive, from prefix and suffix to need for base conversion (in all other cases if you don't have decimal you must have decimal, here it's the other way around)
 
-// on the todo list is to have a trait for get_primitive that is implemented by each float formatter and can override a default. when that happens we can take the parts of get_primitive_dec specific to dec and spin them out to their own functions that can be overriden.
+// on the todo list is to have a trait for get_primitive that is implemented by each float formatter and can override a default. when that happens we can take the parts of get_primitive_dec specific to dec and spin them out to their own functions that can be overridden.
 #[allow(unused_variables)]
 #[allow(unused_assignments)]
 fn get_primitive_hex(inprefix: &InPrefix,
@@ -93,7 +93,7 @@ fn get_primitive_hex(inprefix: &InPrefix,
     // the addition or subtraction of 4 (2**4, because 4 bits in a hex digit)
     // to the exponent.
     // decimal's going to be a little more complicated. correct simulation
-    // of glibc will require after-decimal division to a specified precisino.
+    // of glibc will require after-decimal division to a specified precision.
     // the difficult part of this (arrnum_int_div_step) is already implemented.
 
     // the hex float name may be a bit misleading in terms of how to go about the

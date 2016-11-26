@@ -64,7 +64,7 @@ fn rho_pollard_find_divisor(num: u64) -> u64 {
         y = rho_pollard_pseudorandom_function(y, a, b, num);
         let d = gcd(num, max(x, y) - min(x, y));
         if d == num {
-            // Failure, retry with diffrent function
+            // Failure, retry with different function
             x = range.ind_sample(&mut rng);
             y = x;
             a = range.ind_sample(&mut rng);

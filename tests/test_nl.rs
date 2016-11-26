@@ -35,16 +35,16 @@ fn test_padding_with_overflow() {
 
 #[test]
 fn test_sections_and_styles() {
-    for &(fixture, output) in [("section.txt",
-                                "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  \
-                                 |BODY2\n\nFOOTER1\nFOOTER2\n\nNEXTHEADER1\nNEXTHEADER2\n\n1  \
-                                 |NEXTBODY1\n2  |NEXTBODY2\n\nNEXTFOOTER1\nNEXTFOOTER2\n"),
-                               ("joinblanklines.txt",
-                                "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n\n\n\n\n4  \
-                                 |\n\n\n\n\n5  |\n6  |Followed by 5x empty\n\n\n\n\n7  |\n8  \
-                                 |Followed by 4x empty\n\n\n\n\n9  |Nonempty\n10 |Nonempty\n11 \
-                                 |Nonempty.\n")]
-                                  .iter() {
+    for &(fixture, output) in &[("section.txt",
+                                 "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  \
+                                  |BODY2\n\nFOOTER1\nFOOTER2\n\nNEXTHEADER1\nNEXTHEADER2\n\n1  \
+                                  |NEXTBODY1\n2  |NEXTBODY2\n\nNEXTFOOTER1\nNEXTFOOTER2\n"),
+                                ("joinblanklines.txt",
+                                 "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n\n\n\n\n4  \
+                                  |\n\n\n\n\n5  |\n6  |Followed by 5x empty\n\n\n\n\n7  |\n8  \
+                                  |Followed by 4x empty\n\n\n\n\n9  |Nonempty\n10 |Nonempty\n11 \
+                                  |Nonempty.\n")]
+                                {
         new_ucmd!()
             .args(&["-s", "|", "-n", "ln", "-w", "3", "-b", "a", "-l", "5", fixture])
             .run()

@@ -13,7 +13,7 @@ pub struct InputDecoder<'a, I> where I: 'a {
 
     /// A memory buffer, it's size is set in `new`.
     data: Vec<u8>,
-    /// The numer of bytes in the buffer reserved for the peek data from `PeekRead`.
+    /// The number of bytes in the buffer reserved for the peek data from `PeekRead`.
     reserved_peek_length: usize,
 
     /// The number of (valid) bytes in the buffer.

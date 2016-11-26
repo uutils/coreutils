@@ -29,7 +29,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     // Linux-specific options, not implemented
-    // opts.optflag("Z", "context", "set SELinux secutiry context" +
+    // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
     opts.optopt("m", "mode", "set file mode", "755");
     opts.optflag("p", "parents", "make parent directories as needed");
