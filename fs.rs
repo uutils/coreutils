@@ -26,6 +26,9 @@ pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
     for comp in path.components() {
         match comp {
             Component::ParentDir => {
+                if let Ok(p) = result.read_link() {
+                    result = p;
+                }
                 result.pop();
             }
             Component::CurDir => (),
