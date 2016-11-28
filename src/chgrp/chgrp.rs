@@ -217,6 +217,21 @@ impl Chgrper {
         }
     }
 
+    #[cfg(windows)]
+    fn is_bind_root<P: AsRef<Path>>(&self, root: P) -> bool {
+        false
+    }
+
+    #[cfg(unix)]
+    fn is_bind_root<P: AsRef<Path>>(&self, path: P) -> bool {
+        use std::os::unix::fs::MetadataExt;
+
+        // FIXME: remove unwrap here
+        let given = std::fs::metadata(path).unwrap();
+        let root = std::fs::metadata("/").unwrap();
+        given.dev() == root.dev() && given.ino() == root.ino()
+    }
+
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let follow_arg = self.dereference || self.bit_flag != FTS_PHYSICAL;
         let path = root.as_ref();
@@ -244,7 +259,7 @@ impl Chgrper {
             };
 
             if let Some(p) = may_exist {
-                if p.parent().is_none() {
+                if p.parent().is_none() || self.is_bind_root(p) {
                     show_info!("it is dangerous to operate recursively on '/'");
                     show_info!("use --no-preserve-root to override this failsafe");
                     return 1;
