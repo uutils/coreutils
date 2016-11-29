@@ -1,7 +1,8 @@
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
+
 use std::str::Chars;
-use itertools::PutBackN;
+use itertools::{PutBackN, put_back_n};
 use cli;
 use super::format_field::FormatField;
 
@@ -57,7 +58,7 @@ pub trait Formatter {
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String;
 }
 pub fn get_it_at(offset: usize, str_in: &str) -> PutBackN<Chars> {
-    PutBackN::new(str_in[offset..].chars())
+    put_back_n(str_in[offset..].chars())
 }
 
 // TODO: put this somewhere better

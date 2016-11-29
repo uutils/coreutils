@@ -7,7 +7,7 @@
 
 use std::iter::Peekable;
 use std::slice::Iter;
-use itertools::PutBackN;
+use itertools::put_back_n;
 use cli;
 use tokenize::token::{Token, Tokenizer};
 use tokenize::unescaped_text::UnescapedText;
@@ -26,7 +26,7 @@ impl Memo {
     pub fn new(pf_string: &String, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
         let mut pm = Memo { tokens: Vec::new() };
         let mut tmp_token: Option<Box<Token>>;
-        let mut it = PutBackN::new(pf_string.chars());
+        let mut it = put_back_n(pf_string.chars());
         let mut has_sub = false;
         loop {
             tmp_token = UnescapedText::from_it(&mut it, pf_args_it);
