@@ -8,7 +8,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 use std::process::exit;
 use cli;
-use itertools::PutBackN;
+use itertools::{PutBackN, put_back_n};
 use super::token;
 use super::unescaped_text::UnescapedText;
 use super::num_format::format_field::{FormatField, FieldType};
@@ -371,7 +371,7 @@ impl token::Token for Sub {
                                 })
                             }
                             'b' => {
-                                let mut a_it = PutBackN::new(arg_string.chars());
+                                let mut a_it = put_back_n(arg_string.chars());
                                 UnescapedText::from_it_core(&mut a_it, true);
                                 None
                             }
