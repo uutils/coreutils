@@ -14,7 +14,6 @@ use std::fs;
 use std::io::{Error, ErrorKind};
 use std::io::Result as IOResult;
 use std::path::{Component, Path, PathBuf};
-#[cfg(unix)]
 use std::borrow::Cow;
 
 pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
