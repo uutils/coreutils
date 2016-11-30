@@ -235,7 +235,12 @@ impl Chgrper {
             let may_exist = if follow_arg {
                 path.canonicalize().ok()
             } else {
-                Some(resolve_relative_path(path).into_owned())
+                let real = resolve_relative_path(path);
+                if real.is_dir() {
+                    Some(real.canonicalize().expect("failed to get real path"))
+                } else {
+                    Some(real.into_owned())
+                }
             };
 
             if let Some(p) = may_exist {

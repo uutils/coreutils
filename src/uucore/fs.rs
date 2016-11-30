@@ -17,20 +17,21 @@ use std::path::{Component, Path, PathBuf};
 #[cfg(unix)]
 use std::borrow::Cow;
 
-#[cfg(unix)]
 pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
-    if path.is_absolute() {
+    if path.components().all(|e| e != Component::ParentDir) {
         return path.into();
     }
-    let mut result = env::current_dir().unwrap_or(PathBuf::from("/"));
+    let root = Component::RootDir.as_os_str();
+    let mut result = env::current_dir().unwrap_or(PathBuf::from(root));
     for comp in path.components() {
         match comp {
             Component::ParentDir => {
                 result.pop();
             }
             Component::CurDir => (),
-            Component::Normal(s) => result.push(s),
-            _ => unreachable!(),
+            Component::RootDir |
+            Component::Normal(_) |
+            Component::Prefix(_) => result.push(comp.as_os_str()),
         }
     }
     result.into()

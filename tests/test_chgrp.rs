@@ -43,12 +43,52 @@ fn test_fail_silently() {
 
 #[test]
 fn test_preserve_root() {
-    new_ucmd!()
-        .arg("--preserve-root")
-        .arg("-R")
-        .arg("bin").arg("/")
+    // It's weird that on OS X, `realpath /etc/..` returns '/private'
+    for d in &["/", "/////tmp///../../../../",
+               "../../../../../../../../../../../../../../",
+               "./../../../../../../../../../../../../../../"] {
+        new_ucmd!()
+            .arg("--preserve-root")
+            .arg("-R")
+            .arg("bin").arg(d)
+            .fails()
+            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+    }
+}
+
+#[test]
+fn test_preserve_root_symlink() {
+    let file = "test_chgrp_symlink2root";
+    for d in &["/", "////tmp//../../../../",
+               "..//../../..//../..//../../../../../../../../",
+               ".//../../../../../../..//../../../../../../../"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.symlink(d, file);
+        ucmd.arg("--preserve-root")
+            .arg("-HR")
+            .arg("bin").arg(file)
+            .fails()
+            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink("///usr", file);
+    ucmd.arg("--preserve-root")
+        .arg("-HR")
+        .arg("bin").arg(format!(".//{}/..//..//../../", file))
         .fails()
         .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink("/", "/tmp/__root__");
+    ucmd.arg("--preserve-root")
+        .arg("-R")
+        .arg("bin").arg("/tmp/__root__/.")
+        .fails()
+        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+
+    use ::std::fs;
+    fs::remove_file("/tmp/__root__").unwrap();
 }
 
 #[test]
