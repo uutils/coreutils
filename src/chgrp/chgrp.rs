@@ -219,17 +219,18 @@ impl Chgrper {
 
     #[cfg(windows)]
     fn is_bind_root<P: AsRef<Path>>(&self, root: P) -> bool {
+        // TODO: is there an equivalent on Windows?
         false
     }
 
     #[cfg(unix)]
     fn is_bind_root<P: AsRef<Path>>(&self, path: P) -> bool {
-        use std::os::unix::fs::MetadataExt;
-
-        // FIXME: remove unwrap here
-        let given = std::fs::metadata(path).unwrap();
-        let root = std::fs::metadata("/").unwrap();
-        given.dev() == root.dev() && given.ino() == root.ino()
+        if let (Ok(given), Ok(root)) = (fs::metadata(path), fs::metadata("/")) {
+            given.dev() == root.dev() && given.ino() == root.ino()
+        } else {
+            // FIXME: not totally sure if it's okay to just ignore an error here
+            false
+        }
     }
 
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
