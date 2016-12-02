@@ -171,7 +171,7 @@ To do
 * [x] echo
 * [x] env
 * [x] expand
-* [ ] expr (almost done, no regular expressions)
+* [x] expr
 * [x] factor
 * [x] false
 * [x] fmt

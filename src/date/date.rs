@@ -15,7 +15,7 @@ extern crate clap;
 extern crate uucore;
 
 use chrono::{DateTime, FixedOffset, Offset, Local};
-use chrono::offset::utc::UTC;
+use chrono::offset::Utc;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -123,7 +123,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         // Get the current time, either in the local time zone or UTC.
         let now: DateTime<FixedOffset> = match settings.utc {
             true => {
-                let now = UTC::now();
+                let now = Utc::now();
                 now.with_timezone(&now.offset().fix())
             }
             false => {

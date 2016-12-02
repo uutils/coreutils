@@ -237,11 +237,12 @@ fn create_word_set(config: &Config, filter: &WordFilter,
         for line in &lines.0 {
             // if -r, exclude reference from word set
             let (ref_beg, ref_end) = match ref_reg.find(line) {
-                Some(x) => x,
+                Some(x) => (x.start(), x.end()),
                 None => (0,0)
             };
             // match words with given regex
-            for (beg, end) in reg.find_iter(line) {
+            for mat in reg.find_iter(line) {
+                let (beg, end) = (mat.start(), mat.end());
                 if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;
                 }
@@ -279,7 +280,7 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &str) ->
     } else if config.input_ref {
         let reg = Regex::new(&config.context_regex).unwrap();
         let (beg, end) = match reg.find(line) {
-            Some(x) => x,
+            Some(x) => (x.start(), x.end()),
             None => (0,0)
         };
         format!("{}", &line[beg .. end])

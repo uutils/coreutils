@@ -13,6 +13,7 @@
 //!
 
 use tokens::{Token};
+use onig::{Regex, Syntax, REGEX_OPTION_NONE};
 
 type TokenStack = Vec<(usize, Token)>;
 pub type OperandsList = Vec< Box<ASTNode> >;
@@ -105,6 +106,7 @@ impl ASTNode {
                                 ),
                             "|" => infix_operator_or(&operand_values),
                             "&" => infix_operator_and(&operand_values),
+                            ":" | "match" => operator_match(&operand_values),
                             "length" => prefix_operator_length( &operand_values ),
                             "index" => prefix_operator_index( &operand_values ),
                             "substr" => prefix_operator_substr( &operand_values ),
@@ -347,6 +349,25 @@ fn infix_operator_and( values: &Vec<String> ) -> Result<String, String> {
         Ok(values[0].clone())
     } else {
         Ok(0.to_string())
+    }
+}
+
+fn operator_match(values: &Vec<String>) -> Result<String, String> {
+    assert!(values.len() == 2);
+    let re = match Regex::with_options(&values[1], REGEX_OPTION_NONE, Syntax::grep()) {
+        Ok(m) => m,
+        Err(err) => return Err(err.description().to_string())
+    };
+    if re.captures_len() > 0 {
+        Ok(match re.captures(&values[0]) {
+            Some(captures) => captures.at(1).unwrap().to_string(),
+            None => "".to_string()
+        })
+    } else {
+        Ok(match re.find(&values[0]) {
+            Some((start, end)) => (end - start).to_string(),
+            None => "0".to_string()
+        })
     }
 }
 

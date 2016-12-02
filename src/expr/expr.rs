@@ -11,6 +11,7 @@
 
 #[macro_use]
 extern crate uucore;
+extern crate onig;
 
 mod tokens;
 mod syntax_tree;
@@ -95,9 +96,9 @@ separates increasing precedence groups.  EXPRESSION may be:
   ARG1 / ARG2       arithmetic quotient of ARG1 divided by ARG2
   ARG1 % ARG2       arithmetic remainder of ARG1 divided by ARG2
 
-  STRING : REGEXP   [NOT IMPLEMENTED] anchored pattern match of REGEXP in STRING
+  STRING : REGEXP   anchored pattern match of REGEXP in STRING
 
-  match STRING REGEXP        [NOT IMPLEMENTED] same as STRING : REGEXP
+  match STRING REGEXP        same as STRING : REGEXP
   substr STRING POS LENGTH   substring of STRING, POS counted from 1
   index STRING CHARS         index in STRING where any CHARS is found, or 0
   length STRING              length of STRING
