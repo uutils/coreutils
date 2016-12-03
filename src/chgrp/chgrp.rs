@@ -217,6 +217,22 @@ impl Chgrper {
         }
     }
 
+    #[cfg(windows)]
+    fn is_bind_root<P: AsRef<Path>>(&self, root: P) -> bool {
+        // TODO: is there an equivalent on Windows?
+        false
+    }
+
+    #[cfg(unix)]
+    fn is_bind_root<P: AsRef<Path>>(&self, path: P) -> bool {
+        if let (Ok(given), Ok(root)) = (fs::metadata(path), fs::metadata("/")) {
+            given.dev() == root.dev() && given.ino() == root.ino()
+        } else {
+            // FIXME: not totally sure if it's okay to just ignore an error here
+            false
+        }
+    }
+
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let follow_arg = self.dereference || self.bit_flag != FTS_PHYSICAL;
         let path = root.as_ref();
@@ -244,7 +260,7 @@ impl Chgrper {
             };
 
             if let Some(p) = may_exist {
-                if p.parent().is_none() {
+                if p.parent().is_none() || self.is_bind_root(p) {
                     show_info!("it is dangerous to operate recursively on '/'");
                     show_info!("use --no-preserve-root to override this failsafe");
                     return 1;

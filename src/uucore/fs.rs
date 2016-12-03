@@ -14,7 +14,6 @@ use std::fs;
 use std::io::{Error, ErrorKind};
 use std::io::Result as IOResult;
 use std::path::{Component, Path, PathBuf};
-#[cfg(unix)]
 use std::borrow::Cow;
 
 pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
@@ -26,6 +25,9 @@ pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
     for comp in path.components() {
         match comp {
             Component::ParentDir => {
+                if let Ok(p) = result.read_link() {
+                    result = p;
+                }
                 result.pop();
             }
             Component::CurDir => (),
