@@ -138,7 +138,7 @@ fn create_getopts_options() -> getopts::Options {
                 ("output BYTES bytes per output line. 32 is implied when BYTES is not \
                  specified."),
                 "BYTES");
-    opts.optflag("h", "help", "display this help and exit.");
+    opts.optflag("", "help", "display this help and exit.");
     opts.optflag("", "version", "output version information and exit.");
     opts.optflag("", "traditional", "compatibility mode with one input, offset and label.");
 
@@ -277,7 +277,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     };
 
-    if matches.opt_present("h") {
+    if matches.opt_present("help") {
         println!("{}", opts.usage(&USAGE));
         return 0;
     }
