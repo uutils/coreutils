@@ -281,7 +281,31 @@ impl Chgrper {
         let mut ret = 0;
         let root = root.as_ref();
         let follow = self.dereference || self.bit_flag & FTS_LOGICAL != 0;
-        for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
+
+        if self.preserve_root {
+            let may_exist = if follow {
+                root.canonicalize().ok()
+            } else {
+                let real = resolve_relative_path(root);
+                if real.is_dir() {
+                    Some(real.canonicalize().expect("failed to get real path"))
+                } else {
+                    Some(real.into_owned())
+                }
+            };
+
+            if let Some(p) = may_exist {
+                if p.parent().is_none() || self.is_bind_root(p) {
+                    ret = 1;
+                }
+            }
+        }
+
+        if ret != 0 {
+            return ret;
+        }
+
+        for entry in WalkDir::new(root).follow_links(follow).min_depth(1).max_depth(1) {
             let entry = unwrap!(entry, e, {
                 ret = 1;
                 show_info!("{}", e);
@@ -296,7 +320,17 @@ impl Chgrper {
                 }
             };
 
-            ret = self.wrap_chgrp(path, &meta, follow);
+            if follow {
+                let res = self.dive_into(path);
+                if ret != 0 {
+                    ret = res;
+                }
+            }
+
+            let res = self.wrap_chgrp(path, &meta, follow);
+            if ret != 0 {
+                ret = res;
+            }
         }
         ret
     }
