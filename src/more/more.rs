@@ -18,9 +18,9 @@ use getopts::Options;
 use std::io::{stdout, Write, Read};
 use std::fs::File;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::termios;
 
 #[derive(Clone, Eq, PartialEq)]
@@ -76,7 +76,7 @@ fn help(usage: &str) {
     println!("{}", msg);
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn setup_term() -> termios::Termios {
     let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
@@ -87,19 +87,21 @@ fn setup_term() -> termios::Termios {
     term
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "fuchsia"))]
+#[inline(always)]
 fn setup_term() -> usize {
     0
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 fn reset_term(term: &mut termios::Termios) {
     term.c_lflag.insert(termios::ICANON);
     term.c_lflag.insert(termios::ECHO);
     termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "fuchsia"))]
+#[inline(always)]
 fn reset_term(_: &mut usize) {
 }
 
@@ -112,7 +114,7 @@ fn more(matches: getopts::Matches) {
 
     let mut end = false;
     while let Ok(sz) = f.read(&mut buffer) {
-        if sz == 0 { break; }
+        if sz == 0 { break }
         stdout().write(&buffer[0..sz]).unwrap();
         for byte in std::io::stdin().bytes() {
             match byte.unwrap() {
@@ -125,7 +127,7 @@ fn more(matches: getopts::Matches) {
             }
         }
 
-        if end { break;}
+        if end { break }
     }
 
     reset_term(&mut term);

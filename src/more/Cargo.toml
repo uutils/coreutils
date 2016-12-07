@@ -9,10 +9,9 @@ path = "more.rs"
 
 [dependencies]
 getopts = "*"
-libc = "*"
 uucore = { path="../uucore" }
 
-[target."cfg(unix)".dependencies]
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = "*"
 
 [[bin]]

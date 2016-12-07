@@ -87,6 +87,7 @@ fuchsia = [
   "ln",
   "mkdir",
   "mktemp",
+  "more",
   "mv",
   "nl",
   "nproc",
