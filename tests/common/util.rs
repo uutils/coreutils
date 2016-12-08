@@ -374,7 +374,15 @@ impl TestScenario {
                 // Instead of hardcoding the path relative to the current
                 // directory, use Cargo's OUT_DIR to find path to executable.
                 // This allows tests to be run using profiles other than debug.
-                let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..", PROGNAME);
+                // let target_dir = path_concat!(env::var("OUT_DIR").unwrap(), "..", "..", "..", PROGNAME);
+                let target_dir;
+                // FIXME: $OUT_DIR is not set by nightly cargo
+                // See also: https://github.com/rust-lang/cargo/issues/3368
+                if cfg!(build = "release") {
+                    target_dir = path_concat!(env!("CARGO_MANIFEST_DIR"), "target", "release", PROGNAME);
+                } else {
+                    target_dir = path_concat!(env!("CARGO_MANIFEST_DIR"), "target", "debug", PROGNAME);
+                }
                 PathBuf::from(AtPath::new(Path::new(&target_dir)).root_dir_resolved())
             },
             util_name: String::from(util_name),

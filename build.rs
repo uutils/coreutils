@@ -4,6 +4,10 @@ use std::io::Write;
 use std::path::Path;
 
 pub fn main() {
+    if let Ok(profile) = env::var("PROFILE") {
+        println!("cargo:rustc-cfg=build={:?}", profile);
+    }
+
     let feature_prefix = "CARGO_FEATURE_";
     let out_dir = env::var("OUT_DIR").unwrap();
 
