@@ -39,10 +39,10 @@ unix = [
 # Feature "fuchsia" contains the exclusive list of utilities
 # that can be compiled and run on Fuchsia. Should be built
 # with --no-default-features when selecting this feature.
-# TODO: merge with "generic"/"unix" to avoid duplication
-# once we support all utilities in that feature.
+# TODO: merge with "unix" to avoid duplication once we support
+# all utilities in that feature.
 fuchsia = [
-  # From unix
+  # unix utilities
   "arch",
   "chgrp",
   "chmod",
@@ -62,68 +62,8 @@ fuchsia = [
   "uname",
   "unlink",
 
-  # From generic
-  "base32",
-  "base64",
-  "basename",
-  "cat",
-  "cksum",
-  "comm",
-  "cp",
-  "cut",
-  "dircolors",
-  "dirname",
-  "echo",
-  "env",
-  "expand",
-  "expr",
-  "factor",
-  "false",
-  "fmt",
-  "fold",
-  "hashsum",
-  "head",
-  "link",
-  "ln",
-  "ls",
-  "mkdir",
-  "mktemp",
-  "more",
-  "mv",
-  "nl",
-  "nproc",
-  "od",
-  "paste",
-  "printenv",
-  "printf",
-  "ptx",
-  "pwd",
-  "readlink",
-  "realpath",
-  "relpath",
-  "rm",
-  "rmdir",
-  "seq",
-  "shred",
-  "shuf",
-  "sleep",
-  "sort",
-  "split",
-  "sum",
-  "sync",
-  "tac",
-  "tail",
-  "tee",
-  "test",
-  "tr",
-  "true",
-  "truncate",
-  "tsort",
-  "unexpand",
-  "uniq",
-  "wc",
-  "whoami",
-  "yes",
+  # All generic utilities
+  "generic"
 ]
 generic = [
   "base32",
