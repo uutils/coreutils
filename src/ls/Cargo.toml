@@ -9,7 +9,7 @@ path = "ls.rs"
 
 [dependencies]
 getopts = "*"
-pretty-bytes = "0.1.0"
+pretty-bytes = "*"
 term_grid = "*"
 termsize = "*"
 time = "*"

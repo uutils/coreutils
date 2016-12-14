@@ -85,6 +85,7 @@ fuchsia = [
   "head",
   "link",
   "ln",
+  "ls",
   "mkdir",
   "mktemp",
   "more",
