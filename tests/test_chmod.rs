@@ -117,10 +117,16 @@ fn test_chmod_ugo_copy() {
 
 #[test]
 fn test_chmod_many_options() {
+    let original_umask = unsafe {
+        umask(0)
+    };
     let tests = vec!{
         TestCase{args: vec!{"-r,a+w", TEST_FILE}, before: 0o444, after: 0o222},
     };
     run_tests(tests);
+    unsafe {
+        umask(original_umask);
+    }
 }
 
 #[test]
