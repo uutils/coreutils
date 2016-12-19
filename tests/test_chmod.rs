@@ -1,6 +1,7 @@
 use common::util::*;
 use std::fs::{metadata, OpenOptions, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::sync::Mutex;
 
 extern crate libc;
 use self::libc::umask;
@@ -9,6 +10,9 @@ use self::libc::umask;
 static TEST_FILE: &'static str = "file";
 static REFERENCE_FILE: &'static str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
+lazy_static! {
+    static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
+}
 
 struct TestCase {
     args: Vec<&'static str>,
@@ -70,6 +74,8 @@ fn test_chmod_octal() {
 
 #[test]
 fn test_chmod_ugoa() {
+    let _guard = UMASK_MUTEX.lock();
+
     let last = unsafe {
         umask(0)
     };
@@ -117,6 +123,8 @@ fn test_chmod_ugo_copy() {
 
 #[test]
 fn test_chmod_many_options() {
+    let _guard = UMASK_MUTEX.lock();
+
     let original_umask = unsafe {
         umask(0)
     };
