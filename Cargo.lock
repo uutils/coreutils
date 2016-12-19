@@ -35,6 +35,7 @@ dependencies = [
  "id 0.0.1",
  "install 0.0.1",
  "kill 0.0.1",
+ "lazy_static 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "link 0.0.1",
  "ln 0.0.1",

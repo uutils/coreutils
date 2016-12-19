@@ -1,6 +1,9 @@
 #[macro_use]
 mod common;
 
+#[macro_use]
+extern crate lazy_static;
+
 // For conditional compilation
 macro_rules! unix_only {
     ($($fea:expr, $m:ident);+) => {

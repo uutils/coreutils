@@ -233,6 +233,7 @@ regex="*"
 rand="*"
 tempdir="*"
 unindent="*"
+lazy_static = "*"
 
 [[bin]]
 name = "uutils"
