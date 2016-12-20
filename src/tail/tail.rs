@@ -4,6 +4,7 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Morten Olsen Lysgaard <morten@lysgaard.no>
+ * (c) Alexander Batischev <eual.jp@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -11,9 +12,12 @@
  */
 
 extern crate getopts;
+extern crate libc;
 
 #[macro_use]
 extern crate uucore;
+
+mod platform;
 
 use std::collections::VecDeque;
 use std::error::Error;
@@ -38,6 +42,7 @@ struct Settings {
     sleep_msec: u32,
     beginning: bool,
     follow: bool,
+    pid: platform::Pid,
 }
 
 impl Default for Settings {
@@ -47,6 +52,7 @@ impl Default for Settings {
             sleep_msec: 1000,
             beginning: false,
             follow: false,
+            pid: 0,
         }
     }
 }
@@ -68,6 +74,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("n", "lines", "Number of lines to print", "k");
     opts.optflag("f", "follow", "Print the file as it grows");
     opts.optopt("s", "sleep-interval", "Number or seconds to sleep between polling the file when running with -f", "n");
+    opts.optopt("", "pid", "with -f, terminate after process ID, PID dies", "PID");
     opts.optflag("z", "zero-terminated", "Line delimiter is NUL, not newline");
     opts.optflag("h", "help", "help");
     opts.optflag("V", "version", "version");
@@ -99,6 +106,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
             None => {}
         };
+    }
+
+    if let Some(pid_str) = given_options.opt_str("pid") {
+        if let Ok(pid) = pid_str.parse() {
+            settings.pid = pid;
+            if pid != 0 {
+                if !settings.follow {
+                    show_warning!("PID ignored; --pid=PID is useful only when following");
+                }
+
+                if !platform::supports_pid_checks(pid) {
+                    show_warning!("--pid=PID is not supported on this system");
+                    settings.pid = 0;
+                }
+            }
+        }
     }
 
     match given_options.opt_str("n") {
@@ -320,9 +343,14 @@ const BLOCK_SIZE: u64 = 1 << 16;
 fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
     assert!(settings.follow);
     let mut last = readers.len() - 1;
+    let mut read_some = false;
+    let mut process = platform::ProcessChecker::new(settings.pid);
 
     loop {
         sleep(Duration::new(0, settings.sleep_msec*1000));
+
+        let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
+        read_some = false;
 
         for (i, reader) in readers.iter_mut().enumerate() {
             // Print all new content since the last pass
@@ -331,6 +359,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                 match reader.read_line(&mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
+                        read_some = true;
                         if i != last {
                             println!("\n==> {} <==", filenames[i]);
                             last = i;
@@ -340,6 +369,10 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                     Err(err) => panic!(err)
                 }
             }
+        }
+
+        if pid_is_dead {
+            break;
         }
     }
 }
