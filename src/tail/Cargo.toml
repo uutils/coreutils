@@ -9,7 +9,9 @@ path = "tail.rs"
 
 [dependencies]
 getopts = "*"
+kernel32-sys = "*"
 libc = "*"
+winapi = "*"
 uucore = { path="../uucore" }
 
 [[bin]]

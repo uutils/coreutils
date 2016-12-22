@@ -2,8 +2,11 @@ extern crate uu_tail;
 
 use common::util::*;
 use std::char::from_digit;
-use std::io::Write;
 use self::uu_tail::parse_size;
+use std::io::Write;
+use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
 
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
@@ -72,6 +75,48 @@ fn test_follow_multiple() {
 #[test]
 fn test_follow_stdin() {
     new_ucmd!().arg("-f").pipe_in_fixture(FOOBAR_TXT).run().stdout_is_fixture("follow_stdin.expected");
+}
+
+#[test]
+fn test_follow_with_pid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    #[cfg(unix)]
+    let dummy_cmd = "sh";
+    #[cfg(windows)]
+    let dummy_cmd = "cmd";
+
+    let mut dummy = Command::new(dummy_cmd).stdout(Stdio::null()).spawn().unwrap();
+    let pid = dummy.id();
+
+    let mut child = ucmd.arg("-f").arg(format!("--pid={}", pid)).arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run_no_wait();
+
+    let expected = at.read("foobar_follow_multiple.expected");
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    let first_append = "trois\n";
+    at.append(FOOBAR_2_TXT, first_append);
+    assert_eq!(read_size(&mut child, first_append.len()), first_append);
+
+    let second_append = "doce\ntrece\n";
+    let expected = at.read("foobar_follow_multiple_appended.expected");
+    at.append(FOOBAR_TXT, second_append);
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    // kill the dummy process and give tail time to notice this
+    dummy.kill().unwrap();
+    let _ = dummy.wait();
+    sleep(Duration::from_secs(1));
+
+    let third_append = "should\nbe\nignored\n";
+    at.append(FOOBAR_TXT, third_append);
+    assert_eq!(read_size(&mut child, 1), "\u{0}");
+
+    // On Unix, trying to kill a process that's already dead is fine; on Windows it's an error.
+    #[cfg(unix)]
+    child.kill().unwrap();
+    #[cfg(windows)]
+    assert_eq!(child.kill().is_err(), true);
 }
 
 #[test]
