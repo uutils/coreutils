@@ -119,14 +119,11 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
-    if path.exists() {
-        show_info!("cannot create directory '{}': File exists", path.display());
-        return 1;
-    }
-
-    if let Err(e) = fs::create_dir(path) {
-        show_info!("{}: {}", path.display(), e.to_string());
-        return 1;
+    if !path.exists() {
+        if let Err(e) = fs::create_dir(path) {
+            show_info!("{}: {}", path.display(), e.to_string());
+            return 1;
+        }
     }
 
     if verbose {

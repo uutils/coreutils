@@ -16,7 +16,7 @@ fn test_mkdir_mkdir() {
 fn test_mkdir_dup_dir() {
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg(TEST_DIR2).succeeds();
-    scene.ucmd().arg(TEST_DIR2).fails();
+    scene.ucmd().arg(TEST_DIR2).succeeds();
 }
 
 #[test]
@@ -30,7 +30,9 @@ fn test_mkdir_mode() {
 
 #[test]
 fn test_mkdir_parent() {
-    new_ucmd!().arg("-p").arg(TEST_DIR4).succeeds();
+    let scene = TestScenario::new(util_name!());
+    scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
+    scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
 }
 
 #[test]
