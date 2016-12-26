@@ -378,7 +378,7 @@ fn get_inode(metadata: &Metadata, options: &getopts::Matches) -> String {
 }
 
 #[cfg(not(unix))]
-fn get_inode(_metadata: &Metadata, _options: &getopts::Matches) -> Option<String> {
+fn get_inode(_metadata: &Metadata, _options: &getopts::Matches) -> String {
     "".to_string()
 }
 
