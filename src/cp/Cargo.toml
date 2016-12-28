@@ -8,7 +8,7 @@ name = "uu_cp"
 path = "cp.rs"
 
 [dependencies]
-walkdir = "0.1.*"
+walkdir = "1"
 getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
