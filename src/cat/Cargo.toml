@@ -8,7 +8,11 @@ name = "uu_cat"
 path = "cat.rs"
 
 [dependencies]
+quick-error = "1.1.0"
 uucore = { path="../uucore" }
+
+[target.'cfg(unix)'.dependencies]
+unix_socket = "0.5.0"
 
 [[bin]]
 name = "cat"
