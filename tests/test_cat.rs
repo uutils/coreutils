@@ -1,5 +1,8 @@
-use common::util::*;
+#[cfg(unix)]
+extern crate unix_socket;
+extern crate tempdir;
 
+use common::util::*;
 
 #[test]
 fn test_output_multi_files_print_all_chars() {
@@ -113,7 +116,7 @@ fn test_non_blank_overrides_number() {
             .pipe_in("\na\nb\n\n\nc")
             .succeeds()
             .stdout_only("\n     1\ta\n     2\tb\n\n\n     3\tc");
-    }    
+    }
 }
 
 #[test]
@@ -125,4 +128,31 @@ fn test_squeeze_blank_before_numbering() {
             .succeeds()
             .stdout_only("     1\ta\n     2\t\n     3\tb");
     }
+}
+
+
+
+#[test]
+#[cfg(foo)]
+fn test_domain_socket() {
+    use std::thread;
+    use self::unix_socket::UnixListener;
+    use self::tempdir::TempDir;
+    use std::io::prelude::*;
+
+    let dir = TempDir::new("unix_socket").expect("failed to create dir");
+    let socket_path = dir.path().join("sock");
+    let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+
+    let thread = thread::spawn(move || {
+        let mut stream = listener.accept().expect("failed to accept connection").0;
+        stream.write_all(b"a\tb").expect("failed to write test data");
+    });
+
+    new_ucmd!()
+        .args(&[socket_path])
+        .succeeds()
+        .stdout_only("a\tb");
+
+    thread.join().unwrap();
 }

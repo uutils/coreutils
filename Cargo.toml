@@ -235,6 +235,9 @@ tempdir="*"
 unindent="*"
 lazy_static = "*"
 
+[target.'cfg(unix)'.dev-dependencies]
+unix_socket = "*"
+
 [[bin]]
 name = "uutils"
 path = "src/uutils/uutils.rs"

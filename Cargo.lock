@@ -93,6 +93,7 @@ dependencies = [
  "unexpand 0.0.1",
  "unindent 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uniq 0.0.1",
+ "unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "unlink 0.0.1",
  "uptime 0.0.1",
  "users 0.0.1",
@@ -185,6 +186,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "cat"
 version = "0.0.1"
 dependencies = [
+ "quick-error 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -726,6 +729,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-error"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "rand"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1124,6 +1132,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "unix_socket"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "cfg-if 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "unlink"
 version = "0.0.1"
 dependencies = [
@@ -1259,6 +1276,7 @@ dependencies = [
 "checksum nix 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a0d95c5fa8b641c10ad0b8887454ebaafa3c92b5cd5350f8fc693adafd178e7b"
 "checksum num_cpus 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "55aabf4e2d6271a2e4e4c0f2ea1f5b07cc589cc1a9e9213013b54a76678ca4f3"
 "checksum pretty-bytes 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3095b93999fae14b4e0bb661c53875a441d9058b7b1a7ba2dfebc104d3776349"
+"checksum quick-error 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0aad603e8d7fb67da22dbdf1f4b826ce8829e406124109e73cf1b2454b93a71c"
 "checksum rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "022e0636ec2519ddae48154b028864bdce4eaf7d35226ab8e65c611be97b189d"
 "checksum regex 0.1.80 (registry+https://github.com/rust-lang/crates.io-index)" = "4fd4ace6a8cf7860714a2c2280d6c1f7e6a413486c13298bbc86fd3da019402f"
 "checksum regex-syntax 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "f9ec002c35e86791825ed294b50008eea9ddfc8def4420124fbc6b08db834957"
@@ -1277,6 +1295,7 @@ dependencies = [
 "checksum time 0.1.35 (registry+https://github.com/rust-lang/crates.io-index)" = "3c7ec6d62a20df54e07ab3b78b9a3932972f4b7981de295563686849eb3989af"
 "checksum unicode-width 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2d6722facc10989f63ee0e20a83cd4e1714a9ae11529403ac7e0afd069abc39e"
 "checksum unindent 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3508be0ce1bacc38d579b69bffb4b8d469f5af0c388ff4890b2b294e61671ffe"
+"checksum unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6aa2700417c405c38f5e6902d699345241c28c0b7ade4abaad71e35a87eb1564"
 "checksum utf8-ranges 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "a1ca13c08c41c9c3e04224ed9ff80461d97e121589ff27c753a16cb10830ae0f"
 "checksum void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 "checksum walkdir 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)" = "c66c0b9792f0a765345452775f3adbd28dde9d33f30d13e5dcc5ae17cf6f3780"
