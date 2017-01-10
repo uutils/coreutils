@@ -107,6 +107,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .optflag("h",
                  "human-readable",
                  "Print human readable file sizes (e.g. 1K 234M 56G).")
+        .optflag("i",
+                 "inode",
+                 "print the index number of each file")
         .optflag("L",
                  "dereference",
                  "When showing file information for a symbolic link, show information for the \
@@ -353,7 +356,8 @@ fn display_item_long(item: &PathBuf,
         Ok(md) => md,
     };
 
-    println!("{}{} {} {} {} {} {} {}",
+    println!("{}{}{} {} {} {} {} {} {}",
+             get_inode(&md, options),
              display_file_type(md.file_type()),
              display_permissions(&md),
              pad_left(display_symlink_count(&md), max_links),
@@ -363,6 +367,21 @@ fn display_item_long(item: &PathBuf,
              display_date(&md, options),
              display_file_name(&item, strip, &md, options).contents);
 }
+
+#[cfg(unix)]
+fn get_inode(metadata: &Metadata, options: &getopts::Matches) -> String {
+    if options.opt_present("inode") {
+        format!("{:8} ", metadata.ino())
+    } else {
+        "".to_string()
+    }
+}
+
+#[cfg(not(unix))]
+fn get_inode(_metadata: &Metadata, _options: &getopts::Matches) -> String {
+    "".to_string()
+}
+
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -453,6 +472,11 @@ fn display_file_name(path: &Path,
                      options: &getopts::Matches)
                      -> Cell {
     let mut name = get_file_name(path, strip);
+
+    if !options.opt_present("long") {
+        name = get_inode(metadata, options) + &name;
+    }
+
     if options.opt_present("classify") {
         let file_type = metadata.file_type();
         if file_type.is_dir() {
@@ -512,6 +536,9 @@ fn display_file_name(path: &Path,
                      options: &getopts::Matches)
                      -> Cell {
     let mut name = get_file_name(path, strip);
+    if !options.opt_present("long") {
+        name = get_inode(metadata, options) + &name;
+    }
     let mut width = UnicodeWidthStr::width(&*name);
 
     let color = options.opt_present("color");
