@@ -473,7 +473,7 @@ fn display_file_name(path: &Path,
                      -> Cell {
     let mut name = get_file_name(path, strip);
 
-    if ! options.opt_present("long") {
+    if !options.opt_present("long") {
         name = get_inode(metadata, options) + &name;
     }
 
@@ -536,7 +536,7 @@ fn display_file_name(path: &Path,
                      options: &getopts::Matches)
                      -> Cell {
     let mut name = get_file_name(path, strip);
-    if ! options.opt_present("long") {
+    if !options.opt_present("long") {
         name = get_inode(metadata, options) + &name;
     }
     let mut width = UnicodeWidthStr::width(&*name);
