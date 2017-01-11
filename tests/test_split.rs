@@ -93,7 +93,7 @@ impl RandomFile {
 fn test_split_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_default";
-    let glob = Glob::new(&at, ".", r"x[:alpha:][:alpha:]$");
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     RandomFile::new(&at, name).add_lines(2000);
     ucmd.args(&[name]).succeeds();
     assert_eq!(glob.count(), 2);
@@ -115,7 +115,7 @@ fn test_split_num_prefixed_chunks_by_bytes() {
 fn test_split_str_prefixed_chunks_by_bytes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_str_prefixed_chunks_by_bytes";
-    let glob = Glob::new(&at, ".", r"b[:alpha:][:alpha:]$");
+    let glob = Glob::new(&at, ".", r"b[[:alpha:]][[:alpha:]]$");
     RandomFile::new(&at, name).add_bytes(10000);
     ucmd.args(&["-b", "1000", name, "b"]).succeeds();
     assert_eq!(glob.count(), 10);
@@ -137,7 +137,7 @@ fn test_split_num_prefixed_chunks_by_lines() {
 fn test_split_str_prefixed_chunks_by_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_str_prefixed_chunks_by_lines";
-    let glob = Glob::new(&at, ".", r"d[:alpha:][:alpha:]$");
+    let glob = Glob::new(&at, ".", r"d[[:alpha:]][[:alpha:]]$");
     RandomFile::new(&at, name).add_lines(10000);
     ucmd.args(&["-l", "1000", name, "d"]).succeeds();
     assert_eq!(glob.count(), 10);

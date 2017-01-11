@@ -238,7 +238,7 @@ fn create_word_set(config: &Config, filter: &WordFilter,
             // if -r, exclude reference from word set
             let (ref_beg, ref_end) = match ref_reg.find(line) {
                 Some(x) => (x.start(), x.end()),
-                None => (0,0)
+                None => (0, 0)
             };
             // match words with given regex
             for mat in reg.find_iter(line) {
@@ -281,7 +281,7 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &str) ->
         let reg = Regex::new(&config.context_regex).unwrap();
         let (beg, end) = match reg.find(line) {
             Some(x) => (x.start(), x.end()),
-            None => (0,0)
+            None => (0, 0)
         };
         format!("{}", &line[beg .. end])
     } else {
