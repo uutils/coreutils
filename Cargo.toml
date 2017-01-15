@@ -66,10 +66,35 @@ fuchsia = [
   "generic"
 ]
 generic = [
+  "cat",
+  "hashsum",
+  "more",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "nl",
+  "nproc",
+  "ptx",
+  "shred",
+  "sort",
+  "sync",
+  "tail",
+  "test",
+  "whoami",
+  "redox"
+]
+# Feature "redox" contains the exclusive list of utilities
+# that can be compiled and run on redox. Should be built
+# with --no-default-features when selecting this feature.
+# TODO: merge with "generic" to avoid duplication once we support
+# all utilities in that feature.
+redox = [
+
+  # And maybe all generic utilities
   "base32",
   "base64",
   "basename",
-  "cat",
   "cksum",
   "comm",
   "cp",
@@ -84,22 +109,13 @@ generic = [
   "false",
   "fmt",
   "fold",
-  "hashsum",
   "head",
   "link",
-  "ln",
-  "ls",
-  "mkdir",
-  "mktemp",
-  "more",
   "mv",
-  "nl",
-  "nproc",
   "od",
   "paste",
   "printenv",
   "printf",
-  "ptx",
   "pwd",
   "readlink",
   "realpath",
@@ -107,17 +123,12 @@ generic = [
   "rm",
   "rmdir",
   "seq",
-  "shred",
   "shuf",
   "sleep",
-  "sort",
   "split",
   "sum",
-  "sync",
   "tac",
-  "tail",
   "tee",
-  "test",
   "tr",
   "true",
   "truncate",
@@ -125,7 +136,6 @@ generic = [
   "unexpand",
   "uniq",
   "wc",
-  "whoami",
   "yes",
 ]
 test_unimplemented = []
