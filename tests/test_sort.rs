@@ -58,6 +58,11 @@ fn test_version() {
 }
 
 #[test]
+fn test_ignore_case() {
+    test_helper("ignore_case", "-f");
+}
+
+#[test]
 fn test_multiple_files() {
     new_ucmd!()
         .arg("-n")

@@ -51,6 +51,7 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
+    ignore_case: bool,
     compare_fns: Vec<fn(&String, &String) -> Ordering>,
 }
 
@@ -64,6 +65,7 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
+            ignore_case: false,
             compare_fns: Vec::new(),
         }
     }
@@ -152,6 +154,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut settings: Settings = Default::default();
     let mut opts = getopts::Options::new();
 
+    opts.optflag("f", "ignore-case", "fold lower case to upper case characters");
     opts.optflag("n", "numeric-sort", "compare according to string numerical value");
     opts.optflag("h", "human-numeric-sort", "compare according to human readable sizes, eg 1M > 100k");
     opts.optflag("M", "month-sort", "compare according to month name abbreviation");
@@ -207,6 +210,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
     settings.stable = matches.opt_present("stable");
     settings.unique = matches.opt_present("unique");
     settings.check = matches.opt_present("check");
+    settings.ignore_case = matches.opt_present("ignore-case");
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -334,6 +338,16 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
 }
 
 fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
+    // Convert to uppercase if necessary
+    let (a_upper, b_upper): (String, String);
+    let (a, b) = if settings.ignore_case {
+        a_upper = a.to_uppercase();
+        b_upper = b.to_uppercase();
+        (&a_upper, &b_upper)
+    } else {
+        (a, b)
+    };
+
     for compare_fn in &settings.compare_fns {
         let cmp = compare_fn(a, b);
         if cmp != Ordering::Equal {
