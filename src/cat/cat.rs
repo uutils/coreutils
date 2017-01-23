@@ -304,9 +304,10 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
 fn write_lines(files: Vec<String>, options: &OutputOptions) -> CatResult<()> {
     let mut line_counter: usize = 1;
     let mut error_count = 0;
+    let mut at_line_start = true;
 
     for file in files {
-        let written = write_file_lines(&file[..], options, line_counter);
+        let written = write_file_lines(&file[..], options, line_counter, &mut at_line_start);
         line_counter += match written {
             Ok(lines) => lines,
             Err(error) => {
@@ -326,16 +327,13 @@ fn write_lines(files: Vec<String>, options: &OutputOptions) -> CatResult<()> {
 /// Outputs file and returns result with the number of lines to stdout
 /// from `file`.  If line numbering is enabled, then start output
 /// numbering at `line_number`.
-///
-/// # Arguments
-///
-/// * `files` - There is no short circuit when encountiner an error
-/// reading a file in this vector
-fn write_file_lines(file: &str, options: &OutputOptions, line_number: usize) -> CatResult<usize> {
+fn write_file_lines(file: &str,
+                    options: &OutputOptions,
+                    line_number: usize,
+                    at_line_start: &mut bool) -> CatResult<usize> {
     let mut handle = open(&file[..])?;
     let mut in_buf = [0; 1024 * 31];
     let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
-    let mut at_line_start = true;
     let mut one_blank_kept = false;
 
     let mut lines = 0;
@@ -349,9 +347,9 @@ fn write_file_lines(file: &str, options: &OutputOptions, line_number: usize) -> 
         while pos < n {
             // skip empty line_number enumerating them if needed
             if in_buf[pos] == '\n' as u8 {
-                if !at_line_start || ! options.squeeze_blank || !one_blank_kept {
+                if !*at_line_start || ! options.squeeze_blank || !one_blank_kept {
                     one_blank_kept = true;
-                    if at_line_start && options.number == NumberingMode::NumberAll {
+                    if *at_line_start && options.number == NumberingMode::NumberAll {
                         write!(&mut writer, "{0:6}\t", line_number + lines)?;
                         lines += 1;
                     }
@@ -360,12 +358,12 @@ fn write_file_lines(file: &str, options: &OutputOptions, line_number: usize) -> 
                         writer.flush().context(&file[..])?;
                     }
                 }
-                at_line_start = true;
+                *at_line_start = true;
                 pos += 1;
                 continue;
             }
             one_blank_kept = false;
-            if at_line_start && options.number != NumberingMode::NumberNone {
+            if *at_line_start && options.number != NumberingMode::NumberNone {
                 write!(&mut writer, "{0:6}\t", line_number + lines)?;
                 lines += 1;
             }
@@ -380,7 +378,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, line_number: usize) -> 
             };
             // end of buffer?
             if offset == 0 {
-                at_line_start = false;
+                *at_line_start = false;
                 break;
             }
             // print suitable end of line
@@ -388,7 +386,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, line_number: usize) -> 
             if handle.is_interactive {
                 writer.flush()?;
             }
-            at_line_start = true;
+            *at_line_start = true;
             pos += offset;
         }
     }
