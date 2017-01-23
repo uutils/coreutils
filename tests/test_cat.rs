@@ -23,6 +23,15 @@ fn test_output_multi_files_print_all_chars() {
 }
 
 #[test]
+fn test_numbered_lines_no_trailing_newline() {
+    new_ucmd!()
+        .args(&["nonewline.txt", "alpha.txt", "-n"])
+        .succeeds()
+        .stdout_only("     1\ttext without a trailing newlineabcde\n     2\tfghij\n     \
+                3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n");
+}
+
+#[test]
 fn test_stdin_show_nonprinting() {
     for same_param in vec!["-v", "--show-nonprinting"] {
         new_ucmd!()
