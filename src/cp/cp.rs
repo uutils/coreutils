@@ -20,7 +20,7 @@ extern crate uucore;
 
 use getopts::Options;
 use std::fs;
-use std::io::{BufReader, BufRead, stdin, ErrorKind, Result, Write};
+use std::io::{BufReader, BufRead, stdin, Result, Write};
 use std::path::Path;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
