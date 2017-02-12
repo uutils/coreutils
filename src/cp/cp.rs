@@ -47,15 +47,19 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
-pub struct Behaviour {
+pub struct CopyMode {
+    link : bool,
+    backup_mode : BackupMode,
+    backup_suffix : String,
+    verbose : bool,
+    update : bool,
     overwrite: OverwriteMode,
-    backup: BackupMode,
-    suffix: String,
-    update: bool,
+}
+
+pub struct Behaviour {
+    copy_mode : CopyMode,
     target_dir: Option<String>,
     no_target_dir: bool,
-    verbose: bool,
-    link : bool,
     recursive : bool,
 }
 static NAME: &'static str = "cp";
@@ -73,6 +77,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("r", "recursive", "copy directories recursively");
     opts.optflag("l", "link", "hard-link files instead of copying");
     opts.optflag("i", "interactive", "ask before overwriting files");
+    opts.optflag("u", "update", "copy when SOURCE is newer than DEST, or DEST is missing");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -94,15 +99,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Mode::Help    => help(&usage),
         Mode::Version => version(),
     }
+}
 
+fn version() -> i32 {
+    println!("{} {}", NAME, VERSION);
     0
 }
 
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help(usage: &str) {
+fn help(usage: &str) -> i32 {
     let msg = format!("{0} {1}\n\n\
                        Usage: {0} SOURCE DEST\n  \
                          or:  {0} SOURCE... DIRECTORY\n  \
@@ -110,29 +114,29 @@ fn help(usage: &str) {
                        \n\
                        {2}", NAME, VERSION, usage);
     println!("{}", msg);
+    0
 }
 
-fn copy(matches: getopts::Matches) {
-    let behavior = Behaviour {
-        overwrite : if matches.opt_present("no-clobber") {
+fn copy(matches: getopts::Matches) -> i32 {
+    let copy_mode = CopyMode {
+        link : matches.opt_present("link"),
+        backup_mode : BackupMode::NoBackup, //TODO: Impl backup. 
+        backup_suffix : String::from("~"),
+        verbose : matches.opt_present("verbose"),
+        update : matches.opt_present("update"),
+        overwrite : if matches.opt_present("no-clobber"){
             OverwriteMode::NoClobber
         } else if matches.opt_present("interactive") {
             OverwriteMode::Interactive
         } else {
             OverwriteMode::Force
         },
-        recursive : matches.opt_present("recursive"),
-        backup : BackupMode::NoBackup, //TODO: actually do backup
-        suffix : String::from("~"), //TODO: implement backup with suffix
-        update : false, //TODO: implement updating
-        //target_dir = if matches.opt_present("no-target-dir"){
-        //    None todo: implement this shit
-        //}
-        verbose : matches.opt_present("verbose"),
-        no_target_dir : matches.opt_present("no-target-directory"),
-        link : matches.opt_present("link"),
+    };
+    let behavior = Behaviour {
+        copy_mode : copy_mode,
         target_dir : matches.opt_str("target-directory"),
-
+        no_target_dir : matches.opt_present("no-target-directory"),
+        recursive : matches.opt_present("recursive"),
     };
     let sources: Vec<String> = if matches.free.is_empty() {
         crash!(1, "Missing SOURCE or DEST argument. Try --help for usage")
@@ -183,6 +187,7 @@ fn copy(matches: getopts::Matches) {
             }
         }
     }
+    let mut return_code = 0;
     let folder_copy = !dest.exists();
     'outer: for src in &sources {
         for item in WalkDir::new(src){
@@ -205,13 +210,12 @@ fn copy(matches: getopts::Matches) {
             } else  {
                 dest.join(item)
             };
-            //println!("{:?}", None);
             if item.is_dir() {
                 if !behavior.recursive {
                     println!("{}: skipping directory '{}' (use -r/--recursive to include directories)", NAME, item.display());
                     continue 'outer;
                 }
-                if behavior.verbose {
+                if behavior.copy_mode.verbose {
                     println!("{} -> {}", item.display(), full_dest.display());
                 }
                 if full_dest.is_dir() {
@@ -231,69 +235,26 @@ fn copy(matches: getopts::Matches) {
                     },
                 }
             } else {
-                let same_file = paths_refer_to_same_file(item, full_dest.as_path()).unwrap_or_else(|err| {
-                    match err.kind() {
-                        ErrorKind::NotFound => false,
-                        _ => {
-                            crash!(1, "{}", err)
+                match file_copy(&item, &full_dest, &behavior.copy_mode) {
+                    Ok(result_code) => {
+                        if return_code == 0 && return_code != result_code {
+                            return_code = result_code;
                         }
-                    }
-                });
-                if !item.is_file() {
-                    show_error!("\"{}\" is not a file", item.display());
-                    continue;
-                }
-                if same_file {
-                    crash!(1, "\"{}\" and \"{}\" are the same file",
-                        item.display(),
-                        full_dest.display())
-                }
-                if full_dest.exists() {
-                    match behavior.overwrite {
-                        OverwriteMode::NoClobber => {
-                            show_error!("Not overwriting {} because of option 'no-clobber'", full_dest.display());
-                            continue; //if the destination file exists, we promised not to overwrite
-                        },
-                        OverwriteMode::Interactive => {
-                            if !read_yes() {
-                                continue;
-                            }
-                        },
-                        OverwriteMode::Force => {
-                            let io_result = fs::remove_file(full_dest.clone()).err();
-                            match io_result {
-                                None => {},
-                                Some(t) => {
-                                    crash!(1, "{}", t)
-                                }
-                            }
-                        },
-
-                    }
-                }
-                if behavior.verbose {
-                    println!("{} -> {}", item.display(), full_dest.display());
-                }
-                let io_result = if behavior.link {
-                    fs::hard_link(item, full_dest).err()
-                } else {
-                    fs::copy(item, full_dest).err() //carry out the copy
-                };
-                match io_result {
-                    None => continue,
-                    Some(t) => {
-                        crash!(1, "{}", t)
+                    },
+                    Err(e) => {
+                        crash!(1, "{}", e);
                     }
                 }
             }
         }
     }
+    return_code
 }
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = try!(canonicalize(p1, CanonicalizeMode::Normal));
-    let pathbuf2 = try!(canonicalize(p2, CanonicalizeMode::Normal));
+    let pathbuf1 = canonicalize(p1, CanonicalizeMode::Normal)?;
+    let pathbuf2 = canonicalize(p2, CanonicalizeMode::Normal)?;
 
     Ok(pathbuf1 == pathbuf2)
 }
@@ -308,3 +269,64 @@ fn read_yes() -> bool {
         _ => false
     }
 }
+
+fn file_copy(source: &Path, dest: &Path, copy_mode: &CopyMode) -> Result<i32>  {
+    let same_file = match paths_refer_to_same_file(source, dest) {
+        Ok(result) => {
+            result
+        } ,
+        Err(e) => {
+            return Err(e);
+        }
+    }; 
+
+//    let src_metadata = source.metadata()?;  TODO: GNU cp also quits if the two files have the same inode number. 
+//    let dest_metadata = dest.metadata()?;   unsure how/if to implement this while preserving cross-platform compat
+    if !source.is_file() {
+        show_error!("\"{}\" is not a file", source.display());
+        return Ok(1);
+    }
+    if same_file {
+        show_error!("\"{} and \"{}\" are the same file",
+            source.display(),
+            dest.display());
+            return Ok(1);
+    }
+    if dest.exists() {
+        match copy_mode.overwrite {
+            OverwriteMode::NoClobber => {
+                show_error!("Not overwriting {} because of option \"no-clobber\"", dest.display());
+                    return Ok(0); //Should I warn if a file is skipped because of no-clobber? GNU cp does not.
+            },
+            OverwriteMode::Interactive => {
+                println!("Overwrite \"{}\"?", dest.display());
+                if !read_yes() {
+                    return Ok(0);
+                }
+            }
+            OverwriteMode::Force => {
+                let io_result = fs::remove_file(dest.clone());
+                if io_result.is_err() {
+                    return Err(io_result.err().unwrap());
+                }
+            }
+            
+        }
+    }
+//execute the copy itself
+    if copy_mode.verbose {
+        println!("{} -> {}", source.display(), dest.display());
+    }
+    if copy_mode.link {
+        match fs::hard_link(source, dest) {
+            Ok(_) => Ok(0),
+            Err(e) => Err(e),
+        }
+    } else {
+        match fs::copy(source, dest) {
+            Ok(_) => Ok(0),
+            Err(e) => Err(e),
+        }
+    }
+}
+
