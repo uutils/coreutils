@@ -1,20 +1,8 @@
+extern crate uucore;
+
 use common::util::*;
 
-
-use ::std::fs::File;
-use ::std::io::BufReader;
-use ::std::io::BufRead;
-
-thread_local! {
-    static PASSWD: Vec<String> = BufReader::new(File::open("/etc/passwd").unwrap())
-        .lines()
-        .filter_map(|l| l.ok())
-        .filter(|l| l.starts_with("root:"))
-        .map(|l| {
-            l.split(':').map(|s| s.to_owned()).collect::<Vec<_>>()
-        })
-        .next().unwrap();
-}
+use self::uucore::entries::{Locate, Passwd};
 
 extern crate uu_pinky;
 pub use self::uu_pinky::*;
@@ -29,19 +17,21 @@ fn test_capitalize() {
 
 #[test]
 fn test_long_format() {
-    PASSWD.with(|v| {
-        let gecos = v[4].replace("&", &v[4].capitalize());
-        new_ucmd!()
-            .arg("-l").arg("root")
-            .run()
-            .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n", v[0], gecos, v[5], v[6]));
+    let ulogin = "root";
+    let pw: Passwd = Passwd::locate(ulogin).unwrap();
+    let real_name = pw.user_info().replace("&", &pw.name().capitalize());
+    new_ucmd!()
+        .arg("-l").arg(ulogin)
+        .run()
+        .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n",
+                           ulogin, real_name, pw.user_dir(), pw.user_shell()));
 
-        new_ucmd!()
-            .arg("-lb")
-            .arg("root")
-            .run()
-            .stdout_is(format!("Login name: {:<28}In real life:  {1}\n\n", v[0], gecos));
-    })
+    new_ucmd!()
+        .arg("-lb")
+        .arg(ulogin)
+        .run()
+        .stdout_is(format!("Login name: {:<28}In real life:  {1}\n\n",
+                           ulogin, real_name));
 }
 
 #[cfg(target_os = "linux")]
