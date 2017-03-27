@@ -99,6 +99,7 @@ redox = [
   "comm",
   "cp",
   "cut",
+  "date",
   "dircolors",
   "dirname",
   "echo",
@@ -157,6 +158,7 @@ cksum    = { optional=true, path="src/cksum" }
 comm     = { optional=true, path="src/comm" }
 cp       = { optional=true, path="src/cp" }
 cut      = { optional=true, path="src/cut" }
+date     = { optional=true, path="src/date" }
 dircolors= { optional=true, path="src/dircolors" }
 dirname  = { optional=true, path="src/dirname" }
 du       = { optional=true, path="src/du" }
