@@ -1,0 +1,17 @@
+[package]
+name = "date"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_date"
+path = "date.rs"
+
+[dependencies]
+chrono = "*"
+clap = "*"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "date"
+path = "main.rs"
