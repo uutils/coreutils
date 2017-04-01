@@ -86,6 +86,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  "almost-all",
                  "In a directory, do not ignore all file names that start with '.', only ignore \
                   '.' and '..'.")
+        .optflag("B",
+                 "ignore-backups",
+                 "Ignore entries which end with ~.")
         .optflag("c",
                  "",
                  "If the long listing format (e.g., -l, -o) is being used, print the status \
@@ -233,13 +236,25 @@ fn max(lhs: usize, rhs: usize) -> usize {
     }
 }
 
+fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
+    let ffi_name = entry.file_name();
+    let name = ffi_name.to_string_lossy();
+    if !options.opt_present("a") && !options.opt_present("A") {
+        if name.starts_with('.') {
+            return false;
+        }
+    }
+    if options.opt_present("B") && name.ends_with('~') {
+        return false;
+    }
+    return true;
+}
+
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
     let mut entries = safe_unwrap!(fs::read_dir(dir)
         .and_then(|e| e.collect::<Result<Vec<_>, _>>()));
 
-    if !options.opt_present("a") && !options.opt_present("A") {
-        entries.retain(|e| !e.file_name().to_string_lossy().starts_with('.'))
-    }
+    entries.retain(|e| should_display(e, options));
 
     let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
     sort_entries(&mut entries, options);
