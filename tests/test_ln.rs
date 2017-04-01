@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_symlink_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -246,6 +245,32 @@ fn test_symlink_target_dir() {
     let file_b_link = &format!("{}/{}", dir, file_b);
     assert!(at.is_symlink(file_b_link));
     assert_eq!(at.resolve_link(file_b_link), file_b);
+}
+
+#[test]
+fn test_symlink_target_dir_from_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_ln_target_dir_dir";
+    let from_dir = "test_ln_target_dir_from_dir";
+    let filename_a = "test_ln_target_dir_file_a";
+    let filename_b = "test_ln_target_dir_file_b";
+    let file_a = &format!("{}/{}", from_dir, filename_a);
+    let file_b = &format!("{}/{}", from_dir, filename_b);
+
+    at.mkdir(from_dir);
+    at.touch(file_a);
+    at.touch(file_b);
+    at.mkdir(dir);
+
+    ucmd.args(&["-s", "-t", dir, file_a, file_b]).succeeds().no_stderr();
+
+    let file_a_link = &format!("{}/{}", dir, filename_a);
+    assert!(at.is_symlink(file_a_link));
+    assert_eq!(&at.resolve_link(file_a_link), file_a);
+
+    let file_b_link = &format!("{}/{}", dir, filename_b);
+    assert!(at.is_symlink(file_b_link));
+    assert_eq!(&at.resolve_link(file_b_link), file_b);
 }
 
 #[test]
