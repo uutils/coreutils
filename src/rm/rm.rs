@@ -129,7 +129,7 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
         let filename = &filename[..];
         let file = Path::new(filename);
         if file.exists() {
-            if file.is_dir() {
+            if file.symlink_metadata().unwrap().is_dir() {
                 if recursive && (filename != "/" || !preserve_root) {
                     if interactive != InteractiveMode::InteractiveAlways {
                         if let Err(e) = fs::remove_dir_all(file) {
