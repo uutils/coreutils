@@ -118,6 +118,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  "When showing file information for a symbolic link, show information for the \
                  file the link references rather than the link itself.")
         .optflag("l", "long", "Display detailed information.")
+        .optflag("n", "numeric-uid-gid", "-l with numeric UIDs and GIDs.")
         .optflag("r",
                  "reverse",
                  "Reverse whatever the sorting method is--e.g., list files in reverse \
@@ -308,7 +309,7 @@ fn pad_left(string: String, count: usize) -> String {
 }
 
 fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::Matches) {
-    if options.opt_present("long") {
+    if options.opt_present("long") || options.opt_present("numeric-uid-gid") {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
             let (links, size) = display_dir_entry_size(item, options);
@@ -376,8 +377,8 @@ fn display_item_long(item: &PathBuf,
              display_file_type(md.file_type()),
              display_permissions(&md),
              pad_left(display_symlink_count(&md), max_links),
-             display_uname(&md),
-             display_group(&md),
+             display_uname(&md, options),
+             display_group(&md, options),
              pad_left(display_file_size(&md, options), max_size),
              display_date(&md, options),
              display_file_name(&item, strip, &md, options).contents);
@@ -404,24 +405,32 @@ fn get_inode(_metadata: &Metadata, _options: &getopts::Matches) -> String {
 use uucore::entries;
 
 #[cfg(unix)]
-fn display_uname(metadata: &Metadata) -> String {
-    entries::uid2usr(metadata.uid()).unwrap_or(metadata.uid().to_string())
+fn display_uname(metadata: &Metadata, options: &getopts::Matches) -> String {
+    if options.opt_present("numeric-uid-gid") {
+        metadata.uid().to_string()
+    } else {
+        entries::uid2usr(metadata.uid()).unwrap_or(metadata.uid().to_string())
+    }
 }
 
 #[cfg(unix)]
-fn display_group(metadata: &Metadata) -> String {
-    entries::gid2grp(metadata.gid()).unwrap_or(metadata.gid().to_string())
+fn display_group(metadata: &Metadata, options: &getopts::Matches) -> String {
+    if options.opt_present("numeric-uid-gid") {
+        metadata.gid().to_string()
+    } else {
+        entries::gid2grp(metadata.gid()).unwrap_or(metadata.gid().to_string())
+    }
 }
 
 #[cfg(not(unix))]
 #[allow(unused_variables)]
-fn display_uname(metadata: &Metadata) -> String {
+fn display_uname(metadata: &Metadata, _options: &getopts::Matches) -> String {
     "somebody".to_string()
 }
 
 #[cfg(not(unix))]
 #[allow(unused_variables)]
-fn display_group(metadata: &Metadata) -> String {
+fn display_group(metadata: &Metadata, _options: &getopts::Matches) -> String {
     "somegroup".to_string()
 }
 
