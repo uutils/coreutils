@@ -94,7 +94,9 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
             let mut pathbuf = PathBuf::new();
             for component in path.components() {
                 pathbuf.push(component.as_os_str());
-                status |= mkdir(pathbuf.as_path(), mode, verbose);
+                if !path.is_dir() {
+                    status |= mkdir(pathbuf.as_path(), mode, verbose);
+                }
             }
         } else {
             match path.parent() {
@@ -119,11 +121,9 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
-    if !path.exists() {
-        if let Err(e) = fs::create_dir(path) {
-            show_info!("{}: {}", path.display(), e.to_string());
-            return 1;
-        }
+    if let Err(e) = fs::create_dir(path) {
+        show_info!("{}: {}", path.display(), e.to_string());
+        return 1;
     }
 
     if verbose {
