@@ -189,7 +189,16 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
     let mut all_successful = true;
     for srcpath in files.iter() {
         let targetpath = match srcpath.as_os_str().to_str() {
-            Some(name) => target_dir.join(name),
+            Some(name) => {
+                match Path::new(name).file_name() {
+                    Some(basename) => target_dir.join(basename),
+                    // This can be None only for "." or "..". Trying
+                    // to create a link with such name will fail with
+                    // EEXIST, which agrees with the bahavior of GNU
+                    // coreutils.
+                    None => target_dir.join(name),
+                }
+            }
             None => {
                 show_error!("cannot stat '{}': No such file or directory",
                             srcpath.display());
