@@ -136,3 +136,15 @@ fn test_rm_verbose() {
     ucmd.arg("-v").arg(file_a).arg(file_b).succeeds()
         .stdout_only(format!("removed '{}'\nremoved '{}'\n", file_a, file_b));
 }
+
+#[test]
+fn test_rm_dir_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_dir_symlink_dir";
+    let link = "test_rm_dir_symlink_link";
+
+    at.mkdir(dir);
+    at.symlink(dir, link);
+
+    ucmd.arg(link).succeeds();
+}
