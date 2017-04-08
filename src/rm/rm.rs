@@ -128,16 +128,8 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
     for filename in &files {
         let filename = &filename[..];
         let file = Path::new(filename);
-        if file.exists() {
-            let is_dir = match file.symlink_metadata() {
-                Ok(metadata) => metadata.is_dir(),
-                Err(e) => {
-                    had_err = true;
-                    show_error!("could not read metadata of '{}': {}", filename, e);
-                    continue;
-                }
-            };
-            if is_dir {
+        match file.symlink_metadata() {
+            Ok(metadata) => if metadata.is_dir() {
                 if recursive && (filename != "/" || !preserve_root) {
                     if interactive != InteractiveMode::InteractiveAlways {
                         if let Err(e) = fs::remove_dir_all(file) {
@@ -214,10 +206,16 @@ fn remove(files: Vec<String>, force: bool, interactive: InteractiveMode, one_fs:
                 }
             } else {
                 had_err = remove_file(&file, interactive, verbose).bitor(had_err);
+            },
+            Err(e) => {
+                // TODO: When the error is not about missing files
+                // (e.g., permission), even rm -f should fail with
+                // outputting the error, but there's no easy eay.
+                if !force {
+                    had_err = true;
+                    show_error!("no such file or directory '{}'", filename);
+                }
             }
-        } else if !force {
-            show_error!("no such file or directory '{}'", filename);
-            had_err = true;
         }
     }
 

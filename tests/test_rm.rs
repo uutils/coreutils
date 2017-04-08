@@ -148,3 +148,13 @@ fn test_rm_dir_symlink() {
 
     ucmd.arg(link).succeeds();
 }
+
+#[test]
+fn test_rm_invalid_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let link = "test_rm_invalid_symlink";
+
+    at.symlink(link, link);
+
+    ucmd.arg(link).succeeds();
+}
