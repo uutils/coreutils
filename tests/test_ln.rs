@@ -1,4 +1,5 @@
 use common::util::*;
+use std::path::PathBuf;
 
 #[test]
 fn test_symlink_existing_file() {
@@ -335,16 +336,20 @@ fn test_symlink_target_only() {
 fn test_symlink_implicit_target_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_symlink_implicit_target_dir";
-    let file = "test_symlink_implicit_target_dir/file";
+    // On windows, slashes aren't allowed in symlink targets, so use
+    // PathBuf to construct `file` instead of simple "dir/file".
+    let filename = "test_symlink_implicit_target_file";
+    let path = PathBuf::from(dir).join(filename);
+    let file = &path.to_string_lossy();
 
     at.mkdir(dir);
     at.touch(file);
 
     ucmd.args(&["-s", file]).succeeds().no_stderr();
 
-    assert!(at.file_exists("file"));
-    assert!(at.is_symlink("file"));
-    assert_eq!(at.resolve_link("file"), file);
+    assert!(at.file_exists(filename));
+    assert!(at.is_symlink(filename));
+    assert_eq!(at.resolve_link(filename), *file);
 }
 
 #[test]
