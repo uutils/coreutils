@@ -31,7 +31,7 @@ macro_rules! cstr2cow {
     )
 }
 
-#[cfg(not(target_os = "linu"))]
+#[cfg(not(target_os = "linux"))]
 mod audit {
     pub use std::mem::uninitialized;
     use super::libc::{uid_t, pid_t, c_int, c_uint, uint64_t, dev_t};
