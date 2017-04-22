@@ -34,8 +34,16 @@ impl<'a> CoreOptions<'a> {
         self.options.optflag(short_name, long_name, desc);
         self
     }
+    pub fn optflagmulti(&mut self, short_name: &str, long_name: &str, desc: &str) -> &mut CoreOptions<'a> {
+        self.options.optflagmulti(short_name, long_name, desc);
+        self
+    }
     pub fn optopt(&mut self, short_name: &str, long_name: &str, desc: &str, hint: &str) -> &mut CoreOptions<'a> {
         self.options.optopt(short_name, long_name, desc, hint);
+        self
+    }
+    pub fn optmulti(&mut self, short_name: &str, long_name: &str, desc: &str, hint: &str) -> &mut CoreOptions<'a> {
+        self.options.optmulti(short_name, long_name, desc, hint);
         self
     }
     pub fn usage(&self, summary : &str) -> String {
