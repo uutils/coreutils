@@ -55,12 +55,17 @@ pub struct CopyMode {
     update : bool,
     overwrite: OverwriteMode,
 }
-
+pub enum SymlinkMode {
+    CmdlineDereference,
+    AlwaysDereference,
+    NeverDereference,
+}
 pub struct Behaviour {
     copy_mode : CopyMode,
     target_dir: Option<String>,
     no_target_dir: bool,
     recursive : bool,
+    symlink_mode : SymlinkMode,
 }
 static NAME: &'static str = "cp";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -75,9 +80,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("v", "verbose", "explicitly state what is being done");
     opts.optflag("n", "no-clobber", "don't overwrite a file that already exists");
     opts.optflag("r", "recursive", "copy directories recursively");
+    opts.optflag("R", "", "copy directories recursively");
     opts.optflag("l", "link", "hard-link files instead of copying");
     opts.optflag("i", "interactive", "ask before overwriting files");
     opts.optflag("u", "update", "copy when SOURCE is newer than DEST, or DEST is missing");
+    opts.optflag("f", "force", "If the existing file can't be opened, try to remove it and try again (this option is ignored when --no-clobber is given)");
+    opts.optflag("L", "dereference", "Always follow symbolic links in source and directories referred by source");
+    opts.optflag("P", "no-dereference", "Never follow symbolic links");
+    opts.optflag("H", "", "Only follow symbolic links in the command-line arguments (default behavior)");
+
+
+    ///TODO for POSIX Compatibility:
+    // TODO: -R (as well as -r/--recursive)
+    // TODO: -H (Follow symbolic links in command line
+    // TODO: -L/--dereference (always follow symbolic links in SOURCE)
+    // TODO: -P/--no-dereference (do not follow symbolic links in SOURCE)
+    // TODO: -p/--preserve (preserve the specified attributes) (currently, we always preserve everything, except
+    // when making new directories -- this is posix-accepted but usually expected behavior is this source modified by umask (file mode creation mask)
+    // additionally if we preserve the modes with -p we have t get rid of the setuid and setgid permissions
+    // SHOULD ONLY SET ONE OF -H/-L/P
+    //DEFAULT OF GNU CP: Follow the link if it's in the command line, but don't if it's in the folder hierarchy referenced by command line
+    //NOTE: fs::copy follows the symbolic link by default (-L)
+    // by default we should set the current
+
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -100,8 +125,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Mode::Version => version(),
     }
 }
-
 fn version() -> i32 {
+
     println!("{} {}", NAME, VERSION);
     0
 }
@@ -116,6 +141,7 @@ fn help(usage: &str) -> i32 {
     println!("{}", msg);
     0
 }
+//todo: if the same file is present on the command line and the --backup option isn't given, follow gnu cp
 
 fn copy(matches: getopts::Matches) -> i32 {
     let copy_mode = CopyMode {
@@ -132,11 +158,19 @@ fn copy(matches: getopts::Matches) -> i32 {
             OverwriteMode::Force
         },
     };
+    let symlink_mode = if matches.opt_present("no-dereference") {
+        SymlinkMode::NoDereference
+    } else if matches.opt_present("dereference") {
+        SymlinkMode::Dereference
+    } else {
+        SymlinkMode::DereferenceCmdline
+    };
     let behavior = Behaviour {
         copy_mode : copy_mode,
         target_dir : matches.opt_str("target-directory"),
         no_target_dir : matches.opt_present("no-target-directory"),
-        recursive : matches.opt_present("recursive"),
+        recursive : matches.opt_present("recursive") || matches.opt_present("R"),
+        symlink_mode : symlink_mode
     };
     let sources: Vec<String> = if matches.free.is_empty() {
         crash!(1, "Missing SOURCE or DEST argument. Try --help for usage")
@@ -270,7 +304,7 @@ fn read_yes() -> bool {
     }
 }
 
-fn file_copy(source: &Path, dest: &Path, copy_mode: &CopyMode) -> Result<i32>  {
+fn file_copy(source: &Path, dest: &Path, is_command_line: bool, copy_mode: &CopyMode, symlink_mode: &SymlinkMode) -> Result<i32>  {
     let same_file = match paths_refer_to_same_file(source, dest) {
         Ok(result) => {
             result
@@ -310,7 +344,6 @@ fn file_copy(source: &Path, dest: &Path, copy_mode: &CopyMode) -> Result<i32>  {
                     return Err(io_result.err().unwrap());
                 }
             }
-            
         }
     }
 //execute the copy itself
@@ -321,6 +354,12 @@ fn file_copy(source: &Path, dest: &Path, copy_mode: &CopyMode) -> Result<i32>  {
         match fs::hard_link(source, dest) {
             Ok(_) => Ok(0),
             Err(e) => Err(e),
+        }
+    } else if  true /*file is symlink*/ {
+        match SymlinkMode {
+            SymlinkMode::NoDereference => {},
+            SymlinkMode::AlwaysDereference => {},
+            SymlinkMode::NeverDereference => {},
         }
     } else {
         match fs::copy(source, dest) {
