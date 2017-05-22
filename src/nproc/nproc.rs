@@ -11,6 +11,7 @@
 
 extern crate getopts;
 extern crate num_cpus;
+extern crate libc;
 
 #[macro_use]
 extern crate uucore;
@@ -75,7 +76,7 @@ Print the number of cores available to the current process.", NAME, VERSION);
         };
     }
 
-    let mut cores = num_cpus::get();
+    let mut cores = get_num_cpus();
     if cores <= ignore {
         cores = 1;
     } else {
@@ -83,4 +84,31 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
     println!("{}", cores);
     0
+}
+
+#[cfg(target_os = "linux")]
+fn popcnt(n: u64) -> u64 {
+    let mut c: u64 = (n & 0x5555555555555555) + ((n >> 1) & 0x5555555555555555);
+    c = (c & 0x3333333333333333) + ((c >> 2) & 0x3333333333333333);
+    c = (c & 0x0f0f0f0f0f0f0f0f) + ((c >> 4) & 0x0f0f0f0f0f0f0f0f);
+    c = (c & 0x00ff00ff00ff00ff) + ((c >> 8) & 0x00ff00ff00ff00ff);
+    c = (c & 0x0000ffff0000ffff) + ((c >> 16) & 0x0000ffff0000ffff);
+    c = (c & 0x00000000ffffffff) + ((c >> 32) & 0x00000000ffffffff);
+    c
+}
+
+#[cfg(target_os = "linux")]
+fn get_num_cpus() -> usize {
+    let mut set:  libc::cpu_set_t = unsafe { std::mem::zeroed() };
+    if unsafe { libc::sched_getaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &mut set) } == 0 {
+        let ptr = unsafe { std::mem::transmute::<&libc::cpu_set_t, &u64>(&set) };
+        popcnt(*ptr) as usize
+    } else {
+        num_cpus::get()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_num_cpus() -> usize {
+    num_cpus::get()
 }
