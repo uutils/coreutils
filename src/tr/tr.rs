@@ -6,6 +6,7 @@
  * (c) Michael Gehring <mg@ebfe.org>
  * (c) kwantam <kwantam@gmail.com>
  *     20150428 created `expand` module to eliminate most allocs during setup
+ * (c) Sergey "Shnatsel" Davidoff <shnatsel@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -19,7 +20,7 @@ extern crate uucore;
 
 use bit_set::BitSet;
 use getopts::Options;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 use std::collections::HashMap;
 
 use expand::ExpandSet;
@@ -32,8 +33,11 @@ const BUFFER_LEN: usize = 1024;
 
 fn delete(set: ExpandSet, complement: bool) {
     let mut bset = BitSet::new();
-    let mut stdout = stdout();
+    let stdin = stdin();
+    let mut locked_stdin = stdin.lock();
+    let mut buffered_stdout = BufWriter::new(stdout());
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
+    let mut char_output_buffer: [u8; 4] = [0;4];
 
     for c in set {
         bset.insert(c as usize);
@@ -47,15 +51,15 @@ fn delete(set: ExpandSet, complement: bool) {
         }
     };
 
-    let mut reader = BufReader::new(stdin());
-
-    while let Ok(length) = reader.read_to_string(&mut buf) {
+    while let Ok(length) = locked_stdin.read_line(&mut buf) {
         if length == 0 { break }
-
-        let filtered = buf.chars()
-                          .filter(|c| { is_allowed(*c) })
-                          .collect::<String>();
-        safe_unwrap!(stdout.write_all(filtered.as_bytes()));
+        { // isolation to make borrow checker happy
+            let filtered = buf.chars().filter(|c| is_allowed(*c));
+            for c in filtered {
+                let char_as_bytes = c.encode_utf8(&mut char_output_buffer);
+                buffered_stdout.write_all(char_as_bytes.as_bytes()).unwrap();
+            }
+        }
         buf.clear();
     }
 }
@@ -63,8 +67,11 @@ fn delete(set: ExpandSet, complement: bool) {
 fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
     //let mut map = VecMap::new();
     let mut map = HashMap::new();
-    let stdout = stdout();
+    let stdin = stdin();
+    let mut locked_stdin = stdin.lock();
+    let mut buffered_stdout = BufWriter::new(stdout());
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
+    let mut char_output_buffer: [u8; 4] = [0;4];
 
     let mut s2_prev = '_';
     for i in set1 {
@@ -73,21 +80,14 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
         map.insert(i as usize, s2_prev);
     }
 
-    let mut reader = BufReader::new(stdin());
-    let mut writer = BufWriter::new(stdout);
-
-    while let Ok(length) = reader.read_to_string(&mut buf) {
+    while let Ok(length) = locked_stdin.read_line(&mut buf) {
         if length == 0 { break }
 
-        {
-            let mut chars = buf.chars();
-
-            while let Some(ch) = chars.next() {
-                let trc = match map.get(&(ch as usize)) {
-                    Some(t) => *t,
-                    None => ch,
-                };
-                safe_unwrap!(writer.write_all(format!("{}", trc).as_ref()));
+        { // isolation to make borrow checker happy
+            let output_stream = buf.chars().map(|c| *map.get(&(c as usize)).unwrap_or(&c));
+            for c in output_stream {
+                let char_as_bytes = c.encode_utf8(&mut char_output_buffer);
+                buffered_stdout.write_all(char_as_bytes.as_bytes()).unwrap();
             }
         }
 
