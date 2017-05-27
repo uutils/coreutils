@@ -1,7 +1,7 @@
 uutils coreutils
 ================
 
-[![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
+[![License](https://www.gnu.org/graphics/gplv3-127x51.png)](https://github.com/uutils/coreutils/blob/master/LICENSE)
 [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build status](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
 
@@ -252,4 +252,4 @@ To do
 License
 -------
 
-uutils is licensed under the MIT License - see the `LICENSE` file for details
+uutils is licensed under the GPLv3 License - see the `LICENSE` file for details
