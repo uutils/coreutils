@@ -11,12 +11,19 @@
 
 extern crate getopts;
 extern crate num_cpus;
+extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
 use std::io::Write;
 use std::env;
+
+#[cfg(target_os = "linux")]
+pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;  // libc crate hasn't!!
+#[cfg(not(target_os = "linux"))]
+pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
+
 
 static NAME: &'static str = "nproc";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -75,7 +82,19 @@ Print the number of cores available to the current process.", NAME, VERSION);
         };
     }
 
-    let mut cores = num_cpus::get();
+    let mut cores = if matches.opt_present("all") {
+        let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
+        if nprocs == 1 {
+            // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
+            // However, we want to guarantee that `nproc --all` >= `nproc`.
+            num_cpus::get()
+        } else {
+            if nprocs > 0 { nprocs as usize } else { 1 }
+        }
+    } else {
+        num_cpus::get()
+    };
+
     if cores <= ignore {
         cores = 1;
     } else {
