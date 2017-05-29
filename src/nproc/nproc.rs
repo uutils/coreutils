@@ -12,7 +12,7 @@
 extern crate getopts;
 extern crate num_cpus;
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 extern crate libc;
 
 #[macro_use]
@@ -89,19 +89,7 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
 
     let mut cores = if matches.opt_present("all") {
-        if cfg!(target_os = "linux") || cfg!(target_os = "macos") || cfg!(target_os = "freebsd") || cfg!(target_os = "netbsd") {
-            let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
-            if nprocs == 1 {
-                // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-                // However, we want to guarantee that `nproc --all` >= `nproc`.
-                num_cpus::get()
-            } else {
-                if nprocs > 0 { nprocs as usize } else { 1 }
-            }
-        } else {
-            // Other platform(e.g., windows), num_cpus::get() directly.
-            num_cpus::get()
-        }
+        num_cpus_all()
     } else {
         num_cpus::get()
     };
@@ -113,4 +101,28 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
     println!("{}", cores);
     0
+}
+
+#[cfg(any(target_os = "linux",
+          target_os = "macos",
+          target_os = "freebsd",
+          target_os = "netbsd"))]
+fn num_cpus_all() -> usize {
+    let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
+    if nprocs == 1 {
+        // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
+        // However, we want to guarantee that `nproc --all` >= `nproc`.
+        num_cpus::get()
+    } else {
+        if nprocs > 0 { nprocs as usize } else { 1 }
+    }
+}
+
+// Other platform(e.g., windows), num_cpus::get() directly.
+#[cfg(not(any(target_os = "linux",
+              target_os = "macos",
+              target_os = "freebsd",
+              target_os = "netbsd")))]
+fn num_cpus_all() -> usize {
+    num_cpus::get()
 }
