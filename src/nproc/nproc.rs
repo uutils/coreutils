@@ -22,9 +22,13 @@ use std::io::Write;
 use std::env;
 
 #[cfg(target_os = "linux")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;  // libc crate hasn't!!
-#[cfg(not(target_os = "linux"))]
+pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
+#[cfg(target_os = "macos")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
+#[cfg(target_os = "freebsd")]
+pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
+#[cfg(target_os = "netbsd")]
+pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 
 
 static NAME: &'static str = "nproc";
@@ -85,7 +89,7 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
 
     let mut cores = if matches.opt_present("all") {
-        if cfg!(unix) {
+        if cfg!(target_os = "linux") || cfg!(target_os = "macos") || cfg!(target_os = "freebsd") || cfg!(target_os = "netbsd") {
             let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
             if nprocs == 1 {
                 // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
