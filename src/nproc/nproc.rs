@@ -11,6 +11,8 @@
 
 extern crate getopts;
 extern crate num_cpus;
+
+#[cfg(not(windows))]
 extern crate libc;
 
 #[macro_use]
@@ -83,15 +85,20 @@ Print the number of cores available to the current process.", NAME, VERSION);
     }
 
     let mut cores = if matches.opt_present("all") {
-        let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
-        if nprocs == 1 {
-            // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-            // However, we want to guarantee that `nproc --all` >= `nproc`.
-            num_cpus::get()
+        if cfg!(unix) {
+            let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
+            if nprocs == 1 {
+                // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
+                // However, we want to guarantee that `nproc --all` >= `nproc`.
+                num_cpus::get()
+            } else {
+                if nprocs > 0 { nprocs as usize } else { 1 }
+            }
         } else {
-            if nprocs > 0 { nprocs as usize } else { 1 }
+            num_cpus::get()
         }
     } else {
+        // On windows, num_cpus::get() directly.
         num_cpus::get()
     };
 
