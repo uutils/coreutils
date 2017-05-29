@@ -99,10 +99,10 @@ Print the number of cores available to the current process.", NAME, VERSION);
                 if nprocs > 0 { nprocs as usize } else { 1 }
             }
         } else {
+            // Other platform(e.g., windows), num_cpus::get() directly.
             num_cpus::get()
         }
     } else {
-        // On windows, num_cpus::get() directly.
         num_cpus::get()
     };
 
