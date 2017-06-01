@@ -10,7 +10,7 @@ path = "nproc.rs"
 [dependencies]
 getopts = "*"
 libc = "*"
-num_cpus = "*"
+num_cpus = "1.5"
 uucore = { path="../uucore" }
 
 [[bin]]
