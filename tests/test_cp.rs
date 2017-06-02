@@ -4,6 +4,7 @@ static TEST_HELLO_WORLD_SOURCE: &'static str = "hello_world.txt";
 static TEST_HELLO_WORLD_DEST: &'static str = "copy_of_hello_world.txt";
 static TEST_COPY_TO_FOLDER: &'static str = "hello_dir/";
 static TEST_COPY_TO_FOLDER_FILE: &'static str = "hello_dir/hello_world.txt";
+static TEST_COPY_FROM_FOLDER: &'static str = "hello_dir_with_file/";
 static TEST_COPY_FROM_FOLDER_FILE: &'static str = "hello_dir_with_file/hello_world.txt";
 
 #[test]
@@ -20,6 +21,31 @@ fn test_cp_cp() {
 
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_recurse() {
+    //let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Invoke our binary to make the copy.
+    let result_to_dir = scene.ucmd()
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .run();
+    assert!(result_to_dir.success);
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+
+    let result = scene.ucmd()
+                     .arg("-r")
+                     .arg(TEST_COPY_FROM_FOLDER)
+                     .arg(TEST_COPY_TO_FOLDER)
+                     .run();
+
+    assert!(result.success);
+    // Check the content of the destination file that was copied.
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
 #[test]
