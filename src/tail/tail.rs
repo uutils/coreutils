@@ -346,7 +346,18 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
 
+    let mut buffer = BufReader::new(stdin());
     loop {
+        loop {
+            let mut datum = String::new();
+            match buffer.read_line(&mut datum) {
+                Ok(0) => break,
+                Ok(_) => {
+                  print!("input consumed: {}", datum);
+		},
+                Err(err) => panic!(err)
+            }
+        }
         sleep(Duration::new(0, settings.sleep_msec*1000));
 
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
