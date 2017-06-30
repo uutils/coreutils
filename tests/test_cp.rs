@@ -56,3 +56,27 @@ fn test_cp_with_dirs() {
     assert!(result_from_dir.success);
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
+
+#[test] 
+fn test_cp_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    //using -r option 
+    let result_recursive = scene.ucmd()
+        .arg("-r")
+        .arg("recursion_test")
+        .arg("result_dir")
+        .run();
+    assert!(result_recursive.success);
+    assert!(at.read("recursion_test/file_1")==at.read("result_dir/file_1"));
+    assert!(at.read("recursion_test/file_2")==at.read("result_dir/file_2"));
+    assert!(at.read("recursion_test/dir_1/file_3")==at.read("result_dir/dir_1/file_3"));
+    assert!(at.read("recursion_test/dir_1/file_4")==at.read("result_dir/dir_1/file_4"));
+    assert!(at.read("recursion_test/dir_2/file_5")==at.read("result_dir/dir_2/file_5"));
+    assert!(at.read("recursion_test/dir_2/file_6")==at.read("result_dir/dir_2/file_6"));
+    assert!(at.read("recursion_test/dir_3/file_7")==at.read("result_dir/dir_3/file_7"));
+    assert!(at.read("recursion_test/dir_3/file_8")==at.read("result_dir/dir_3/file_8"));
+    assert!(at.read("recursion_test/dir_4/file_9")==at.read("result_dir/dir_4/file_9"));
+    assert!(at.read("recursion_test/dir_4/file_10")==at.read("result_dir/dir_4/file_10"));
+}
