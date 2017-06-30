@@ -33,6 +33,9 @@ install:
 
   - rustc -V
   - cargo -V
+  - if "%TOOLCHAIN%" == "msvc" if "%PLATFORM%" == "i686" call "%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat"
+  - if "%TOOLCHAIN%" == "msvc" if "%PLATFORM%" == "x86_64" "C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x64
+  - if "%TOOLCHAIN%" == "msvc" if "%PLATFORM%" == "x86_64" call "%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat" x86_amd64
 
 artifacts:
   - path: target\debug\uutils.exe
