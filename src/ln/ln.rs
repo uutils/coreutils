@@ -143,39 +143,45 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
-    match settings.target_dir {
-        Some(ref name) => return link_files_in_dir(files, &PathBuf::from(name), &settings),
-        None => {}
+    if files.len() == 0 {
+        show_error!("missing file operand\nTry '{} --help' for more information.", NAME);
+        return 1;
     }
-    match files.len() {
-        0 => {
-            show_error!("missing file operand\nTry '{} --help' for more information.", NAME);
+
+    // Handle cases where we create links in a directory first.
+    if let Some(ref name) = settings.target_dir {
+        // 4th form: a directory is specified by -t.
+        return link_files_in_dir(files, &PathBuf::from(name), &settings);
+    }
+    if !settings.no_target_dir {
+        if files.len() == 1 {
+            // 2nd form: the target directory is the current directory.
+            return link_files_in_dir(files, &PathBuf::from("."), &settings);
+        }
+        let last_file = &PathBuf::from(files.last().unwrap());
+        if files.len() > 2 || last_file.is_dir() {
+            // 3rd form: create links in the last argument.
+            return link_files_in_dir(&files[0..files.len()-1], last_file, &settings);
+        }
+    }
+
+    // 1st form. Now there should be only two operands, but if -T is
+    // specified we may have a wrong number of operands.
+    if files.len() == 1 {
+        show_error!("missing destination file operand after '{}'", files[0].to_string_lossy());
+        return 1;
+    }
+    if files.len() > 2 {
+        show_error!("extra operand '{}'\nTry '{} --help' for more information.", files[2].display(), NAME);
+        return 1;
+    }
+    assert!(files.len() != 0);
+
+    match link(&files[0], &files[1], settings) {
+        Ok(_) => 0,
+        Err(e) => {
+            show_error!("{}", e);
             1
-        },
-        1 => match link(&files[0], &files[0], settings) {
-            Ok(_) => 0,
-            Err(e) => {
-                show_error!("{}", e);
-                1
-            }
-        },
-        2 => match link(&files[0], &files[1], settings) {
-            Ok(_) => 0,
-            Err(e) => {
-                show_error!("{}", e);
-                1
-            }
-        },
-        _ => {
-            if settings.no_target_dir {
-                show_error!("extra operand '{}'\nTry '{} --help' for more information.", files[2].display(), NAME);
-                return 1;
-            }
-            let (targets, dir) = match settings.target_dir {
-                Some(ref dir) => (files, PathBuf::from(dir.clone())),
-                None => (&files[0..files.len()-1], files[files.len()-1].clone())
-            };
-            link_files_in_dir(targets, &dir, settings)
         }
     }
 }
@@ -218,10 +224,6 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
 
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
-
-    if dst.is_dir() && settings.no_target_dir {
-        try!(fs::remove_dir(dst));
-    }
 
     if is_symlink(dst) || dst.exists() {
         match settings.overwrite {

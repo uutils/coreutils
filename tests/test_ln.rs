@@ -1,4 +1,5 @@
 use common::util::*;
+use std::path::PathBuf;
 
 #[test]
 fn test_symlink_existing_file() {
@@ -274,7 +275,7 @@ fn test_symlink_target_dir_from_dir() {
 }
 
 #[test]
-fn test_symlink_overwrite_dir() {
+fn test_symlink_overwrite_dir_fail() {
     let (at, mut ucmd) = at_and_ucmd!();
     let path_a = "test_symlink_overwrite_dir_a";
     let path_b = "test_symlink_overwrite_dir_b";
@@ -282,35 +283,7 @@ fn test_symlink_overwrite_dir() {
     at.touch(path_a);
     at.mkdir(path_b);
 
-    ucmd.args(&["-s", "-T", path_a, path_b]).succeeds().no_stderr();
-
-    assert!(at.file_exists(path_a));
-    assert!(at.is_symlink(path_b));
-    assert_eq!(at.resolve_link(path_b), path_a);
-}
-
-#[test]
-fn test_symlink_overwrite_nonempty_dir() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let path_a = "test_symlink_overwrite_nonempty_dir_a";
-    let path_b = "test_symlink_overwrite_nonempty_dir_b";
-    let dummy = "test_symlink_overwrite_nonempty_dir_b/file";
-
-    at.touch(path_a);
-    at.mkdir(path_b);
-    at.touch(dummy);
-
-    // Not same error as GNU; the error message is a Rust builtin
-    // TODO: test (and implement) correct error message (or at least decide whether to do so)
-    // Current: "ln: error: Directory not empty (os error 66)"
-    // GNU:     "ln: cannot link 'a' to 'b': Directory not empty"
-    
-    // Verbose output for the link should not be shown on failure
-    assert!(ucmd.args(&["-v", "-T", "-s", path_a, path_b])
-            .fails().no_stdout().stderr.len() > 0);
-
-    assert!(at.file_exists(path_a));
-    assert!(at.dir_exists(path_b));
+    assert!(ucmd.args(&["-s", "-T", path_a, path_b]).fails().stderr.len() > 0);
 }
 
 #[test]
@@ -347,4 +320,63 @@ fn test_symlink_verbose() {
 
     scene.ucmd().args(&["-v", "-b", file_a, file_b])
         .succeeds().stdout_only(format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));
+}
+
+#[test]
+fn test_symlink_target_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_symlink_target_only";
+
+    at.mkdir(dir);
+
+    assert!(ucmd.args(&["-s", "-t", dir]).fails().stderr.len() > 0);
+}
+
+#[test]
+fn test_symlink_implicit_target_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_symlink_implicit_target_dir";
+    // On windows, slashes aren't allowed in symlink targets, so use
+    // PathBuf to construct `file` instead of simple "dir/file".
+    let filename = "test_symlink_implicit_target_file";
+    let path = PathBuf::from(dir).join(filename);
+    let file = &path.to_string_lossy();
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    ucmd.args(&["-s", file]).succeeds().no_stderr();
+
+    assert!(at.file_exists(filename));
+    assert!(at.is_symlink(filename));
+    assert_eq!(at.resolve_link(filename), *file);
+}
+
+#[test]
+fn test_symlink_to_dir_2args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "test_symlink_to_dir_2args_file";
+    let from_file = &format!("{}/{}", at.as_string(), filename);
+    let to_dir = "test_symlink_to_dir_2args_to_dir";
+    let to_file = &format!("{}/{}", to_dir, filename);
+
+    at.mkdir(to_dir);
+    at.touch(from_file);
+
+    ucmd.args(&["-s", from_file, to_dir]).succeeds().no_stderr();
+
+    assert!(at.file_exists(to_file));
+    assert!(at.is_symlink(to_file));
+    assert_eq!(at.resolve_link(to_file), filename);
+}
+
+#[test]
+fn test_symlink_missing_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_symlink_missing_destination";
+
+    at.touch(file);
+
+    ucmd.args(&["-s", "-T", file]).fails()
+        .stderr_is(format!("ln: error: missing destination file operand after '{}'", file));
 }
