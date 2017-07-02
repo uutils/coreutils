@@ -11,6 +11,7 @@ path = "cp.rs"
 getopts = "*"
 libc = "*"
 uucore = { path="../uucore" }
+walkdir = "*"
 
 [[bin]]
 name = "cp"

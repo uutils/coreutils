@@ -14,6 +14,10 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
+extern crate walkdir;
+
+use walkdir::WalkDir;
+
 use getopts::Options;
 use std::fs;
 use std::io::{ErrorKind, Result, Write};
@@ -34,9 +38,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
     opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("r", "recursive", "copy directories recursively");
     opts.optflag("", "version", "output version information and exit");
-    opts.optopt("t", "target-directory", "copy all SOURCE arguments into DIRECTORY", "DEST");
-    opts.optflag("T", "no-target-directory", "Treat DEST as a regular file and not a directory");
+    opts.optopt("t",
+                "target-directory",
+                "copy all SOURCE arguments into DIRECTORY",
+                "DEST");
+    opts.optflag("T",
+                 "no-target-directory",
+                 "Treat DEST as a regular file and not a directory");
     opts.optflag("v", "verbose", "explicitly state what is being done");
 
     let matches = match opts.parse(&args[1..]) {
@@ -44,7 +54,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(e) => {
             show_error!("{}", e);
             panic!()
-        },
+        }
     };
     let usage = opts.usage("Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
     let mode = if matches.opt_present("version") {
@@ -56,8 +66,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::Copy    => copy(matches),
-        Mode::Help    => help(&usage),
+        Mode::Copy => copy(matches),
+        Mode::Help => help(&usage),
         Mode::Version => version(),
     }
 
@@ -74,7 +84,10 @@ fn help(usage: &str) {
                          or:  {0} SOURCE... DIRECTORY\n  \
                          or:  {0} -t DIRECTORY SOURCE...\n\
                        \n\
-                       {2}", NAME, VERSION, usage);
+                       {2}",
+                      NAME,
+                      VERSION,
+                      usage);
     println!("{}", msg);
 }
 
@@ -84,12 +97,19 @@ fn copy(matches: getopts::Matches) {
         show_error!("Missing SOURCE or DEST argument. Try --help.");
         panic!()
     } else if !matches.opt_present("target-directory") {
-        matches.free[..matches.free.len() - 1].iter().cloned().collect()
+        matches.free[..matches.free.len() - 1]
+            .iter()
+            .cloned()
+            .collect()
     } else {
         matches.free.iter().cloned().collect()
     };
+    let recursive: bool = matches.opt_present("recursive");
+
     let dest_str = if matches.opt_present("target-directory") {
-        matches.opt_str("target-directory").expect("Option -t/--target-directory requires an argument")
+        matches
+            .opt_str("target-directory")
+            .expect("Option -t/--target-directory requires an argument")
     } else {
         matches.free[matches.free.len() - 1].clone()
     };
@@ -100,7 +120,8 @@ fn copy(matches: getopts::Matches) {
         //the argument to the -t/--target-directory= options
         let path = Path::new(&dest_str);
         if !path.is_dir() && matches.opt_present("target-directory") {
-            show_error!("Target {} is not a directory", matches.opt_str("target-directory").unwrap());
+            show_error!("Target {} is not a directory",
+                        matches.opt_str("target-directory").unwrap());
             panic!()
         } else {
             path
@@ -110,38 +131,59 @@ fn copy(matches: getopts::Matches) {
 
     assert!(sources.len() >= 1);
     if matches.opt_present("no-target-directory") && dest.is_dir() {
-        show_error!("Can't overwrite directory {} with non-directory", dest.display());
+        show_error!("Can't overwrite directory {} with non-directory",
+                    dest.display());
         panic!()
     }
 
     if sources.len() == 1 {
         let source = Path::new(&sources[0]);
-        let same_file = paths_refer_to_same_file(source, dest).unwrap_or_else(|err| {
-            match err.kind() {
-                ErrorKind::NotFound => false,
-                _ => {
-                    show_error!("{}", err);
-                    panic!()
-                }
+        let same_file =
+            paths_refer_to_same_file(source, dest).unwrap_or_else(|err| match err.kind() {
+                                                                      ErrorKind::NotFound => false,
+                                                                      _ => {
+                show_error!("{}", err);
+                panic!()
             }
-        });
+            });
 
         if same_file {
             show_error!("\"{}\" and \"{}\" are the same file",
-                source.display(),
-                dest.display());
+                        source.display(),
+                        dest.display());
             panic!();
         }
         let mut full_dest = dest.to_path_buf();
-        if dest.is_dir() {
-            full_dest.push(source.file_name().unwrap()); //the destination path is the destination
-        } // directory + the file name we're copying
-        if verbose {
-            println!("{} -> {}", source.display(), full_dest.display());
-        }
-        if let Err(err) = fs::copy(source, full_dest) {
-            show_error!("{}", err);
-            panic!();
+        if recursive {
+            for entry in WalkDir::new(source) {
+                let entry = entry.unwrap();
+                if entry.path().is_dir() {
+                    let mut dst_path = full_dest.clone();
+                    dst_path.push(entry.path());
+                    if let Err(err) = fs::create_dir(dst_path) {
+                        show_error!("{}", err);
+                        panic!();
+                    }
+                } else {
+                    let mut dst_path = full_dest.clone();
+                    dst_path.push(entry.path());
+                    if let Err(err) = fs::copy(entry.path(), dst_path) {
+                        show_error!("{}", err);
+                        panic!();
+                    }
+                }
+            }
+        } else {
+            if dest.is_dir() {
+                full_dest.push(source.file_name().unwrap()); //the destination path is the destination
+            } // directory + the file name we're copying
+            if verbose {
+                println!("{} -> {}", source.display(), full_dest.display());
+            }
+            if let Err(err) = fs::copy(source, full_dest) {
+                show_error!("{}", err);
+                panic!();
+            }
         }
     } else {
         if !dest.is_dir() {
@@ -151,24 +193,47 @@ fn copy(matches: getopts::Matches) {
         for src in &sources {
             let source = Path::new(&src);
 
-            if !source.is_file() {
-                show_error!("\"{}\" is not a file", source.display());
-                continue;
-            }
+            if !recursive {
+                if !source.is_file() {
+                    show_error!("\"{}\" is not a file", source.display());
+                    continue;
+                }
 
-            let mut full_dest = dest.to_path_buf();
+                let mut full_dest = dest.to_path_buf();
 
-            full_dest.push(source.file_name().unwrap());
+                full_dest.push(source.file_name().unwrap());
 
-            if verbose {
-                println!("{} -> {}", source.display(), full_dest.display());
-            }
+                if verbose {
+                    println!("{} -> {}", source.display(), full_dest.display());
+                }
 
-            let io_result = fs::copy(source, full_dest);
+                let io_result = fs::copy(source, full_dest);
 
-            if let Err(err) = io_result {
-                show_error!("{}", err);
-                panic!()
+                if let Err(err) = io_result {
+                    show_error!("{}", err);
+                    panic!()
+                }
+            } else {
+                for entry in WalkDir::new(source) {
+                    let entry = entry.unwrap();
+                    let full_dest = dest.to_path_buf();
+
+                    if entry.path().is_dir() {
+                        let mut dst_path = full_dest.clone();
+                        dst_path.push(entry.path());
+                        if let Err(err) = fs::create_dir(dst_path) {
+                            show_error!("{}", err);
+                            panic!();
+                        }
+                    } else {
+                        let mut dst_path = full_dest.clone();
+                        dst_path.push(entry.path());
+                        if let Err(err) = fs::copy(entry.path(), dst_path) {
+                            show_error!("{}", err);
+                            panic!();
+                        }
+                    }
+                }
             }
         }
     }
