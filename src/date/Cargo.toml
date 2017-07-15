@@ -8,8 +8,8 @@ name = "uu_date"
 path = "date.rs"
 
 [dependencies]
-chrono = "*"
-clap = "*"
+chrono = "0.3.0"
+clap = "2.24.1"
 uucore = { path="../uucore" }
 
 [[bin]]

@@ -14,7 +14,11 @@
 extern crate getopts;
 extern crate libc;
 
+#[cfg(windows)]
 #[macro_use]
+extern crate uucore;
+
+#[cfg(not(windows))]
 extern crate uucore;
 
 static NAME: &'static str = "sync";

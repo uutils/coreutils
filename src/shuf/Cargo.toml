@@ -8,8 +8,8 @@ name = "uu_shuf"
 path = "shuf.rs"
 
 [dependencies]
-getopts = "*"
-rand = "*"
+getopts = "0.2.14"
+rand = "0.3.15"
 uucore = { path="../uucore" }
 
 [[bin]]

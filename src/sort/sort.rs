@@ -16,7 +16,6 @@ extern crate semver;
 
 #[macro_use]
 extern crate uucore;
-#[macro_use]
 extern crate itertools;
 
 use std::cmp::Ordering;

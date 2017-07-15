@@ -8,12 +8,12 @@ name = "uu_install"
 path = "install.rs"
 
 [dependencies]
-getopts = "*"
+getopts = "0.2.14"
 libc = ">= 0.2"
 uucore = { path="../uucore" }
 
 [dev-dependencies]
-time = "*"
+time = "0.1.38"
 
 [[bin]]
 name = "install"

@@ -8,9 +8,9 @@ name = "uu_tr"
 path = "tr.rs"
 
 [dependencies]
-getopts = "*"
-bit-set = "*"
-fnv = "*"
+getopts = "0.2.14"
+bit-set = "0.4.0"
+fnv = "1.0.5"
 
 [dependencies.uucore]
 path = "../uucore"
