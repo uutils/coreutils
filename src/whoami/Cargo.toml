@@ -8,9 +8,9 @@ name = "uu_whoami"
 path = "whoami.rs"
 
 [dependencies]
-getopts = "*"
-winapi = "*"
-advapi32-sys = "*"
+getopts = "0.2.14"
+winapi = "0.2.8"
+advapi32-sys = "0.2.0"
 
 [dependencies.uucore]
 path = "../uucore"

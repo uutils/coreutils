@@ -8,10 +8,10 @@ name = "uu_cp"
 path = "cp.rs"
 
 [dependencies]
-getopts = "*"
-libc = "*"
+getopts = "0.2.14"
+libc = "0.2.26"
 uucore = { path="../uucore" }
-walkdir = "*"
+walkdir = "1.0.7"
 
 [[bin]]
 name = "cp"

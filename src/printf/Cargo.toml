@@ -8,7 +8,7 @@ name = "uu_printf"
 path = "printf.rs"
 
 [dependencies]
-"itertools" = "*"
+"itertools" = "0.6.0"
 uucore = { path="../uucore" }
 
 [[bin]]

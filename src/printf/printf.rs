@@ -3,13 +3,12 @@
 #![allow(dead_code)]
 
 extern crate itertools;
+extern crate uucore;
 
 mod cli;
 mod memo;
 mod tokenize;
 
-#[macro_use]
-extern crate uucore;
 
 static NAME: &'static str = "printf";
 static VERSION: &'static str = "0.0.1";
@@ -39,12 +38,12 @@ static LONGHELP_BODY: &'static str = "
   ESCAPE SEQUENCES
 
   The following escape sequences, organized here in alphabetical order,
-  will print the corresponding character literal:    
+  will print the corresponding character literal:
 
   \"   double quote
 
   \\\\    backslash
-   
+
   \\a  alert (BEL)
 
   \\b  backspace
@@ -64,7 +63,7 @@ static LONGHELP_BODY: &'static str = "
   \\v  vertical tab
 
   \\NNN byte with value expressed in octal value NNN (1 to 3 digits)
-        values greater than 256 will be treated 
+        values greater than 256 will be treated
 
   \\xHH byte with value expressed in hexadecimal value NN (1 to 2 digits)
 
@@ -80,14 +79,14 @@ static LONGHELP_BODY: &'static str = "
 
   Fields
 
-  %s - string 
-  %b - string parsed for literals 
+  %s - string
+  %b - string parsed for literals
     second parameter is max length
 
   %c - char
     no second parameter
 
-  %i or %d - 64-bit integer 
+  %i or %d - 64-bit integer
   %u - 64 bit unsigned integer
   %x or %X - 64-bit unsigned integer as hex
   %o - 64-bit unsigned integer as octal
@@ -97,7 +96,7 @@ static LONGHELP_BODY: &'static str = "
   %f or %F - decimal floating point value
   %e or %E - scientific notation floating point value
   %g or %G - shorter of specially interpreted decimal or SciNote floating point value.
-    second parameter is 
+    second parameter is
       -max places after decimal point for floating point output
       -max number of significant digits for scientific notation output
 
@@ -108,7 +107,7 @@ static LONGHELP_BODY: &'static str = "
   printf '%4.3i' 7
   has a first parameter of 4
      and a second parameter of 3
-  will result in ' 007' 
+  will result in ' 007'
 
   printf '%.1s' abcde
   has no first parameter
@@ -121,7 +120,7 @@ static LONGHELP_BODY: &'static str = "
   will result in  '   q'
 
   The first parameter of a field is the minimum width to pad the output to
-   if the output is less than this absolute value of this width, 
+   if the output is less than this absolute value of this width,
    it will be padded with leading spaces, or, if the argument is negative,
    with trailing spaces. the default is zero.
 
@@ -132,7 +131,7 @@ static LONGHELP_BODY: &'static str = "
     0 (e.g. 010) - interpret argument as octal (integer output fields only)
     0x (e.g. 0xABC) - interpret argument as hex (numeric output fields only)
     \' (e.g. \'a) - interpret argument as a character constant
-    
+
   HOW TO USE SUBSTITUTIONS
 
   Substitutions are used to pass additional argument(s) into the FORMAT string, to be formatted a
@@ -140,14 +139,14 @@ static LONGHELP_BODY: &'static str = "
 
       printf 'the letter %X comes before the letter %X' 10 11
 
-  will print 
-   
-     'the letter A comes before the letter B' 
+  will print
+
+     'the letter A comes before the letter B'
 
   because the substitution field %X means
   'take an integer argument and write it as a hexadecimal number'
 
-  Passing more arguments than are in the format string will cause the format string to be 
+  Passing more arguments than are in the format string will cause the format string to be
    repeated for the remaining substitutions
 
      printf 'it is %i F in %s \n' 22 Portland 25 Boston 27 New York
@@ -160,18 +159,18 @@ static LONGHELP_BODY: &'static str = "
      '
   If a format string is printed but there are less arguments remaining
    than there are substitution fields, substitution fields without
-   an argument will default to empty strings, or for numeric fields 
+   an argument will default to empty strings, or for numeric fields
    the value 0
 
   AVAILABLE SUBSTITUTIONS
 
-  This program, like GNU coreutils printf, 
-  interprets a modified subset of the POSIX C printf spec, 
-  a quick reference to substitutions is below. 
+  This program, like GNU coreutils printf,
+  interprets a modified subset of the POSIX C printf spec,
+  a quick reference to substitutions is below.
 
    STRING SUBSTITUTIONS
-    All string fields have a 'max width' parameter 
-    %.3s means 'print no more than three characters of the original input' 
+    All string fields have a 'max width' parameter
+    %.3s means 'print no more than three characters of the original input'
 
    %s - string
 
@@ -193,7 +192,7 @@ static LONGHELP_BODY: &'static str = "
     %.4i means an integer which if it is less than 4 digits in length,
     is padded with leading zeros until it is 4 digits in length.
 
-   %d or %i - 64-bit integer 
+   %d or %i - 64-bit integer
 
    %u - 64 bit unsigned integer
 
@@ -202,7 +201,7 @@ static LONGHELP_BODY: &'static str = "
 
    %o - 64 bit unsigned integer printed in octal (base 8)
 
-   FLOATING POINT SUBSTITUTIONS 
+   FLOATING POINT SUBSTITUTIONS
 
     All floating point fields have a 'max decimal places / max significant digits' parameter
     %.10f means a decimal floating point with 7 decimal places past 0
@@ -212,7 +211,7 @@ static LONGHELP_BODY: &'static str = "
     Like with GNU coreutils, the value after the decimal point is these outputs is parsed as a double first before being rendered to text. For both implementations do not expect meaningful precision past the 18th decimal place. When using a number of decimal places that is 18 or higher, you can expect variation in output between GNU coreutils printf and this printf at the 18th decimal place of +/- 1
 
    %f - floating point value presented in decimal, truncated and displayed to 6 decimal places by default.
-        There is not past-double behavior parity with Coreutils printf, values are not estimated or adjusted beyond input values. 
+        There is not past-double behavior parity with Coreutils printf, values are not estimated or adjusted beyond input values.
 
    %e or %E - floating point value presented in scientific notation
             7 significant digits by default
@@ -225,9 +224,9 @@ static LONGHELP_BODY: &'static str = "
             Sci Note has 6 significant digits by default
             Trailing zeroes are removed
             Instead of being truncated, digit after last is rounded
- 
-   Like other behavior in this utility, the design choices of floating point 
-    behavior in this utility is selected to reproduce in exact 
+
+   Like other behavior in this utility, the design choices of floating point
+    behavior in this utility is selected to reproduce in exact
     the behavior of GNU coreutils' printf from an inputs and outputs standpoint.
 
   USING PARAMETERS
@@ -239,8 +238,8 @@ static LONGHELP_BODY: &'static str = "
      leading spaces
    The 2nd parameter is proceeded by a dot.
    You do not have to use parameters
-   
-  SPECIAL FORMS OF INPUT 
+
+  SPECIAL FORMS OF INPUT
    For numeric input, the following additional forms of input are accepted besides decimal:
 
     Octal (only with integer): if the argument begins with a 0 the proceeding characters
@@ -255,13 +254,13 @@ static LONGHELP_BODY: &'static str = "
       of the next character will be interpreted as an 8-bit unsigned integer. If there are
       additional bytes, they will throw an error (unless the environment variable POSIXLY_CORRECt is set)
 
-WRITTEN BY : 
+WRITTEN BY :
   Nathan E. Ross, et al. for the uutils project
 
-MORE INFO : 
+MORE INFO :
   https://github.com/uutils/coreutils
 
-COPYRIGHT : 
+COPYRIGHT :
   Copyright 2015 uutils project.
   Licensed under the MIT License, please see LICENSE file for details
 
@@ -279,7 +278,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if formatstr == "--help" {
         print!("{} {}", LONGHELP_LEAD, LONGHELP_BODY);
     } else if formatstr == "--version" {
-        println!("{} {}", NAME, VERSION);        
+        println!("{} {}", NAME, VERSION);
     } else {
         let printf_args = &args[2..];
         memo::Memo::run_all(formatstr, printf_args);

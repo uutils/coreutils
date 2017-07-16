@@ -8,7 +8,7 @@ name = "uu_realpath"
 path = "realpath.rs"
 
 [dependencies]
-getopts = "*"
+getopts = "0.2.14"
 uucore = { path="../uucore" }
 
 [[bin]]

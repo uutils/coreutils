@@ -9,9 +9,9 @@ path = "mktemp.rs"
 
 [dependencies]
 uucore = { path="../uucore" }
-getopts = "*"
+getopts = "0.2.14"
 rand = "0.3"
-tempfile = "*"
+tempfile = "2.1.5"
 
 [[bin]]
 name = "mktemp"

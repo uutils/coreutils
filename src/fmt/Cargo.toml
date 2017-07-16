@@ -8,8 +8,8 @@ name = "uu_fmt"
 path = "fmt.rs"
 
 [dependencies]
-libc = "*"
-unicode-width = "*"
+libc = "0.2.26"
+unicode-width = "0.1.4"
 uucore = { path="../uucore" }
 
 [[bin]]

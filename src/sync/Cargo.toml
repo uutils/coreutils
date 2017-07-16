@@ -8,10 +8,10 @@ name = "uu_sync"
 path = "sync.rs"
 
 [dependencies]
-getopts = "*"
-libc = "*"
-winapi = "*"
-kernel32-sys = "*"
+getopts = "0.2.14"
+libc = "0.2.26"
+winapi = "0.2.8"
+kernel32-sys = "0.2.2"
 uucore = { path="../uucore" }
 
 [[bin]]

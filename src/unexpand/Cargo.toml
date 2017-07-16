@@ -8,8 +8,8 @@ name = "uu_unexpand"
 path = "unexpand.rs"
 
 [dependencies]
-getopts = "*"
-unicode-width = "*"
+getopts = "0.2.14"
+unicode-width = "0.1.4"
 uucore = { path="../uucore" }
 
 [[bin]]

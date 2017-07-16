@@ -8,10 +8,10 @@ name = "uu_od"
 path = "od.rs"
 
 [dependencies]
-getopts = "*"
-libc = "*"
-byteorder = "*"
-half = "*"
+getopts = "0.2.14"
+libc = "0.2.26"
+byteorder = "1.1.0"
+half = "1.0.0"
 uucore = { path="../uucore" }
 
 [[bin]]

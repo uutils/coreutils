@@ -8,7 +8,7 @@ name = "uu_dircolors"
 path = "dircolors.rs"
 
 [dependencies]
-glob = "*"
+glob = "0.2.11"
 uucore = { path="../uucore" }
 
 [[bin]]

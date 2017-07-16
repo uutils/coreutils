@@ -8,8 +8,8 @@ name = "uu_mkfifo"
 path = "mkfifo.rs"
 
 [dependencies]
-getopts = "*"
-libc = "*"
+getopts = "0.2.14"
+libc = "0.2.26"
 uucore = { path="../uucore" }
 
 [[bin]]

@@ -8,11 +8,11 @@ name = "uu_more"
 path = "more.rs"
 
 [dependencies]
-getopts = "*"
+getopts = "0.2.14"
 uucore = { path="../uucore" }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
-nix = "*"
+nix = "0.8.1"
 
 [[bin]]
 name = "more"

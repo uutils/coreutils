@@ -16,9 +16,8 @@
 #![allow(dead_code)]
 
 extern crate getopts;
-
-#[macro_use]
 extern crate uucore;
+
 use uucore::utmpx::*;
 
 use getopts::Options;

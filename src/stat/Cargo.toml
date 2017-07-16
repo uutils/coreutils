@@ -8,8 +8,8 @@ name = "uu_stat"
 path = "stat.rs"
 
 [dependencies]
-getopts = "*"
-time = "*"
+getopts = "0.2.14"
+time = "0.1.38"
 
 [dependencies.uucore]
 path = "../uucore"

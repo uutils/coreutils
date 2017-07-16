@@ -8,7 +8,7 @@ name = "uu_chown"
 path = "chown.rs"
 
 [dependencies]
-glob = "*"
+glob = "0.2.11"
 walkdir = "0.1"
 
 [dependencies.uucore]
@@ -17,7 +17,7 @@ default-features = false
 features = ["entries", "fs"]
 
 [dependencies.clippy]
-version = "*"
+version = "0.0.143"
 optional = true
 
 [[bin]]
