@@ -305,8 +305,10 @@ dependencies = [
 name = "cp"
 version = "0.0.1"
 dependencies = [
+ "clap 2.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.26 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quick-error 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
  "walkdir 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
