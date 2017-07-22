@@ -144,6 +144,7 @@ pub enum CopyMode {
     SymLink,
     Sparse,
     Copy,
+    Update,
 }
 
 #[derive(Clone)]
@@ -316,7 +317,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .default_value("~")
              .value_name("SUFFIX")
              .help("override the usual backup suffix"))
-
+        .arg(Arg::with_name(OPT_UPDATE)
+             .short("u")
+             .long(OPT_UPDATE)
+             .help("copy only when the SOURCE file is newer than the destination file\
+                    or when the destination file is missing"))
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
              .short("a")
@@ -380,11 +385,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
              .long(OPT_STRIP_TRAILING_SLASHES)
              .help("NotImplemented: remove any trailing slashes from each SOURCE argument"))
-        .arg(Arg::with_name(OPT_UPDATE)
-             .short("u")
-             .long(OPT_UPDATE)
-             .help("NotImplemented: copy only when the SOURCE file is newer than the destination file\
-                    or when the destination file is missing"))
         .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
              .short("x")
              .long(OPT_ONE_FILE_SYSTEM)
@@ -461,6 +461,8 @@ impl CopyMode {
             CopyMode::SymLink
         } else if matches.is_present(OPT_SPARSE) {
             CopyMode::Sparse
+        } else if matches.is_present(OPT_UPDATE) {
+            CopyMode::Update
         } else {
             CopyMode::Copy
         }
@@ -500,7 +502,6 @@ impl Options {
             OPT_REFLINK,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
-            OPT_UPDATE,
             OPT_ONE_FILE_SYSTEM,
             OPT_CONTEXT,
             #[cfg(windows)] OPT_FORCE,
@@ -827,6 +828,22 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         CopyMode::Copy    => { fs::copy(source, dest).context(&*context_for(source, dest))?; },
         CopyMode::SymLink => { symlink_file(source, dest, &*context_for(source, dest))?; },
         CopyMode::Sparse  => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
+        CopyMode::Update => {
+            if dest.exists() {
+                let src_metadata = fs::metadata(source.clone())?;
+                let dest_metadata = fs::metadata(dest.clone())?;
+
+                let src_time = src_metadata.modified()?;
+                let dest_time = dest_metadata.modified()?;
+                if src_time <= dest_time {
+                    return Ok(())
+                } else {
+                    fs::copy(source, dest).context(&*context_for(source, dest))?;
+                }
+            } else {
+                fs::copy(source, dest).context(&*context_for(source, dest))?;
+            }
+        }
     };
 
     for attribute in &options.preserve_attributes {
