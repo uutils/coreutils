@@ -9,6 +9,7 @@
  * file that was distributed with this source code.
  */
 
+#[cfg(unix)]
 extern crate libc;
 extern crate walker;
 
@@ -16,9 +17,9 @@ extern crate walker;
 extern crate uucore;
 
 use std::error::Error;
-use std::ffi::CString;
-use std::io::{self, Write};
-use std::mem;
+use std::fs;
+use std::io::Write;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use walker::Walker;
 
@@ -74,16 +75,10 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
         let verbose = matches.opt_present("verbose");
         let preserve_root = matches.opt_present("preserve-root");
         let recursive = matches.opt_present("recursive");
-        let fmode = matches.opt_str("reference").and_then(|fref| {
-            let s = CString::new(fref).unwrap_or_else( |_| {
-                crash!(1, "reference file name contains internal nul byte")
-            });
-            let mut stat : libc::stat = unsafe { mem::uninitialized() };
-            let statres = unsafe { libc::stat(s.as_ptr() as *const _, &mut stat as *mut libc::stat) };
-            if statres == 0 {
-                Some(stat.st_mode)
-            } else {
-                crash!(1, "cannot stat attribues of '{}': {}", matches.opt_str("reference").unwrap(), io::Error::last_os_error())
+        let fmode = matches.opt_str("reference").and_then(|ref fref| {
+            match fs::metadata(fref) {
+                Ok(meta) => Some(meta.mode()),
+                Err(err) => crash!(1, "cannot stat attribues of '{}': {}", fref, err)
             }
         });
         let cmode =
@@ -108,7 +103,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
     0
 }
 
-fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
+fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve_root: bool, recursive: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), i32> {
     let mut r = Ok(());
 
     for filename in &files {
@@ -157,28 +152,25 @@ fn chmod(files: Vec<String>, changes: bool, quiet: bool, verbose: bool, preserve
 }
 
 #[cfg(windows)]
-fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), i32> {
     // chmod is useless on Windows
     // it doesn't set any permissions at all
     // instead it just sets the readonly attribute on the file
     Err(0)
 }
-#[cfg(unix)]
-fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<libc::mode_t>, cmode: Option<&String>) -> Result<(), i32> {
-    let path = CString::new(name).unwrap_or_else(|e| panic!("{}", e));
-    let mut stat: libc::stat = unsafe { mem::uninitialized() };
-    let statres = unsafe { libc::stat(path.as_ptr(), &mut stat as *mut libc::stat) };
-    let mut fperm =
-        if statres == 0 {
-            stat.st_mode & 0o7777
-        } else {
+#[cfg(any(unix, target_os = "redox"))]
+fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool, fmode: Option<u32>, cmode: Option<&String>) -> Result<(), i32> {
+    let mut fperm = match fs::metadata(name) {
+        Ok(meta) => meta.mode() & 0o7777,
+        Err(err) => {
             if !quiet {
-                show_error!("{}", io::Error::last_os_error());
+                show_error!("{}", err);
             }
             return Err(1);
-        };
+        }
+    };
     match fmode {
-        Some(mode) => try!(change_file(fperm, mode, file, &path, verbose, changes, quiet)),
+        Some(mode) => try!(change_file(fperm, mode, file, name, verbose, changes, quiet)),
         None => {
             for mode in cmode.unwrap().split(',') {  // cmode is guaranteed to be Some in this case
                 let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -190,7 +182,7 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
                     };
                 match result {
                     Ok(mode) => {
-                        try!(change_file(fperm, mode, file, &path, verbose, changes, quiet));
+                        try!(change_file(fperm, mode, file, name, verbose, changes, quiet));
                         fperm = mode;
                     }
                     Err(f) => {
@@ -207,13 +199,13 @@ fn chmod_file(file: &Path, name: &str, changes: bool, quiet: bool, verbose: bool
     Ok(())
 }
 
-fn parse_numeric(fperm: libc::mode_t, mut mode: &str) -> Result<libc::mode_t, String> {
+fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
     let (op, pos) = try!(parse_op(mode, Some('=')));
     mode = mode[pos..].trim_left_matches('0');
     if mode.len() > 4 {
         Err(format!("mode is too large ({} > 7777)", mode))
     } else {
-        match libc::mode_t::from_str_radix(mode, 8) {
+        match u32::from_str_radix(mode, 8) {
             Ok(change) => {
                 Ok(match op {
                     '+' => fperm | change,
@@ -227,14 +219,23 @@ fn parse_numeric(fperm: libc::mode_t, mut mode: &str) -> Result<libc::mode_t, St
     }
 }
 
-fn parse_symbolic(mut fperm: libc::mode_t, mut mode: &str, file: &Path) -> Result<libc::mode_t, String> {
+fn parse_symbolic(mut fperm: u32, mut mode: &str, file: &Path) -> Result<u32, String> {
+    #[cfg(unix)]
+    use libc::umask;
+
+    #[cfg(target_os = "redox")]
+    unsafe fn umask(_mask: u32) -> u32 {
+        // XXX
+        0
+    }
+
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
         return Err(format!("invalid mode ({})", mode));
     }
     let respect_umask = pos == 0;
     let last_umask = unsafe {
-        libc::umask(0)
+        umask(0)
     };
     mode = &mode[pos..];
     while mode.len() > 0 {
@@ -253,12 +254,12 @@ fn parse_symbolic(mut fperm: libc::mode_t, mut mode: &str, file: &Path) -> Resul
         }
     }
     unsafe {
-        libc::umask(last_umask);
+        umask(last_umask);
     }
     Ok(fperm)
 }
 
-fn parse_levels(mode: &str) -> (libc::mode_t, usize) {
+fn parse_levels(mode: &str) -> (u32, usize) {
     let mut mask = 0;
     let mut pos = 0;
     for ch in mode.chars() {
@@ -290,7 +291,7 @@ fn parse_op(mode: &str, default: Option<char>) -> Result<(char, usize), String> 
     }
 }
 
-fn parse_change(mode: &str, fperm: libc::mode_t, file: &Path) -> (libc::mode_t, usize) {
+fn parse_change(mode: &str, fperm: u32, file: &Path) -> (u32, usize) {
     let mut srwx = fperm & 0o7000;
     let mut pos = 0;
     for ch in mode.chars() {
@@ -318,24 +319,24 @@ fn parse_change(mode: &str, fperm: libc::mode_t, file: &Path) -> (libc::mode_t, 
     (srwx, pos)
 }
 
-fn change_file(fperm: libc::mode_t, mode: libc::mode_t, file: &Path, path: &CString, verbose: bool, changes: bool, quiet: bool) -> Result<(), i32> {
+fn change_file(fperm: u32, mode: u32, file: &Path, path: &str, verbose: bool, changes: bool, quiet: bool) -> Result<(), i32> {
     if fperm == mode {
         if verbose && !changes {
             show_info!("mode of '{}' retained as {:o}", file.display(), fperm);
         }
         Ok(())
-    } else if unsafe { libc::chmod(path.as_ptr(), mode) } == 0 {
-        if verbose || changes {
-            show_info!("mode of '{}' changed from {:o} to {:o}", file.display(), fperm, mode);
-        }
-        Ok(())
-    } else {
+    } else if let Err(err) = fs::set_permissions(Path::new(path), fs::Permissions::from_mode(mode)) {
         if !quiet {
-            show_error!("{}", io::Error::last_os_error());
+            show_error!("{}", err);
         }
         if verbose {
             show_info!("failed to change mode of file '{}' from {:o} to {:o}", file.display(), fperm, mode);
         }
-        return Err(1);
+        Err(1)
+    } else {
+        if verbose || changes {
+            show_info!("mode of '{}' changed from {:o} to {:o}", file.display(), fperm, mode);
+        }
+        Ok(())
     }
 }
