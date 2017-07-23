@@ -12,6 +12,8 @@
 
 extern crate clap;
 extern crate walkdir;
+#[cfg(target_os = "linux")]
+#[macro_use] extern crate ioctl_sys;
 #[macro_use] extern crate uucore;
 #[macro_use] extern crate quick_error;
 
@@ -25,8 +27,13 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
+#[cfg(target_os = "linux")] use std::os::unix::io::IntoRawFd;
+use std::fs::File;
+use std::fs::OpenOptions;
 
 #[cfg(unix)] use std::os::unix::fs::PermissionsExt;
+
+#[cfg(target_os = "linux")] ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
     #[derive(Debug)]
@@ -125,6 +132,11 @@ pub enum OverwriteMode {
     NoClobber,
 }
 
+#[derive (Clone, Eq, PartialEq)]
+pub enum ReflinkMode {
+    Always, Auto, Never
+}
+
 /// Specifies the expected file type of copy target
 pub enum TargetType {
     Directory,
@@ -170,6 +182,8 @@ pub struct Options {
     one_file_system: bool,
     overwrite: OverwriteMode,
     parents: bool,
+    reflink: bool,
+    reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
     recursive: bool,
     backup_suffix: String,
@@ -273,6 +287,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .arg(Arg::with_name(OPT_LINK)
              .short("l")
              .long(OPT_LINK)
+             .overrides_with(OPT_REFLINK)
              .help("hard-link files instead of copying"))
         .arg(Arg::with_name(OPT_NO_CLOBBER)
              .short("n")
@@ -294,6 +309,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .short("s")
              .long(OPT_SYMBOLIC_LINK)
              .conflicts_with(OPT_LINK)
+             .overrides_with(OPT_REFLINK)
              .help("make symbolic links instead of copying"))
         .arg(Arg::with_name(OPT_FORCE)
              .short("f")
@@ -322,6 +338,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .long(OPT_UPDATE)
              .help("copy only when the SOURCE file is newer than the destination file\
                     or when the destination file is missing"))
+        .arg(Arg::with_name(OPT_REFLINK)
+             .long(OPT_REFLINK)
+             .takes_value(true)
+             .value_name("WHEN")
+             .help("control clone/CoW copies. See below"))
+
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
              .short("a")
@@ -331,6 +353,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
              .long(OPT_ATTRIBUTES_ONLY)
              .conflicts_with(OPT_COPY_CONTENTS)
+             .overrides_with(OPT_REFLINK)
              .help("NotImplemented: don't copy the file data, just the attributes"))
         .arg(Arg::with_name(OPT_COPY_CONTENTS)
              .long(OPT_COPY_CONTENTS)
@@ -372,11 +395,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
              .help("NotImplemented: use full source file name under DIRECTORY"))
-        .arg(Arg::with_name(OPT_REFLINK)
-             .long(OPT_REFLINK)
-             .takes_value(true)
-             .value_name("WHEN")
-             .help("NotImplemented: control clone/CoW copies. See below"))
         .arg(Arg::with_name(OPT_SPARSE)
              .long(OPT_SPARSE)
              .takes_value(true)
@@ -499,7 +517,6 @@ impl Options {
             OPT_PRESERVE,
             OPT_NO_PRESERVE,
             OPT_PARENTS,
-            OPT_REFLINK,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
             OPT_ONE_FILE_SYSTEM,
@@ -541,7 +558,6 @@ impl Options {
         } else {
             vec![]
         };
-
         let options = Options {
             attributes_only: matches.is_present(OPT_ATTRIBUTES_ONLY),
             copy_contents: matches.is_present(OPT_COPY_CONTENTS),
@@ -553,6 +569,24 @@ impl Options {
             backup_suffix: matches.value_of(OPT_SUFFIX).unwrap().to_string(),
             update: matches.is_present(OPT_UPDATE),
             verbose: matches.is_present(OPT_VERBOSE),
+            reflink: matches.is_present(OPT_REFLINK),
+            reflink_mode: {
+                if let Some(reflink) = matches.value_of(OPT_REFLINK) {
+                    match reflink {
+                        "always" => {
+                            ReflinkMode::Always
+                        },
+                        "auto" => {
+                            ReflinkMode::Auto
+                        },
+                        value => {
+                            return Err(Error::InvalidArgument(format!("invalid argument '{}' for \'reflink\'", value)))
+                        }
+                    }
+                } else {
+                    ReflinkMode::Never
+                }
+            },
             backup,
             no_target_dir,
             preserve_attributes,
@@ -824,10 +858,16 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     }
 
     match options.copy_mode {
-        CopyMode::Link    => { fs::hard_link(source, dest).context(&*context_for(source, dest))?; },
-        CopyMode::Copy    => { fs::copy(source, dest).context(&*context_for(source, dest))?; },
-        CopyMode::SymLink => { symlink_file(source, dest, &*context_for(source, dest))?; },
-        CopyMode::Sparse  => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
+        CopyMode::Link => {
+            fs::hard_link(source, dest).context(&*context_for(source, dest))?;
+        }
+        CopyMode::Copy => {
+            copy_helper(source, dest, options)?;
+        }
+        CopyMode::SymLink => {
+            symlink_file(source, dest, &*context_for(source, dest))?;
+        }
+        CopyMode::Sparse => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
                 let src_metadata = fs::metadata(source.clone())?;
@@ -836,12 +876,12 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
                 let src_time = src_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
                 if src_time <= dest_time {
-                    return Ok(())
+                    return Ok(());
                 } else {
-                    fs::copy(source, dest).context(&*context_for(source, dest))?;
+                    copy_helper(source, dest, options)?;
                 }
             } else {
-                fs::copy(source, dest).context(&*context_for(source, dest))?;
+                copy_helper(source, dest, options)?;
             }
         }
     };
@@ -853,6 +893,46 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     Ok(())
 }
 
+///Copy the file from `source` to `dest` either using the normal `fs::copy` or the
+///`FICLONE` ioctl if --reflink is specified and the filesystem supports it.
+fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+    if options.reflink {
+        #[cfg(not(target_os = "linux"))]
+        return Err(format!("--reflink is only supported on linux").into());
+
+        #[cfg(target_os = "linux")]
+        {
+            let src_file = File::open(source).unwrap().into_raw_fd();
+            let dst_file = OpenOptions::new()
+                .write(true)
+                .truncate(false)
+                .create(true)
+                .open(dest)
+                .unwrap()
+                .into_raw_fd();
+            match options.reflink_mode {
+                ReflinkMode::Always => unsafe {
+                    let result = ficlone(dst_file, src_file as *const i32);
+                    if result != 0 {
+                        return Err(format!("failed to clone {:?} from {:?}: {}", source, dest, std::io::Error::last_os_error()).into());
+                    } else {
+                        return Ok(())
+                    }
+                },
+                ReflinkMode::Auto => unsafe {
+                    let result = ficlone(dst_file, src_file as *const i32);
+                    if result != 0 {
+                        fs::copy(source, dest).context(&*context_for(source, dest))?;
+                    }
+                },
+                ReflinkMode::Never => {}
+            }
+        }
+    } else {
+        fs::copy(source, dest).context(&*context_for(source, dest))?;
+    }
+    Ok(())
+}
 
 /// Generate an error message if `target` is not the correct `target_type`
 pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult<()> {
