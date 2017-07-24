@@ -225,7 +225,7 @@ fn parse_symbolic(mut fperm: u32, mut mode: &str, file: &Path) -> Result<u32, St
 
     #[cfg(target_os = "redox")]
     unsafe fn umask(_mask: u32) -> u32 {
-        // XXX
+        // XXX Redox does not currently have umask
         0
     }
 
@@ -243,7 +243,7 @@ fn parse_symbolic(mut fperm: u32, mut mode: &str, file: &Path) -> Result<u32, St
         mode = &mode[pos..];
         let (mut srwx, pos) = parse_change(mode, fperm, file);
         if respect_umask {
-            srwx &= !last_umask;
+            srwx &= !(last_umask as u32);
         }
         mode = &mode[pos..];
         match op {
