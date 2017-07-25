@@ -31,6 +31,7 @@ use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
 use std::path::{Path, PathBuf};
 use std::io::Write;
+use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
 
@@ -191,9 +192,10 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
             entries.sort_by_key(|k| get_metadata(k, options).map(|md| md.ctime()).unwrap_or(0));
         } else {
             entries.sort_by_key(|k| {
-                get_metadata(k, options)
+                // Newest first
+                Reverse(get_metadata(k, options)
                     .and_then(|md| md.modified())
-                    .unwrap_or(std::time::UNIX_EPOCH)
+                    .unwrap_or(std::time::UNIX_EPOCH))
             });
         }
     } else if options.opt_present("S") {
@@ -213,9 +215,10 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     let mut reverse = options.opt_present("r");
     if options.opt_present("t") {
         entries.sort_by_key(|k| {
-            get_metadata(k, options)
+            // Newest first
+            Reverse(get_metadata(k, options)
                 .and_then(|md| md.modified())
-                .unwrap_or(std::time::UNIX_EPOCH)
+                .unwrap_or(std::time::UNIX_EPOCH))
         });
     } else if options.opt_present("S") {
         entries.sort_by_key(|k| get_metadata(k, options).map(|md| md.file_size()).unwrap_or(0));
