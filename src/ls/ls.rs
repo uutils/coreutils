@@ -34,7 +34,7 @@ use std::io::Write;
 #[cfg(unix)]
 use std::collections::HashMap;
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -183,7 +183,7 @@ fn list(options: getopts::Matches) {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "redox"))]
 fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     let mut reverse = options.opt_present("r");
     if options.opt_present("t") {
