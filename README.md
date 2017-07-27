@@ -145,110 +145,96 @@ Contribute
 
 To contribute to coreutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
-To do
------
+Utilities
+---------
 
-* [x] arch
-* [x] base32
-* [x] base64
-* [x] basename
-* [x] cat
-* [ ] chcon
-* [x] chgrp
-* [x] chmod
-* [x] chown
-* [x] chroot
-* [x] cksum
-* [x] comm
-* [ ] cp (not much done)
-* [ ] csplit
-* [x] cut
-* [ ] date
-* [ ] dd
-* [ ] df
-* [x] dircolors
-* [x] dirname
-* [x] du
-* [x] echo
-* [x] env
-* [x] expand
-* [ ] expr (almost done, no regular expressions)
-* [x] factor
-* [x] false
-* [x] fmt
-* [x] fold
-* [x] groups
-* [x] hashsum
-* [x] head
-* [x] hostid
-* [x] hostname
-* [x] id
-* [ ] install (a couple of missing options)
-* [ ] join
-* [x] kill
-* [x] link
-* [x] ln
-* [x] logname
-* [ ] ls
-* [x] ~~md5sum~~, ~~sha1sum~~, ~~sha224sum~~, ~~sha256sum~~, ~~sha384sum~~, ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs))
-* [x] mkdir
-* [x] mkfifo
-* [x] mknod
-* [x] mktemp
-* [x] mv
-* [ ] more (in progress, needs lots of work)
-* [x] nice
-* [x] nl
-* [x] nohup
-* [x] nproc
-* [ ] numfmt
-* [ ] od (almost complete, `--strings` and 128-bit datatypes are missing)
-* [x] paste
-* [x] pathchk
-* [x] pinky
-* [ ] pr
-* [x] printenv
-* [ ] printf
-* [x] ptx
-* [x] pwd
-* [x] readlink
-* [x] realpath
-* [x] relpath
-* [x] rm
-* [x] rmdir
-* [ ] runcon
-* [x] seq
-* [x] shred
-* [x] shuf
-* [x] sleep
-* [ ] sort (a couple of options implemented)
-* [ ] split (a couple of missing options)
-* [x] stat
-* [x] stdbuf
-* [ ] stty
-* [x] sum
-* [x] sync
-* [x] tac
-* [ ] tail (not all features implemented)
-* [x] tee
-* [ ] test (not all features implemented)
-* [x] timeout
-* [x] touch
-* [x] tr
-* [x] true
-* [x] truncate
-* [x] tsort
-* [x] tty
-* [x] uname
-* [x] unexpand
-* [x] uniq
-* [x] unlink
-* [x] uptime
-* [x] users
-* [x] wc
-* [x] who
-* [x] whoami
-* [x] yes
+| Done      | Semi-Done | To Do  |
+|-----------|-----------|--------|
+| arch      | cp        | chcon  |
+| base32    | expr (no regular expressions) | csplit |
+| base64    | install   | date   |
+| basename  | ls        | dd     |
+| cat       | more      | df     |
+| chgrp     | od (`--strings` and 128-bit data types missing) | join |
+| chmod     | printf    | numfmt |
+| chown     | sort      | pr     |
+| chroot    | split     | runcon |
+| cksum     | tail      | stty   |
+| comm      | test      |        |
+| cut       |           |        |
+| dircolors |           |        |
+| dirname   |           |        |
+| du        |           |        |
+| echo      |           |        |
+| env       |           |        |
+| expand    |           |        |
+| factor    |           |        |
+| false     |           |        |
+| fmt       |           |        |
+| fold      |           |        |
+| groups    |           |        |
+| hashsum   |           |        |
+| head      |           |        |
+| hostid    |           |        |
+| hostname  |           |        |
+| id        |           |        |
+| kill      |           |        |
+| link      |           |        |
+| ln        |           |        |
+| logname   |           |        |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| mkdir     |           |        |
+| mkfifo    |           |        |
+| mknod     |           |        |
+| mktemp    |           |        |
+| mv        |           |        |
+| nice      |           |        |
+| nl        |           |        |
+| nohup     |           |        |
+| nproc     |           |        |
+| paste     |           |        |
+| pathchk   |           |        |
+| pinky     |           |        |
+| printenv  |           |        |
+| ptx       |           |        |
+| pwd       |           |        |
+| readlink  |           |        |
+| realpath  |           |        |
+| relpath   |           |        |
+| rm        |           |        |
+| rmdir     |           |        |
+| seq       |           |        |
+| shred     |           |        |
+| shuf      |           |        |
+| sleep     |           |        |
+| stat      |           |        |
+| stdbuf    |           |        |
+| sum       |           |        |
+| sync      |           |        |
+| tac       |           |        |
+| tee       |           |        |
+| timeout   |           |        |
+| touch     |           |        |
+| tr        |           |        |
+| true      |           |        |
+| truncate  |           |        |
+| tsort     |           |        |
+| tty       |           |        |
+| uname     |           |        |
+| unexpand  |           |        |
+| uniq      |           |        |
+| unlink    |           |        |
+| uptime    |           |        |
+| users     |           |        |
+| wc        |           |        |
+| who       |           |        |
+| whoami    |           |        |
+| yes       |           |        |
 
 License
 -------
