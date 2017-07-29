@@ -45,7 +45,7 @@ struct Options {
     verbose: bool
 }
 
-const AFTER_HELP: &'static str = "
+const AFTER_HELP: &'static str = "\
 By default, rm does not remove directories.  Use the --recursive (-r)
 option to remove each listed directory, too, along with all of its contents
 
