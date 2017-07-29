@@ -8,7 +8,7 @@ name = "uu_whoami"
 path = "whoami.rs"
 
 [dependencies]
-getopts = "0.2.14"
+clap = "2.25"
 winapi = "0.2.8"
 advapi32-sys = "0.2.0"
 

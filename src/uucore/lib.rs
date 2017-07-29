@@ -1,6 +1,8 @@
 #[cfg(feature = "libc")]
 pub extern crate libc;
 
+pub extern crate os_str_generic;
+
 #[macro_use]
 mod macros;
 

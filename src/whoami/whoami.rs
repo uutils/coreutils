@@ -11,42 +11,24 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-extern crate getopts;
+#[macro_use]
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
+use clap::App;
 use std::io::Write;
+use std::ffi::OsString;
 
 mod platform;
 
-static NAME: &'static str = "whoami";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS]", NAME);
-        println!("");
-        println!("{}", opts.usage("print effective userid"));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+pub fn uumain(args: Vec<OsString>) -> i32 {
+    let _ = App::new(executable!(args))
+                    .version(crate_version!())
+                    .author("uutils developers (https://github.com/uutils)")
+                    .about("Print effective user ID.")
+                    .get_matches_from(args);
 
     exec();
 
@@ -54,13 +36,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 pub fn exec() {
-    unsafe {
-        match platform::getusername() {
-            Ok(username) => println!("{}", username),
-            Err(err) => match err.raw_os_error() {
-                Some(0) | None => crash!(1, "failed to get username"),
-                Some(_) => crash!(1, "failed to get username: {}", err),
-            }
+    let maybe_name = unsafe { platform::getusername() };
+    match maybe_name {
+        Ok(username) => byte_print!(&os_bytesln!(username)),
+        Err(err) => match err.raw_os_error() {
+            Some(0) | None => crash!(1, "failed to get username"),
+            Some(_) => crash!(1, "failed to get username: {}", err),
         }
     }
 }

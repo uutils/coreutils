@@ -9,7 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
+#[macro_use]
+extern crate clap;
 extern crate remove_dir_all;
 extern crate walkdir;
 
@@ -17,10 +18,12 @@ extern crate walkdir;
 extern crate uucore;
 
 use std::collections::VecDeque;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{stdin, stderr, BufRead, Write};
 use std::ops::BitOr;
 use std::path::Path;
+use clap::{App, Arg};
 use remove_dir_all::remove_dir_all;
 use walkdir::{DirEntry, WalkDir};
 
@@ -42,105 +45,117 @@ struct Options {
     verbose: bool
 }
 
-static NAME: &'static str = "rm";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const AFTER_HELP: &'static str = "
+By default, rm does not remove directories.  Use the --recursive (-r)
+option to remove each listed directory, too, along with all of its contents
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    // TODO: make getopts support -R in addition to -r
-    let mut opts = getopts::Options::new();
+To remove a file whose name starts with a '-', for example '-foo',
+use one of these commands:
+rm -- -foo
 
-    opts.optflag("f", "force", "ignore nonexistent files and arguments, never prompt");
-    opts.optflag("i", "", "prompt before every removal");
-    opts.optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes");
-    opts.optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN");
-    opts.optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)");
-    opts.optflag("", "no-preserve-root", "do not treat '/' specially");
-    opts.optflag("", "preserve-root", "do not remove '/' (default)");
-    opts.optflag("r", "recursive", "remove directories and their contents recursively");
-    opts.optflag("d", "dir", "remove empty directories");
-    opts.optflag("v", "verbose", "explain what is being done");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+rm ./-foo
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
-    };
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
-        println!("{}", opts.usage("Remove (unlink) the FILE(s)."));
-        println!("By default, rm does not remove directories.  Use the --recursive (-r)");
-        println!("option to remove each listed directory, too, along with all of its contents");
-        println!("");
-        println!("To remove a file whose name starts with a '-', for example '-foo',");
-        println!("use one of these commands:");
-        println!("rm -- -foo");
-        println!("");
-        println!("rm ./-foo");
-        println!("");
-        println!("Note that if you use rm to remove a file, it might be possible to recover");
-        println!("some of its contents, given sufficient expertise and/or time.  For greater");
-        println!("assurance that the contents are truly unrecoverable, consider using shred.");
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() {
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", NAME);
-        return 1;
-    } else {
-        let options = Options {
-            force: matches.opt_present("force"),
-            interactive: {
-                if matches.opt_present("i") {
-                    InteractiveMode::InteractiveAlways
-                } else if matches.opt_present("I") {
-                    InteractiveMode::InteractiveOnce
-                } else if matches.opt_present("interactive") {
-                    match &matches.opt_str("interactive").unwrap()[..] {
-                        "none" => InteractiveMode::InteractiveNone,
-                        "once" => InteractiveMode::InteractiveOnce,
-                        "always" => InteractiveMode::InteractiveAlways,
-                        val => {
-                            crash!(1, "Invalid argument to interactive ({})", val)
-                        }
+Note that if you use rm to remove a file, it might be possible to recover
+some of its contents, given sufficient expertise and/or time.  For greater
+assurance that the contents are truly unrecoverable, consider using shred.
+";
+
+pub fn uumain(args: Vec<OsString>) -> i32 {
+    let matches = App::new(executable!(args))
+                          .version(crate_version!())
+                          .author("uutils developers (https://github.com/uutils)")
+                          .about("Deletes (aka \"remove\" or \"unlink\") files and directories.")
+                          .after_help(AFTER_HELP)
+                          .arg(Arg::with_name("force")
+                               .short("f")
+                               .long("force")
+                               .help("Ignore nonexistent files and arguments, never prompt"))
+                          .arg(Arg::with_name("int_always")
+                               .short("i")
+                               .help("Prompt before every removal"))
+                          .arg(Arg::with_name("int_once")
+                               .short("I")
+                               .help("Prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes"))
+                          .arg(Arg::with_name("interactive")
+                               .long("interactive")
+                               .value_name("WHEN")
+                               .help("Prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always")
+                               .takes_value(true))
+                          .arg(Arg::with_name("one-fs")
+                               .long("one-file-system")
+                               .help("When removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)"))
+                          .arg(Arg::with_name("no-preserve-root")
+                               .long("no-preserve-root")
+                               .help("Do not treat '/' specially"))
+                          .arg(Arg::with_name("recursive")
+                               .short("r")
+                               .visible_alias("R")
+                               .long("recursive")
+                               .help("Remove directories and their contents recursively"))
+                          .arg(Arg::with_name("dir")
+                               .short("d")
+                               .long("dir")
+                               .help("Remove empty directories"))
+                          .arg(Arg::with_name("verbose")
+                               .short("v")
+                               .long("verbose")
+                               .help("Explain what is being done"))
+                          .arg(Arg::with_name("FILES")
+                               .help("Which files and/or directories are to be removed")
+                               .required(true)
+                               .index(1)
+                               .multiple(true))
+                          .get_matches_from(args);
+
+    let files: Vec<&OsStr> = matches.values_of_os("FILES").unwrap().collect();
+    let options = Options {
+        force: matches.is_present("force"),
+        interactive: {
+            if matches.is_present("int_always") {
+                InteractiveMode::InteractiveAlways
+            } else if matches.is_present("int_once") {
+                InteractiveMode::InteractiveOnce
+            } else if matches.is_present("interactive") {
+                match &matches.value_of("interactive").unwrap()[..] {
+                    "none" => InteractiveMode::InteractiveNone,
+                    "once" => InteractiveMode::InteractiveOnce,
+                    "always" => InteractiveMode::InteractiveAlways,
+                    val => {
+                        crash!(1, "Invalid argument to interactive ({})", val)
                     }
-                } else {
-                    InteractiveMode::InteractiveNone
                 }
-            },
-            one_fs: matches.opt_present("one-file-system"),
-            preserve_root: !matches.opt_present("no-preserve-root"),
-            recursive: matches.opt_present("recursive"),
-            dir: matches.opt_present("dir"),
-            verbose: matches.opt_present("verbose")
-        };
-        if options.interactive == InteractiveMode::InteractiveOnce
-                && (options.recursive || matches.free.len() > 3) {
-            let msg =
-                if options.recursive {
-                    "Remove all arguments recursively? "
-                } else {
-                    "Remove all arguments? "
-                };
-            if !prompt(msg) {
-                return 0;
+            } else {
+                InteractiveMode::InteractiveNone
             }
-        }
-
-        if remove(matches.free, options) {
-            return 1;
+        },
+        one_fs: matches.is_present("one-fs"),
+        preserve_root: !matches.is_present("no-preserve-root"),
+        recursive: matches.is_present("recursive"),
+        dir: matches.is_present("dir"),
+        verbose: matches.is_present("verbose")
+    };
+    if options.interactive == InteractiveMode::InteractiveOnce
+            && (options.recursive || files.len() > 3) {
+        let msg =
+            if options.recursive {
+                "Remove all arguments recursively? "
+            } else {
+                "Remove all arguments? "
+            };
+        if !prompt(msg) {
+            return 0;
         }
     }
 
-    0
+    if remove(files, options) {
+        1
+    } else {
+        0
+    }
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: Vec<String>, options: Options) -> bool {
+fn remove(files: Vec<&OsStr>, options: Options) -> bool {
     let mut had_err = false;
 
     for filename in &files {
@@ -159,7 +174,7 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                 // (e.g., permission), even rm -f should fail with
                 // outputting the error, but there's no easy eay.
                 if !options.force {
-                    show_error!("no such file or directory '{}'", filename);
+                    show_error!("no such file or directory '{}'", file.display());
                     true
                 } else {
                     false
