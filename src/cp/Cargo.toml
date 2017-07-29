@@ -18,6 +18,9 @@ clap = "2.20.0"
 quick-error = "1.1.0"
 uucore = { path="../uucore" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+ioctl-sys = "0.5.2"
+
 [[bin]]
 name = "cp"
 path = "main.rs"
