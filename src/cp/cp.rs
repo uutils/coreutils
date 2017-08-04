@@ -157,6 +157,7 @@ pub enum CopyMode {
     Sparse,
     Copy,
     Update,
+    AttrOnly
 }
 
 #[derive(Clone)]
@@ -343,6 +344,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .takes_value(true)
              .value_name("WHEN")
              .help("control clone/CoW copies. See below"))
+        .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
+             .long(OPT_ATTRIBUTES_ONLY)
+             .conflicts_with(OPT_COPY_CONTENTS)
+             .overrides_with(OPT_REFLINK)
+             .help("Don't copy the file data, just the attributes"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
@@ -350,11 +356,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .long(OPT_ARCHIVE)
              .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
              .help("NotImplemented: same as -dR --preserve=all"))
-        .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
-             .long(OPT_ATTRIBUTES_ONLY)
-             .conflicts_with(OPT_COPY_CONTENTS)
-             .overrides_with(OPT_REFLINK)
-             .help("NotImplemented: don't copy the file data, just the attributes"))
         .arg(Arg::with_name(OPT_COPY_CONTENTS)
              .long(OPT_COPY_CONTENTS)
              .conflicts_with(OPT_ATTRIBUTES_ONLY)
@@ -481,6 +482,8 @@ impl CopyMode {
             CopyMode::Sparse
         } else if matches.is_present(OPT_UPDATE) {
             CopyMode::Update
+        } else if matches.is_present(OPT_ATTRIBUTES_ONLY) {
+            CopyMode::AttrOnly
         } else {
             CopyMode::Copy
         }
@@ -508,7 +511,6 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts =  vec![
             OPT_ARCHIVE,
-            OPT_ATTRIBUTES_ONLY,
             OPT_COPY_CONTENTS,
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
             OPT_DEREFERENCE,
@@ -888,6 +890,14 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             } else {
                 copy_helper(source, dest, options)?;
             }
+        },
+        CopyMode::AttrOnly => {
+            let dst_file = OpenOptions::new()
+                .write(true)
+                .truncate(false)
+                .create(true)
+                .open(dest)
+                .unwrap();
         }
     };
 
