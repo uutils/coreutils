@@ -10,6 +10,7 @@
  * that was distributed with this source code.
  */
 
+extern crate libc;
 extern crate clap;
 extern crate walkdir;
 #[cfg(target_os = "linux")]
@@ -17,6 +18,8 @@ extern crate walkdir;
 #[macro_use] extern crate uucore;
 #[macro_use] extern crate quick_error;
 
+use std::mem;
+use std::ffi::CString;
 use clap::{Arg, App, ArgMatches};
 use quick_error::ResultExt;
 use std::collections::HashSet;
@@ -516,7 +519,6 @@ impl Options {
             OPT_DEREFERENCE,
             OPT_NO_DEREFERENCE,
             OPT_PRESERVE_DEFUALT_ATTRIBUTES,
-            OPT_PRESERVE,
             OPT_NO_PRESERVE,
             OPT_PARENTS,
             OPT_SPARSE,
@@ -787,7 +789,21 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             let metadata = fs::metadata(source).context(context)?;
             fs::set_permissions(dest, metadata.permissions()).context(context)?;
         },
-        Attribute::Timestamps => return Err(Error::NotImplemented("preserving timestamp not implemented".to_string())),
+        Attribute::Timestamps => {
+            let meta = fs::metadata(source)?;
+            let modified = meta.modified()?;
+            let accessed = meta.accessed()?;
+            let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
+            let dest_path = CString::new(dest.as_os_str().to_str().unwrap()).unwrap();
+            unsafe {
+                let mut stat: libc::stat = mem::zeroed();
+                libc::stat(src_path.as_ptr(), &mut stat);
+                libc::utime(dest_path.as_ptr(), &libc::utimbuf{
+                    actime: stat.st_atime,
+                    modtime: stat.st_mtime
+                });
+            }
+        },
         Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
         Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
         Attribute::Xattr      => return Err(Error::NotImplemented("preserving xattr not implemented".to_string())),
@@ -892,7 +908,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             }
         },
         CopyMode::AttrOnly => {
-            let dst_file = OpenOptions::new()
+            OpenOptions::new()
                 .write(true)
                 .truncate(false)
                 .create(true)
