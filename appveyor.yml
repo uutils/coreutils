@@ -1,7 +1,15 @@
+os: Visual Studio 2015
+
 environment:
   matrix:
   - TARGET: x86_64-pc-windows-msvc
+    MSYS_BITS: 64
+    TOOLCHAIN: msvc
+    PLATFORM: x86_64
   - TARGET: i686-pc-windows-msvc
+    MSYS_BITS: 32
+    TOOLCHAIN: msvc
+    PLATFORM: i686
   - TARGET: i686-pc-windows-gnu
     MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z/download
     MINGW_ARCHIVE: i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
