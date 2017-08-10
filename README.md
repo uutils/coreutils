@@ -152,16 +152,16 @@ Utilities
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
 | base32    | expr (no regular expressions) | csplit |
-| base64    | install   | date   |
-| basename  | ls        | dd     |
-| cat       | more      | df     |
-| chgrp     | od (`--strings` and 128-bit data types missing) | join |
-| chmod     | printf    | numfmt |
-| chown     | sort      | pr     |
-| chroot    | split     | runcon |
-| cksum     | tail      | stty   |
+| base64    | install   | dd     |
+| basename  | ls        | df     |
+| cat       | more      | join   |
+| chgrp     | od (`--strings` and 128-bit data types missing) | numfmt |
+| chmod     | printf    | pr     |
+| chown     | sort      | runcon |
+| chroot    | split     | stty   |
+| cksum     | tail      |        |
 | comm      | test      |        |
-| cut       |           |        |
+| cut       | date      |        |
 | dircolors |           |        |
 | dirname   |           |        |
 | du        |           |        |
