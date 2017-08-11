@@ -726,7 +726,12 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
     }
 
     let root_path = Path::new(&root).canonicalize()?;
-    let root_parent = root_path.parent();
+
+    let root_parent = if target.exists() {
+        root_path.parent()
+    } else {
+        Some(root_path.as_path())
+    };
 
     for path in WalkDir::new(root) {
         let path = or_continue!(or_continue!(path).path().canonicalize());
