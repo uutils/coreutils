@@ -11,7 +11,7 @@ use std::path::Path;
 // enough that an attacker will run out of luck before we run out of patience.
 const NUM_RETRIES: u32 = 1 << 31;
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "redox"))]
 fn create_dir<P: AsRef<Path>>(path: P) -> IOResult<()> {
     use std::fs::DirBuilder;
     use std::os::unix::fs::DirBuilderExt;
