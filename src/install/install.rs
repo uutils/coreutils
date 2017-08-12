@@ -27,12 +27,12 @@ static SUMMARY: &'static str = "Copy SOURCE to DEST or multiple SOURCE(s) to the
  DIRECTORY, while setting permission modes and owner/group";
 static LONG_HELP: &'static str = "";
 
-const DEFAULT_MODE: libc::mode_t = 755;
+const DEFAULT_MODE: u32 = 755;
 
 #[allow(dead_code)]
 pub struct Behaviour {
     main_function: MainFunction,
-    specified_mode: Option<libc::mode_t>,
+    specified_mode: Option<u32>,
     suffix: String,
     verbose: bool
 }
@@ -47,7 +47,7 @@ pub enum MainFunction {
 
 impl Behaviour {
     /// Determine the mode for chmod after copy.
-    pub fn mode(&self) -> libc::mode_t {
+    pub fn mode(&self) -> u32 {
         match self.specified_mode {
             Some(x) => x,
             None => DEFAULT_MODE
@@ -209,7 +209,7 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 
     let considering_dir: bool = MainFunction::Directory == main_function;
 
-    let specified_mode: Option<libc::mode_t> = if matches.opt_present("mode") {
+    let specified_mode: Option<u32> = if matches.opt_present("mode") {
         match matches.opt_str("mode") {
             Some(x) => {
                 match mode::parse(&x[..], considering_dir) {
