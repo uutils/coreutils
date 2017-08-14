@@ -16,6 +16,7 @@ extern crate walkdir;
 #[macro_use] extern crate ioctl_sys;
 #[macro_use] extern crate uucore;
 #[macro_use] extern crate quick_error;
+extern crate filetime;
 
 use clap::{Arg, App, ArgMatches};
 use quick_error::ResultExt;
@@ -30,6 +31,7 @@ use walkdir::WalkDir;
 #[cfg(target_os = "linux")] use std::os::unix::io::IntoRawFd;
 use std::fs::File;
 use std::fs::OpenOptions;
+use filetime::{FileTime, set_file_times};
 
 #[cfg(unix)] use std::os::unix::fs::PermissionsExt;
 
@@ -231,7 +233,7 @@ static OPT_ONE_FILE_SYSTEM:               &str = "one-file-system";
 static OPT_PARENTS:                       &str = "parents";
 static OPT_PATHS:                         &str = "paths";
 static OPT_PRESERVE:                      &str = "preserve";
-static OPT_PRESERVE_DEFUALT_ATTRIBUTES:   &str = "preserve-default-attributes";
+static OPT_PRESERVE_DEFAULT_ATTRIBUTES:   &str = "preserve-default-attributes";
 static OPT_RECURSIVE:                     &str = "recursive";
 static OPT_RECURSIVE_ALIAS:               &str = "recursive_alias";
 static OPT_REFLINK:                       &str = "reflink";
@@ -348,7 +350,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .arg(Arg::with_name(OPT_ARCHIVE)
              .short("a")
              .long(OPT_ARCHIVE)
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
              .help("NotImplemented: same as -dR --preserve=all"))
         .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
              .long(OPT_ATTRIBUTES_ONLY)
@@ -372,25 +374,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .long(OPT_NO_DEREFERENCE)
              .conflicts_with(OPT_DEREFERENCE)
              .help("NotImplemented: never follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_PRESERVE_DEFUALT_ATTRIBUTES)
+        .arg(Arg::with_name(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
-             .long(OPT_PRESERVE_DEFUALT_ATTRIBUTES)
+             .long(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
              .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: same as --preserve=mode(unix only),ownership,timestamps"))
+             .help("same as --preserve=mode(unix only),ownership,timestamps"))
         .arg(Arg::with_name(OPT_PRESERVE)
              .long(OPT_PRESERVE)
              .takes_value(true)
              .multiple(true)
              .possible_values(PRESERVABLE_ATTRIBUTES)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_NO_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .help("preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
                     if possible additional attributes: context, links, xattr, all"))
         .arg(Arg::with_name(OPT_NO_PRESERVE)
              .long(OPT_NO_PRESERVE)
              .takes_value(true)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
              .help("NotImplemented: don't preserve the specified attributes"))
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
@@ -513,8 +515,6 @@ impl Options {
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
             OPT_DEREFERENCE,
             OPT_NO_DEREFERENCE,
-            OPT_PRESERVE_DEFUALT_ATTRIBUTES,
-            OPT_PRESERVE,
             OPT_NO_PRESERVE,
             OPT_PARENTS,
             OPT_SPARSE,
@@ -553,7 +553,7 @@ impl Options {
                     attributes
                 }
             }
-        } else if matches.is_present(OPT_PRESERVE_DEFUALT_ATTRIBUTES) {
+        } else if matches.is_present(OPT_PRESERVE_DEFAULT_ATTRIBUTES) {
             DEFAULT_ATTRIBUTES.to_vec()
         } else {
             vec![]
@@ -785,7 +785,12 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             let metadata = fs::metadata(source).context(context)?;
             fs::set_permissions(dest, metadata.permissions()).context(context)?;
         },
-        Attribute::Timestamps => return Err(Error::NotImplemented("preserving timestamp not implemented".to_string())),
+        Attribute::Timestamps => {
+            let metadata = fs::metadata(source).context(context)?;
+            let mtime = FileTime::from_last_modification_time(&metadata);
+            let atime = FileTime::from_last_access_time(&metadata);
+            set_file_times(dest, mtime, atime)?;
+        },
         Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
         Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
         Attribute::Xattr      => return Err(Error::NotImplemented("preserving xattr not implemented".to_string())),
