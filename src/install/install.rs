@@ -138,8 +138,7 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
                                           DIRECTORY", "DIRECTORY")
     // TODO implement flag
         .optflag("T", "no-target-directory", "(unimplemented) treat DEST as a normal file")
-    // TODO implement flag
-        .optflag("v", "verbose", "(unimplemented) explain what is being done")
+        .optflag("v", "verbose", "explain what is being done")
     // TODO implement flag
         .optflag("P", "preserve-context", "(unimplemented) preserve security context")
     // TODO implement flag
@@ -181,8 +180,6 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
         Err("--target-directory, -t")
     } else if matches.opt_present("no-target-directory") {
         Err("--no-target-directory, -T")
-    } else if matches.opt_present("verbose") {
-        Err("--verbose, -v")
     } else if matches.opt_present("preserve-context") {
         Err("--preserve-context, -P")
     } else if matches.opt_present("context") {
@@ -367,7 +364,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<(), ()> {
     }
 
     if b.verbose {
-        print!("‘{}’ -> ‘{}’", from.display(), to.display());
+        show_info!("'{}' -> '{}'", from.display(), to.display());
     }
 
     Ok(())
