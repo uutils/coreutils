@@ -787,9 +787,9 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
         },
         Attribute::Timestamps => {
             let metadata = fs::metadata(source).context(context)?;
-            let mtime = FileTime::from_last_modification_time(&metadata);
             let atime = FileTime::from_last_access_time(&metadata);
-            set_file_times(dest, mtime, atime)?;
+            let mtime = FileTime::from_last_modification_time(&metadata);
+            set_file_times(dest, atime, mtime)?;
         },
         Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
         Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
