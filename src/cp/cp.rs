@@ -13,6 +13,8 @@
 extern crate libc;
 extern crate clap;
 extern crate walkdir;
+extern crate filetime;
+use filetime::FileTime;
 #[cfg(target_os = "linux")]
 #[macro_use] extern crate ioctl_sys;
 #[macro_use] extern crate uucore;
@@ -790,19 +792,8 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             fs::set_permissions(dest, metadata.permissions()).context(context)?;
         },
         Attribute::Timestamps => {
-            let meta = fs::metadata(source)?;
-            let modified = meta.modified()?;
-            let accessed = meta.accessed()?;
-            let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
-            let dest_path = CString::new(dest.as_os_str().to_str().unwrap()).unwrap();
-            unsafe {
-                let mut stat: libc::stat = mem::zeroed();
-                libc::stat(src_path.as_ptr(), &mut stat);
-                libc::utime(dest_path.as_ptr(), &libc::utimbuf{
-                    actime: stat.st_atime,
-                    modtime: stat.st_mtime
-                });
-            }
+            let metadata = fs::metadata(source)?;
+            filetime::set_file_times(Path::new(dest), FileTime::from_last_access_time(&metadata), FileTime::from_last_modification_time(&metadata))?;
         },
         Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
         Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
