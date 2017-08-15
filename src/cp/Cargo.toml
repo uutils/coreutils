@@ -17,6 +17,7 @@ walkdir = "1.0.7"
 clap = "2.20.0"
 quick-error = "1.1.0"
 uucore = { path="../uucore" }
+filetime = "0.1.10"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
