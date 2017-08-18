@@ -22,6 +22,9 @@ filetime = "0.1"
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
 
+[target.'cfg(unix)'.dependencies]
+xattr="0.2.1"
+
 [[bin]]
 name = "cp"
 path = "main.rs"

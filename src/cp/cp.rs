@@ -19,6 +19,8 @@ use filetime::FileTime;
 #[macro_use] extern crate ioctl_sys;
 #[macro_use] extern crate uucore;
 #[macro_use] extern crate quick_error;
+#[cfg(unix)]
+extern crate xattr;
 
 use std::mem;
 use std::ffi::CString;
@@ -796,7 +798,21 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
         },
         Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
         Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
-        Attribute::Xattr      => return Err(Error::NotImplemented("preserving xattr not implemented".to_string())),
+        Attribute::Xattr      => {
+            #[cfg(unix)]
+            {
+               let xattrs = xattr::list(source)?;
+               for attr in xattrs {
+                    if let Some(attr_value) = xattr::get(source, attr.clone())? {
+                        xattr::set(dest, attr, &attr_value[..]);
+                    }
+               }
+            }
+            #[cfg(not(unix))]
+            {
+                return Err(format!("XAttrs are only supported on unix.").into());
+            }
+        },
         Attribute::All        => return Err(Error::NotImplemented("preserving a not implemented".to_string())),
     })
 }
