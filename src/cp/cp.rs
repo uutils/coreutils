@@ -237,7 +237,7 @@ static OPT_ONE_FILE_SYSTEM:               &str = "one-file-system";
 static OPT_PARENTS:                       &str = "parents";
 static OPT_PATHS:                         &str = "paths";
 static OPT_PRESERVE:                      &str = "preserve";
-static OPT_PRESERVE_DEFUALT_ATTRIBUTES:   &str = "preserve-default-attributes";
+static OPT_PRESERVE_DEFAULT_ATTRIBUTES:   &str = "preserve-default-attributes";
 static OPT_RECURSIVE:                     &str = "recursive";
 static OPT_RECURSIVE_ALIAS:               &str = "recursive_alias";
 static OPT_REFLINK:                       &str = "reflink";
@@ -354,12 +354,33 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .conflicts_with(OPT_COPY_CONTENTS)
              .overrides_with(OPT_REFLINK)
              .help("Don't copy the file data, just the attributes"))
+        .arg(Arg::with_name(OPT_PRESERVE)
+             .long(OPT_PRESERVE)
+             .takes_value(true)
+             .multiple(true)
+             .use_delimiter(true)
+             .possible_values(PRESERVABLE_ATTRIBUTES)
+             .value_name("ATTR_LIST")
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+                    if possible additional attributes: context, links, xattr, all"))
+        .arg(Arg::with_name(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
+             .short("-p")
+             .long(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
+             .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .help("same as --preserve=mode(unix only),ownership,timestamps"))
+        .arg(Arg::with_name(OPT_NO_PRESERVE)
+             .long(OPT_NO_PRESERVE)
+             .takes_value(true)
+             .value_name("ATTR_LIST")
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
+             .help("don't preserve the specified attributes"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
              .short("a")
              .long(OPT_ARCHIVE)
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
              .help("NotImplemented: same as -dR --preserve=all"))
         .arg(Arg::with_name(OPT_COPY_CONTENTS)
              .long(OPT_COPY_CONTENTS)
@@ -378,26 +399,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .long(OPT_NO_DEREFERENCE)
              .conflicts_with(OPT_DEREFERENCE)
              .help("NotImplemented: never follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_PRESERVE_DEFUALT_ATTRIBUTES)
-             .short("-p")
-             .long(OPT_PRESERVE_DEFUALT_ATTRIBUTES)
-             .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: same as --preserve=mode(unix only),ownership,timestamps"))
-        .arg(Arg::with_name(OPT_PRESERVE)
-             .long(OPT_PRESERVE)
-             .takes_value(true)
-             .multiple(true)
-             .possible_values(PRESERVABLE_ATTRIBUTES)
-             .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_NO_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
-                    if possible additional attributes: context, links, xattr, all"))
-        .arg(Arg::with_name(OPT_NO_PRESERVE)
-             .long(OPT_NO_PRESERVE)
-             .takes_value(true)
-             .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: don't preserve the specified attributes"))
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
              .help("NotImplemented: use full source file name under DIRECTORY"))
@@ -520,8 +521,6 @@ impl Options {
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
             OPT_DEREFERENCE,
             OPT_NO_DEREFERENCE,
-            OPT_PRESERVE_DEFUALT_ATTRIBUTES,
-            OPT_NO_PRESERVE,
             OPT_PARENTS,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
@@ -559,7 +558,7 @@ impl Options {
                     attributes
                 }
             }
-        } else if matches.is_present(OPT_PRESERVE_DEFUALT_ATTRIBUTES) {
+        } else if matches.is_present(OPT_PRESERVE_DEFAULT_ATTRIBUTES) {
             DEFAULT_ATTRIBUTES.to_vec()
         } else {
             vec![]
