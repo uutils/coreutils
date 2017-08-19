@@ -167,7 +167,7 @@ pub enum CopyMode {
     AttrOnly
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Attribute {
     #[cfg(unix)] Mode,
     Ownership,
@@ -665,27 +665,66 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
+    let mut preserve_hard_links = false;
+    for attribute in &options.preserve_attributes {
+        if *attribute == Attribute::Links {
+            preserve_hard_links = true;
+        }
+    }
+    #[cfg(unix)]
+    let mut hard_links: Vec<(String, u64)> = vec![];
+
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
-
     for source in sources {
         if seen_sources.contains(source) {
             show_warning!("source '{}' specified more than once", source.display());
 
-        } else if let Err(error) = copy_source(source, target, &target_type, options) {
-            show_error!("{}", error);
-            match error {
-                Error::Skipped(_) => (),
-                _ => non_fatal_errors = true,
-            }
-        }
-        seen_sources.insert(source);
-    }
+        } else {
+            let mut found_hard_link = false;
+            if preserve_hard_links {
+                #[cfg(unix)]
+                unsafe {
+                    let dest = construct_dest_path(source, target, &target_type, options)?;
+                    let mut stat = mem::zeroed();
+                    let src_path = CString::new(Path::new(&source.clone()).as_os_str().to_str().unwrap()).unwrap();
 
+                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
+                        return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
+                    }
+
+                    let inode = stat.st_ino;
+                    for hard_link in &hard_links {
+                        if hard_link.1 == inode {
+                            std::fs::hard_link(hard_link.0.clone(), dest.clone());
+                            found_hard_link = true;
+                        }
+                    }
+                    if stat.st_nlink > 1 && !found_hard_link {
+                        hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+                    }
+                }
+                #[cfg(windows)]
+                {
+
+                }
+            }
+            if !found_hard_link {
+                if let Err(error) = copy_source(source, target, &target_type, options) {
+                    show_error!("{}", error);
+                    match error {
+                        Error::Skipped(_) => (),
+                        _ => non_fatal_errors = true,
+                    }
+                }
+            }
+            seen_sources.insert(source);
+        }
+    }
     if non_fatal_errors {
-        Err(Error::NotAllFilesCopied)
+        return Err(Error::NotAllFilesCopied)
     } else {
-        Ok(())
+        return Ok(())
     }
 }
 
@@ -710,7 +749,6 @@ fn copy_source(source: &Source, target: &Target, target_type: &TargetType, optio
                -> CopyResult<()>
 {
     let source_path = Path::new(&source);
-
     if source_path.is_dir() {
         // Copy as directory
         copy_directory(source, target, options)
@@ -740,6 +778,14 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
         Some(root_path.as_path())
     };
 
+    #[cfg(unix)]
+    let mut hard_links: Vec<(String, u64)> = vec![];
+     let mut preserve_hard_links = false;
+        for attribute in &options.preserve_attributes {
+            if *attribute == Attribute::Links {
+                preserve_hard_links = true;
+            }
+        }
     for path in WalkDir::new(root) {
         let path = or_continue!(or_continue!(path).path().canonicalize());
         let local_to_root_parent = match root_parent {
@@ -752,13 +798,42 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
         if path.is_dir() && !local_to_target.exists() {
             or_continue!(fs::create_dir_all(local_to_target.clone()));
         } else if !path.is_dir() {
-            copy_file(path.as_path(), local_to_target.as_path(), options)?;
+            if preserve_hard_links {
+                #[cfg(unix)]
+                unsafe {
+                    let mut stat = mem::zeroed();
+                    let src_path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
+
+                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
+                        return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
+                    }
+
+                    let inode = stat.st_ino;
+                    let mut found_hard_link = false;
+                    for hard_link in &hard_links {
+                        if hard_link.1 == inode {
+                            std::fs::hard_link(hard_link.0.clone(), local_to_target.as_path());
+                            found_hard_link = true;
+                        }
+                    }
+                    if stat.st_nlink > 1 && !found_hard_link {
+                        hard_links.push((local_to_target.as_path().to_str().unwrap().to_string(), inode));
+                        copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                    }
+                }
+                #[cfg(windows)]
+                {
+
+                }
+            } else {
+                println!("copy");
+                copy_file(path.as_path(), local_to_target.as_path(), options)?;
+            }
         }
     }
 
     Ok(())
 }
-
 
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
@@ -797,7 +872,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             filetime::set_file_times(Path::new(dest), FileTime::from_last_access_time(&metadata), FileTime::from_last_modification_time(&metadata))?;
         },
         Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
-        Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
+        Attribute::Links      => {},
         Attribute::Xattr      => {
             #[cfg(unix)]
             {
