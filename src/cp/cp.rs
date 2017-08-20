@@ -22,6 +22,18 @@ use filetime::FileTime;
 #[cfg(unix)]
 extern crate xattr;
 
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
+
+#[cfg(windows)]
+extern crate kernel32;
+#[cfg(windows)]
+use kernel32::GetFileInformationByHandle;
+#[cfg(windows)]
+use kernel32::CreateFile2;
+#[cfg(windows)]
+extern crate winapi;
+
 use std::mem;
 use std::ffi::CString;
 use clap::{Arg, App, ArgMatches};
@@ -673,6 +685,9 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
     }
     #[cfg(unix)]
     let mut hard_links: Vec<(String, u64)> = vec![];
+    
+    #[cfg(windows)]
+    let mut hard_links: Vec<(String, (u32, u32))> = vec![];
 
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
@@ -706,7 +721,32 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
                 }
                 #[cfg(windows)]
                 {
+                    unsafe {
+                        if !source.is_dir() {
+                            let dest = construct_dest_path(source, target, &target_type, options)?;
+                            let handle = CreateFile2(CString::new(Path::new(&source.clone()).as_os_str().to_str().unwrap()).unwrap().as_ptr() as *const u16,
+                                                                    winapi::winnt::GENERIC_READ,
+                                                                    winapi::winnt::FILE_SHARE_READ,
+                                                                    0,
+                                                                    std::ptr::null_mut());
+                            let file_info = std::mem::uninitialized();
+                            if GetFileInformationByHandle(handle, file_info) != 0 {
+                                return Err(format!("cannot get file information {:?}: {}", source, std::io::Error::last_os_error()).into());
+                            }
 
+                            let file_index = ((*file_info).nFileIndexHigh, (*file_info).nFileIndexLow);
+                            for hard_link in &hard_links {
+                                if (hard_link.1).0 == file_index.0 && (hard_link.1).1 == file_index.1 {
+                                    std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
+                                    found_hard_link = true;
+                                }
+                            }
+                            if (((*file_info).nNumberOfLinks) > 1u32) && !found_hard_link {
+                                println!("{}", (*file_info).nNumberOfLinks);
+                                hard_links.push((dest.clone().to_str().unwrap().to_string(), file_index));
+                            }
+                        }
+                    }
                 }
             }
             if !found_hard_link {
@@ -786,6 +826,10 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
                 preserve_hard_links = true;
             }
         }
+
+    #[cfg(windows)]
+    let mut hard_links: Vec<(String, (u32, u32))> = vec![];
+
     for path in WalkDir::new(root) {
         let path = or_continue!(or_continue!(path).path().canonicalize());
         let local_to_root_parent = match root_parent {
@@ -819,14 +863,39 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
                     if stat.st_nlink > 1 && !found_hard_link {
                         hard_links.push((local_to_target.as_path().to_str().unwrap().to_string(), inode));
                         copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                    } else {
+                        copy_file(path.as_path(), local_to_target.as_path(), options)?;
                     }
                 }
                 #[cfg(windows)]
                 {
+                    unsafe {
+                            let mut found_hard_link = false;
+                            let src_path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
+                            let handle = File::open(path.clone()).unwrap().as_raw_handle();
+                            let file_info = std::mem::uninitialized();
 
+                            let handle = File::open(path.clone()).unwrap().as_raw_handle();
+                            if GetFileInformationByHandle(handle, file_info) != 0 {
+                                return Err(format!("cannot get file information {:?}: {}", src_path, std::io::Error::last_os_error()).into());
+                            }
+
+                            let file_index = ((*file_info).nFileIndexHigh, (*file_info).nFileIndexLow);
+                            for hard_link in &hard_links {
+                                if (hard_link.1).0 == file_index.0 && (hard_link.1).1 == file_index.1 {
+                                    std::fs::hard_link(hard_link.0.clone(), local_to_target.as_path()).unwrap();
+                                    found_hard_link = true;                            
+                                }
+                            }
+                            if (*file_info).nNumberOfLinks > 1u32 && !found_hard_link {
+                                hard_links.push((local_to_target.as_path().to_str().unwrap().to_string(), file_index));
+                                copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                            } else {
+                                copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                            }
+                    }
                 }
             } else {
-                println!("copy");
                 copy_file(path.as_path(), local_to_target.as_path(), options)?;
             }
         }

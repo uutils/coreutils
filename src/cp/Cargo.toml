@@ -22,6 +22,10 @@ filetime = "0.1"
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+kernel32-sys = "*"
+winapi = "*"
+
 [target.'cfg(unix)'.dependencies]
 xattr="0.2.1"
 
