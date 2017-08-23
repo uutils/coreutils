@@ -71,7 +71,7 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
     let mut locked_stdin = stdin.lock();
     let mut buffered_stdout = BufWriter::new(stdout());
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
-    let mut char_output_buffer: [u8; 4] = [0;4];
+    let mut output_buf = String::with_capacity(BUFFER_LEN + 4);
 
     let mut s2_prev = '_';
     for i in set1 {
@@ -85,13 +85,12 @@ fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
 
         { // isolation to make borrow checker happy
             let output_stream = buf.chars().map(|c| *map.get(&(c as usize)).unwrap_or(&c));
-            for c in output_stream {
-                let char_as_bytes = c.encode_utf8(&mut char_output_buffer);
-                buffered_stdout.write_all(char_as_bytes.as_bytes()).unwrap();
-            }
+            output_buf.extend(output_stream);
+            buffered_stdout.write_all(output_buf.as_bytes()).unwrap();
         }
 
         buf.clear();
+        output_buf.clear();
     }
 }
 
