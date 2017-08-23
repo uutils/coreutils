@@ -14,7 +14,6 @@ extern crate libc;
 extern crate clap;
 extern crate walkdir;
 extern crate filetime;
-use filetime::FileTime;
 #[cfg(target_os = "linux")]
 #[macro_use] extern crate ioctl_sys;
 #[macro_use] extern crate uucore;
@@ -49,6 +48,10 @@ use walkdir::WalkDir;
 #[cfg(target_os = "linux")] use std::os::unix::io::IntoRawFd;
 use std::fs::File;
 use std::fs::OpenOptions;
+use filetime::FileTime;
+
+#[cfg(target_os = "linux")]
+use libc::{c_int, c_char};
 
 #[cfg(unix)] use std::os::unix::fs::PermissionsExt;
 
@@ -187,7 +190,6 @@ pub enum Attribute {
     Context,
     Links,
     Xattr,
-    All,
 }
 
 /// Re-usable, extensible copy options
@@ -521,7 +523,6 @@ impl FromStr for Attribute {
             "context" => Attribute::Context,
             "links" => Attribute::Links,
             "xattr" => Attribute::Xattr,
-            "all" => Attribute::All,
             _ => return Err(Error::InvalidArgument(format!("invalid attribute '{}'", value)))
         })
     }
@@ -567,7 +568,18 @@ impl Options {
                 Some(attribute_strs) => {
                     let mut attributes = Vec::new();
                     for attribute_str in attribute_strs {
-                        attributes.push(Attribute::from_str(attribute_str)?);
+                        if attribute_str == "all" {
+                           #[cfg(unix)]
+                           attributes.push(Attribute::Mode);
+                           attributes.push(Attribute::Ownership);
+                           attributes.push(Attribute::Timestamps);
+                           attributes.push(Attribute::Context);
+                           attributes.push(Attribute::Xattr);
+                           attributes.push(Attribute::Links);
+                           break;
+                        } else { 
+                            attributes.push(Attribute::from_str(attribute_str)?);
+                        }
                     }
                     attributes
                 }
@@ -577,6 +589,7 @@ impl Options {
         } else {
             vec![]
         };
+
         let options = Options {
             attributes_only: matches.is_present(OPT_ATTRIBUTES_ONLY),
             copy_contents: matches.is_present(OPT_COPY_CONTENTS),
@@ -616,7 +629,6 @@ impl Options {
         Ok(options)
     }
 }
-
 
 impl TargetType {
     /// Return TargetType required for `target`.
@@ -665,6 +677,49 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
     Ok((sources, target))
 }
 
+fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::PathBuf, dest: std::path::PathBuf, found_hard_link: &mut bool) -> CopyResult<()> {
+    if !source.is_dir() {
+        unsafe {
+            let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
+            let mut inode: u64 = 0;
+            let mut nlinks = 0;
+            #[cfg(unix)]
+            {
+                let mut stat = mem::zeroed();
+                if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
+                    return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
+                }
+                inode = stat.st_ino;
+                nlinks = stat.st_nlink;
+            }
+            #[cfg(windows)]
+            {
+                let mut stat = mem::uninitialized();
+                let handle = CreateFile2(src_path.as_ptr() as *const u16,
+                                                        winapi::winnt::GENERIC_READ,
+                                                        winapi::winnt::FILE_SHARE_READ,
+                                                        0,
+                                                        std::ptr::null_mut());
+                if GetFileInformationByHandle(handle, stat) != 0 {
+                    return Err(format!("cannot get file information {:?}: {}", source, std::io::Error::last_os_error()).into());
+                }
+                inode = (((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64);
+                nlinks = (*stat).nNumberOfLinks;
+            }
+
+            for hard_link in hard_links.iter() {
+                if hard_link.1 == inode {
+                    std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
+                    *found_hard_link = true;
+                }
+            }
+            if !(*found_hard_link) && nlinks > 1 {
+                hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Copy all `sources` to `target`.  Returns an
 /// `Err(Error::NotAllFilesCopied)` if at least one non-fatal error was
@@ -683,72 +738,21 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
             preserve_hard_links = true;
         }
     }
-    #[cfg(unix)]
+
     let mut hard_links: Vec<(String, u64)> = vec![];
-    
-    #[cfg(windows)]
-    let mut hard_links: Vec<(String, (u32, u32))> = vec![];
 
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
     for source in sources {
         if seen_sources.contains(source) {
             show_warning!("source '{}' specified more than once", source.display());
-
         } else {
             let mut found_hard_link = false;
             if preserve_hard_links {
-                #[cfg(unix)]
-                unsafe {
                     let dest = construct_dest_path(source, target, &target_type, options)?;
-                    let mut stat = mem::zeroed();
                     let src_path = CString::new(Path::new(&source.clone()).as_os_str().to_str().unwrap()).unwrap();
-
-                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
-                        return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
-                    }
-
-                    let inode = stat.st_ino;
-                    for hard_link in &hard_links {
-                        if hard_link.1 == inode {
-                            std::fs::hard_link(hard_link.0.clone(), dest.clone());
-                            found_hard_link = true;
-                        }
-                    }
-                    if stat.st_nlink > 1 && !found_hard_link {
-                        hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
-                    }
-                }
-                #[cfg(windows)]
-                {
-                    unsafe {
-                        if !source.is_dir() {
-                            let dest = construct_dest_path(source, target, &target_type, options)?;
-                            let handle = CreateFile2(CString::new(Path::new(&source.clone()).as_os_str().to_str().unwrap()).unwrap().as_ptr() as *const u16,
-                                                                    winapi::winnt::GENERIC_READ,
-                                                                    winapi::winnt::FILE_SHARE_READ,
-                                                                    0,
-                                                                    std::ptr::null_mut());
-                            let file_info = std::mem::uninitialized();
-                            if GetFileInformationByHandle(handle, file_info) != 0 {
-                                return Err(format!("cannot get file information {:?}: {}", source, std::io::Error::last_os_error()).into());
-                            }
-
-                            let file_index = ((*file_info).nFileIndexHigh, (*file_info).nFileIndexLow);
-                            for hard_link in &hard_links {
-                                if (hard_link.1).0 == file_index.0 && (hard_link.1).1 == file_index.1 {
-                                    std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
-                                    found_hard_link = true;
-                                }
-                            }
-                            if (((*file_info).nNumberOfLinks) > 1u32) && !found_hard_link {
-                                println!("{}", (*file_info).nNumberOfLinks);
-                                hard_links.push((dest.clone().to_str().unwrap().to_string(), file_index));
-                            }
-                        }
-                    }
-                }
-            }
+                    preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
+               }
             if !found_hard_link {
                 if let Err(error) = copy_source(source, target, &target_type, options) {
                     show_error!("{}", error);
@@ -762,9 +766,9 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
         }
     }
     if non_fatal_errors {
-        return Err(Error::NotAllFilesCopied)
+        Err(Error::NotAllFilesCopied)
     } else {
-        return Ok(())
+       Ok(())
     }
 }
 
@@ -828,7 +832,7 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
         }
 
     #[cfg(windows)]
-    let mut hard_links: Vec<(String, (u32, u32))> = vec![];
+    let mut hard_links: Vec<(String, u64)> = vec![];
 
     for path in WalkDir::new(root) {
         let path = or_continue!(or_continue!(path).path().canonicalize());
@@ -843,57 +847,12 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
             or_continue!(fs::create_dir_all(local_to_target.clone()));
         } else if !path.is_dir() {
             if preserve_hard_links {
-                #[cfg(unix)]
-                unsafe {
-                    let mut stat = mem::zeroed();
-                    let src_path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
-
-                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
-                        return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
-                    }
-
-                    let inode = stat.st_ino;
-                    let mut found_hard_link = false;
-                    for hard_link in &hard_links {
-                        if hard_link.1 == inode {
-                            std::fs::hard_link(hard_link.0.clone(), local_to_target.as_path());
-                            found_hard_link = true;
-                        }
-                    }
-                    if stat.st_nlink > 1 && !found_hard_link {
-                        hard_links.push((local_to_target.as_path().to_str().unwrap().to_string(), inode));
+                let mut found_hard_link = false;
+                let source = path.to_path_buf();
+                let dest = local_to_target.as_path().to_path_buf();
+                preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link).unwrap();
+                if !found_hard_link {
                         copy_file(path.as_path(), local_to_target.as_path(), options)?;
-                    } else {
-                        copy_file(path.as_path(), local_to_target.as_path(), options)?;
-                    }
-                }
-                #[cfg(windows)]
-                {
-                    unsafe {
-                            let mut found_hard_link = false;
-                            let src_path = CString::new(path.as_os_str().to_str().unwrap()).unwrap();
-                            let handle = File::open(path.clone()).unwrap().as_raw_handle();
-                            let file_info = std::mem::uninitialized();
-
-                            let handle = File::open(path.clone()).unwrap().as_raw_handle();
-                            if GetFileInformationByHandle(handle, file_info) != 0 {
-                                return Err(format!("cannot get file information {:?}: {}", src_path, std::io::Error::last_os_error()).into());
-                            }
-
-                            let file_index = ((*file_info).nFileIndexHigh, (*file_info).nFileIndexLow);
-                            for hard_link in &hard_links {
-                                if (hard_link.1).0 == file_index.0 && (hard_link.1).1 == file_index.1 {
-                                    std::fs::hard_link(hard_link.0.clone(), local_to_target.as_path()).unwrap();
-                                    found_hard_link = true;                            
-                                }
-                            }
-                            if (*file_info).nNumberOfLinks > 1u32 && !found_hard_link {
-                                hard_links.push((local_to_target.as_path().to_str().unwrap().to_string(), file_index));
-                                copy_file(path.as_path(), local_to_target.as_path(), options)?;
-                            } else {
-                                copy_file(path.as_path(), local_to_target.as_path(), options)?;
-                            }
-                    }
                 }
             } else {
                 copy_file(path.as_path(), local_to_target.as_path(), options)?;
@@ -940,7 +899,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             let metadata = fs::metadata(source)?;
             filetime::set_file_times(Path::new(dest), FileTime::from_last_access_time(&metadata), FileTime::from_last_modification_time(&metadata))?;
         },
-        Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
+        Attribute::Context    => {},
         Attribute::Links      => {},
         Attribute::Xattr      => {
             #[cfg(unix)]
@@ -957,7 +916,6 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
                 return Err(format!("XAttrs are only supported on unix.").into());
             }
         },
-        Attribute::All        => return Err(Error::NotImplemented("preserving a not implemented".to_string())),
     })
 }
 
@@ -1028,6 +986,13 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 
     if options.verbose {
         println!("{}", context_for(source, dest));
+    }
+
+    let mut preserve_context = false;
+    for attribute in &options.preserve_attributes {
+        if *attribute == Attribute::Context {
+            preserve_context = true;
+        }
     }
 
     match options.copy_mode {
