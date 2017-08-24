@@ -32,63 +32,80 @@ static NAME: &'static str = "tr";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const BUFFER_LEN: usize = 1024;
 
-fn delete(set: ExpandSet, complement: bool) {
-    let mut bset = BitSet::new();
-    let stdin = stdin();
-    let mut locked_stdin = stdin.lock();
-    let mut buffered_stdout = BufWriter::new(stdout());
-    let mut buf = String::with_capacity(BUFFER_LEN + 4);
-    let mut char_output_buffer: [u8; 4] = [0;4];
+trait SymbolTranslator {
+    fn translate(&self, c: &char, prev_c: &char) -> Option<char>;
+}
 
-    for c in set {
-        bset.insert(c as usize);
-    }
+struct DeleteOperation {
+    bset: BitSet,
+    complement: bool,
+}
 
-    let is_allowed = |c : char| {
-        if complement {
-            bset.contains(c as usize)
-        } else {
-            !bset.contains(c as usize)
+impl DeleteOperation {
+    fn new(set: ExpandSet, complement: bool) -> DeleteOperation {
+        DeleteOperation {
+            bset: set.map(|c| c as usize).collect(),
+            complement: complement
         }
-    };
-
-    while let Ok(length) = locked_stdin.read_line(&mut buf) {
-        if length == 0 { break }
-        { // isolation to make borrow checker happy
-            let filtered = buf.chars().filter(|c| is_allowed(*c));
-            for c in filtered {
-                let char_as_bytes = c.encode_utf8(&mut char_output_buffer);
-                buffered_stdout.write_all(char_as_bytes.as_bytes()).unwrap();
-            }
-        }
-        buf.clear();
     }
 }
 
-fn tr<'a>(set1: ExpandSet<'a>, mut set2: ExpandSet<'a>) {
-    let mut map = FnvHashMap::default();
-    let stdin = stdin();
-    let mut locked_stdin = stdin.lock();
-    let mut buffered_stdout = BufWriter::new(stdout());
+impl SymbolTranslator for DeleteOperation {
+    fn translate(&self, c: &char, _prev_c: &char) -> Option<char> {
+        let uc = *c as usize;
+        if self.complement == self.bset.contains(uc) {
+            Some(*c)
+        } else {
+            None
+        }
+    }
+}
+
+struct TranslateOperation {
+    translate_map: FnvHashMap<usize, char>,
+}
+
+impl TranslateOperation {
+    fn new(set1: ExpandSet, set2: &mut ExpandSet) -> TranslateOperation {
+        let mut map = FnvHashMap::default();
+        let mut s2_prev = '_';
+        for i in set1 {
+            s2_prev = set2.next().unwrap_or(s2_prev);
+
+            map.insert(i as usize, s2_prev);
+        }
+        TranslateOperation {
+            translate_map: map,
+        }
+    }
+}
+
+impl SymbolTranslator for TranslateOperation {
+    fn translate(&self, c: &char, _prev_c: &char) -> Option<char> {
+        Some(*self.translate_map.get(&(*c as usize)).unwrap_or(c))
+    }
+}
+
+fn translate_input<T: SymbolTranslator>(input: &mut BufRead, output: &mut Write, translator: T) {
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
     let mut output_buf = String::with_capacity(BUFFER_LEN + 4);
+    // let mut char_output_buffer: [u8; 4] = [0;4];
 
-    let mut s2_prev = '_';
-    for i in set1 {
-        s2_prev = set2.next().unwrap_or(s2_prev);
-
-        map.insert(i as usize, s2_prev);
-    }
-
-    while let Ok(length) = locked_stdin.read_line(&mut buf) {
+    while let Ok(length) = input.read_line(&mut buf) {
+        let mut prev_c = 0 as char;
         if length == 0 { break }
-
         { // isolation to make borrow checker happy
-            let output_stream = buf.chars().map(|c| *map.get(&(c as usize)).unwrap_or(&c));
-            output_buf.extend(output_stream);
-            buffered_stdout.write_all(output_buf.as_bytes()).unwrap();
-        }
+            let filtered = buf.chars().filter_map(|c| {
+                let res = translator.translate(&c, &prev_c);
+                if res.is_some() {
+                    prev_c = c;
+                }
+                res
+            });
 
+            output_buf.extend(filtered);
+            output.write_all(output_buf.as_bytes()).unwrap();
+        }
         buf.clear();
         output_buf.clear();
     }
@@ -110,6 +127,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("C", "", "same as -c");
     opts.optflag("d", "delete", "delete characters in SET1");
     opts.optflag("h", "help", "display this help and exit");
+    opts.optflag("s", "squeeze", "");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
@@ -144,13 +162,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     }
 
+    let stdin = stdin();
+    let mut locked_stdin = stdin.lock();
+    let stdout = stdout();
+    let locked_stdout = stdout.lock();
+    let mut buffered_stdout = BufWriter::new(locked_stdout);
+
     if dflag {
         let set1 = ExpandSet::new(sets[0].as_ref());
-        delete(set1, cflag);
+        let delete_op = DeleteOperation::new(set1, cflag);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, delete_op);
     } else {
         let set1 = ExpandSet::new(sets[0].as_ref());
-        let set2 = ExpandSet::new(sets[1].as_ref());
-        tr(set1, set2);
+        let mut set2 = ExpandSet::new(sets[1].as_ref());
+        let op = TranslateOperation::new(set1, &mut set2);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op)
     }
 
     0
