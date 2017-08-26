@@ -61,6 +61,56 @@ impl SymbolTranslator for DeleteOperation {
     }
 }
 
+struct SqueezeOperation {
+    squeeze_set: BitSet,
+    complement: bool,
+}
+
+impl SqueezeOperation {
+    fn new(squeeze_set: ExpandSet, complement: bool) -> SqueezeOperation {
+        SqueezeOperation {
+            squeeze_set: squeeze_set.map(|c| c as usize).collect(),
+            complement: complement
+        }
+    }
+}
+
+impl SymbolTranslator for SqueezeOperation {
+    fn translate(&self, c: &char, prev_c: &char) -> Option<char> {
+        if *prev_c == *c && self.complement != self.squeeze_set.contains(*c as usize) {
+            None
+        } else {
+            Some(*c)
+        }
+    }
+}
+
+struct DeleteAndSqueezeOperation {
+    delete_set: BitSet,
+    squeeze_set: BitSet,
+    complement: bool,
+}
+
+impl DeleteAndSqueezeOperation {
+    fn new(delete_set: ExpandSet, squeeze_set: ExpandSet, complement: bool) -> DeleteAndSqueezeOperation {
+        DeleteAndSqueezeOperation {
+            delete_set: delete_set.map(|c| c as usize).collect(),
+            squeeze_set: squeeze_set.map(|c| c as usize).collect(),
+            complement: complement
+        }
+    }
+}
+
+impl SymbolTranslator for DeleteAndSqueezeOperation {
+    fn translate(&self, c: &char, prev_c: &char) -> Option<char> {
+        if self.complement != self.delete_set.contains(*c as usize) || *prev_c == *c && self.squeeze_set.contains(*c as usize) {
+            None
+        } else {
+            Some(*c)
+        }
+    }
+}
+
 struct TranslateOperation {
     translate_map: FnvHashMap<usize, char>,
 }
@@ -89,7 +139,6 @@ impl SymbolTranslator for TranslateOperation {
 fn translate_input<T: SymbolTranslator>(input: &mut BufRead, output: &mut Write, translator: T) {
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
     let mut output_buf = String::with_capacity(BUFFER_LEN + 4);
-    // let mut char_output_buffer: [u8; 4] = [0;4];
 
     while let Ok(length) = input.read_line(&mut buf) {
         let mut prev_c = 0 as char;
@@ -127,7 +176,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("C", "", "same as -c");
     opts.optflag("d", "delete", "delete characters in SET1");
     opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("s", "squeeze", "");
+    opts.optflag("s", "squeeze", "replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
@@ -155,10 +204,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let dflag = matches.opt_present("d");
     let cflag = matches.opts_present(&["c".to_owned(), "C".to_owned()]);
+    let sflag = matches.opt_present("s");
     let sets = matches.free;
 
-    if cflag && !dflag {
-        show_error!("-c is only supported with -d");
+    if cflag && !dflag && !sflag {
+        show_error!("-c is only supported with -d or -s");
         return 1;
     }
 
@@ -168,12 +218,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
+    let set1 = ExpandSet::new(sets[0].as_ref());
     if dflag {
-        let set1 = ExpandSet::new(sets[0].as_ref());
-        let delete_op = DeleteOperation::new(set1, cflag);
-        translate_input(&mut locked_stdin, &mut buffered_stdout, delete_op);
+        if sflag {
+            let set2 = ExpandSet::new(sets[1].as_ref());
+            let op = DeleteAndSqueezeOperation::new(set1, set2, cflag);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        } else {
+            let op = DeleteOperation::new(set1, cflag);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        }
+    } else if sflag {
+        let op = SqueezeOperation::new(set1, cflag);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     } else {
-        let set1 = ExpandSet::new(sets[0].as_ref());
         let mut set2 = ExpandSet::new(sets[1].as_ref());
         let op = TranslateOperation::new(set1, &mut set2);
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)
