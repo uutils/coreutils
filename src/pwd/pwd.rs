@@ -15,6 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::env;
+use std::fs;
 
 static NAME: &'static str = "pwd";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -24,6 +25,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
+    opts.optflag("L", "logical", "use PWD from environment, even if it contains symlinks");
+    opts.optflag("P", "physical", "avoid all symlinks");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -43,7 +46,13 @@ Print the full filename of the current working directory.", NAME, VERSION);
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {
-        println!("{}", env::current_dir().unwrap().display());
+        let logical_path = env::current_dir().unwrap();
+        if matches.opt_present("logical") {
+            println!("{}", logical_path.display());
+        } else {
+            let physical_path = fs::canonicalize(&logical_path);
+            println!("{}", physical_path.unwrap().display());
+        }
     }
 
     0
