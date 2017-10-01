@@ -10,13 +10,31 @@
  * that was distributed with this source code.
  */
 
+extern crate libc;
 extern crate clap;
 extern crate walkdir;
+extern crate filetime;
 #[cfg(target_os = "linux")]
 #[macro_use] extern crate ioctl_sys;
 #[macro_use] extern crate uucore;
 #[macro_use] extern crate quick_error;
+#[cfg(unix)]
+extern crate xattr;
 
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
+
+#[cfg(windows)]
+extern crate kernel32;
+#[cfg(windows)]
+use kernel32::GetFileInformationByHandle;
+#[cfg(windows)]
+use kernel32::CreateFile2;
+#[cfg(windows)]
+extern crate winapi;
+
+use std::mem;
+use std::ffi::CString;
 use clap::{Arg, App, ArgMatches};
 use quick_error::ResultExt;
 use std::collections::HashSet;
@@ -30,6 +48,10 @@ use walkdir::WalkDir;
 #[cfg(target_os = "linux")] use std::os::unix::io::IntoRawFd;
 use std::fs::File;
 use std::fs::OpenOptions;
+use filetime::FileTime;
+
+#[cfg(target_os = "linux")]
+use libc::{c_int, c_char};
 
 #[cfg(unix)] use std::os::unix::fs::PermissionsExt;
 
@@ -157,9 +179,10 @@ pub enum CopyMode {
     Sparse,
     Copy,
     Update,
+    AttrOnly
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Attribute {
     #[cfg(unix)] Mode,
     Ownership,
@@ -167,7 +190,6 @@ pub enum Attribute {
     Context,
     Links,
     Xattr,
-    All,
 }
 
 /// Re-usable, extensible copy options
@@ -231,7 +253,7 @@ static OPT_ONE_FILE_SYSTEM:               &str = "one-file-system";
 static OPT_PARENTS:                       &str = "parents";
 static OPT_PATHS:                         &str = "paths";
 static OPT_PRESERVE:                      &str = "preserve";
-static OPT_PRESERVE_DEFUALT_ATTRIBUTES:   &str = "preserve-default-attributes";
+static OPT_PRESERVE_DEFAULT_ATTRIBUTES:   &str = "preserve-default-attributes";
 static OPT_RECURSIVE:                     &str = "recursive";
 static OPT_RECURSIVE_ALIAS:               &str = "recursive_alias";
 static OPT_REFLINK:                       &str = "reflink";
@@ -343,18 +365,39 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .takes_value(true)
              .value_name("WHEN")
              .help("control clone/CoW copies. See below"))
+        .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
+             .long(OPT_ATTRIBUTES_ONLY)
+             .conflicts_with(OPT_COPY_CONTENTS)
+             .overrides_with(OPT_REFLINK)
+             .help("Don't copy the file data, just the attributes"))
+        .arg(Arg::with_name(OPT_PRESERVE)
+             .long(OPT_PRESERVE)
+             .takes_value(true)
+             .multiple(true)
+             .use_delimiter(true)
+             .possible_values(PRESERVABLE_ATTRIBUTES)
+             .value_name("ATTR_LIST")
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+                    if possible additional attributes: context, links, xattr, all"))
+        .arg(Arg::with_name(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
+             .short("-p")
+             .long(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
+             .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .help("same as --preserve=mode(unix only),ownership,timestamps"))
+        .arg(Arg::with_name(OPT_NO_PRESERVE)
+             .long(OPT_NO_PRESERVE)
+             .takes_value(true)
+             .value_name("ATTR_LIST")
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
+             .help("don't preserve the specified attributes"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
              .short("a")
              .long(OPT_ARCHIVE)
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
+             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
              .help("NotImplemented: same as -dR --preserve=all"))
-        .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
-             .long(OPT_ATTRIBUTES_ONLY)
-             .conflicts_with(OPT_COPY_CONTENTS)
-             .overrides_with(OPT_REFLINK)
-             .help("NotImplemented: don't copy the file data, just the attributes"))
         .arg(Arg::with_name(OPT_COPY_CONTENTS)
              .long(OPT_COPY_CONTENTS)
              .conflicts_with(OPT_ATTRIBUTES_ONLY)
@@ -372,26 +415,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
              .long(OPT_NO_DEREFERENCE)
              .conflicts_with(OPT_DEREFERENCE)
              .help("NotImplemented: never follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_PRESERVE_DEFUALT_ATTRIBUTES)
-             .short("-p")
-             .long(OPT_PRESERVE_DEFUALT_ATTRIBUTES)
-             .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: same as --preserve=mode(unix only),ownership,timestamps"))
-        .arg(Arg::with_name(OPT_PRESERVE)
-             .long(OPT_PRESERVE)
-             .takes_value(true)
-             .multiple(true)
-             .possible_values(PRESERVABLE_ATTRIBUTES)
-             .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_NO_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
-                    if possible additional attributes: context, links, xattr, all"))
-        .arg(Arg::with_name(OPT_NO_PRESERVE)
-             .long(OPT_NO_PRESERVE)
-             .takes_value(true)
-             .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFUALT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
-             .help("NotImplemented: don't preserve the specified attributes"))
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
              .help("NotImplemented: use full source file name under DIRECTORY"))
@@ -481,6 +504,8 @@ impl CopyMode {
             CopyMode::Sparse
         } else if matches.is_present(OPT_UPDATE) {
             CopyMode::Update
+        } else if matches.is_present(OPT_ATTRIBUTES_ONLY) {
+            CopyMode::AttrOnly
         } else {
             CopyMode::Copy
         }
@@ -498,7 +523,6 @@ impl FromStr for Attribute {
             "context" => Attribute::Context,
             "links" => Attribute::Links,
             "xattr" => Attribute::Xattr,
-            "all" => Attribute::All,
             _ => return Err(Error::InvalidArgument(format!("invalid attribute '{}'", value)))
         })
     }
@@ -508,14 +532,10 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts =  vec![
             OPT_ARCHIVE,
-            OPT_ATTRIBUTES_ONLY,
             OPT_COPY_CONTENTS,
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
             OPT_DEREFERENCE,
             OPT_NO_DEREFERENCE,
-            OPT_PRESERVE_DEFUALT_ATTRIBUTES,
-            OPT_PRESERVE,
-            OPT_NO_PRESERVE,
             OPT_PARENTS,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
@@ -548,16 +568,28 @@ impl Options {
                 Some(attribute_strs) => {
                     let mut attributes = Vec::new();
                     for attribute_str in attribute_strs {
-                        attributes.push(Attribute::from_str(attribute_str)?);
+                        if attribute_str == "all" {
+                           #[cfg(unix)]
+                           attributes.push(Attribute::Mode);
+                           attributes.push(Attribute::Ownership);
+                           attributes.push(Attribute::Timestamps);
+                           attributes.push(Attribute::Context);
+                           attributes.push(Attribute::Xattr);
+                           attributes.push(Attribute::Links);
+                           break;
+                        } else { 
+                            attributes.push(Attribute::from_str(attribute_str)?);
+                        }
                     }
                     attributes
                 }
             }
-        } else if matches.is_present(OPT_PRESERVE_DEFUALT_ATTRIBUTES) {
+        } else if matches.is_present(OPT_PRESERVE_DEFAULT_ATTRIBUTES) {
             DEFAULT_ATTRIBUTES.to_vec()
         } else {
             vec![]
         };
+
         let options = Options {
             attributes_only: matches.is_present(OPT_ATTRIBUTES_ONLY),
             copy_contents: matches.is_present(OPT_COPY_CONTENTS),
@@ -597,7 +629,6 @@ impl Options {
         Ok(options)
     }
 }
-
 
 impl TargetType {
     /// Return TargetType required for `target`.
@@ -646,6 +677,49 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
     Ok((sources, target))
 }
 
+fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::PathBuf, dest: std::path::PathBuf, found_hard_link: &mut bool) -> CopyResult<()> {
+    if !source.is_dir() {
+        unsafe {
+            let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
+            let mut inode: u64 = 0;
+            let mut nlinks = 0;
+            #[cfg(unix)]
+            {
+                let mut stat = mem::zeroed();
+                if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
+                    return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
+                }
+                inode = stat.st_ino;
+                nlinks = stat.st_nlink;
+            }
+            #[cfg(windows)]
+            {
+                let mut stat = mem::uninitialized();
+                let handle = CreateFile2(src_path.as_ptr() as *const u16,
+                                                        winapi::winnt::GENERIC_READ,
+                                                        winapi::winnt::FILE_SHARE_READ,
+                                                        0,
+                                                        std::ptr::null_mut());
+                if GetFileInformationByHandle(handle, stat) != 0 {
+                    return Err(format!("cannot get file information {:?}: {}", source, std::io::Error::last_os_error()).into());
+                }
+                inode = (((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64);
+                nlinks = (*stat).nNumberOfLinks;
+            }
+
+            for hard_link in hard_links.iter() {
+                if hard_link.1 == inode {
+                    std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
+                    *found_hard_link = true;
+                }
+            }
+            if !(*found_hard_link) && nlinks > 1 {
+                hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Copy all `sources` to `target`.  Returns an
 /// `Err(Error::NotAllFilesCopied)` if at least one non-fatal error was
@@ -658,27 +732,43 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
+    let mut preserve_hard_links = false;
+    for attribute in &options.preserve_attributes {
+        if *attribute == Attribute::Links {
+            preserve_hard_links = true;
+        }
+    }
+
+    let mut hard_links: Vec<(String, u64)> = vec![];
+
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
-
     for source in sources {
         if seen_sources.contains(source) {
             show_warning!("source '{}' specified more than once", source.display());
-
-        } else if let Err(error) = copy_source(source, target, &target_type, options) {
-            show_error!("{}", error);
-            match error {
-                Error::Skipped(_) => (),
-                _ => non_fatal_errors = true,
+        } else {
+            let mut found_hard_link = false;
+            if preserve_hard_links {
+                    let dest = construct_dest_path(source, target, &target_type, options)?;
+                    let src_path = CString::new(Path::new(&source.clone()).as_os_str().to_str().unwrap()).unwrap();
+                    preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
+               }
+            if !found_hard_link {
+                if let Err(error) = copy_source(source, target, &target_type, options) {
+                    show_error!("{}", error);
+                    match error {
+                        Error::Skipped(_) => (),
+                        _ => non_fatal_errors = true,
+                    }
+                }
             }
+            seen_sources.insert(source);
         }
-        seen_sources.insert(source);
     }
-
     if non_fatal_errors {
         Err(Error::NotAllFilesCopied)
     } else {
-        Ok(())
+       Ok(())
     }
 }
 
@@ -703,7 +793,6 @@ fn copy_source(source: &Source, target: &Target, target_type: &TargetType, optio
                -> CopyResult<()>
 {
     let source_path = Path::new(&source);
-
     if source_path.is_dir() {
         // Copy as directory
         copy_directory(source, target, options)
@@ -733,6 +822,18 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
         Some(root_path.as_path())
     };
 
+    #[cfg(unix)]
+    let mut hard_links: Vec<(String, u64)> = vec![];
+     let mut preserve_hard_links = false;
+        for attribute in &options.preserve_attributes {
+            if *attribute == Attribute::Links {
+                preserve_hard_links = true;
+            }
+        }
+
+    #[cfg(windows)]
+    let mut hard_links: Vec<(String, u64)> = vec![];
+
     for path in WalkDir::new(root) {
         let path = or_continue!(or_continue!(path).path().canonicalize());
         let local_to_root_parent = match root_parent {
@@ -745,13 +846,22 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
         if path.is_dir() && !local_to_target.exists() {
             or_continue!(fs::create_dir_all(local_to_target.clone()));
         } else if !path.is_dir() {
-            copy_file(path.as_path(), local_to_target.as_path(), options)?;
+            if preserve_hard_links {
+                let mut found_hard_link = false;
+                let source = path.to_path_buf();
+                let dest = local_to_target.as_path().to_path_buf();
+                preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link).unwrap();
+                if !found_hard_link {
+                        copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                }
+            } else {
+                copy_file(path.as_path(), local_to_target.as_path(), options)?;
+            }
         }
     }
 
     Ok(())
 }
-
 
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
@@ -785,11 +895,27 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             let metadata = fs::metadata(source).context(context)?;
             fs::set_permissions(dest, metadata.permissions()).context(context)?;
         },
-        Attribute::Timestamps => return Err(Error::NotImplemented("preserving timestamp not implemented".to_string())),
-        Attribute::Context    => return Err(Error::NotImplemented("preserving context not implemented".to_string())),
-        Attribute::Links      => return Err(Error::NotImplemented("preserving links not implemented".to_string())),
-        Attribute::Xattr      => return Err(Error::NotImplemented("preserving xattr not implemented".to_string())),
-        Attribute::All        => return Err(Error::NotImplemented("preserving a not implemented".to_string())),
+        Attribute::Timestamps => {
+            let metadata = fs::metadata(source)?;
+            filetime::set_file_times(Path::new(dest), FileTime::from_last_access_time(&metadata), FileTime::from_last_modification_time(&metadata))?;
+        },
+        Attribute::Context    => {},
+        Attribute::Links      => {},
+        Attribute::Xattr      => {
+            #[cfg(unix)]
+            {
+               let xattrs = xattr::list(source)?;
+               for attr in xattrs {
+                    if let Some(attr_value) = xattr::get(source, attr.clone())? {
+                        xattr::set(dest, attr, &attr_value[..]);
+                    }
+               }
+            }
+            #[cfg(not(unix))]
+            {
+                return Err(format!("XAttrs are only supported on unix.").into());
+            }
+        },
     })
 }
 
@@ -862,6 +988,13 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         println!("{}", context_for(source, dest));
     }
 
+    let mut preserve_context = false;
+    for attribute in &options.preserve_attributes {
+        if *attribute == Attribute::Context {
+            preserve_context = true;
+        }
+    }
+
     match options.copy_mode {
         CopyMode::Link => {
             fs::hard_link(source, dest).context(&*context_for(source, dest))?;
@@ -888,6 +1021,14 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             } else {
                 copy_helper(source, dest, options)?;
             }
+        },
+        CopyMode::AttrOnly => {
+            OpenOptions::new()
+                .write(true)
+                .truncate(false)
+                .create(true)
+                .open(dest)
+                .unwrap();
         }
     };
 
