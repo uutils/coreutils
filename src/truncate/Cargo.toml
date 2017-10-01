@@ -8,7 +8,7 @@ name = "uu_truncate"
 path = "truncate.rs"
 
 [dependencies]
-getopts = "*"
+getopts = "0.2.14"
 uucore = { path="../uucore" }
 
 [[bin]]

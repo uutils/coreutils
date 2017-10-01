@@ -8,7 +8,7 @@ name = "uu_uniq"
 path = "uniq.rs"
 
 [dependencies]
-getopts = "*"
+getopts = "0.2.14"
 
 [dependencies.uucore]
 path="../uucore"

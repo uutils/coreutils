@@ -2,9 +2,10 @@ extern crate libc;
 
 use std::io::Write;
 use std::path::Path;
+use std::fs;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.
-pub fn parse(mode_string: &str, considering_dir: bool) -> Result<libc::mode_t, String> {
+pub fn parse(mode_string: &str, considering_dir: bool) -> Result<u32, String> {
     let numbers: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
     // Passing 000 as the existing permissions seems to mirror GNU behaviour.
@@ -19,21 +20,12 @@ pub fn parse(mode_string: &str, considering_dir: bool) -> Result<libc::mode_t, S
 ///
 /// Adapted from mkdir.rs.  Handles own error printing.
 ///
-#[cfg(unix)]
-pub fn chmod(path: &Path, mode: libc::mode_t) -> Result<(), ()> {
-    use std::ffi::CString;
-    use std::io::Error;
-
-    let file = CString::new(path.as_os_str().to_str().unwrap()).
-                            unwrap_or_else(|e| crash!(1, "{}", e));
-    let mode = mode as libc::mode_t;
-
-    if unsafe { libc::chmod(file.as_ptr(), mode) } != 0 {
-        show_info!("{}: chmod failed with errno {}", path.display(),
-                   Error::last_os_error().raw_os_error().unwrap());
-        return Err(());
-    }
-    Ok(())
+#[cfg(any(unix, target_os = "redox"))]
+pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
+        show_info!("{}: chmod failed with error {}", path.display(), err);
+    })
 }
 
 /// chmod a file or directory on Windows.
@@ -41,7 +33,7 @@ pub fn chmod(path: &Path, mode: libc::mode_t) -> Result<(), ()> {
 /// Adapted from mkdir.rs.
 ///
 #[cfg(windows)]
-pub fn chmod(path: &Path, mode: libc::mode_t) -> Result<(), ()> {
+pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     // chmod on Windows only sets the readonly flag, which isn't even honored on directories
     Ok(())
 }
@@ -53,13 +45,13 @@ pub fn chmod(path: &Path, mode: libc::mode_t) -> Result<(), ()> {
 mod chmod_rs {
     extern crate libc;
 
-    pub fn parse_numeric(fperm: libc::mode_t, mut mode: &str) -> Result<libc::mode_t, String> {
+    pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
         let (op, pos) = try!(parse_op(mode, Some('=')));
         mode = mode[pos..].trim_left_matches('0');
         if mode.len() > 4 {
             Err(format!("mode is too large ({} > 7777)", mode))
         } else {
-            match libc::mode_t::from_str_radix(mode, 8) {
+            match u32::from_str_radix(mode, 8) {
                 Ok(change) => {
                     Ok(match op {
                         '+' => fperm | change,
@@ -73,14 +65,23 @@ mod chmod_rs {
         }
     }
 
-    pub fn parse_symbolic(mut fperm: libc::mode_t, mut mode: &str, considering_dir: bool) -> Result<libc::mode_t, String> {
+    pub fn parse_symbolic(mut fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
+        #[cfg(unix)]
+        use libc::umask;
+
+        #[cfg(target_os = "redox")]
+        unsafe fn umask(_mask: u32) -> u32 {
+            // XXX Redox does not currently have umask
+            0
+        }
+
         let (mask, pos) = parse_levels(mode);
         if pos == mode.len() {
             return Err(format!("invalid mode ({})", mode));
         }
         let respect_umask = pos == 0;
         let last_umask = unsafe {
-            libc::umask(0)
+            umask(0)
         };
         mode = &mode[pos..];
         while mode.len() > 0 {
@@ -88,7 +89,7 @@ mod chmod_rs {
             mode = &mode[pos..];
             let (mut srwx, pos) = parse_change(mode, fperm, considering_dir);
             if respect_umask {
-                srwx &= !last_umask;
+                srwx &= !(last_umask as u32);
             }
             mode = &mode[pos..];
             match op {
@@ -99,12 +100,12 @@ mod chmod_rs {
             }
         }
         unsafe {
-            libc::umask(last_umask);
+            umask(last_umask);
         }
         Ok(fperm)
     }
 
-    fn parse_levels(mode: &str) -> (libc::mode_t, usize) {
+    fn parse_levels(mode: &str) -> (u32, usize) {
         let mut mask = 0;
         let mut pos = 0;
         for ch in mode.chars() {
@@ -136,7 +137,7 @@ mod chmod_rs {
         }
     }
 
-    fn parse_change(mode: &str, fperm: libc::mode_t, considering_dir: bool) -> (libc::mode_t, usize) {
+    fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
         let mut srwx = fperm & 0o7000;
         let mut pos = 0;
         for ch in mode.chars() {

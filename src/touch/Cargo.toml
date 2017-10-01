@@ -8,9 +8,9 @@ name = "uu_touch"
 path = "touch.rs"
 
 [dependencies]
-filetime = "*"
-getopts = "*"
-time = "*"
+filetime = "0.1.10"
+getopts = "0.2.14"
+time = "0.1.38"
 
 [dependencies.uucore]
 path = "../uucore"

@@ -11,7 +11,7 @@ path = "base32.rs"
 uucore = { path="../uucore" }
 
 [dependencies.clippy]
-version = "*"
+version = "0.0.143"
 optional = true
 
 [[bin]]

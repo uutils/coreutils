@@ -8,8 +8,8 @@ name = "uu_expr"
 path = "expr.rs"
 
 [dependencies]
-libc = "*"
-onig = "1.3"
+libc = "0.2.26"
+onig = "1.3.0"
 uucore = { path="../uucore" }
 
 [[bin]]

@@ -8,12 +8,12 @@ name = "uu_nl"
 path = "nl.rs"
 
 [dependencies]
-getopts = "*"
-libc = "*"
-aho-corasick = "*"
-memchr = "*"
-regex = "*"
-regex-syntax = "*"
+getopts = "0.2.14"
+libc = "0.2.26"
+aho-corasick = "0.6.3"
+memchr = "1.0.1"
+regex = "0.2.2"
+regex-syntax = "0.4.1"
 uucore = { path="../uucore" }
 
 [[bin]]

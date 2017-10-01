@@ -8,9 +8,9 @@ name = "uu_timeout"
 path = "timeout.rs"
 
 [dependencies]
-getopts = "*"
-libc = "*"
-time = "*"
+getopts = "0.2.14"
+libc = "0.2.26"
+time = "0.1.38"
 uucore = { path="../uucore" }
 
 [[bin]]

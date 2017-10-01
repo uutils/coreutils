@@ -8,7 +8,7 @@ name = "uu_chgrp"
 path = "chgrp.rs"
 
 [dependencies]
-walkdir = "*"
+walkdir = "1.0.7"
 
 [dependencies.uucore]
 path = "../uucore"

@@ -4,6 +4,7 @@ uutils coreutils
 [![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
 [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build status](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
+[![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utils in [Rust](http://www.rust-lang.org). This repo is to aggregate the GNU
@@ -144,110 +145,96 @@ Contribute
 
 To contribute to coreutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
-To do
------
+Utilities
+---------
 
-* [x] arch
-* [x] base32
-* [x] base64
-* [x] basename
-* [x] cat
-* [ ] chcon
-* [x] chgrp
-* [x] chmod
-* [x] chown
-* [x] chroot
-* [x] cksum
-* [x] comm
-* [ ] cp (not much done)
-* [ ] csplit
-* [x] cut
-* [ ] date
-* [ ] dd
-* [ ] df
-* [x] dircolors
-* [x] dirname
-* [x] du
-* [x] echo
-* [x] env
-* [x] expand
-* [x] expr
-* [x] factor
-* [x] false
-* [x] fmt
-* [x] fold
-* [x] groups
-* [x] hashsum
-* [x] head
-* [x] hostid
-* [x] hostname
-* [x] id
-* [ ] install (a couple of missing options)
-* [ ] join
-* [x] kill
-* [x] link
-* [x] ln
-* [x] logname
-* [ ] ls
-* [x] ~~md5sum~~, ~~sha1sum~~, ~~sha224sum~~, ~~sha256sum~~, ~~sha384sum~~, ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs))
-* [x] mkdir
-* [x] mkfifo
-* [x] mknod
-* [x] mktemp
-* [x] mv
-* [ ] more (in progress, needs lots of work)
-* [x] nice
-* [x] nl
-* [x] nohup
-* [x] nproc
-* [ ] numfmt
-* [ ] od (almost complete, `--strings` and 128-bit datatypes are missing)
-* [x] paste
-* [x] pathchk
-* [x] pinky
-* [ ] pr
-* [x] printenv
-* [ ] printf
-* [x] ptx
-* [x] pwd
-* [x] readlink
-* [x] realpath
-* [x] relpath
-* [x] rm
-* [x] rmdir
-* [ ] runcon
-* [x] seq
-* [x] shred
-* [x] shuf
-* [x] sleep
-* [ ] sort (a couple of options implemented)
-* [ ] split (a couple of missing options)
-* [x] stat
-* [x] stdbuf
-* [ ] stty
-* [x] sum
-* [x] sync
-* [x] tac
-* [ ] tail (not all features implemented)
-* [x] tee
-* [ ] test (not all features implemented)
-* [x] timeout
-* [x] touch
-* [x] tr
-* [x] true
-* [x] truncate
-* [x] tsort
-* [x] tty
-* [x] uname
-* [x] unexpand
-* [x] uniq
-* [x] unlink
-* [x] uptime
-* [x] users
-* [x] wc
-* [x] who
-* [x] whoami
-* [x] yes
+| Done      | Semi-Done | To Do  |
+|-----------|-----------|--------|
+| arch      | cp        | chcon  |
+| base32    | expr | csplit |
+| base64    | install   | dd     |
+| basename  | ls        | df     |
+| cat       | more      | join   |
+| chgrp     | od (`--strings` and 128-bit data types missing) | numfmt |
+| chmod     | printf    | pr     |
+| chown     | sort      | runcon |
+| chroot    | split     | stty   |
+| cksum     | tail      |        |
+| comm      | test      |        |
+| cut       | date      |        |
+| dircolors |           |        |
+| dirname   |           |        |
+| du        |           |        |
+| echo      |           |        |
+| env       |           |        |
+| expand    |           |        |
+| factor    |           |        |
+| false     |           |        |
+| fmt       |           |        |
+| fold      |           |        |
+| groups    |           |        |
+| hashsum   |           |        |
+| head      |           |        |
+| hostid    |           |        |
+| hostname  |           |        |
+| id        |           |        |
+| kill      |           |        |
+| link      |           |        |
+| ln        |           |        |
+| logname   |           |        |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| mkdir     |           |        |
+| mkfifo    |           |        |
+| mknod     |           |        |
+| mktemp    |           |        |
+| mv        |           |        |
+| nice      |           |        |
+| nl        |           |        |
+| nohup     |           |        |
+| nproc     |           |        |
+| paste     |           |        |
+| pathchk   |           |        |
+| pinky     |           |        |
+| printenv  |           |        |
+| ptx       |           |        |
+| pwd       |           |        |
+| readlink  |           |        |
+| realpath  |           |        |
+| relpath   |           |        |
+| rm        |           |        |
+| rmdir     |           |        |
+| seq       |           |        |
+| shred     |           |        |
+| shuf      |           |        |
+| sleep     |           |        |
+| stat      |           |        |
+| stdbuf    |           |        |
+| sum       |           |        |
+| sync      |           |        |
+| tac       |           |        |
+| tee       |           |        |
+| timeout   |           |        |
+| touch     |           |        |
+| tr        |           |        |
+| true      |           |        |
+| truncate  |           |        |
+| tsort     |           |        |
+| tty       |           |        |
+| uname     |           |        |
+| unexpand  |           |        |
+| uniq      |           |        |
+| unlink    |           |        |
+| uptime    |           |        |
+| users     |           |        |
+| wc        |           |        |
+| who       |           |        |
+| whoami    |           |        |
+| yes       |           |        |
 
 License
 -------

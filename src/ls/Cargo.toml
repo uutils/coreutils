@@ -8,13 +8,13 @@ name = "uu_ls"
 path = "ls.rs"
 
 [dependencies]
-getopts = "*"
-pretty-bytes = "*"
-term_grid = "*"
-termsize = "*"
-time = "*"
-lazy_static = "*"
-unicode-width = "*"
+getopts = "0.2.14"
+pretty-bytes = "0.2.1"
+term_grid = "0.1.5"
+termsize = "0.1.4"
+time = "0.1.38"
+lazy_static = "0.2.8"
+unicode-width = "0.1.4"
 
 [dependencies.uucore]
 path = "../uucore"

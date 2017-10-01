@@ -8,7 +8,7 @@ name = "uu_hostid"
 path = "hostid.rs"
 
 [dependencies]
-libc = "*"
+libc = "0.2.26"
 uucore = { path="../uucore" }
 
 [[bin]]

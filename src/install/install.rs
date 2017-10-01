@@ -27,12 +27,12 @@ static SUMMARY: &'static str = "Copy SOURCE to DEST or multiple SOURCE(s) to the
  DIRECTORY, while setting permission modes and owner/group";
 static LONG_HELP: &'static str = "";
 
-const DEFAULT_MODE: libc::mode_t = 755;
+const DEFAULT_MODE: u32 = 755;
 
 #[allow(dead_code)]
 pub struct Behaviour {
     main_function: MainFunction,
-    specified_mode: Option<libc::mode_t>,
+    specified_mode: Option<u32>,
     suffix: String,
     verbose: bool
 }
@@ -47,7 +47,7 @@ pub enum MainFunction {
 
 impl Behaviour {
     /// Determine the mode for chmod after copy.
-    pub fn mode(&self) -> libc::mode_t {
+    pub fn mode(&self) -> u32 {
         match self.specified_mode {
             Some(x) => x,
             None => DEFAULT_MODE
@@ -138,8 +138,7 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
                                           DIRECTORY", "DIRECTORY")
     // TODO implement flag
         .optflag("T", "no-target-directory", "(unimplemented) treat DEST as a normal file")
-    // TODO implement flag
-        .optflag("v", "verbose", "(unimplemented) explain what is being done")
+        .optflag("v", "verbose", "explain what is being done")
     // TODO implement flag
         .optflag("P", "preserve-context", "(unimplemented) preserve security context")
     // TODO implement flag
@@ -181,8 +180,6 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
         Err("--target-directory, -t")
     } else if matches.opt_present("no-target-directory") {
         Err("--no-target-directory, -T")
-    } else if matches.opt_present("verbose") {
-        Err("--verbose, -v")
     } else if matches.opt_present("preserve-context") {
         Err("--preserve-context, -P")
     } else if matches.opt_present("context") {
@@ -209,7 +206,7 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 
     let considering_dir: bool = MainFunction::Directory == main_function;
 
-    let specified_mode: Option<libc::mode_t> = if matches.opt_present("mode") {
+    let specified_mode: Option<u32> = if matches.opt_present("mode") {
         match matches.opt_str("mode") {
             Some(x) => {
                 match mode::parse(&x[..], considering_dir) {
@@ -367,7 +364,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<(), ()> {
     }
 
     if b.verbose {
-        print!("‘{}’ -> ‘{}’", from.display(), to.display());
+        show_info!("'{}' -> '{}'", from.display(), to.display());
     }
 
     Ok(())
