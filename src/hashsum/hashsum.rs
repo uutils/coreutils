@@ -20,7 +20,9 @@ extern crate rustc_serialize as serialize;
 #[macro_use]
 extern crate uucore;
 
-use crypto::digest::Digest;
+mod digest;
+
+use digest::Digest;
 use crypto::md5::Md5;
 use crypto::sha1::Sha1;
 use crypto::sha2::{Sha224, Sha256, Sha384, Sha512};
