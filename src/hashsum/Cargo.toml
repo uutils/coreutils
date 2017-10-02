@@ -8,12 +8,16 @@ name = "uu_hashsum"
 path = "hashsum.rs"
 
 [dependencies]
+digest = "0.6.2"
 getopts = "0.2.14"
 libc = "0.2.26"
+md5 = "0.3.5"
 regex = "0.2.2"
 regex-syntax = "0.4.1"
-rust-crypto = "0.2.36"
 rustc-serialize = "0.3.24"
+sha1 = "0.2.0"
+sha2 = "0.6.0"
+sha3 = "0.6.0"
 uucore = { path="../uucore" }
 
 [[bin]]

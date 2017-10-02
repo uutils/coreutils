@@ -11,11 +11,14 @@
  * file that was distributed with this source code.
  */
 
-extern crate crypto;
 extern crate getopts;
+extern crate md5;
 extern crate regex_syntax;
 extern crate regex;
 extern crate rustc_serialize as serialize;
+extern crate sha1;
+extern crate sha2;
+extern crate sha3;
 
 #[macro_use]
 extern crate uucore;
@@ -23,12 +26,12 @@ extern crate uucore;
 mod digest;
 
 use digest::Digest;
-use crypto::md5::Md5;
-use crypto::sha1::Sha1;
-use crypto::sha2::{Sha224, Sha256, Sha384, Sha512};
-use crypto::sha3::{Sha3, Sha3Mode};
+use md5::Context as Md5;
 use regex::Regex;
 use serialize::hex::ToHex;
+use sha1::Sha1;
+use sha2::{Sha224, Sha256, Sha384, Sha512};
+use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use std::ascii::AsciiExt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, stdin, Write};
@@ -64,24 +67,24 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
         "sha3sum" => {
             match matches.opt_str("bits") {
                 Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                    Ok(224) => ("SHA3-224", Box::new(Sha3::new(Sha3Mode::Sha3_224)) as Box<Digest>, 224),
-                    Ok(256) => ("SHA3-256", Box::new(Sha3::new(Sha3Mode::Sha3_256)) as Box<Digest>, 256),
-                    Ok(384) => ("SHA3-384", Box::new(Sha3::new(Sha3Mode::Sha3_384)) as Box<Digest>, 384),
-                    Ok(512) => ("SHA3-512", Box::new(Sha3::new(Sha3Mode::Sha3_512)) as Box<Digest>, 512),
+                    Ok(224) => ("SHA3-224", Box::new(Sha3_224::new()) as Box<Digest>, 224),
+                    Ok(256) => ("SHA3-256", Box::new(Sha3_256::new()) as Box<Digest>, 256),
+                    Ok(384) => ("SHA3-384", Box::new(Sha3_384::new()) as Box<Digest>, 384),
+                    Ok(512) => ("SHA3-512", Box::new(Sha3_512::new()) as Box<Digest>, 512),
                     Ok(_) => crash!(1, "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"),
                     Err(err) => crash!(1, "{}", err)
                 },
                 None => crash!(1, "--bits required for SHA3")
             }
         }
-        "sha3-224sum" => ("SHA3-224", Box::new(Sha3::new(Sha3Mode::Sha3_224)) as Box<Digest>, 224),
-        "sha3-256sum" => ("SHA3-256", Box::new(Sha3::new(Sha3Mode::Sha3_256)) as Box<Digest>, 256),
-        "sha3-384sum" => ("SHA3-384", Box::new(Sha3::new(Sha3Mode::Sha3_384)) as Box<Digest>, 384),
-        "sha3-512sum" => ("SHA3-512", Box::new(Sha3::new(Sha3Mode::Sha3_512)) as Box<Digest>, 512),
+        "sha3-224sum" => ("SHA3-224", Box::new(Sha3_224::new()) as Box<Digest>, 224),
+        "sha3-256sum" => ("SHA3-256", Box::new(Sha3_256::new()) as Box<Digest>, 256),
+        "sha3-384sum" => ("SHA3-384", Box::new(Sha3_384::new()) as Box<Digest>, 384),
+        "sha3-512sum" => ("SHA3-512", Box::new(Sha3_512::new()) as Box<Digest>, 512),
         "shake128sum" => {
             match matches.opt_str("bits") {
                 Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                    Ok(bits) => ("SHAKE128", Box::new(Sha3::new(Sha3Mode::Shake128)) as Box<Digest>, bits),
+                    Ok(bits) => ("SHAKE128", Box::new(Shake128::new()) as Box<Digest>, bits),
                     Err(err) => crash!(1, "{}", err)
                 },
                 None => crash!(1, "--bits required for SHAKE-128")
@@ -90,7 +93,7 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
         "shake256sum" => {
             match matches.opt_str("bits") {
                 Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                    Ok(bits) => ("SHAKE256", Box::new(Sha3::new(Sha3Mode::Shake256)) as Box<Digest>, bits),
+                    Ok(bits) => ("SHAKE256", Box::new(Shake256::new()) as Box<Digest>, bits),
                     Err(err) => crash!(1, "{}", err)
                 },
                 None => crash!(1, "--bits required for SHAKE-256")
@@ -113,24 +116,24 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
                 if matches.opt_present("sha3") {
                     match matches.opt_str("bits") {
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                            Ok(224) => set_or_crash("SHA3-224", Box::new(Sha3::new(Sha3Mode::Sha3_224)) as Box<Digest>, 224),
-                            Ok(256) => set_or_crash("SHA3-256", Box::new(Sha3::new(Sha3Mode::Sha3_256)) as Box<Digest>, 256),
-                            Ok(384) => set_or_crash("SHA3-384", Box::new(Sha3::new(Sha3Mode::Sha3_384)) as Box<Digest>, 384),
-                            Ok(512) => set_or_crash("SHA3-512", Box::new(Sha3::new(Sha3Mode::Sha3_512)) as Box<Digest>, 512),
+                            Ok(224) => set_or_crash("SHA3-224", Box::new(Sha3_224::new()) as Box<Digest>, 224),
+                            Ok(256) => set_or_crash("SHA3-256", Box::new(Sha3_256::new()) as Box<Digest>, 256),
+                            Ok(384) => set_or_crash("SHA3-384", Box::new(Sha3_384::new()) as Box<Digest>, 384),
+                            Ok(512) => set_or_crash("SHA3-512", Box::new(Sha3_512::new()) as Box<Digest>, 512),
                             Ok(_) => crash!(1, "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"),
                             Err(err) => crash!(1, "{}", err)
                         },
                         None => crash!(1, "--bits required for SHA3")
                     }
                 }
-                if matches.opt_present("sha3-224") { set_or_crash("SHA3-224", Box::new(Sha3::new(Sha3Mode::Sha3_224)), 224) }
-                if matches.opt_present("sha3-256") { set_or_crash("SHA3-256", Box::new(Sha3::new(Sha3Mode::Sha3_256)), 256) }
-                if matches.opt_present("sha3-384") { set_or_crash("SHA3-384", Box::new(Sha3::new(Sha3Mode::Sha3_384)), 384) }
-                if matches.opt_present("sha3-512") { set_or_crash("SHA3-512", Box::new(Sha3::new(Sha3Mode::Sha3_512)), 512) }
+                if matches.opt_present("sha3-224") { set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224) }
+                if matches.opt_present("sha3-256") { set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256) }
+                if matches.opt_present("sha3-384") { set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384) }
+                if matches.opt_present("sha3-512") { set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512) }
                 if matches.opt_present("shake128") {
                     match matches.opt_str("bits") {
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                            Ok(bits) => set_or_crash("SHAKE128", Box::new(Sha3::new(Sha3Mode::Shake128)), bits),
+                            Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
                             Err(err) => crash!(1, "{}", err)
                         },
                         None => crash!(1, "--bits required for SHAKE-128")
@@ -139,7 +142,7 @@ fn detect_algo(program: &str, matches: &getopts::Matches) -> (&'static str, Box<
                 if matches.opt_present("shake256") {
                     match matches.opt_str("bits") {
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                            Ok(bits) => set_or_crash("SHAKE256", Box::new(Sha3::new(Sha3Mode::Shake256)), bits),
+                            Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
                             Err(err) => crash!(1, "{}", err)
                         },
                         None => crash!(1, "--bits required for SHAKE-256")
