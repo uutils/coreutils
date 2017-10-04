@@ -701,7 +701,7 @@ fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::P
                     return Err(format!("cannot get file information {:?}: {}", source, std::io::Error::last_os_error()).into());
                 }
                 inode = (((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64);
-                nlinks = (*stat).nNumberOfLinks;
+                nlinks = (*stat).nNumberOfLinks as u64;
             }
 
             for hard_link in hard_links.iter() {
