@@ -50,9 +50,6 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use filetime::FileTime;
 
-#[cfg(target_os = "linux")]
-use libc::{c_int, c_char};
-
 #[cfg(unix)] use std::os::unix::fs::PermissionsExt;
 
 #[cfg(target_os = "linux")] ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
@@ -681,8 +678,8 @@ fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::P
     if !source.is_dir() {
         unsafe {
             let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
-            let mut inode: u64 = 0;
-            let mut nlinks = 0;
+            let inode: u64;
+            let nlinks: u64;
             #[cfg(unix)]
             {
                 let mut stat = mem::zeroed();
@@ -750,7 +747,6 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
             let mut found_hard_link = false;
             if preserve_hard_links {
                     let dest = construct_dest_path(source, target, &target_type, options)?;
-                    let src_path = CString::new(Path::new(&source.clone()).as_os_str().to_str().unwrap()).unwrap();
                     preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
                }
             if !found_hard_link {
@@ -907,7 +903,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
                let xattrs = xattr::list(source)?;
                for attr in xattrs {
                     if let Some(attr_value) = xattr::get(source, attr.clone())? {
-                        xattr::set(dest, attr, &attr_value[..]);
+                        crash_if_err!(EXIT_ERR, xattr::set(dest, attr, &attr_value[..]));
                     }
                }
             }
@@ -986,13 +982,6 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 
     if options.verbose {
         println!("{}", context_for(source, dest));
-    }
-
-    let mut preserve_context = false;
-    for attribute in &options.preserve_attributes {
-        if *attribute == Attribute::Context {
-            preserve_context = true;
-        }
     }
 
     match options.copy_mode {
