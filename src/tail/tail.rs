@@ -79,6 +79,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("h", "help", "help");
     opts.optflag("V", "version", "version");
     opts.optflag("v", "verbose", "always output headers giving file names");
+    // TODO: --silent flag as alias to --quiet
+    opts.optflag("q", "quiet", "never output headers giving file names");
 
     let given_options = match opts.parse(&args) {
         Ok (m) => { m }
@@ -165,6 +167,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let verbose = given_options.opt_present("v");
+    let quiet = given_options.opt_present("q");
 
     let files = given_options.free;
 
@@ -172,16 +175,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let mut buffer = BufReader::new(stdin());
         unbounded_tail(&mut buffer, &settings);
     } else {
-        let mut multiple = false;
+        let multiple = files.len() > 1;
         let mut first_header = true;
         let mut readers = Vec::new();
 
-        if files.len() > 1 {
-            multiple = true;
-        }
-
         for filename in &files {
-            if multiple || verbose {
+            if (multiple || verbose) && !quiet {
                 if !first_header { println!(""); }
                 println!("==> {} <==", filename);
             }
