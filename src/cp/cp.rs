@@ -686,8 +686,8 @@ fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::P
                 if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
                     return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
                 }
-                inode = stat.st_ino;
-                nlinks = stat.st_nlink;
+                inode = stat.st_ino as u64;
+                nlinks = stat.st_nlink as u64;
             }
             #[cfg(windows)]
             {
