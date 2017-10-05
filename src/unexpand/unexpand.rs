@@ -137,7 +137,7 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
     }
 }
 
-fn write_tabs(mut output: &mut BufWriter<Stdout>, tabstops: &[usize],
+fn write_tabs(output: &mut BufWriter<Stdout>, tabstops: &[usize],
               mut scol: usize, col: usize, prevtab: bool, init: bool, amode: bool) {
     // This conditional establishes the following:
     // We never turn a single space before a non-blank into

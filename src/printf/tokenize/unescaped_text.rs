@@ -179,7 +179,7 @@ impl UnescapedText {
         let mut new_text = UnescapedText::new();
         let mut tmp_str = String::new();
         {
-            let mut new_vec: &mut Vec<u8> = &mut (new_text.0);
+            let new_vec: &mut Vec<u8> = &mut (new_text.0);
             while let Some(ch) = it.next() {
                 if !addchar {
                     addchar = true;
