@@ -245,3 +245,19 @@ fn test_lines_with_size_suffix() {
 
     ucmd.arg(FILE).arg("-n").arg("2K").run().stdout_is_fixture(EXPECTED_FILE);
 }
+
+#[test]
+fn test_multiple_input_files() {
+    new_ucmd!().arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run().stdout_is_fixture("foobar_follow_multiple.expected");
+}
+
+#[test]
+fn test_multiple_input_files_with_suppressed_headers() {
+    new_ucmd!().arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).arg("-q").run().stdout_is_fixture("foobar_multiple_quiet.expected");
+}
+
+#[test]
+fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers() {
+    // TODO: actually the later one should win, i.e. -qv should lead to headers being printed, -vq to them being suppressed
+    new_ucmd!().arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).arg("-q").arg("-v").run().stdout_is_fixture("foobar_multiple_quiet.expected");
+}
