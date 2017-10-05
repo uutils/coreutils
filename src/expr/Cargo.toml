@@ -9,6 +9,7 @@ path = "expr.rs"
 
 [dependencies]
 libc = "0.2.26"
+onig = "1.3.0"
 uucore = { path="../uucore" }
 
 [[bin]]

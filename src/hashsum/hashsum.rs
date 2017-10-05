@@ -295,12 +295,12 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
             for (i, line) in buffer.lines().enumerate() {
                 let line = safe_unwrap!(line);
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
-                    Some(caps) => (caps.name("fileName").unwrap(),
-                                   caps.name("digest").unwrap().to_ascii_lowercase(),
-                                   caps.name("binary").unwrap() == "*"),
+                    Some(caps) => (caps.name("fileName").unwrap().as_str(),
+                                   caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+                                   caps.name("binary").unwrap().as_str() == "*"),
                     None => match bsd_re.captures(&line) {
-                        Some(caps) => (caps.name("fileName").unwrap(),
-                                       caps.name("digest").unwrap().to_ascii_lowercase(),
+                        Some(caps) => (caps.name("fileName").unwrap().as_str(),
+                                       caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
                                        true),
                         None => {
                             bad_format += 1;

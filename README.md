@@ -151,7 +151,7 @@ Utilities
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr (no regular expressions) | csplit |
+| base32    | expr | csplit |
 | base64    | install   | dd     |
 | basename  | ls        | df     |
 | cat       | more      | join   |
