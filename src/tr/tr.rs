@@ -116,13 +116,18 @@ struct TranslateOperation {
 }
 
 impl TranslateOperation {
-    fn new(set1: ExpandSet, set2: &mut ExpandSet) -> TranslateOperation {
+    fn new(set1: ExpandSet, set2: &mut ExpandSet, truncate: bool) -> TranslateOperation {
         let mut map = FnvHashMap::default();
         let mut s2_prev = '_';
         for i in set1 {
-            s2_prev = set2.next().unwrap_or(s2_prev);
+            let s2_next = set2.next();
 
-            map.insert(i as usize, s2_prev);
+            if s2_next.is_none() && truncate {
+                map.insert(i as usize, i);
+            } else {
+                s2_prev = s2_next.unwrap_or(s2_prev);
+                map.insert(i as usize, s2_prev);
+            }
         }
         TranslateOperation {
             translate_map: map,
@@ -177,6 +182,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("d", "delete", "delete characters in SET1");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("s", "squeeze", "replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character");
+    opts.optflag("t", "truncate-set1", "first truncate SET1 to length of SET2");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
@@ -205,6 +211,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let dflag = matches.opt_present("d");
     let cflag = matches.opts_present(&["c".to_owned(), "C".to_owned()]);
     let sflag = matches.opt_present("s");
+    let tflag = matches.opt_present("t");
     let sets = matches.free;
 
     if cflag && !dflag && !sflag {
@@ -233,7 +240,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     } else {
         let mut set2 = ExpandSet::new(sets[1].as_ref());
-        let op = TranslateOperation::new(set1, &mut set2);
+        let op = TranslateOperation::new(set1, &mut set2, tflag);
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)
     }
 

@@ -57,3 +57,27 @@ fn test_delete_and_squeeze_complement() {
     new_ucmd!()
         .args(&["-dsc", "a-z", "A-Z"]).pipe_in("abBcB").run().stdout_is("abc");
 }
+
+#[test]
+fn test_set1_longer_than_set2() {
+    new_ucmd!()
+        .args(&["abc", "xy"]).pipe_in("abcde").run().stdout_is("xyyde");
+}
+
+#[test]
+fn test_set1_shorter_than_set2() {
+    new_ucmd!()
+        .args(&["ab", "xyz"]).pipe_in("abcde").run().stdout_is("xycde");
+}
+
+#[test]
+fn test_truncate() {
+    new_ucmd!()
+        .args(&["-t", "abc", "xy"]).pipe_in("abcde").run().stdout_is("xycde");
+}
+
+#[test]
+fn test_truncate_with_set1_shorter_than_set2() {
+    new_ucmd!()
+        .args(&["-t", "ab", "xyz"]).pipe_in("abcde").run().stdout_is("xycde");
+}
