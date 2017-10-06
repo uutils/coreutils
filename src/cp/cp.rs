@@ -984,6 +984,17 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         println!("{}", context_for(source, dest));
     }
 
+    #[allow(unused)]
+    {
+        // TODO: implement --preserve flag
+        let mut preserve_context = false;
+        for attribute in &options.preserve_attributes {
+            if *attribute == Attribute::Context {
+                preserve_context = true;
+            }
+        }
+    }
+
     match options.copy_mode {
         CopyMode::Link => {
             fs::hard_link(source, dest).context(&*context_for(source, dest))?;
