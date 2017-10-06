@@ -5,7 +5,6 @@ extern crate sha1;
 extern crate sha2;
 extern crate sha3;
 
-use sha2::Digest as Sha2Digest;
 use digest::digest::{Input, ExtendableOutput, XofReader};
 
 pub trait Digest {
@@ -72,11 +71,11 @@ impl Digest for sha2::Sha224 {
     }
 
     fn input(&mut self, input: &[u8]) {
-        Sha2Digest::input(self, input);
+        digest::Digest::input(self, input);
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(Sha2Digest::result(*self).as_slice());
+        out.copy_from_slice(digest::Digest::result(*self).as_slice());
     }
 
     fn reset(&mut self) {
@@ -92,11 +91,11 @@ impl Digest for sha2::Sha256 {
     }
 
     fn input(&mut self, input: &[u8]) {
-        Sha2Digest::input(self, input);
+        digest::Digest::input(self, input);
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(Sha2Digest::result(*self).as_slice());
+        out.copy_from_slice(digest::Digest::result(*self).as_slice());
     }
 
     fn reset(&mut self) {
@@ -112,11 +111,11 @@ impl Digest for sha2::Sha384 {
     }
 
     fn input(&mut self, input: &[u8]) {
-        Sha2Digest::input(self, input)
+        digest::Digest::input(self, input)
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(Sha2Digest::result(*self).as_slice());
+        out.copy_from_slice(digest::Digest::result(*self).as_slice());
     }
 
     fn reset(&mut self) {
@@ -132,11 +131,11 @@ impl Digest for sha2::Sha512 {
     }
 
     fn input(&mut self, input: &[u8]) {
-        Sha2Digest::input(self, input)
+        digest::Digest::input(self, input)
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(Sha2Digest::result(*self).as_slice());
+        out.copy_from_slice(digest::Digest::result(*self).as_slice());
     }
 
     fn reset(&mut self) {
