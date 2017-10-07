@@ -65,9 +65,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 
     let delim : Vec<String> = (0 .. 4).map(|col| mkdelim(col, opts)).collect();
 
-    let mut ra = &mut String::new();
+    let ra = &mut String::new();
     let mut na = a.read_line(ra);
-    let mut rb = &mut String::new();
+    let rb = &mut String::new();
     let mut nb = b.read_line(rb);
 
     while na.is_ok() || nb.is_ok() {
