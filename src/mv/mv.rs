@@ -86,43 +86,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     let usage = opts.usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
 
-    // This does not exactly match the GNU implementation:
-    // The GNU mv defaults to Force, but if more than one of the
-    // overwrite options are supplied, only the last takes effect.
-    // To default to no-clobber in that situation seems safer:
-    //
-    let overwrite_mode = if matches.opt_present("no-clobber") {
-        OverwriteMode::NoClobber
-    } else if matches.opt_present("interactive") {
-        OverwriteMode::Interactive
-    } else {
-        OverwriteMode::Force
-    };
-
-    let backup_mode = if matches.opt_present("b") {
-        BackupMode::SimpleBackup
-    } else if matches.opt_present("backup") {
-        match matches.opt_str("backup") {
-            None => BackupMode::SimpleBackup,
-            Some(mode) => {
-                match &mode[..] {
-                    "simple" | "never" => BackupMode::SimpleBackup,
-                    "numbered" | "t" => BackupMode::NumberedBackup,
-                    "existing" | "nil" => BackupMode::ExistingBackup,
-                    "none" | "off" => BackupMode::NoBackup,
-                    x => {
-                        show_error!("invalid argument ‘{}’ for ‘backup type’\n\
-                                Try '{} --help' for more information.",
-                                    x,
-                                    NAME);
-                        return 1;
-                    }
-                }
-            }
-        }
-    } else {
-        BackupMode::NoBackup
-    };
+    let overwrite_mode = determine_overwrite_mode(&matches);
+    let backup_mode = determine_backup_mode(&matches);
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
         show_error!("options --backup and --no-clobber are mutually exclusive\n\
@@ -131,23 +96,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     }
 
-    let backup_suffix = if matches.opt_present("suffix") {
-        match matches.opt_str("suffix") {
-            Some(x) => x,
-            None => {
-                show_error!("option '--suffix' requires an argument\n\
-                            Try '{} --help' for more information.",
-                            NAME);
-                return 1;
-            }
-        }
-    } else {
-        if let (Ok(s), BackupMode::SimpleBackup) = (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode) {
-            s
-        } else {
-            "~".to_owned()
-        }
-    };
+    let backup_suffix = determine_backup_suffix(backup_mode, &matches);
 
     if matches.opt_present("T") && matches.opt_present("t") {
         show_error!("cannot combine --target-directory (-t) and --no-target-directory (-T)");
@@ -185,6 +134,66 @@ pub fn uumain(args: Vec<String>) -> i32 {
         0
     } else {
         exec(&paths[..], behaviour)
+    }
+}
+
+fn determine_overwrite_mode(matches: &getopts::Matches) -> OverwriteMode {
+    // This does not exactly match the GNU implementation:
+    // The GNU mv defaults to Force, but if more than one of the
+    // overwrite options are supplied, only the last takes effect.
+    // To default to no-clobber in that situation seems safer:
+    //
+    if matches.opt_present("no-clobber") {
+        OverwriteMode::NoClobber
+    } else if matches.opt_present("interactive") {
+        OverwriteMode::Interactive
+    } else {
+        OverwriteMode::Force
+    }
+}
+
+fn determine_backup_mode(matches: &getopts::Matches) -> BackupMode {
+    if matches.opt_present("b") {
+        BackupMode::SimpleBackup
+    } else if matches.opt_present("backup") {
+        match matches.opt_str("backup") {
+            None => BackupMode::SimpleBackup,
+            Some(mode) => {
+                match &mode[..] {
+                    "simple" | "never" => BackupMode::SimpleBackup,
+                    "numbered" | "t" => BackupMode::NumberedBackup,
+                    "existing" | "nil" => BackupMode::ExistingBackup,
+                    "none" | "off" => BackupMode::NoBackup,
+                    x => {
+                        crash!(1, "invalid argument ‘{}’ for ‘backup type’\n\
+                                Try '{} --help' for more information.",
+                                    x,
+                                    NAME);
+                    }
+                }
+            }
+        }
+    } else {
+        BackupMode::NoBackup
+    }
+}
+
+fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) -> String {
+    if matches.opt_present("suffix") {
+        match matches.opt_str("suffix") {
+            Some(x) => x,
+            None => {
+                crash!(1, "option '--suffix' requires an argument\n\
+                            Try '{} --help' for more information.",
+                            NAME);
+            }
+        }
+    } else {
+        if let (Ok(s), BackupMode::SimpleBackup) = (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode) {
+            s
+        } else {
+            "~".to_owned()
+        }
     }
 }
 
