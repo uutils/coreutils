@@ -26,6 +26,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Argument parsing
     //
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("a", "multiple", "Support more than one argument. Treat every argument as a name.")
+        .optopt("s", "suffix", "Remove a trailing suffix. This option implies the -a option.", "SUFFIX")
+        .optflag("z", "zero", "Output a zero byte (ASCII NUL) at the end of each line, rather than a newline.")
         .parse(args);
 
     // too few arguments
@@ -37,8 +40,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
             "missing operand"
         );
     }
+    let opt_s = matches.opt_present("s");
+    let opt_a = matches.opt_present("a");
+    let opt_z = matches.opt_present("z");
+    let multiple_paths = opt_s || opt_a;
     // too many arguments
-    else if matches.free.len() > 2 {
+    if !multiple_paths && matches.free.len() > 2 {
         crash!(
             1,
             "{0}: extra operand '{1}'\nTry '{0} --help' for more information.",
@@ -47,23 +54,33 @@ pub fn uumain(args: Vec<String>) -> i32 {
         );
     }
 
+    let suffix = if opt_s {
+        matches.opt_str("s").unwrap()
+    } else if !opt_a && matches.free.len() > 1 {
+        matches.free[1].clone()
+    } else {
+        "".to_owned()
+    };
+
     //
     // Main Program Processing
     //
 
-    let mut name = strip_dir(&matches.free[0]);
+    let paths = if multiple_paths {
+        &matches.free[..]
+    } else {
+        &matches.free[0..1]
+    };
 
-    if matches.free.len() > 1 {
-        let suffix = matches.free[1].clone();
-        name = strip_suffix(name.as_ref(), suffix.as_ref());
+    let line_ending = if opt_z { "\0" } else { "\n" };
+    for path in paths {
+        print!("{}{}", basename(&path, &suffix), line_ending);
     }
-
-    println!("{}", name);
 
     0
 }
 
-fn strip_dir(fullname: &str) -> String {
+fn basename(fullname: &str, suffix: &str) -> String {
     // Remove all platform-specific path separators from the end
     let mut path: String = fullname.chars().rev().skip_while(|&ch| is_separator(ch)).collect();
 
@@ -73,7 +90,7 @@ fn strip_dir(fullname: &str) -> String {
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(path);
     match pb.components().last() {
-        Some(c) => c.as_os_str().to_str().unwrap().to_owned(),
+        Some(c) => strip_suffix(c.as_os_str().to_str().unwrap(), suffix),
         None => "".to_owned()
     }
 }

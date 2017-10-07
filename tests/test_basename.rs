@@ -23,7 +23,6 @@ fn test_dont_remove_suffix() {
     new_ucmd!().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only( "baz");
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
 #[test]
 fn test_multiple_param() {
     for multiple_param in vec!["-a", "--multiple"] {
@@ -33,7 +32,6 @@ fn test_multiple_param() {
     }
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
 #[test]
 fn test_suffix_param() {
     for suffix_param in vec!["-s", "--suffix"] {
@@ -44,7 +42,6 @@ fn test_suffix_param() {
     }
 }
 
-#[cfg_attr(not(feature="test_unimplemented"),ignore)]
 #[test]
 fn test_zero_param() {
     for zero_param in vec!["-z", "--zero"] {
