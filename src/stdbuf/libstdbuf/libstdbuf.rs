@@ -38,7 +38,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn stdbuf() {
+pub unsafe extern fn stdbuf() {
     if let Ok(val) = env::var("_STDBUF_E") {
         set_buffer(stderr, &val);
     }
