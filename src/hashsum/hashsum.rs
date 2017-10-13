@@ -12,10 +12,10 @@
  */
 
 extern crate getopts;
+extern crate hex;
 extern crate md5;
 extern crate regex_syntax;
 extern crate regex;
-extern crate rustc_serialize as serialize;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
@@ -26,9 +26,9 @@ extern crate uucore;
 mod digest;
 
 use digest::Digest;
+use hex::ToHex;
 use md5::Context as Md5;
 use regex::Regex;
-use serialize::hex::ToHex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};

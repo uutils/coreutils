@@ -1,11 +1,11 @@
 extern crate digest;
 extern crate md5;
-extern crate rustc_serialize;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
 
 use digest::digest::{Input, ExtendableOutput, XofReader};
+use hex::ToHex;
 
 pub trait Digest {
     fn new() -> Self where Self: Sized;
@@ -17,8 +17,6 @@ pub trait Digest {
         (self.output_bits() + 7) / 8
     }
     fn result_str(&mut self) -> String {
-        use self::rustc_serialize::hex::ToHex;
-
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
         self.result(&mut buf);
         buf.to_hex()
