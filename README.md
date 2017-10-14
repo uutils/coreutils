@@ -74,6 +74,13 @@ Set install parent directory (default value is /usr/local):
 make PREFIX=/my/path install
 ```
 
+Simple Installation Alternative:
+---------------------------------
+
+[Nix](https://nixos.org/nix/) package manager:
+
+    $ nix-env -i coreutils
+
 Uninstallation Instructions
 ---------------------------
 
