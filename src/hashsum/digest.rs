@@ -63,202 +63,64 @@ impl Digest for sha1::Sha1 {
     fn output_bits(&self) -> usize { 160 }
 }
 
-impl Digest for sha2::Sha224 {
-    fn new() -> Self {
-        sha2::Sha224::default()
-    }
+// Implements the Digest trait for sha2 / sha3 algorithms with fixed ouput
+macro_rules! impl_digest_sha {
+    ($type: ty, $size: expr) => (
+        impl Digest for $type {
+            fn new() -> Self {
+                Self::default()
+            }
 
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input);
-    }
+            fn input(&mut self, input: &[u8]) {
+                digest::Digest::input(self, input);
+            }
 
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
+            fn result(&mut self, out: &mut [u8]) {
+                out.copy_from_slice(digest::Digest::result(*self).as_slice());
+            }
 
-    fn reset(&mut self) {
-        *self = sha2::Sha224::default();
-    }
+            fn reset(&mut self) {
+                *self = Self::new();
+            }
 
-    fn output_bits(&self) -> usize { 224 }
+            fn output_bits(&self) -> usize { $size }
+        }
+    )
 }
 
-impl Digest for sha2::Sha256 {
-    fn new() -> Self {
-        sha2::Sha256::default()
-    }
+// Implements the Digest trait for sha2 / sha3 algorithms with variable ouput
+macro_rules! impl_digest_shake {
+    ($type: ty) => (
+        impl Digest for $type {
+            fn new() -> Self {
+                Self::default()
+            }
 
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input);
-    }
+            fn input(&mut self, input: &[u8]) {
+                self.process(input);
+            }
 
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
+            fn result(&mut self, out: &mut [u8]) {
+                self.xof_result().read(out);
+            }
 
-    fn reset(&mut self) {
-        *self = sha2::Sha256::default();
-    }
+            fn reset(&mut self) {
+                *self = Self::new();
+            }
 
-    fn output_bits(&self) -> usize { 256 }
+            fn output_bits(&self) -> usize { 0 }
+        }
+    )
 }
 
-impl Digest for sha2::Sha384 {
-    fn new() -> Self {
-        sha2::Sha384::default()
-    }
+impl_digest_sha!(sha2::Sha224, 224);
+impl_digest_sha!(sha2::Sha256, 256);
+impl_digest_sha!(sha2::Sha384, 384);
+impl_digest_sha!(sha2::Sha512, 512);
 
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
-
-    fn reset(&mut self) {
-        *self = sha2::Sha384::default();
-    }
-
-    fn output_bits(&self) -> usize { 384 }
-}
-
-impl Digest for sha2::Sha512 {
-    fn new() -> Self {
-        sha2::Sha512::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
-
-    fn reset(&mut self) {
-        *self = sha2::Sha512::default();
-    }
-
-    fn output_bits(&self) -> usize { 512 }
-}
-
-impl Digest for sha3::Sha3_224 {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
-
-    fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    fn output_bits(&self) -> usize { 224 }
-}
-
-impl Digest for sha3::Sha3_256 {
-    fn new() -> Self {
-        sha3::Sha3_256::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
-
-    fn reset(&mut self) {
-        *self = sha3::Sha3_256::default();
-    }
-
-    fn output_bits(&self) -> usize { 256 }
-}
-
-impl Digest for sha3::Sha3_384 {
-    fn new() -> Self {
-        sha3::Sha3_384::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
-
-    fn reset(&mut self) {
-        *self = sha3::Sha3_384::default();
-    }
-
-    fn output_bits(&self) -> usize { 384 }
-}
-
-impl Digest for sha3::Sha3_512 {
-    fn new() -> Self {
-        sha3::Sha3_512::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::input(self, input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(digest::Digest::result(*self).as_slice());
-    }
-
-    fn reset(&mut self) {
-        *self = sha3::Sha3_512::default();
-    }
-
-    fn output_bits(&self) -> usize { 512 }
-}
-
-impl Digest for sha3::Shake128 {
-    fn new() -> Self {
-        sha3::Shake128::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        self.process(input);
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        self.xof_result().read(out);
-    }
-
-    fn reset(&mut self) {
-        *self = sha3::Shake128::default();
-    }
-
-    fn output_bits(&self) -> usize { 0 }
-}
-
-impl Digest for sha3::Shake256 {
-    fn new() -> Self {
-        sha3::Shake256::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        self.process(input);
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        self.xof_result().read(out);
-    }
-
-    fn reset(&mut self) {
-        *self = sha3::Shake256::default();
-    }
-
-    fn output_bits(&self) -> usize { 0 }
-}
+impl_digest_sha!(sha3::Sha3_224, 224);
+impl_digest_sha!(sha3::Sha3_256, 256);
+impl_digest_sha!(sha3::Sha3_384, 384);
+impl_digest_sha!(sha3::Sha3_512, 512);
+impl_digest_shake!(sha3::Shake128);
+impl_digest_shake!(sha3::Shake256);
