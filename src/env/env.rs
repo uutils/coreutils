@@ -86,8 +86,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else if opt.starts_with("--") {
             match opt.as_ref() {
-                "--help" => { core_opts.parse(vec![String::from("--help")]); return 0; }
-                "--version" => { core_opts.parse(vec![String::from("--version")]); return 0; }
+                "--help" => { core_opts.parse(vec![String::new(), String::from("--help")]); return 0; }
+                "--version" => { core_opts.parse(vec![String::new(), String::from("--version")]); return 0; }
 
                 "--ignore-environment" => opts.ignore_env = true,
                 "--null" => opts.null = true,
