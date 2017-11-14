@@ -674,6 +674,9 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 }
 
 fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::PathBuf, dest: std::path::PathBuf, found_hard_link: &mut bool) -> CopyResult<()> {
+    // Redox does not currently support hard links
+    #[cfg(not(target_os = "redox"))]
+    {
     if !source.is_dir() {
         unsafe {
             let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
@@ -713,6 +716,7 @@ fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::P
                 hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
             }
         }
+    }
     }
     Ok(())
 }
@@ -826,7 +830,8 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
             }
         }
 
-    #[cfg(windows)]
+    // This should be changed once Redox supports hardlinks
+    #[cfg(any(windows, target_os = "redox"))]
     let mut hard_links: Vec<(String, u64)> = vec![];
 
     for path in WalkDir::new(root) {
