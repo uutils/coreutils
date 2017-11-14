@@ -1,0 +1,16 @@
+[package]
+name = "numfmt"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "uu_numfmt"
+path = "numfmt.rs"
+
+[dependencies]
+getopts = "0.2.14"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "numfmt"
+path = "main.rs"

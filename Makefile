@@ -69,6 +69,7 @@ PROGS       := \
   more \
   mv \
   nl \
+  numfmt \
   nproc \
   od \
   paste \
@@ -171,6 +172,7 @@ TEST_PROGS  := \
 	mktemp \
 	mv \
 	nl \
+	numfmt \
 	od \
 	paste \
 	pathchk \

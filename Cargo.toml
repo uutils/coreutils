@@ -22,6 +22,7 @@ unix = [
   "mkfifo",
   "mknod",
   "nice",
+  "numfmt",
   "nohup",
   "pathchk",
   "pinky",
@@ -192,6 +193,7 @@ nice     = { optional=true, path="src/nice" }
 nl       = { optional=true, path="src/nl" }
 nohup    = { optional=true, path="src/nohup" }
 nproc    = { optional=true, path="src/nproc" }
+numfmt   = { optional=true, path="src/numfmt" }
 od       = { optional=true, path="src/od" }
 paste    = { optional=true, path="src/paste" }
 pathchk  = { optional=true, path="src/pathchk" }
