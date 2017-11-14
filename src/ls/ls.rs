@@ -160,7 +160,7 @@ fn list(options: getopts::Matches) {
             dir = true;
             if options.opt_present("l") && !(options.opt_present("L")) {
                 if let Ok(md) = p.symlink_metadata() {
-                    if md.file_type().is_symlink() {
+                    if md.file_type().is_symlink() && !p.ends_with( "/" ) {
                         dir = false;
                     }
                 }
