@@ -212,7 +212,7 @@ pub struct Options {
 }
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static USAGE: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
+static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
@@ -221,12 +221,10 @@ fn print_version() {
     println!("{} {}", executable!(), VERSION);
 }
 
-/// Prints usage/help
-fn get_about(usage: &str) -> String {
-    format!("Usage: {0} [OPTION]... [-T] SOURCE DEST
-  or:  {0} [OPTION]... SOURCE... DIRECTORY
-  or:  {0} [OPTION]... -t DIRECTORY SOURCE...
-{1}", executable!(), usage)
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [-T] SOURCE DEST
+    {0} [OPTION]... SOURCE... DIRECTORY
+    {0} [OPTION]... -t DIRECTORY SOURCE...", executable!())
 }
 
 
@@ -278,10 +276,11 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let about = get_about(USAGE);
+    let usage = get_usage();
     let matches = App::new(executable!())
         .version(VERSION)
-        .about(&about[..])
+        .about(ABOUT)
+        .usage(&usage[..])
         .arg(Arg::with_name(OPT_TARGET_DIRECTORY)
              .short("t")
              .conflicts_with(OPT_NO_TARGET_DIRECTORY)
