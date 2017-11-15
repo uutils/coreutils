@@ -2,6 +2,16 @@ use common::util::*;
 
 
 #[test]
+fn test_env_help() {
+    assert!(new_ucmd!().arg("--help").succeeds().no_stderr().stdout.contains("Options:"));
+}
+
+#[test]
+fn test_env_version() {
+    assert!(new_ucmd!().arg("--version").succeeds().no_stderr().stdout.contains(util_name!()));
+}
+
+#[test]
 fn test_single_name_value_pair() {
     let out = new_ucmd!()
         .arg("FOO=bar").run().stdout;
