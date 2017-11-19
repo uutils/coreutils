@@ -15,8 +15,8 @@ endif
 ifeq ($(SYSTEM),Darwin)
 	DYLIB_EXT        := dylib
 	DYLIB_FLAGS      := -dynamiclib -undefined dynamic_lookup
-	DYLIB_LINK_START := -Wl,-all_load
-	DYLIB_LINK_END   := -Wl,-noall_load
+	DYLIB_LINK_START :=
+	DYLIB_LINK_END   :=
 endif
 
 all: $(BUILDDIR)/libstdbuf.$(DYLIB_EXT)
