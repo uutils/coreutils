@@ -65,14 +65,14 @@ fn test_stdin_all_repeated() {
 #[test]
 fn test_stdin_all_repeated_separate() {
     new_ucmd!()
-        .args(&["--all-repeated", "separate"]).pipe_in_fixture(INPUT)
+        .args(&["--all-repeated=separate"]).pipe_in_fixture(INPUT)
         .run().stdout_is_fixture("sorted-all-repeated-separate.expected");
 }
 
 #[test]
 fn test_stdin_all_repeated_prepend() {
     new_ucmd!()
-        .args(&["--all-repeated", "prepend"]).pipe_in_fixture(INPUT)
+        .args(&["--all-repeated=prepend"]).pipe_in_fixture(INPUT)
         .run().stdout_is_fixture("sorted-all-repeated-prepend.expected");
 }
 

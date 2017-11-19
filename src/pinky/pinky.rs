@@ -48,21 +48,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
 The utmp file will be {}", utmpx::DEFAULT_FILE);
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, &long_help);
     opts.optflag("l",
-                 "l",
+                 "",
                  "produce long format output for the specified USERs");
     opts.optflag("b",
-                 "b",
+                 "",
                  "omit the user's home directory and shell in long format");
-    opts.optflag("h", "h", "omit the user's project file in long format");
-    opts.optflag("p", "p", "omit the user's plan file in long format");
-    opts.optflag("s", "s", "do short format output, this is the default");
-    opts.optflag("f", "f", "omit the line of column headings in short format");
-    opts.optflag("w", "w", "omit the user's full name in short format");
+    opts.optflag("h", "", "omit the user's project file in long format");
+    opts.optflag("p", "", "omit the user's plan file in long format");
+    opts.optflag("s", "", "do short format output, this is the default");
+    opts.optflag("f", "", "omit the line of column headings in short format");
+    opts.optflag("w", "", "omit the user's full name in short format");
     opts.optflag("i",
-                 "i",
+                 "",
                  "omit the user's full name and remote host in short format");
     opts.optflag("q",
-                 "q",
+                 "",
                  "omit the user's full name, remote host and idle time in short format");
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
