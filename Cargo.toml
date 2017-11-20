@@ -11,6 +11,7 @@ unix = [
   "chmod",
   "chown",
   "chroot",
+  "df",
   "du",
   "groups",
   "hostid",
@@ -162,6 +163,7 @@ cut      = { optional=true, path="src/cut" }
 date     = { optional=true, path="src/date" }
 dircolors= { optional=true, path="src/dircolors" }
 dirname  = { optional=true, path="src/dirname" }
+df       = { optional=true, path="src/df" }
 du       = { optional=true, path="src/du" }
 echo     = { optional=true, path="src/echo" }
 env      = { optional=true, path="src/env" }

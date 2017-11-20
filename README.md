@@ -162,7 +162,7 @@ Utilities
 | cksum     | tail      |        |
 | comm      | test      |        |
 | cut       | date      |        |
-| dircolors |           |        |
+| dircolors | df        |        |
 | dirname   |           |        |
 | du        |           |        |
 | echo      |           |        |
