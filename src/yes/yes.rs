@@ -11,51 +11,46 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-extern crate getopts;
+#[macro_use]
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
+use clap::{App, Arg};
 use std::io::Write;
+use std::ffi::{OsStr, OsString};
 
-static NAME: &'static str = "yes";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub fn uumain(args: Vec<OsString>) -> i32 {
+    let matches = App::new(executable!(args))
+                          .version(crate_version!())
+                          .author("uutils developers (https://github.com/uutils)")
+                          .about("Repeatedly output a line with all specified STRING(s), or 'y'.")
+                          .arg(Arg::with_name("STRING")
+                               .help("Sets the strings that should be printed")
+                               .index(1)
+                               .multiple(true))
+                          .get_matches_from(args);
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "invalid options\n{}", f)
-    };
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!("");
-        print!("{}", opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'."));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-    let string = if matches.free.is_empty() {
-        "y".to_owned()
+    if !matches.is_present("STRING") {
+        exec(OsStr::new("y"));
     } else {
-        matches.free.join(" ")
+        let mut values = matches.values_of_os("STRING").unwrap();
+        let init = OsString::from(values.next().unwrap());
+        let msg = values.fold(init, |mut acc, arg| {
+            acc.push(" ");
+            acc.push(arg);
+            acc
+        });
+        exec(&msg[..]);
     };
-
-    exec(&string[..]);
 
     0
 }
 
-pub fn exec(string: &str) {
-    while pipe_println!("{}", string) { }
+pub fn exec(string: &OsStr) {
+    let output = os_bytesln!(string);
+    loop {
+        byte_print!(&output);
+    }
 }

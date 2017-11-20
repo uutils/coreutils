@@ -8,7 +8,7 @@ name = "uu_yes"
 path = "yes.rs"
 
 [dependencies]
-getopts = "0.2.14"
+clap = "2.25"
 uucore = { path="../uucore" }
 
 [[bin]]

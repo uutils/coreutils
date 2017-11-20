@@ -16,6 +16,10 @@ macro_rules! executable(
         } else {
             module
         }
+    });
+
+    ($args:expr) => ({
+        ::std::path::Path::new(&$args[0]).file_name().unwrap().to_string_lossy()
     })
 );
 
@@ -209,6 +213,47 @@ macro_rules! pipe_flush(
         }
     )
 );
+
+#[macro_export]
+macro_rules! os_bytes {
+    ($osstr:expr) => ({
+        use ::uucore::os_str_generic::OsStrGenericExt;
+
+        $osstr.elements().map(|x| x.raw()).collect::<Vec<_>>()
+    })
+}
+
+// we have this because byte_println! needs two writes
+#[macro_export]
+macro_rules! os_bytesln {
+    ($osstr:expr) => ({
+        use ::uucore::os_str_generic::OsStrGenericExt;
+
+        let mut bytes = os_bytes!($osstr);
+        bytes.push(::std::ffi::OsStr::new("\n").elements().next().unwrap().raw());
+        bytes
+    })
+}
+
+#[macro_export]
+macro_rules! byte_print {
+    ($bytes:expr) => ({
+        if let Err(f) = ::std::io::stdout().write($bytes) {
+            panic!(f.to_string());
+        }
+    })
+}
+
+// it is probably better to use os_bytesln! and then byte_print!
+#[macro_export]
+macro_rules! byte_println {
+    ($bytes:expr) => ({
+        use ::uucore::os_str_generic::OsStrGenericExt;
+
+        byte_print!($bytes);
+        byte_print!(&[::std::ffi::OsStr::new("\n").elements().next().unwrap().raw()]);
+    })
+}
 
 #[macro_export]
 macro_rules! safe_write(

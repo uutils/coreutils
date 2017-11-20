@@ -9,11 +9,14 @@
  */
 
 use std::io::Result;
+use std::ffi::OsString;
 use uucore::libc::geteuid;
 use uucore::entries::uid2usr;
 
-pub unsafe fn getusername() -> Result<String> {
+pub unsafe fn getusername() -> Result<OsString> {
     // Get effective user id
     let uid = geteuid();
-    uid2usr(uid)
+    // XXX: uid2usr returns a String, which may or may not be fine given that I am not sure if
+    //      there are systems that allow non-utf8 characters in /etc/passwd
+    uid2usr(uid).map(|name| OsString::from(name))
 }

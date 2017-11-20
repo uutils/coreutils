@@ -8,7 +8,7 @@ name = "uu_rm"
 path = "rm.rs"
 
 [dependencies]
-getopts = "0.2.14"
+clap = "2.25"
 walkdir = "1.0.7"
 remove_dir_all = "0.2"
 uucore = { path="../uucore" }

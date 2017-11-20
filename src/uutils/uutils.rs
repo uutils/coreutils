@@ -14,6 +14,8 @@ include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 use std::collections::hash_map::HashMap;
 use std::path::Path;
 use std::env;
+use std::ffi::OsString;
+use std::process;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -35,7 +37,7 @@ fn usage(cmap: &UtilityMap) {
 
 fn main() {
     let umap = util_map();
-    let mut args : Vec<String> = env::args().collect();
+    let mut args: Vec<OsString> = env::args_os().collect();
 
     // try binary name as util name.
     let args0 = args[0].clone();
@@ -43,7 +45,7 @@ fn main() {
     let binary_as_util = binary.file_name().unwrap().to_str().unwrap();
 
     if let Some(&uumain) = umap.get(binary_as_util) {
-        std::process::exit(uumain(args));
+        process::exit(uumain(args));
     }
 
     if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
@@ -58,20 +60,20 @@ fn main() {
                 break;
             }
         }
-        if ! found {
+        if !found {
             println!("{}: applet not found", binary_as_util);
-            std::process::exit(1);
+            process::exit(1);
         }
     }
 
     // try first arg as util name.
-    if args.len() >= 1 {
+    process::exit(if args.len() >= 1 {
 
         let util = &args[0][..];
 
         match umap.get(util) {
             Some(&uumain) => {
-                std::process::exit(uumain(args.clone()));
+                uumain(args)
             }
             None => {
                 if &args[0][..] == "--help" {
@@ -80,25 +82,26 @@ fn main() {
                         let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                std::process::exit(uumain(vec![util.to_owned(), "--help".to_owned()]));
+                                uumain(vec![util.to_owned(), "--help".to_owned()])
                             }
                             None => {
                                 println!("{}: applet not found", util);
-                                std::process::exit(1);
+                                1
                             }
                         }
+                    } else {
+                        usage(&umap);
+                        0
                     }
-                    usage(&umap);
-                    std::process::exit(0);
                 } else {
                     println!("{}: applet not found", util);
-                    std::process::exit(1);
+                    1
                 }
             }
         }
     } else {
         // no arguments provided
         usage(&umap);
-        std::process::exit(0);
-    }
+        0
+    });
 }
