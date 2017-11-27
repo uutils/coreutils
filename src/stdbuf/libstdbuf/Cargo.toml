@@ -1,0 +1,13 @@
+[package]
+name = "libstdbuf"
+version = "0.0.1"
+authors = []
+
+[lib]
+name = "libstdbuf"
+path = "libstdbuf.rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+uucore = { path="../../uucore" }
+libc = "0.2"

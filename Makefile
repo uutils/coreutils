@@ -306,10 +306,10 @@ ifeq (${MULTICALL}, y)
 		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
 else
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(PKG_BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
+		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
 	mkdir -p $(INSTALLDIR_LIB)
-	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/$(lib) $(INSTALLDIR_LIB)/$(lib);)
+	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/build/*/out/$(lib) $(INSTALLDIR_LIB)/$(lib);)
 
 uninstall:
 ifeq (${MULTICALL}, y)

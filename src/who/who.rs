@@ -55,7 +55,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("H", "heading", "print line of column headings");
     opts.optflag("l", "login", "print system login processes");
     opts.optflag("", "lookup", "attempt to canonicalize hostnames via DNS");
-    opts.optflag("m", "m", "only hostname and user associated with stdin");
+    opts.optflag("m", "", "only hostname and user associated with stdin");
     opts.optflag("p", "process", "print active processes spawned by init");
     opts.optflag("q",
                  "count",
