@@ -31,7 +31,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
         mkfile(&at.plus_as_string(TEST_FILE), test.before);
         let perms = at.metadata(TEST_FILE).permissions().mode();
         if perms != test.before {
-            panic!(format!("{}: expected: {:o} got: {:o}", "setting permissions failed", test.after, perms));
+            panic!(format!("{}: expected: {:o} got: {:o}", "setting permissions on test files before actual test run failed", test.after, perms));
         }
 
         for arg in &test.args {
