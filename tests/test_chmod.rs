@@ -59,15 +59,15 @@ fn run_tests(tests: Vec<TestCase>) {
 #[test]
 fn test_chmod_octal() {
     let tests = vec!{
-        TestCase{args: vec!{"0700",  TEST_FILE}, before: 0o000, after: 0o700},
-        TestCase{args: vec!{"0070",  TEST_FILE}, before: 0o000, after: 0o070},
-        TestCase{args: vec!{"0007",  TEST_FILE}, before: 0o000, after: 0o007},
-        TestCase{args: vec!{"-0700", TEST_FILE}, before: 0o700, after: 0o000},
-        TestCase{args: vec!{"-0070", TEST_FILE}, before: 0o060, after: 0o000},
-        TestCase{args: vec!{"-0007", TEST_FILE}, before: 0o001, after: 0o000},
-        TestCase{args: vec!{"+0100", TEST_FILE}, before: 0o600, after: 0o700},
-        TestCase{args: vec!{"+0020", TEST_FILE}, before: 0o050, after: 0o070},
-        TestCase{args: vec!{"+0004", TEST_FILE}, before: 0o003, after: 0o007},
+        TestCase{args: vec!{"0700",  TEST_FILE}, before: 0o100000, after: 0o100700},
+        TestCase{args: vec!{"0070",  TEST_FILE}, before: 0o100000, after: 0o100070},
+        TestCase{args: vec!{"0007",  TEST_FILE}, before: 0o100000, after: 0o100007},
+        TestCase{args: vec!{"-0700", TEST_FILE}, before: 0o100700, after: 0o100000},
+        TestCase{args: vec!{"-0070", TEST_FILE}, before: 0o100060, after: 0o100000},
+        TestCase{args: vec!{"-0007", TEST_FILE}, before: 0o100001, after: 0o100000},
+        TestCase{args: vec!{"+0100", TEST_FILE}, before: 0o100600, after: 0o100700},
+        TestCase{args: vec!{"+0020", TEST_FILE}, before: 0o100050, after: 0o100070},
+        TestCase{args: vec!{"+0004", TEST_FILE}, before: 0o100003, after: 0o100007},
     };
     run_tests(tests);
 }
@@ -80,13 +80,13 @@ fn test_chmod_ugoa() {
         umask(0)
     };
     let tests = vec!{
-        TestCase{args: vec!{"u=rwx", TEST_FILE}, before: 0o000, after: 0o700},
-        TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o000, after: 0o070},
-        TestCase{args: vec!{"o=rwx", TEST_FILE}, before: 0o000, after: 0o007},
-        TestCase{args: vec!{"a=rwx", TEST_FILE}, before: 0o000, after: 0o777},
-        TestCase{args: vec!{"-r", TEST_FILE}, before: 0o777, after: 0o333},
-        TestCase{args: vec!{"-w", TEST_FILE}, before: 0o777, after: 0o555},
-        TestCase{args: vec!{"-x", TEST_FILE}, before: 0o777, after: 0o666},
+        TestCase{args: vec!{"u=rwx", TEST_FILE}, before: 0o100000, after: 0o100700},
+        TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o100000, after: 0o100070},
+        TestCase{args: vec!{"o=rwx", TEST_FILE}, before: 0o100000, after: 0o100007},
+        TestCase{args: vec!{"a=rwx", TEST_FILE}, before: 0o100000, after: 0o100777},
+        TestCase{args: vec!{"-r", TEST_FILE}, before: 0o100777, after: 0o100333},
+        TestCase{args: vec!{"-w", TEST_FILE}, before: 0o100777, after: 0o100555},
+        TestCase{args: vec!{"-x", TEST_FILE}, before: 0o100777, after: 0o100666},
     };
     run_tests(tests);
 
@@ -94,14 +94,14 @@ fn test_chmod_ugoa() {
         umask(0o022);
     }
     let tests = vec!{
-        TestCase{args: vec!{"u=rwx", TEST_FILE}, before: 0o000, after: 0o700},
-        TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o000, after: 0o070},
-        TestCase{args: vec!{"o=rwx", TEST_FILE}, before: 0o000, after: 0o007},
-        TestCase{args: vec!{"a=rwx", TEST_FILE}, before: 0o000, after: 0o777},
-        TestCase{args: vec!{"+rw", TEST_FILE}, before: 0o000, after: 0o644},
-        TestCase{args: vec!{"=rwx", TEST_FILE}, before: 0o000, after: 0o755},
-        TestCase{args: vec!{"-w", TEST_FILE}, before: 0o777, after: 0o577},
-        TestCase{args: vec!{"-x", TEST_FILE}, before: 0o777, after: 0o666},
+        TestCase{args: vec!{"u=rwx", TEST_FILE}, before: 0o100000, after: 0o100700},
+        TestCase{args: vec!{"g=rwx", TEST_FILE}, before: 0o100000, after: 0o100070},
+        TestCase{args: vec!{"o=rwx", TEST_FILE}, before: 0o100000, after: 0o100007},
+        TestCase{args: vec!{"a=rwx", TEST_FILE}, before: 0o100000, after: 0o100777},
+        TestCase{args: vec!{"+rw", TEST_FILE}, before: 0o100000, after: 0o100644},
+        TestCase{args: vec!{"=rwx", TEST_FILE}, before: 0o100000, after: 0o100755},
+        TestCase{args: vec!{"-w", TEST_FILE}, before: 0o100777, after: 0o100577},
+        TestCase{args: vec!{"-x", TEST_FILE}, before: 0o100777, after: 0o100666},
     };
     run_tests(tests);
     unsafe {
@@ -112,11 +112,11 @@ fn test_chmod_ugoa() {
 #[test]
 fn test_chmod_ugo_copy() {
     let tests = vec!{
-        TestCase{args: vec!{"u=g", TEST_FILE}, before: 0o070, after: 0o770},
-        TestCase{args: vec!{"g=o", TEST_FILE}, before: 0o005, after: 0o055},
-        TestCase{args: vec!{"o=u", TEST_FILE}, before: 0o200, after: 0o202},
-        TestCase{args: vec!{"u-g", TEST_FILE}, before: 0o710, after: 0o610},
-        TestCase{args: vec!{"u+g", TEST_FILE}, before: 0o250, after: 0o750},
+        TestCase{args: vec!{"u=g", TEST_FILE}, before: 0o100070, after: 0o100770},
+        TestCase{args: vec!{"g=o", TEST_FILE}, before: 0o100005, after: 0o100055},
+        TestCase{args: vec!{"o=u", TEST_FILE}, before: 0o100200, after: 0o100202},
+        TestCase{args: vec!{"u-g", TEST_FILE}, before: 0o100710, after: 0o100610},
+        TestCase{args: vec!{"u+g", TEST_FILE}, before: 0o100250, after: 0o100750},
     };
     run_tests(tests);
 }
@@ -129,7 +129,7 @@ fn test_chmod_many_options() {
         umask(0)
     };
     let tests = vec!{
-        TestCase{args: vec!{"-r,a+w", TEST_FILE}, before: 0o444, after: 0o222},
+        TestCase{args: vec!{"-r,a+w", TEST_FILE}, before: 0o100444, after: 0o100222},
     };
     run_tests(tests);
     unsafe {
@@ -140,8 +140,8 @@ fn test_chmod_many_options() {
 #[test]
 fn test_chmod_reference_file() {
     let tests = vec!{
-        TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
-        TestCase{args: vec!{"a-w", "--reference", REFERENCE_FILE, TEST_FILE}, before: 0o070, after: 0o247},
+        TestCase{args: vec!{"--reference", REFERENCE_FILE, TEST_FILE}, before: 0o100070, after: 0o100247},
+        TestCase{args: vec!{"a-w", "--reference", REFERENCE_FILE, TEST_FILE}, before: 0o100070, after: 0o100247},
     };
     let (at, ucmd) = at_and_ucmd!();
     mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
