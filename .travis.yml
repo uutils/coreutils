@@ -7,6 +7,12 @@ matrix:
     - rust: stable
       os: osx
       env: FEATURES=''
+    - rust: 1.20.0
+      os: linux
+      env: FEATURES=''
+    - rust: 1.20.0
+      os: osx
+      env: FEATURES=''
     - rust: beta
       os: linux
       env: FEATURES=''

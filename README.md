@@ -21,6 +21,13 @@ are either old, abandoned, hosted on CVS, written in platform-specific C, etc.
 Rust provides a good, platform-agnostic way of writing systems utils that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
+Rust Version
+------------
+
+uutils supports and is tested on version `1.20.0` and above (including beta and nightly builds) of `rustc`.
+
+On Windows, only the nightly version is tested currently.
+
 Build Instructions
 ------------------
 
