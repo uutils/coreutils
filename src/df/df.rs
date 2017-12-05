@@ -17,7 +17,10 @@ extern crate clap;
 extern crate winapi;
 
 use clap::{Arg, App, ArgMatches};
-use libc::uid_t;
+#[cfg(unix)]
+use libc::{uid_t, fsid_t};
+#[cfg(target_os = "macos")]
+use libc::statfs;
 use std::{env, io, path, ptr, mem, slice, time};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
@@ -57,67 +60,6 @@ static OPT_VERSION: &str = "version";
 
 static MOUNT_OPT_BIND: &str = "bind";
 
-#[cfg(any(target_os = "freebsd", target_os = "macos"))]
-#[repr(C)]
-#[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
-struct fsid_t {
-    val: [i32; 2usize],
-}
-
-#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-#[repr(C)]
-#[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
-struct statfs {
-    f_bsize: u32,
-    f_iosize: i32,
-    f_blocks: u64,
-    f_bfree: u64,
-    f_bavail: u64,
-    f_files: u64,
-    f_ffree: u64,
-    f_fsid: fsid_t,
-    f_owner: uid_t,
-    f_type: u32,
-    f_flags: u32,
-    f_fssubtype: u32,
-    f_fstypename: [c_char; 16usize],
-    f_mntonname: [c_char; 1024usize],
-    f_mntfromname: [c_char; 1024usize],
-    f_reserved: [u32; 8usize],
-}
-
-#[cfg(all(target_os = "freebsd", not(all(target_os = "macos", target_arch = "x86_64"))))]
-#[repr(C)]
-#[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
-struct statfs {
-    f_version: u32,
-    f_type: u32,
-    f_flags: u64,
-    f_bsize: u64,
-    f_iosize: u64,
-    f_blocks: u64,
-    f_bfree: u64,
-    f_bavail: i64,
-    f_files: u64,
-    f_ffree: i64,
-    f_syncwrites: u64,
-    f_asyncwrites: u64,
-    f_syncreads: u64,
-    f_asyncreads: u64,
-    f_spare: [u64; 10usize],
-    f_namemax: u32,
-    f_owner: uid_t,
-    f_fsid: fsid_t,
-    f_charspare: [c_char; 80usize],
-    f_fstypename: [c_char; 16usize],
-    f_mntfromname: [c_char; 88usize],
-    f_mntonname: [c_char; 88usize],
-}
-
-
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
 struct FsSelector {
@@ -149,6 +91,35 @@ struct MountInfo {
     dummy: bool,
 }
 
+#[cfg(all(target_os = "freebsd", not(all(target_os = "macos", target_arch = "x86_64"))))]
+#[repr(C)]
+#[derive(Copy, Clone)]
+#[allow(non_camel_case_types)]
+struct statfs {
+    f_version: u32,
+    f_type: u32,
+    f_flags: u64,
+    f_bsize: u64,
+    f_iosize: u64,
+    f_blocks: u64,
+    f_bfree: u64,
+    f_bavail: i64,
+    f_files: u64,
+    f_ffree: i64,
+    f_syncwrites: u64,
+    f_asyncwrites: u64,
+    f_syncreads: u64,
+    f_asyncreads: u64,
+    f_spare: [u64; 10usize],
+    f_namemax: u32,
+    f_owner: uid_t,
+    f_fsid: fsid_t,
+    f_charspare: [c_char; 80usize],
+    f_fstypename: [c_char; 16usize],
+    f_mntfromname: [c_char; 88usize],
+    f_mntonname: [c_char; 88usize],
+}
+
 #[derive(Debug, Clone)]
 struct FsUsage {
     blocksize: u64,
@@ -166,13 +137,6 @@ struct Filesystem {
     usage: FsUsage,
 }
 
-macro_rules! exit_with_error(
-    ($($msg:tt)+) => ({
-        show_error!($($msg)+);
-        exit!(1);
-    })
-);
-
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
@@ -189,13 +153,13 @@ extern "C" {
 }
 
 #[cfg(any(target_os = "freebsd", target_os = "macos"))]
-impl statfs {
-    fn to_mount_info(&self) -> MountInfo {
+impl From<statfs> for MountInfo {
+    fn from(statfs: statfs) -> Self {
         let mut info = MountInfo {
             dev_id: -1,
-            dev_name: unsafe { CStr::from_ptr(&self.f_mntfromname[0]).to_string_lossy().into_owned() },
-            fs_type: unsafe { CStr::from_ptr(&self.f_fstypename[0]).to_string_lossy().into_owned() },
-            mount_dir: unsafe { CStr::from_ptr(&self.f_mntonname[0]).to_string_lossy().into_owned() },
+            dev_name: unsafe { CStr::from_ptr(&statfs.f_mntfromname[0]).to_string_lossy().into_owned() },
+            fs_type: unsafe { CStr::from_ptr(&statfs.f_fstypename[0]).to_string_lossy().into_owned() },
+            mount_dir: unsafe { CStr::from_ptr(&statfs.f_mntonname[0]).to_string_lossy().into_owned() },
             mount_root: "".to_string(),
             mount_option: "".to_string(),
             remote: false,
@@ -284,7 +248,7 @@ impl MountInfo {
         // set MountInfo::remote
         if cfg!(windows) {
             // TODO: how to invoke GetDriverType?
-            exit_with_error!("unimplemented");
+            unimplemented!();
         } else {
             if self.dev_name.find(":").is_some()
                 || (self.dev_name.starts_with("//")
@@ -392,13 +356,13 @@ fn read_fs_list() -> Vec<MountInfo> {
         let mut mptr: *mut statfs = ptr::null_mut();
         let len = unsafe { getmntinfo(&mut mptr, 1 as c_int) };
         if len < 0 {
-            exit_with_error!("getmntinfo() failed");
+            crash!(EXIT_ERR, "getmntinfo failed");
         }
         let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
-        return mounts.iter().map(|m| m.to_mount_info()).collect::<Vec<_>>();
+        return mounts.into_iter().map(|m| MountInfo::from(*m)).collect::<Vec<_>>();
     }
     // panic for other os
-    exit_with_error!("unimplemented");
+    unimplemented!();
 }
 
 fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
@@ -584,21 +548,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
         .collect::<Vec<_>>();
 
-    let mut header = vec!["Filesystem", "Mounted on"];
-    if opt.show_inode_instead {
-        header.insert(1, "Inodes");
-        header.insert(2, "Iused");
-        header.insert(3, "IFree");
-        header.insert(4, "IUse%");
-    } else {
-        header.insert(1, if opt.human_readable_base == -1 { "1k-blocks" } else { "Size" });
-        header.insert(2, "Used");
-        header.insert(3, "Available");
-        header.insert(4, "Use%");
-    }
+    // set headers
+    let mut header = vec!["Filesystem"];
     if opt.show_fs_type {
-        header.insert(1, "Type");
+        header.push("Type");
     }
+    header.extend_from_slice(&if opt.show_inode_instead {
+        ["Inodes", "Iused", "IFree", "IUses%"]
+    } else {
+        [if opt.human_readable_base == -1 { "1k-blocks" } else { "Size" }, "Used", "Available", "Use%"]
+    });
+    header.push("Mounted on");
+
     for (idx, title) in header.iter().enumerate() {
         if idx == 0 || idx == header.len() - 1 {
             print!("{0: <16} ", title);

@@ -110,6 +110,7 @@ UNIX_PROGS := \
   chmod \
   chown \
   chroot \
+  df \
   du \
   groups \
   hostid \
@@ -156,6 +157,7 @@ TEST_PROGS  := \
 	cut \
 	dircolors \
 	dirname \
+	df \
 	echo \
 	env \
 	expr \
