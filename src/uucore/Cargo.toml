@@ -7,10 +7,7 @@ authors = []
 getopts = "0.2.14"
 time = { version = "0.1.38", optional = true }
 data-encoding = { version = "^1.1", optional = true }
-
-[dependencies.libc]
-git = "https://github.com/rust-lang/libc.git"
-optional = true
+libc = { version = "0.2.34", optional = true }
 
 [features]
 fs = ["libc"]
