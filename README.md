@@ -21,8 +21,16 @@ are either old, abandoned, hosted on CVS, written in platform-specific C, etc.
 Rust provides a good, platform-agnostic way of writing systems utils that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
-Rust Version
+Requirements
 ------------
+
+* Rust (`cargo`, `rustc`)
+* GNU Make (an option to build on Unix and to install on every platform)
+* CMake (used by Oniguruma, which is required for `expr`)
+* [Sphinx](http://www.sphinx-doc.org/) (for documentation)
+* gzip (for installing documentation)
+
+### Rust Version ###
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
 The current oldest supported version of the Rust compiler is `1.22.0`, but `1.20.0` is
@@ -34,25 +42,62 @@ On both Windows and Redox, only the nightly version is tested currently.
 Build Instructions
 ------------------
 
-To simply build all available utilities:
-```
-make
+There are currently two methods to build uutils: GNU Make and Cargo.  However,
+while there may be two methods, both systems are required to build on Unix
+(only Cargo is required on Windows).
+
+First, for both methods, we need to fetch the repository:
+```bash
+$ git clone https://github.com/uutils/coreutils
+$ cd coreutils
 ```
 
-(on Windows use [MinGW/MSYS](http://www.mingw.org/wiki/MSYS) or `Cygwin` make and make sure you have `rustc` in `PATH`)
+### Cargo ###
+
+Building uutils using Cargo is easy because the process is the same as for
+every other Rust program:
+```bash
+# to keep debug information, compile without --release
+$ cargo build --release
+```
+
+If you don't want to build every utility available on your platform into the
+multicall binary (the Busybox-esque binary), you can also specify which ones
+you want to build manually.  For example:
+```bash
+$ cargo build --features "base32 cat echo rm" --no-default-features
+```
+
+If you don't even want to build the multicall binary and would prefer to just
+build the utilities as individual binaries, that is possible too.  For example:
+```bash
+$ cargo build -p base32 -p cat -p echo -p rm
+```
+
+### GNU Make ###
+
+Building using `make` is a simple process as well.
+
+To simply build all available utilities:
+```bash
+$ make
+```
 
 To build all but a few of the available utilities:
 ```
-make SKIP_UTILS='UTILITY_1 UTILITY_2'
+$ make SKIP_UTILS='UTILITY_1 UTILITY_2'
 ```
 
 To build only a few of the available utilities:
 ```
-make UTILS='UTILITY_1 UTILITY_2'
+$ make UTILS='UTILITY_1 UTILITY_2'
 ```
 
 Installation Instructions
 -------------------------
+
+Unfortunately, due to limitations with Cargo, uutils requires `make` to
+install.
 
 To install all available utilities:
 ```
@@ -81,11 +126,14 @@ make MULTICALL=y install
 
 Set install parent directory (default value is /usr/local):
 ```
+# DESTDIR is also supported
 make PREFIX=/my/path install
 ```
 
 Uninstallation Instructions
 ---------------------------
+
+Likewise, uninstalling requires `make`.
 
 To uninstall all utilities:
 ```
@@ -104,11 +152,29 @@ make MULTICALL=y uninstall
 
 To uninstall from a custom parent directory:
 ```
+# DESTDIR is also supported
 make PREFIX=/my/path uninstall
 ```
 
 Test Instructions
 -----------------
+
+Testing can be done using either Cargo or `make`.
+
+### Cargo ###
+
+Just like with building, we follow the standard procedure for testing using
+Cargo:
+```bash
+$ cargo test
+```
+
+If you would prefer to test a select few utilities:
+```bash
+$ cargo test --features "chmod mv tail" --no-default-features
+```
+
+### GNU Make ###
 
 To simply test all available utilities:
 ```
@@ -130,10 +196,11 @@ To include tests for unimplemented behavior:
 make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
-Run busybox tests
+Run Busybox Tests
 -----------------
 
-This testing functionality is only available on *nix operating systems
+This testing functionality is only available on *nix operating systems and
+requires `make`.
 
 To run busybox's tests for all utilities for which busybox has tests
 ```
@@ -153,7 +220,7 @@ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 Contribute
 ----------
 
-To contribute to coreutils, please see [CONTRIBUTING](CONTRIBUTING.md).
+To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 Utilities
 ---------
@@ -161,7 +228,7 @@ Utilities
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr | csplit |
+| base32    | expr      | csplit |
 | base64    | install   | dd     |
 | basename  | ls        | df     |
 | cat       | more      | join   |
