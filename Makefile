@@ -22,9 +22,15 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= /bin
 LIBDIR ?= /lib
+MANDIR ?= /man/man1
 
 INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
 INSTALLDIR_LIB=$(DESTDIR)$(PREFIX)$(LIBDIR)
+INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)/share/$(MANDIR)
+$(shell test -d $(INSTALLDIR_MAN))
+ifneq ($(.SHELLSTATUS),0)
+override INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)$(MANDIR)
+endif
 
 #prefix to apply to uutils binary and all tool binaries
 PROG_PREFIX ?=
@@ -34,6 +40,7 @@ PROG_PREFIX ?=
 BASEDIR       ?= $(shell pwd)
 BUILDDIR      := $(BASEDIR)/target/${PROFILE}
 PKG_BUILDDIR  := $(BUILDDIR)/deps
+DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
 BUSYBOX_VER  := 1.24.1
@@ -215,11 +222,6 @@ TEST_NO_FAIL_FAST :=--no-fail-fast
 TEST_SPEC_FEATURE := test_unimplemented
 endif
 
-define BUILD_EXE
-build_exe_$(1):
-	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} -p $(1)
-endef
-
 define TEST_BUSYBOX
 test_busybox_$(1):
 	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
@@ -257,14 +259,18 @@ all: build
 do_install = $(INSTALL) ${1}
 use_default := 1
 
-$(foreach util,$(EXES),$(eval $(call BUILD_EXE,$(util))))
-
-build-pkgs: $(addprefix build_exe_,$(EXES))
+build-pkgs:
+ifneq (${MULTICALL}, y)
+	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p $(pkg))
+endif
 
 build-uutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
-build: build-uutils build-pkgs
+build-manpages:
+	cd $(DOCSDIR) && make man
+
+build: build-uutils build-pkgs build-manpages
 
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
@@ -295,28 +301,35 @@ endif
 
 clean:
 	$(RM) $(BUILDDIR)
+	cd $(DOCSDIR) && make clean
 
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 install: build
 	mkdir -p $(INSTALLDIR_BIN)
+	mkdir -p $(INSTALLDIR_LIB)
+	mkdir -p $(INSTALLDIR_MAN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
-	$(foreach prog, $(filter-out uutils, $(INSTALLEES)), \
-		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog);)
+	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out uutils, $(INSTALLEES)), \
+		ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog) &&) :
+	cat $(DOCSDIR)/_build/man/uutils.1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)uutils.1.gz
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
-	mkdir -p $(INSTALLDIR_LIB)
-	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/build/*/out/$(lib) $(INSTALLDIR_LIB)/$(lib);)
+	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/build/*/out/$(lib) $(INSTALLDIR_LIB)/$(PROG_PREFIX)$(lib) &&) :
+	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
+		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
 
 uninstall:
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)uutils)
 endif
+	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)uutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(INSTALLDIR_LIB)/,$(LIBS))
+	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
+	rm -f $(addprefix $(INSTALLDIR_LIB)/$(PROG_PREFIX),$(LIBS))
 
-.PHONY: all build test distclean clean busytest install uninstall
+.PHONY: all build build-uutils build-pkgs build-docs test distclean clean busytest install uninstall
