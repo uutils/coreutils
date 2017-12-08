@@ -2,6 +2,7 @@
 name = "tee"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_tee"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "tee"
-path = "main.rs"
+path = "../../uumain.rs"

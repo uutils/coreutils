@@ -2,6 +2,7 @@
 name = "mkfifo"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_mkfifo"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "mkfifo"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,6 +2,7 @@
 name = "paste"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_paste"
@@ -13,4 +14,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "paste"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,6 +2,7 @@
 name = "tty"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_tty"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "tty"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,6 +2,7 @@
 name = "pinky"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_pinky"
@@ -14,4 +15,4 @@ features = ["utmpx", "entries"]
 
 [[bin]]
 name = "pinky"
-path = "main.rs"
+path = "../../uumain.rs"

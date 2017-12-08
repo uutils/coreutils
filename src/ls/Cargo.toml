@@ -2,6 +2,7 @@
 name = "ls"
 version = "0.0.1"
 authors = ["Jeremiah Peschka <jeremiah.peschka@gmail.com>"]
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_ls"
@@ -23,4 +24,4 @@ features = ["entries"]
 
 [[bin]]
 name = "ls"
-path = "main.rs"
+path = "../../uumain.rs"

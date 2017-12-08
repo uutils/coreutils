@@ -19,9 +19,7 @@ use std::io::{self, stdin, Read, Write, BufReader};
 use std::mem;
 use std::path::Path;
 
-use crc_table::CRC_TABLE;
-
-mod crc_table;
+include!(concat!(env!("OUT_DIR"), "/crc_table.rs"));
 
 static SYNTAX: &'static str = "[OPTIONS] [FILE]..."; 
 static SUMMARY: &'static str = "Print CRC and size for each file"; 

@@ -2,6 +2,7 @@
 name = "echo"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_echo"
@@ -12,4 +13,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "echo"
-path = "main.rs"
+path = "../../uumain.rs"

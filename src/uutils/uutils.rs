@@ -14,6 +14,9 @@ include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 use std::collections::hash_map::HashMap;
 use std::path::Path;
 use std::env;
+use std::io::Write;
+
+extern crate uucore;
 
 static NAME: &'static str = "uutils";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -34,6 +37,8 @@ fn usage(cmap: &UtilityMap) {
 }
 
 fn main() {
+    uucore::panic::install_sigpipe_hook();
+
     let umap = util_map();
     let mut args : Vec<String> = env::args().collect();
 
@@ -80,7 +85,9 @@ fn main() {
                         let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                std::process::exit(uumain(vec![util.to_owned(), "--help".to_owned()]));
+                                let code = uumain(vec![util.to_owned(), "--help".to_owned()]);
+                                std::io::stdout().flush().expect("could not flush stdout");
+                                std::process::exit(code);
                             }
                             None => {
                                 println!("{}: applet not found", util);

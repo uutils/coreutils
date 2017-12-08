@@ -2,6 +2,7 @@
 name = "whoami"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_whoami"
@@ -19,4 +20,4 @@ features = ["entries"]
 
 [[bin]]
 name = "whoami"
-path = "main.rs"
+path = "../../uumain.rs"

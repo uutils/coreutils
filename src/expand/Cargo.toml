@@ -2,6 +2,7 @@
 name = "expand"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_expand"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "expand"
-path = "main.rs"
+path = "../../uumain.rs"
