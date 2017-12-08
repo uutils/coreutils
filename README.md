@@ -24,7 +24,8 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 Rust Version
 ------------
 
-uutils supports and is tested on version `1.20.0` and above (including beta and nightly builds) of `rustc`.
+uutils follows Rust's release channels and is tested against stable, beta and nightly.
+To check which one is the latest stable version of Rust visit [Rust's releases page](https://github.com/rust-lang/rust/releases).
 
 On Windows, only the nightly version is tested currently.
 
