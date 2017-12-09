@@ -14,6 +14,8 @@ extern crate clap;
 #[macro_use] extern crate uucore;
 
 #[cfg(windows)]
+extern crate kernel32;
+#[cfg(windows)]
 extern crate winapi;
 
 use clap::{Arg, App, ArgMatches};
@@ -22,20 +24,28 @@ use libc::{uid_t, fsid_t};
 #[cfg(target_os = "macos")]
 use libc::statfs;
 use std::{env, io, path, ptr, mem, slice, time};
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsString, OsStr};
+#[cfg(unix)]
 use std::os::raw::{c_char, c_int};
 use std::fs::{File};
 use std::collections::HashSet;
 use std::io::{Write, BufReader, BufRead};
 use std::cell::Cell;
 use std::collections::HashMap;
+#[cfg(windows)]
+use kernel32::{GetDriveTypeW, FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, QueryDosDeviceW,
+    GetVolumeInformationW, GetLastError, GetVolumePathNamesForVolumeNameW, GetDiskFreeSpaceW};
+#[cfg(windows)]
+use std::os::windows::prelude::*;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
 
-static EXIT_OK: i32 = 0;
-static EXIT_ERR: i32 = 1;
+const EXIT_OK: i32 = 0;
+const EXIT_ERR: i32 = 1;
+
+#[cfg(windows)] const MAX_PATH: usize = 266;
 
 #[cfg(target_os = "linux")] static LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(target_os = "linux")] static LINUX_MTAB: &str = "/etc/mtab";
@@ -81,7 +91,8 @@ struct Options {
 
 #[derive(Debug, Clone)]
 struct MountInfo {
-    dev_id: i32,
+    // it stores `volume_name` in windows platform and `dev_id` in unix platform
+    dev_id: String, 
     dev_name: String,
     fs_type: String,
     mount_dir: String,
@@ -137,6 +148,19 @@ struct Filesystem {
     usage: FsUsage,
 }
 
+#[cfg(windows)]
+macro_rules! String2LPWSTR {
+    ($str: expr) => (OsString::from($str.clone()).as_os_str().encode_wide().chain(Some(0)).collect::<Vec<u16>>().as_ptr())
+}
+
+#[cfg(windows)]
+#[allow(non_snake_case)]
+fn LPWSTR2String(buf: &[u16]) -> String {
+    let len = unsafe { libc::wcslen(buf.as_ptr()) };
+    OsString::from_wide(&buf[..len as usize]).into_string().unwrap()
+}
+
+
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
@@ -156,7 +180,7 @@ extern "C" {
 impl From<statfs> for MountInfo {
     fn from(statfs: statfs) -> Self {
         let mut info = MountInfo {
-            dev_id: -1,
+            dev_id: "".to_string(),
             dev_name: unsafe { CStr::from_ptr(&statfs.f_mntfromname[0]).to_string_lossy().into_owned() },
             fs_type: unsafe { CStr::from_ptr(&statfs.f_fstypename[0]).to_string_lossy().into_owned() },
             mount_dir: unsafe { CStr::from_ptr(&statfs.f_mntonname[0]).to_string_lossy().into_owned() },
@@ -226,9 +250,9 @@ impl MountInfo {
         unsafe {
             let mut stat = mem::zeroed();
             if libc::stat(path.as_ptr(), &mut stat) == 0 {
-                self.dev_id = stat.st_dev as i32;
+                self.dev_id = (stat.st_dev as i32).to_string();
             } else {
-                self.dev_id = -1;
+                self.dev_id = "".to_string();
             }
         }
         // set MountInfo::dummy
@@ -246,10 +270,12 @@ impl MountInfo {
                 && self.mount_option.find(MOUNT_OPT_BIND).is_none(),
         }
         // set MountInfo::remote
-        if cfg!(windows) {
-            // TODO: how to invoke GetDriverType?
-            unimplemented!();
-        } else {
+        #[cfg(windows)] {
+            self.remote = winapi::winbase::DRIVE_REMOTE == unsafe {
+                GetDriveTypeW(String2LPWSTR!(self.mount_root))
+            };
+        }
+        #[cfg(unix)] {
             if self.dev_name.find(":").is_some()
                 || (self.dev_name.starts_with("//")
                     && self.fs_type == "smbfs" || self.fs_type == "cifs")
@@ -266,7 +292,7 @@ impl MountInfo {
         match file_name {
             "/proc/self/mountinfo" => {
                 let mut m = MountInfo {
-                    dev_id: -1,
+                    dev_id: "".to_string(),
                     dev_name: raw[8].to_string(),
                     fs_type: raw[7].to_string(),
                     mount_root: raw[3].to_string(),
@@ -280,7 +306,7 @@ impl MountInfo {
             },
             "/etc/mtab" => {
                 let mut m = MountInfo {
-                    dev_id: -1,
+                    dev_id: "".to_string(),
                     dev_name: raw[0].to_string(),
                     fs_type: raw[2].to_string(),
                     mount_root: "".to_string(),
@@ -294,6 +320,59 @@ impl MountInfo {
             },
             _ => None
         }
+    }
+     #[cfg(windows)]
+    fn new(mut volume_name: String) -> Option<MountInfo> {
+        let mut dev_name_buf = [0u16; MAX_PATH];
+        volume_name.pop();
+        let dev_name_len = unsafe { QueryDosDeviceW(
+            OsString::from(volume_name.clone()).as_os_str().encode_wide().chain(Some(0)).skip(4).collect::<Vec<u16>>().as_ptr(),
+            dev_name_buf.as_mut_ptr(), dev_name_buf.len() as winapi::DWORD) };
+        volume_name.push('\\');
+        let dev_name = LPWSTR2String(&dev_name_buf);
+
+        let mut mount_root_buf = [0u16; MAX_PATH];
+        let success = unsafe {
+            GetVolumePathNamesForVolumeNameW(
+                String2LPWSTR!(volume_name),
+                mount_root_buf.as_mut_ptr(),
+                mount_root_buf.len() as winapi::DWORD,
+                ptr::null_mut()
+            )
+        };
+        if 0 == success {
+            // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
+            return None;
+        }         
+        let mount_root = LPWSTR2String(&mount_root_buf);
+
+        let mut fs_type_buf = [0u16; MAX_PATH];
+        let success = unsafe {
+            GetVolumeInformationW(
+                String2LPWSTR!(mount_root),
+                ptr::null_mut(),
+                0 as winapi::DWORD,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                fs_type_buf.as_mut_ptr(),
+                fs_type_buf.len() as winapi::DWORD
+            )
+        };
+        let fs_type = if 0 != success { Some(LPWSTR2String(&fs_type_buf)) } else { None };
+
+        let mut mn_info = MountInfo {
+            dev_id: volume_name,
+            dev_name,
+            fs_type: fs_type.unwrap_or("".to_string()),
+            mount_root,
+            mount_dir: "".to_string(),
+            mount_option: "".to_string(),
+            remote: false,
+            dummy: false,
+        };
+        mn_info.set_missing_fields();
+        Some(mn_info)
     }
 }
 
@@ -334,7 +413,10 @@ impl Filesystem {
                 })
             }
         }
-        // TODO: add windows support
+        #[cfg(windows)] {
+            // TODO: add windows support
+            None
+        }
     }
 }
 
@@ -361,6 +443,35 @@ fn read_fs_list() -> Vec<MountInfo> {
         let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
         return mounts.into_iter().map(|m| MountInfo::from(*m)).collect::<Vec<_>>();
     }
+    #[cfg(windows)] {
+        let mut volume_name_buf = [0u16; MAX_PATH];
+        let find_handle = unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as winapi::DWORD) };
+        if winapi::shlobj::INVALID_HANDLE_VALUE == find_handle {
+            crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", unsafe { GetLastError() });
+        }
+        let mut mounts = Vec::<MountInfo>::new();
+        loop {
+            let volume_name = LPWSTR2String(&volume_name_buf);
+            if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with("\\") {
+                show_warning!("A bad path was skipped: {}", volume_name);
+                continue;
+            }
+            if let Some(m) = MountInfo::new(volume_name) {
+                mounts.push(m);
+            }
+            if 0 == unsafe { FindNextVolumeW(find_handle, volume_name_buf.as_mut_ptr(), volume_name_buf.len() as winapi::DWORD) } {
+                let err = unsafe { GetLastError() };
+                if err != winapi::ERROR_NO_MORE_FILES {
+                    crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
+                }
+                break;
+            }
+        }
+        unsafe {
+            FindVolumeClose(find_handle);
+        }
+        return mounts;
+    }
     // panic for other os
     unimplemented!();
 }
@@ -372,9 +483,9 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
             || !opt.fs_selector.should_select(&mi.fs_type) {
             None
         } else {
-            Some((mi.dev_id, mi))
+            Some((mi.dev_id.clone(), mi))
         }
-    }).fold(HashMap::<i32, Cell<MountInfo>>::new(), |mut acc, (id, mi)| {
+    }).fold(HashMap::<String, Cell<MountInfo>>::new(), |mut acc, (id, mi)| {
         if acc.contains_key(&id) {
             let seen = acc.get(&id).unwrap().replace(mi.clone());
             let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
@@ -512,6 +623,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.is_present(OPT_VERSION) {
         println!("{} {}", executable!(), VERSION);
         return EXIT_OK;
+    }
+
+    #[cfg(windows)] {
+        if matches.is_present(OPT_INODES) {
+            println!("{}: {}", executable!(), "doesn't support -i option");
+            return EXIT_OK;
+        }
     }
 
     let mut opt = Options::new();

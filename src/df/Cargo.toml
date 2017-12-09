@@ -12,6 +12,10 @@ clap = "2.24.1"
 libc = "0.2.26"
 uucore = { path="../uucore" }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+kernel32-sys = "*"
+winapi = "*"
+
 [[bin]]
 name = "df"
 path = "main.rs"
