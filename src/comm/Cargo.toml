@@ -2,6 +2,7 @@
 name = "comm"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_comm"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "comm"
-path = "main.rs"
+path = "../../uumain.rs"

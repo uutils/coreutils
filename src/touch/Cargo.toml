@@ -2,6 +2,7 @@
 name = "touch"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_touch"
@@ -19,4 +20,4 @@ features = ["libc"]
 
 [[bin]]
 name = "touch"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,6 +2,7 @@
 name = "install"
 version = "0.0.1"
 authors = ["Ben Eills <ben@beneills.com>"]
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_install"
@@ -17,4 +18,4 @@ time = "0.1.38"
 
 [[bin]]
 name = "install"
-path = "main.rs"
+path = "../../uumain.rs"

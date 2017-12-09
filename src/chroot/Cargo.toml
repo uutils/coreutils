@@ -2,6 +2,7 @@
 name = "chroot"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_chroot"
@@ -17,4 +18,4 @@ features = ["entries"]
 
 [[bin]]
 name = "chroot"
-path = "main.rs"
+path = "../../uumain.rs"

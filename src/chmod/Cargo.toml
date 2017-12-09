@@ -2,6 +2,7 @@
 name = "chmod"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_chmod"
@@ -14,4 +15,4 @@ walker = "1.0.0"
 
 [[bin]]
 name = "chmod"
-path = "main.rs"
+path = "../../uumain.rs"

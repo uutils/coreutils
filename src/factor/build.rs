@@ -18,8 +18,11 @@
 #![cfg_attr(test, allow(dead_code))]
 
 use sieve::Sieve;
-use std::env::args;
+use std::env::{self, args};
+use std::fs::File;
+use std::io::Write;
 use std::num::Wrapping;
+use std::path::Path;
 use std::u64::MAX as MAX_U64;
 
 #[cfg(test)]
@@ -29,6 +32,9 @@ use numeric::is_prime;
 mod numeric;
 
 mod sieve;
+
+#[path = "../../mkmain.rs"]
+mod mkmain;
 
 // extended Euclid algorithm
 // precondition: a does not divide 2^64
@@ -68,10 +74,15 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
 
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
+    mkmain::main();
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let mut file = File::create(&Path::new(&out_dir).join("prime_table.rs")).unwrap();
+
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
     let n = args().skip(1).next().unwrap_or("1027".to_string()).parse::<usize>().ok().unwrap_or(1027);
 
-    print!("{}", PREAMBLE);
+    write!(file, "{}", PREAMBLE).unwrap();
     let mut cols = 3;
 
     // we want a total of n + 1 values
@@ -85,17 +96,17 @@ fn main() {
         // format the table
         let outstr = format!("({}, {}, {}),", x, inv_mod_u64(x).unwrap(), MAX_U64 / x);
         if cols + outstr.len() > MAX_WIDTH {
-            print!("\n    {}", outstr);
+            write!(file, "\n    {}", outstr).unwrap();
             cols = 4 + outstr.len();
         } else {
-            print!(" {}", outstr);
+            write!(file, " {}", outstr).unwrap();
             cols += 1 + outstr.len();
         }
 
         x = next;
     }
 
-    print!("\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n", x);
+    write!(file, "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n", x).unwrap();
 }
 
 #[test]

@@ -8,27 +8,34 @@
 * file that was distributed with this source code.
 */
 
+use std::env;
 use std::fs::File;
 use std::io::Write;
+use std::path::Path;
 
 static CRC_TABLE_LEN: usize = 256;
 
+#[path = "../../mkmain.rs"]
+mod mkmain;
+
 fn main() {
+    mkmain::main();
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+
     let mut table = Vec::with_capacity(CRC_TABLE_LEN);
-    for num in (0 .. CRC_TABLE_LEN) {
+    for num in 0..CRC_TABLE_LEN {
         table.push(crc_entry(num as u8) as u32);
     }
-    let file = File::create("crc_table.rs").unwrap_or_else(|e| panic!("{}", e));
-    write!(&file, "/* auto-generated (DO NOT EDIT) */
-
-pub static CRC_TABLE: [u32; {}] = {:?};", CRC_TABLE_LEN, table).unwrap();
+    let file = File::create(&Path::new(&out_dir).join("crc_table.rs")).unwrap();
+    write!(&file, "const CRC_TABLE: [u32; {}] = {:?};", CRC_TABLE_LEN, table).unwrap();
 }
 
 #[inline]
 fn crc_entry(input: u8) -> u32 {
     let mut crc = (input as u32) << 24;
 
-    for _ in (0 .. 8) {
+    for _ in 0..8 {
         if crc & 0x80000000 != 0 {
             crc <<= 1;
             crc ^= 0x04c11db7;

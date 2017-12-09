@@ -15,7 +15,9 @@ libstdbuf = { path="libstdbuf" }
 
 [build-dependencies]
 cc = "1.0"
+glob = "0.2"
+libstdbuf = { path = "libstdbuf" }
 
 [[bin]]
 name = "stdbuf"
-path = "main.rs"
+path = "../../uumain.rs"

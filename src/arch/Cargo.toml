@@ -2,6 +2,7 @@
 name = "arch"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_arch"
@@ -14,4 +15,4 @@ features = ["utsname"]
 
 [[bin]]
 name = "arch"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,6 +2,7 @@
 name = "realpath"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_realpath"
@@ -13,4 +14,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "realpath"
-path = "main.rs"
+path = "../../uumain.rs"

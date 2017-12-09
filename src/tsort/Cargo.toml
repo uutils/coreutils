@@ -2,6 +2,7 @@
 name = "tsort"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_tsort"
@@ -13,4 +14,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "tsort"
-path = "main.rs"
+path = "../../uumain.rs"

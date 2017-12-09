@@ -2,6 +2,7 @@
 name = "fold"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_fold"
@@ -12,4 +13,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "fold"
-path = "main.rs"
+path = "../../uumain.rs"

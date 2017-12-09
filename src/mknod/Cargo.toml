@@ -2,6 +2,7 @@
 name = "mknod"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_mknod"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "mknod"
-path = "main.rs"
+path = "../../uumain.rs"

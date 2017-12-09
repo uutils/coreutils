@@ -2,6 +2,7 @@
 name = "readlink"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_readlink"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "readlink"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -13,4 +13,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "factor"
-path = "main.rs"
+path = "../../uumain.rs"

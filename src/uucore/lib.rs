@@ -7,6 +7,8 @@ mod macros;
 #[macro_use]
 pub mod coreopts;
 
+pub mod panic;
+
 #[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(feature = "utf8")]

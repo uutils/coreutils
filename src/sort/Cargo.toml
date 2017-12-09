@@ -2,6 +2,7 @@
 name = "sort"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_sort"
@@ -15,4 +16,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "sort"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,6 +2,7 @@
 name = "base64"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_base64"
@@ -12,4 +13,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "base64"
-path = "main.rs"
+path = "../../uumain.rs"

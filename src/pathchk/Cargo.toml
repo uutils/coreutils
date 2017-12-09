@@ -2,6 +2,7 @@
 name = "pathchk"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_pathchk"
@@ -14,4 +15,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "pathchk"
-path = "main.rs"
+path = "../../uumain.rs"

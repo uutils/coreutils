@@ -2,6 +2,7 @@
 name = "dirname"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_dirname"
@@ -13,4 +14,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "dirname"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -19,7 +19,6 @@ extern crate rand;
 extern crate uucore;
 
 use numeric::*;
-use prime_table::P_INVS_U64;
 use rand::distributions::{Range, IndependentSample};
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead, BufReader, Write};
@@ -27,12 +26,13 @@ use std::num::Wrapping;
 use std::mem::swap;
 
 mod numeric;
-mod prime_table;
 
-static SYNTAX: &'static str = "[OPTION] [NUMBER]..."; 
+include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
+
+static SYNTAX: &'static str = "[OPTION] [NUMBER]...";
 static SUMMARY: &'static str = "Print the prime factors of the given number(s).
- If none are specified, read from standard input."; 
-static LONG_HELP: &'static str = ""; 
+ If none are specified, read from standard input.";
+static LONG_HELP: &'static str = "";
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {

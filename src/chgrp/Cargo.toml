@@ -2,6 +2,7 @@
 name = "chgrp"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_chgrp"
@@ -17,4 +18,4 @@ features = ["entries", "fs"]
 
 [[bin]]
 name = "chgrp"
-path = "main.rs"
+path = "../../uumain.rs"

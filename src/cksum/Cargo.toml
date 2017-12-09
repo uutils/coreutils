@@ -13,4 +13,4 @@ uucore = { path="../uucore" }
 
 [[bin]]
 name = "cksum"
-path = "main.rs"
+path = "../../uumain.rs"

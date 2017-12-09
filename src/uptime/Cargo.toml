@@ -2,6 +2,7 @@
 name = "uptime"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_uptime"
@@ -17,4 +18,4 @@ features = ["utmpx"]
 
 [[bin]]
 name = "uptime"
-path = "main.rs"
+path = "../../uumain.rs"
