@@ -9,25 +9,21 @@
  * file that was distributed with this source code.
  */
 
-#![allow(non_snake_case)]
-
 extern crate time;
 
 #[macro_use]
 extern crate uucore;
 
 use std::fs;
+use std::iter;
 use std::io::{stderr, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::sync::Arc;
 use time::Timespec;
-use std::sync::mpsc::channel;
-use std::thread;
 
-static NAME: &'static str = "du"; 
-static SUMMARY: &'static str = "estimate file space usage"; 
-static LONG_HELP: &'static str = "
+const NAME: &'static str = "du";
+const SUMMARY: &'static str = "estimate file space usage";
+const LONG_HELP: &'static str = "
  Display  values  are  in  units  of  the  first  available  SIZE from
  --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
  ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
@@ -36,7 +32,7 @@ static LONG_HELP: &'static str = "
  SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
  Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
  ers of 1000).
-"; 
+";
 
 struct Options {
     all: bool,
@@ -58,10 +54,10 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: &PathBuf) -> Stat {
-        let metadata = safe_unwrap!(fs::symlink_metadata(path));
+    fn new(path: PathBuf) -> Stat {
+        let metadata = safe_unwrap!(fs::symlink_metadata(&path));
         Stat {
-            path: path.clone(),
+            path: path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
@@ -74,56 +70,51 @@ impl Stat {
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
-fn du(path: &PathBuf, mut my_stat: Stat, options: Arc<Options>, depth: usize) -> Vec<Arc<Stat>> {
+// XXX: this should use the impl Trait return type when it is stabilized
+fn du(mut my_stat: Stat, options: &Options, depth: usize)
+    -> Box<DoubleEndedIterator<Item = Stat>>
+{
     let mut stats = vec!();
     let mut futures = vec!();
 
     if my_stat.is_dir {
-        let read = match fs::read_dir(path) {
+        let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
                 safe_writeln!(stderr(), "{}: cannot read directory ‘{}‘: {}",
-                              options.program_name, path.display(), e);
-                return vec!(Arc::new(my_stat))
+                              options.program_name, my_stat.path.display(), e);
+                return Box::new(iter::once(my_stat))
             }
         };
 
         for f in read.into_iter() {
-            let entry = f.unwrap();
-            let this_stat = Stat::new(&entry.path());
+            let entry = crash_if_err!(1, f);
+            let this_stat = Stat::new(entry.path());
             if this_stat.is_dir {
-                let oa_clone = options.clone();
-                let (tx, rx) = channel();
-                thread::spawn(move || {
-                    let result = du(&entry.path(), this_stat, oa_clone, depth + 1);
-                    tx.send(result)
-                });
-                futures.push(rx);
+                futures.push(du(this_stat, options, depth + 1));
             } else {
                 my_stat.size += this_stat.size;
                 my_stat.blocks += this_stat.blocks;
                 if options.all {
-                    stats.push(Arc::new(this_stat))
+                    stats.push(this_stat);
                 }
             }
         }
     }
 
-    for rx in &mut futures {
-        for stat in rx.recv().unwrap().into_iter().rev() {
-            if !options.separate_dirs && stat.path.parent().unwrap().to_path_buf() == my_stat.path {
-                my_stat.size += stat.size;
-                my_stat.blocks += stat.blocks;
-            }
-            if options.max_depth == None || depth < options.max_depth.unwrap() {
-                stats.push(stat.clone());
-            }
+    stats.extend(futures.into_iter().flat_map(|val| val).rev().filter_map(|stat| {
+        if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
+            my_stat.size += stat.size;
+            my_stat.blocks += stat.blocks;
         }
-    }
-
-    stats.push(Arc::new(my_stat));
-
-    stats
+        if options.max_depth == None || depth < options.max_depth.unwrap() {
+            Some(stat)
+        } else {
+            None
+        }
+    }));
+    stats.push(my_stat);
+    Box::new(stats.into_iter())
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -218,17 +209,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let strs = if matches.free.is_empty() {vec!("./".to_owned())} else {matches.free.clone()};
 
-    let options_arc = Arc::new(options);
-
-    let MB = if matches.opt_present("si") {1000 * 1000} else {1024 * 1024};
-    let KB = if matches.opt_present("si") {1000} else {1024};
+    let mb = if matches.opt_present("si") {1000 * 1000} else {1024 * 1024};
+    let kb = if matches.opt_present("si") {1000} else {1024};
 
     let block_size = match matches.opt_str("block-size") {
         Some(s) => {
             let mut found_number = false;
             let mut found_letter = false;
-            let mut numbers = String::new(); 
-            let mut letters = String::new(); 
+            let mut numbers = String::new();
+            let mut letters = String::new();
             for c in s.chars() {
                 if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
                     show_error!("invalid --block-size argument '{}'", s);
@@ -263,17 +252,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let convert_size = |size: u64| -> String {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            if size >= MB {
-                format!("{:.1}M", (size as f64) / (MB as f64))
-            } else if size >= KB {
-                format!("{:.1}K", (size as f64) / (KB as f64))
+            if size >= mb {
+                format!("{:.1}M", (size as f64) / (mb as f64))
+            } else if size >= kb {
+                format!("{:.1}K", (size as f64) / (kb as f64))
             } else {
                 format!("{}B", size)
             }
         } else if matches.opt_present("k") {
-            format!("{}", ((size as f64) / (KB as f64)).ceil())
+            format!("{}", ((size as f64) / (kb as f64)).ceil())
         } else if matches.opt_present("m") {
-            format!("{}", ((size as f64) / (MB as f64)).ceil())
+            format!("{}", ((size as f64) / (mb as f64)).ceil())
         } else {
             format!("{}", ((size as f64) / (block_size as f64)).ceil())
         }
@@ -304,7 +293,7 @@ Try '{} --help' for more information.", s, NAME);
     let mut grand_total = 0;
     for path_str in strs.into_iter() {
         let path = PathBuf::from(path_str);
-        let iter = du(&path, Stat::new(&path), options_arc.clone(), 0).into_iter();
+        let iter = du(Stat::new(path), &options, 0).into_iter();
         let (_, len) = iter.size_hint();
         let len = len.unwrap();
         for (index, stat) in iter.enumerate() {
@@ -346,7 +335,7 @@ Try '{} --help' for more information.", s, NAME);
                     print!("{}\t{}{}", convert_size(size), stat.path.display(), line_separator);
                 }
             }
-            if options_arc.total && index == (len - 1) {
+            if options.total && index == (len - 1) {
                 // The last element will be the total size of the the path under
                 // path_str.  We add it to the grand total.
                 grand_total += size;
@@ -354,7 +343,7 @@ Try '{} --help' for more information.", s, NAME);
         }
     }
 
-    if options_arc.total {
+    if options.total {
         print!("{}\ttotal", convert_size(grand_total));
         print!("{}", line_separator);
     }
