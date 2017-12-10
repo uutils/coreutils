@@ -9,8 +9,6 @@
  * file that was distributed with this source code.
  */
 
-#![allow(non_snake_case)]
-
 extern crate time;
 
 #[macro_use]
@@ -211,8 +209,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let strs = if matches.free.is_empty() {vec!("./".to_owned())} else {matches.free.clone()};
 
-    let MB = if matches.opt_present("si") {1000 * 1000} else {1024 * 1024};
-    let KB = if matches.opt_present("si") {1000} else {1024};
+    let mb = if matches.opt_present("si") {1000 * 1000} else {1024 * 1024};
+    let kb = if matches.opt_present("si") {1000} else {1024};
 
     let block_size = match matches.opt_str("block-size") {
         Some(s) => {
@@ -254,17 +252,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let convert_size = |size: u64| -> String {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            if size >= MB {
-                format!("{:.1}M", (size as f64) / (MB as f64))
-            } else if size >= KB {
-                format!("{:.1}K", (size as f64) / (KB as f64))
+            if size >= mb {
+                format!("{:.1}M", (size as f64) / (mb as f64))
+            } else if size >= kb {
+                format!("{:.1}K", (size as f64) / (kb as f64))
             } else {
                 format!("{}B", size)
             }
         } else if matches.opt_present("k") {
-            format!("{}", ((size as f64) / (KB as f64)).ceil())
+            format!("{}", ((size as f64) / (kb as f64)).ceil())
         } else if matches.opt_present("m") {
-            format!("{}", ((size as f64) / (MB as f64)).ceil())
+            format!("{}", ((size as f64) / (mb as f64)).ceil())
         } else {
             format!("{}", ((size as f64) / (block_size as f64)).ceil())
         }
