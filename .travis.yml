@@ -25,10 +25,15 @@ matrix:
     - rust: nightly
       os: osx
       env: FEATURES=nightly
+    - rust: nightly
+      os: linux
+      env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
 cache:
  directories:
   - $HOME/.cargo
-sudo: false
+sudo: true
+before_install:
+  - if [ $REDOX ]; then ./.travis/redox-toolchain.sh; fi
 script:
-  - cargo build --features "$FEATURES"
-  - cargo test --features "$FEATURES" --no-fail-fast
+  - cargo build $CARGO_ARGS --features "$FEATURES"
+  - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
