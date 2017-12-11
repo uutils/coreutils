@@ -15,10 +15,21 @@ extern crate getopts;
 extern crate uucore;
 
 use std::env;
-use std::fs;
+//use std::fs;
+use std::path::{Path, PathBuf};
+use std::io;
 
 static NAME: &'static str = "pwd";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
+    let path_buf = path.canonicalize()?;
+
+    #[cfg(windows)]
+    let path_buf = Path::new(path_buf.as_path().to_string_lossy().trim_left_matches(r"\\?\")).to_path_buf();
+
+    Ok(path_buf)
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -46,13 +57,19 @@ Print the full filename of the current working directory.", NAME, VERSION);
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {
-        let logical_path = env::current_dir().unwrap();
-        if matches.opt_present("logical") {
-            println!("{}", logical_path.display());
-        } else {
-            let physical_path = fs::canonicalize(&logical_path);
-            println!("{}", physical_path.unwrap().display());
-        }
+        match env::current_dir() {
+            Ok(logical_path) => {
+                if matches.opt_present("logical") {
+                    println!("{}", logical_path.display());
+                } else {
+                    match absolute_path(&logical_path) {
+                        Ok(physical_path) => println!("{}", physical_path.display()),
+                        Err(e) => crash!(1, "failed to get absolute path {}", e)
+                    };
+                }
+            },
+            Err(e) => crash!(1, "failed to get current directory {}", e)
+        };
     }
 
     0
