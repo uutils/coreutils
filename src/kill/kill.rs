@@ -15,12 +15,12 @@ extern crate libc;
 extern crate uucore;
 
 use libc::{c_int, pid_t};
-use std::io::{Error, Write};
+use std::io::Error;
 use uucore::signals::ALL_SIGNALS;
 
-static SYNTAX: &'static str = "[options] <pid> [...]"; 
-static SUMMARY: &'static str = ""; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &'static str = "[options] <pid> [...]";
+static SUMMARY: &'static str = "";
+static LONG_HELP: &'static str = "";
 
 static EXIT_OK:  i32 = 0;
 static EXIT_ERR: i32 = 1;

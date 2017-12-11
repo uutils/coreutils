@@ -16,7 +16,7 @@ extern crate uucore;
 
 use std::fs;
 use std::env;
-use std::io::{BufRead, BufReader, Result, stdin, Write};
+use std::io::{BufRead, BufReader, Result, stdin};
 use std::path::{Path, PathBuf};
 
 static NAME: &'static str = "mv";

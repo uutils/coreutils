@@ -18,6 +18,8 @@ pub mod encoding;
 #[cfg(feature = "parse_time")]
 pub mod parse_time;
 
+#[cfg(all(not(windows), feature = "mode"))]
+pub mod mode;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "utmpx"))]
 pub mod utmpx;
 #[cfg(all(unix, feature = "utsname"))]

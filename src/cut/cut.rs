@@ -150,7 +150,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
             loop {
                 match buf_read.select(low - cur_pos, None::<&mut Stdout>) {
                     NewlineFound => {
-                        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+                        crash_if_err!(1, out.write_all(&[newline_char]));
                         continue 'newline
                     }
                     Complete(len) => {
@@ -160,7 +160,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
                     Partial(len) => cur_pos += len,
                     EndOfFile => {
                         if orig_pos != cur_pos {
-                            pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+                            crash_if_err!(1, out.write_all(&[newline_char]));
                         }
 
                         break 'newline
@@ -171,7 +171,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
             match opts.out_delim {
                 Some(ref delim) => {
                     if print_delim {
-                        pipe_crash_if_err!(1, out.write_all(delim.as_bytes()));
+                        crash_if_err!(1, out.write_all(delim.as_bytes()));
                     }
                     print_delim = true;
                 }
@@ -189,7 +189,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
                     }
                     EndOfFile => {
                         if cur_pos != low || low == high {
-                            pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+                            crash_if_err!(1, out.write_all(&[newline_char]));
                         }
 
                         break 'newline
@@ -199,7 +199,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         }
 
         buf_read.consume_line();
-        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+        crash_if_err!(1, out.write_all(&[newline_char]));
     }
 
     0
@@ -230,9 +230,9 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
 
         if delim_search.peek().is_none() {
             if ! only_delimited {
-                pipe_crash_if_err!(1, out.write_all(line));
+                crash_if_err!(1, out.write_all(line));
                 if line[line.len() - 1] != newline_char {
-                    pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+                    crash_if_err!(1, out.write_all(&[newline_char]));
                 }
             }
 
@@ -249,14 +249,14 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
 
             for _ in 0..high - low + 1 {
                 if print_delim {
-                    pipe_crash_if_err!(1, out.write_all(out_delim.as_bytes()));
+                    crash_if_err!(1, out.write_all(out_delim.as_bytes()));
                 }
 
                 match delim_search.next() {
                     Some((high_idx, next_low_idx)) => {
                         let segment = &line[low_idx..high_idx];
 
-                        pipe_crash_if_err!(1, out.write_all(segment));
+                        crash_if_err!(1, out.write_all(segment));
 
                         print_delim = true;
 
@@ -266,7 +266,7 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
                     None => {
                         let segment = &line[low_idx..];
 
-                        pipe_crash_if_err!(1, out.write_all(segment));
+                        crash_if_err!(1, out.write_all(segment));
 
                         if line[line.len() - 1] == newline_char {
                             continue 'newline
@@ -277,7 +277,7 @@ fn cut_fields_delimiter<R: Read>(reader: R, ranges: &[Range], delim: &str, only_
             }
         }
 
-        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+        crash_if_err!(1, out.write_all(&[newline_char]));
     }
 
     0
@@ -318,9 +318,9 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
 
         if delim_search.peek().is_none() {
             if ! opts.only_delimited {
-                pipe_crash_if_err!(1, out.write_all(line));
+                crash_if_err!(1, out.write_all(line));
                 if line[line.len() - 1] != newline_char {
-                    pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+                    crash_if_err!(1, out.write_all(&[newline_char]));
                 }
             }
 
@@ -345,7 +345,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
                 Some((high_idx, next_low_idx)) => {
                     let segment = &line[low_idx..high_idx];
 
-                    pipe_crash_if_err!(1, out.write_all(segment));
+                    crash_if_err!(1, out.write_all(segment));
 
                     print_delim = true;
                     low_idx = next_low_idx;
@@ -354,7 +354,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
                 None => {
                     let segment = &line[low_idx..line.len()];
 
-                    pipe_crash_if_err!(1, out.write_all(segment));
+                    crash_if_err!(1, out.write_all(segment));
 
                     if line[line.len() - 1] == newline_char {
                         continue 'newline
@@ -364,7 +364,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
             }
         }
 
-        pipe_crash_if_err!(1, out.write_all(&[newline_char]));
+        crash_if_err!(1, out.write_all(&[newline_char]));
     }
 
     0

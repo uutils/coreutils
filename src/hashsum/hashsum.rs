@@ -3,7 +3,7 @@
 /*
  * This file is part of the uutils coreutils package.
  *
- * (c) Arcterus <arcterus@mail.com>
+ * (c) Alex Lyon <arcterus@mail.com>
  * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
  * (c) Gil Cottle <gcottle@redtown.org>
  *
@@ -34,7 +34,7 @@ use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use std::ascii::AsciiExt;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, stdin, Write};
+use std::io::{self, BufRead, BufReader, Read, stdin};
 use std::path::Path;
 
 static NAME: &'static str = "hashsum";
@@ -232,7 +232,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn version() {
-    pipe_println!("{} {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }
 
 fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
@@ -251,7 +251,7 @@ Usage:
 
 Compute and check message digests.", NAME, VERSION, spec);
 
-    pipe_print!("{}", opts.usage(&msg));
+    print!("{}", opts.usage(&msg));
 }
 
 fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: bool, check: bool, tag: bool, status: bool, quiet: bool, strict: bool, warn: bool, output_bits: usize) -> Result<(), i32> {
@@ -325,11 +325,11 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
                     .to_ascii_lowercase();
                 if sum == real_sum {
                     if !quiet {
-                        pipe_println!("{}: OK", ck_filename);
+                        println!("{}: OK", ck_filename);
                     }
                 } else {
                     if !status {
-                        pipe_println!("{}: FAILED", ck_filename);
+                        println!("{}: FAILED", ck_filename);
                     }
                     failed += 1;
                 }
@@ -337,9 +337,9 @@ fn hashsum(algoname: &str, mut digest: Box<Digest>, files: Vec<String>, binary: 
         } else {
             let sum = safe_unwrap!(digest_reader(&mut digest, &mut file, binary, output_bits));
             if tag {
-                pipe_println!("{} ({}) = {}", algoname, filename, sum);
+                println!("{} ({}) = {}", algoname, filename, sum);
             } else {
-                pipe_println!("{} {}{}", sum, binary_marker, filename);
+                println!("{} {}{}", sum, binary_marker, filename);
             }
         }
     }

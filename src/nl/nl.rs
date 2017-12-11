@@ -20,7 +20,7 @@ extern crate regex;
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::iter::repeat;
 use std::path::Path;
 

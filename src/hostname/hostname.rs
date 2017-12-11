@@ -21,12 +21,11 @@ extern crate uucore;
 use std::collections::hash_set::HashSet;
 use std::iter::repeat;
 use std::str;
-use std::io::Write;
 use std::net::ToSocketAddrs;
 
-static SYNTAX: &'static str = "[OPTION]... [HOSTNAME]"; 
-static SUMMARY: &'static str = "Print or set the system's host name."; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &'static str = "[OPTION]... [HOSTNAME]";
+static SUMMARY: &'static str = "Print or set the system's host name.";
+static LONG_HELP: &'static str = "";
 
 extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;

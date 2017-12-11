@@ -116,7 +116,7 @@ fn test_install_mode_failing() {
     at.touch(file);
     at.mkdir(dir);
     assert!(ucmd.arg(file).arg(dir).arg(mode_arg)
-            .fails().stderr.contains("Invalid mode string: numeric parsing error"));
+            .fails().stderr.contains("Invalid mode string: invalid digit found in string"));
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));

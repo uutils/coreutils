@@ -15,7 +15,6 @@ use uucore::utmpx::{self, time, Utmpx};
 use uucore::libc::{STDIN_FILENO, ttyname, S_IWGRP};
 
 use std::borrow::Cow;
-use std::io::prelude::*;
 use std::ffi::CStr;
 use std::path::PathBuf;
 use std::os::unix::fs::MetadataExt;

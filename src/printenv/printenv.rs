@@ -16,7 +16,6 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
 use std::env;
 
 static NAME: &'static str = "printenv";
@@ -40,7 +39,7 @@ Usage:
   {0} [VARIABLE]... [OPTION]...
 
 Prints the given environment VARIABLE(s), otherwise prints them all.", NAME, VERSION);
-        print!("{}", opts.usage(&msg)); 
+        print!("{}", opts.usage(&msg));
         return 0;
     }
     if matches.opt_present("version") {

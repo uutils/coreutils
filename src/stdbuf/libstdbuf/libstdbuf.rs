@@ -5,7 +5,6 @@ extern crate uucore;
 
 use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF};
 use std::env;
-use std::io::Write;
 use std::ptr;
 
 extern {

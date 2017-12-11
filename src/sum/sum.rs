@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{Read, Result, stdin, Write};
+use std::io::{Read, Result, stdin};
 use std::path::Path;
 
 static NAME: &'static str = "sum";

@@ -18,7 +18,6 @@ extern crate libc;
 extern crate uucore;
 
 use std::ffi::CStr;
-use std::io::Write;
 use uucore::fs::is_stdin_interactive;
 
 extern {

@@ -3,7 +3,7 @@
 /*
  * This file is part of the uutils coreutils package.
  *
- * (c) Arcterus <arcterus@mail.com>
+ * (c) Alex Lyon <arcterus@mail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,13 +13,13 @@
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
-static SUMMARY: &'static str = "Writes each file (or standard input if no files are given) 
- to standard output whilst breaking long lines"; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &'static str = "[OPTION]... [FILE]...";
+static SUMMARY: &'static str = "Writes each file (or standard input if no files are given)
+ to standard output whilst breaking long lines";
+static LONG_HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);

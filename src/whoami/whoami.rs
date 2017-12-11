@@ -17,7 +17,6 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::Write;
 
 mod platform;
 

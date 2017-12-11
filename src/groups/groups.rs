@@ -13,7 +13,6 @@
 #[macro_use]
 extern crate uucore;
 use uucore::entries::{Passwd, Locate, get_groups, gid2grp};
-use std::io::Write;
 
 static SYNTAX: &'static str = "[user]";
 static SUMMARY: &'static str = "display current group names";

@@ -19,7 +19,7 @@ use libc::{c_char, signal, dup2, execvp};
 use libc::{SIG_IGN, SIGHUP};
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
-use std::io::{Error, Write};
+use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use std::env;

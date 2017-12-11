@@ -17,7 +17,6 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::Write;
 
 static NAME: &'static str = "yes";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -57,5 +56,5 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 pub fn exec(string: &str) {
-    while pipe_println!("{}", string) { }
+    loop { println!("{}", string) }
 }

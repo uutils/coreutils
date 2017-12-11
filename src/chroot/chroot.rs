@@ -18,18 +18,18 @@ use uucore::libc::{self, setgid, setuid, chroot, setgroups};
 use uucore::entries;
 
 use std::ffi::CString;
-use std::io::{Error, Write};
+use std::io::Error;
 use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 
 static NAME: &'static str = "chroot";
-static SYNTAX: &'static str = "[OPTION]... NEWROOT [COMMAND [ARG]...]"; 
-static SUMMARY: &'static str = "Run COMMAND with root directory set to NEWROOT."; 
+static SYNTAX: &'static str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
+static SUMMARY: &'static str = "Run COMMAND with root directory set to NEWROOT.";
 static LONG_HELP: &'static str = "
  If COMMAND is not specified, it defaults to '$(SHELL) -i'.
  If $(SHELL) is not set, /bin/sh is used.
-"; 
+";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)

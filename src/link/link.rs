@@ -13,13 +13,12 @@
 extern crate uucore;
 
 use std::fs::hard_link;
-use std::io::Write;
 use std::path::Path;
 use std::io::Error;
 
-static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2"; 
-static SUMMARY: &'static str = "Create a link named FILE2 to FILE1"; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2";
+static SUMMARY: &'static str = "Create a link named FILE2 to FILE1";
+static LONG_HELP: &'static str = "";
 
 pub fn normalize_error_message(e: Error) -> String {
     match e.raw_os_error() {

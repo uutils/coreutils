@@ -14,13 +14,13 @@
 extern crate uucore;
 
 use std::fs;
-use std::io::{BufRead, BufReader, Result, stdin, Write};
+use std::io::{BufRead, BufReader, Result, stdin};
 #[cfg(unix)] use std::os::unix::fs::symlink;
 #[cfg(windows)] use std::os::windows::fs::{symlink_file,symlink_dir};
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "ln"; 
-static SUMMARY: &'static str = ""; 
+static NAME: &'static str = "ln";
+static SUMMARY: &'static str = "";
 static LONG_HELP: &'static str = "
  In the 1st form, create a link to TARGET with the name LINK_NAME.
  In the 2nd form, create a link to TARGET in the current directory.
@@ -30,7 +30,7 @@ static LONG_HELP: &'static str = "
  When creating hard links, each TARGET must exist.  Symbolic links
  can hold arbitrary text; if later resolved, a relative link is
  interpreted in relation to its parent directory.
-"; 
+";
 
 pub struct Settings {
     overwrite: OverwriteMode,

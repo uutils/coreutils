@@ -20,7 +20,6 @@ use libc::{mode_t, dev_t};
 use libc::{S_IRUSR, S_IWUSR, S_IRGRP, S_IWGRP, S_IROTH, S_IWOTH, S_IFIFO, S_IFBLK, S_IFCHR};
 
 use getopts::Options;
-use std::io::Write;
 
 use std::ffi::CString;
 

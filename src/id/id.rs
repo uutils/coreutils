@@ -22,7 +22,6 @@ pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::entries::{self, Passwd, Group, Locate};
 use uucore::process::{getgid, getuid, getegid, geteuid};
-use std::io::Write;
 use std::ffi::CStr;
 
 macro_rules! cstr2cow {

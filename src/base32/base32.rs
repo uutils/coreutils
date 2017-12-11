@@ -13,11 +13,11 @@ extern crate uucore;
 use uucore::encoding::{Data, Format, wrap_print};
 
 use std::fs::File;
-use std::io::{BufReader, Read, stdin, Write};
+use std::io::{BufReader, Read, stdin};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]"; 
-static SUMMARY: &'static str = "Base32 encode or decode FILE, or standard input, to standard output."; 
+static SYNTAX: &'static str = "[OPTION]... [FILE]";
+static SUMMARY: &'static str = "Base32 encode or decode FILE, or standard input, to standard output.";
 static LONG_HELP: &'static str = "
  With no FILE, or when FILE is -, read standard input.
 
@@ -39,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
                 "COLS")
         .parse(args);
-    
+
     let line_wrap = match matches.opt_str("wrap") {
         Some(s) => {
             match s.parse() {

@@ -14,7 +14,7 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
@@ -115,8 +115,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         for file in &files {
             if settings.verbose {
-                if !firstime { pipe_println!(""); }
-                pipe_println!("==> {} <==", file);
+                if !firstime { println!(""); }
+                println!("==> {} <==", file);
             }
             firstime = false;
 
@@ -171,16 +171,12 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
     match settings.mode {
         FilterMode::Bytes(count) => {
             for byte in reader.bytes().take(count) {
-                if !pipe_print!("{}", byte.unwrap() as char) {
-                    return false;
-                }
+                print!("{}", byte.unwrap() as char);
             }
         },
         FilterMode::Lines(count) => {
             for line in reader.lines().take(count) {
-                if !pipe_println!("{}", line.unwrap()) {
-                    return false;
-                }
+                println!("{}", line.unwrap());
             }
         }
     }

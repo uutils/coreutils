@@ -17,15 +17,15 @@
 extern crate uucore;
 
 use std::env;
-use std::io::Write;
+use std::io::{Write, stdout};
 use std::process::Command;
 
-static NAME: &'static str = "env"; 
-static SYNTAX: &'static str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]"; 
-static SUMMARY: &'static str = "Set each NAME to VALUE in the environment and run COMMAND"; 
+static NAME: &'static str = "env";
+static SYNTAX: &'static str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
+static SUMMARY: &'static str = "Set each NAME to VALUE in the environment and run COMMAND";
 static LONG_HELP: &'static str = "
  A mere - implies -i. If no COMMAND, print the resulting environment
-"; 
+";
 
 struct options {
     ignore_env: bool,
@@ -48,7 +48,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     core_opts.optflag("i", "ignore-environment", "start with an empty environment")
         .optflag("0", "null", "end each output line with a 0 byte rather than newline")
         .optopt("u", "unset", "remove variable from the environment", "NAME");
-        
+
     let mut opts = Box::new(options {
         ignore_env: false,
         null: false,
@@ -189,7 +189,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         // no program provided
         print_env(opts.null);
-        pipe_flush!();
+        return_if_err!(1, stdout().flush());
     }
 
     0

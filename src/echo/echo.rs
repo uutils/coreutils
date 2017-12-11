@@ -12,12 +12,12 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
+use std::io::{Write, stdout};
 use std::str::from_utf8;
 
 #[allow(dead_code)]
-static SYNTAX: &'static str = "[OPTIONS]... [STRING]..."; 
-static SUMMARY: &'static str = "display a line of text"; 
+static SYNTAX: &'static str = "[OPTIONS]... [STRING]...";
+static SUMMARY: &'static str = "display a line of text";
 static LONG_HELP: &'static str = r#"
  Echo the STRING(s) to standard output.
  If -e is in effect, the following sequences are recognized:
@@ -34,7 +34,7 @@ static LONG_HELP: &'static str = r#"
  \\v      vertical tab
  \\0NNN   byte with octal value NNN (1 to 3 digits)
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
-"#; 
+"#;
 
 #[derive(Clone)]
 struct EchoOptions {
@@ -173,7 +173,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if options.newline {
-        pipe_flush!();
+        return_if_err!(1, stdout().flush())
     } else {
         println!("")
     }

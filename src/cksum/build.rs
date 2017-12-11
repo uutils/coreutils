@@ -1,7 +1,7 @@
 /*
 * This file is part of the uutils coreutils package.
 *
-* (c) Arcterus <arcterus@mail.com>
+* (c) Alex Lyon <arcterus@mail.com>
 * (c) Michael Gehring <mg@ebfe.org>
 *
 * For the full copyright and license information, please view the LICENSE

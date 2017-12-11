@@ -17,7 +17,7 @@ extern crate uucore;
 
 use libc::mkfifo;
 use std::ffi::CString;
-use std::io::{Error, Write};
+use std::io::Error;
 
 static NAME: &'static str = "mkfifo";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");

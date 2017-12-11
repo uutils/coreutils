@@ -17,7 +17,6 @@ use uucore::fs::resolve_relative_path;
 extern crate walkdir;
 use walkdir::WalkDir;
 
-use std::io::prelude::*;
 use std::io::Result as IOResult;
 use std::io::Error as IOError;
 

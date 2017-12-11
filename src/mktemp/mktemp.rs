@@ -17,7 +17,6 @@ extern crate rand;
 extern crate uucore;
 
 use std::env;
-use std::io::Write;
 use std::path::{PathBuf, is_separator};
 use std::mem::forget;
 use std::iter;
