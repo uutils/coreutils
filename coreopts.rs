@@ -1,5 +1,4 @@
 extern crate getopts;
-use std::io::Write;
 
 pub struct HelpText<'a> {
     pub name : &'a str,
@@ -53,8 +52,8 @@ impl<'a> CoreOptions<'a> {
         let matches = match self.options.parse(&args[1..]) {
             Ok(m) => { Some(m) },
             Err(f) => {
-                pipe_write!(&mut ::std::io::stderr(), "{}: error: ", self.help_text.name);
-                pipe_writeln!(&mut ::std::io::stderr(), "{}", f);
+                eprint!("{}: error: ", self.help_text.name);
+                eprintln!("{}", f);
                 ::std::process::exit(1);
             }
         }.unwrap();
