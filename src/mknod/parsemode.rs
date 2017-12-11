@@ -8,9 +8,9 @@ pub fn parse_mode(mode: Option<String>) -> Result<mode_t, String> {
     if let Some(mode) = mode {
         let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
         let result = if mode.contains(arr) {
-            mode::parse_numeric(fperm, mode.as_str())
+            mode::parse_numeric(fperm as u32, mode.as_str())
         } else {
-            mode::parse_symbolic(fperm, mode.as_str(), true)
+            mode::parse_symbolic(fperm as u32, mode.as_str(), true)
         };
         result.map(|mode| mode as mode_t)
     } else {
