@@ -12,13 +12,12 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
 use std::path::{is_separator, PathBuf};
 
 static NAME: &'static str = "basename";
-static SYNTAX: &'static str = "NAME [SUFFIX]"; 
+static SYNTAX: &'static str = "NAME [SUFFIX]";
 static SUMMARY: &'static str = "Print NAME with any leading directory components removed
- If specified, also remove a trailing SUFFIX"; 
+ If specified, also remove a trailing SUFFIX";
 static LONG_HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {

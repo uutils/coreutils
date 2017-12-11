@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::{Matches, Options};
-use std::io::{self, Write};
+use std::io;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
@@ -23,7 +23,7 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-static LIBSTDBUF: &'static str = "libstdbuf"; 
+static LIBSTDBUF: &'static str = "libstdbuf";
 
 enum BufferType {
     Default,
@@ -49,17 +49,17 @@ enum OkMsg {
 }
 
 #[cfg(target_os = "linux")]
-fn preload_strings() -> (&'static str, &'static str) { 
+fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", ".so")
 }
 
 #[cfg(target_os = "macos")]
-fn preload_strings() -> (&'static str, &'static str) { 
+fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", ".dylib")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn preload_strings() -> (&'static str, &'static str) { 
+fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
 
@@ -68,10 +68,10 @@ fn print_version() {
 }
 
 fn print_usage(opts: &Options) {
-    let brief = 
+    let brief =
         "Run COMMAND, with modified buffering operations for its standard streams\n \
         Mandatory arguments to long options are mandatory for short options too.";
-    let explanation = 
+    let explanation =
         "If MODE is 'L' the corresponding stream will be line buffered.\n \
         This option is invalid with standard input.\n\n \
         If MODE is '0' the corresponding stream will be unbuffered.\n\n \

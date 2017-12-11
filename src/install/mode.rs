@@ -1,6 +1,5 @@
 extern crate libc;
 
-use std::io::Write;
 use std::path::Path;
 use std::fs;
 use uucore::mode;

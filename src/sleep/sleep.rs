@@ -3,7 +3,7 @@
 /*
  * This file is part of the uutils coreutils package.
  *
- * (c) Arcterus <arcterus@mail.com>
+ * (c) Alex Lyon <arcterus@mail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -14,8 +14,7 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
-use std::thread::{self};
+use std::thread;
 use std::time::Duration;
 
 static NAME: &'static str = "sleep";

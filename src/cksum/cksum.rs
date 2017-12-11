@@ -14,16 +14,16 @@
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{self, stdin, Read, Write, BufReader};
+use std::io::{self, stdin, Read, BufReader};
 #[cfg(not(windows))]
 use std::mem;
 use std::path::Path;
 
 include!(concat!(env!("OUT_DIR"), "/crc_table.rs"));
 
-static SYNTAX: &'static str = "[OPTIONS] [FILE]..."; 
-static SUMMARY: &'static str = "Print CRC and size for each file"; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &'static str = "[OPTIONS] [FILE]...";
+static SUMMARY: &'static str = "Print CRC and size for each file";
+static LONG_HELP: &'static str = "";
 
 #[inline]
 fn crc_update(crc: u32, input: u8) -> u32 {

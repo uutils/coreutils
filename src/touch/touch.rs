@@ -18,7 +18,7 @@ extern crate uucore;
 
 use filetime::*;
 use std::fs::{self, File};
-use std::io::{self, Error, Write};
+use std::io::{self, Error};
 use std::path::Path;
 
 static NAME: &'static str = "touch";

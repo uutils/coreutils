@@ -30,7 +30,6 @@ use uucore::libc::{S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP
 use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
 use std::path::{Path, PathBuf};
-use std::io::Write;
 use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;

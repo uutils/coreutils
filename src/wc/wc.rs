@@ -17,7 +17,7 @@ extern crate uucore;
 use getopts::{Matches, Options};
 use std::ascii::AsciiExt;
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read, Write};
+use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use std::result::Result as StdResult;
 use std::str::from_utf8;

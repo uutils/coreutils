@@ -20,7 +20,7 @@ extern crate uucore;
 use getopts::Options;
 use libc::{S_IFMT, S_IFLNK, S_IFREG};
 use libc::{lstat, unlink, c_char, stat};
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, ErrorKind};
 use std::mem::uninitialized;
 
 static NAME: &'static str = "unlink";

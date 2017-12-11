@@ -21,7 +21,7 @@ extern crate uucore;
 use numeric::*;
 use rand::distributions::{Range, IndependentSample};
 use std::cmp::{max, min};
-use std::io::{stdin, BufRead, BufReader, Write};
+use std::io::{stdin, BufRead, BufReader};
 use std::num::Wrapping;
 use std::mem::swap;
 

@@ -23,7 +23,7 @@ pub use uucore::libc;
 
 use getopts::Options;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::mem::transmute;
 
 static NAME: &'static str = "uptime";

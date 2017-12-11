@@ -15,7 +15,6 @@ extern crate getopts;
 extern crate uucore;
 
 use std::env;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 

@@ -18,7 +18,6 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
 use std::env;
 
 #[cfg(target_os = "linux")]

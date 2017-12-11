@@ -2,7 +2,6 @@ use std;
 use std::io;
 use std::io::BufReader;
 use std::fs::File;
-use std::io::Write;
 use std::vec::Vec;
 
 pub enum InputSource<'a> {

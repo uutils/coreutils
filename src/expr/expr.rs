@@ -16,8 +16,6 @@ extern crate onig;
 mod tokens;
 mod syntax_tree;
 
-use std::io::{Write};
-
 static NAME: &'static str = "expr";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 

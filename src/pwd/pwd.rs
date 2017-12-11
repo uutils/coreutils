@@ -14,7 +14,6 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
 use std::env;
 
 static NAME: &'static str = "pwd";

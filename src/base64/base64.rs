@@ -15,11 +15,11 @@ extern crate uucore;
 use uucore::encoding::{Data, Format, wrap_print};
 
 use std::fs::File;
-use std::io::{BufReader, Read, stdin, Write};
+use std::io::{BufReader, Read, stdin};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]"; 
-static SUMMARY: &'static str = "Base64 encode or decode FILE, or standard input, to standard output."; 
+static SYNTAX: &'static str = "[OPTION]... [FILE]";
+static SUMMARY: &'static str = "Base64 encode or decode FILE, or standard input, to standard output.";
 static LONG_HELP: &'static str = "
  With no FILE, or when FILE is -, read standard input.
 

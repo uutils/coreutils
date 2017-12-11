@@ -23,7 +23,7 @@ use walkdir::WalkDir;
 use std::fs::{self, Metadata};
 use std::os::unix::fs::MetadataExt;
 
-use std::io::{self, Write};
+use std::io;
 use std::io::Result as IOResult;
 
 use std::path::Path;

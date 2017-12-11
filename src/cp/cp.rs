@@ -39,7 +39,7 @@ use clap::{Arg, App, ArgMatches};
 use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{BufReader, BufRead, stdin, Write};
+use std::io::{BufReader, BufRead, stdin, stdout, Write};
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
@@ -114,9 +114,9 @@ macro_rules! or_continue(
 /// answered yes.
 macro_rules! prompt_yes(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stdout(), $($args)+);
-        pipe_write!(&mut ::std::io::stdout(), " [y/N]: ");
-        pipe_flush!();
+        print!($($args)+);
+        print!(" [y/N]: ");
+        crash_if_err!(1, stdout().flush());
         let mut s = String::new();
         match BufReader::new(stdin()).read_line(&mut s) {
             Ok(_) => match s.char_indices().nth(0) {
@@ -573,7 +573,7 @@ impl Options {
                            attributes.push(Attribute::Xattr);
                            attributes.push(Attribute::Links);
                            break;
-                        } else { 
+                        } else {
                             attributes.push(Attribute::from_str(attribute_str)?);
                         }
                     }

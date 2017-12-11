@@ -21,7 +21,7 @@ use uucore::entries;
 
 use std::{fs, iter, cmp};
 use std::fs::File;
-use std::io::{Write, BufReader, BufRead};
+use std::io::{BufReader, BufRead};
 use std::borrow::Cow;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;

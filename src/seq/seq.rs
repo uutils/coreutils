@@ -9,7 +9,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::cmp;
-use std::io::Write;
+use std::io::{Write, stdout};
 
 static NAME: &'static str = "seq";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -225,22 +225,18 @@ fn print_seq(first: f64, step: f64, last: f64, largest_dec: usize, separator: St
         let before_dec = istr.find('.').unwrap_or(ilen);
         if pad && before_dec < padding {
             for _ in 0..(padding - before_dec) {
-                if !pipe_print!("0") {
-                    return;
-                }
+                print!("0");
             }
         }
-        pipe_print!("{}", istr);
+        print!("{}", istr);
         i += 1;
         value = first + i as f64 * step;
         if !done_printing(value, step, last) {
-            if !pipe_print!("{}", separator) {
-                return;
-            }
+            print!("{}", separator);
         }
     }
     if (first >= last && step < 0f64) || (first <= last && step > 0f64) {
-        pipe_print!("{}", terminator);
+        print!("{}", terminator);
     }
-    pipe_flush!();
+    crash_if_err!(1, stdout().flush());
 }

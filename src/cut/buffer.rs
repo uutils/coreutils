@@ -136,7 +136,7 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
             };
 
             match out {
-                Some(out) => pipe_crash_if_err!(1, out.write_all(&buffer[0..consume_val])),
+                Some(out) => crash_if_err!(1, out.write_all(&buffer[0..consume_val])),
                 None => (),
             }
             (res, consume_val)

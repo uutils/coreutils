@@ -13,19 +13,18 @@ extern crate glob;
 #[macro_use]
 extern crate uucore;
 
-
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::borrow::Borrow;
 use std::env;
 
 static SYNTAX: &'static str = "[OPTION]... [FILE]";
-static SUMMARY: &'static str = "Output commands to set the LS_COLORS environment variable."; 
+static SUMMARY: &'static str = "Output commands to set the LS_COLORS environment variable.";
 static LONG_HELP: &'static str = "
  If FILE is specified, read it to determine which colors to use for which
  file types and extensions.  Otherwise, a precompiled database is used.
  For details on the format of these files, run 'dircolors --print-database'
-"; 
+";
 
 mod colors;
 use colors::INTERNAL_DB;

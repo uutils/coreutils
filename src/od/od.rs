@@ -34,7 +34,6 @@ mod output_info;
 mod mockstream;
 
 use std::cmp;
-use std::io::Write;
 use byteorder_io::*;
 use multifilereader::*;
 use partialreader::*;

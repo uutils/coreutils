@@ -17,7 +17,7 @@ extern crate uucore;
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 
 static NAME: &'static str = "tsort";

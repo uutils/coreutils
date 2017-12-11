@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::fs;
-use std::io::Write;
+use std::io::{Write, stdout};
 use std::path::PathBuf;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
@@ -121,7 +121,7 @@ fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
     } else {
         println!("{}", path);
     }
-    pipe_flush!();
+    crash_if_err!(1, stdout().flush());
 }
 
 fn show_usage(opts: &getopts::Options) {

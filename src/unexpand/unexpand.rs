@@ -249,7 +249,7 @@ fn unexpand(options: Options) {
                             scol = col;             // now printed up to this column
                         }
                     },
-                    Other | Backspace => {  // always 
+                    Other | Backspace => {  // always
                         write_tabs(&mut output, ts, scol, col, pctype == Tab, init, options.aflag);
                         init = false;               // no longer at the start of a line
                         col = if ctype == Other {   // use computed width
@@ -273,5 +273,5 @@ fn unexpand(options: Options) {
             buf.truncate(0);    // clear out the buffer
         }
     }
-    pipe_flush!(output);
+    crash_if_err!(1, output.flush())
 }
