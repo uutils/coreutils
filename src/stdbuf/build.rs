@@ -52,14 +52,8 @@ fn main() {
     }
     link.arg("-o")
         .arg(format!("{}/libstdbuf.{}", out_dir, platform::DYLIB_EXT))
-        .arg(format!("{}/libstdbuf.a", out_dir));
-    if platform::DYLIB_LINK_START.len() > 0 {
-        link.arg(platform::DYLIB_LINK_START);
-    }
-    link.arg(entry);
-    if platform::DYLIB_LINK_END.len() > 0 {
-        link.arg(platform::DYLIB_LINK_END);
-    }
+        .arg(format!("{}/libstdbuf.a", out_dir))
+        .arg(entry);
     if !link.spawn().unwrap().wait().unwrap().success() {
         panic!("linking failed");
     }
