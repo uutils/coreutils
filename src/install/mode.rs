@@ -2,6 +2,7 @@ extern crate libc;
 
 use std::path::Path;
 use std::fs;
+#[cfg(not(windows))]
 use uucore::mode;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.

@@ -20,6 +20,7 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use walker::Walker;
+#[cfg(not(windows))]
 use uucore::mode;
 
 const NAME: &'static str = "chmod";
