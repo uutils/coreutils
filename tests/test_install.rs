@@ -85,7 +85,7 @@ fn test_install_mode_numeric() {
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
-    assert_eq!(0o333 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o100333 as u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn test_install_mode_symbolic() {
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
-    assert_eq!(0o003 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o100003 as u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -134,5 +134,5 @@ fn test_install_mode_directories() {
 
     assert!(at.dir_exists(component));
     let permissions = at.metadata(component).permissions();
-    assert_eq!(0o333 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o040333 as u32, PermissionsExt::mode(&permissions));
 }
