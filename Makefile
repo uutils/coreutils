@@ -61,6 +61,7 @@ PROGS       := \
   fold \
   hashsum \
   head \
+  join \
   link \
   ln \
   ls \

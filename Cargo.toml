@@ -69,6 +69,7 @@ fuchsia = [
 generic = [
   "cat",
   "hashsum",
+  "join",
   "more",
   "ln",
   "ls",
@@ -178,6 +179,7 @@ hostid   = { optional=true, path="src/hostid" }
 hostname = { optional=true, path="src/hostname" }
 id       = { optional=true, path="src/id" }
 install  = { optional=true, path="src/install" }
+join     = { optional=true, path="src/join" }
 kill     = { optional=true, path="src/kill" }
 link     = { optional=true, path="src/link" }
 ln       = { optional=true, path="src/ln" }

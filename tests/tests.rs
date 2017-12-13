@@ -58,6 +58,7 @@ generic! {
     "fold", test_fold;
     "hashsum", test_hashsum;
     "head", test_head;
+    "join", test_join;
     "link", test_link;
     "ln", test_ln;
     "ls", test_ls;

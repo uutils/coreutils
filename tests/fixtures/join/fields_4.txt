@@ -1,0 +1,5 @@
+2 c 1 cd
+3 d 2 de
+5 e 3 ef
+7 f 4 fg
+11 g 5 gh
