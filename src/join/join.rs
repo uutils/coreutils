@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Lines, Read, stdin};
+use std::io::{BufRead, BufReader, Lines, Stdin, stdin};
 use std::cmp::Ordering;
 
 static NAME: &'static str = "join";
@@ -77,20 +77,20 @@ impl Line {
     }
 }
 
-struct State {
+struct State<'a> {
     key: usize,
     print_unpaired: bool,
-    lines: Lines<BufReader<Box<Read>>>,
+    lines: Lines<Box<BufRead + 'a>>,
     seq: Vec<Line>,
 }
 
-impl State {
-    fn new(name: &str, key: usize, print_unpaired: bool) -> State {
-        let f: Box<Read> = if name == "-" {
-            Box::new(stdin()) as Box<Read>
+impl<'a> State<'a> {
+    fn new(name: &str, stdin: &'a Stdin, key: usize, print_unpaired: bool) -> State<'a> {
+        let f = if name == "-" {
+            Box::new(stdin.lock()) as Box<BufRead>
         } else {
             match File::open(name) {
-                Ok(file) => Box::new(file) as Box<Read>,
+                Ok(file) => Box::new(BufReader::new(file)) as Box<BufRead>,
                 Err(err) => crash!(1, "{}: {}", name, err),
             }
         };
@@ -98,7 +98,7 @@ impl State {
         State {
             key: key,
             print_unpaired: print_unpaired,
-            lines: BufReader::new(f).lines(),
+            lines: f.lines(),
             seq: Vec::new(),
         }
     }
@@ -124,7 +124,7 @@ impl State {
     fn next_line(&mut self) {
         match self.read_line() {
             Some(line) => self.seq[0] = line,
-            None => self.seq.clear()
+            None => self.seq.clear(),
         }
     }
 
@@ -282,14 +282,18 @@ standard output. The default join field is the first, delimited by blanks.",
 }
 
 fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+    let stdin = stdin();
+
     let mut state1 = State::new(
         &files[0],
+        &stdin,
         settings.key1,
         settings.print_unpaired == FileNum::File1,
     );
 
     let mut state2 = State::new(
         &files[1],
+        &stdin,
         settings.key2,
         settings.print_unpaired == FileNum::File2,
     );
