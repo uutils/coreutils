@@ -123,12 +123,8 @@ impl State {
     /// Move to the next line, if any.
     fn next_line(&mut self) {
         match self.read_line() {
-            Some(line) => {
-                self.seq[0] = line;
-            }
-            None => {
-                self.seq.clear();
-            }
+            Some(line) => self.seq[0] = line,
+            None => self.seq.clear()
         }
     }
 
@@ -197,7 +193,7 @@ impl State {
 
     fn read_line(&mut self) -> Option<Line> {
         match self.lines.next() {
-            Some(value) => Some(Line::new(value.expect("error reading file"))),
+            Some(value) => Some(Line::new(crash_if_err!(1, value))),
             None => None,
         }
     }
