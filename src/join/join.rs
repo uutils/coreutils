@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
@@ -17,6 +17,7 @@ extern crate uucore;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines, Stdin, stdin};
 use std::cmp::Ordering;
+use clap::{App, Arg};
 
 static NAME: &'static str = "join";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -206,52 +207,59 @@ impl<'a> State<'a> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
+    let matches = App::new(NAME)
+        .version(VERSION)
+        .about(
+            "For each pair of input lines with identical join fields, write a line to
+standard output. The default join field is the first, delimited by blanks.
+
+When FILE1 or FILE2 (not both) is -, read standard input.")
+        .help_message("display this help and exit")
+        .version_message("display version and exit")
+        .arg(Arg::with_name("a")
+            .short("a")
+            .takes_value(true)
+            .possible_values(&["1", "2"])
+            .value_name("FILENUM")
+            .help("also print unpairable lines from file FILENUM, where
+FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
+        .arg(Arg::with_name("i")
+            .short("i")
+            .long("ignore-case")
+            .help("ignore differences in case when comparing fields"))
+        .arg(Arg::with_name("j")
+            .short("j")
+            .takes_value(true)
+            .value_name("FIELD")
+            .help("equivalent to '-1 FIELD -2 FIELD'"))
+        .arg(Arg::with_name("1")
+            .short("1")
+            .takes_value(true)
+            .value_name("FIELD")
+            .help("join on this FIELD of file 1"))
+        .arg(Arg::with_name("2")
+            .short("2")
+            .takes_value(true)
+            .value_name("FIELD")
+            .help("join on this FIELD of file 2"))
+        .arg(Arg::with_name("file1")
+            .required(true)
+            .value_name("FILE1")
+            .hidden(true))
+        .arg(Arg::with_name("file2")
+            .required(true)
+            .value_name("FILE2")
+            .hidden(true))
+        .get_matches_from(args);
+
+    let keys = parse_field_number(matches.value_of("j"));
+    let key1 = parse_field_number(matches.value_of("1"));
+    let key2 = parse_field_number(matches.value_of("2"));
+
     let mut settings: Settings = Default::default();
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optopt(
-        "a",
-        "",
-        "also print unpairable lines from file FILENUM, where FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
-        "FILENUM"
-    );
-    opts.optflag(
-        "i",
-        "ignore-case",
-        "ignore differences in case when comparing fields",
-    );
-    opts.optopt("j", "", "equivalent to '-1 FIELD -2 FIELD'", "FIELD");
-    opts.optopt("1", "", "join on this FIELD of file 1", "FIELD");
-    opts.optopt("2", "", "join on this FIELD of file 2", "FIELD");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-Usage:
- {0} [OPTION]... FILE1 FILE2
-
-For each pair of input lines with identical join fields, write a line to
-standard output. The default join field is the first, delimited by blanks.",
-            NAME,
-            VERSION
-        );
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-
-    let keys = parse_field_number(matches.opt_str("j"));
-    let key1 = parse_field_number(matches.opt_str("1"));
-    let key2 = parse_field_number(matches.opt_str("2"));
-
-    settings.print_unpaired = match matches.opt_str("a") {
+    settings.print_unpaired = match matches.value_of("a") {
         Some(value) => {
-            match &value[..] {
+            match value {
                 "1" => FileNum::File1,
                 "2" => FileNum::File2,
                 value => crash!(1, "invalid file number: {}", value),
@@ -259,40 +267,32 @@ standard output. The default join field is the first, delimited by blanks.",
         }
         None => FileNum::None,
     };
-    settings.ignore_case = matches.opt_present("ignore-case");
+    settings.ignore_case = matches.is_present("i");
     settings.key1 = get_field_number(keys, key1);
     settings.key2 = get_field_number(keys, key2);
 
-    let files = matches.free;
-    let file_count = files.len();
+    let file1 = matches.value_of("file1").unwrap();
+    let file2 = matches.value_of("file2").unwrap();
 
-    if file_count < 1 {
-        crash!(1, "missing operand");
-    } else if file_count < 2 {
-        crash!(1, "missing operand after '{}'", files[0]);
-    } else if file_count > 2 {
-        crash!(1, "extra operand '{}'", files[2]);
-    }
-
-    if files[0] == "-" && files[1] == "-" {
+    if file1 == "-" && file2 == "-" {
         crash!(1, "both files cannot be standard input");
     }
 
-    exec(files, &settings)
+    exec(file1, file2, &settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
     let stdin = stdin();
 
     let mut state1 = State::new(
-        &files[0],
+        &file1,
         &stdin,
         settings.key1,
         settings.print_unpaired == FileNum::File1,
     );
 
     let mut state2 = State::new(
-        &files[1],
+        &file2,
         &stdin,
         settings.key2,
         settings.print_unpaired == FileNum::File2,
@@ -349,7 +349,7 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> usize {
 }
 
 /// Parse the specified field string as a natural number and return it.
-fn parse_field_number(value: Option<String>) -> Option<usize> {
+fn parse_field_number(value: Option<&str>) -> Option<usize> {
     match value {
         Some(value) => {
             match value.parse() {
