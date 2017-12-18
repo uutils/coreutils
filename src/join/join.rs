@@ -53,7 +53,7 @@ struct Line {
 
 impl Line {
     fn new(string: String) -> Line {
-        Line { fields: string.split_whitespace().map(|s| String::from(s)).collect() }
+        Line { fields: string.split_whitespace().map(String::from).collect() }
     }
 
     /// Get field at index.
