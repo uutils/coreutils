@@ -35,6 +35,7 @@ dependencies = [
  "hostname 0.0.1",
  "id 0.0.1",
  "install 0.0.1",
+ "join 0.0.1",
  "kill 0.0.1",
  "lazy_static 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -586,6 +587,14 @@ version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "either 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "join"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.15 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
 ]
 
 [[package]]
