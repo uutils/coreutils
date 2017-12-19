@@ -37,7 +37,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("a",
                  "all",
                  "Behave as though all of the options -mnrsv were specified.");
-    opts.optflag("s", "sysname", "print the operating system name.");
+    opts.optflag("s", "kernel-name", "print the operating system name.");
     opts.optflag("n", "nodename", "print the nodename (the nodename may be a name that the system is known by to a communications network).");
     opts.optflag("r", "kernel-release", "print the operating system release.");
     opts.optflag("v", "kernel-version", "print the operating system version.");
