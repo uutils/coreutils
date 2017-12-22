@@ -8,6 +8,9 @@ build = "../../mkmain.rs"
 name = "uu_uname"
 path = "uname.rs"
 
+[dependencies]
+clap = "2.20.0"
+
 [dependencies.uucore]
 path = "../uucore"
 default-features = false
