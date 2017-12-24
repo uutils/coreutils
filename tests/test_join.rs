@@ -93,3 +93,34 @@ fn case_insensitive() {
         .arg("-i")
         .succeeds().stdout_only_fixture("case_insensitive.expected");
 }
+
+#[test]
+fn semicolon_separated() {
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg(";")
+        .succeeds().stdout_only_fixture("semicolon_separated.expected");
+}
+
+#[test]
+fn new_line_separated() {
+    new_ucmd!()
+        .arg("-")
+        .arg("fields_2.txt")
+        .arg("-t")
+        .arg("")
+        .pipe_in("1 a\n1 b\n8 h\n")
+        .succeeds().stdout_only("1 a\n8 h");
+}
+
+#[test]
+fn multitab_character() {
+    new_ucmd!()
+        .arg("semicolon_fields_1.txt")
+        .arg("semicolon_fields_2.txt")
+        .arg("-t")
+        .arg("э")
+        .fails().stderr_is("join: error: multi-character tab э");
+}

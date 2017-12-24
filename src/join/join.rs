@@ -29,11 +29,19 @@ enum FileNum {
     File2,
 }
 
+#[derive(Copy, Clone)]
+enum Sep {
+    Char(char),
+    Line,
+    Whitespaces,
+}
+
 struct Settings {
     key1: usize,
     key2: usize,
     print_unpaired: FileNum,
     ignore_case: bool,
+    separator: Sep,
 }
 
 impl Default for Settings {
@@ -43,6 +51,7 @@ impl Default for Settings {
             key2: 0,
             print_unpaired: FileNum::None,
             ignore_case: false,
+            separator: Sep::Whitespaces,
         }
     }
 }
@@ -52,8 +61,14 @@ struct Line {
 }
 
 impl Line {
-    fn new(string: String) -> Line {
-        Line { fields: string.split_whitespace().map(String::from).collect() }
+    fn new(string: String, separator: Sep) -> Line {
+        let fields = match separator {
+            Sep::Whitespaces => string.split_whitespace().map(String::from).collect(),
+            Sep::Char(sep) => string.split(sep).map(String::from).collect(),
+            Sep::Line => vec![string],
+        };
+
+        Line { fields }
     }
 
     /// Get field at index.
@@ -65,14 +80,11 @@ impl Line {
         }
     }
 
-    /// Iterate each field except the one at the index.
-    fn foreach_except<F>(&self, index: usize, f: &F)
-    where
-        F: Fn(&String),
-    {
-        for (i, field) in self.fields.iter().enumerate() {
+    /// Print each field except the one at the index.
+    fn print_fields(&self, index: usize, separator: char) {
+        for i in 0..self.fields.len() {
             if i != index {
-                f(&field);
+                print!("{}{}", separator, self.fields[i]);
             }
         }
     }
@@ -113,17 +125,12 @@ impl<'a> State<'a> {
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(&mut self) {
+    fn skip_line(&mut self, read_sep: Sep, write_sep: char) {
         if self.print_unpaired {
-            self.print_unpaired_line(&self.seq[0]);
+            self.print_unpaired_line(&self.seq[0], write_sep);
         }
 
-        self.next_line();
-    }
-
-    /// Move to the next line, if any.
-    fn next_line(&mut self) {
-        match self.read_line() {
+        match self.read_line(read_sep) {
             Some(line) => self.seq[0] = line,
             None => self.seq.clear(),
         }
@@ -131,8 +138,8 @@ impl<'a> State<'a> {
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, ignore_case: bool) -> Option<Line> {
-        while let Some(line) = self.read_line() {
+    fn extend(&mut self, read_sep: Sep, ignore_case: bool) -> Option<Line> {
+        while let Some(line) = self.read_line(read_sep) {
             let diff = compare(
                 self.seq[0].get_field(self.key),
                 line.get_field(self.key),
@@ -150,14 +157,14 @@ impl<'a> State<'a> {
     }
 
     /// Combine two line sequences.
-    fn combine(&self, other: &State) {
+    fn combine(&self, other: &State, write_sep: char) {
         let key = self.seq[0].get_field(self.key);
 
         for line1 in &self.seq {
             for line2 in &other.seq {
                 print!("{}", key);
-                line1.foreach_except(self.key, &print_field);
-                line2.foreach_except(other.key, &print_field);
+                line1.print_fields(self.key, write_sep);
+                line2.print_fields(other.key, write_sep);
                 println!();
             }
         }
@@ -176,32 +183,32 @@ impl<'a> State<'a> {
         !self.seq.is_empty()
     }
 
-    fn initialize(&mut self) {
-        if let Some(line) = self.read_line() {
+    fn initialize(&mut self, read_sep: Sep) {
+        if let Some(line) = self.read_line(read_sep) {
             self.seq.push(line);
         }
     }
 
-    fn finalize(&mut self) {
+    fn finalize(&mut self, read_sep: Sep, write_sep: char) {
         if self.has_line() && self.print_unpaired {
-            self.print_unpaired_line(&self.seq[0]);
+            self.print_unpaired_line(&self.seq[0], write_sep);
 
-            while let Some(line) = self.read_line() {
-                self.print_unpaired_line(&line);
+            while let Some(line) = self.read_line(read_sep) {
+                self.print_unpaired_line(&line, write_sep);
             }
         }
     }
 
-    fn read_line(&mut self) -> Option<Line> {
+    fn read_line(&mut self, sep: Sep) -> Option<Line> {
         match self.lines.next() {
-            Some(value) => Some(Line::new(crash_if_err!(1, value))),
+            Some(value) => Some(Line::new(crash_if_err!(1, value), sep)),
             None => None,
         }
     }
 
-    fn print_unpaired_line(&self, line: &Line) {
+    fn print_unpaired_line(&self, line: &Line, sep: char) {
         print!("{}", line.get_field(self.key));
-        line.foreach_except(self.key, &print_field);
+        line.print_fields(self.key, sep);
         println!();
     }
 }
@@ -232,6 +239,11 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
             .takes_value(true)
             .value_name("FIELD")
             .help("equivalent to '-1 FIELD -2 FIELD'"))
+        .arg(Arg::with_name("t")
+            .short("t")
+            .takes_value(true)
+            .value_name("CHAR")
+            .help("use CHAR as input and output field separator"))
         .arg(Arg::with_name("1")
             .short("1")
             .takes_value(true)
@@ -271,6 +283,14 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
     settings.key1 = get_field_number(keys, key1);
     settings.key2 = get_field_number(keys, key2);
 
+    if let Some(value) = matches.value_of("t") {
+        settings.separator = match value.len() {
+            0 => Sep::Line,
+            1 => Sep::Char(value.chars().nth(0).unwrap()),
+            _ => crash!(1, "multi-character tab {}", value),
+        };
+    }
+
     let file1 = matches.value_of("file1").unwrap();
     let file2 = matches.value_of("file2").unwrap();
 
@@ -298,24 +318,29 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         settings.print_unpaired == FileNum::File2,
     );
 
-    state1.initialize();
-    state2.initialize();
+    let write_sep = match settings.separator {
+        Sep::Char(sep) => sep,
+        _ => ' ',
+    };
+
+    state1.initialize(settings.separator);
+    state2.initialize(settings.separator);
 
     while state1.has_line() && state2.has_line() {
         let diff = state1.compare(&state2, settings.ignore_case);
 
         match diff {
             Ordering::Less => {
-                state1.skip_line();
+                state1.skip_line(settings.separator, write_sep);
             }
             Ordering::Greater => {
-                state2.skip_line();
+                state2.skip_line(settings.separator, write_sep);
             }
             Ordering::Equal => {
-                let next_line1 = state1.extend(settings.ignore_case);
-                let next_line2 = state2.extend(settings.ignore_case);
+                let next_line1 = state1.extend(settings.separator, settings.ignore_case);
+                let next_line2 = state2.extend(settings.separator, settings.ignore_case);
 
-                state1.combine(&state2);
+                state1.combine(&state2, write_sep);
 
                 state1.reset(next_line1);
                 state2.reset(next_line2);
@@ -323,8 +348,8 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         }
     }
 
-    state1.finalize();
-    state2.finalize();
+    state1.finalize(settings.separator, write_sep);
+    state2.finalize(settings.separator, write_sep);
 
     0
 }
@@ -367,8 +392,4 @@ fn compare(field1: &str, field2: &str, ignore_case: bool) -> Ordering {
     } else {
         field1.cmp(field2)
     }
-}
-
-fn print_field(field: &String) {
-    print!("{}{}", ' ', field);
 }
