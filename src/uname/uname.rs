@@ -61,7 +61,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             .short("s")
             .long(OPT_KERNELNAME)
             .alias("sysname") // Obsolescent option in GNU uname
-            .help("print the operating system name.")
+            .help("print the operating system name."))
         .arg(Arg::with_name(OPT_NODENAME)
             .short("n")
             .long(OPT_NODENAME)
