@@ -109,7 +109,7 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
     // TODO implement flag
         .optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
                                   files, and in some cases, do not modify the destination at all")
-        .optflag("d", "directory", "treat all arguments as directory names\n \
+        .optflag("d", "directory", "treat all arguments as directory names.\n \
                                     create all components of the specified directories")
     // TODO implement flag
         .optflag("D", "", "(unimplemented) create all leading components of DEST except the\n \
@@ -286,6 +286,13 @@ fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
     }
 }
 
+/// Test if the path is a a new file path that can be
+/// created immediately
+fn is_new_file_path(path: &Path) -> bool {
+    path.is_file() ||
+        ! path.exists() && path.parent().map(|p| p.is_dir()).unwrap_or(true)
+}
+
 /// Perform an install, given a list of paths and behaviour.
 ///
 /// Returns an integer intended as a program return code.
@@ -296,9 +303,13 @@ fn standard(paths: &[PathBuf], b: Behaviour) -> i32 {
         1
     } else {
         let sources = &paths[0..paths.len() - 1];
-        let target_directory = &paths[paths.len() - 1];
+        let target = &paths[paths.len() - 1];
 
-        copy_files_into_dir(sources, target_directory, &b)
+        if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
+            copy_file_to_file(&sources[0], target, &b)
+        } else {
+            copy_files_into_dir(sources, target, &b)
+        }
     }
 }
 
@@ -336,6 +347,20 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
         }
     };
     if all_successful { 0 } else { 1 }
+}
+
+/// Copy a file to another file.
+///
+/// Prints verbose information and error messages.
+/// Returns an integer intended as a program return code.
+///
+/// # Parameters
+///
+/// _file_ must exist as a non-directory.
+/// _target_ must be a non-directory
+///
+fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behaviour) -> i32 {
+    if copy(file, &target, b).is_err() { 1 } else { 0 }
 }
 
 /// Copy one file to a new location, changing metadata.

@@ -29,6 +29,20 @@ fn test_install_basic() {
 }
 
 #[test]
+fn test_install_failing_not_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "test_install_target_dir_file_a1";
+    let file2 = "test_install_target_dir_file_a2";
+    let file3 = "test_install_target_dir_file_a3";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.touch(file3);
+    assert!(ucmd.arg(file1).arg(file2).arg(file3)
+            .fails().stderr.contains("not a directory"));
+}
+
+#[test]
 fn test_install_unimplemented_arg() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_install_target_dir_dir_b";
@@ -136,3 +150,47 @@ fn test_install_mode_directories() {
     let permissions = at.metadata(component).permissions();
     assert_eq!(0o040333 as u32, PermissionsExt::mode(&permissions));
 }
+
+#[test]
+fn test_install_target_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "test_install_target_file_file_i1";
+    let file2 = "test_install_target_file_file_i2";
+
+    at.touch(file1);
+    at.touch(file2);
+    ucmd.arg(file1).arg(file2).succeeds().no_stderr();
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+}
+
+#[test]
+fn test_install_target_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_install_target_new_filer_file_j";
+    let dir = "test_install_target_new_file_dir_j";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file).arg(format!("{}/{}", dir, file)).succeeds().no_stderr();
+
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(&format!("{}/{}", dir, file)));
+}
+
+#[test]
+fn test_install_target_new_file_failing_nonexistent_parent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "test_install_target_new_file_failing_file_k1";
+    let file2 = "test_install_target_new_file_failing_file_k2";
+    let dir = "test_install_target_new_file_failing_dir_k";
+
+    at.touch(file1);
+
+    let err = ucmd.arg(file1).arg(format!("{}/{}", dir, file2))
+             .fails().stderr;
+
+    assert!(err.contains("not a directory"))
+}
+
