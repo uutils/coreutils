@@ -106,6 +106,7 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
                                     file", "CONTROL")
     // TODO implement flag
         .optflag("b", "", "(unimplemented) like --backup but does not accept an argument")
+        .optflag("c", "", "ignored")
     // TODO implement flag
         .optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
                                   files, and in some cases, do not modify the destination at all")
