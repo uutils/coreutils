@@ -158,3 +158,18 @@ fn test_rm_invalid_symlink() {
 
     ucmd.arg(link).succeeds();
 }
+
+#[test]
+fn test_rm_force_no_operand() {
+    let mut ucmd = new_ucmd!();
+
+    ucmd.arg("-f").succeeds().no_stderr();
+}
+
+#[test]
+fn test_rm_no_operand() {
+    let mut ucmd = new_ucmd!();
+
+    ucmd.fails()
+        .stderr_is("rm: error: missing an argument\nrm: error: for help, try 'rm --help'\n");
+}

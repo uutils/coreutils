@@ -66,6 +66,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(m) => m,
         Err(f) => crash!(1, "{}", f)
     };
+
+    let force = matches.opt_present("force");
+
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
         println!("");
@@ -87,13 +90,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("assurance that the contents are truly unrecoverable, consider using shred.");
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() {
+    } else if matches.free.is_empty() && !force {
         show_error!("missing an argument");
         show_error!("for help, try '{0} --help'", NAME);
         return 1;
     } else {
         let options = Options {
-            force: matches.opt_present("force"),
+            force: force,
             interactive: {
                 if matches.opt_present("i") {
                     InteractiveMode::InteractiveAlways
