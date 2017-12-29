@@ -13,16 +13,12 @@ mod mkmain;
 mod platform {
     pub const DYLIB_EXT: &'static str = "dylib";
     pub const DYLIB_FLAGS: [&'static str; 3] = ["-dynamiclib", "-undefined", "dynamic_lookup"];
-    pub const DYLIB_LINK_START: &'static str = "";
-    pub const DYLIB_LINK_END: &'static str = "";
 }
 
 #[cfg(target_os = "linux")]
 mod platform {
     pub const DYLIB_EXT: &'static str = "so";
     pub const DYLIB_FLAGS: [&'static str; 1] = ["-shared"];
-    pub const DYLIB_LINK_START: &'static str = "-Wl,--whole-archive";
-    pub const DYLIB_LINK_END: &'static str = "-Wl,--no-whole-archive";
 }
 
 // FIXME: this entire thing is pretty fragile

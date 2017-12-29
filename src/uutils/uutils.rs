@@ -79,7 +79,7 @@ fn main() {
                 std::process::exit(uumain(args.clone()));
             }
             None => {
-                if &args[0][..] == "--help" {
+                if &args[0][..] == "--help" || &args[0][..] == "-h" {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
                         let util = &args[1][..];
