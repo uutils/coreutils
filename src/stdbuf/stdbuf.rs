@@ -10,20 +10,23 @@
 */
 
 extern crate getopts;
+extern crate tempdir;
 
 #[macro_use]
 extern crate uucore;
 
 use getopts::{Matches, Options};
-use std::io;
+use tempdir::TempDir;
+use std::fs::File;
+use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
-use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static NAME: &'static str = "stdbuf";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-static LIBSTDBUF: &'static str = "libstdbuf";
+
+const STDBUF_INJECT: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
 enum BufferType {
     Default,
@@ -50,12 +53,12 @@ enum OkMsg {
 
 #[cfg(target_os = "linux")]
 fn preload_strings() -> (&'static str, &'static str) {
-    ("LD_PRELOAD", ".so")
+    ("LD_PRELOAD", "so")
 }
 
 #[cfg(target_os = "macos")]
 fn preload_strings() -> (&'static str, &'static str) {
-    ("DYLD_LIBRARY_PATH", ".dylib")
+    ("DYLD_LIBRARY_PATH", "dylib")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
@@ -184,30 +187,14 @@ fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: Buffer
     }
 }
 
-fn exe_path() -> io::Result<PathBuf> {
-    let exe_path = try!(std::env::current_exe());
-    let absolute_path = try!(canonicalize(exe_path, CanonicalizeMode::Normal));
-    Ok(match absolute_path.parent() {
-        Some(p) => p.to_path_buf(),
-        None => absolute_path.clone()
-    })
-}
-
-fn get_preload_env() -> (String, String) {
+fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
     let (preload, extension) = preload_strings();
-    let mut libstdbuf = LIBSTDBUF.to_owned();
-    libstdbuf.push_str(extension);
-    // First search for library in directory of executable.
-    let mut path = exe_path().unwrap_or_else(|_| crash!(1, "Impossible to fetch the path of this executable."));
-    path.push(libstdbuf.clone());
-    if path.exists() {
-        match path.as_os_str().to_str() {
-            Some(s) => { return (preload.to_owned(), s.to_owned()); },
-            None => crash!(1, "Error while converting path.")
-        };
-    }
-    // We assume library is in LD_LIBRARY_PATH/ DYLD_LIBRARY_PATH.
-    (preload.to_owned(), libstdbuf)
+    let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
+
+    let mut file = File::create(&inject_path)?;
+    file.write_all(STDBUF_INJECT)?;
+    
+    Ok((preload.to_owned(), inject_path))
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -244,7 +231,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
     let command_name = &args[command_idx as usize];
     let mut command = Command::new(command_name);
-    let (preload_env, libstdbuf) = get_preload_env();
+    
+    let mut tmp_dir = return_if_err!(1, TempDir::new("stdbuf"));
+    let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
     command.args(&args[(command_idx as usize) + 1 ..]).env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);

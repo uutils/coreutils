@@ -10,13 +10,11 @@ path = "stdbuf.rs"
 
 [dependencies]
 getopts = "0.2.14"
+tempdir = "0.3.5"
 uucore = { path="../uucore" }
-libstdbuf = { path="libstdbuf" }
 
 [build-dependencies]
-cc = "1.0"
-glob = "0.2"
-libstdbuf = { path = "libstdbuf" }
+libstdbuf = { path="libstdbuf" }
 
 [[bin]]
 name = "stdbuf"
