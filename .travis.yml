@@ -22,12 +22,29 @@ matrix:
     - rust: nightly
       os: linux
       env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
+
 cache:
- directories:
-  - $HOME/.cargo
+  directories:
+    - $HOME/.cargo
+
 sudo: true
+
 before_install:
   - if [ $REDOX ]; then ./.travis/redox-toolchain.sh; fi
+
 script:
   - cargo build $CARGO_ARGS --features "$FEATURES"
   - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
+
+addons:
+  apt:
+    packages:
+      - libssl-dev
+
+after_success: |
+  if [ "$TRAVIS_OS_NAME" = linux -a "$TRAVIS_RUST_VERSION" = stable ]; then
+    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
+    cargo tarpaulin --out Xml
+    bash <(curl -s https://codecov.io/bash)
+  fi
+
