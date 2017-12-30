@@ -25,8 +25,9 @@ Requirements
 ------------
 
 * Rust (`cargo`, `rustc`)
-* GNU Make (an option to build on Unix and to install on every platform)
-* CMake (used by Oniguruma, which is required for `expr`)
+* GNU Make (required to build documentation)
+* CMake (Unix; used by Oniguruma, which is required for `expr`)
+* NMake (Windows; used by Oniguruma, which is required for `expr`)
 * [Sphinx](http://www.sphinx-doc.org/) (for documentation)
 * gzip (for installing documentation)
 
@@ -84,76 +85,95 @@ $ make
 ```
 
 To build all but a few of the available utilities:
-```
+```bash
 $ make SKIP_UTILS='UTILITY_1 UTILITY_2'
 ```
 
 To build only a few of the available utilities:
-```
+```bash
 $ make UTILS='UTILITY_1 UTILITY_2'
 ```
 
 Installation Instructions
 -------------------------
 
-Unfortunately, due to limitations with Cargo, uutils requires `make` to
-install.
+### Cargo ###
+
+Likewise, installing can simply be done using:
+```bash
+$ cargo install
+```
+
+This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
+
+### GNU Make ###
 
 To install all available utilities:
-```
-make install
+```bash
+$ make install
 ```
 
 To install all but a few of the available utilities:
-```
-make SKIP_UTILS='UTILITY_1 UTILITY_2' install
+```bash
+$ make SKIP_UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install only a few of the available utilities:
-```
-make UTILS='UTILITY_1 UTILITY_2' install
+```bash
+$ make UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install every program with a prefix (e.g. uu-echo uu-cat):
-```
-make PROG_PREFIX=PREFIX_GOES_HERE install
+```bash
+$ make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
 
 To install the multicall binary:
-```
-make MULTICALL=y install
+```bash
+$ make MULTICALL=y install
 ```
 
 Set install parent directory (default value is /usr/local):
-```
+```bash
 # DESTDIR is also supported
-make PREFIX=/my/path install
+$ make PREFIX=/my/path install
 ```
 
 Uninstallation Instructions
 ---------------------------
 
-Likewise, uninstalling requires `make`.
+Uninstallation differs depending on how you have installed uutils.  If you used
+Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
+Make to uninstall.
+
+### Cargo ###
+
+To uninstall uutils:
+```bash
+$ cargo uninstall uutils
+```
+
+### GNU Make ###
 
 To uninstall all utilities:
-```
-make uninstall
+```bash
+$ make uninstall
 ```
 
 To uninstall every program with a set prefix:
-```
-make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+```bash
+$ make PROG_PREFIX=PREFIX_GOES_HERE uninstall
 ```
 
 To uninstall the multicall binary:
-```
-make MULTICALL=y uninstall
+```bash
+$ make MULTICALL=y uninstall
 ```
 
 To uninstall from a custom parent directory:
-```
+```bash
 # DESTDIR is also supported
-make PREFIX=/my/path uninstall
+$ make PREFIX=/my/path uninstall
 ```
 
 Test Instructions
@@ -177,23 +197,23 @@ $ cargo test --features "chmod mv tail" --no-default-features
 ### GNU Make ###
 
 To simply test all available utilities:
-```
-make test
+```bash
+$ make test
 ```
 
 To test all but a few of the available utilities:
-```
-make SKIP_UTILS='UTILITY_1 UTILITY_2' test
+```bash
+$ make SKIP_UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To test only a few of the available utilities:
-```
-make UTILS='UTILITY_1 UTILITY_2' test
+```bash
+$ make UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To include tests for unimplemented behavior:
-```
-make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
+```bash
+$ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
 Run Busybox Tests
@@ -203,18 +223,18 @@ This testing functionality is only available on *nix operating systems and
 requires `make`.
 
 To run busybox's tests for all utilities for which busybox has tests
-```
-make busytest
+```bash
+$ make busytest
 ```
 
 To run busybox's tests for a few of the available utilities
-```
-make UTILS='UTILITY_1 UTILITY_2' busytest
+```bash
+$ make UTILS='UTILITY_1 UTILITY_2' busytest
 ```
 
 To pass an argument like "-v" to the busybox test runtime
-```
-make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
+```bash
+$ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
 Contribute
@@ -231,15 +251,15 @@ Utilities
 | base32    | expr      | csplit |
 | base64    | install   | dd     |
 | basename  | ls        | df     |
-| cat       | more      | join   |
-| chgrp     | od (`--strings` and 128-bit data types missing) | numfmt |
-| chmod     | printf    | pr     |
-| chown     | sort      | runcon |
-| chroot    | split     | stty   |
+| cat       | more      | numfmt |
+| chgrp     | od (`--strings` and 128-bit data types missing) | pr |
+| chmod     | printf    | runcon |
+| chown     | sort      | stty   |
+| chroot    | split     |        |
 | cksum     | tail      |        |
 | comm      | test      |        |
 | cut       | date      |        |
-| dircolors |           |        |
+| dircolors | join      |        |
 | dirname   |           |        |
 | du        |           |        |
 | echo      |           |        |
