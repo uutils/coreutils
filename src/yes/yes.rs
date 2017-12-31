@@ -21,6 +21,8 @@ use getopts::Options;
 static NAME: &'static str = "yes";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+const BUF_SIZE: usize = 8192;
+
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
@@ -50,7 +52,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         matches.free.join(" ")
     };
 
-    exec(&string[..]);
+    let mut multistring = string.clone();
+    while multistring.len() < BUF_SIZE - string.len() - 1 {
+        multistring.push_str("\n");
+        multistring.push_str(&string);
+    }
+
+    exec(&multistring[..]);
 
     0
 }
