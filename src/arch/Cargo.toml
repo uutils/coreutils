@@ -8,6 +8,10 @@ build = "../../mkmain.rs"
 name = "uu_arch"
 path = "arch.rs"
 
+[dependencies]
+failure = "0.1.1"
+failure_derive = "0.1.1"
+
 [dependencies.uucore]
 path = "../uucore"
 default-features = false

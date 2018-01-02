@@ -21,9 +21,9 @@ macro_rules! executable(
 
 #[macro_export]
 macro_rules! show_error(
-    ($($args:tt)+) => ({
-        eprint!("{}: error: ", executable!());
-        eprintln!($($args)+);
+    ($fd:expr, $($args:tt)+) => ({
+        write!($fd.stderr, "{}: error: ", $fd.name)
+            .and_then(|_| writeln!($fd.stderr, $($args)+))
     })
 );
 
@@ -53,37 +53,12 @@ macro_rules! disp_err(
 );
 
 #[macro_export]
-macro_rules! crash(
-    ($exitcode:expr, $($args:tt)+) => ({
-        show_error!($($args)+);
-        ::std::process::exit($exitcode)
-    })
-);
-
-#[macro_export]
-macro_rules! exit(
-    ($exitcode:expr) => ({
-        ::std::process::exit($exitcode)
-    })
-);
-
-#[macro_export]
-macro_rules! crash_if_err(
-    ($exitcode:expr, $exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => crash!($exitcode, "{}", f),
-        }
-    )
-);
-
-#[macro_export]
 macro_rules! return_if_err(
-    ($exitcode:expr, $exp:expr) => (
+    ($exitcode:expr, $fd: expr, $exp:expr) => (
         match $exp {
             Ok(m) => m,
             Err(f) => {
-                show_error!("{}", f);
+                show_error!($fd, "{}", f);
                 return $exitcode;
             }
         }
@@ -91,32 +66,84 @@ macro_rules! return_if_err(
 );
 
 #[macro_export]
-macro_rules! safe_write(
-    ($fd:expr, $($args:tt)+) => (
-        match write!($fd, $($args)+) {
-            Ok(_) => {}
-            Err(f) => panic!(f.to_string())
+macro_rules! generate_from_impl(
+    ($name:ident, $entry:ident, $from:path) => (
+        impl From<$from> for $name {
+            fn from(orig: $from) -> $name {
+                $name::$entry(orig)
+            }
         }
     )
 );
 
 #[macro_export]
-macro_rules! safe_writeln(
-    ($fd:expr, $($args:tt)+) => (
-        match writeln!($fd, $($args)+) {
-            Ok(_) => {}
-            Err(f) => panic!(f.to_string())
+macro_rules! xxxxxxxgenerate_error_type(
+    ($name:ident, $($err:path, $exitcode:tt)*) => (
+        #[derive(Debug, Fail)]
+        #[fail(display = "{}", err)]
+        pub struct $name {
+            exitcode: i32,
+            err: $crate::failure::Error
         }
+
+        impl From<::std::io::Error> for $name {
+            fn from(err: ::std::io::Error) -> $name {
+                $name {
+                    exitcode: if err.kind() == ::std::io::ErrorKind::BrokenPipe {
+                        $crate::PIPE_EXITCODE
+                    } else {
+                        1
+                    },
+                    err: err.into()
+                }
+            }
+        }
+
+        impl From<$crate::failure::Error> for $name {
+            fn from(err: $crate::failure::Error) -> $name {
+                $name {
+                    exitcode: 1,
+                    err: err.into()
+                }
+            }
+        }
+
+        impl<T> From<$crate::failure::Context<T>> for $name {
+            fn from(err: $crate::failure::Context<T>) -> $name {
+                $name {
+                    exitcode: 1,
+                    err: err.into()
+                }
+            }
+        }
+
+        $(
+            impl From<$err> for $name {
+                fn from(err: $err) -> $name {
+                    $name {
+                        exitcode: generate_exitcode!(err, $exitcode),
+                        err: err.into()
+                    }
+                }
+            }
+        )*
+
+        impl $crate::UError for $name {
+            fn code(&self) -> i32 { self.exitcode }
+            fn error(self) -> $crate::failure::Error { self.err }
+        }
+
+        pub type Result<T> = ::std::result::Result<T, $name>;
     )
 );
 
 #[macro_export]
-macro_rules! safe_unwrap(
-    ($exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => crash!(1, "{}", f.to_string())
-        }
+macro_rules! generate_exitcode(
+    ($err:expr, _) => (
+        $err.code()
+    );
+    ($err:expr, $exitcode:tt) => (
+        $exitcode
     )
 );
 

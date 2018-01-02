@@ -10,10 +10,16 @@
 
 #[macro_use]
 extern crate uucore;
+#[macro_use]
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
+
 use uucore::encoding::{Data, Format, wrap_print};
+use uucore::{ProgramInfo, UStatus, Util};
 
 use std::fs::File;
-use std::io::{BufReader, Read, stdin};
+use std::io::{self, BufReader, Read, Write, stdin};
 use std::path::Path;
 
 static SYNTAX: &'static str = "[OPTION]... [FILE]";
@@ -28,55 +34,86 @@ static LONG_HELP: &'static str = "
  encoded stream.
 ";
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("d", "decode", "decode data")
-        .optflag("i",
-                 "ignore-garbage",
-                 "when decoding, ignore non-alphabetic characters")
-        .optopt("w",
-                "wrap",
-                "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-                "COLS")
-        .parse(args);
+pub const UTILITY: Base32 = Base32;
 
-    let line_wrap = match matches.opt_str("wrap") {
-        Some(s) => {
-            match s.parse() {
-                Ok(n) => n,
-                Err(e) => {
-                    crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
+pub struct Base32;
+
+impl<'a, I: Read, O: Write, E: Write> Util<'a, I, O, E, Error> for Base32 {
+    fn uumain(args: Vec<String>, pio: &mut ProgramInfo<I, O, E>) -> Result<i32, Error> {
+        let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+            .optflag("d", "decode", "decode data")
+            .optflag("i",
+                     "ignore-garbage",
+                     "when decoding, ignore non-alphabetic characters")
+            .optopt("w",
+                    "wrap",
+                    "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
+                    "COLS")
+            .parse(args, pio)?;
+    
+        if matches.is_none() {
+            return Ok(0);
+        }
+        let matches = matches.unwrap();
+
+        let line_wrap = match matches.opt_str("wrap") {
+            Some(s) => {
+                match s.parse() {
+                    Ok(wrap) => wrap,
+                    Err(f) => return Err(Error::ParseWrap(f, s))
                 }
             }
+            None => 76,
+        };
+
+        if matches.free.len() > 1 {
+            Err(format_err!("extra operand '{}'", matches.free[0]))?;
         }
-        None => 76,
-    };
 
-    if matches.free.len() > 1 {
-        disp_err!("extra operand ‘{}’", matches.free[0]);
-        return 1;
-    }
+        let input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
+            BufReader::new(Box::new(stdin()) as Box<Read>)
+        } else {
+            let path = Path::new(matches.free[0].as_str());
+            let file_buf = File::open(&path)?;
+            BufReader::new(Box::new(file_buf) as Box<Read>)
+        };
 
-    let input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
-        BufReader::new(Box::new(stdin()) as Box<Read>)
-    } else {
-        let path = Path::new(matches.free[0].as_str());
-        let file_buf = safe_unwrap!(File::open(&path));
-        BufReader::new(Box::new(file_buf) as Box<Read>)
-    };
+        let mut data = Data::new(input, Format::Base32)
+            .line_wrap(line_wrap)
+            .ignore_garbage(matches.opt_present("ignore-garbage"));
 
-    let mut data = Data::new(input, Format::Base32)
-        .line_wrap(line_wrap)
-        .ignore_garbage(matches.opt_present("ignore-garbage"));
-
-    if !matches.opt_present("decode") {
-        wrap_print(line_wrap, data.encode());
-    } else {
-        match data.decode() {
-            Ok(s) => print!("{}", String::from_utf8(s).unwrap()),
-            Err(_) => crash!(1, "invalid input"),
+        if !matches.opt_present("decode") {
+            wrap_print(line_wrap, data.encode());
+        } else {
+            match data.decode() {
+                Ok(s) => write!(pio, "{}", String::from_utf8(s).unwrap())?,
+                Err(_) => Err(format_err!("invalid input"))?,
+            }
         }
-    }
 
-    0
+        Ok(0)
+    }
 }
+
+#[derive(Debug, Fail)]
+pub enum Error {
+    #[fail(display = "{}", _0)]
+    Io(#[cause] io::Error),
+
+    #[fail(display = "{}", _0)]
+    CoreOpts(#[cause] uucore::coreopts::Error),
+
+    #[fail(display = "invalid wrap size: '{}': {}", _1, _0)]
+    ParseWrap(#[cause] ::std::num::ParseIntError, String),
+
+    #[fail(display = "{}", _0)]
+    General(failure::Error)
+}
+
+impl UStatus for Error { }
+
+generate_from_impl!(Error, Io, io::Error);
+generate_from_impl!(Error, CoreOpts, uucore::coreopts::Error);
+generate_from_impl!(Error, General, failure::Error);
+
+//generate_error_type!(Base32Error, uucore::coreopts::CoreOptionsError, _);

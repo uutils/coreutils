@@ -10,6 +10,8 @@ path = "base32.rs"
 
 [dependencies]
 uucore = { path="../uucore" }
+failure = "0.1.1"
+failure_derive = "0.1.1"
 
 [dependencies.clippy]
 version = "0.0.143"

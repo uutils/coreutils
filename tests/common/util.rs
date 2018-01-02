@@ -55,15 +55,15 @@ pub struct CmdResult {
 
 impl CmdResult {
     /// asserts that the command resulted in a success (zero) status code
-    pub fn success(&self) -> Box<&CmdResult> {
+    pub fn success(&self) -> &CmdResult {
         assert!(self.success);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
-    pub fn failure(&self) -> Box<&CmdResult> {
+    pub fn failure(&self) -> &CmdResult {
         assert!(!self.success);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
@@ -71,9 +71,9 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1. you can not know exactly what stdout will be
     /// or 2. you know that stdout will also be empty
-    pub fn no_stderr(&self) -> Box<&CmdResult> {
+    pub fn no_stderr(&self) -> &CmdResult {
         assert_eq!("", self.stderr);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
@@ -82,21 +82,21 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1. you can not know exactly what stderr will be
     /// or 2. you know that stderr will also be empty
-    pub fn no_stdout(&self) -> Box<&CmdResult> {
+    pub fn no_stdout(&self) -> &CmdResult {
         assert_eq!("", self.stdout);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// stdout_only is a better choice unless stderr may or will be non-empty
-    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(String::from(msg.as_ref()).trim_right(), self.stdout.trim_right());
-        Box::new(self)
+        self
     }
 
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(contents)
     }
@@ -104,13 +104,13 @@ impl CmdResult {
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// stderr_only is a better choice unless stdout may or will be non-empty
-    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(String::from(msg.as_ref()).trim_right(), self.stderr.trim_right());
-        Box::new(self)
+        self
     }
 
     /// like stderr_is(...), but expects the contents of the file at the provided relative path
-    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stderr_is(contents)
     }
@@ -119,12 +119,12 @@ impl CmdResult {
     /// 1. the command resulted in stdout stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stderr stream output
-    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stdout_is(msg)
     }
 
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_only(contents)
     }
@@ -133,20 +133,20 @@ impl CmdResult {
     /// 1. the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stdout stream output
-    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stdout().stderr_is(msg)
     }
 
     /// like stderr_only(...), but expects the contents of the file at the provided relative path
-    pub fn stderr_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stderr_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stderr_only(contents)
     }
 
-    pub fn fails_silently(&self) -> Box<&CmdResult> {
+    pub fn fails_silently(&self) -> &CmdResult {
         assert!(!self.success);
         assert_eq!("", self.stderr);
-        Box::new(self)
+        self
     }
 }
 
@@ -467,23 +467,23 @@ impl UCommand {
         ucmd
     }
 
-    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> Box<&mut UCommand> {
+    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
         self.comm_string.push_str(" ");
         self.comm_string.push_str(arg.as_ref().to_str().unwrap());
         self.raw.arg(arg.as_ref());
-        Box::new(self)
+        self
     }
 
     /// like arg(...), but uses the contents of the file at the provided relative path as the argument
-    pub fn arg_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
+    pub fn arg_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut UCommand {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.arg(contents)
     }
 
-    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
+    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
         if self.has_run {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
         }
@@ -493,30 +493,30 @@ impl UCommand {
         }
 
         self.raw.args(args.as_ref());
-        Box::new(self)
+        self
     }
 
     /// provides stdinput to feed in to the command when spawned
-    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         if self.stdin.is_some() {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
         }
         self.stdin = Some(input.into());
-        Box::new(self)
+        self
     }
 
     /// like pipe_in(...), but uses the contents of the file at the provided relative path as the piped in data
-    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
+    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut UCommand {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.pipe_in(contents)
     }
 
-    pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand> where K: AsRef<OsStr>, V: AsRef<OsStr> {
+    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut UCommand where K: AsRef<OsStr>, V: AsRef<OsStr> {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
         self.raw.env(key, val);
-        Box::new(self)
+        self
     }
 
     /// Spawns the command, feeds the stdin if any, and returns the

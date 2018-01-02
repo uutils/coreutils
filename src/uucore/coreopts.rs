@@ -1,5 +1,21 @@
 extern crate getopts;
 
+use super::{ProgramInfo, UStatus};
+use std::io::{self, Read, Write};
+
+#[derive(Debug, Fail)]
+pub enum Error {
+    #[fail(display = "{}", _0)]
+    Getopts(#[cause] getopts::Fail),
+    #[fail(display = "{}", _0)]
+    Io(#[cause] io::Error)
+}
+
+impl UStatus for Error { }
+
+generate_from_impl!(Error, Getopts, getopts::Fail);
+generate_from_impl!(Error, Io, io::Error);
+
 pub struct HelpText<'a> {
     pub name : &'a str,
     pub version : &'a str,
@@ -48,33 +64,29 @@ impl<'a> CoreOptions<'a> {
     pub fn usage(&self, summary : &str) -> String {
         self.options.usage(summary)
     }
-    pub fn parse(&mut self, args : Vec<String>) -> getopts::Matches {
-        let matches = match self.options.parse(&args[1..]) {
-            Ok(m) => { Some(m) },
-            Err(f) => {
-                eprint!("{}: error: ", self.help_text.name);
-                eprintln!("{}", f);
-                ::std::process::exit(1);
-            }
-        }.unwrap();
+    pub fn parse<'b, I, O, E>(&mut self, args : Vec<String>, pio: &mut ProgramInfo<'b, I, O, E>) -> Result<Option<getopts::Matches>, Error>//UError<CoreOptionsErrorKind>>//CoreOptionsError>
+        where I: Read, O: Write, E: Write
+    {
+        let matches = self.options.parse(&args[1..])?;
         if matches.opt_present("help") {
             let usage_str = if self.help_text.display_usage {
                     format!("\n {}\n\n Reference\n",
                         self.options.usage(self.help_text.summary)
                     ).replace("Options:", " Options:")
                 } else { String::new() };
-            print!("
+            writeln!(pio, "
  {0} {1}
 
  {0} {2}
 {3}{4}
-", self.help_text.name, self.help_text.version, self.help_text.syntax, usage_str, self.help_text.long_help);
-            exit!(0);
+", self.help_text.name, self.help_text.version, self.help_text.syntax, usage_str, self.help_text.long_help)?;
+            Ok(None)
         } else if matches.opt_present("version") {
-            println!("{} {}", self.help_text.name, self.help_text.version);
-            exit!(0);
+            writeln!(pio, "{} {}", self.help_text.name, self.help_text.version)?;
+            Ok(None)
+        } else {
+            Ok(Some(matches))
         }
-        matches
     }
 }
 
