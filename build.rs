@@ -53,6 +53,12 @@ pub fn main() {
                               map.insert(\"shake128sum\", uu_hashsum::uumain);
                               map.insert(\"shake256sum\", uu_hashsum::uumain);\n".as_bytes()).unwrap();
             },
+            // FIXME: this won't work atm because i need to figure out the best way to do this
+            "baseconv" => {
+                mf.write_all("map.insert(\"baseconv\", uu_baseconv::UTILITY);
+                              map.insert(\"base32\", uu_baseconv::UTILITY);
+                              map.insert(\"base64\", uu_baseconv::UTILITY);\n".as_bytes()).unwrap();
+            }
             _ =>
                 mf.write_all(format!("map.insert(\"{krate}\", uu_{krate}::uumain);\n", krate=krate).as_bytes()).unwrap(),
         }

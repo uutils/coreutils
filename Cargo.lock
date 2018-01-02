@@ -63,18 +63,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "base32"
+name = "baseconv"
 version = "0.0.1"
 dependencies = [
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "uucore 0.0.1",
-]
-
-[[package]]
-name = "base64"
-version = "0.0.1"
-dependencies = [
  "uucore 0.0.1",
 ]
 
@@ -1608,8 +1601,7 @@ name = "uutils"
 version = "0.0.1"
 dependencies = [
  "arch 0.0.1",
- "base32 0.0.1",
- "base64 0.0.1",
+ "baseconv 0.0.1",
  "basename 0.0.1",
  "cat 0.0.1",
  "chgrp 0.0.1",

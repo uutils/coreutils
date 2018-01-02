@@ -1,12 +1,12 @@
 [package]
-name = "base32"
+name = "baseconv"
 version = "0.0.1"
 authors = []
 build = "../../mkmain.rs"
 
 [lib]
-name = "uu_base32"
-path = "base32.rs"
+name = "uu_baseconv"
+path = "baseconv.rs"
 
 [dependencies]
 uucore = { path="../uucore" }
@@ -18,5 +18,5 @@ version = "0.0.143"
 optional = true
 
 [[bin]]
-name = "base32"
+name = "baseconv"
 path = "../../uumain.rs"

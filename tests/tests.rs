@@ -40,8 +40,7 @@ macro_rules! generic {
     };
 }
 generic! {
-    "base32", test_base32;
-    "base64", test_base64;
+    "baseconv", test_baseconv;
     "basename", test_basename;
     "cat", test_cat;
     "cksum", test_cksum;

@@ -15,6 +15,7 @@ use std::collections::hash_map::HashMap;
 use std::path::Path;
 use std::env;
 use std::io::Write;
+use uucore::Util;
 
 extern crate uucore;
 
