@@ -47,27 +47,10 @@ fn to_char(bytes: &[u8], base: u32) -> char {
     usize::from_str_radix(from_utf8(bytes.as_ref()).unwrap(), base).unwrap() as u8 as char
 }
 
-#[inline(always)]
-fn isxdigit(c: u8) -> bool {
-    match c as char {
-        '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' |
-        '8' | '9' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' => true,
-        _ => false
-    }
-}
-
-#[inline(always)]
-fn isodigit(c: u8) -> bool {
-    match c as char {
-        '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' => true,
-        _ => false
-    }
-}
-
 fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
     let (max_digits, is_legal_digit) : (usize, fn(u8) -> bool) = match base {
-        8 => (3, isodigit),
-        16 => (2, isxdigit),
+        8 => (3, |c| { (c as char).is_digit(8) }),
+        16 => (2, |c| { (c as char).is_digit(16) }),
         _ => panic!(),
     };
 
@@ -175,7 +158,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if options.newline {
         return_if_err!(1, stdout().flush())
     } else {
-        println!("")
+        println!()
     }
 
     0
