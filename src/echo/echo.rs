@@ -105,15 +105,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     prev_was_slash = false;
                     match c {
                         '\\' => print!("\\"),
+                        'n' => print!("\n"),
+                        'r' => print!("\r"),
+                        't' => print!("\t"),
+                        'v' => print!("\x0B"),
                         'a' => print!("\x07"),
                         'b' => print!("\x08"),
                         'c' => break,
                         'e' => print!("\x1B"),
                         'f' => print!("\x0C"),
-                        'n' => print!("\n"),
-                        'r' => print!("\r"),
-                        't' => print!("\t"),
-                        'v' => print!("\x0B"),
                         'x' => {
                             let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16);
                             if num_char_used == 0 {
