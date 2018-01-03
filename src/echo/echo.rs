@@ -16,9 +16,9 @@ use std::io::{Write, stdout};
 use std::str::from_utf8;
 
 #[allow(dead_code)]
-static SYNTAX: &'static str = "[OPTIONS]... [STRING]...";
-static SUMMARY: &'static str = "display a line of text";
-static LONG_HELP: &'static str = r#"
+static SYNTAX: &str = "[OPTIONS]... [STRING]...";
+static SUMMARY: &str = "display a line of text";
+static HELP: &str = r#"
  Echo the STRING(s) to standard output.
  If -e is in effect, the following sequences are recognized:
 
@@ -36,26 +36,24 @@ static LONG_HELP: &'static str = r#"
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
 
-#[derive(Clone)]
-struct EchoOptions {
+enum Base {
+    B8 = 8,
+    B16 = 16,
+}
+
+struct Opts {
     newline: bool,
     escape: bool
 }
 
-#[inline(always)]
-fn to_char(bytes: &[u8], base: u32) -> char {
-    usize::from_str_radix(from_utf8(bytes.as_ref()).unwrap(), base).unwrap() as u8 as char
-}
-
-fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
-    let (max_digits, is_legal_digit) : (usize, fn(u8) -> bool) = match base {
-        8 => (3, |c| { (c as char).is_digit(8) }),
-        16 => (2, |c| { (c as char).is_digit(16) }),
-        _ => panic!(),
+fn convert_str(string: &[u8], index: usize, base: Base) -> (char, usize) {
+    let (max_digits, is_legal_digit): (usize, fn(u8) -> bool) = match base {
+        Base::B8 => (3, |c| { (c as char).is_digit(8) }),
+        Base::B16 => (2, |c| { (c as char).is_digit(16) }),
     };
 
-    let mut bytes = vec!();
-    for offset in 0usize .. max_digits {
+    let mut bytes = vec![];
+    for offset in 0..max_digits {
         if string.len() <= index + offset as usize {
             break;
         }
@@ -70,39 +68,39 @@ fn convert_str(string: &[u8], index: usize, base: u32) -> (char, usize) {
     if bytes.is_empty() {
         (' ', 0)
     } else {
-        (to_char(&bytes, base), bytes.len())
+        (usize::from_str_radix(
+            from_utf8(bytes.as_ref()).unwrap(),
+            base as u32
+        ).unwrap() as u8 as char, bytes.len())
     }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut options = EchoOptions {
-        newline: false,
-        escape: false
-    };
-
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")
         .optflag("e", "", "enable interpretation of backslash escapes")
         .optflag("E", "", "disable interpretation of backslash escapes (default)")
         .parse(args);
 
-    options.newline = matches.opt_present("n");
-    options.escape = matches.opt_present("e");
+    let options = Opts {
+        newline: matches.opt_present("n"),
+        escape: matches.opt_present("e"),
+    };
     let free = matches.free;
     if !free.is_empty() {
         let string = free.join(" ");
         if options.escape {
             let mut prev_was_slash = false;
             let mut iter = string.chars().enumerate();
-            while let Some((index, c)) = iter.next() {
-                if !prev_was_slash {
+            while let Some((mut idx, c)) = iter.next() {
+                prev_was_slash = if !prev_was_slash {
                     if c != '\\' {
                         print!("{}", c);
+                        false
                     } else {
-                        prev_was_slash = true;
+                        true
                     }
                 } else {
-                    prev_was_slash = false;
                     match c {
                         '\\' => print!("\\"),
                         'n' => print!("\n"),
@@ -114,40 +112,32 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         'c' => break,
                         'e' => print!("\x1B"),
                         'f' => print!("\x0C"),
-                        'x' => {
-                            let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 16);
-                            if num_char_used == 0 {
-                                print!("\\x");
+                        ch => { // 'x' or '0' or _
+                            idx = if ch == 'x' || ch == '0' {
+                                idx + 1
                             } else {
-                                print!("{}", c);
-                                for _ in 0 .. num_char_used {
-                                    iter.next(); // consume used characters
-                                }
-                            }
-                        },
-                        '0' => {
-                            let (c, num_char_used) = convert_str(string.as_bytes(), index + 1, 8);
-                            if num_char_used == 0 {
-                                print!("\0");
-                            } else {
-                                print!("{}", c);
-                                for _ in 0 .. num_char_used {
-                                    iter.next(); // consume used characters
-                                }
-                            }
-                        }
-                        _ => {
-                            let (esc_c, num_char_used) = convert_str(string.as_bytes(), index, 8);
-                            if num_char_used == 0 {
-                                print!("\\{}", c);
-                            } else {
-                                print!("{}", esc_c);
-                                for _ in 1 .. num_char_used {
-                                    iter.next(); // consume used characters
+                                idx
+                            };
+                            let base = if ch == 'x' { Base::B16 } else { Base::B8 };
+                            match convert_str(string.as_bytes(), idx, base) {
+                                (_, 0) => {
+                                    match ch {
+                                        'x' => print!("\\x"),
+                                        '0' => print!("\0"),
+                                        _ => print!("\\{}", c),
+                                    }
+                                },
+                                (c, num_char_used) => {
+                                    print!("{}", c);
+                                    let beg = if ch == 'x' || ch == '0' { 0 } else { 1 };
+                                    for _ in beg..num_char_used {
+                                        iter.next(); // consume used characters
+                                    }
                                 }
                             }
                         }
                     }
+                    false
                 }
             }
         } else {
