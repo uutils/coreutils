@@ -124,3 +124,52 @@ fn multitab_character() {
         .arg("э")
         .fails().stderr_is("join: error: multi-character tab э");
 }
+
+#[test]
+fn default_format() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("1.1 2.2")
+        .succeeds().stdout_only_fixture("default.expected");
+
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("0 2.2")
+        .succeeds().stdout_only_fixture("default.expected");
+}
+
+#[test]
+fn unpaired_lines_format() {
+    new_ucmd!()
+        .arg("fields_2.txt")
+        .arg("fields_3.txt")
+        .arg("-a")
+        .arg("2")
+        .arg("-o")
+        .arg("1.2 1.1 2.4 2.3 2.2 0")
+        .succeeds().stdout_only_fixture("unpaired_lines_format.expected");
+}
+
+#[test]
+fn autoformat() {
+    new_ucmd!()
+        .arg("fields_2.txt")
+        .arg("different_lengths.txt")
+        .arg("-o")
+        .arg("auto")
+        .succeeds().stdout_only_fixture("autoformat.expected");
+}
+
+#[test]
+fn empty_format() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("")
+        .fails().stderr_is("join: error: invalid file number in field spec: ''");
+}
