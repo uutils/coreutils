@@ -20,7 +20,7 @@ use uucore::signals::ALL_SIGNALS;
 
 static SYNTAX: &'static str = "[options] <pid> [...]";
 static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 static EXIT_OK:  i32 = 0;
 static EXIT_ERR: i32 = 1;
@@ -34,7 +34,7 @@ pub enum Mode {
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_signal) = handle_obsolete(args);
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL")
         .optflagopt("l", "list", "list all signal names, or convert one to a name", "LIST")
         .optflag("L", "table", "list all signal names in a nice table")

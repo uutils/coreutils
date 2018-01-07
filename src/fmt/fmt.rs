@@ -36,7 +36,7 @@ mod parasplit;
 // program's NAME and VERSION are used for -V and -h
 static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
 static SUMMARY: &'static str = "Reformat paragraphs from input files (or stdin) to stdout.";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 pub type FileOrStdReader = BufReader<Box<Read+'static>>;
 pub struct FmtOptions {
@@ -58,7 +58,7 @@ pub struct FmtOptions {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")
         .optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.")
         .optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.")

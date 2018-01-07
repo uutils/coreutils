@@ -23,7 +23,7 @@ include!(concat!(env!("OUT_DIR"), "/crc_table.rs"));
 
 static SYNTAX: &'static str = "[OPTIONS] [FILE]...";
 static SUMMARY: &'static str = "Print CRC and size for each file";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 #[inline]
 fn crc_update(crc: u32, input: u8) -> u32 {
@@ -85,7 +85,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .parse(args);
 
     let files = matches.free;

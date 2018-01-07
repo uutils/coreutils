@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 static NAME: &'static str = "ln";
 static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  In the 1st form, create a link to TARGET with the name LINK_NAME.
  In the 2nd form, create a link to TARGET in the current directory.
  In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
@@ -62,7 +62,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... TARGET                  (2nd form)
  {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
  {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)", NAME);
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(&syntax, SUMMARY, HELP)
         .optflag("b", "", "make a backup of each file that would otherwise be overwritten or removed")
         .optflagopt("", "backup", "make a backup of each file that would otherwise be overwritten or removed", "METHOD")
     // TODO: opts.optflag("d", "directory", "allow users with appropriate privileges to attempt to make hard links to directories");

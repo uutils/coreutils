@@ -18,13 +18,13 @@ static NAME: &'static str = "basename";
 static SYNTAX: &'static str = "NAME [SUFFIX]";
 static SUMMARY: &'static str = "Print NAME with any leading directory components removed
  If specified, also remove a trailing SUFFIX";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     //
     // Argument parsing
     //
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("a", "multiple", "Support more than one argument. Treat every argument as a name.")
         .optopt("s", "suffix", "Remove a trailing suffix. This option implies the -a option.", "SUFFIX")
         .optflag("z", "zero", "Output a zero byte (ASCII NUL) at the end of each line, rather than a newline.")

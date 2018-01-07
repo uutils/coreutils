@@ -21,7 +21,7 @@ use std::str::from_utf8;
 
 static SYNTAX: &'static str = "";
 static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 enum FilterMode {
     Bytes(usize),
@@ -51,7 +51,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         (args, None) => args
     };
 
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K")
         .optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K")
         .optflag("q", "quiet", "never print headers giving file names")

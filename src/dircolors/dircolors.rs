@@ -20,7 +20,7 @@ use std::env;
 
 static SYNTAX: &'static str = "[OPTION]... [FILE]";
 static SUMMARY: &'static str = "Output commands to set the LS_COLORS environment variable.";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  If FILE is specified, read it to determine which colors to use for which
  file types and extensions.  Otherwise, a precompiled database is used.
  For details on the format of these files, run 'dircolors --print-database'
@@ -56,7 +56,7 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
         .optflag("",
                  "bourne-shell",

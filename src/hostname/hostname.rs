@@ -25,7 +25,7 @@ use std::net::ToSocketAddrs;
 
 static SYNTAX: &'static str = "[OPTION]... [HOSTNAME]";
 static SUMMARY: &'static str = "Print or set the system's host name.";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 extern {
     fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
@@ -42,7 +42,7 @@ extern {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("d", "domain", "Display the name of the DNS domain if possible")
         .optflag("i", "ip-address", "Display the network address(es) of the host")
         .optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)")   // TODO: support --long

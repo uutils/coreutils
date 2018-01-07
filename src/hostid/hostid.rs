@@ -18,7 +18,7 @@ use libc::c_long;
 
 static SYNTAX: &'static str = "[options]"; 
 static SUMMARY: &'static str = ""; 
-static LONG_HELP: &'static str = ""; 
+static HELP: &'static str = "";
 
 pub enum Mode {
     HostId,
@@ -32,7 +32,7 @@ extern {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    new_coreopts!(SYNTAX, SUMMARY, HELP)
         .parse(args);
     hostid();
     0

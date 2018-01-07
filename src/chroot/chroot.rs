@@ -26,13 +26,13 @@ use std::process::Command;
 static NAME: &'static str = "chroot";
 static SYNTAX: &'static str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
 static SUMMARY: &'static str = "Run COMMAND with root directory set to NEWROOT.";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  If COMMAND is not specified, it defaults to '$(SHELL) -i'.
  If $(SHELL) is not set, /bin/sh is used.
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optopt("u", "user", "User (ID or name) to switch before running the program", "USER")
         .optopt("g", "group", "Group (ID or name) to switch to", "GROUP")
         .optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2...")

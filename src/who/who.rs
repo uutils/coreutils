@@ -21,7 +21,7 @@ use std::os::unix::fs::MetadataExt;
 
 static SYNTAX: &'static str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
 static SUMMARY: &'static str = "Print information about users who are currently logged in.";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
   -a, --all         same as -b -d --login -p -r -t -T -u
   -b, --boot        time of last system boot
   -d, --dead        print dead processes
@@ -47,7 +47,7 @@ If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 
 pub fn uumain(args: Vec<String>) -> i32 {
 
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
+    let mut opts = new_coreopts!(SYNTAX, SUMMARY, HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
     opts.optflag("b", "boot", "time of last system boot");
     opts.optflag("d", "dead", "print dead processes");

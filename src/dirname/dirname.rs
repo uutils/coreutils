@@ -17,14 +17,14 @@ use std::path::Path;
 static NAME: &'static str = "dirname"; 
 static SYNTAX: &'static str = "[OPTION] NAME..."; 
 static SUMMARY: &'static str = "strip last component from file name"; 
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  Output each NAME with its last non-slash component and trailing slashes
  removed; if NAME contains no /'s, output '.' (meaning the current
  directory).
 "; 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("z", "zero", "separate output with NUL rather than newline")
         .parse(args);
 

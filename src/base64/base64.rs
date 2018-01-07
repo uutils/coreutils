@@ -20,7 +20,7 @@ use std::path::Path;
 
 static SYNTAX: &'static str = "[OPTION]... [FILE]";
 static SUMMARY: &'static str = "Base64 encode or decode FILE, or standard input, to standard output.";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  With no FILE, or when FILE is -, read standard input.
 
  The data are encoded as described for the base64 alphabet in RFC
@@ -31,7 +31,7 @@ static LONG_HELP: &'static str = "
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("d", "decode", "decode data")
         .optflag("i",
                  "ignore-garbage",

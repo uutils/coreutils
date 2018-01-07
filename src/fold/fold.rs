@@ -19,11 +19,11 @@ use std::path::Path;
 static SYNTAX: &'static str = "[OPTION]... [FILE]...";
 static SUMMARY: &'static str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("b", "bytes", "count using bytes rather than columns (meaning control characters such as newline are not treated specially)")
         .optflag("s", "spaces", "break lines at word boundaries rather than a hard cut-off")
         .optopt("w", "width", "set WIDTH as the maximum line width rather than 80", "WIDTH")

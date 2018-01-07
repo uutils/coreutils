@@ -26,7 +26,7 @@ use uucore::mode;
 const NAME: &'static str = "chmod";
 static SUMMARY: &'static str = "Change the mode of each FILE to MODE.
  With --reference, change the mode of each FILE to that of RFILE.";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
 ";
 
@@ -34,7 +34,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
     let syntax = format!("[OPTION]... MODE[,MODE]... FILE...
  {0} [OPTION]... OCTAL-MODE FILE...
  {0} [OPTION]... --reference=RFILE FILE...", NAME);
-    let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
+    let mut opts = new_coreopts!(&syntax, SUMMARY, HELP);
     opts.optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)")
         .optflag("f", "quiet", "suppress most error messages (unimplemented)") // TODO: support --silent
         .optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)")

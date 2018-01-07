@@ -23,7 +23,7 @@ use time::Timespec;
 
 const NAME: &'static str = "du";
 const SUMMARY: &'static str = "estimate file space usage";
-const LONG_HELP: &'static str = "
+const HELP: &'static str = "
  Display  values  are  in  units  of  the  first  available  SIZE from
  --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
  ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
@@ -120,7 +120,7 @@ fn du(mut my_stat: Stat, options: &Options, depth: usize)
 pub fn uumain(args: Vec<String>) -> i32 {
     let syntax = format!("[OPTION]... [FILE]...
  {0} [OPTION]... --files0-from=F", NAME);
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(&syntax, SUMMARY, HELP)
     // In task
         .optflag("a", "all", " write counts for all files, not just directories")
     // In main

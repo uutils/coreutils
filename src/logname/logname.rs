@@ -36,10 +36,10 @@ fn get_userlogin() -> Option<String> {
 
 static SYNTAX: &'static str = "";
 static SUMMARY: &'static str = "Print user's login name";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    new_coreopts!(SYNTAX, SUMMARY, HELP).parse(args);
 
     exec();
 

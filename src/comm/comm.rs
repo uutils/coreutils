@@ -21,7 +21,7 @@ use std::path::Path;
 
 static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2"; 
 static SUMMARY: &'static str = "Compare sorted files line by line"; 
-static LONG_HELP: &'static str = ""; 
+static HELP: &'static str = "";
 
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
@@ -125,7 +125,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("1", "", "suppress column 1 (lines uniq to FILE1)")
         .optflag("2", "", "suppress column 2 (lines uniq to FILE2)")
         .optflag("3", "", "suppress column 3 (lines that appear in both files)")
