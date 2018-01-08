@@ -1,0 +1,18 @@
+[package]
+name = "dd"
+version = "0.0.1"
+authors = []
+build = "../../mkmain.rs"
+
+[lib]
+name = "uu_dd"
+path = "dd.rs"
+
+[dependencies]
+chan = "0.1"
+chan-signal = "0.3"
+uucore = { path="../uucore" }
+
+[[bin]]
+name = "dd"
+path = "../../uumain.rs"

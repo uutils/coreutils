@@ -75,7 +75,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut result = PathBuf::new();
     absfrom.components().skip(suffix_pos).map(|_| result.push("..")).last();
-    absto.components().skip(suffix_pos).map(|x| result.push(x.as_ref())).last();
+    absto.components().skip(suffix_pos).map(|x| result.push(x.as_os_str())).last();
 
     println!("{}", result.display());
     0

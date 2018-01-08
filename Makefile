@@ -119,6 +119,7 @@ UNIX_PROGS := \
   chown \
   chroot \
   du \
+  dd \
   groups \
   hostid \
   hostname \

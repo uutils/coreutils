@@ -12,6 +12,7 @@ unix = [
   "chown",
   "chroot",
   "du",
+  "dd",
   "groups",
   "hostid",
   "hostname",
@@ -49,6 +50,7 @@ fuchsia = [
   "chmod",
   "chown",
   "du",
+  "dd",
   "groups",
   "hostid",
   "install",
@@ -164,6 +166,7 @@ date     = { optional=true, path="src/date" }
 dircolors= { optional=true, path="src/dircolors" }
 dirname  = { optional=true, path="src/dirname" }
 du       = { optional=true, path="src/du" }
+dd       = { optional=true, path="src/dd" }
 echo     = { optional=true, path="src/echo" }
 env      = { optional=true, path="src/env" }
 expand   = { optional=true, path="src/expand" }
