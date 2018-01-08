@@ -10,6 +10,8 @@ path = "basename.rs"
 
 [dependencies]
 uucore = { path="../uucore" }
+failure = "0.1.1"
+failure_derive = "0.1.1"
 
 [[bin]]
 name = "basename"
