@@ -155,6 +155,7 @@ pub trait Capitalize {
 
 impl Capitalize for str {
     fn capitalize(&self) -> String {
+        #[allow(unused_imports)]
         use std::ascii::AsciiExt;
         self.char_indices().fold(String::with_capacity(self.len()), |mut acc, x| {
             if x.0 != 0 {
