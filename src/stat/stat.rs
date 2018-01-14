@@ -475,7 +475,7 @@ impl Stater {
             // mount points aren't displayed when showing filesystem information
             None
         } else {
-            let reader = BufReader::new(File::open(MOUNT_INFO).expect("Failed to read /etc/mtab"));
+            let reader = BufReader::new(File::open(MOUNT_INFO).expect(&format!("Failed to read {}", MOUNT_INFO)));
             let mut mount_list = reader.lines()
                                        .filter_map(|s| s.ok())
                                        .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
