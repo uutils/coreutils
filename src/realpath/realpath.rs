@@ -77,7 +77,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
     let mut links_left = 256;
 
     for part in abs.components() {
-        result.push(part.as_ref());
+        result.push(&part);
         loop {
             if links_left == 0 {
                 if !quiet { show_error!("Too many symbolic links: {}", path) };
