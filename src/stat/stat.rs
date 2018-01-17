@@ -202,7 +202,7 @@ pub struct Stater {
     showfs: bool,
     from_user: bool,
     files: Vec<String>,
-    mount_list: Vec<String>,
+    mount_list: Option<Vec<String>>,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
 }
@@ -471,13 +471,19 @@ impl Stater {
         let default_dev_tokens = Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true), use_printf)
             .unwrap();
 
-        let reader = BufReader::new(File::open(MOUNT_INFO).expect("Failed to read /etc/mtab"));
-        let mut mount_list = reader.lines()
-                                   .filter_map(|s| s.ok())
-                                   .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
-                                   .collect::<Vec<String>>();
-        // Reverse sort. The longer comes first.
-        mount_list.sort_by(|a, b| b.cmp(a));
+        let mount_list = if showfs {
+            // mount points aren't displayed when showing filesystem information
+            None
+        } else {
+            let reader = BufReader::new(File::open(MOUNT_INFO).expect(&format!("Failed to read {}", MOUNT_INFO)));
+            let mut mount_list = reader.lines()
+                                       .filter_map(|s| s.ok())
+                                       .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
+                                       .collect::<Vec<String>>();
+            // Reverse sort. The longer comes first.
+            mount_list.sort_by(|a, b| b.cmp(a));
+            Some(mount_list)
+        };
 
         Ok(Stater {
             follow: matches.opt_present("dereference"),
@@ -495,9 +501,11 @@ impl Stater {
             Ok(s) => s,
             Err(_) => return None,
         };
-        for root in (&self.mount_list).into_iter() {
-            if path.starts_with(root) {
-                return Some(root.clone());
+        if let Some(ref mount_list) = self.mount_list {
+            for root in mount_list.into_iter() {
+                if path.starts_with(root) {
+                    return Some(root.clone());
+                }
             }
         }
         None
