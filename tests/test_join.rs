@@ -173,3 +173,29 @@ fn empty_format() {
         .arg("")
         .fails().stderr_is("join: error: invalid file number in field spec: ''");
 }
+
+#[test]
+fn empty_key() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("empty.txt")
+        .arg("-j")
+        .arg("2")
+        .arg("-a")
+        .arg("1")
+        .arg("-e")
+        .arg("x")
+        .succeeds().stdout_only_fixture("empty_key.expected");
+}
+
+#[test]
+fn missing_format_fields() {
+    new_ucmd!()
+        .arg("fields_2.txt")
+        .arg("different_lengths.txt")
+        .arg("-o")
+        .arg("0 1.2 2.4")
+        .arg("-e")
+        .arg("x")
+        .succeeds().stdout_only_fixture("missing_format_fields.expected");
+}

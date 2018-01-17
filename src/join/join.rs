@@ -15,7 +15,7 @@ extern crate clap;
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Lines, Stdin, stdin};
+use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 use std::cmp::{min, Ordering};
 use clap::{App, Arg};
 
@@ -44,6 +44,7 @@ struct Settings {
     separator: Sep,
     autoformat: bool,
     format: Vec<Spec>,
+    empty: String,
 }
 
 impl Default for Settings {
@@ -56,6 +57,7 @@ impl Default for Settings {
             separator: Sep::Whitespaces,
             autoformat: false,
             format: vec![],
+            empty: String::new(),
         }
     }
 }
@@ -64,15 +66,30 @@ impl Default for Settings {
 struct Repr<'a> {
     separator: char,
     format: &'a [Spec],
+    empty: &'a str,
 }
 
 impl<'a> Repr<'a> {
-    fn new(separator: char, format: &'a [Spec]) -> Repr {
-        Repr { separator, format }
+    fn new(separator: char, format: &'a [Spec], empty: &'a str) -> Repr<'a> {
+        Repr {
+            separator,
+            format,
+            empty,
+        }
     }
 
     fn uses_format(&self) -> bool {
         !self.format.is_empty()
+    }
+
+    /// Print the field or empty filler if the field is not set.
+    fn print_field(&self, field: Option<&str>) {
+        let value = match field {
+            Some(field) => field,
+            None => self.empty,
+        };
+
+        print!("{}", value);
     }
 
     /// Print each field except the one at the index.
@@ -96,7 +113,7 @@ impl<'a> Repr<'a> {
 
             let field = match f(&self.format[i]) {
                 Some(value) => value,
-                None => "",
+                None => self.empty,
             };
 
             print!("{}", field);
@@ -151,11 +168,11 @@ impl Line {
     }
 
     /// Get field at index.
-    fn get_field(&self, index: usize) -> &str {
+    fn get_field(&self, index: usize) -> Option<&str> {
         if index < self.fields.len() {
-            &self.fields[index]
+            Some(&self.fields[index])
         } else {
-            ""
+            None
         }
     }
 }
@@ -244,21 +261,21 @@ impl<'a> State<'a> {
             for line2 in &other.seq {
                 if repr.uses_format() {
                     repr.print_format(|spec| match spec {
-                        &Spec::Key => Some(key),
+                        &Spec::Key => key,
                         &Spec::Field(file_num, field_num) => {
                             if file_num == self.file_num {
-                                return Some(line1.get_field(field_num));
+                                return line1.get_field(field_num);
                             }
 
                             if file_num == other.file_num {
-                                return Some(line2.get_field(field_num));
+                                return line2.get_field(field_num);
                             }
 
                             None
                         }
                     });
                 } else {
-                    print!("{}", key);
+                    repr.print_field(key);
                     repr.print_fields(&line1, self.key, self.max_fields);
                     repr.print_fields(&line2, other.key, self.max_fields);
                 }
@@ -311,15 +328,15 @@ impl<'a> State<'a> {
     fn print_unpaired_line(&self, line: &Line, repr: &Repr) {
         if repr.uses_format() {
             repr.print_format(|spec| match spec {
-                &Spec::Key => Some(line.get_field(self.key)),
+                &Spec::Key => line.get_field(self.key),
                 &Spec::Field(file_num, field_num) => if file_num == self.file_num {
-                    Some(line.get_field(field_num))
+                    line.get_field(field_num)
                 } else {
                     None
                 },
             });
         } else {
-            print!("{}", line.get_field(self.key));
+            repr.print_field(line.get_field(self.key));
             repr.print_fields(line, self.key, self.max_fields);
         }
 
@@ -344,6 +361,11 @@ When FILE1 or FILE2 (not both) is -, read standard input.")
             .value_name("FILENUM")
             .help("also print unpairable lines from file FILENUM, where
 FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
+        .arg(Arg::with_name("e")
+            .short("e")
+            .takes_value(true)
+            .value_name("EMPTY")
+            .help("replace missing input fields with EMPTY"))
         .arg(Arg::with_name("i")
             .short("i")
             .long("ignore-case")
@@ -389,12 +411,10 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
 
     let mut settings: Settings = Default::default();
     settings.print_unpaired = match matches.value_of("a") {
-        Some(value) => {
-            match value {
-                "1" => FileNum::File1,
-                "2" => FileNum::File2,
-                value => crash!(1, "invalid file number: '{}'", value),
-            }
+        Some(value) => match value {
+            "1" => FileNum::File1,
+            "2" => FileNum::File2,
+            value => crash!(1, "invalid file number: '{}'", value),
         },
         None => FileNum::None,
     };
@@ -419,6 +439,10 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
                 .map(Spec::parse)
                 .collect();
         }
+    }
+
+    if let Some(empty) = matches.value_of("e") {
+        settings.empty = empty.to_string();
     }
 
     let file1 = matches.value_of("file1").unwrap();
@@ -456,6 +480,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
             _ => ' ',
         },
         &settings.format,
+        &settings.empty,
     );
 
     state1.initialize(settings.separator, settings.autoformat);
@@ -522,10 +547,20 @@ fn parse_field_number_option(value: Option<&str>) -> Option<usize> {
     Some(parse_field_number(value?))
 }
 
-fn compare(field1: &str, field2: &str, ignore_case: bool) -> Ordering {
-    if ignore_case {
-        field1.to_lowercase().cmp(&field2.to_lowercase())
-    } else {
-        field1.cmp(field2)
+fn compare(field1: Option<&str>, field2: Option<&str>, ignore_case: bool) -> Ordering {
+    if let (Some(field1), Some(field2)) = (field1, field2) {
+        return if ignore_case {
+            field1.to_lowercase().cmp(&field2.to_lowercase())
+        } else {
+            field1.cmp(field2)
+        };
+    }
+
+    match field1 {
+        Some(_) => Ordering::Greater,
+        None => match field2 {
+            Some(_) => Ordering::Less,
+            None => Ordering::Equal,
+        },
     }
 }
