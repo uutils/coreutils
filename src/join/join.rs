@@ -15,7 +15,7 @@ extern crate clap;
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Lines, Stdin, stdin};
+use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 use std::cmp::{min, Ordering};
 use clap::{App, Arg};
 
@@ -71,7 +71,11 @@ struct Repr<'a> {
 
 impl<'a> Repr<'a> {
     fn new(separator: char, format: &'a [Spec], empty: &'a str) -> Repr<'a> {
-        Repr { separator, format, empty }
+        Repr {
+            separator,
+            format,
+            empty,
+        }
     }
 
     fn uses_format(&self) -> bool {
@@ -79,8 +83,7 @@ impl<'a> Repr<'a> {
     }
 
     /// Print the field or empty filler if the field is not set.
-    fn print_field(&self, field: Option<&str>)
-    {
+    fn print_field(&self, field: Option<&str>) {
         let value = match field {
             Some(field) => field,
             None => self.empty,
@@ -408,12 +411,10 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
 
     let mut settings: Settings = Default::default();
     settings.print_unpaired = match matches.value_of("a") {
-        Some(value) => {
-            match value {
-                "1" => FileNum::File1,
-                "2" => FileNum::File2,
-                value => crash!(1, "invalid file number: '{}'", value),
-            }
+        Some(value) => match value {
+            "1" => FileNum::File1,
+            "2" => FileNum::File2,
+            value => crash!(1, "invalid file number: '{}'", value),
         },
         None => FileNum::None,
     };
@@ -560,6 +561,6 @@ fn compare(field1: Option<&str>, field2: Option<&str>, ignore_case: bool) -> Ord
         None => match field2 {
             Some(_) => Ordering::Less,
             None => Ordering::Equal,
-        }
+        },
     }
 }
