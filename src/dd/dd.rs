@@ -516,7 +516,14 @@ impl OutFileWrap {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let signal = chan_signal::notify(&[Signal::INT, Signal::USR1]);
+    let signal = if cfg!(target_os = "freebsd") || cfg!(target_os = "openbsd")
+        || cfg!(target_os = "netbsd") || cfg!(target_os = "dragonflybsd") {
+        chan_signal::notify(&[Signal::INT, Signal::USR1])
+    } else { // BSD
+        chan_signal::notify(&[Signal::INT, Signal::USR1])
+        // No Signal::INFO yet.
+        // chan_signal::notify(&[Signal::INT, Signal::INFO])
+    };
     let (s_done, r_done) = chan::sync(0);
 
     let cf = parse_args(args);
@@ -532,7 +539,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         chan_select! {
             signal.recv() -> signal => {
                 display_stat(Arc::clone(&cf2));
-                println!("signal: {:?}", signal);
                 if let Some(Signal::INT) = signal {
                     exit(1);
                 }
