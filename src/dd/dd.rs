@@ -520,8 +520,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         || cfg!(target_os = "netbsd") || cfg!(target_os = "dragonflybsd") {
         chan_signal::notify(&[Signal::INT, Signal::USR1])
     } else { // BSD
+        // Signal::INFO isn't supported yes
         chan_signal::notify(&[Signal::INT, Signal::USR1])
-        // No Signal::INFO yet.
         // chan_signal::notify(&[Signal::INT, Signal::INFO])
     };
     let (s_done, r_done) = chan::sync(0);
