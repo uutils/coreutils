@@ -105,8 +105,8 @@ fn create_getopts_options() -> getopts::Options {
                 "limit dump to BYTES input bytes", "BYTES");
     opts.optopt("", "endian", "byte order to use for multi-byte formats", "big|little");
     opts.optopt("S", "strings",
-                ("output strings of at least BYTES graphic chars. 3 is assumed when \
-                 BYTES is not specified."),
+                "output strings of at least BYTES graphic chars. 3 is assumed when \
+                 BYTES is not specified.",
                 "BYTES");
     opts.optflagmulti("a", "", "named characters, ignoring high-order bit");
     opts.optflagmulti("b", "", "octal bytes");
@@ -134,8 +134,8 @@ fn create_getopts_options() -> getopts::Options {
     opts.optmulti("t", "format", "select output format or formats", "TYPE");
     opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
     opts.optflagopt("w", "width",
-                ("output BYTES bytes per output line. 32 is implied when BYTES is not \
-                 specified."),
+                "output BYTES bytes per output line. 32 is implied when BYTES is not \
+                 specified.",
                 "BYTES");
     opts.optflag("", "help", "display this help and exit.");
     opts.optflag("", "version", "output version information and exit.");

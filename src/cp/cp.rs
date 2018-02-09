@@ -46,7 +46,7 @@ use std::str::FromStr;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
 #[cfg(target_os = "linux")] use std::os::unix::io::IntoRawFd;
-use std::fs::File;
+#[cfg(target_os = "linux")] use std::fs::File;
 use std::fs::OpenOptions;
 use filetime::FileTime;
 
