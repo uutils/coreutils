@@ -199,3 +199,11 @@ fn missing_format_fields() {
         .arg("x")
         .succeeds().stdout_only_fixture("missing_format_fields.expected");
 }
+
+#[test]
+fn wrong_line_order() {
+    new_ucmd!()
+        .arg("fields_2.txt")
+        .arg("fields_4.txt")
+        .fails().stderr_is("fields_4.txt:5: is not sorted");
+}
