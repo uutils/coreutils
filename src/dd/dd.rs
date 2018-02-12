@@ -54,8 +54,8 @@ impl Default for Conf {
             is_stdin: true,
             is_stdout: true,
 
-            inp_block_size: Self::DEFAULT_BLOCK_SIZE,
-            out_block_size: Self::DEFAULT_BLOCK_SIZE,
+            inp_block_size: Self::GNU_BLOCK_SIZE,
+            out_block_size: Self::GNU_BLOCK_SIZE,
             cnv_block_size: 0,
 
             skip: 0,
@@ -80,6 +80,7 @@ type FlagT = u32;
 
 impl Conf {
     const DEFAULT_BLOCK_SIZE: usize = 512;
+    const GNU_BLOCK_SIZE: usize = 1024;
 
     pub fn set_if(&mut self, input_filename: &str) {
         self.inp_name = input_filename.to_string();
@@ -518,11 +519,11 @@ impl OutFileWrap {
 pub fn uumain(args: Vec<String>) -> i32 {
     let signal = if cfg!(target_os = "freebsd") || cfg!(target_os = "openbsd")
         || cfg!(target_os = "netbsd") || cfg!(target_os = "dragonflybsd") {
-        chan_signal::notify(&[Signal::INT, Signal::USR1])
-    } else { // BSD
         // Signal::INFO isn't supported yes
         chan_signal::notify(&[Signal::INT, Signal::USR1])
         // chan_signal::notify(&[Signal::INT, Signal::INFO])
+    } else {
+        chan_signal::notify(&[Signal::INT, Signal::USR1])
     };
     let (s_done, r_done) = chan::sync(0);
 
