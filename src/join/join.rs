@@ -36,6 +36,13 @@ enum Sep {
     Whitespaces,
 }
 
+#[derive(Copy, Clone, PartialEq)]
+enum CheckOrder {
+    Default,
+    Disabled,
+    Enabled,
+}
+
 struct Settings {
     key1: usize,
     key2: usize,
@@ -45,6 +52,7 @@ struct Settings {
     autoformat: bool,
     format: Vec<Spec>,
     empty: String,
+    check_order: CheckOrder,
 }
 
 impl Default for Settings {
@@ -58,6 +66,7 @@ impl Default for Settings {
             autoformat: false,
             format: vec![],
             empty: String::new(),
+            check_order: CheckOrder::Default,
         }
     }
 }
@@ -121,6 +130,23 @@ impl<'a> Repr<'a> {
     }
 }
 
+/// Input processing parameters.
+struct Input {
+    separator: Sep,
+    ignore_case: bool,
+    check_order: CheckOrder,
+}
+
+impl Input {
+    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Input {
+        Input {
+            separator,
+            ignore_case,
+            check_order,
+        }
+    }
+}
+
 enum Spec {
     Key,
     Field(FileNum, usize),
@@ -179,17 +205,20 @@ impl Line {
 
 struct State<'a> {
     key: usize,
+    file_name: &'a str,
     file_num: FileNum,
     print_unpaired: bool,
     lines: Lines<Box<BufRead + 'a>>,
     seq: Vec<Line>,
     max_fields: usize,
+    line_num: usize,
+    has_failed: bool,
 }
 
 impl<'a> State<'a> {
     fn new(
         file_num: FileNum,
-        name: &str,
+        name: &'a str,
         stdin: &'a Stdin,
         key: usize,
         print_unpaired: FileNum,
@@ -205,11 +234,14 @@ impl<'a> State<'a> {
 
         State {
             key: key,
+            file_name: name,
             file_num: file_num,
             print_unpaired: print_unpaired == file_num,
             lines: f.lines(),
             seq: Vec::new(),
             max_fields: usize::max_value(),
+            line_num: 0,
+            has_failed: false,
         }
     }
 
@@ -222,12 +254,12 @@ impl<'a> State<'a> {
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(&mut self, read_sep: Sep, repr: &Repr) {
+    fn skip_line(&mut self, input: &Input, repr: &Repr) {
         if self.print_unpaired {
             self.print_unpaired_line(&self.seq[0], repr);
         }
 
-        match self.read_line(read_sep) {
+        match self.next_line(input) {
             Some(line) => self.seq[0] = line,
             None => self.seq.clear(),
         }
@@ -235,12 +267,12 @@ impl<'a> State<'a> {
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, read_sep: Sep, ignore_case: bool) -> Option<Line> {
-        while let Some(line) = self.read_line(read_sep) {
+    fn extend(&mut self, input: &Input) -> Option<Line> {
+        while let Some(line) = self.next_line(input) {
             let diff = compare(
                 self.seq[0].get_field(self.key),
                 line.get_field(self.key),
-                ignore_case,
+                input.ignore_case,
             );
 
             if diff == Ordering::Equal {
@@ -308,21 +340,48 @@ impl<'a> State<'a> {
         }
     }
 
-    fn finalize(&mut self, read_sep: Sep, repr: &Repr) {
+    fn finalize(&mut self, input: &Input, repr: &Repr) {
         if self.has_line() && self.print_unpaired {
             self.print_unpaired_line(&self.seq[0], repr);
 
-            while let Some(line) = self.read_line(read_sep) {
+            while let Some(line) = self.next_line(input) {
                 self.print_unpaired_line(&line, repr);
             }
         }
     }
 
     fn read_line(&mut self, sep: Sep) -> Option<Line> {
-        match self.lines.next() {
-            Some(value) => Some(Line::new(crash_if_err!(1, value), sep)),
-            None => None,
+        let value = self.lines.next()?;
+        self.line_num += 1;
+        Some(Line::new(crash_if_err!(1, value), sep))
+    }
+
+    /// Prepare the next line.
+    fn next_line(&mut self, input: &Input) -> Option<Line> {
+        let line = self.read_line(input.separator)?;
+
+        if input.check_order == CheckOrder::Disabled {
+            return Some(line);
         }
+
+        let diff = compare(
+            self.seq[self.seq.len() - 1].get_field(self.key),
+            line.get_field(self.key),
+            input.ignore_case,
+        );
+
+        if diff == Ordering::Greater {
+            eprintln!("{}:{}: is not sorted", self.file_name, self.line_num);
+
+            // This is fatal if the check is enabled.
+            if input.check_order == CheckOrder::Enabled {
+                exit!(1);
+            }
+
+            self.has_failed = true;
+        }
+
+        Some(line)
     }
 
     fn print_unpaired_line(&self, line: &Line, repr: &Repr) {
@@ -395,6 +454,13 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
             .takes_value(true)
             .value_name("FIELD")
             .help("join on this FIELD of file 2"))
+        .arg(Arg::with_name("check-order")
+             .long("check-order")
+             .help("check that the input is correctly sorted, \
+                 even if all input lines are pairable"))
+        .arg(Arg::with_name("nocheck-order")
+            .long("nocheck-order")
+            .help("do not check that the input is correctly sorted"))
         .arg(Arg::with_name("file1")
             .required(true)
             .value_name("FILE1")
@@ -445,6 +511,14 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2"))
         settings.empty = empty.to_string();
     }
 
+    if matches.is_present("nocheck-order") {
+        settings.check_order = CheckOrder::Disabled;
+    }
+
+    if matches.is_present("check-order") {
+        settings.check_order = CheckOrder::Enabled;
+    }
+
     let file1 = matches.value_of("file1").unwrap();
     let file2 = matches.value_of("file2").unwrap();
 
@@ -474,6 +548,12 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         settings.print_unpaired,
     );
 
+    let input = Input::new(
+        settings.separator,
+        settings.ignore_case,
+        settings.check_order,
+    );
+
     let repr = Repr::new(
         match settings.separator {
             Sep::Char(sep) => sep,
@@ -491,14 +571,14 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
 
         match diff {
             Ordering::Less => {
-                state1.skip_line(settings.separator, &repr);
+                state1.skip_line(&input, &repr);
             }
             Ordering::Greater => {
-                state2.skip_line(settings.separator, &repr);
+                state2.skip_line(&input, &repr);
             }
             Ordering::Equal => {
-                let next_line1 = state1.extend(settings.separator, settings.ignore_case);
-                let next_line2 = state2.extend(settings.separator, settings.ignore_case);
+                let next_line1 = state1.extend(&input);
+                let next_line2 = state2.extend(&input);
 
                 state1.combine(&state2, &repr);
 
@@ -508,10 +588,10 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         }
     }
 
-    state1.finalize(settings.separator, &repr);
-    state2.finalize(settings.separator, &repr);
+    state1.finalize(&input, &repr);
+    state2.finalize(&input, &repr);
 
-    0
+    (state1.has_failed || state2.has_failed) as i32
 }
 
 /// Check that keys for both files and for a particular file are not
