@@ -32,7 +32,7 @@ include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
 static SYNTAX: &'static str = "[OPTION] [NUMBER]...";
 static SUMMARY: &'static str = "Print the prime factors of the given number(s).
  If none are specified, read from standard input.";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {
@@ -158,7 +158,7 @@ fn print_factors_str(num_str: &str) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .parse(args);
 
     if matches.free.is_empty() {

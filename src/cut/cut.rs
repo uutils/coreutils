@@ -25,7 +25,7 @@ mod searcher;
 
 static SYNTAX: &'static str = "[-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static SUMMARY: &'static str = "Prints specified byte or field columns from each line of stdin or the input files";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  Each call must specify a mode (what to use for columns),
  a sequence (which columns to print), and provide a data source
 
@@ -415,7 +415,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optopt("b", "bytes", "filter byte columns from the input source", "sequence")
         .optopt("c", "characters", "alias for character mode", "sequence")
         .optopt("d", "delimiter", "specify the delimiter character that separates fields in the input source. Defaults to Tab.", "delimiter")

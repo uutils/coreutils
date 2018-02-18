@@ -18,7 +18,7 @@ use std::io::Error;
 
 static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2";
 static SUMMARY: &'static str = "Create a link named FILE2 to FILE1";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 pub fn normalize_error_message(e: Error) -> String {
     match e.raw_os_error() {
@@ -28,7 +28,7 @@ pub fn normalize_error_message(e: Error) -> String {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .parse(args);
     if matches.free.len() != 2 {
         crash!(1, "{}", msg_wrong_number_of_arguments!(2));

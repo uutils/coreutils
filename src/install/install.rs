@@ -24,7 +24,7 @@ use std::result::Result;
 static NAME: &'static str = "install";
 static SUMMARY: &'static str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 const DEFAULT_MODE: u32 = 755;
 
@@ -100,7 +100,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn parse_opts(args: Vec<String>) -> getopts::Matches {
     let syntax = format!("SOURCE DEST
  {} SOURCE... DIRECTORY", NAME);
-     new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+     new_coreopts!(&syntax, SUMMARY, HELP)
     // TODO implement flag
         .optflagopt("",  "backup", "(unimplemented) make a backup of each existing destination\n \
                                     file", "CONTROL")

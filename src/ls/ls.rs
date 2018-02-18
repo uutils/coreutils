@@ -46,7 +46,7 @@ use std::os::windows::fs::MetadataExt;
 
 static NAME: &'static str = "ls";
 static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  By default, ls will list the files and contents of any directories on
  the command line, expect that it will ignore files and directories
  whose names start with '.'
@@ -78,7 +78,7 @@ lazy_static! {
 pub fn uumain(args: Vec<String>) -> i32 {
     let syntax = format!("[OPTION]... DIRECTORY
  {0} [OPTION]... [FILE]...", NAME);
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(&syntax, SUMMARY, HELP)
         .optflag("a",
                  "all",
                  "Do not ignore hidden files (files with names that start with '.').")

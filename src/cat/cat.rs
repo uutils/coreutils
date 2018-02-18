@@ -31,7 +31,7 @@ use uucore::fs::is_stdin_interactive;
 static SYNTAX: &'static str = "[OPTION]... [FILE]...";
 static SUMMARY: &'static str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 
 #[derive(PartialEq)]
@@ -126,7 +126,7 @@ type CatResult<T> = Result<T, CatError>;
 
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("A", "show-all", "equivalent to -vET")
         .optflag("b",
                  "number-nonblank",

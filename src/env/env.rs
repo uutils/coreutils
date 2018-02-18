@@ -23,7 +23,7 @@ use std::process::Command;
 static NAME: &'static str = "env";
 static SYNTAX: &'static str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 static SUMMARY: &'static str = "Set each NAME to VALUE in the environment and run COMMAND";
-static LONG_HELP: &'static str = "
+static HELP: &'static str = "
  A mere - implies -i. If no COMMAND, print the resulting environment
 ";
 
@@ -44,7 +44,7 @@ fn print_env(null: bool) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut core_opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
+    let mut core_opts = new_coreopts!(SYNTAX, SUMMARY, HELP);
     core_opts.optflag("i", "ignore-environment", "start with an empty environment")
         .optflag("0", "null", "end each output line with a 0 byte rather than newline")
         .optopt("u", "unset", "remove variable from the environment", "NAME");

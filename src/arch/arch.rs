@@ -15,10 +15,10 @@ use uucore::utsname::Uname;
 
 static SYNTAX: &'static str = "";
 static SUMMARY: &'static str = "Determine architecture name for current machine.";
-static LONG_HELP: &'static str = "";
+static HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    new_coreopts!(SYNTAX, SUMMARY, HELP).parse(args);
     let uts = Uname::new();
     println!("{}", uts.machine().trim());
     0
