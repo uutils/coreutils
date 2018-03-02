@@ -149,6 +149,13 @@ provides this package out of the box since 18.03:
 nix-env -iA nixos.uutils-coreutils
 ```
 
+Simple Installation Alternative:
+---------------------------------
+
+[Nix](https://nixos.org/nix/) package manager:
+
+    $ nix-env -i coreutils
+
 Uninstallation Instructions
 ---------------------------
 
