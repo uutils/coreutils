@@ -200,7 +200,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         exit!(1);
     }
 
-    let who = Who {
+    let mut who = Who {
         do_lookup: do_lookup,
         short_list: short_list,
         short_output: short_output,
@@ -216,6 +216,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         need_runlevel: need_runlevel,
         need_users: need_users,
         my_line_only: my_line_only,
+        has_records: false,
         args: matches.free,
     };
 
@@ -240,6 +241,7 @@ struct Who {
     need_runlevel: bool,
     need_users: bool,
     my_line_only: bool,
+    has_records: bool,
     args: Vec<String>,
 }
 
@@ -282,7 +284,7 @@ fn current_tty() -> String {
 }
 
 impl Who {
-    fn exec(&self) {
+    fn exec(&mut self) {
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()
         } else {
@@ -297,6 +299,9 @@ impl Who {
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
+            let mut records = Utmpx::iter_all_records().read_from(f).peekable();
+            self.has_records = records.peek().is_some();
+
             if self.include_heading {
                 self.print_heading()
             }
@@ -306,7 +311,7 @@ impl Who {
                 "".to_owned()
             };
 
-            for ut in Utmpx::iter_all_records().read_from(f) {
+            for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut);
@@ -486,7 +491,11 @@ impl Who {
         }
         buf.push_str(&format!(" {:<12}", line));
         // "%Y-%m-%d %H:%M"
-        buf.push_str(&format!(" {:<1$}", time, 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2));
+        let mut time_size = 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2;
+        if !self.has_records {
+            time_size -= 4;
+        }
+        buf.push_str(&format!(" {:<1$}", time, time_size));
 
         if !self.short_output {
             if self.include_idle {
