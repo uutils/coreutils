@@ -252,7 +252,7 @@ unindent = "0.1.0"
 lazy_static = "0.2.2"
 
 [target.'cfg(unix)'.dev-dependencies]
-rust-users = { git = "https://github.com/Arcterus/rust-users" }
+rust-users = { git = "https://github.com/uutils/rust-users" }
 unix_socket = "0.5.0"
 
 [[bin]]
