@@ -18,33 +18,35 @@ extern crate clap;
 use clap::{Arg, App};
 use uucore::utsname::Uname;
 
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-static ABOUT: &'static str = "Print certain system information.  With no OPTION, same as -s.";
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const ABOUT: &'static str = "Print certain system information.  With no OPTION, same as -s.";
 
-static OPT_ALL: &'static str = "all";
-static OPT_KERNELNAME: &'static str = "kernel-name";
-static OPT_NODENAME: &'static str = "nodename";
-static OPT_KERNELVERSION: &'static str = "kernel-version";
-static OPT_KERNELRELEASE: &'static str = "kernel-release";
-static OPT_MACHINE: &'static str = "machine";
+const OPT_ALL: &'static str = "all";
+const OPT_KERNELNAME: &'static str = "kernel-name";
+const OPT_NODENAME: &'static str = "nodename";
+const OPT_KERNELVERSION: &'static str = "kernel-version";
+const OPT_KERNELRELEASE: &'static str = "kernel-release";
+const OPT_MACHINE: &'static str = "machine";
 
 //FIXME: unimplemented options
-//static OPT_PROCESSOR: &'static str = "processor";
-//static OPT_HWPLATFORM: &'static str = "hardware-platform";
-static OPT_OS: &'static str = "operating-system";
+//const OPT_PROCESSOR: &'static str = "processor";
+//const OPT_HWPLATFORM: &'static str = "hardware-platform";
+const OPT_OS: &'static str = "operating-system";
 
 #[cfg(target_os = "linux")]
-static HOST_OS: &'static str = "GNU/Linux";
+const HOST_OS: &'static str = "GNU/Linux";
 #[cfg(target_os = "windows")]
-static HOST_OS: &'static str = "Windows NT";
+const HOST_OS: &'static str = "Windows NT";
 #[cfg(target_os = "freebsd")]
-static HOST_OS: &'static str = "FreeBSD";
+const HOST_OS: &'static str = "FreeBSD";
 #[cfg(target_os = "openbsd")]
-static HOST_OS: &'static str = "OpenBSD";
+const HOST_OS: &'static str = "OpenBSD";
 #[cfg(target_os = "macos")]
-static HOST_OS: &'static str = "Darwin";
+const HOST_OS: &'static str = "Darwin";
 #[cfg(target_os = "fuchsia")]
-static HOST_OS: &'static str = "Fuchsia";
+const HOST_OS: &'static str = "Fuchsia";
+#[cfg(target_os = "redox")]
+const HOST_OS: &'static str = "Redox";
 
 pub fn uumain(args: Vec<String>) -> i32 {
 
