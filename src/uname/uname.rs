@@ -92,7 +92,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .get_matches_from(&args);
 
     let argc = args.len();
-    let uname = Uname::new();
+    let uname = return_if_err!(1, Uname::new());
     let mut output = String::new();
 
     if matches.is_present(OPT_KERNELNAME) || matches.is_present(OPT_ALL) || argc == 1 {

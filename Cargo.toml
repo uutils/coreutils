@@ -6,7 +6,6 @@ build = "build.rs"
 
 [features]
 unix = [
-  "arch",
   "chgrp",
   "chmod",
   "chown",
@@ -44,7 +43,6 @@ unix = [
 # all utilities in that feature.
 fuchsia = [
   # unix utilities
-  "arch",
   "chgrp",
   "chmod",
   "chown",
@@ -67,6 +65,7 @@ fuchsia = [
   "generic"
 ]
 generic = [
+  "arch",
   "cat",
   "hashsum",
   "join",

@@ -19,7 +19,7 @@ static LONG_HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
-    let uts = Uname::new();
+    let uts = return_if_err!(1, Uname::new());
     println!("{}", uts.machine().trim());
     0
 }
