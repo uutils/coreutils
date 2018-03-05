@@ -13,7 +13,7 @@
 //!
 
 use tokens::{Token};
-use onig::{Regex, Syntax, REGEX_OPTION_NONE};
+use onig::{Regex, RegexOptions, Syntax};
 
 type TokenStack = Vec<(usize, Token)>;
 pub type OperandsList = Vec< Box<ASTNode> >;
@@ -354,7 +354,7 @@ fn infix_operator_and( values: &Vec<String> ) -> Result<String, String> {
 
 fn operator_match(values: &Vec<String>) -> Result<String, String> {
     assert!(values.len() == 2);
-    let re = match Regex::with_options(&values[1], REGEX_OPTION_NONE, Syntax::grep()) {
+    let re = match Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep()) {
         Ok(m) => m,
         Err(err) => return Err(err.description().to_string())
     };
