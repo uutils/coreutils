@@ -10,7 +10,7 @@ pub use self::platform::*;
 
 #[cfg(unix)]
 mod platform {
-    use super::libc::{uname, utsname};
+    use ::libc::{uname, utsname};
     use ::std::mem;
     use ::std::ffi::CStr;
     use ::std::borrow::Cow;
