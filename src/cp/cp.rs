@@ -695,8 +695,8 @@ fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::P
             {
                 let mut stat = mem::uninitialized();
                 let handle = CreateFile2(src_path.as_ptr() as *const u16,
-                                                        winapi::winnt::GENERIC_READ,
-                                                        winapi::winnt::FILE_SHARE_READ,
+                                                        winapi::um::winnt::GENERIC_READ,
+                                                        winapi::um::winnt::FILE_SHARE_READ,
                                                         0,
                                                         std::ptr::null_mut());
                 if GetFileInformationByHandle(handle, stat) != 0 {

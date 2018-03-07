@@ -7,41 +7,57 @@
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
- *
- * Synced with:
- *
- * https://www.opensource.apple.com/source/shell_cmds/shell_cmds-170/hostname/hostname.c?txt
  */
 
 extern crate libc;
+#[cfg(windows)]
+extern crate winapi;
 
 #[macro_use]
 extern crate uucore;
 
 use std::collections::hash_set::HashSet;
 use std::iter::repeat;
+use std::io;
 use std::str;
 use std::net::ToSocketAddrs;
+
+#[cfg(windows)]
+use winapi::um::winsock2::{GetHostNameW, WSAStartup, WSACleanup};
+#[cfg(windows)]
+use winapi::um::sysinfoapi::{ComputerNamePhysicalDnsHostname, SetComputerNameExW};
+#[cfg(windows)]
+use winapi::shared::minwindef::MAKEWORD;
+#[cfg(windows)]
+use uucore::wide::*;
+
+#[cfg(not(windows))]
+use libc::gethostname;
+#[cfg(not(windows))]
+use libc::sethostname;
 
 static SYNTAX: &'static str = "[OPTION]... [HOSTNAME]";
 static SUMMARY: &'static str = "Print or set the system's host name.";
 static LONG_HELP: &'static str = "";
 
-extern {
-    fn gethostname(name: *mut libc::c_char, namelen: libc::size_t) -> libc::c_int;
-}
-
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
-extern {
-    fn sethostname(name: *const libc::c_char, namelen: libc::c_int) -> libc::c_int;
-}
-
-#[cfg(target_os = "linux")]
-extern {
-    fn sethostname(name: *const libc::c_char, namelen: libc::size_t) -> libc::c_int;
-}
-
 pub fn uumain(args: Vec<String>) -> i32 {
+    #[cfg(windows)]
+    unsafe {
+        let mut data = std::mem::uninitialized();
+        if WSAStartup(MAKEWORD(2, 2), &mut data as *mut _) != 0 {
+            eprintln!("Failed to start Winsock 2.2");
+            return 1;
+        }
+    }
+    let result = execute(args);
+    #[cfg(windows)]
+    unsafe {
+        WSACleanup();
+    }
+    result
+}
+
+fn execute(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("d", "domain", "Display the name of the DNS domain if possible")
         .optflag("i", "ip-address", "Display the network address(es) of the host")
@@ -51,7 +67,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     match matches.free.len() {
         0 => {
-            let hostname = xgethostname();
+            let hostname = return_if_err!(1, xgethostname());
 
             if matches.opt_present("i") {
                 // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
@@ -110,45 +126,63 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn xgethostname() -> String {
-    let namelen = 256usize;
-    let mut name : Vec<u8> = repeat(0).take(namelen).collect();
+#[cfg(not(windows))]
+fn xgethostname() -> io::Result<String> {
+    let namelen = 256;
+    let mut name: Vec<u8> = repeat(0).take(namelen).collect();
     let err = unsafe {
-        gethostname (name.as_mut_ptr() as *mut libc::c_char,
-                                        namelen as libc::size_t)
+        gethostname(name.as_mut_ptr() as *mut libc::c_char, namelen as libc::size_t)
     };
 
-    if err != 0 {
-        panic!("Cannot determine hostname");
+    if err == 0 {
+        let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
+
+        Ok(str::from_utf8(&name[..last_char]).unwrap().to_owned())
+    } else {
+        Err(io::Error::last_os_error())
     }
-
-    let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
-
-    str::from_utf8(&name[..last_char]).unwrap().to_owned()
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(windows)]
+fn xgethostname() -> io::Result<String> {
+    let namelen = 256;
+    let mut name: Vec<u16> = repeat(0).take(namelen).collect();
+    let err = unsafe {
+        GetHostNameW(name.as_mut_ptr(), namelen as libc::c_int)
+    };
+
+    if err == 0 {
+        Ok(String::from_wide_null(&name))
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(windows))]
 fn xsethostname(name: &str) {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
     let err = unsafe {
-        sethostname (vec_name.as_ptr(), vec_name.len() as libc::c_int)
+        sethostname(vec_name.as_ptr(), vec_name.len() as _)
     };
 
     if err != 0 {
-        println!("Cannot set hostname to {}", name);
+        eprintln!("Cannot set hostname to {}", name);
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(windows)]
 fn xsethostname(name: &str) {
-    let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
+    use std::ffi::OsStr;
+
+    let wide_name = OsStr::new(name).to_wide_null();
 
     let err = unsafe {
-        sethostname (vec_name.as_ptr(), vec_name.len() as libc::size_t)
+        SetComputerNameExW(ComputerNamePhysicalDnsHostname, wide_name.as_ptr())
     };
 
-    if err != 0 {
-        println!("Cannot set hostname to {}", name);
+    if err == 0 {
+        // NOTE: the above is correct, failure is when the function returns 0 apparently
+        eprintln!("Cannot set hostname to {}", name);
     }
 }

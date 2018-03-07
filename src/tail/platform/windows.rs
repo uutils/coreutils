@@ -11,9 +11,9 @@ extern crate winapi;
 extern crate kernel32;
 
 use self::kernel32::{OpenProcess, CloseHandle, WaitForSingleObject};
-use self::winapi::minwindef::DWORD;
-use self::winapi::winbase::{WAIT_OBJECT_0, WAIT_FAILED};
-use self::winapi::winnt::{HANDLE, SYNCHRONIZE};
+use self::winapi::shared::minwindef::DWORD;
+use self::winapi::um::winbase::{WAIT_OBJECT_0, WAIT_FAILED};
+use self::winapi::um::winnt::{HANDLE, SYNCHRONIZE};
 
 pub type Pid = DWORD;
 

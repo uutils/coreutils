@@ -1,5 +1,7 @@
 #[cfg(feature = "libc")]
 pub extern crate libc;
+#[cfg(feature = "winapi")]
+pub extern crate winapi;
 
 #[macro_use]
 mod macros;
@@ -22,7 +24,7 @@ pub mod parse_time;
 pub mod mode;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "utmpx"))]
 pub mod utmpx;
-#[cfg(all(unix, feature = "utsname"))]
+#[cfg(feature = "utsname")]
 pub mod utsname;
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;

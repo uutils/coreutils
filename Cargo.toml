@@ -6,7 +6,6 @@ build = "build.rs"
 
 [features]
 unix = [
-  "arch",
   "chgrp",
   "chmod",
   "chown",
@@ -14,7 +13,6 @@ unix = [
   "du",
   "groups",
   "hostid",
-  "hostname",
   "id",
   "install",
   "kill",
@@ -44,7 +42,6 @@ unix = [
 # all utilities in that feature.
 fuchsia = [
   # unix utilities
-  "arch",
   "chgrp",
   "chmod",
   "chown",
@@ -67,8 +64,10 @@ fuchsia = [
   "generic"
 ]
 generic = [
+  "arch",
   "cat",
   "hashsum",
+  "hostname",
   "join",
   "more",
   "ln",
@@ -84,14 +83,14 @@ generic = [
   "tail",
   "test",
   "whoami",
-  "redox"
+  "redox_generic"
 ]
-# Feature "redox" contains the exclusive list of utilities
+# Feature "redox"/"redox_generic" contains the exclusive list of utilities
 # that can be compiled and run on redox. Should be built
 # with --no-default-features when selecting this feature.
 # TODO: merge with "generic" to avoid duplication once we support
 # all utilities in that feature.
-redox = [
+redox_generic = [
 
   # And maybe all generic utilities
   "base32",
@@ -140,6 +139,10 @@ redox = [
   "uniq",
   "wc",
   "yes",
+]
+redox = [
+  "uname",
+  "redox_generic"
 ]
 test_unimplemented = []
 nightly = []

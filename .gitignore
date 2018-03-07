@@ -4,6 +4,7 @@ target/
 /tmp/
 /busybox/
 /.vscode/
+/.vs/
 *~
 .*.swp
 .*.swo
