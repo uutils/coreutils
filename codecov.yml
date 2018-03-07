@@ -1,0 +1,7 @@
+coverage:
+  status:
+    project:
+      default:
+        # TODO: when the embedding interface is complete, this should be
+        #       changed to something more reasonable, like 1%
+        threshold: 50%
