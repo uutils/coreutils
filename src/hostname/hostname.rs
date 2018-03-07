@@ -12,6 +12,7 @@
 extern crate libc;
 #[cfg(windows)]
 extern crate winapi;
+extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
@@ -21,6 +22,7 @@ use std::iter::repeat;
 use std::io;
 use std::str;
 use std::net::ToSocketAddrs;
+use getopts::Matches;
 
 #[cfg(windows)]
 use winapi::um::winsock2::{GetHostNameW, WSAStartup, WSACleanup};
@@ -36,9 +38,9 @@ use libc::gethostname;
 #[cfg(not(windows))]
 use libc::sethostname;
 
-static SYNTAX: &'static str = "[OPTION]... [HOSTNAME]";
-static SUMMARY: &'static str = "Print or set the system's host name.";
-static LONG_HELP: &'static str = "";
+const SYNTAX: &'static str = "[OPTION]... [HOSTNAME]";
+const SUMMARY: &'static str = "Print or set the system's host name.";
+const LONG_HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     #[cfg(windows)]
@@ -66,68 +68,83 @@ fn execute(args: Vec<String>) -> i32 {
         .parse(args);
 
     match matches.free.len() {
-        0 => {
-            let hostname = return_if_err!(1, xgethostname());
-
-            if matches.opt_present("i") {
-                // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
-                // This should use std::net::lookup_host, but that is still marked unstable.
-                let hostname = hostname + ":1";
-                match hostname.to_socket_addrs() {
-                    Ok(addresses) => {
-                        let mut hashset = HashSet::new();
-                        let mut output = String::new();
-                        for addr in addresses {
-                            // XXX: not sure why this is necessary...
-                            if !hashset.contains(&addr) {
-                                let mut ip = format!("{}", addr);
-                                if ip.ends_with(":1") {
-                                    ip = ip[..ip.len()-2].to_owned();
-                                }
-                                output.push_str(&ip);
-                                output.push_str(" ");
-                                hashset.insert(addr.clone());
-                            }
-                        }
-                        let len = output.len();
-                        if len > 0 {
-                            println!("{}", &output[0 .. len - 1]);
-                        }
-                    }
-                    Err(f) => {
-                        show_error!("{}", f);
-                        return 1;
-                    }
-                }
+        0 => display_hostname(matches),
+        1 => {
+            if let Err(err) = xsethostname(matches.free.last().unwrap()) {
+                show_error!("{}", err);
+                1
             } else {
-                if matches.opt_present("s") {
-                    let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
-                    let ci = it.next();
-                    if ci.is_some() {
-                        println!("{}", &hostname[0 .. ci.unwrap().0]);
-                        return 0;
-                    }
-                } else if matches.opt_present("d") {
-                    let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
-                    let ci = it.next();
-                    if ci.is_some() {
-                        println!("{}", &hostname[ci.unwrap().0 + 1 .. ]);
-                        return 0;
-                    }
-                }
-
-                println!("{}", hostname);
+                0
             }
         }
-        1 => xsethostname(matches.free.last().unwrap()),
-        _ => crash!(1, "{}", msg_wrong_number_of_arguments!(0, 1))
-    };
+        _ => {
+            show_error!("{}", msg_wrong_number_of_arguments!(0, 1));
+            1
+        }
+    }
+}
 
-    0
+fn display_hostname(matches: Matches) -> i32 {
+    let hostname = return_if_err!(1, xgethostname());
+
+    if matches.opt_present("i") {
+        // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
+        // This was originally supposed to use std::net::lookup_host, but that seems to be
+        // deprecated.  Perhaps we should use the dns-lookup crate?
+        let hostname = hostname + ":1";
+        match hostname.to_socket_addrs() {
+            Ok(addresses) => {
+                let mut hashset = HashSet::new();
+                let mut output = String::new();
+                for addr in addresses {
+                    // XXX: not sure why this is necessary...
+                    if !hashset.contains(&addr) {
+                        let mut ip = format!("{}", addr);
+                        if ip.ends_with(":1") {
+                            let len = ip.len();
+                            ip.truncate(len - 2);
+                        }
+                        output.push_str(&ip);
+                        output.push_str(" ");
+                        hashset.insert(addr);
+                    }
+                }
+                let len = output.len();
+                if len > 0 {
+                    println!("{}", &output[0..len - 1]);
+                }
+
+                0
+            }
+            Err(f) => {
+                show_error!("{}", f);
+
+                1
+            }
+        }
+    } else {
+        if matches.opt_present("s") || matches.opt_present("d") {
+            let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
+            if let Some(ci) = it.next() {
+                if matches.opt_present("s") {
+                    println!("{}", &hostname[0..ci.0]);
+                } else {
+                    println!("{}", &hostname[ci.0 + 1..]);
+                }
+                return 0;
+            }
+        }
+
+        println!("{}", hostname);
+
+        0
+    }
 }
 
 #[cfg(not(windows))]
 fn xgethostname() -> io::Result<String> {
+    use std::ffi::CStr;
+
     let namelen = 256;
     let mut name: Vec<u8> = repeat(0).take(namelen).collect();
     let err = unsafe {
@@ -135,9 +152,13 @@ fn xgethostname() -> io::Result<String> {
     };
 
     if err == 0 {
-        let last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
+        let mut last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
+        if last_char == name.len() {
+            name.push(0);
+            last_char += 1;
+        }
 
-        Ok(str::from_utf8(&name[..last_char]).unwrap().to_owned())
+        Ok(CStr::from_bytes_with_nul(&name[..last_char]).unwrap().to_string_lossy().into_owned())
     } else {
         Err(io::Error::last_os_error())
     }
@@ -159,7 +180,7 @@ fn xgethostname() -> io::Result<String> {
 }
 
 #[cfg(not(windows))]
-fn xsethostname(name: &str) {
+fn xsethostname(name: &str) -> io::Result<()> {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
     let err = unsafe {
@@ -167,12 +188,14 @@ fn xsethostname(name: &str) {
     };
 
     if err != 0 {
-        eprintln!("Cannot set hostname to {}", name);
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
 
 #[cfg(windows)]
-fn xsethostname(name: &str) {
+fn xsethostname(name: &str) -> io::Result<()> {
     use std::ffi::OsStr;
 
     let wide_name = OsStr::new(name).to_wide_null();
@@ -183,6 +206,8 @@ fn xsethostname(name: &str) {
 
     if err == 0 {
         // NOTE: the above is correct, failure is when the function returns 0 apparently
-        eprintln!("Cannot set hostname to {}", name);
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
