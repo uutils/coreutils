@@ -10,6 +10,7 @@ path = "hostname.rs"
 
 [dependencies]
 libc = "0.2.26"
+winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
 uucore = { path="../uucore" }
 
 [[bin]]
