@@ -33,7 +33,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.opt_present("help") {
-        let msg = format!("{0} {1}
+        let msg = format!(
+            "{0} {1}
 
 Usage:
   {0} NUMBER[SUFFIX]
@@ -44,7 +45,9 @@ Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.", NAME, VERSION);
+specified by the sum of their values.",
+            NAME, VERSION
+        );
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -60,11 +63,12 @@ specified by the sum of their values.", NAME, VERSION);
 }
 
 fn sleep(args: Vec<String>) {
-    let sleep_dur = args.iter().fold(Duration::new(0, 0), |result, arg|
+    let sleep_dur = args.iter().fold(Duration::new(0, 0), |result, arg| {
         match uucore::parse_time::from_str(&arg[..]) {
             Ok(m) => m + result,
             Err(f) => crash!(1, "{}", f),
-        });
+        }
+    });
 
     thread::sleep(sleep_dur);
 }

@@ -1,5 +1,4 @@
 #![crate_name = "uu_chown"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
@@ -7,14 +6,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
-use uucore::libc::{self, uid_t, gid_t, lchown};
-pub use uucore::entries::{self, Locate, Passwd, Group};
+use uucore::libc::{self, gid_t, lchown, uid_t};
+pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
 
 extern crate walkdir;
@@ -32,7 +30,8 @@ use std::convert::AsRef;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static SYNTAX: &'static str = "[OPTION]... [OWNER][:[GROUP]] FILE...\n chown [OPTION]... --reference=RFILE FILE...";
+static SYNTAX: &'static str =
+    "[OPTION]... [OWNER][:[GROUP]] FILE...\n chown [OPTION]... --reference=RFILE FILE...";
 static SUMMARY: &'static str = "change file owner and group";
 
 const FTS_COMFOLLOW: u8 = 1;
@@ -193,26 +192,32 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
 
     if usr_only {
-        Ok((Some(match Passwd::locate(args[0]) {
-            Ok(v) => v.uid(),
-            _ => return Err(format!("invalid user: ‘{}’", spec)),
-        }),
-            None))
+        Ok((
+            Some(match Passwd::locate(args[0]) {
+                Ok(v) => v.uid(),
+                _ => return Err(format!("invalid user: ‘{}’", spec)),
+            }),
+            None,
+        ))
     } else if grp_only {
-        Ok((None,
+        Ok((
+            None,
             Some(match Group::locate(args[1]) {
-            Ok(v) => v.gid(),
-            _ => return Err(format!("invalid group: ‘{}’", spec)),
-        })))
+                Ok(v) => v.gid(),
+                _ => return Err(format!("invalid group: ‘{}’", spec)),
+            }),
+        ))
     } else if usr_grp {
-        Ok((Some(match Passwd::locate(args[0]) {
-            Ok(v) => v.uid(),
-            _ => return Err(format!("invalid user: ‘{}’", spec)),
-        }),
+        Ok((
+            Some(match Passwd::locate(args[0]) {
+                Ok(v) => v.uid(),
+                _ => return Err(format!("invalid user: ‘{}’", spec)),
+            }),
             Some(match Group::locate(args[1]) {
-            Ok(v) => v.gid(),
-            _ => return Err(format!("invalid group: ‘{}’", spec)),
-        })))
+                Ok(v) => v.gid(),
+                _ => return Err(format!("invalid group: ‘{}’", spec)),
+            }),
+        ))
     } else {
         Ok((None, None))
     }
@@ -263,7 +268,13 @@ impl Chowner {
         ret
     }
 
-    fn chown<P: AsRef<Path>>(&self, path: P, duid: uid_t, dgid: gid_t, follow: bool) -> IOResult<()> {
+    fn chown<P: AsRef<Path>>(
+        &self,
+        path: P,
+        duid: uid_t,
+        dgid: gid_t,
+        follow: bool,
+    ) -> IOResult<()> {
         let path = path.as_ref();
         let s = CString::new(path.as_os_str().as_bytes()).unwrap();
         let ret = unsafe {
@@ -391,12 +402,14 @@ impl Chowner {
                 _ => {
                     show_info!("changing ownership of '{}': {}", path.display(), e);
                     if self.verbosity == Verbose {
-                        println!("failed to change ownership of {} from {}:{} to {}:{}",
-                                 path.display(),
-                                 entries::uid2usr(meta.uid()).unwrap(),
-                                 entries::gid2grp(meta.gid()).unwrap(),
-                                 entries::uid2usr(dest_uid).unwrap(),
-                                 entries::gid2grp(dest_gid).unwrap());
+                        println!(
+                            "failed to change ownership of {} from {}:{} to {}:{}",
+                            path.display(),
+                            entries::uid2usr(meta.uid()).unwrap(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::uid2usr(dest_uid).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        );
                     };
                 }
             }
@@ -406,20 +419,24 @@ impl Chowner {
             if changed {
                 match self.verbosity {
                     Changes | Verbose => {
-                        println!("changed ownership of {} from {}:{} to {}:{}",
-                                 path.display(),
-                                 entries::uid2usr(meta.uid()).unwrap(),
-                                 entries::gid2grp(meta.gid()).unwrap(),
-                                 entries::uid2usr(dest_uid).unwrap(),
-                                 entries::gid2grp(dest_gid).unwrap());
+                        println!(
+                            "changed ownership of {} from {}:{} to {}:{}",
+                            path.display(),
+                            entries::uid2usr(meta.uid()).unwrap(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::uid2usr(dest_uid).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        );
                     }
                     _ => (),
                 };
             } else if self.verbosity == Verbose {
-                println!("ownership of {} retained as {}:{}",
-                         path.display(),
-                         entries::uid2usr(dest_uid).unwrap(),
-                         entries::gid2grp(dest_gid).unwrap());
+                println!(
+                    "ownership of {} retained as {}:{}",
+                    path.display(),
+                    entries::uid2usr(dest_uid).unwrap(),
+                    entries::gid2grp(dest_gid).unwrap()
+                );
             }
         }
         ret

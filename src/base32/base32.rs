@@ -10,14 +10,15 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::encoding::{Data, Format, wrap_print};
+use uucore::encoding::{wrap_print, Data, Format};
 
 use std::fs::File;
-use std::io::{BufReader, Read, stdin};
+use std::io::{stdin, BufReader, Read};
 use std::path::Path;
 
 static SYNTAX: &'static str = "[OPTION]... [FILE]";
-static SUMMARY: &'static str = "Base32 encode or decode FILE, or standard input, to standard output.";
+static SUMMARY: &'static str =
+    "Base32 encode or decode FILE, or standard input, to standard output.";
 static LONG_HELP: &'static str = "
  With no FILE, or when FILE is -, read standard input.
 
@@ -31,24 +32,26 @@ static LONG_HELP: &'static str = "
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("d", "decode", "decode data")
-        .optflag("i",
-                 "ignore-garbage",
-                 "when decoding, ignore non-alphabetic characters")
-        .optopt("w",
-                "wrap",
-                "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-                "COLS")
+        .optflag(
+            "i",
+            "ignore-garbage",
+            "when decoding, ignore non-alphabetic characters",
+        )
+        .optopt(
+            "w",
+            "wrap",
+            "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
+            "COLS",
+        )
         .parse(args);
 
     let line_wrap = match matches.opt_str("wrap") {
-        Some(s) => {
-            match s.parse() {
-                Ok(n) => n,
-                Err(e) => {
-                    crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
-                }
+        Some(s) => match s.parse() {
+            Ok(n) => n,
+            Err(e) => {
+                crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
             }
-        }
+        },
         None => 76,
     };
 

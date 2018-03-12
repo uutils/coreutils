@@ -29,7 +29,8 @@ use std::path::Path;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static SYNTAX: &'static str = "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
+static SYNTAX: &'static str =
+    "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
 static SUMMARY: &'static str = "Change the group of each FILE to GROUP.";
 
 const FTS_COMFOLLOW: u8 = 1;
@@ -334,10 +335,12 @@ impl Chgrper {
                 _ => {
                     show_info!("changing group of '{}': {}", path.display(), e);
                     if self.verbosity == Verbose {
-                        println!("failed to change group of {} from {} to {}",
-                                 path.display(),
-                                 entries::gid2grp(meta.gid()).unwrap(),
-                                 entries::gid2grp(dest_gid).unwrap());
+                        println!(
+                            "failed to change group of {} from {} to {}",
+                            path.display(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        );
                     };
                 }
             }
@@ -347,17 +350,21 @@ impl Chgrper {
             if changed {
                 match self.verbosity {
                     Changes | Verbose => {
-                        println!("changed group of {} from {} to {}",
-                                 path.display(),
-                                 entries::gid2grp(meta.gid()).unwrap(),
-                                 entries::gid2grp(dest_gid).unwrap());
+                        println!(
+                            "changed group of {} from {} to {}",
+                            path.display(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        );
                     }
                     _ => (),
                 };
             } else if self.verbosity == Verbose {
-                println!("group of {} retained as {}",
-                         path.display(),
-                         entries::gid2grp(dest_gid).unwrap());
+                println!(
+                    "group of {} retained as {}",
+                    path.display(),
+                    entries::gid2grp(dest_gid).unwrap()
+                );
             }
         }
         ret

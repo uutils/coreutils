@@ -75,23 +75,21 @@ fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
         Some('T') => Ok((Some(Suffix::T), 1)),
         Some('P') => Ok((Some(Suffix::P), 1)),
         Some('E') => Ok((Some(Suffix::E), 1)),
-        Some('i') => {
-            match iter.next_back() {
-                Some('K') => Ok((Some(Suffix::Ki), 2)),
-                Some('M') => Ok((Some(Suffix::Mi), 2)),
-                Some('G') => Ok((Some(Suffix::Gi), 2)),
-                Some('T') => Ok((Some(Suffix::Ti), 2)),
-                Some('P') => Ok((Some(Suffix::Pi), 2)),
-                Some('E') => Ok((Some(Suffix::Ei), 2)),
-                _ => Err("Failed to parse suffix"),
-            }
-        }
+        Some('i') => match iter.next_back() {
+            Some('K') => Ok((Some(Suffix::Ki), 2)),
+            Some('M') => Ok((Some(Suffix::Mi), 2)),
+            Some('G') => Ok((Some(Suffix::Gi), 2)),
+            Some('T') => Ok((Some(Suffix::Ti), 2)),
+            Some('P') => Ok((Some(Suffix::Pi), 2)),
+            Some('E') => Ok((Some(Suffix::Ei), 2)),
+            _ => Err("Failed to parse suffix"),
+        },
         _ => Ok((None, 0)),
     }?;
 
-    let number = s[..s.len() - suffix_len].parse::<f64>().map_err(|err| {
-        err.to_string()
-    })?;
+    let number = s[..s.len() - suffix_len]
+        .parse::<f64>()
+        .map_err(|err| err.to_string())?;
 
     Ok((number, suffix))
 }
@@ -120,37 +118,35 @@ struct NumfmtOptions {
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
         (None, _) => Ok(i),
-        (Some(Suffix::K), &Unit::Auto) |
-        (Some(Suffix::K), &Unit::Si) => Ok(i * 1000.),
-        (Some(Suffix::M), &Unit::Auto) |
-        (Some(Suffix::M), &Unit::Si) => Ok(i * 1000_000.),
-        (Some(Suffix::G), &Unit::Auto) |
-        (Some(Suffix::G), &Unit::Si) => Ok(i * 1000_000_000.),
-        (Some(Suffix::T), &Unit::Auto) |
-        (Some(Suffix::T), &Unit::Si) => Ok(i * 1000_000_000_000.),
-        (Some(Suffix::P), &Unit::Auto) |
-        (Some(Suffix::P), &Unit::Si) => Ok(i * 1000_000_000_000_000.),
-        (Some(Suffix::E), &Unit::Auto) |
-        (Some(Suffix::E), &Unit::Si) => Ok(i * 1000_000_000_000_000_000.),
+        (Some(Suffix::K), &Unit::Auto) | (Some(Suffix::K), &Unit::Si) => Ok(i * 1000.),
+        (Some(Suffix::M), &Unit::Auto) | (Some(Suffix::M), &Unit::Si) => Ok(i * 1000_000.),
+        (Some(Suffix::G), &Unit::Auto) | (Some(Suffix::G), &Unit::Si) => Ok(i * 1000_000_000.),
+        (Some(Suffix::T), &Unit::Auto) | (Some(Suffix::T), &Unit::Si) => Ok(i * 1000_000_000_000.),
+        (Some(Suffix::P), &Unit::Auto) | (Some(Suffix::P), &Unit::Si) => {
+            Ok(i * 1000_000_000_000_000.)
+        }
+        (Some(Suffix::E), &Unit::Auto) | (Some(Suffix::E), &Unit::Si) => {
+            Ok(i * 1000_000_000_000_000_000.)
+        }
 
-        (Some(Suffix::Ki), &Unit::Auto) |
-        (Some(Suffix::Ki), &Unit::IecI) |
-        (Some(Suffix::K), &Unit::Iec) => Ok(i * 1024.),
-        (Some(Suffix::Mi), &Unit::Auto) |
-        (Some(Suffix::Mi), &Unit::IecI) |
-        (Some(Suffix::M), &Unit::Iec) => Ok(i * 1048576.),
-        (Some(Suffix::Gi), &Unit::Auto) |
-        (Some(Suffix::Gi), &Unit::IecI) |
-        (Some(Suffix::G), &Unit::Iec) => Ok(i * 1073741824.),
-        (Some(Suffix::Ti), &Unit::Auto) |
-        (Some(Suffix::Ti), &Unit::IecI) |
-        (Some(Suffix::T), &Unit::Iec) => Ok(i * 1099511627776.),
-        (Some(Suffix::Pi), &Unit::Auto) |
-        (Some(Suffix::Pi), &Unit::IecI) |
-        (Some(Suffix::P), &Unit::Iec) => Ok(i * 1125899906842624.),
-        (Some(Suffix::Ei), &Unit::Auto) |
-        (Some(Suffix::Ei), &Unit::IecI) |
-        (Some(Suffix::E), &Unit::Iec) => Ok(i * 1152921504606846976.),
+        (Some(Suffix::Ki), &Unit::Auto)
+        | (Some(Suffix::Ki), &Unit::IecI)
+        | (Some(Suffix::K), &Unit::Iec) => Ok(i * 1024.),
+        (Some(Suffix::Mi), &Unit::Auto)
+        | (Some(Suffix::Mi), &Unit::IecI)
+        | (Some(Suffix::M), &Unit::Iec) => Ok(i * 1048576.),
+        (Some(Suffix::Gi), &Unit::Auto)
+        | (Some(Suffix::Gi), &Unit::IecI)
+        | (Some(Suffix::G), &Unit::Iec) => Ok(i * 1073741824.),
+        (Some(Suffix::Ti), &Unit::Auto)
+        | (Some(Suffix::Ti), &Unit::IecI)
+        | (Some(Suffix::T), &Unit::Iec) => Ok(i * 1099511627776.),
+        (Some(Suffix::Pi), &Unit::Auto)
+        | (Some(Suffix::Pi), &Unit::IecI)
+        | (Some(Suffix::P), &Unit::Iec) => Ok(i * 1125899906842624.),
+        (Some(Suffix::Ei), &Unit::Auto)
+        | (Some(Suffix::Ei), &Unit::IecI)
+        | (Some(Suffix::E), &Unit::Iec) => Ok(i * 1152921504606846976.),
 
         (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
     }
@@ -163,49 +159,38 @@ fn transform_from(s: String, unit: &Unit) -> Result<String> {
 
 fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
     match *u {
-        Unit::Si => {
-            match i {
-                _ if i < 1000. => Ok((i, None)),
-                _ if i < 1000_000. => Ok((i / 1000., Some(Suffix::K))),
-                _ if i < 1000_000_000. => Ok((i / 1000_000., Some(Suffix::M))),
-                _ if i < 1000_000_000_000. => Ok((i / 1000_000_000., Some(Suffix::G))),
-                _ if i < 1000_000_000_000_000. => Ok((i / 1000_000_000_000., Some(Suffix::T))),
-                _ if i < 1000_000_000_000_000_000. => Ok(
-                    (i / 1000_000_000_000_000., Some(Suffix::P)),
-                ),
-                _ if i < 1000_000_000_000_000_000_000. => Ok((
-                    i / 1000_000_000_000_000_000.,
-                    Some(Suffix::E),
-                )),
-                _ => Err("Number is too big and unsupported".to_owned()),
+        Unit::Si => match i {
+            _ if i < 1000. => Ok((i, None)),
+            _ if i < 1000_000. => Ok((i / 1000., Some(Suffix::K))),
+            _ if i < 1000_000_000. => Ok((i / 1000_000., Some(Suffix::M))),
+            _ if i < 1000_000_000_000. => Ok((i / 1000_000_000., Some(Suffix::G))),
+            _ if i < 1000_000_000_000_000. => Ok((i / 1000_000_000_000., Some(Suffix::T))),
+            _ if i < 1000_000_000_000_000_000. => Ok((i / 1000_000_000_000_000., Some(Suffix::P))),
+            _ if i < 1000_000_000_000_000_000_000. => {
+                Ok((i / 1000_000_000_000_000_000., Some(Suffix::E)))
             }
-        }
-        Unit::Iec => {
-            match i {
-                _ if i < 1024. => Ok((i, None)),
-                _ if i < 1048576. => Ok((i / 1024., Some(Suffix::K))),
-                _ if i < 1073741824. => Ok((i / 1048576., Some(Suffix::M))),
-                _ if i < 1099511627776. => Ok((i / 1073741824., Some(Suffix::G))),
-                _ if i < 1125899906842624. => Ok((i / 1099511627776., Some(Suffix::T))),
-                _ if i < 1152921504606846976. => Ok((i / 1125899906842624., Some(Suffix::P))),
-                _ if i < 1180591620717411303424. => Ok((i / 1152921504606846976., Some(Suffix::E))),
-                _ => Err("Number is too big and unsupported".to_owned()),
-            }
-        }
-        Unit::IecI => {
-            match i {
-                _ if i < 1024. => Ok((i, None)),
-                _ if i < 1048576. => Ok((i / 1024., Some(Suffix::Ki))),
-                _ if i < 1073741824. => Ok((i / 1048576., Some(Suffix::Mi))),
-                _ if i < 1099511627776. => Ok((i / 1073741824., Some(Suffix::Gi))),
-                _ if i < 1125899906842624. => Ok((i / 1099511627776., Some(Suffix::Ti))),
-                _ if i < 1152921504606846976. => Ok((i / 1125899906842624., Some(Suffix::Pi))),
-                _ if i < 1180591620717411303424. => Ok(
-                    (i / 1152921504606846976., Some(Suffix::Ei)),
-                ),
-                _ => Err("Number is too big and unsupported".to_owned()),
-            }
-        }
+            _ => Err("Number is too big and unsupported".to_owned()),
+        },
+        Unit::Iec => match i {
+            _ if i < 1024. => Ok((i, None)),
+            _ if i < 1048576. => Ok((i / 1024., Some(Suffix::K))),
+            _ if i < 1073741824. => Ok((i / 1048576., Some(Suffix::M))),
+            _ if i < 1099511627776. => Ok((i / 1073741824., Some(Suffix::G))),
+            _ if i < 1125899906842624. => Ok((i / 1099511627776., Some(Suffix::T))),
+            _ if i < 1152921504606846976. => Ok((i / 1125899906842624., Some(Suffix::P))),
+            _ if i < 1180591620717411303424. => Ok((i / 1152921504606846976., Some(Suffix::E))),
+            _ => Err("Number is too big and unsupported".to_owned()),
+        },
+        Unit::IecI => match i {
+            _ if i < 1024. => Ok((i, None)),
+            _ if i < 1048576. => Ok((i / 1024., Some(Suffix::Ki))),
+            _ if i < 1073741824. => Ok((i / 1048576., Some(Suffix::Mi))),
+            _ if i < 1099511627776. => Ok((i / 1073741824., Some(Suffix::Gi))),
+            _ if i < 1125899906842624. => Ok((i / 1099511627776., Some(Suffix::Ti))),
+            _ if i < 1152921504606846976. => Ok((i / 1125899906842624., Some(Suffix::Pi))),
+            _ if i < 1180591620717411303424. => Ok((i / 1152921504606846976., Some(Suffix::Ei))),
+            _ => Err("Number is too big and unsupported".to_owned()),
+        },
         Unit::Auto => Err("Unit 'auto' isn't supported with --to options".to_owned()),
     }
 }

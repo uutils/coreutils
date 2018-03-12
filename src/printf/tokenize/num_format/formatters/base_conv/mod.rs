@@ -41,12 +41,12 @@ pub struct DivOut<'a> {
     pub remainder: Remainder<'a>,
 }
 
-pub fn arrnum_int_div_step<'a>(rem_in: Remainder<'a>,
-                               radix_in: u8,
-                               base_ten_int_divisor: u8,
-                               after_decimal: bool)
-                               -> DivOut<'a> {
-
+pub fn arrnum_int_div_step<'a>(
+    rem_in: Remainder<'a>,
+    radix_in: u8,
+    base_ten_int_divisor: u8,
+    after_decimal: bool,
+) -> DivOut<'a> {
     let mut rem_out = Remainder {
         position: rem_in.position,
         replace: Vec::new(),
@@ -65,17 +65,15 @@ pub fn arrnum_int_div_step<'a>(rem_in: Remainder<'a>,
     loop {
         let u = match it_replace.next() {
             Some(u_rep) => u_rep.clone() as u16,
-            None => {
-                match it_f.next() {
-                    Some(u_orig) => u_orig.clone() as u16,
-                    None => {
-                        if !after_decimal {
-                            break;
-                        }
-                        0
+            None => match it_f.next() {
+                Some(u_orig) => u_orig.clone() as u16,
+                None => {
+                    if !after_decimal {
+                        break;
                     }
+                    0
                 }
-            }
+            },
         };
         traversed += 1;
         bufferval += u;
@@ -176,7 +174,7 @@ pub fn arrnum_int_add(arrnum: &Vec<u8>, basenum: u8, base_ten_int_term: u8) -> V
     let mut it = arrnum.iter().rev();
     loop {
         let i = it.next();
-        match i {            
+        match i {
             Some(u) => {
                 new_amount = (u.clone() as u16) + carry;
                 rem = new_amount % base;
@@ -217,7 +215,6 @@ pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
     result.reverse();
     result
 }
-
 
 // temporary needs-improvement-function
 #[allow(unused_variables)]
@@ -272,9 +269,11 @@ pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &RadixDef) -> String {
 #[allow(unused_variables)]
 pub fn base_conv_str(src: &str, radix_def_src: &RadixDef, radix_def_dest: &RadixDef) -> String {
     let intermed_in: Vec<u8> = str_to_arrnum(src, radix_def_src);
-    let intermed_out = base_conv_vec(&intermed_in,
-                                     radix_def_src.get_max(),
-                                     radix_def_dest.get_max());
+    let intermed_out = base_conv_vec(
+        &intermed_in,
+        radix_def_src.get_max(),
+        radix_def_dest.get_max(),
+    );
     arrnum_to_str(&intermed_out, radix_def_dest)
 }
 

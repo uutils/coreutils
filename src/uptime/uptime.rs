@@ -18,7 +18,7 @@ extern crate getopts;
 extern crate uucore;
 // import crate time from utmpx
 use uucore::utmpx::*;
-use uucore::libc::{time_t, c_double};
+use uucore::libc::{c_double, time_t};
 pub use uucore::libc;
 
 use getopts::Options;
@@ -33,7 +33,7 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 use libc::getloadavg;
 
 #[cfg(windows)]
-extern {
+extern "C" {
     fn GetTickCount() -> libc::uint32_t;
 }
 
@@ -45,7 +45,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -57,9 +57,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]", NAME);
         println!("");
-        println!("{}", opts.usage("Print the current time, the length of time the system has been up,\n\
-                              the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes."));
+        println!(
+            "{}",
+            opts.usage(
+                "Print the current time, the length of time the system has been up,\n\
+                 the number of users on the system, and the average number of jobs\n\
+                 in the run queue over the last 1, 5 and 15 minutes."
+            )
+        );
         return 0;
     }
 
@@ -79,12 +84,14 @@ fn print_loadavg() {
 
     if loads == -1 {
         print!("\n");
-    }
-    else {
+    } else {
         print!("load average: ");
         for n in 0..loads {
-            print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
-                                   else { ", " } );
+            print!(
+                "{:.2}{}",
+                avg[n as usize],
+                if n == loads - 1 { "\n" } else { ", " }
+            );
         }
     }
 }
@@ -102,8 +109,8 @@ fn process_utmpx() -> (Option<time_t>, usize) {
                 if t.sec > 0 {
                     boot_time = Some(t.sec as time_t);
                 }
-            },
-            _ => continue
+            }
+            _ => continue,
         }
     }
     (boot_time, nusers)
@@ -125,19 +132,22 @@ fn print_nusers(nusers: usize) {
 fn print_time() {
     let local_time = time::now();
 
-    print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
-           local_time.tm_min, local_time.tm_sec);
+    print!(
+        " {:02}:{:02}:{:02} ",
+        local_time.tm_hour, local_time.tm_min, local_time.tm_sec
+    );
 }
 
 #[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
     let mut proc_uptime = String::new();
 
-    if let Some(n) =
-        File::open("/proc/uptime").ok()
-            .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
-            .and_then(|_| proc_uptime.split_whitespace().next())
-            .and_then(|s| s.replace(".", "").parse().ok()) {
+    if let Some(n) = File::open("/proc/uptime")
+        .ok()
+        .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
+        .and_then(|_| proc_uptime.split_whitespace().next())
+        .and_then(|s| s.replace(".", "").parse().ok())
+    {
         n
     } else {
         match boot_time {
@@ -145,7 +155,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
                 let now = time::get_time().sec;
                 let boottime = t as i64;
                 ((now - boottime) * 100)
-            },
+            }
             _ => -1,
         }
     }
@@ -162,11 +172,9 @@ fn print_uptime(upsecs: i64) {
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
         print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
-    }
-    else if updays > 1 {
+    } else if updays > 1 {
         print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
-    }
-    else {
+    } else {
         print!("up  {:2}:{:02}, ", uphours, upmins);
     }
 }

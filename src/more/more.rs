@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::{stdout, Write, Read};
+use std::io::{stdout, Read, Write};
 use std::fs::File;
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(e) => {
             show_error!("{}", e);
             panic!()
-        },
+        }
     };
     let usage = opts.usage("more TARGET.");
     let mode = if matches.opt_present("version") {
@@ -56,8 +56,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::More    => more(matches),
-        Mode::Help    => help(&usage),
+        Mode::More => more(matches),
+        Mode::Help => help(&usage),
         Mode::Version => version(),
     }
 
@@ -69,10 +69,13 @@ fn version() {
 }
 
 fn help(usage: &str) {
-    let msg = format!("{0} {1}\n\n\
-                       Usage: {0} TARGET\n  \
-                       \n\
-                       {2}", NAME, VERSION, usage);
+    let msg = format!(
+        "{0} {1}\n\n\
+         Usage: {0} TARGET\n  \
+         \n\
+         {2}",
+        NAME, VERSION, usage
+    );
     println!("{}", msg);
 }
 
@@ -102,8 +105,7 @@ fn reset_term(term: &mut termios::Termios) {
 
 #[cfg(any(windows, target_os = "fuchsia"))]
 #[inline(always)]
-fn reset_term(_: &mut usize) {
-}
+fn reset_term(_: &mut usize) {}
 
 fn more(matches: getopts::Matches) {
     let files = matches.free;
@@ -114,7 +116,9 @@ fn more(matches: getopts::Matches) {
 
     let mut end = false;
     while let Ok(sz) = f.read(&mut buffer) {
-        if sz == 0 { break }
+        if sz == 0 {
+            break;
+        }
         stdout().write(&buffer[0..sz]).unwrap();
         for byte in std::io::stdin().bytes() {
             match byte.unwrap() {
@@ -122,12 +126,14 @@ fn more(matches: getopts::Matches) {
                 b'q' | 27 => {
                     end = true;
                     break;
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
 
-        if end { break }
+        if end {
+            break;
+        }
     }
 
     reset_term(&mut term);

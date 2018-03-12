@@ -1,6 +1,10 @@
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Radix { Decimal, Hexadecimal, Octal, NoPrefix }
+pub enum Radix {
+    Decimal,
+    Hexadecimal,
+    Octal,
+    NoPrefix,
+}
 
 /// provides the byte offset printed at the left margin
 pub struct InputOffset {

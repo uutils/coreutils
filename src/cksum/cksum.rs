@@ -9,12 +9,11 @@
  * file that was distributed with this source code.
  */
 
-
 #[macro_use]
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{self, stdin, Read, BufReader};
+use std::io::{self, stdin, BufReader, Read};
 #[cfg(not(windows))]
 use std::mem;
 use std::path::Path;
@@ -46,7 +45,7 @@ fn init_byte_array() -> Vec<u8> {
 }
 
 #[cfg(not(windows))]
-fn init_byte_array() -> [u8; 1024*1024] {
+fn init_byte_array() -> [u8; 1024 * 1024] {
     unsafe { mem::uninitialized() }
 }
 
@@ -56,10 +55,8 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut size = 0usize;
 
     let file;
-    let mut rd : Box<Read> = match fname {
-        "-" => {
-            Box::new(stdin())
-        }
+    let mut rd: Box<Read> = match fname {
+        "-" => Box::new(stdin()),
         _ => {
             file = try!(File::open(&Path::new(fname)));
             Box::new(BufReader::new(file))
@@ -78,15 +75,14 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
                 }
                 size += num_bytes;
             }
-            Err(err) => return Err(err)
+            Err(err) => return Err(err),
         }
     }
     //Ok((0 as u32,0 as usize))
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .parse(args);
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     let files = matches.free;
 

@@ -31,9 +31,9 @@ pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
                 result.pop();
             }
             Component::CurDir => (),
-            Component::RootDir |
-            Component::Normal(_) |
-            Component::Prefix(_) => result.push(comp.as_os_str()),
+            Component::RootDir | Component::Normal(_) | Component::Prefix(_) => {
+                result.push(comp.as_os_str())
+            }
         }
     }
     result.into()
@@ -53,7 +53,10 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
     let mut result = original.as_ref().to_path_buf();
     loop {
         if followed == MAX_LINKS_FOLLOWED {
-            return Err(Error::new(ErrorKind::InvalidInput, "maximum links followed"));
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "maximum links followed",
+            ));
         }
 
         match fs::symlink_metadata(&result) {
@@ -93,8 +96,7 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
     // vector for canonicalization.
     for part in original.components() {
         match part {
-            Component::Prefix(_) |
-            Component::RootDir => {
+            Component::Prefix(_) | Component::RootDir => {
                 result.push(part.as_os_str());
             }
             Component::CurDir => (),
@@ -117,12 +119,10 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
             }
 
             match resolve(&result) {
-                Err(e) => {
-                    match can_mode {
-                        CanonicalizeMode::Missing => continue,
-                        _ => return Err(e),
-                    }
-                }
+                Err(e) => match can_mode {
+                    CanonicalizeMode::Missing => continue,
+                    _ => return Err(e),
+                },
                 Ok(path) => {
                     result.pop();
                     result.push(path);

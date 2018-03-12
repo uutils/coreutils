@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::str::from_utf8;
 
 #[allow(dead_code)]
@@ -43,13 +43,13 @@ enum Base {
 
 struct Opts {
     newline: bool,
-    escape: bool
+    escape: bool,
 }
 
 fn convert_str(string: &[u8], index: usize, base: Base) -> (char, usize) {
     let (max_digits, is_legal_digit): (usize, fn(u8) -> bool) = match base {
-        Base::B8 => (3, |c| { (c as char).is_digit(8) }),
-        Base::B16 => (2, |c| { (c as char).is_digit(16) }),
+        Base::B8 => (3, |c| (c as char).is_digit(8)),
+        Base::B16 => (2, |c| (c as char).is_digit(16)),
     };
 
     let mut bytes = vec![];
@@ -68,10 +68,11 @@ fn convert_str(string: &[u8], index: usize, base: Base) -> (char, usize) {
     if bytes.is_empty() {
         (' ', 0)
     } else {
-        (usize::from_str_radix(
-            from_utf8(bytes.as_ref()).unwrap(),
-            base as u32
-        ).unwrap() as u8 as char, bytes.len())
+        (
+            usize::from_str_radix(from_utf8(bytes.as_ref()).unwrap(), base as u32).unwrap() as u8
+                as char,
+            bytes.len(),
+        )
     }
 }
 
@@ -79,7 +80,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")
         .optflag("e", "", "enable interpretation of backslash escapes")
-        .optflag("E", "", "disable interpretation of backslash escapes (default)")
+        .optflag(
+            "E",
+            "",
+            "disable interpretation of backslash escapes (default)",
+        )
         .parse(args);
 
     let options = Opts {
@@ -112,20 +117,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         'c' => break,
                         'e' => print!("\x1B"),
                         'f' => print!("\x0C"),
-                        ch => { // 'x' or '0' or _
-                            idx = if ch == 'x' || ch == '0' {
-                                idx + 1
-                            } else {
-                                idx
-                            };
+                        ch => {
+                            // 'x' or '0' or _
+                            idx = if ch == 'x' || ch == '0' { idx + 1 } else { idx };
                             let base = if ch == 'x' { Base::B16 } else { Base::B8 };
                             match convert_str(string.as_bytes(), idx, base) {
-                                (_, 0) => {
-                                    match ch {
-                                        'x' => print!("\\x"),
-                                        '0' => print!("\0"),
-                                        _ => print!("\\{}", c),
-                                    }
+                                (_, 0) => match ch {
+                                    'x' => print!("\\x"),
+                                    '0' => print!("\0"),
+                                    _ => print!("\\{}", c),
                                 },
                                 (c, num_char_used) => {
                                     print!("{}", c);

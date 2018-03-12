@@ -16,7 +16,7 @@ extern crate uucore;
 
 #[allow(unused_imports)]
 use std::ascii::AsciiExt;
-use std::fs::{File, metadata, OpenOptions};
+use std::fs::{metadata, File, OpenOptions};
 use std::io::Result;
 use std::path::Path;
 
@@ -28,7 +28,7 @@ enum TruncateMode {
     AtMost,
     AtLeast,
     RoundDown,
-    RoundUp
+    RoundUp,
 }
 
 static NAME: &'static str = "truncate";
@@ -38,15 +38,24 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     opts.optflag("c", "no-create", "do not create files that do not exist");
-    opts.optflag("o", "io-blocks", "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)");
-    opts.optopt("r", "reference", "base the size of each file on the size of RFILE", "RFILE");
+    opts.optflag(
+        "o",
+        "io-blocks",
+        "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)",
+    );
+    opts.optopt(
+        "r",
+        "reference",
+        "base the size of each file on the size of RFILE",
+        "RFILE",
+    );
     opts.optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => { crash!(1, "{}", f) }
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("help") {
@@ -55,8 +64,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTION]... FILE...", NAME);
         println!("");
-        print!("{}", opts.usage("Shrink or extend the size of each file to the specified size."));
-        print!("
+        print!(
+            "{}",
+            opts.usage("Shrink or extend the size of each file to the specified size.")
+        );
+        print!(
+            "
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
     'KB' =>           1000 (kilobytes)
@@ -73,7 +86,8 @@ file based on its current size:
     '>'  => at least
     '/'  => round down to multiple of
     '%'  => round up to multiple of
-");
+"
+        );
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else if matches.free.is_empty() {
@@ -89,7 +103,7 @@ file based on its current size:
         } else {
             match truncate(no_create, io_blocks, reference, size, matches.free) {
                 Ok(()) => ( /* pass */ ),
-                Err(_) => return 1
+                Err(_) => return 1,
             }
         }
     }
@@ -97,27 +111,34 @@ file based on its current size:
     0
 }
 
-fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<String>, filenames: Vec<String>) -> Result<()> {
+fn truncate(
+    no_create: bool,
+    _: bool,
+    reference: Option<String>,
+    size: Option<String>,
+    filenames: Vec<String>,
+) -> Result<()> {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let _ = match File::open(Path::new(&rfilename)) {
                 Ok(m) => m,
-                Err(f) => {
-                    crash!(1, "{}", f.to_string())
-                }
+                Err(f) => crash!(1, "{}", f.to_string()),
             };
             match metadata(rfilename) {
                 Ok(meta) => (meta.len(), TruncateMode::Reference),
-                Err(f) => {
-                    crash!(1, "{}", f.to_string())
-                }
+                Err(f) => crash!(1, "{}", f.to_string()),
             }
         }
-        None => parse_size(size.unwrap().as_ref())
+        None => parse_size(size.unwrap().as_ref()),
     };
     for filename in &filenames {
         let path = Path::new(filename);
-        match OpenOptions::new().read(true).write(true).create(!no_create).open(path) {
+        match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(!no_create)
+            .open(path)
+        {
             Ok(file) => {
                 let fsize = match metadata(filename) {
                     Ok(meta) => meta.len(),
@@ -130,21 +151,25 @@ fn truncate(no_create: bool, _: bool, reference: Option<String>, size: Option<St
                     TruncateMode::Reference => refsize,
                     TruncateMode::Extend => fsize + refsize,
                     TruncateMode::Reduce => fsize - refsize,
-                    TruncateMode::AtMost => if fsize > refsize { refsize } else { fsize },
-                    TruncateMode::AtLeast => if fsize < refsize { refsize } else { fsize },
+                    TruncateMode::AtMost => if fsize > refsize {
+                        refsize
+                    } else {
+                        fsize
+                    },
+                    TruncateMode::AtLeast => if fsize < refsize {
+                        refsize
+                    } else {
+                        fsize
+                    },
                     TruncateMode::RoundDown => fsize - fsize % refsize,
-                    TruncateMode::RoundUp => fsize + fsize % refsize
+                    TruncateMode::RoundUp => fsize + fsize % refsize,
                 };
                 match file.set_len(tsize) {
-                    Ok(_) => {},
-                    Err(f) => {
-                        crash!(1, "{}", f.to_string())
-                    }
+                    Ok(_) => {}
+                    Err(f) => crash!(1, "{}", f.to_string()),
                 };
             }
-            Err(f) => {
-                crash!(1, "{}", f.to_string())
-            }
+            Err(f) => crash!(1, "{}", f.to_string()),
         }
     }
     Ok(())
@@ -158,15 +183,14 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         '>' => TruncateMode::AtLeast,
         '/' => TruncateMode::RoundDown,
         '*' => TruncateMode::RoundUp,
-        _ => TruncateMode::Reference /* assume that the size is just a number */
+        _ => TruncateMode::Reference, /* assume that the size is just a number */
     };
     let bytes = {
-        let mut slice =
-            if mode == TruncateMode::Reference {
-                size
-            } else {
-                &size[1..]
-            };
+        let mut slice = if mode == TruncateMode::Reference {
+            size
+        } else {
+            &size[1..]
+        };
         if slice.chars().last().unwrap().is_alphabetic() {
             slice = &slice[..slice.len() - 1];
             if slice.len() > 0 && slice.chars().last().unwrap().is_alphabetic() {
@@ -177,13 +201,15 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
     }.to_owned();
     let mut number: u64 = match bytes.parse() {
         Ok(num) => num,
-        Err(e) => {
-            crash!(1, "'{}' is not a valid number: {}", size, e)
-        }
+        Err(e) => crash!(1, "'{}' is not a valid number: {}", size, e),
     };
     if size.chars().last().unwrap().is_alphabetic() {
         number *= match size.chars().last().unwrap().to_ascii_uppercase() {
-            'B' => match size.chars().nth(size.len() - 2).unwrap().to_ascii_uppercase() {
+            'B' => match size.chars()
+                .nth(size.len() - 2)
+                .unwrap()
+                .to_ascii_uppercase()
+            {
                 'K' => 1000u64,
                 'M' => 1000u64.pow(2),
                 'G' => 1000u64.pow(3),
@@ -192,9 +218,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
                 'E' => 1000u64.pow(6),
                 'Z' => 1000u64.pow(7),
                 'Y' => 1000u64.pow(8),
-                letter => {
-                    crash!(1, "'{}B' is not a valid suffix.", letter)
-                }
+                letter => crash!(1, "'{}B' is not a valid suffix.", letter),
             },
             'K' => 1024u64,
             'M' => 1024u64.pow(2),
@@ -204,9 +228,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
             'E' => 1024u64.pow(6),
             'Z' => 1024u64.pow(7),
             'Y' => 1024u64.pow(8),
-            letter => {
-                crash!(1, "'{}' is not a valid suffix.", letter)
-            }
+            letter => crash!(1, "'{}' is not a valid suffix.", letter),
         };
     }
     (number, mode)

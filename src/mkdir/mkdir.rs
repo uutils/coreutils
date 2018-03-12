@@ -38,7 +38,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if args.len() == 1 || matches.opt_present("help") {
@@ -78,7 +78,10 @@ fn print_help(opts: &getopts::Options) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
-    print!("{}", opts.usage("Create the given DIRECTORY(ies) if they do not exist"));
+    print!(
+        "{}",
+        opts.usage("Create the given DIRECTORY(ies) if they do not exist")
+    );
 }
 
 /**
@@ -101,12 +104,15 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
             match path.parent() {
                 Some(parent) => {
                     if parent != empty && !parent.exists() {
-                        show_info!("cannot create directory '{}': No such file or directory", path.display());
+                        show_info!(
+                            "cannot create directory '{}': No such file or directory",
+                            path.display()
+                        );
                         status = 1;
                     } else {
                         status |= mkdir(path, mode, verbose);
                     }
-                },
+                }
                 None => {
                     status |= mkdir(path, mode, verbose);
                 }
@@ -134,11 +140,16 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
         use std::ffi::CString;
         use std::io::Error;
 
-        let directory = CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
+        let directory =
+            CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
         let mode = mode as libc::mode_t;
 
         if unsafe { libc::chmod(directory.as_ptr(), mode) } != 0 {
-            show_info!("{}: errno {}", path.display(), Error::last_os_error().raw_os_error().unwrap());
+            show_info!(
+                "{}: errno {}",
+                path.display(),
+                Error::last_os_error().raw_os_error().unwrap()
+            );
             return 1;
         }
         0

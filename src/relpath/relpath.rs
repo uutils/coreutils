@@ -26,24 +26,35 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("h", "help", "Show help and exit");
     opts.optflag("V", "version", "Show version and exit");
-    opts.optopt("d", "", "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative", "DIR");
+    opts.optopt(
+        "d",
+        "",
+        "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
+        "DIR",
+    );
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
             show_usage(&opts);
-            return 1
+            return 1;
         }
     };
 
-    if matches.opt_present("V") { version(); return 0 }
-    if matches.opt_present("h") { show_usage(&opts); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0;
+    }
+    if matches.opt_present("h") {
+        show_usage(&opts);
+        return 0;
+    }
 
     if matches.free.is_empty() {
         show_error!("Missing operand: TO");
         println!("Try `{} --help` for more information.", NAME);
-        return 1
+        return 1;
     }
 
     let to = Path::new(&matches.free[0]);
@@ -58,9 +69,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.opt_present("d") {
         let base = Path::new(&matches.opt_str("d").unwrap()).to_path_buf();
         let absbase = canonicalize(base, CanonicalizeMode::Normal).unwrap();
-        if !absto.as_path().starts_with(absbase.as_path()) || !absfrom.as_path().starts_with(absbase.as_path()) {
+        if !absto.as_path().starts_with(absbase.as_path())
+            || !absfrom.as_path().starts_with(absbase.as_path())
+        {
             println!("{}", absto.display());
-            return 0
+            return 0;
         }
     }
 
@@ -74,8 +87,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let mut result = PathBuf::new();
-    absfrom.components().skip(suffix_pos).map(|_| result.push("..")).last();
-    absto.components().skip(suffix_pos).map(|x| result.push(x.as_os_str())).last();
+    absfrom
+        .components()
+        .skip(suffix_pos)
+        .map(|_| result.push(".."))
+        .last();
+    absto
+        .components()
+        .skip(suffix_pos)
+        .map(|x| result.push(x.as_os_str()))
+        .last();
 
     println!("{}", result.display());
     0
@@ -93,8 +114,11 @@ fn show_usage(opts: &getopts::Options) {
     println!("  {} -V|--version", NAME);
     println!("  {} -h|--help", NAME);
     println!("");
-    print!("{}", opts.usage(
+    print!(
+        "{}",
+        opts.usage(
             "Convert TO destination to the relative path from the FROM dir.\n\
-            If FROM path is omitted, current working dir will be used.")
+             If FROM path is omitted, current working dir will be used."
+        )
     );
 }

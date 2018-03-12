@@ -148,6 +148,8 @@ test_unimplemented = []
 nightly = []
 default = ["generic", "unix"]
 
+[workspace]
+
 [dependencies]
 uucore   = { path="src/uucore" }
 arch     = { optional=true, path="src/arch" }

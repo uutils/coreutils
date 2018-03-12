@@ -40,7 +40,7 @@ fn main() {
     uucore::panic::install_sigpipe_hook();
 
     let umap = util_map();
-    let mut args : Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
 
     // try binary name as util name.
     let args0 = args[0].clone();
@@ -51,8 +51,9 @@ fn main() {
         std::process::exit(uumain(args));
     }
 
-    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
-     binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox") {
+    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils")
+        || binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox")
+    {
         args.remove(0);
     } else {
         let mut found = false;
@@ -63,7 +64,7 @@ fn main() {
                 break;
             }
         }
-        if ! found {
+        if !found {
             println!("{}: applet not found", binary_as_util);
             std::process::exit(1);
         }
@@ -71,7 +72,6 @@ fn main() {
 
     // try first arg as util name.
     if args.len() >= 1 {
-
         let util = &args[0][..];
 
         match umap.get(util) {

@@ -6,13 +6,13 @@
 // file that was distributed with this source code.
 //
 #![crate_name = "uu_who"]
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
 use uucore::utmpx::{self, time, Utmpx};
-use uucore::libc::{STDIN_FILENO, ttyname, S_IWGRP};
+use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -46,7 +46,6 @@ If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
     opts.optflag("b", "boot", "time of last system boot");
@@ -56,9 +55,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "lookup", "attempt to canonicalize hostnames via DNS");
     opts.optflag("m", "", "only hostname and user associated with stdin");
     opts.optflag("p", "process", "print active processes spawned by init");
-    opts.optflag("q",
-                 "count",
-                 "all login names and number of users logged on");
+    opts.optflag(
+        "q",
+        "count",
+        "all login names and number of users logged on",
+    );
     opts.optflag("r", "runlevel", "print current runlevel");
     opts.optflag("s", "short", "print only name, line, and time (default)");
     opts.optflag("t", "time", "print last system clock change");
@@ -94,7 +95,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // If true, display a '+' for each user if mesg y, a '-' if mesg n,
     // or a '?' if their tty cannot be statted.
-    let include_mesg = matches.opt_present("a") || matches.opt_present("T") || matches.opt_present("w");
+    let include_mesg =
+        matches.opt_present("a") || matches.opt_present("T") || matches.opt_present("w");
 
     // If true, display process termination & exit status.
     let mut include_exit = false;
@@ -256,10 +258,11 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
             if seconds_idle < 60 {
                 "  .  ".into()
             } else {
-                format!("{:02}:{:02}",
-                        seconds_idle / 3600,
-                        (seconds_idle % 3600) / 60)
-                        .into()
+                format!(
+                    "{:02}:{:02}",
+                    seconds_idle / 3600,
+                    (seconds_idle % 3600) / 60
+                ).into()
             }
         } else {
             " old ".into()
@@ -276,7 +279,10 @@ fn current_tty() -> String {
     unsafe {
         let res = ttyname(STDIN_FILENO);
         if !res.is_null() {
-            CStr::from_ptr(res as *const _).to_string_lossy().trim_left_matches("/dev/").to_owned()
+            CStr::from_ptr(res as *const _)
+                .to_string_lossy()
+                .trim_left_matches("/dev/")
+                .to_owned()
         } else {
             "".to_owned()
         }
@@ -330,9 +336,7 @@ impl Who {
                     }
                 }
 
-                if ut.record_type() == utmpx::BOOT_TIME {
-
-                }
+                if ut.record_type() == utmpx::BOOT_TIME {}
             }
         }
     }
@@ -342,25 +346,18 @@ impl Who {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
         let runlvline = format!("run-level {}", curr);
-        let comment = format!("last={}",
-                              if last == 'N' {
-                                  'S'
-                              } else {
-                                  'N'
-                              });
+        let comment = format!("last={}", if last == 'N' { 'S' } else { 'N' });
 
-        self.print_line("",
-                        ' ',
-                        &runlvline,
-                        &time_string(ut),
-                        "",
-                        "",
-                        if !last.is_control() {
-                            &comment
-                        } else {
-                            ""
-                        },
-                        "");
+        self.print_line(
+            "",
+            ' ',
+            &runlvline,
+            &time_string(ut),
+            "",
+            "",
+            if !last.is_control() { &comment } else { "" },
+            "",
+        );
     }
 
     #[inline]
@@ -372,14 +369,16 @@ impl Who {
     fn print_login(&self, ut: &Utmpx) {
         let comment = format!("id={}", ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
-        self.print_line("LOGIN",
-                        ' ',
-                        &ut.tty_device(),
-                        &time_string(ut),
-                        "",
-                        &pidstr,
-                        &comment,
-                        "");
+        self.print_line(
+            "LOGIN",
+            ' ',
+            &ut.tty_device(),
+            &time_string(ut),
+            "",
+            &pidstr,
+            &comment,
+            "",
+        );
     }
 
     #[inline]
@@ -388,28 +387,32 @@ impl Who {
         let pidstr = format!("{}", ut.pid());
         let e = ut.exit_status();
         let exitstr = format!("term={} exit={}", e.0, e.1);
-        self.print_line("",
-                        ' ',
-                        &ut.tty_device(),
-                        &time_string(ut),
-                        "",
-                        &pidstr,
-                        &comment,
-                        &exitstr);
+        self.print_line(
+            "",
+            ' ',
+            &ut.tty_device(),
+            &time_string(ut),
+            "",
+            &pidstr,
+            &comment,
+            &exitstr,
+        );
     }
 
     #[inline]
     fn print_initspawn(&self, ut: &Utmpx) {
         let comment = format!("id={}", ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
-        self.print_line("",
-                        ' ',
-                        &ut.tty_device(),
-                        &time_string(ut),
-                        "",
-                        &pidstr,
-                        &comment,
-                        "");
+        self.print_line(
+            "",
+            ' ',
+            &ut.tty_device(),
+            &time_string(ut),
+            "",
+            &pidstr,
+            &comment,
+            "",
+        );
     }
 
     #[inline]
@@ -457,31 +460,31 @@ impl Who {
             buf.push(h.to_owned());
         }
         let s = buf.join(":");
-        let hoststr = if s.is_empty() {
-            s
-        } else {
-            format!("({})", s)
-        };
+        let hoststr = if s.is_empty() { s } else { format!("({})", s) };
 
-        self.print_line(ut.user().as_ref(),
-                        mesg,
-                        ut.tty_device().as_ref(),
-                        time_string(ut).as_str(),
-                        idle.as_ref(),
-                        format!("{}", ut.pid()).as_str(),
-                        hoststr.as_str(),
-                        "");
+        self.print_line(
+            ut.user().as_ref(),
+            mesg,
+            ut.tty_device().as_ref(),
+            time_string(ut).as_str(),
+            idle.as_ref(),
+            format!("{}", ut.pid()).as_str(),
+            hoststr.as_str(),
+            "",
+        );
     }
 
-    fn print_line(&self,
-                  user: &str,
-                  state: char,
-                  line: &str,
-                  time: &str,
-                  idle: &str,
-                  pid: &str,
-                  comment: &str,
-                  exit: &str) {
+    fn print_line(
+        &self,
+        user: &str,
+        state: char,
+        line: &str,
+        time: &str,
+        idle: &str,
+        pid: &str,
+        comment: &str,
+        exit: &str,
+    ) {
         let mut buf = String::with_capacity(64);
         let msg = vec![' ', state].into_iter().collect::<String>();
 
@@ -512,13 +515,15 @@ impl Who {
 
     #[inline]
     fn print_heading(&self) {
-        self.print_line("NAME",
-                        ' ',
-                        "LINE",
-                        "TIME",
-                        "IDLE",
-                        "PID",
-                        "COMMENT",
-                        "EXIT");
+        self.print_line(
+            "NAME",
+            ' ',
+            "LINE",
+            "TIME",
+            "IDLE",
+            "PID",
+            "COMMENT",
+            "EXIT",
+        );
     }
 }

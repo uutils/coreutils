@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{Read, Result, stdin};
+use std::io::{stdin, Read, Result};
 use std::path::Path;
 
 static NAME: &'static str = "sum";
@@ -33,7 +33,7 @@ fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
                     checksum = (checksum >> 1) + ((checksum & 1) << 15);
                     checksum = checksum.wrapping_add(byte as u16);
                 }
-            },
+            }
             _ => break,
         }
     }
@@ -53,7 +53,7 @@ fn sysv_sum(mut reader: Box<Read>) -> (usize, u16) {
                 for &byte in buf[..n].iter() {
                     ret = ret.wrapping_add(byte as u32);
                 }
-            },
+            }
             _ => break,
         }
     }
@@ -84,17 +84,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if matches.opt_present("help") {
-        let msg = format!("{0} {1}
+        let msg = format!(
+            "{0} {1}
 
 Usage:
   {0} [OPTION]... [FILE]...
 
-Checksum and count the blocks in a file.", NAME, VERSION);
-        println!("{}\nWith no FILE, or when  FILE is -, read standard input.", opts.usage(&msg));
+Checksum and count the blocks in a file.",
+            NAME, VERSION
+        );
+        println!(
+            "{}\nWith no FILE, or when  FILE is -, read standard input.",
+            opts.usage(&msg)
+        );
         return 0;
     }
     if matches.opt_present("version") {
@@ -119,7 +125,7 @@ Checksum and count the blocks in a file.", NAME, VERSION);
     for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
-            _ => crash!(1, "unable to open file")
+            _ => crash!(1, "unable to open file"),
         };
         let (blocks, sum) = if sysv {
             sysv_sum(reader)

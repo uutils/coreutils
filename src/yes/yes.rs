@@ -31,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "invalid options\n{}", f)
+        Err(f) => crash!(1, "invalid options\n{}", f),
     };
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
@@ -39,7 +39,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", NAME);
         println!("");
-        print!("{}", opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'."));
+        print!(
+            "{}",
+            opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'.")
+        );
         return 0;
     }
     if matches.opt_present("version") {
@@ -64,5 +67,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 pub fn exec(string: &str) {
-    loop { println!("{}", string) }
+    loop {
+        println!("{}", string)
+    }
 }

@@ -56,9 +56,12 @@ impl<'b> MultifileReader<'b> {
                             // print an error at the time that the file is needed,
                             // then move on the the next file.
                             // This matches the behavior of the original `od`
-                            eprintln!("{}: '{}': {}",
+                            eprintln!(
+                                "{}: '{}': {}",
                                 executable!().split("::").next().unwrap(), // remove module
-                                fname, e);
+                                fname,
+                                e
+                            );
                             self.any_err = true
                         }
                     }
@@ -91,12 +94,14 @@ impl<'b> io::Read for MultifileReader<'b> {
                             Ok(0) => break,
                             Ok(n) => n,
                             Err(e) => {
-                                eprintln!("{}: I/O: {}",
+                                eprintln!(
+                                    "{}: I/O: {}",
                                     executable!().split("::").next().unwrap(), // remove module
-                                    e);
+                                    e
+                                );
                                 self.any_err = true;
                                 break;
-                            },
+                            }
                         };
                         if xfrd == buf.len() {
                             // transferred all that was asked for.
@@ -117,11 +122,10 @@ impl<'b> HasError for MultifileReader<'b> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, Read, ErrorKind};
+    use std::io::{Cursor, ErrorKind, Read};
     use mockstream::*;
 
     #[test]
@@ -176,11 +180,23 @@ mod tests {
     #[test]
     fn test_multi_file_reader_read_error_at_start() {
         let mut inputs = Vec::new();
-        inputs.push(InputSource::Stream(Box::new(FailingMockStream::new(ErrorKind::Other, "Failing", 1))));
+        inputs.push(InputSource::Stream(Box::new(FailingMockStream::new(
+            ErrorKind::Other,
+            "Failing",
+            1,
+        ))));
         inputs.push(InputSource::Stream(Box::new(Cursor::new(&b"abcd"[..]))));
-        inputs.push(InputSource::Stream(Box::new(FailingMockStream::new(ErrorKind::Other, "Failing", 1))));
+        inputs.push(InputSource::Stream(Box::new(FailingMockStream::new(
+            ErrorKind::Other,
+            "Failing",
+            1,
+        ))));
         inputs.push(InputSource::Stream(Box::new(Cursor::new(&b"ABCD"[..]))));
-        inputs.push(InputSource::Stream(Box::new(FailingMockStream::new(ErrorKind::Other, "Failing", 1))));
+        inputs.push(InputSource::Stream(Box::new(FailingMockStream::new(
+            ErrorKind::Other,
+            "Failing",
+            1,
+        ))));
         let mut v = [0; 5];
 
         let mut sut = MultifileReader::new(inputs);

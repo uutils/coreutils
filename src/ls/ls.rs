@@ -10,13 +10,13 @@
 
 extern crate getopts;
 extern crate pretty_bytes;
-extern crate termsize;
 extern crate term_grid;
+extern crate termsize;
 extern crate time;
 extern crate unicode_width;
 use pretty_bytes::converter::convert;
-use term_grid::{Grid, GridOptions, Direction, Filling, Cell};
-use time::{Timespec, strftime};
+use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use time::{strftime, Timespec};
 
 #[macro_use]
 extern crate lazy_static;
@@ -24,8 +24,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 #[cfg(unix)]
-use uucore::libc::{S_ISUID, S_ISGID, S_ISVTX, S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP,
-                   S_IROTH, S_IWOTH, S_IXOTH, mode_t};
+use uucore::libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH,
+                   S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR};
 
 use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
@@ -76,65 +76,86 @@ lazy_static! {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let syntax = format!("[OPTION]... DIRECTORY
- {0} [OPTION]... [FILE]...", NAME);
+    let syntax = format!(
+        "[OPTION]... DIRECTORY
+ {0} [OPTION]... [FILE]...",
+        NAME
+    );
     let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
-        .optflag("a",
-                 "all",
-                 "Do not ignore hidden files (files with names that start with '.').")
-        .optflag("A",
-                 "almost-all",
-                 "In a directory, do not ignore all file names that start with '.', only ignore \
-                  '.' and '..'.")
-        .optflag("B",
-                 "ignore-backups",
-                 "Ignore entries which end with ~.")
-        .optflag("c",
-                 "",
-                 "If the long listing format (e.g., -l, -o) is being used, print the status \
-                 change time (the ‘ctime’ in the inode) instead of the modification time. When \
-                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
-                 format, sort according to the status change time.")
-        .optflag("d",
-                 "directory",
-                 "Only list the names of directories, rather than listing directory contents. \
-                  This will not follow symbolic links unless one of `--dereference-command-line \
-                  (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
-                  specified.")
-        .optflag("F",
-                 "classify",
-                 "Append a character to each file name indicating the file type. Also, for \
-                 regular files that are executable, append '*'. The file type indicators are \
-                 '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                 '>' for doors, and nothing for regular files.")
-        .optflag("h",
-                 "human-readable",
-                 "Print human readable file sizes (e.g. 1K 234M 56G).")
-        .optflag("i",
-                 "inode",
-                 "print the index number of each file")
-        .optflag("L",
-                 "dereference",
-                 "When showing file information for a symbolic link, show information for the \
-                 file the link references rather than the link itself.")
+        .optflag(
+            "a",
+            "all",
+            "Do not ignore hidden files (files with names that start with '.').",
+        )
+        .optflag(
+            "A",
+            "almost-all",
+            "In a directory, do not ignore all file names that start with '.', only ignore \
+             '.' and '..'.",
+        )
+        .optflag("B", "ignore-backups", "Ignore entries which end with ~.")
+        .optflag(
+            "c",
+            "",
+            "If the long listing format (e.g., -l, -o) is being used, print the status \
+             change time (the ‘ctime’ in the inode) instead of the modification time. When \
+             explicitly sorting by time (--sort=time or -t) or when not using a long listing \
+             format, sort according to the status change time.",
+        )
+        .optflag(
+            "d",
+            "directory",
+            "Only list the names of directories, rather than listing directory contents. \
+             This will not follow symbolic links unless one of `--dereference-command-line \
+             (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
+             specified.",
+        )
+        .optflag(
+            "F",
+            "classify",
+            "Append a character to each file name indicating the file type. Also, for \
+             regular files that are executable, append '*'. The file type indicators are \
+             '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
+             '>' for doors, and nothing for regular files.",
+        )
+        .optflag(
+            "h",
+            "human-readable",
+            "Print human readable file sizes (e.g. 1K 234M 56G).",
+        )
+        .optflag("i", "inode", "print the index number of each file")
+        .optflag(
+            "L",
+            "dereference",
+            "When showing file information for a symbolic link, show information for the \
+             file the link references rather than the link itself.",
+        )
         .optflag("l", "long", "Display detailed information.")
         .optflag("n", "numeric-uid-gid", "-l with numeric UIDs and GIDs.")
-        .optflag("r",
-                 "reverse",
-                 "Reverse whatever the sorting method is--e.g., list files in reverse \
-                 alphabetical order, youngest first, smallest first, or whatever.")
-        .optflag("R",
-                 "recursive",
-                 "List the contents of all directories recursively.")
+        .optflag(
+            "r",
+            "reverse",
+            "Reverse whatever the sorting method is--e.g., list files in reverse \
+             alphabetical order, youngest first, smallest first, or whatever.",
+        )
+        .optflag(
+            "R",
+            "recursive",
+            "List the contents of all directories recursively.",
+        )
         .optflag("S", "", "Sort by file size, largest first.")
-        .optflag("t",
-                 "",
-                 "Sort by modification time (the 'mtime' in the inode), newest first.")
-        .optflag("U",
-                 "",
-                 "Do not sort; list the files in whatever order they are stored in the \
-                 directory.  This is especially useful when listing very large directories, \
-                 since not doing any sorting can be noticeably faster.")
+        .optflag(
+            "t",
+            "",
+            "Sort by modification time (the 'mtime' in the inode), newest first.",
+        )
+        .optflag(
+            "U",
+            "",
+            "Do not sort; list the files in whatever order they are stored in the \
+             directory.  This is especially useful when listing very large directories, \
+             since not doing any sorting can be noticeably faster.",
+        )
         .optflag("", "color", "Color output based on file type.")
         .parse(args);
 
@@ -159,7 +180,7 @@ fn list(options: getopts::Matches) {
             dir = true;
             if options.opt_present("l") && !(options.opt_present("L")) {
                 if let Ok(md) = p.symlink_metadata() {
-                    if md.file_type().is_symlink() && !p.ends_with( "/" ) {
+                    if md.file_type().is_symlink() && !p.ends_with("/") {
                         dir = false;
                     }
                 }
@@ -189,16 +210,16 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     if options.opt_present("t") {
         if options.opt_present("c") {
             entries.sort_by_key(|k| {
-                Reverse(get_metadata(k, options)
-                    .map(|md| md.ctime())
-                    .unwrap_or(0))
+                Reverse(get_metadata(k, options).map(|md| md.ctime()).unwrap_or(0))
             });
         } else {
             entries.sort_by_key(|k| {
                 // Newest first
-                Reverse(get_metadata(k, options)
-                    .and_then(|md| md.modified())
-                    .unwrap_or(std::time::UNIX_EPOCH))
+                Reverse(
+                    get_metadata(k, options)
+                        .and_then(|md| md.modified())
+                        .unwrap_or(std::time::UNIX_EPOCH),
+                )
             });
         }
     } else if options.opt_present("S") {
@@ -219,12 +240,18 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     if options.opt_present("t") {
         entries.sort_by_key(|k| {
             // Newest first
-            Reverse(get_metadata(k, options)
-                .and_then(|md| md.modified())
-                .unwrap_or(std::time::UNIX_EPOCH))
+            Reverse(
+                get_metadata(k, options)
+                    .and_then(|md| md.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH),
+            )
         });
     } else if options.opt_present("S") {
-        entries.sort_by_key(|k| get_metadata(k, options).map(|md| md.file_size()).unwrap_or(0));
+        entries.sort_by_key(|k| {
+            get_metadata(k, options)
+                .map(|md| md.file_size())
+                .unwrap_or(0)
+        });
         reverse = !reverse;
     } else if !options.opt_present("U") {
         entries.sort();
@@ -258,27 +285,22 @@ fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
 }
 
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
-    let mut entries = safe_unwrap!(fs::read_dir(dir)
-        .and_then(|e| e.collect::<Result<Vec<_>, _>>()));
+    let mut entries =
+        safe_unwrap!(fs::read_dir(dir).and_then(|e| e.collect::<Result<Vec<_>, _>>()));
 
     entries.retain(|e| should_display(e, options));
 
     let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
     sort_entries(&mut entries, options);
 
-
-
     if options.opt_present("a") {
         let mut display_entries = entries.clone();
         display_entries.insert(0, dir.join(".."));
         display_entries.insert(0, dir.join("."));
         display_items(&display_entries, Some(dir), options);
-    }
-    else
-    {
+    } else {
         display_items(&entries, Some(dir), options);
     }
-
 
     if options.opt_present("R") {
         for e in entries.iter().filter(|p| p.is_dir()) {
@@ -298,7 +320,10 @@ fn get_metadata(entry: &PathBuf, options: &getopts::Matches) -> std::io::Result<
 
 fn display_dir_entry_size(entry: &PathBuf, options: &getopts::Matches) -> (usize, usize) {
     if let Ok(md) = get_metadata(entry, options) {
-        (display_symlink_count(&md).len(), display_file_size(&md, options).len())
+        (
+            display_symlink_count(&md).len(),
+            display_file_size(&md, options).len(),
+        )
     } else {
         (0, 0)
     }
@@ -326,7 +351,8 @@ fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::
             display_item_long(item, strip, max_links, max_size, options);
         }
     } else {
-        let names: Vec<_> = items.iter()
+        let names: Vec<_> = items
+            .iter()
             .filter_map(|i| {
                 let md = get_metadata(i, options);
                 match md {
@@ -364,11 +390,13 @@ fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::
     }
 }
 
-fn display_item_long(item: &PathBuf,
-                     strip: Option<&Path>,
-                     max_links: usize,
-                     max_size: usize,
-                     options: &getopts::Matches) {
+fn display_item_long(
+    item: &PathBuf,
+    strip: Option<&Path>,
+    max_links: usize,
+    max_size: usize,
+    options: &getopts::Matches,
+) {
     let md = match get_metadata(item, options) {
         Err(e) => {
             let filename = get_file_name(&item, strip);
@@ -378,16 +406,18 @@ fn display_item_long(item: &PathBuf,
         Ok(md) => md,
     };
 
-    println!("{}{}{} {} {} {} {} {} {}",
-             get_inode(&md, options),
-             display_file_type(md.file_type()),
-             display_permissions(&md),
-             pad_left(display_symlink_count(&md), max_links),
-             display_uname(&md, options),
-             display_group(&md, options),
-             pad_left(display_file_size(&md, options), max_size),
-             display_date(&md, options),
-             display_file_name(&item, strip, &md, options).contents);
+    println!(
+        "{}{}{} {} {} {} {} {} {}",
+        get_inode(&md, options),
+        display_file_type(md.file_type()),
+        display_permissions(&md),
+        pad_left(display_symlink_count(&md), max_links),
+        display_uname(&md, options),
+        display_group(&md, options),
+        pad_left(display_file_size(&md, options), max_size),
+        display_date(&md, options),
+        display_file_name(&item, strip, &md, options).contents
+    );
 }
 
 #[cfg(unix)]
@@ -403,7 +433,6 @@ fn get_inode(metadata: &Metadata, options: &getopts::Matches) -> String {
 fn get_inode(_metadata: &Metadata, _options: &getopts::Matches) -> String {
     "".to_string()
 }
-
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -455,11 +484,13 @@ fn display_date(metadata: &Metadata, options: &getopts::Matches) -> String {
 #[allow(unused_variables)]
 fn display_date(metadata: &Metadata, options: &getopts::Matches) -> String {
     if let Ok(mtime) = metadata.modified() {
-        let time =
-            time::at(Timespec::new(mtime.duration_since(std::time::UNIX_EPOCH)
-                                       .unwrap()
-                                       .as_secs() as i64,
-                                   0));
+        let time = time::at(Timespec::new(
+            mtime
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64,
+            0,
+        ));
         strftime("%F %R", &time).unwrap()
     } else {
         "???".to_string()
@@ -496,11 +527,12 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
 }
 
 #[cfg(not(unix))]
-fn display_file_name(path: &Path,
-                     strip: Option<&Path>,
-                     metadata: &Metadata,
-                     options: &getopts::Matches)
-                     -> Cell {
+fn display_file_name(
+    path: &Path,
+    strip: Option<&Path>,
+    metadata: &Metadata,
+    options: &getopts::Matches,
+) -> Cell {
     let mut name = get_file_name(path, strip);
 
     if !options.opt_present("long") {
@@ -539,15 +571,9 @@ fn color_name(name: String, typ: &str) -> String {
         }
     };
     if let Some(code) = COLOR_MAP.get(typ) {
-        format!("{}{}{}{}{}{}{}{}",
-                *LEFT_CODE,
-                code,
-                *RIGHT_CODE,
-                name,
-                *END_CODE,
-                *LEFT_CODE,
-                *RESET_CODE,
-                *RIGHT_CODE,
+        format!(
+            "{}{}{}{}{}{}{}{}",
+            *LEFT_CODE, code, *RIGHT_CODE, name, *END_CODE, *LEFT_CODE, *RESET_CODE, *RIGHT_CODE,
         )
     } else {
         name
@@ -560,11 +586,12 @@ macro_rules! has {
     )
 }
 #[cfg(unix)]
-fn display_file_name(path: &Path,
-                     strip: Option<&Path>,
-                     metadata: &Metadata,
-                     options: &getopts::Matches)
-                     -> Cell {
+fn display_file_name(
+    path: &Path,
+    strip: Option<&Path>,
+    metadata: &Metadata,
+    options: &getopts::Matches,
+) -> Cell {
     let mut name = get_file_name(path, strip);
     if !options.opt_present("long") {
         name = get_inode(metadata, options) + &name;
@@ -639,11 +666,7 @@ fn display_file_name(path: &Path,
     if options.opt_present("long") && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
             // We don't bother updating width here because it's not used for long listings
-            let code = if target.exists() {
-                "fi"
-            } else {
-                "mi"
-            };
+            let code = if target.exists() { "fi" } else { "mi" };
             let target_name = color_name(target.to_string_lossy().to_string(), code);
             name.push_str(" -> ");
             name.push_str(&target_name);
@@ -679,16 +702,8 @@ fn display_permissions(metadata: &Metadata) -> String {
 fn display_permissions(metadata: &Metadata) -> String {
     let mode = metadata.mode() as mode_t;
     let mut result = String::with_capacity(9);
-    result.push(if has!(mode, S_IRUSR) {
-        'r'
-    } else {
-        '-'
-    });
-    result.push(if has!(mode, S_IWUSR) {
-        'w'
-    } else {
-        '-'
-    });
+    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISUID) {
         if has!(mode, S_IXUSR) {
             's'
@@ -701,16 +716,8 @@ fn display_permissions(metadata: &Metadata) -> String {
         '-'
     });
 
-    result.push(if has!(mode, S_IRGRP) {
-        'r'
-    } else {
-        '-'
-    });
-    result.push(if has!(mode, S_IWGRP) {
-        'w'
-    } else {
-        '-'
-    });
+    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISGID) {
         if has!(mode, S_IXGRP) {
             's'
@@ -723,16 +730,8 @@ fn display_permissions(metadata: &Metadata) -> String {
         '-'
     });
 
-    result.push(if has!(mode, S_IROTH) {
-        'r'
-    } else {
-        '-'
-    });
-    result.push(if has!(mode, S_IWOTH) {
-        'w'
-    } else {
-        '-'
-    });
+    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISVTX) {
         if has!(mode, S_IXOTH) {
             't'

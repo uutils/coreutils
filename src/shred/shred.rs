@@ -13,7 +13,7 @@
 extern crate getopts;
 extern crate rand;
 
-use rand::{ThreadRng, Rng};
+use rand::{Rng, ThreadRng};
 use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -32,25 +32,41 @@ const NAMESET: &'static str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM
 
 // Patterns as shown in the GNU coreutils shred implementation
 const PATTERNS: [&'static [u8]; 22] = [
-    b"\x00",         b"\xFF",         b"\x55",         b"\xAA",
-    b"\x24\x92\x49", b"\x49\x24\x92", b"\x6D\xB6\xDB", b"\x92\x49\x24",
-    b"\xB6\xDB\x6D", b"\xDB\x6D\xB6", b"\x11",         b"\x22",
-    b"\x33",         b"\x44",         b"\x66",         b"\x77",
-    b"\x88",         b"\x99",         b"\xBB",         b"\xCC",
-    b"\xDD",         b"\xEE"
+    b"\x00",
+    b"\xFF",
+    b"\x55",
+    b"\xAA",
+    b"\x24\x92\x49",
+    b"\x49\x24\x92",
+    b"\x6D\xB6\xDB",
+    b"\x92\x49\x24",
+    b"\xB6\xDB\x6D",
+    b"\xDB\x6D\xB6",
+    b"\x11",
+    b"\x22",
+    b"\x33",
+    b"\x44",
+    b"\x66",
+    b"\x77",
+    b"\x88",
+    b"\x99",
+    b"\xBB",
+    b"\xCC",
+    b"\xDD",
+    b"\xEE",
 ];
 
 #[derive(Clone, Copy)]
 enum PassType<'a> {
     Pattern(&'a [u8]),
-    Random
+    Random,
 }
 
 // Used to generate all possible filenames of a certain length using NAMESET as an alphabet
 struct FilenameGenerator {
     name_len: usize,
     nameset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAMESET
-    exhausted: Cell<bool>
+    exhausted: Cell<bool>,
 }
 
 impl FilenameGenerator {
@@ -62,28 +78,28 @@ impl FilenameGenerator {
         FilenameGenerator {
             name_len: name_len,
             nameset_indices: RefCell::new(indices),
-            exhausted: Cell::new(false)
+            exhausted: Cell::new(false),
         }
     }
 }
 
 impl Iterator for FilenameGenerator {
     type Item = String;
-    
+
     fn next(&mut self) -> Option<String> {
         if self.exhausted.get() {
             return None;
         }
-        
+
         let mut nameset_indices = self.nameset_indices.borrow_mut();
-        
+
         // Make the return value, then increment
         let mut ret = String::new();
         for i in nameset_indices.iter() {
             let c: char = NAMESET.chars().nth(*i).unwrap();
             ret.push(c);
         }
-        
+
         if nameset_indices[0] == NAMESET.len() - 1 {
             self.exhausted.set(true)
         }
@@ -92,13 +108,12 @@ impl Iterator for FilenameGenerator {
             if nameset_indices[i] == NAMESET.len() - 1 {
                 nameset_indices[i] = 0; // Carry the 1
                 continue;
-            }
-            else {
+            } else {
                 nameset_indices[i] += 1;
                 break;
             }
         }
-        
+
         Some(ret)
     }
 }
@@ -111,7 +126,7 @@ struct BytesGenerator<'a> {
     block_size: usize,
     exact: bool, // if false, every block's size is block_size
     gen_type: PassType<'a>,
-    rng: Option<RefCell<ThreadRng>>
+    rng: Option<RefCell<ThreadRng>>,
 }
 
 impl<'a> BytesGenerator<'a> {
@@ -120,28 +135,28 @@ impl<'a> BytesGenerator<'a> {
             PassType::Random => Some(RefCell::new(rand::thread_rng())),
             _ => None,
         };
-        
+
         BytesGenerator {
             total_bytes: total_bytes,
             bytes_generated: Cell::new(0u64),
             block_size: BLOCK_SIZE,
             exact: exact,
             gen_type: gen_type,
-            rng: rng
+            rng: rng,
         }
     }
 }
 
 impl<'a> Iterator for BytesGenerator<'a> {
     type Item = Box<[u8]>;
-    
+
     fn next(&mut self) -> Option<Box<[u8]>> {
         // We go over the total_bytes limit when !self.exact and total_bytes isn't a multiple
         // of self.block_size
         if self.bytes_generated.get() >= self.total_bytes {
             return None;
         }
-        
+
         let this_block_size: usize = {
             if !self.exact {
                 self.block_size
@@ -154,9 +169,9 @@ impl<'a> Iterator for BytesGenerator<'a> {
                 }
             }
         };
-        
-        let mut bytes : Vec<u8> = Vec::with_capacity(this_block_size);
-        
+
+        let mut bytes: Vec<u8> = Vec::with_capacity(this_block_size);
+
         match self.gen_type {
             PassType::Random => {
                 // This is ok because the vector was
@@ -170,9 +185,9 @@ impl<'a> Iterator for BytesGenerator<'a> {
             PassType::Pattern(pattern) => {
                 let skip = {
                     if self.bytes_generated.get() == 0 {
-                      0
+                        0
                     } else {
-                      (pattern.len() as u64 % self.bytes_generated.get()) as usize
+                        (pattern.len() as u64 % self.bytes_generated.get()) as usize
                     }
                 };
                 // Same range as 0..this_block_size but we start with the right index
@@ -182,7 +197,7 @@ impl<'a> Iterator for BytesGenerator<'a> {
                 }
             }
         };
-        
+
         let new_bytes_generated = self.bytes_generated.get() + this_block_size as u64;
         self.bytes_generated.set(new_bytes_generated);
 
@@ -194,19 +209,41 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     // TODO: Add force option
-    opts.optopt("n", "iterations", "overwrite N times instead of the default (3)", "N");
-    opts.optopt("s", "size", "shred this many bytes (suffixes like K, M, G accepted)", "FILESIZE");
-    opts.optflag("u", "remove", "truncate and remove the file after overwriting; See below");
+    opts.optopt(
+        "n",
+        "iterations",
+        "overwrite N times instead of the default (3)",
+        "N",
+    );
+    opts.optopt(
+        "s",
+        "size",
+        "shred this many bytes (suffixes like K, M, G accepted)",
+        "FILESIZE",
+    );
+    opts.optflag(
+        "u",
+        "remove",
+        "truncate and remove the file after overwriting; See below",
+    );
     opts.optflag("v", "verbose", "show progress");
-    opts.optflag("x", "exact", "do not round file sizes up to the next full block; \
-                                this is the default for non-regular files");
-    opts.optflag("z", "zero", "add a final overwrite with zeros to hide shredding");
+    opts.optflag(
+        "x",
+        "exact",
+        "do not round file sizes up to the next full block; \
+         this is the default for non-regular files",
+    );
+    opts.optflag(
+        "z",
+        "zero",
+        "add a final overwrite with zeros to hide shredding",
+    );
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m)  => m,
-        Err(e) => panic!("Invalid options\n{}", e)
+        Ok(m) => m,
+        Err(e) => panic!("Invalid options\n{}", e),
     };
 
     if matches.opt_present("help") {
@@ -222,13 +259,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     } else {
         let iterations = match matches.opt_str("iterations") {
             Some(s) => match s.parse::<usize>() {
-                           Ok(u) => u,
-                           Err(_) => {
-                               println!("{}: Invalid number of passes", NAME);
-                               return 1;
-                           }
-                       },
-            None => 3
+                Ok(u) => u,
+                Err(_) => {
+                    println!("{}: Invalid number of passes", NAME);
+                    return 1;
+                }
+            },
+            None => 3,
         };
         let remove = matches.opt_present("remove");
         let size = get_size(matches.opt_str("size"));
@@ -236,8 +273,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let zero = matches.opt_present("zero");
         let verbose = matches.opt_present("verbose");
         for path_str in matches.free.into_iter() {
-            wipe_file(&path_str, iterations, remove,
-                      size, exact, zero, verbose);
+            wipe_file(&path_str, iterations, remove, size, exact, zero, verbose);
         }
     }
 
@@ -246,17 +282,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn show_help(opts: &getopts::Options) {
     println!("Usage: {} [OPTION]... FILE...", NAME);
-    println!("Overwrite the specified FILE(s) repeatedly, in order to make it harder \
-              for even very expensive hardware probing to recover the data.");
+    println!(
+        "Overwrite the specified FILE(s) repeatedly, in order to make it harder \
+         for even very expensive hardware probing to recover the data."
+    );
     println!("{}", opts.usage(""));
     println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
     println!("the files because it is common to operate on device files like /dev/hda,");
     println!("and those files usually should not be removed.");
     println!("");
-    println!("CAUTION: Note that {} relies on a very important assumption:", NAME);
+    println!(
+        "CAUTION: Note that {} relies on a very important assumption:",
+        NAME
+    );
     println!("that the file system overwrites data in place.  This is the traditional");
     println!("way to do things, but many modern file system designs do not satisfy this");
-    println!("assumption.  The following are examples of file systems on which {} is", NAME);
+    println!(
+        "assumption.  The following are examples of file systems on which {} is",
+        NAME
+    );
     println!("not effective, or is not guaranteed to be effective in all file system modes:");
     println!("");
     println!("* log-structured or journaled file systems, such as those supplied with");
@@ -273,9 +317,15 @@ fn show_help(opts: &getopts::Options) {
     println!("* compressed file systems");
     println!("");
     println!("In the case of ext3 file systems, the above disclaimer applies");
-    println!("(and {} is thus of limited effectiveness) only in data=journal mode,", NAME);
+    println!(
+        "(and {} is thus of limited effectiveness) only in data=journal mode,",
+        NAME
+    );
     println!("which journals file data in addition to just metadata.  In both the");
-    println!("data=ordered (default) and data=writeback modes, {} works as usual.", NAME);
+    println!(
+        "data=ordered (default) and data=writeback modes, {} works as usual.",
+        NAME
+    );
     println!("Ext3 journaling modes can be changed by adding the data=something option");
     println!("to the mount options for a particular file system in the /etc/fstab file,");
     println!("as documented in the mount man page (man mount).");
@@ -291,16 +341,25 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     if size_str_opt.is_none() {
         return None;
     }
-    
+
     let mut size_str = size_str_opt.as_ref().unwrap().clone();
     // Immutably look at last character of size string
     let unit = match size_str.chars().last().unwrap() {
-        'K' => { size_str.pop();  1024u64 }
-        'M' => { size_str.pop(); (1024 * 1024) as u64 }
-        'G' => { size_str.pop(); (1024 * 1024 * 1024) as u64 }
-         _   => { 1u64 }
+        'K' => {
+            size_str.pop();
+            1024u64
+        }
+        'M' => {
+            size_str.pop();
+            (1024 * 1024) as u64
+        }
+        'G' => {
+            size_str.pop();
+            (1024 * 1024 * 1024) as u64
+        }
+        _ => 1u64,
     };
-    
+
     let coeff = match size_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
@@ -308,7 +367,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
             exit!(1);
         }
     };
-    
+
     Some(coeff * unit)
 }
 
@@ -328,29 +387,40 @@ fn pass_name(pass_type: &PassType) -> String {
     }
 }
 
-fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
-             size: Option<u64>, exact: bool, zero: bool, verbose: bool) {
-
+fn wipe_file(
+    path_str: &str,
+    n_passes: usize,
+    remove: bool,
+    size: Option<u64>,
+    exact: bool,
+    zero: bool,
+    verbose: bool,
+) {
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
-        println!("{}: {}: No such file or directory", NAME, path.display()); return;
+        println!("{}: {}: No such file or directory", NAME, path.display());
+        return;
     }
     if !path.is_file() {
-        println!("{}: {}: Not a file", NAME, path.display()); return;
+        println!("{}: {}: Not a file", NAME, path.display());
+        return;
     }
 
     // Fill up our pass sequence
     let mut pass_sequence: Vec<PassType> = Vec::new();
-    
-    if n_passes <= 3 { // Only random passes if n_passes <= 3
-        for _ in 0..n_passes { pass_sequence.push(PassType::Random) }
+
+    if n_passes <= 3 {
+        // Only random passes if n_passes <= 3
+        for _ in 0..n_passes {
+            pass_sequence.push(PassType::Random)
+        }
     }
     // First fill it with Patterns, shuffle it, then evenly distribute Random
     else {
         let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
         let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
-        
+
         for _ in 0..n_full_arrays {
             for p in &PATTERNS {
                 pass_sequence.push(PassType::Pattern(*p));
@@ -360,14 +430,14 @@ fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
             pass_sequence.push(PassType::Pattern(PATTERNS[i]));
         }
         rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
-        
-        let n_random = 3 + n_passes/10; // Minimum 3 random passes; ratio of 10 after
-        // Evenly space random passes; ensures one at the beginning and end
+
+        let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
+                                          // Evenly space random passes; ensures one at the beginning and end
         for i in 0..n_random {
-            pass_sequence[i * (n_passes - 1)/(n_random - 1)] = PassType::Random;
+            pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
         }
     }
-    
+
     // --zero specifies whether we want one final pass of 0x00 on our file
     if zero {
         pass_sequence.push(PassType::Pattern(b"\x00"));
@@ -375,19 +445,33 @@ fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
 
     {
         let total_passes: usize = pass_sequence.len();
-        let mut file: File = OpenOptions::new().write(true)
-                                               .truncate(false)
-                                               .open(path)
-                                               .expect("Failed to open file for writing");
+        let mut file: File = OpenOptions::new()
+            .write(true)
+            .truncate(false)
+            .open(path)
+            .expect("Failed to open file for writing");
 
         for (i, pass_type) in pass_sequence.iter().enumerate() {
             if verbose {
                 let pass_name: String = pass_name(pass_type);
                 if total_passes.to_string().len() == 1 {
-                    println!("{}: {}: pass {}/{} ({})... ", NAME, path.display(), i + 1, total_passes, pass_name);
-                }
-                else {
-                    println!("{}: {}: pass {:2.0}/{:2.0} ({})... ", NAME, path.display(), i + 1, total_passes, pass_name);
+                    println!(
+                        "{}: {}: pass {}/{} ({})... ",
+                        NAME,
+                        path.display(),
+                        i + 1,
+                        total_passes,
+                        pass_name
+                    );
+                } else {
+                    println!(
+                        "{}: {}: pass {:2.0}/{:2.0} ({})... ",
+                        NAME,
+                        path.display(),
+                        i + 1,
+                        total_passes,
+                        pass_name
+                    );
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
@@ -400,9 +484,13 @@ fn wipe_file(path_str: &str, n_passes: usize, remove: bool,
     }
 }
 
-fn do_pass(file: &mut File, path: &Path, generator_type: PassType,
-           given_file_size: Option<u64>, exact: bool) -> Result<(), io::Error> {
-
+fn do_pass(
+    file: &mut File,
+    path: &Path,
+    generator_type: PassType,
+    given_file_size: Option<u64>,
+    exact: bool,
+) -> Result<(), io::Error> {
     try!(file.seek(SeekFrom::Start(0)));
 
     // Use the given size or the whole file if not specified
@@ -429,9 +517,9 @@ fn get_file_size(path: &Path) -> Result<u64, io::Error> {
 // Return the path of the file after its last renaming or None if error
 fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
     let file_name_len: usize = orig_path.file_name().unwrap().to_str().unwrap().len();
-    
+
     let mut last_path: PathBuf = PathBuf::from(orig_path);
-    
+
     for length in (1..file_name_len + 1).rev() {
         for name in FilenameGenerator::new(length) {
             let new_path: PathBuf = orig_path.with_file_name(name);
@@ -443,14 +531,18 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
             match fs::rename(&last_path, &new_path) {
                 Ok(()) => {
                     if verbose {
-                        println!("{}: {}: renamed to {}", NAME,
-                                                          last_path.display(),
-                                                          new_path.display());
+                        println!(
+                            "{}: {}: renamed to {}",
+                            NAME,
+                            last_path.display(),
+                            new_path.display()
+                        );
                     }
-                   
+
                     // Sync every file rename
                     {
-                        let new_file: File = File::open(new_path.clone()).expect("Failed to open renamed file for syncing");
+                        let new_file: File = File::open(new_path.clone())
+                            .expect("Failed to open renamed file for syncing");
                         new_file.sync_all().expect("Failed to sync renamed file");
                     }
 
@@ -458,10 +550,13 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     break;
                 }
                 Err(e) => {
-                    println!("{}: {}: Couldn't rename to {}: {}", NAME,
-                                                                  last_path.display(),
-                                                                  new_path.display(),
-                                                                  e);
+                    println!(
+                        "{}: {}: Couldn't rename to {}: {}",
+                        NAME,
+                        last_path.display(),
+                        new_path.display(),
+                        e
+                    );
                     return None;
                 }
             }
@@ -480,8 +575,8 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
     match renamed_path {
         Some(rp) => {
             try!(fs::remove_file(rp));
-        },
-        None => ()
+        }
+        None => (),
     }
 
     if verbose {

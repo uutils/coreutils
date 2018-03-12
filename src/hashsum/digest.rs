@@ -4,11 +4,13 @@ extern crate sha1;
 extern crate sha2;
 extern crate sha3;
 
-use digest::digest::{Input, ExtendableOutput, XofReader};
+use digest::digest::{ExtendableOutput, Input, XofReader};
 use hex::ToHex;
 
 pub trait Digest {
-    fn new() -> Self where Self: Sized;
+    fn new() -> Self
+    where
+        Self: Sized;
     fn input(&mut self, input: &[u8]);
     fn result(&mut self, out: &mut [u8]);
     fn reset(&mut self);
@@ -40,7 +42,9 @@ impl Digest for md5::Context {
         *self = md5::Context::new();
     }
 
-    fn output_bits(&self) -> usize { 128 }
+    fn output_bits(&self) -> usize {
+        128
+    }
 }
 
 impl Digest for sha1::Sha1 {
@@ -60,7 +64,9 @@ impl Digest for sha1::Sha1 {
         self.reset();
     }
 
-    fn output_bits(&self) -> usize { 160 }
+    fn output_bits(&self) -> usize {
+        160
+    }
 }
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed ouput

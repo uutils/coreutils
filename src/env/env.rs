@@ -1,5 +1,4 @@
 #![crate_name = "uu_env"]
-
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -10,14 +9,13 @@
  */
 
 /* last synced with: env (GNU coreutils) 8.13 */
-
 #![allow(non_camel_case_types)]
 
 #[macro_use]
 extern crate uucore;
 
 use std::env;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::process::Command;
 
 static NAME: &'static str = "env";
@@ -32,7 +30,7 @@ struct options {
     null: bool,
     unsets: Vec<String>,
     sets: Vec<(String, String)>,
-    program: Vec<String>
+    program: Vec<String>,
 }
 
 // print name=value env pairs on screen
@@ -45,16 +43,21 @@ fn print_env(null: bool) {
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut core_opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
-    core_opts.optflag("i", "ignore-environment", "start with an empty environment")
-        .optflag("0", "null", "end each output line with a 0 byte rather than newline")
+    core_opts
+        .optflag("i", "ignore-environment", "start with an empty environment")
+        .optflag(
+            "0",
+            "null",
+            "end each output line with a 0 byte rather than newline",
+        )
         .optopt("u", "unset", "remove variable from the environment", "NAME");
 
     let mut opts = Box::new(options {
         ignore_env: false,
         null: false,
-        unsets: vec!(),
-        sets: vec!(),
-        program: vec!()
+        unsets: vec![],
+        sets: vec![],
+        program: vec![],
     });
 
     let mut wait_cmd = false;
@@ -86,8 +89,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else if opt.starts_with("--") {
             match opt.as_ref() {
-                "--help" => { core_opts.parse(vec![String::new(), String::from("--help")]); return 0; }
-                "--version" => { core_opts.parse(vec![String::new(), String::from("--version")]); return 0; }
+                "--help" => {
+                    core_opts.parse(vec![String::new(), String::from("--help")]);
+                    return 0;
+                }
+                "--version" => {
+                    core_opts.parse(vec![String::new(), String::from("--version")]);
+                    return 0;
+                }
 
                 "--ignore-environment" => opts.ignore_env = true,
                 "--null" => opts.null = true,
@@ -96,7 +105,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                     match var {
                         None => println!("{}: this option requires an argument: {}", NAME, opt),
-                        Some(s) => opts.unsets.push(s.to_owned())
+                        Some(s) => opts.unsets.push(s.to_owned()),
                     }
                 }
 
@@ -127,7 +136,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                         match var {
                             None => println!("{}: this option requires an argument: {}", NAME, opt),
-                            Some(s) => opts.unsets.push(s.to_owned())
+                            Some(s) => opts.unsets.push(s.to_owned()),
                         }
                     }
                     _ => {
@@ -183,8 +192,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let prog = opts.program[0].clone();
         let args = &opts.program[1..];
         match Command::new(prog).args(args).status() {
-            Ok(exit) => return if exit.success() { 0 } else { exit.code().unwrap() },
-            Err(_) => return 1
+            Ok(exit) => {
+                return if exit.success() {
+                    0
+                } else {
+                    exit.code().unwrap()
+                }
+            }
+            Err(_) => return 1,
         }
     } else {
         // no program provided

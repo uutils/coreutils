@@ -8,10 +8,10 @@
  */
 
 #[cfg(unix)]
-pub use self::unix::{Pid, supports_pid_checks, ProcessChecker};
+pub use self::unix::{supports_pid_checks, Pid, ProcessChecker};
 
 #[cfg(windows)]
-pub use self::windows::{Pid, supports_pid_checks, ProcessChecker};
+pub use self::windows::{supports_pid_checks, Pid, ProcessChecker};
 
 #[cfg(unix)]
 mod unix;

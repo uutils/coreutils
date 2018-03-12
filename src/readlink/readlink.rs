@@ -15,7 +15,7 @@ extern crate getopts;
 extern crate uucore;
 
 use std::fs;
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::path::PathBuf;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
@@ -25,15 +25,24 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("f", "canonicalize",
-                 "canonicalize by following every symlink in every component of the \
-                  given name recursively; all but the last component must exist");
-    opts.optflag("e", "canonicalize-existing",
-                 "canonicalize by following every symlink in every component of the \
-                  given name recursively, all components must exist");
-    opts.optflag("m", "canonicalize-missing",
-                 "canonicalize by following every symlink in every component of the \
-                  given name recursively, without requirements on components existence");
+    opts.optflag(
+        "f",
+        "canonicalize",
+        "canonicalize by following every symlink in every component of the \
+         given name recursively; all but the last component must exist",
+    );
+    opts.optflag(
+        "e",
+        "canonicalize-existing",
+        "canonicalize by following every symlink in every component of the \
+         given name recursively, all components must exist",
+    );
+    opts.optflag(
+        "m",
+        "canonicalize-missing",
+        "canonicalize by following every symlink in every component of the \
+         given name recursively, without requirements on components existence",
+    );
     opts.optflag("n", "no-newline", "do not output the trailing delimiter");
     opts.optflag("q", "quiet", "suppress most error messages");
     opts.optflag("s", "silent", "suppress most error messages");
@@ -44,7 +53,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("help") {
         show_usage(&opts);
@@ -76,7 +85,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let files = matches.free;
     if files.is_empty() {
-        crash!(1, "missing operand\nTry {} --help for more information", NAME);
+        crash!(
+            1,
+            "missing operand\nTry {} --help for more information",
+            NAME
+        );
     }
 
     if no_newline && files.len() > 1 && !silent {
@@ -93,7 +106,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     if verbose {
                         eprintln!("{}: {}: errno {}", NAME, f, err.raw_os_error().unwrap());
                     }
-                    return 1
+                    return 1;
                 }
             }
         } else {
@@ -103,7 +116,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     if verbose {
                         eprintln!("{}: {}: errno {:?}", NAME, f, err.raw_os_error().unwrap());
                     }
-                    return 1
+                    return 1;
                 }
             }
         }

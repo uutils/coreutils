@@ -23,22 +23,27 @@ static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
-    opts.optflag("0", "null", "end each output line with 0 byte rather than newline");
+    opts.optflag(
+        "0",
+        "null",
+        "end each output line with 0 byte rather than newline",
+    );
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "Invalid options\n{}", f)
-        }
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("help") {
-        let msg = format!("{0} {1}
+        let msg = format!(
+            "{0} {1}
 
 Usage:
   {0} [VARIABLE]... [OPTION]...
 
-Prints the given environment VARIABLE(s), otherwise prints them all.", NAME, VERSION);
+Prints the given environment VARIABLE(s), otherwise prints them all.",
+            NAME, VERSION
+        );
         print!("{}", opts.usage(&msg));
         return 0;
     }

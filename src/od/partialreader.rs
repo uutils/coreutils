@@ -34,7 +34,9 @@ impl<R: Read> Read for PartialReader<R> {
         if self.skip > 0 {
             let buf_size = cmp::min(self.skip, MAX_SKIP_BUFFER);
             let mut bytes: Vec<u8> = Vec::with_capacity(buf_size);
-            unsafe { bytes.set_len(buf_size); }
+            unsafe {
+                bytes.set_len(buf_size);
+            }
 
             while self.skip > 0 {
                 let skip_count = cmp::min(self.skip, buf_size);
@@ -49,15 +51,19 @@ impl<R: Read> Read for PartialReader<R> {
             None => self.inner.read(out),
             Some(0) => Ok(0),
             Some(ref mut limit) => {
-                let slice = if *limit > out.len() { out } else { &mut out[0..*limit] };
+                let slice = if *limit > out.len() {
+                    out
+                } else {
+                    &mut out[0..*limit]
+                };
                 match self.inner.read(slice) {
                     Err(e) => Err(e),
                     Ok(r) => {
                         *limit -= r;
                         Ok(r)
-                    },
+                    }
                 }
-            },
+            }
         }
     }
 }
@@ -71,7 +77,7 @@ impl<R: HasError> HasError for PartialReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, Read, ErrorKind};
+    use std::io::{Cursor, ErrorKind, Read};
     use std::error::Error;
     use mockstream::*;
 
@@ -127,8 +133,7 @@ mod tests {
     #[test]
     fn test_read_skipping_with_two_reads_during_skip() {
         let mut v = [0; 10];
-        let c = Cursor::new(&b"a"[..])
-                .chain(Cursor::new(&b"bcdefgh"[..]));
+        let c = Cursor::new(&b"a"[..]).chain(Cursor::new(&b"bcdefgh"[..]));
         let mut sut = PartialReader::new(c, 2, None);
 
         assert_eq!(sut.read(v.as_mut()).unwrap(), 6);

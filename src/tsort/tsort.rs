@@ -17,7 +17,7 @@ extern crate uucore;
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
 static NAME: &'static str = "tsort";
@@ -31,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     if matches.opt_present("h") {
@@ -60,39 +60,40 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut stdin_buf;
     let mut file_buf;
-    let mut reader = BufReader::new(
-        if input == "-" {
-            stdin_buf = stdin();
-            &mut stdin_buf as &mut Read
-        } else {
-            file_buf = match File::open(Path::new(&input)) {
-                Ok(a) => a,
-                _ => {
-                    show_error!("{}: No such file or directory", input);
-                    return 1;
-                }
-            };
-            &mut file_buf as &mut Read
-        }
-    );
+    let mut reader = BufReader::new(if input == "-" {
+        stdin_buf = stdin();
+        &mut stdin_buf as &mut Read
+    } else {
+        file_buf = match File::open(Path::new(&input)) {
+            Ok(a) => a,
+            _ => {
+                show_error!("{}: No such file or directory", input);
+                return 1;
+            }
+        };
+        &mut file_buf as &mut Read
+    });
 
     let mut g = Graph::new();
     loop {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line.trim_right().split_whitespace().map(|s| s.to_owned()).collect();
+                let tokens: Vec<String> = line.trim_right()
+                    .split_whitespace()
+                    .map(|s| s.to_owned())
+                    .collect();
                 if tokens.is_empty() {
-                    break
+                    break;
                 }
                 for ab in tokens.chunks(2) {
                     match ab.len() {
                         2 => g.add_edge(&ab[0], &ab[1]),
-                        _ => crash!(1, "{}: input contains an odd number of tokens", input)
+                        _ => crash!(1, "{}: input contains an odd number of tokens", input),
                     }
                 }
-            },
-            _ => break
+            }
+            _ => break,
         }
     }
 
@@ -114,7 +115,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 struct Graph {
     in_edges: HashMap<String, HashSet<String>>,
     out_edges: HashMap<String, Vec<String>>,
-    result: Vec<String>
+    result: Vec<String>,
 }
 
 impl Graph {
@@ -122,7 +123,7 @@ impl Graph {
         Graph {
             in_edges: HashMap::new(),
             out_edges: HashMap::new(),
-            result: vec!(),
+            result: vec![],
         }
     }
 
@@ -136,10 +137,10 @@ impl Graph {
 
     fn init_node(&mut self, n: &String) {
         self.in_edges.insert(n.clone(), HashSet::new());
-        self.out_edges.insert(n.clone(), vec!());
+        self.out_edges.insert(n.clone(), vec![]);
     }
 
-    fn add_edge(&mut self, from: &String,  to: &String) {
+    fn add_edge(&mut self, from: &String, to: &String) {
         if !self.has_node(to) {
             self.init_node(to);
         }
@@ -157,7 +158,7 @@ impl Graph {
     // Kahn's algorithm
     // O(|V|+|E|)
     fn run_tsort(&mut self) {
-        let mut start_nodes = vec!();
+        let mut start_nodes = vec![];
         for (n, edges) in &self.in_edges {
             if edges.is_empty() {
                 start_nodes.push(n.clone());
@@ -186,7 +187,7 @@ impl Graph {
     fn is_acyclic(&self) -> bool {
         for (_, edges) in &self.out_edges {
             if !edges.is_empty() {
-                return false
+                return false;
             }
         }
         true

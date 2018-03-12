@@ -1,5 +1,5 @@
 use super::super::format_field::FormatField;
-use super::super::formatter::{InPrefix, Base, FormatPrimitive, warn_incomplete_conv, get_it_at};
+use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, InPrefix};
 use super::base_conv;
 use super::base_conv::RadixDef;
 
@@ -13,12 +13,13 @@ pub struct FloatAnalysis {
     pub decimal_pos: Option<usize>,
     pub follow: Option<char>,
 }
-fn has_enough_digits(hex_input: bool,
-                     hex_output: bool,
-                     string_position: usize,
-                     starting_position: usize,
-                     limit: usize)
-                     -> bool {
+fn has_enough_digits(
+    hex_input: bool,
+    hex_output: bool,
+    string_position: usize,
+    starting_position: usize,
+    limit: usize,
+) -> bool {
     // -1s are for rounding
     if hex_output {
         if hex_input {
@@ -33,16 +34,16 @@ fn has_enough_digits(hex_input: bool,
             ((string_position - 1) - starting_position >= limit)
         }
     }
-
 }
 
 impl FloatAnalysis {
-    pub fn analyze(str_in: &str,
-                   inprefix: &InPrefix,
-                   max_sd_opt: Option<usize>,
-                   max_after_dec_opt: Option<usize>,
-                   hex_output: bool)
-                   -> FloatAnalysis {
+    pub fn analyze(
+        str_in: &str,
+        inprefix: &InPrefix,
+        max_sd_opt: Option<usize>,
+        max_after_dec_opt: Option<usize>,
+        hex_output: bool,
+    ) -> FloatAnalysis {
         // this fn assumes
         // the input string
         // has no leading spaces or 0s
@@ -73,9 +74,9 @@ impl FloatAnalysis {
                             }
                         }
                     }
-                    if ret.decimal_pos.is_some() &&
-                       pos_before_first_nonzero_after_decimal.is_none() &&
-                       e != '0' {
+                    if ret.decimal_pos.is_some() && pos_before_first_nonzero_after_decimal.is_none()
+                        && e != '0'
+                    {
                         pos_before_first_nonzero_after_decimal = Some(i - 1);
                     }
                     if let Some(max_sd) = max_sd_opt {
@@ -130,8 +131,10 @@ fn de_hex(src: &str, before_decimal: bool) -> String {
         base_conv::base_conv_str(src, &rhex, &rten)
     } else {
         let as_arrnum_hex = base_conv::str_to_arrnum(src, &rhex);
-        let s = format!("{}",
-                        base_conv::base_conv_float(&as_arrnum_hex, rhex.get_max(), rten.get_max()));
+        let s = format!(
+            "{}",
+            base_conv::base_conv_float(&as_arrnum_hex, rhex.get_max(), rten.get_max())
+        );
         if s.len() > 2 {
             String::from(&s[2..])
         } else {
@@ -147,7 +150,6 @@ fn de_hex(src: &str, before_decimal: bool) -> String {
 // and if the digit was nine
 // propagate to the next, etc.
 fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
-
     let mut it = in_str[0..position].chars();
     let mut rev = String::new();
     let mut i = position;
@@ -162,7 +164,7 @@ fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
                 rev.push(((e as u8) + 1) as char);
                 finished_in_dec = true;
                 break;
-            }                        
+            }
         }
     }
     let mut fwd = String::from(&in_str[0..i]);
@@ -172,18 +174,18 @@ fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
     (fwd, finished_in_dec)
 }
 
-fn round_terminal_digit(before_dec: String,
-                        after_dec: String,
-                        position: usize)
-                        -> (String, String) {
-
+fn round_terminal_digit(
+    before_dec: String,
+    after_dec: String,
+    position: usize,
+) -> (String, String) {
     if position < after_dec.len() {
         let digit_at_pos: char;
         {
             digit_at_pos = (&after_dec[position..position + 1])
-                               .chars()
-                               .next()
-                               .expect("");
+                .chars()
+                .next()
+                .expect("");
         }
         match digit_at_pos {
             '5'...'9' => {
@@ -202,12 +204,13 @@ fn round_terminal_digit(before_dec: String,
     (before_dec, after_dec)
 }
 
-pub fn get_primitive_dec(inprefix: &InPrefix,
-                         str_in: &str,
-                         analysis: &FloatAnalysis,
-                         last_dec_place: usize,
-                         sci_mode: Option<bool>)
-                         -> FormatPrimitive {
+pub fn get_primitive_dec(
+    inprefix: &InPrefix,
+    str_in: &str,
+    analysis: &FloatAnalysis,
+    last_dec_place: usize,
+    sci_mode: Option<bool>,
+) -> FormatPrimitive {
     let mut f: FormatPrimitive = Default::default();
 
     // add negative sign section
@@ -227,22 +230,24 @@ pub fn get_primitive_dec(inprefix: &InPrefix,
     }
     // convert to string, de_hexifying if input is in hex.
     let (first_segment, second_segment) = match inprefix.radix_in {
-        Base::Hex => {
-            (de_hex(first_segment_raw, true),
-             de_hex(second_segment_raw, false))
-        }
-        _ => {
-            (String::from(first_segment_raw),
-             String::from(second_segment_raw))
-        }
+        Base::Hex => (
+            de_hex(first_segment_raw, true),
+            de_hex(second_segment_raw, false),
+        ),
+        _ => (
+            String::from(first_segment_raw),
+            String::from(second_segment_raw),
+        ),
     };
     let (pre_dec_unrounded, post_dec_unrounded, mantissa) = if sci_mode.is_some() {
         if first_segment.len() > 1 {
             let mut post_dec = String::from(&first_segment[1..]);
             post_dec.push_str(&second_segment);
-            (String::from(&first_segment[0..1]),
-             post_dec,
-             first_segment.len() as isize - 1)
+            (
+                String::from(&first_segment[0..1]),
+                post_dec,
+                first_segment.len() as isize - 1,
+            )
         } else {
             match first_segment.chars().next() {
                 Some('0') => {
@@ -273,18 +278,13 @@ pub fn get_primitive_dec(inprefix: &InPrefix,
         (first_segment, second_segment, 0)
     };
 
-    let (pre_dec_draft, post_dec_draft) = round_terminal_digit(pre_dec_unrounded,
-                                                               post_dec_unrounded,
-                                                               last_dec_place - 1);
+    let (pre_dec_draft, post_dec_draft) =
+        round_terminal_digit(pre_dec_unrounded, post_dec_unrounded, last_dec_place - 1);
 
     f.pre_decimal = Some(pre_dec_draft);
     f.post_decimal = Some(post_dec_draft);
     if let Some(capitalized) = sci_mode {
-        let si_ind = if capitalized {
-            'E'
-        } else {
-            'e'
-        };
+        let si_ind = if capitalized { 'E' } else { 'e' };
         f.suffix = Some(if mantissa >= 0 {
             format!("{}+{:02}", si_ind, mantissa)
         } else {
@@ -310,9 +310,11 @@ pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> S
             final_str.push_str(&pre_decimal);
         }
         None => {
-            panic!("error, format primitives provided to int, will, incidentally under correct \
-                    behavior, always have a pre_dec value.");
-        }            
+            panic!(
+                "error, format primitives provided to int, will, incidentally under correct \
+                 behavior, always have a pre_dec value."
+            );
+        }
     }
     let decimal_places = field.second_field.unwrap_or(6);
     match prim.post_decimal {
@@ -338,8 +340,10 @@ pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> S
             }
         }
         None => {
-            panic!("error, format primitives provided to int, will, incidentally under correct \
-                    behavior, always have a pre_dec value.");
+            panic!(
+                "error, format primitives provided to int, will, incidentally under correct \
+                 behavior, always have a pre_dec value."
+            );
         }
     }
     match prim.suffix {

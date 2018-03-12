@@ -64,26 +64,29 @@ impl Stat {
             nlink: metadata.nlink() as u64,
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
-            modified: metadata.mtime() as u64
+            modified: metadata.mtime() as u64,
         }
     }
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
 // XXX: this should use the impl Trait return type when it is stabilized
-fn du(mut my_stat: Stat, options: &Options, depth: usize)
-    -> Box<DoubleEndedIterator<Item = Stat>>
-{
-    let mut stats = vec!();
-    let mut futures = vec!();
+fn du(mut my_stat: Stat, options: &Options, depth: usize) -> Box<DoubleEndedIterator<Item = Stat>> {
+    let mut stats = vec![];
+    let mut futures = vec![];
 
     if my_stat.is_dir {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                safe_writeln!(stderr(), "{}: cannot read directory ‘{}‘: {}",
-                              options.program_name, my_stat.path.display(), e);
-                return Box::new(iter::once(my_stat))
+                safe_writeln!(
+                    stderr(),
+                    "{}: cannot read directory ‘{}‘: {}",
+                    options.program_name,
+                    my_stat.path.display(),
+                    e
+                );
+                return Box::new(iter::once(my_stat));
             }
         };
 
@@ -102,24 +105,33 @@ fn du(mut my_stat: Stat, options: &Options, depth: usize)
         }
     }
 
-    stats.extend(futures.into_iter().flat_map(|val| val).rev().filter_map(|stat| {
-        if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
-            my_stat.size += stat.size;
-            my_stat.blocks += stat.blocks;
-        }
-        if options.max_depth == None || depth < options.max_depth.unwrap() {
-            Some(stat)
-        } else {
-            None
-        }
-    }));
+    stats.extend(
+        futures
+            .into_iter()
+            .flat_map(|val| val)
+            .rev()
+            .filter_map(|stat| {
+                if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
+                    my_stat.size += stat.size;
+                    my_stat.blocks += stat.blocks;
+                }
+                if options.max_depth == None || depth < options.max_depth.unwrap() {
+                    Some(stat)
+                } else {
+                    None
+                }
+            }),
+    );
     stats.push(my_stat);
     Box::new(stats.into_iter())
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let syntax = format!("[OPTION]... [FILE]...
- {0} [OPTION]... --files0-from=F", NAME);
+    let syntax = format!(
+        "[OPTION]... [FILE]...
+ {0} [OPTION]... --files0-from=F",
+        NAME
+    );
     let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
     // In task
         .optflag("a", "all", " write counts for all files, not just directories")
@@ -176,8 +188,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             line argument;  --max-depth=0 is the same as --summarize", "N")
     // In main
         .optflagopt("", "time", "show time of the last modification of any file in the
-            directory, or any of its subdirectories.  If WORD is given, show time as WORD instead of modification time:
-            atime, access, use, ctime or status", "WORD")
+            directory, or any of its subdirectories.  If WORD is given, show time as WORD instead
+            of modification time: atime, access, use, ctime or status", "WORD")
     // In main
         .optopt("", "time-style", "show times using style STYLE:
             full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE")
@@ -207,10 +219,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
         separate_dirs: matches.opt_present("S"),
     };
 
-    let strs = if matches.free.is_empty() {vec!("./".to_owned())} else {matches.free.clone()};
+    let strs = if matches.free.is_empty() {
+        vec!["./".to_owned()]
+    } else {
+        matches.free.clone()
+    };
 
-    let mb = if matches.opt_present("si") {1000 * 1000} else {1024 * 1024};
-    let kb = if matches.opt_present("si") {1000} else {1024};
+    let mb = if matches.opt_present("si") {
+        1000 * 1000
+    } else {
+        1024 * 1024
+    };
+    let kb = if matches.opt_present("si") {
+        1000
+    } else {
+        1024
+    };
 
     let block_size = match matches.opt_str("block-size") {
         Some(s) => {
@@ -232,22 +256,30 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
             let number = numbers.parse::<u64>().unwrap();
             let multiple = match &letters[..] {
-                "K" => 1024u64.pow(1), "M" => 1024u64.pow(2),
-                "G" => 1024u64.pow(3), "T" => 1024u64.pow(4),
-                "P" => 1024u64.pow(5), "E" => 1024u64.pow(6),
-                "Z" => 1024u64.pow(7), "Y" => 1024u64.pow(8),
-                "KB" => 1000u64.pow(1), "MB" => 1000u64.pow(2),
-                "GB" => 1000u64.pow(3), "TB" => 1000u64.pow(4),
-                "PB" => 1000u64.pow(5), "EB" => 1000u64.pow(6),
-                "ZB" => 1000u64.pow(7), "YB" => 1000u64.pow(8),
+                "K" => 1024u64.pow(1),
+                "M" => 1024u64.pow(2),
+                "G" => 1024u64.pow(3),
+                "T" => 1024u64.pow(4),
+                "P" => 1024u64.pow(5),
+                "E" => 1024u64.pow(6),
+                "Z" => 1024u64.pow(7),
+                "Y" => 1024u64.pow(8),
+                "KB" => 1000u64.pow(1),
+                "MB" => 1000u64.pow(2),
+                "GB" => 1000u64.pow(3),
+                "TB" => 1000u64.pow(4),
+                "PB" => 1000u64.pow(5),
+                "EB" => 1000u64.pow(6),
+                "ZB" => 1000u64.pow(7),
+                "YB" => 1000u64.pow(8),
                 _ => {
                     show_error!("invalid --block-size argument '{}'", s);
                     return 1;
                 }
             };
             number * multiple
-        },
-        None => 1024
+        }
+        None => 1024,
     };
 
     let convert_size = |size: u64| -> String {
@@ -269,26 +301,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let time_format_str = match matches.opt_str("time-style") {
-        Some(s) => {
-            match &s[..] {
-                "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
-                "long-iso" => "%Y-%m-%d %H:%M",
-                "iso" => "%Y-%m-%d",
-                _ => {
-                    show_error!("invalid argument '{}' for 'time style'
+        Some(s) => match &s[..] {
+            "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
+            "long-iso" => "%Y-%m-%d %H:%M",
+            "iso" => "%Y-%m-%d",
+            _ => {
+                show_error!(
+                    "invalid argument '{}' for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
-Try '{} --help' for more information.", s, NAME);
-                    return 1;
-                }
+Try '{} --help' for more information.",
+                    s,
+                    NAME
+                );
+                return 1;
             }
         },
-        None => "%Y-%m-%d %H:%M"
+        None => "%Y-%m-%d %H:%M",
     };
 
-    let line_separator = if matches.opt_present("0") {"\0"} else {"\n"};
+    let line_separator = if matches.opt_present("0") { "\0" } else { "\n" };
 
     let mut grand_total = 0;
     for path_str in strs.into_iter() {
@@ -313,26 +347,40 @@ Try '{} --help' for more information.", s, NAME);
                                 "created" => stat.created,
                                 "modified" => stat.modified,
                                 _ => {
-                                    show_error!("invalid argument 'modified' for '--time'
+                                    show_error!(
+                                        "invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
-    Try '{} --help' for more information.", NAME);
+    Try '{} --help' for more information.",
+                                        NAME
+                                    );
                                     return 1;
                                 }
                             },
-                            None => stat.modified
+                            None => stat.modified,
                         };
                         ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
                     };
                     time::at(Timespec::new(secs, nsecs))
                 };
-                if !summarize || (summarize && index == len-1) {
+                if !summarize || (summarize && index == len - 1) {
                     let time_str = tm.strftime(time_format_str).unwrap();
-                    print!("{}\t{}\t{}{}", convert_size(size), time_str, stat.path.display(), line_separator);
+                    print!(
+                        "{}\t{}\t{}{}",
+                        convert_size(size),
+                        time_str,
+                        stat.path.display(),
+                        line_separator
+                    );
                 }
             } else {
-                if !summarize || (summarize && index == len-1) {
-                    print!("{}\t{}{}", convert_size(size), stat.path.display(), line_separator);
+                if !summarize || (summarize && index == len - 1) {
+                    print!(
+                        "{}\t{}{}",
+                        convert_size(size),
+                        stat.path.display(),
+                        line_separator
+                    );
                 }
             }
             if options.total && index == (len - 1) {

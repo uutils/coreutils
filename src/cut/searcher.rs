@@ -11,7 +11,7 @@
 pub struct Searcher<'a> {
     haystack: &'a [u8],
     needle: &'a [u8],
-    position: usize 
+    position: usize,
 }
 
 impl<'a> Searcher<'a> {
@@ -19,7 +19,7 @@ impl<'a> Searcher<'a> {
         Searcher {
             haystack: haystack,
             needle: needle,
-            position: 0
+            position: 0,
         }
     }
 }

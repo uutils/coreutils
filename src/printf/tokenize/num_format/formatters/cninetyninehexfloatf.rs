@@ -1,10 +1,9 @@
 //! formatter for %a %F C99 Hex-floating-point subs
 use super::super::format_field::FormatField;
-use super::super::formatter::{InPrefix, FormatPrimitive, Formatter};
-use super::float_common::{FloatAnalysis, primitive_to_str_common};
+use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
+use super::float_common::{primitive_to_str_common, FloatAnalysis};
 use super::base_conv;
 use super::base_conv::RadixDef;
-
 
 pub struct CninetyNineHexFloatf {
     as_num: f64,
@@ -16,22 +15,22 @@ impl CninetyNineHexFloatf {
 }
 
 impl Formatter for CninetyNineHexFloatf {
-    fn get_primitive(&self,
-                     field: &FormatField,
-                     inprefix: &InPrefix,
-                     str_in: &str)
-                     -> Option<FormatPrimitive> {
+    fn get_primitive(
+        &self,
+        field: &FormatField,
+        inprefix: &InPrefix,
+        str_in: &str,
+    ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
-        let analysis = FloatAnalysis::analyze(&str_in,
-                                              inprefix,
-                                              Some(second_field as usize),
-                                              None,
-                                              true);
-        let f = get_primitive_hex(inprefix,
-                                  &str_in[inprefix.offset..],
-                                  &analysis,
-                                  second_field as usize,
-                                  *field.field_char == 'A');
+        let analysis =
+            FloatAnalysis::analyze(&str_in, inprefix, Some(second_field as usize), None, true);
+        let f = get_primitive_hex(
+            inprefix,
+            &str_in[inprefix.offset..],
+            &analysis,
+            second_field as usize,
+            *field.field_char == 'A',
+        );
         Some(f)
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
@@ -44,19 +43,15 @@ impl Formatter for CninetyNineHexFloatf {
 // on the todo list is to have a trait for get_primitive that is implemented by each float formatter and can override a default. when that happens we can take the parts of get_primitive_dec specific to dec and spin them out to their own functions that can be overridden.
 #[allow(unused_variables)]
 #[allow(unused_assignments)]
-fn get_primitive_hex(inprefix: &InPrefix,
-                     str_in: &str,
-                     analysis: &FloatAnalysis,
-                     last_dec_place: usize,
-                     capitalized: bool)
-                     -> FormatPrimitive {
-
+fn get_primitive_hex(
+    inprefix: &InPrefix,
+    str_in: &str,
+    analysis: &FloatAnalysis,
+    last_dec_place: usize,
+    capitalized: bool,
+) -> FormatPrimitive {
     let mut f: FormatPrimitive = Default::default();
-    f.prefix = Some(String::from(if inprefix.sign == -1 {
-        "-0x"
-    } else {
-        "0x"
-    }));
+    f.prefix = Some(String::from(if inprefix.sign == -1 { "-0x" } else { "0x" }));
 
     // assign the digits before and after the decimal points
     // to separate slices. If no digits after decimal point,
@@ -101,11 +96,7 @@ fn get_primitive_hex(inprefix: &InPrefix,
     // directly to base 2 and then at the end translate back to hex.
     let mantissa = 0;
     f.suffix = Some({
-        let ind = if capitalized {
-            "P"
-        } else {
-            "p"
-        };
+        let ind = if capitalized { "P" } else { "p" };
         if mantissa >= 0 {
             format!("{}+{}", ind, mantissa)
         } else {
@@ -122,8 +113,10 @@ fn to_hex(src: &str, before_decimal: bool) -> String {
         base_conv::base_conv_str(src, &rten, &rhex)
     } else {
         let as_arrnum_ten = base_conv::str_to_arrnum(src, &rten);
-        let s = format!("{}",
-                        base_conv::base_conv_float(&as_arrnum_ten, rten.get_max(), rhex.get_max()));
+        let s = format!(
+            "{}",
+            base_conv::base_conv_float(&as_arrnum_ten, rten.get_max(), rhex.get_max())
+        );
         if s.len() > 2 {
             String::from(&s[2..])
         } else {

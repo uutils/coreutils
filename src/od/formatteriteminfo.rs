@@ -35,22 +35,22 @@ impl fmt::Debug for FormatWriter {
             &FormatWriter::IntWriter(ref p) => {
                 try!(f.write_str("IntWriter:"));
                 fmt::Pointer::fmt(p, f)
-            },
+            }
             &FormatWriter::FloatWriter(ref p) => {
                 try!(f.write_str("FloatWriter:"));
                 fmt::Pointer::fmt(p, f)
-            },
+            }
             &FormatWriter::MultibyteWriter(ref p) => {
                 try!(f.write_str("MultibyteWriter:"));
                 fmt::Pointer::fmt(&(*p as *const ()), f)
-            },
+            }
         }
-     }
- }
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct FormatterItemInfo {
     pub byte_size: usize,
-    pub print_width: usize,      // including a space in front of the text
+    pub print_width: usize, // including a space in front of the text
     pub formatter: FormatWriter,
 }
