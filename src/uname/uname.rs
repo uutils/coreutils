@@ -14,9 +14,10 @@
 #[macro_use]
 extern crate uucore;
 extern crate clap;
+extern crate platform_info;
 
 use clap::{Arg, App};
-use uucore::utsname::Uname;
+use platform_info::*;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const ABOUT: &'static str = "Print certain system information.  With no OPTION, same as -s.";
@@ -94,35 +95,35 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .get_matches_from(&args);
 
     let argc = args.len();
-    let uname = return_if_err!(1, Uname::new());
+    let uname = return_if_err!(1, PlatformInfo::new());
     let mut output = String::new();
 
     if matches.is_present(OPT_KERNELNAME) || matches.is_present(OPT_ALL) || argc == 1 {
-        output.push_str(uname.sysname().as_ref());
+        output.push_str(&uname.sysname());
         output.push_str(" ");
     }
 
     if matches.is_present(OPT_NODENAME) || matches.is_present(OPT_ALL) {
-        output.push_str(uname.nodename().as_ref());
+        output.push_str(&uname.nodename());
         output.push_str(" ");
     }
     if matches.is_present(OPT_KERNELRELEASE) || matches.is_present(OPT_ALL) {
-        output.push_str(uname.release().as_ref());
+        output.push_str(&uname.release());
         output.push_str(" ");
     }
     if matches.is_present(OPT_KERNELVERSION) || matches.is_present(OPT_ALL) {
-        output.push_str(uname.version().as_ref());
+        output.push_str(&uname.version());
         output.push_str(" ");
     }
     if matches.is_present(OPT_MACHINE) || matches.is_present(OPT_ALL) {
-        output.push_str(uname.machine().as_ref());
+        output.push_str(&uname.machine());
         output.push_str(" ");
     }
     if matches.is_present(OPT_OS) || matches.is_present(OPT_ALL) {
         output.push_str(HOST_OS);
         output.push_str(" ");
     }
-    println!("{}", output.trim());
+    println!("{}", output.trim_right());
 
     0
 }

@@ -11,7 +11,9 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::utsname::Uname;
+extern crate platform_info;
+
+use platform_info::*;
 
 static SYNTAX: &'static str = "";
 static SUMMARY: &'static str = "Determine architecture name for current machine.";
@@ -19,7 +21,7 @@ static LONG_HELP: &'static str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
-    let uts = return_if_err!(1, Uname::new());
+    let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
     0
 }

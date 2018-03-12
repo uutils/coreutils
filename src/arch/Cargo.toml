@@ -8,10 +8,12 @@ build = "../../mkmain.rs"
 name = "uu_arch"
 path = "arch.rs"
 
+[dependencies]
+platform-info = { git = "https://github.com/uutils/platform-info" }
+
 [dependencies.uucore]
 path = "../uucore"
 default-features = false
-features = ["utsname"]
 
 [[bin]]
 name = "arch"
