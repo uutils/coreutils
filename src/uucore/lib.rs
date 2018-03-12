@@ -24,8 +24,6 @@ pub mod parse_time;
 pub mod mode;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "utmpx"))]
 pub mod utmpx;
-#[cfg(feature = "utsname")]
-pub mod utsname;
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
 #[cfg(all(unix, feature = "process"))]
