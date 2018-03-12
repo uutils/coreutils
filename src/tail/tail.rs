@@ -23,7 +23,7 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, stdin, stdout, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::str::from_utf8;
 use std::thread::sleep;
@@ -62,8 +62,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
-        (args, Some(n)) => { settings.mode = FilterMode::Lines(n, '\n' as u8); args },
-        (args, None) => args
+        (args, Some(n)) => {
+            settings.mode = FilterMode::Lines(n, '\n' as u8);
+            args
+        }
+        (args, None) => args,
     };
 
     let args = options;
@@ -73,8 +76,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optopt("c", "bytes", "Number of bytes to print", "k");
     opts.optopt("n", "lines", "Number of lines to print", "k");
     opts.optflag("f", "follow", "Print the file as it grows");
-    opts.optopt("s", "sleep-interval", "Number or seconds to sleep between polling the file when running with -f", "n");
-    opts.optopt("", "pid", "with -f, terminate after process ID, PID dies", "PID");
+    opts.optopt(
+        "s",
+        "sleep-interval",
+        "Number or seconds to sleep between polling the file when running with -f",
+        "n",
+    );
+    opts.optopt(
+        "",
+        "pid",
+        "with -f, terminate after process ID, PID dies",
+        "PID",
+    );
     opts.optflag("z", "zero-terminated", "Line delimiter is NUL, not newline");
     opts.optflag("h", "help", "help");
     opts.optflag("V", "version", "version");
@@ -83,7 +96,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "silent", "synonym of --quiet");
 
     let given_options = match opts.parse(&args) {
-        Ok (m) => { m }
+        Ok(m) => m,
         Err(_) => {
             println!("{}", opts.usage(""));
             return 1;
@@ -94,7 +107,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("{}", opts.usage(""));
         return 0;
     }
-    if given_options.opt_present("V") { version(); return 0 }
+    if given_options.opt_present("V") {
+        version();
+        return 0;
+    }
 
     settings.follow = given_options.opt_present("f");
     if settings.follow {
@@ -102,7 +118,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Some(n) => {
                 let parsed: Option<u32> = n.parse().ok();
                 match parsed {
-                    Some(m) => { settings.sleep_msec = m * 1000 }
+                    Some(m) => settings.sleep_msec = m * 1000,
                     None => {}
                 }
             }
@@ -156,8 +172,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     }
                 }
             }
-            None => { }
-        }
+            None => {}
+        },
     };
 
     if given_options.opt_present("z") {
@@ -181,7 +197,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         for filename in &files {
             if (multiple || verbose) && !quiet {
-                if !first_header { println!(); }
+                if !first_header {
+                    println!();
+                }
                 println!("==> {} <==", filename);
             }
             first_header = false;
@@ -241,54 +259,54 @@ impl ParseSizeErr {
     }
 
     fn size_too_big(s: &str) -> ParseSizeErr {
-        ParseSizeErr::SizeTooBig(
-            format!("invalid size: '{}': Value too large to be stored in data type", s))
+        ParseSizeErr::SizeTooBig(format!(
+            "invalid size: '{}': Value too large to be stored in data type",
+            s
+        ))
     }
 }
 
 pub type ParseSizeResult = Result<u64, ParseSizeErr>;
 
 pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
-    let mut base =
-        if size_slice.chars().last().unwrap_or('_') == 'B' {
-            size_slice = &size_slice[..size_slice.len() - 1];
-            1000u64
-        } else {
-            1024u64
-        };
+    let mut base = if size_slice.chars().last().unwrap_or('_') == 'B' {
+        size_slice = &size_slice[..size_slice.len() - 1];
+        1000u64
+    } else {
+        1024u64
+    };
 
-    let exponent =
-        if size_slice.len() > 0 {
-            let mut has_suffix = true;
-            let exp = match size_slice.chars().last().unwrap_or('_') {
-                'K' | 'k' => 1u64,
-                'M' => 2u64,
-                'G' => 3u64,
-                'T' => 4u64,
-                'P' => 5u64,
-                'E' => 6u64,
-                'Z' | 'Y' => {
-                    return Err(ParseSizeErr::size_too_big(size_slice));
-                },
-                'b' => {
-                    base = 512u64;
-                    1u64
-                }
-                _ => {
-                    has_suffix = false;
-                    0u64
-                }
-            };
-            if has_suffix {
-                size_slice = &size_slice[..size_slice.len() - 1];
+    let exponent = if size_slice.len() > 0 {
+        let mut has_suffix = true;
+        let exp = match size_slice.chars().last().unwrap_or('_') {
+            'K' | 'k' => 1u64,
+            'M' => 2u64,
+            'G' => 3u64,
+            'T' => 4u64,
+            'P' => 5u64,
+            'E' => 6u64,
+            'Z' | 'Y' => {
+                return Err(ParseSizeErr::size_too_big(size_slice));
             }
-            exp
-        } else {
-            0u64
+            'b' => {
+                base = 512u64;
+                1u64
+            }
+            _ => {
+                has_suffix = false;
+                0u64
+            }
         };
+        if has_suffix {
+            size_slice = &size_slice[..size_slice.len() - 1];
+        }
+        exp
+    } else {
+        0u64
+    };
 
     let mut multiplier = 1u64;
-    for _ in 0u64 .. exponent {
+    for _ in 0u64..exponent {
         multiplier *= base;
     }
     if base == 1000u64 && exponent == 0u64 {
@@ -296,8 +314,9 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         Err(ParseSizeErr::parse_failure(size_slice))
     } else {
         let value: Option<u64> = size_slice.parse().ok();
-        value.map(|v| Ok(multiplier * v))
-             .unwrap_or(Err(ParseSizeErr::parse_failure(size_slice)))
+        value
+            .map(|v| Ok(multiplier * v))
+            .unwrap_or(Err(ParseSizeErr::parse_failure(size_slice)))
     }
 }
 
@@ -316,9 +335,11 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 
         if current.len() > 1 && current[0] == '-' as u8 {
             let len = current.len();
-            for pos in 1 .. len {
+            for pos in 1..len {
                 // Ensure that the argument is only made out of digits
-                if !(current[pos] as char).is_numeric() { break; }
+                if !(current[pos] as char).is_numeric() {
+                    break;
+                }
 
                 // If this is the last number
                 if pos == len - 1 {
@@ -330,7 +351,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
         }
 
         a += 1;
-    };
+    }
 
     (options, None)
 }
@@ -346,7 +367,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
     let mut process = platform::ProcessChecker::new(settings.pid);
 
     loop {
-        sleep(Duration::new(0, settings.sleep_msec*1000));
+        sleep(Duration::new(0, settings.sleep_msec * 1000));
 
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
         read_some = false;
@@ -364,8 +385,8 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                             last = i;
                         }
                         print!("{}", datum);
-                    },
-                    Err(err) => panic!(err)
+                    }
+                    Err(err) => panic!(err),
                 }
             }
         }
@@ -379,8 +400,14 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
 /// Iterate over bytes in the file, in reverse, until `should_stop` returns
 /// true. The `file` is left seek'd to the position just after the byte that
 /// `should_stop` returned true for.
-fn backwards_thru_file<F>(mut file: &File, size: u64, buf: &mut Vec<u8>, delimiter: u8, should_stop: &mut F)
-    where F: FnMut(u8) -> bool
+fn backwards_thru_file<F>(
+    mut file: &File,
+    size: u64,
+    buf: &mut Vec<u8>,
+    delimiter: u8,
+    should_stop: &mut F,
+) where
+    F: FnMut(u8) -> bool,
 {
     assert!(buf.len() >= BLOCK_SIZE as usize);
 
@@ -437,10 +464,10 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
                     false
                 }
             });
-        },
+        }
         FilterMode::Bytes(count) => {
             file.seek(SeekFrom::End(-(count as i64))).unwrap();
-        },
+        }
     }
 
     // Print the target section of the file.
@@ -485,15 +512,15 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                             }
                             ringbuf.push_back(datum);
                         }
-                    },
-                    Err(err) => panic!(err)
+                    }
+                    Err(err) => panic!(err),
                 }
             }
             let mut stdout = stdout();
             for datum in &ringbuf {
                 print_string(&mut stdout, datum);
             }
-        },
+        }
         FilterMode::Bytes(mut count) => {
             let mut ringbuf: VecDeque<u8> = VecDeque::new();
             let mut skip = if settings.beginning {
@@ -516,8 +543,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                             }
                             ringbuf.push_back(datum[0]);
                         }
-                    },
-                    Err(err) => panic!(err)
+                    }
+                    Err(err) => panic!(err),
                 }
             }
             let mut stdout = stdout();

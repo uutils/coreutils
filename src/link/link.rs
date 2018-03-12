@@ -22,14 +22,13 @@ static LONG_HELP: &'static str = "";
 
 pub fn normalize_error_message(e: Error) -> String {
     match e.raw_os_error() {
-        Some(2) => { String::from("No such file or directory (os error 2)") }
-        _ => { format!("{}", e) }
+        Some(2) => String::from("No such file or directory (os error 2)"),
+        _ => format!("{}", e),
     }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .parse(args);
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
     if matches.free.len() != 2 {
         crash!(1, "{}", msg_wrong_number_of_arguments!(2));
     }
@@ -40,7 +39,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     match hard_link(old, new) {
         Ok(_) => 0,
         Err(err) => {
-            show_error!("{}",normalize_error_message(err));
+            show_error!("{}", normalize_error_message(err));
             1
         }
     }

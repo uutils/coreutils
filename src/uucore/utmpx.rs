@@ -33,12 +33,12 @@
 
 use super::libc;
 pub extern crate time;
-use self::time::{Tm, Timespec};
+use self::time::{Timespec, Tm};
 
-use ::std::io::Result as IOResult;
-use ::std::io::Error as IOError;
-use ::std::ptr;
-use ::std::ffi::CString;
+use std::io::Result as IOResult;
+use std::io::Error as IOError;
+use std::ptr;
+use std::ffi::CString;
 
 pub use self::ut::*;
 use libc::utmpx;
@@ -159,8 +159,10 @@ impl Utmpx {
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> Tm {
-        time::at(Timespec::new(self.inner.ut_tv.tv_sec as i64,
-                               self.inner.ut_tv.tv_usec as i32))
+        time::at(Timespec::new(
+            self.inner.ut_tv.tv_sec as i64,
+            self.inner.ut_tv.tv_usec as i32,
+        ))
     }
     /// A.K.A. ut.ut_exit
     ///
@@ -202,10 +204,12 @@ impl Utmpx {
         let c_host = CString::new(host).unwrap();
         let mut res = ptr::null_mut();
         let status = unsafe {
-            libc::getaddrinfo(c_host.as_ptr(),
-                              ptr::null(),
-                              &hints as *const _,
-                              &mut res as *mut _)
+            libc::getaddrinfo(
+                c_host.as_ptr(),
+                ptr::null(),
+                &hints as *const _,
+                &mut res as *mut _,
+            )
         };
         if status == 0 {
             let info: libc::addrinfo = unsafe { ptr::read(res as *const _) };
@@ -255,7 +259,9 @@ impl Iterator for UtmpxIter {
         unsafe {
             let res = getutxent();
             if !res.is_null() {
-                Some(Utmpx { inner: ptr::read(res as *const _) })
+                Some(Utmpx {
+                    inner: ptr::read(res as *const _),
+                })
             } else {
                 endutxent();
                 None

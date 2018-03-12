@@ -1,7 +1,7 @@
 // Mainly taken from crate `tempdir`
 
 extern crate rand;
-use rand::{Rng, thread_rng};
+use rand::{thread_rng, Rng};
 
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};
@@ -24,8 +24,12 @@ fn create_dir<P: AsRef<Path>>(path: P) -> IOResult<()> {
     ::std::fs::create_dir(path)
 }
 
-pub fn new_in<P: AsRef<Path>>(tmpdir: P, prefix: &str, rand: usize, suffix: &str) -> IOResult<String> {
-
+pub fn new_in<P: AsRef<Path>>(
+    tmpdir: P,
+    prefix: &str,
+    rand: usize,
+    suffix: &str,
+) -> IOResult<String> {
     let mut rng = thread_rng();
     for _ in 0..NUM_RETRIES {
         let rand_chars: String = rng.gen_ascii_chars().take(rand).collect();
@@ -38,6 +42,8 @@ pub fn new_in<P: AsRef<Path>>(tmpdir: P, prefix: &str, rand: usize, suffix: &str
         }
     }
 
-    Err(Error::new(ErrorKind::AlreadyExists,
-                   "too many temporary directories already exist"))
+    Err(Error::new(
+        ErrorKind::AlreadyExists,
+        "too many temporary directories already exist",
+    ))
 }

@@ -1,11 +1,11 @@
-extern crate libc;
 #[macro_use]
 extern crate cpp;
+extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
-use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF};
+use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
 
@@ -26,7 +26,7 @@ cpp!{{
     }
 }}
 
-extern {
+extern "C" {
     fn __stdbuf_get_stdin() -> *mut FILE;
     fn __stdbuf_get_stdout() -> *mut FILE;
     fn __stdbuf_get_stderr() -> *mut FILE;
@@ -39,7 +39,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         input => {
             let buff_size: usize = match input.parse() {
                 Ok(num) => num,
-                Err(e) => crash!(1, "incorrect size of buffer!: {}", e)
+                Err(e) => crash!(1, "incorrect size of buffer!: {}", e),
             };
             (_IOFBF, buff_size as size_t)
         }

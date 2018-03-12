@@ -54,18 +54,17 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
             r
         } / newr;
 
-        let (tp, Wrapping(newtp)) =
-            (newt, Wrapping(t) - (Wrapping(quot) * Wrapping(newt)));
+        let (tp, Wrapping(newtp)) = (newt, Wrapping(t) - (Wrapping(quot) * Wrapping(newt)));
         t = tp;
         newt = newtp;
 
-        let (rp, Wrapping(newrp)) =
-            (newr, Wrapping(r) - (Wrapping(quot) * Wrapping(newr)));
+        let (rp, Wrapping(newrp)) = (newr, Wrapping(r) - (Wrapping(quot) * Wrapping(newr)));
         r = rp;
         newr = newrp;
     }
 
-    if r > 1 {      // not invertible
+    if r > 1 {
+        // not invertible
         return None;
     }
 
@@ -80,7 +79,13 @@ fn main() {
     let mut file = File::create(&Path::new(&out_dir).join("prime_table.rs")).unwrap();
 
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
-    let n = args().skip(1).next().unwrap_or("1027".to_string()).parse::<usize>().ok().unwrap_or(1027);
+    let n = args()
+        .skip(1)
+        .next()
+        .unwrap_or("1027".to_string())
+        .parse::<usize>()
+        .ok()
+        .unwrap_or(1027);
 
     write!(file, "{}", PREAMBLE).unwrap();
     let mut cols = 3;
@@ -106,7 +111,11 @@ fn main() {
         x = next;
     }
 
-    write!(file, "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n", x).unwrap();
+    write!(
+        file,
+        "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n",
+        x
+    ).unwrap();
 }
 
 #[test]
@@ -127,8 +136,7 @@ fn test_generator() {
 }
 
 const MAX_WIDTH: usize = 102;
-const PREAMBLE: &'static str =
-r##"/*
+const PREAMBLE: &'static str = r##"/*
 * This file is part of the uutils coreutils package.
 *
 * (c) kwantam <kwantam@gmail.com>

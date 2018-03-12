@@ -2,7 +2,7 @@
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
 
 use std::str::Chars;
-use itertools::{PutBackN, put_back_n};
+use itertools::{put_back_n, PutBackN};
 use cli;
 use super::format_field::FormatField;
 
@@ -28,8 +28,7 @@ impl Default for FormatPrimitive {
     }
 }
 
-#[derive(Clone)]
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Base {
     Ten = 10,
     Hex = 16,
@@ -48,11 +47,12 @@ pub trait Formatter {
     //  return a FormatPrimitive for
     // particular field char(s), given the argument
     // string and prefix information (sign, radix)
-    fn get_primitive(&self,
-                     field: &FormatField,
-                     inprefix: &InPrefix,
-                     str_in: &str)
-                     -> Option<FormatPrimitive>;
+    fn get_primitive(
+        &self,
+        field: &FormatField,
+        inprefix: &InPrefix,
+        str_in: &str,
+    ) -> Option<FormatPrimitive>;
     // return a string from a formatprimitive,
     // given information about the field
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String;

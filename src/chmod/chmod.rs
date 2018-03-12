@@ -31,12 +31,17 @@ static LONG_HELP: &'static str = "
 ";
 
 pub fn uumain(mut args: Vec<String>) -> i32 {
-    let syntax = format!("[OPTION]... MODE[,MODE]... FILE...
+    let syntax = format!(
+        "[OPTION]... MODE[,MODE]... FILE...
  {0} [OPTION]... OCTAL-MODE FILE...
- {0} [OPTION]... --reference=RFILE FILE...", NAME);
+ {0} [OPTION]... --reference=RFILE FILE...",
+        NAME
+    );
     let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
-    opts.optflag("c", "changes", "like verbose but report only when a change is made (unimplemented)")
-        .optflag("f", "quiet", "suppress most error messages (unimplemented)") // TODO: support --silent
+    opts.optflag("c", "changes", "like verbose but report only when a change is made \
+                                  (unimplemented)")
+        // TODO: support --silent (can be done using clap)
+        .optflag("f", "quiet", "suppress most error messages (unimplemented)")
         .optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)")
         .optflag("", "no-preserve-root", "do not treat '/' specially (the default)")
         .optflag("", "preserve-root", "fail to operate recursively on '/'")
@@ -58,25 +63,24 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
         let verbose = matches.opt_present("verbose");
         let preserve_root = matches.opt_present("preserve-root");
         let recursive = matches.opt_present("recursive");
-        let fmode = matches.opt_str("reference").and_then(|ref fref| {
-            match fs::metadata(fref) {
+        let fmode = matches
+            .opt_str("reference")
+            .and_then(|ref fref| match fs::metadata(fref) {
                 Ok(meta) => Some(meta.mode()),
-                Err(err) => crash!(1, "cannot stat attribues of '{}': {}", fref, err)
-            }
-        });
-        let cmode =
-            if fmode.is_none() {
-                // If there was a negative option, now it's a good time to
-                // use it.
-                if negative_option.is_some() {
-                    negative_option
-                } else {
-                    Some(matches.free.remove(0))
-                }
+                Err(err) => crash!(1, "cannot stat attribues of '{}': {}", fref, err),
+            });
+        let cmode = if fmode.is_none() {
+            // If there was a negative option, now it's a good time to
+            // use it.
+            if negative_option.is_some() {
+                negative_option
             } else {
-                None
-            };
-        let chmoder = Chmoder{
+                Some(matches.free.remove(0))
+            }
+        } else {
+            None
+        };
+        let chmoder = Chmoder {
             changes: changes,
             quiet: quiet,
             verbose: verbose,
@@ -87,7 +91,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
         };
         match chmoder.chmod(matches.free) {
             Ok(()) => {}
-            Err(e) => return e
+            Err(e) => return e,
         }
     }
 
@@ -102,9 +106,9 @@ fn sanitize_input(args: &mut Vec<String>) -> Option<String> {
         }
         if let Some(second) = args[i].chars().nth(1) {
             match second {
-                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0' ... '7' => {
+                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'...'7' => {
                     return Some(args.remove(i));
-                },
+                }
                 _ => {}
             }
         }
@@ -123,7 +127,6 @@ struct Chmoder {
 }
 
 impl Chmoder {
-
     fn chmod(&self, files: Vec<String>) -> Result<(), i32> {
         let mut r = Ok(());
 
@@ -145,18 +148,21 @@ impl Chmoder {
                             // on Windows OsStrings cannot be built out of non-UTF-8 chars. One
                             // possible fix is to use CStrings rather than Strings in the args
                             // to chmod() and chmod_file().
-                            r = self.chmod(walk_dir.filter_map(|x| match x {
-                                                                Ok(o) => match o.path().into_os_string().to_str() {
-                                                                    Some(s) => Some(s.to_owned()),
-                                                                    None => None,
-                                                                },
-                                                                Err(_) => None,
-                                                              }).collect()).and(r);
+                            r = self.chmod(
+                                walk_dir
+                                    .filter_map(|x| match x {
+                                        Ok(o) => match o.path().into_os_string().to_str() {
+                                            Some(s) => Some(s.to_owned()),
+                                            None => None,
+                                        },
+                                        Err(_) => None,
+                                    })
+                                    .collect(),
+                            ).and(r);
                             r = self.chmod_file(&file, filename).and(r);
                         }
                     } else {
-                        show_error!("could not change permissions of directory '{}'",
-                                    filename);
+                        show_error!("could not change permissions of directory '{}'", filename);
                         r = Err(1);
                     }
                 } else {
@@ -193,14 +199,14 @@ impl Chmoder {
             Some(mode) => try!(self.change_file(fperm, mode, file, name)),
             None => {
                 let cmode_unwrapped = self.cmode.clone().unwrap();
-                for mode in cmode_unwrapped.split(',') {  // cmode is guaranteed to be Some in this case
+                for mode in cmode_unwrapped.split(',') {
+                    // cmode is guaranteed to be Some in this case
                     let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-                    let result =
-                        if mode.contains(arr) {
-                            mode::parse_numeric(fperm, mode)
-                        } else {
-                            mode::parse_symbolic(fperm, mode, file.is_dir())
-                        };
+                    let result = if mode.contains(arr) {
+                        mode::parse_numeric(fperm, mode)
+                    } else {
+                        mode::parse_symbolic(fperm, mode, file.is_dir())
+                    };
                     match result {
                         Ok(mode) => {
                             try!(self.change_file(fperm, mode, file, name));
@@ -226,17 +232,29 @@ impl Chmoder {
                 show_info!("mode of '{}' retained as {:o}", file.display(), fperm);
             }
             Ok(())
-        } else if let Err(err) = fs::set_permissions(Path::new(path), fs::Permissions::from_mode(mode)) {
+        } else if let Err(err) =
+            fs::set_permissions(Path::new(path), fs::Permissions::from_mode(mode))
+        {
             if !self.quiet {
                 show_error!("{}", err);
             }
             if self.verbose {
-                show_info!("failed to change mode of file '{}' from {:o} to {:o}", file.display(), fperm, mode);
+                show_info!(
+                    "failed to change mode of file '{}' from {:o} to {:o}",
+                    file.display(),
+                    fperm,
+                    mode
+                );
             }
             Err(1)
         } else {
             if self.verbose || self.changes {
-                show_info!("mode of '{}' changed from {:o} to {:o}", file.display(), fperm, mode);
+                show_info!(
+                    "mode of '{}' changed from {:o} to {:o}",
+                    file.display(),
+                    fperm,
+                    mode
+                );
             }
             Ok(())
         }

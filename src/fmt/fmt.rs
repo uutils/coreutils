@@ -15,7 +15,7 @@ extern crate unicode_width;
 extern crate uucore;
 
 use std::cmp;
-use std::io::{Read, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Read};
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
@@ -34,27 +34,27 @@ mod linebreak;
 mod parasplit;
 
 // program's NAME and VERSION are used for -V and -h
-static SYNTAX: &'static str = "[OPTION]... [FILE]..."; 
+static SYNTAX: &'static str = "[OPTION]... [FILE]...";
 static SUMMARY: &'static str = "Reformat paragraphs from input files (or stdin) to stdout.";
 static LONG_HELP: &'static str = "";
 
-pub type FileOrStdReader = BufReader<Box<Read+'static>>;
+pub type FileOrStdReader = BufReader<Box<Read + 'static>>;
 pub struct FmtOptions {
-    crown           : bool,
-    tagged          : bool,
-    mail            : bool,
-    split_only      : bool,
-    use_prefix      : bool,
-    prefix          : String,
-    xprefix         : bool,
-    use_anti_prefix : bool,
-    anti_prefix     : String,
-    xanti_prefix    : bool,
-    uniform         : bool,
-    quick           : bool,
-    width           : usize,
-    goal            : usize,
-    tabwidth        : usize,
+    crown: bool,
+    tagged: bool,
+    mail: bool,
+    split_only: bool,
+    use_prefix: bool,
+    prefix: String,
+    xprefix: bool,
+    use_anti_prefix: bool,
+    anti_prefix: String,
+    xanti_prefix: bool,
+    uniform: bool,
+    quick: bool,
+    width: usize,
+    goal: usize,
+    tabwidth: usize,
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -75,38 +75,57 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(args);
 
     let mut fmt_opts = FmtOptions {
-        crown           : false,
-        tagged          : false,
-        mail            : false,
-        uniform         : false,
-        quick           : false,
-        split_only      : false,
-        use_prefix      : false,
-        prefix          : String::new(),
-        xprefix         : false,
-        use_anti_prefix : false,
-        anti_prefix     : String::new(),
-        xanti_prefix    : false,
-        width           : 79,
-        goal            : 74,
-        tabwidth        : 8,
+        crown: false,
+        tagged: false,
+        mail: false,
+        uniform: false,
+        quick: false,
+        split_only: false,
+        use_prefix: false,
+        prefix: String::new(),
+        xprefix: false,
+        use_anti_prefix: false,
+        anti_prefix: String::new(),
+        xanti_prefix: false,
+        width: 79,
+        goal: 74,
+        tabwidth: 8,
     };
 
-    if matches.opt_present("t") { fmt_opts.tagged       = true; }
-    if matches.opt_present("c") { fmt_opts.crown        = true; fmt_opts.tagged = false; }
-    if matches.opt_present("m") { fmt_opts.mail         = true; }
-    if matches.opt_present("u") { fmt_opts.uniform      = true; }
-    if matches.opt_present("q") { fmt_opts.quick        = true; }
-    if matches.opt_present("s") { fmt_opts.split_only   = true; fmt_opts.crown  = false; fmt_opts.tagged = false; }
-    if matches.opt_present("x") { fmt_opts.xprefix      = true; }
-    if matches.opt_present("X") { fmt_opts.xanti_prefix = true; }
+    if matches.opt_present("t") {
+        fmt_opts.tagged = true;
+    }
+    if matches.opt_present("c") {
+        fmt_opts.crown = true;
+        fmt_opts.tagged = false;
+    }
+    if matches.opt_present("m") {
+        fmt_opts.mail = true;
+    }
+    if matches.opt_present("u") {
+        fmt_opts.uniform = true;
+    }
+    if matches.opt_present("q") {
+        fmt_opts.quick = true;
+    }
+    if matches.opt_present("s") {
+        fmt_opts.split_only = true;
+        fmt_opts.crown = false;
+        fmt_opts.tagged = false;
+    }
+    if matches.opt_present("x") {
+        fmt_opts.xprefix = true;
+    }
+    if matches.opt_present("X") {
+        fmt_opts.xanti_prefix = true;
+    }
 
     match matches.opt_str("p") {
         Some(s) => {
             fmt_opts.prefix = s;
             fmt_opts.use_prefix = true;
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("P") {
@@ -114,46 +133,49 @@ pub fn uumain(args: Vec<String>) -> i32 {
             fmt_opts.anti_prefix = s;
             fmt_opts.use_anti_prefix = true;
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("w") {
         Some(s) => {
-            fmt_opts.width =
-                match s.parse::<usize>() {
-                    Ok(t) => t,
-                    Err(e) => { crash!(1, "Invalid WIDTH specification: `{}': {}", s, e); }
-                };
+            fmt_opts.width = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    crash!(1, "Invalid WIDTH specification: `{}': {}", s, e);
+                }
+            };
             fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("g") {
         Some(s) => {
-            fmt_opts.goal =
-                match s.parse::<usize>() {
-                    Ok(t) => t,
-                    Err(e) => { crash!(1, "Invalid GOAL specification: `{}': {}", s, e); }
-                };
+            fmt_opts.goal = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    crash!(1, "Invalid GOAL specification: `{}': {}", s, e);
+                }
+            };
             if !matches.opt_present("w") {
                 fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
             } else if fmt_opts.goal > fmt_opts.width {
                 crash!(1, "GOAL cannot be greater than WIDTH.");
             }
         }
-        None => ()
+        None => (),
     };
 
     match matches.opt_str("T") {
         Some(s) => {
-            fmt_opts.tabwidth =
-                match s.parse::<usize>() {
-                    Ok(t) => t,
-                    Err(e) => { crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e); }
-                };
+            fmt_opts.tabwidth = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e);
+                }
+            };
         }
-        None => ()
+        None => (),
     };
 
     if fmt_opts.tabwidth < 1 {
@@ -172,13 +194,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     for i in files.iter().map(|x| &x[..]) {
         let mut fp = match i {
-            "-" => BufReader::new(Box::new(stdin()) as Box<Read+'static>),
+            "-" => BufReader::new(Box::new(stdin()) as Box<Read + 'static>),
             _ => match File::open(i) {
-                Ok(f) => BufReader::new(Box::new(f) as Box<Read+'static>),
+                Ok(f) => BufReader::new(Box::new(f) as Box<Read + 'static>),
                 Err(e) => {
                     show_warning!("{}: {}", i, e);
                     continue;
-                },
+                }
             },
         };
         let p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
@@ -187,8 +209,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 Err(s) => {
                     silent_unwrap!(ostream.write_all(s.as_bytes()));
                     silent_unwrap!(ostream.write_all("\n".as_bytes()));
-                },
-                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
+                }
+                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream),
             }
         }
 

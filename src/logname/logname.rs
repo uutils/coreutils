@@ -18,7 +18,7 @@ extern crate uucore;
 
 use std::ffi::CStr;
 
-extern {
+extern "C" {
     // POSIX requires using getlogin (or equivalent code)
     pub fn getlogin() -> *const libc::c_char;
 }
@@ -49,6 +49,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn exec() {
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
-        None => show_error!("no login name")
+        None => show_error!("no login name"),
     }
 }

@@ -58,27 +58,33 @@ pub fn guess_syntax() -> OutputFmt {
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
-        .optflag("",
-                 "bourne-shell",
-                 "output Bourne shell code to set LS_COLORS")
+        .optflag(
+            "",
+            "bourne-shell",
+            "output Bourne shell code to set LS_COLORS",
+        )
         .optflag("c", "csh", "output C shell code to set LS_COLORS")
         .optflag("", "c-shell", "output C shell code to set LS_COLORS")
         .optflag("p", "print-database", "print the byte counts")
         .parse(args);
 
-    if (matches.opt_present("csh") || matches.opt_present("c-shell") ||
-        matches.opt_present("sh") || matches.opt_present("bourne-shell")) &&
-       matches.opt_present("print-database") {
-        disp_err!("the options to output dircolors' internal database and\nto select a shell \
-                   syntax are mutually exclusive");
+    if (matches.opt_present("csh") || matches.opt_present("c-shell") || matches.opt_present("sh")
+        || matches.opt_present("bourne-shell")) && matches.opt_present("print-database")
+    {
+        disp_err!(
+            "the options to output dircolors' internal database and\nto select a shell \
+             syntax are mutually exclusive"
+        );
         return 1;
     }
 
     if matches.opt_present("print-database") {
         if !matches.free.is_empty() {
-            disp_err!("extra operand ‘{}’\nfile operands cannot be combined with \
-                      --print-database (-p)",
-                      matches.free[0]);
+            disp_err!(
+                "extra operand ‘{}’\nfile operands cannot be combined with \
+                 --print-database (-p)",
+                matches.free[0]
+            );
             return 1;
         }
         println!("{}", INTERNAL_DB);
@@ -113,9 +119,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         match File::open(matches.free[0].as_str()) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(fin.lines().filter_map(|l| l.ok()),
-                               out_format,
-                               matches.free[0].as_str())
+                result = parse(
+                    fin.lines().filter_map(|l| l.ok()),
+                    out_format,
+                    matches.free[0].as_str(),
+                )
             }
             Err(e) => {
                 show_info!("{}: {}", matches.free[0], e);
@@ -193,8 +201,9 @@ enum ParseState {
 }
 use std::collections::HashMap;
 fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
-    where T: IntoIterator,
-          T::Item: Borrow<str>
+where
+    T: IntoIterator,
+    T::Item: Borrow<str>,
 {
     // 1440 > $(dircolors | wc -m)
     let mut result = String::with_capacity(1440);
@@ -257,7 +266,10 @@ fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
 
         let (key, val) = line.split_two();
         if val.is_empty() {
-            return Err(format!("{}:{}: invalid line;  missing second token", fp, num));
+            return Err(format!(
+                "{}:{}: invalid line;  missing second token",
+                fp, num
+            ));
         }
         let lower = key.to_lowercase();
 

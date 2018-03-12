@@ -1,5 +1,4 @@
 #![crate_name = "uu_printf"]
-
 #![allow(dead_code)]
 
 extern crate itertools;
@@ -8,7 +7,6 @@ extern crate uucore;
 mod cli;
 mod memo;
 mod tokenize;
-
 
 static NAME: &'static str = "printf";
 static VERSION: &'static str = "0.0.1";
@@ -179,8 +177,10 @@ static LONGHELP_BODY: &'static str = "
          e.g. \\n will be transformed into a newline character.
 
         One special rule about %b mode is that octal literals are intepreted differently
-        In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN instead of \\NNN
-        (Although, for legacy reasons, octal literals in the form of \\NNN will still be interpreted and not throw a warning, you will have problems if you use this for a literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
+        In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
+        instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
+        still be interpreted and not throw a warning, you will have problems if you use this for a
+        literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
 
    CHAR SUBSTITUTIONS
     The character field does not have a secondary parameter.
@@ -206,12 +206,18 @@ static LONGHELP_BODY: &'static str = "
     All floating point fields have a 'max decimal places / max significant digits' parameter
     %.10f means a decimal floating point with 7 decimal places past 0
     %.10e means a scientific notation number with 10 significant digits
-    %.10g means the same behavior for decimal and Sci. Note, respectively, and provides the shorter of each's output.
+    %.10g means the same behavior for decimal and Sci. Note, respectively, and provides the shorter
+          of each's output.
 
-    Like with GNU coreutils, the value after the decimal point is these outputs is parsed as a double first before being rendered to text. For both implementations do not expect meaningful precision past the 18th decimal place. When using a number of decimal places that is 18 or higher, you can expect variation in output between GNU coreutils printf and this printf at the 18th decimal place of +/- 1
+    Like with GNU coreutils, the value after the decimal point is these outputs is parsed as a
+    double first before being rendered to text. For both implementations do not expect meaningful
+    precision past the 18th decimal place. When using a number of decimal places that is 18 or
+    higher, you can expect variation in output between GNU coreutils printf and this printf at the
+    18th decimal place of +/- 1
 
-   %f - floating point value presented in decimal, truncated and displayed to 6 decimal places by default.
-        There is not past-double behavior parity with Coreutils printf, values are not estimated or adjusted beyond input values.
+   %f - floating point value presented in decimal, truncated and displayed to 6 decimal places by
+        default. There is not past-double behavior parity with Coreutils printf, values are not
+        estimated or adjusted beyond input values.
 
    %e or %E - floating point value presented in scientific notation
             7 significant digits by default
@@ -252,7 +258,8 @@ static LONGHELP_BODY: &'static str = "
 
     Character Constant: if the argument begins with a single quote character, the first byte
       of the next character will be interpreted as an 8-bit unsigned integer. If there are
-      additional bytes, they will throw an error (unless the environment variable POSIXLY_CORRECt is set)
+      additional bytes, they will throw an error (unless the environment variable POSIXLY_CORRECT
+      is set)
 
 WRITTEN BY :
   Nathan E. Ross, et al. for the uutils project
@@ -269,8 +276,10 @@ COPYRIGHT :
 pub fn uumain(args: Vec<String>) -> i32 {
     let location = &args[0];
     if args.len() <= 1 {
-        println!("{0}: missing operand\nTry '{0} --help' for more information.",
-                 location);
+        println!(
+            "{0}: missing operand\nTry '{0} --help' for more information.",
+            location
+        );
         return 1;
     }
     let ref formatstr = args[1];

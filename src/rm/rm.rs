@@ -18,7 +18,7 @@ extern crate uucore;
 
 use std::collections::VecDeque;
 use std::fs;
-use std::io::{stdin, stderr, BufRead, Write};
+use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::Path;
 use remove_dir_all::remove_dir_all;
@@ -28,7 +28,7 @@ use walkdir::{DirEntry, WalkDir};
 enum InteractiveMode {
     InteractiveNone,
     InteractiveOnce,
-    InteractiveAlways
+    InteractiveAlways,
 }
 
 struct Options {
@@ -39,7 +39,7 @@ struct Options {
     preserve_root: bool,
     recursive: bool,
     dir: bool,
-    verbose: bool
+    verbose: bool,
 }
 
 static NAME: &'static str = "rm";
@@ -49,14 +49,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // TODO: make getopts support -R in addition to -r
     let mut opts = getopts::Options::new();
 
-    opts.optflag("f", "force", "ignore nonexistent files and arguments, never prompt");
+    opts.optflag(
+        "f",
+        "force",
+        "ignore nonexistent files and arguments, never prompt",
+    );
     opts.optflag("i", "", "prompt before every removal");
     opts.optflag("I", "", "prompt once before removing more than three files, or when removing recursively.  Less intrusive than -i, while still giving some protection against most mistakes");
-    opts.optflagopt("", "interactive", "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always", "WHEN");
+    opts.optflagopt(
+        "",
+        "interactive",
+        "prompt according to WHEN: never, once (-I), or always (-i).  Without WHEN, prompts always",
+        "WHEN",
+    );
     opts.optflag("", "one-file-system", "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)");
     opts.optflag("", "no-preserve-root", "do not treat '/' specially");
     opts.optflag("", "preserve-root", "do not remove '/' (default)");
-    opts.optflag("r", "recursive", "remove directories and their contents recursively");
+    opts.optflag(
+        "r",
+        "recursive",
+        "remove directories and their contents recursively",
+    );
     opts.optflag("d", "dir", "remove empty directories");
     opts.optflag("v", "verbose", "explain what is being done");
     opts.optflag("h", "help", "display this help and exit");
@@ -64,7 +77,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "{}", f)
+        Err(f) => crash!(1, "{}", f),
     };
 
     let force = matches.opt_present("force");
@@ -107,9 +120,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         "none" => InteractiveMode::InteractiveNone,
                         "once" => InteractiveMode::InteractiveOnce,
                         "always" => InteractiveMode::InteractiveAlways,
-                        val => {
-                            crash!(1, "Invalid argument to interactive ({})", val)
-                        }
+                        val => crash!(1, "Invalid argument to interactive ({})", val),
                     }
                 } else {
                     InteractiveMode::InteractiveNone
@@ -119,16 +130,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
             preserve_root: !matches.opt_present("no-preserve-root"),
             recursive: matches.opt_present("recursive"),
             dir: matches.opt_present("dir"),
-            verbose: matches.opt_present("verbose")
+            verbose: matches.opt_present("verbose"),
         };
         if options.interactive == InteractiveMode::InteractiveOnce
-                && (options.recursive || matches.free.len() > 3) {
-            let msg =
-                if options.recursive {
-                    "Remove all arguments recursively? "
-                } else {
-                    "Remove all arguments? "
-                };
+            && (options.recursive || matches.free.len() > 3)
+        {
+            let msg = if options.recursive {
+                "Remove all arguments recursively? "
+            } else {
+                "Remove all arguments? "
+            };
             if !prompt(msg) {
                 return 0;
             }
@@ -217,8 +228,10 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
             show_error!("could not remove directory '{}'", path.display());
             had_err = true;
         } else {
-            show_error!("could not remove directory '{}' (did you mean to pass '-r'?)",
-                        path.display());
+            show_error!(
+                "could not remove directory '{}' (did you mean to pass '-r'?)",
+                path.display()
+            );
             had_err = true;
         }
     }
@@ -227,15 +240,16 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    let response =
-        if options.interactive == InteractiveMode::InteractiveAlways {
-            prompt_file(path, true)
-        } else {
-            true
-        };
+    let response = if options.interactive == InteractiveMode::InteractiveAlways {
+        prompt_file(path, true)
+    } else {
+        true
+    };
     if response {
         match fs::remove_dir(path) {
-            Ok(_) => if options.verbose { println!("removed '{}'", path.display()); },
+            Ok(_) => if options.verbose {
+                println!("removed '{}'", path.display());
+            },
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -247,15 +261,16 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
-    let response =
-        if options.interactive == InteractiveMode::InteractiveAlways {
-            prompt_file(path, false)
-        } else {
-            true
-        };
+    let response = if options.interactive == InteractiveMode::InteractiveAlways {
+        prompt_file(path, false)
+    } else {
+        true
+    };
     if response {
         match fs::remove_file(path) {
-            Ok(_) => if options.verbose { println!("removed '{}'", path.display()); },
+            Ok(_) => if options.verbose {
+                println!("removed '{}'", path.display());
+            },
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -283,12 +298,10 @@ fn prompt(msg: &str) -> bool {
     let mut stdin = stdin.lock();
 
     match stdin.read_until('\n' as u8, &mut buf) {
-        Ok(x) if x > 0 => {
-            match buf[0] {
-                b'y' | b'Y' => true,
-                _ => false,
-            }
-        }
+        Ok(x) if x > 0 => match buf[0] {
+            b'y' | b'Y' => true,
+            _ => false,
+        },
         _ => false,
     }
 }

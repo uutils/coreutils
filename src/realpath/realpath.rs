@@ -1,4 +1,4 @@
-#![crate_name= "uu_realpath"]
+#![crate_name = "uu_realpath"]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -26,8 +26,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("h", "help", "Show help and exit");
     opts.optflag("V", "version", "Show version and exit");
-    opts.optflag("s", "strip", "Only strip '.' and '..' components, but don't resolve symbolic links");
-    opts.optflag("z", "zero", "Separate output filenames with \\0 rather than newline");
+    opts.optflag(
+        "s",
+        "strip",
+        "Only strip '.' and '..' components, but don't resolve symbolic links",
+    );
+    opts.optflag(
+        "z",
+        "zero",
+        "Separate output filenames with \\0 rather than newline",
+    );
     opts.optflag("q", "quiet", "Do not print warnings for invalid paths");
 
     let matches = match opts.parse(&args[1..]) {
@@ -35,17 +43,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(f) => {
             show_error!("{}", f);
             show_usage(&opts);
-            return 1
+            return 1;
         }
     };
 
-    if matches.opt_present("V") { version(); return 0 }
-    if matches.opt_present("h") { show_usage(&opts); return 0 }
+    if matches.opt_present("V") {
+        version();
+        return 0;
+    }
+    if matches.opt_present("h") {
+        show_usage(&opts);
+        return 0;
+    }
 
     if matches.free.is_empty() {
         show_error!("Missing operand: FILENAME, at least one is required");
         println!("Try `{} --help` for more information.", NAME);
-        return 1
+        return 1;
     }
 
     let strip = matches.opt_present("s");
@@ -70,7 +84,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         } else {
             println!("{}", abs.display())
         }
-        return true
+        return true;
     }
 
     let mut result = PathBuf::new();
@@ -80,8 +94,10 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         result.push(part.as_os_str());
         loop {
             if links_left == 0 {
-                if !quiet { show_error!("Too many symbolic links: {}", path) };
-                return false
+                if !quiet {
+                    show_error!("Too many symbolic links: {}", path)
+                };
+                return false;
             }
             match fs::metadata(result.as_path()) {
                 Err(_) => break,
@@ -92,13 +108,13 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
                         Ok(x) => {
                             result.pop();
                             result.push(x.as_path());
-                        },
+                        }
                         _ => {
                             if !quiet {
                                 show_error!("Invalid path: {}", path)
                             };
-                            return false
-                        },
+                            return false;
+                        }
                     }
                 }
             }

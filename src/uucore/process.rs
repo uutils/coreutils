@@ -8,7 +8,7 @@
 //
 
 use super::libc;
-use libc::{c_int, pid_t, uid_t, gid_t};
+use libc::{c_int, gid_t, pid_t, uid_t};
 use std::fmt;
 use std::io;
 use std::process::Child;
@@ -17,27 +17,19 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub fn geteuid() -> uid_t {
-    unsafe {
-        libc::geteuid()
-    }
+    unsafe { libc::geteuid() }
 }
 
 pub fn getegid() -> gid_t {
-    unsafe {
-        libc::getegid()
-    }
+    unsafe { libc::getegid() }
 }
 
 pub fn getgid() -> gid_t {
-    unsafe {
-        libc::getgid()
-    }
+    unsafe { libc::getgid() }
 }
 
 pub fn getuid() -> uid_t {
-    unsafe {
-        libc::getuid()
-    }
+    unsafe { libc::getuid() }
 }
 
 // This is basically sys::unix::process::ExitStatus
@@ -109,7 +101,10 @@ impl ChildExt for Child {
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>> {
         // The result will be written to that Option, protected by a Mutex
         // Then the Condvar will be signaled
-        let state = Arc::new((Mutex::new(Option::None::<io::Result<ExitStatus>>), Condvar::new()));
+        let state = Arc::new((
+            Mutex::new(Option::None::<io::Result<ExitStatus>>),
+            Condvar::new(),
+        ));
 
         // Start the waiting thread
         let state_th = state.clone();

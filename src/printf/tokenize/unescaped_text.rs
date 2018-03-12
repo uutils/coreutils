@@ -65,12 +65,12 @@ impl UnescapedText {
             preface = 'U';
             leading_zeros = 8;
         }
-        let err_msg = format!("invalid universal character name {0}{1:02$x}",
-                              preface,
-                              val,
-                              leading_zeros);
+        let err_msg = format!(
+            "invalid universal character name {0}{1:02$x}",
+            preface, val, leading_zeros
+        );
         if (val < 159 && (val != 36 && val != 64 && val != 96)) || (val > 55296 && val < 57343) {
-            println!("{}", err_msg);//todo stderr
+            println!("{}", err_msg); //todo stderr
             exit(cli::EXIT_ERR);
         }
     }
@@ -167,7 +167,6 @@ impl UnescapedText {
                 byte_vec.extend(s.bytes());
             }
         };
-
     }
 
     // take an iterator to a string,
@@ -239,9 +238,10 @@ impl UnescapedText {
 }
 #[allow(unused_variables)]
 impl token::Tokenizer for UnescapedText {
-    fn from_it(it: &mut PutBackN<Chars>,
-               args: &mut Peekable<Iter<String>>)
-               -> Option<Box<token::Token>> {
+    fn from_it(
+        it: &mut PutBackN<Chars>,
+        args: &mut Peekable<Iter<String>>,
+    ) -> Option<Box<token::Token>> {
         UnescapedText::from_it_core(it, false)
     }
 }

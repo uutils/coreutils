@@ -9,10 +9,10 @@
  * file that was distributed with this source code.
  */
 
+extern crate getopts;
 extern crate libc;
 #[cfg(windows)]
 extern crate winapi;
-extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
@@ -25,7 +25,7 @@ use std::net::ToSocketAddrs;
 use getopts::Matches;
 
 #[cfg(windows)]
-use winapi::um::winsock2::{GetHostNameW, WSAStartup, WSACleanup};
+use winapi::um::winsock2::{GetHostNameW, WSACleanup, WSAStartup};
 #[cfg(windows)]
 use winapi::um::sysinfoapi::{ComputerNamePhysicalDnsHostname, SetComputerNameExW};
 #[cfg(windows)]
@@ -63,8 +63,10 @@ fn execute(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("d", "domain", "Display the name of the DNS domain if possible")
         .optflag("i", "ip-address", "Display the network address(es) of the host")
-        .optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)")   // TODO: support --long
-        .optflag("s", "short", "Display the short hostname (the portion before the first dot) if possible")
+        // TODO: support --long
+        .optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)")
+        .optflag("s", "short", "Display the short hostname (the portion before the first dot) if \
+                                possible")
         .parse(args);
 
     match matches.free.len() {
@@ -148,7 +150,10 @@ fn xgethostname() -> io::Result<String> {
     let namelen = 256;
     let mut name: Vec<u8> = repeat(0).take(namelen).collect();
     let err = unsafe {
-        gethostname(name.as_mut_ptr() as *mut libc::c_char, namelen as libc::size_t)
+        gethostname(
+            name.as_mut_ptr() as *mut libc::c_char,
+            namelen as libc::size_t,
+        )
     };
 
     if err == 0 {
@@ -158,7 +163,10 @@ fn xgethostname() -> io::Result<String> {
             last_char += 1;
         }
 
-        Ok(CStr::from_bytes_with_nul(&name[..last_char]).unwrap().to_string_lossy().into_owned())
+        Ok(CStr::from_bytes_with_nul(&name[..last_char])
+            .unwrap()
+            .to_string_lossy()
+            .into_owned())
     } else {
         Err(io::Error::last_os_error())
     }
@@ -168,9 +176,7 @@ fn xgethostname() -> io::Result<String> {
 fn xgethostname() -> io::Result<String> {
     let namelen = 256;
     let mut name: Vec<u16> = repeat(0).take(namelen).collect();
-    let err = unsafe {
-        GetHostNameW(name.as_mut_ptr(), namelen as libc::c_int)
-    };
+    let err = unsafe { GetHostNameW(name.as_mut_ptr(), namelen as libc::c_int) };
 
     if err == 0 {
         Ok(String::from_wide_null(&name))
@@ -183,9 +189,7 @@ fn xgethostname() -> io::Result<String> {
 fn xsethostname(name: &str) -> io::Result<()> {
     let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
 
-    let err = unsafe {
-        sethostname(vec_name.as_ptr(), vec_name.len() as _)
-    };
+    let err = unsafe { sethostname(vec_name.as_ptr(), vec_name.len() as _) };
 
     if err != 0 {
         Err(io::Error::last_os_error())
@@ -200,9 +204,7 @@ fn xsethostname(name: &str) -> io::Result<()> {
 
     let wide_name = OsStr::new(name).to_wide_null();
 
-    let err = unsafe {
-        SetComputerNameExW(ComputerNamePhysicalDnsHostname, wide_name.as_ptr())
-    };
+    let err = unsafe { SetComputerNameExW(ComputerNamePhysicalDnsHostname, wide_name.as_ptr()) };
 
     if err == 0 {
         // NOTE: the above is correct, failure is when the function returns 0 apparently

@@ -9,9 +9,9 @@
 // that was distributed with this source code.
 //
 
+pub extern crate filetime;
 extern crate getopts;
 extern crate time;
-pub extern crate filetime;
 
 #[macro_use]
 extern crate uucore;
@@ -54,7 +54,7 @@ macro_rules! to_timeval {
 #[cfg(unix)]
 fn set_symlink_times(p: &str, atime: FileTime, mtime: FileTime) -> io::Result<()> {
     use std::ffi::CString;
-    use uucore::libc::{lutimes, timeval, time_t, suseconds_t};
+    use uucore::libc::{lutimes, suseconds_t, time_t, timeval};
 
     let times = [to_timeval!(atime), to_timeval!(mtime)];
     let p = try!(CString::new(p));
@@ -72,29 +72,39 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optflag("a", "", "change only the access time");
     opts.optflag("c", "no-create", "do not create any files");
-    opts.optopt("d",
-                "date",
-                "parse argument and use it instead of current time",
-                "STRING");
-    opts.optflag("h",
-                 "no-dereference",
-                 "affect each symbolic link instead of any referenced file \
-                                         (only for systems that can change the timestamps of a symlink)");
+    opts.optopt(
+        "d",
+        "date",
+        "parse argument and use it instead of current time",
+        "STRING",
+    );
+    opts.optflag(
+        "h",
+        "no-dereference",
+        "affect each symbolic link instead of any referenced file \
+         (only for systems that can change the timestamps of a symlink)",
+    );
     opts.optflag("m", "", "change only the modification time");
-    opts.optopt("r",
-                "reference",
-                "use this file's times instead of the current time",
-                "FILE");
-    opts.optopt("t",
-                "",
-                "use [[CC]YY]MMDDhhmm[.ss] instead of the current time",
-                "STAMP");
-    opts.optopt("",
-                "time",
-                "change only the specified time: \"access\", \"atime\", or \
-                                         \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
-                                         equivalent to -m",
-                "WORD");
+    opts.optopt(
+        "r",
+        "reference",
+        "use this file's times instead of the current time",
+        "FILE",
+    );
+    opts.optopt(
+        "t",
+        "",
+        "use [[CC]YY]MMDDhhmm[.ss] instead of the current time",
+        "STAMP",
+    );
+    opts.optopt(
+        "",
+        "time",
+        "change only the specified time: \"access\", \"atime\", or \
+         \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
+         equivalent to -m",
+        "WORD",
+    );
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -113,23 +123,34 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("");
         println!("Usage: {} [OPTION]... FILE...", NAME);
         println!("");
-        println!("{}", opts.usage("Update the access and modification times of \
-                                   each FILE to the current time."));
+        println!(
+            "{}",
+            opts.usage(
+                "Update the access and modification times of \
+                 each FILE to the current time."
+            )
+        );
         if matches.free.is_empty() {
             return 1;
         }
         return 0;
     }
 
-    if matches.opt_present("date") && matches.opts_present(&["reference".to_owned(), "t".to_owned()]) ||
-       matches.opt_present("reference") && matches.opts_present(&["date".to_owned(), "t".to_owned()]) ||
-       matches.opt_present("t") && matches.opts_present(&["date".to_owned(), "reference".to_owned()]) {
+    if matches.opt_present("date")
+        && matches.opts_present(&["reference".to_owned(), "t".to_owned()])
+        || matches.opt_present("reference")
+            && matches.opts_present(&["date".to_owned(), "t".to_owned()])
+        || matches.opt_present("t")
+            && matches.opts_present(&["date".to_owned(), "reference".to_owned()])
+    {
         panic!("Invalid options: cannot specify reference time from more than one source");
     }
 
     let (mut atime, mut mtime) = if matches.opt_present("reference") {
-        stat(&matches.opt_str("reference").unwrap()[..],
-             !matches.opt_present("no-dereference"))
+        stat(
+            &matches.opt_str("reference").unwrap()[..],
+            !matches.opt_present("no-dereference"),
+        )
     } else if matches.opts_present(&["date".to_owned(), "t".to_owned()]) {
         let timestamp = if matches.opt_present("date") {
             parse_date(matches.opt_str("date").unwrap().as_ref())
@@ -168,13 +189,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let st = stat(path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 
-            if !(matches.opt_present("a") || time.contains(&"access".to_owned()) ||
-                 time.contains(&"atime".to_owned()) || time.contains(&"use".to_owned())) {
+            if !(matches.opt_present("a") || time.contains(&"access".to_owned())
+                || time.contains(&"atime".to_owned())
+                || time.contains(&"use".to_owned()))
+            {
                 atime = st.0;
             }
 
-            if !(matches.opt_present("m") || time.contains(&"modify".to_owned()) ||
-                 time.contains(&"mtime".to_owned())) {
+            if !(matches.opt_present("m") || time.contains(&"modify".to_owned())
+                || time.contains(&"mtime".to_owned()))
+            {
                 mtime = st.1;
             }
         }
@@ -201,8 +225,16 @@ fn stat(path: &str, follow: bool) -> (FileTime, FileTime) {
     };
 
     match metadata {
-        Ok(m) => (FileTime::from_last_access_time(&m), FileTime::from_last_modification_time(&m)),
-        Err(_) => crash!(1, "failed to get attributes of '{}': {}", path, Error::last_os_error()),
+        Ok(m) => (
+            FileTime::from_last_access_time(&m),
+            FileTime::from_last_modification_time(&m),
+        ),
+        Err(_) => crash!(
+            1,
+            "failed to get attributes of '{}': {}",
+            path,
+            Error::last_os_error()
+        ),
     }
 }
 

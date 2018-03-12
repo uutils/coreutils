@@ -25,9 +25,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Argument parsing
     //
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("a", "multiple", "Support more than one argument. Treat every argument as a name.")
-        .optopt("s", "suffix", "Remove a trailing suffix. This option implies the -a option.", "SUFFIX")
-        .optflag("z", "zero", "Output a zero byte (ASCII NUL) at the end of each line, rather than a newline.")
+        .optflag(
+            "a",
+            "multiple",
+            "Support more than one argument. Treat every argument as a name.",
+        )
+        .optopt(
+            "s",
+            "suffix",
+            "Remove a trailing suffix. This option implies the -a option.",
+            "SUFFIX",
+        )
+        .optflag(
+            "z",
+            "zero",
+            "Output a zero byte (ASCII NUL) at the end of each line, rather than a newline.",
+        )
         .parse(args);
 
     // too few arguments
@@ -81,7 +94,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn basename(fullname: &str, suffix: &str) -> String {
     // Remove all platform-specific path separators from the end
-    let mut path: String = fullname.chars().rev().skip_while(|&ch| is_separator(ch)).collect();
+    let mut path: String = fullname
+        .chars()
+        .rev()
+        .skip_while(|&ch| is_separator(ch))
+        .collect();
 
     // Undo reverse
     path = path.chars().rev().collect();
@@ -90,7 +107,7 @@ fn basename(fullname: &str, suffix: &str) -> String {
     let pb = PathBuf::from(path);
     match pb.components().last() {
         Some(c) => strip_suffix(c.as_os_str().to_str().unwrap(), suffix),
-        None => "".to_owned()
+        None => "".to_owned(),
     }
 }
 

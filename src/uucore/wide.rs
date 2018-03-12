@@ -12,7 +12,10 @@ pub trait ToWide {
     fn to_wide(&self) -> Vec<u16>;
     fn to_wide_null(&self) -> Vec<u16>;
 }
-impl<T> ToWide for T where T: AsRef<OsStr> {
+impl<T> ToWide for T
+where
+    T: AsRef<OsStr>,
+{
     fn to_wide(&self) -> Vec<u16> {
         self.as_ref().encode_wide().collect()
     }
@@ -30,6 +33,8 @@ impl FromWide for String {
     }
     fn from_wide_null(wide: &[u16]) -> String {
         let len = wide.iter().take_while(|&&c| c != 0).count();
-        OsString::from_wide(&wide[..len]).to_string_lossy().into_owned()
+        OsString::from_wide(&wide[..len])
+            .to_string_lossy()
+            .into_owned()
     }
 }

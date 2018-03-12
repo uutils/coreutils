@@ -1,5 +1,4 @@
 #![crate_name = "uu_users"]
-
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -42,7 +41,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTION]... [FILE]", NAME);
         println!("");
-        println!("{}", opts.usage("Output who is currently logged in according to FILE."));
+        println!(
+            "{}",
+            opts.usage("Output who is currently logged in according to FILE.")
+        );
         return 0;
     }
 

@@ -33,7 +33,6 @@ unix_only! {
     "stat", test_stat
 }
 
-
 macro_rules! generic {
     ($($fea:expr, $m:ident);+) => {
         $(

@@ -11,12 +11,12 @@
 
 // last synced with: uname (GNU coreutils) 8.21
 
-#[macro_use]
-extern crate uucore;
 extern crate clap;
 extern crate platform_info;
+#[macro_use]
+extern crate uucore;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 use platform_info::*;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -50,7 +50,6 @@ const HOST_OS: &'static str = "Fuchsia";
 const HOST_OS: &'static str = "Redox";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-
     let usage = format!("{} [OPTION]...", executable!());
     let matches = App::new(executable!())
         .version(VERSION)

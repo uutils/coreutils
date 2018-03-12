@@ -15,20 +15,22 @@ pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
         Err(format!("mode is too large ({} > 7777)", mode))
     } else {
         match u32::from_str_radix(mode, 8) {
-            Ok(change) => {
-                Ok(match op {
-                    '+' => fperm | change,
-                    '-' => fperm & !change,
-                    '=' => change,
-                    _ => unreachable!()
-                })
-            }
-            Err(err) => Err(err.description().to_owned())
+            Ok(change) => Ok(match op {
+                '+' => fperm | change,
+                '-' => fperm & !change,
+                '=' => change,
+                _ => unreachable!(),
+            }),
+            Err(err) => Err(err.description().to_owned()),
         }
     }
 }
 
-pub fn parse_symbolic(mut fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
+pub fn parse_symbolic(
+    mut fperm: u32,
+    mut mode: &str,
+    considering_dir: bool,
+) -> Result<u32, String> {
     #[cfg(unix)]
     use libc::umask;
 
@@ -43,9 +45,7 @@ pub fn parse_symbolic(mut fperm: u32, mut mode: &str, considering_dir: bool) -> 
         return Err(format!("invalid mode ({})", mode));
     }
     let respect_umask = pos == 0;
-    let last_umask = unsafe {
-        umask(0)
-    };
+    let last_umask = unsafe { umask(0) };
     mode = &mode[pos..];
     while mode.len() > 0 {
         let (op, pos) = parse_op(mode, None)?;
@@ -59,7 +59,7 @@ pub fn parse_symbolic(mut fperm: u32, mut mode: &str, considering_dir: bool) -> 
             '+' => fperm |= srwx & mask,
             '-' => fperm &= !(srwx & mask),
             '=' => fperm = (fperm & !mask) | (srwx & mask),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
     unsafe {
@@ -77,12 +77,12 @@ fn parse_levels(mode: &str) -> (u32, usize) {
             'g' => 0o7070,
             'o' => 0o7007,
             'a' => 0o7777,
-            _ => break
+            _ => break,
         };
         pos += 1;
     }
     if pos == 0 {
-        mask = 0o7777;  // default to 'a'
+        mask = 0o7777; // default to 'a'
     }
     (mask, pos)
 }
@@ -93,10 +93,13 @@ fn parse_op(mode: &str, default: Option<char>) -> Result<(char, usize), String> 
             '+' | '-' | '=' => Ok((ch, 1)),
             _ => match default {
                 Some(ch) => Ok((ch, 0)),
-                None => Err(format!("invalid operator (expected +, -, or =, but found {})", ch))
-            }
+                None => Err(format!(
+                    "invalid operator (expected +, -, or =, but found {})",
+                    ch
+                )),
+            },
         },
-        None => Err("unexpected end of mode".to_owned())
+        None => Err("unexpected end of mode".to_owned()),
     }
 }
 
@@ -118,7 +121,7 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
             'u' => srwx = (fperm & 0o700) | ((fperm >> 3) & 0o070) | ((fperm >> 6) & 0o007),
             'g' => srwx = ((fperm << 3) & 0o700) | (fperm & 0o070) | ((fperm >> 3) & 0o007),
             'o' => srwx = ((fperm << 6) & 0o700) | ((fperm << 3) & 0o070) | (fperm & 0o007),
-            _ => break
+            _ => break,
         };
         pos += 1;
     }

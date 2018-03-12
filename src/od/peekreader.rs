@@ -28,7 +28,7 @@ pub trait PeekRead {
     ///
     /// # Panics
     /// Might panic if `peek_size` is larger then the size of `out`
-    fn peek_read(&mut self, out: &mut [u8], peek_size: usize) -> io::Result<(usize,usize)>;
+    fn peek_read(&mut self, out: &mut [u8], peek_size: usize) -> io::Result<(usize, usize)>;
 }
 
 /// Wrapper for `std::io::Read` allowing to peek into the data to be read.
@@ -53,7 +53,7 @@ impl<R: Read> PeekReader<R> {
             Ok(n) => {
                 self.temp_buffer.drain(..n);
                 n
-            },
+            }
             Err(_) => 0,
         }
     }
@@ -83,7 +83,7 @@ impl<R: Read> PeekRead for PeekReader<R> {
     ///
     /// # Panics
     /// If `peek_size` is larger then the size of `out`
-    fn peek_read(&mut self, out: &mut [u8], peek_size: usize) -> io::Result<(usize,usize)> {
+    fn peek_read(&mut self, out: &mut [u8], peek_size: usize) -> io::Result<(usize, usize)> {
         assert!(out.len() >= peek_size);
         match self.read(out) {
             Err(e) => Err(e),
@@ -97,7 +97,7 @@ impl<R: Read> PeekRead for PeekReader<R> {
                     self.write_to_tempbuffer(&out[real_size..bytes_in_buffer]);
                     Ok((real_size, actual_peek_size))
                 }
-            },
+            }
         }
     }
 }
@@ -127,7 +127,7 @@ mod tests {
         let mut sut = PeekReader::new(Cursor::new(&b"abcdefgh"[..]));
 
         let mut v = [0; 10];
-        assert_eq!(sut.peek_read(v.as_mut(), 0).unwrap(), (8,0));
+        assert_eq!(sut.peek_read(v.as_mut(), 0).unwrap(), (8, 0));
         assert_eq!(v, [0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0, 0]);
     }
 

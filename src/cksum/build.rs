@@ -28,7 +28,11 @@ fn main() {
         table.push(crc_entry(num as u8) as u32);
     }
     let file = File::create(&Path::new(&out_dir).join("crc_table.rs")).unwrap();
-    write!(&file, "const CRC_TABLE: [u32; {}] = {:?};", CRC_TABLE_LEN, table).unwrap();
+    write!(
+        &file,
+        "const CRC_TABLE: [u32; {}] = {:?};",
+        CRC_TABLE_LEN, table
+    ).unwrap();
 }
 
 #[inline]

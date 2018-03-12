@@ -19,9 +19,9 @@ pub use fsext::*;
 extern crate uucore;
 use uucore::entries;
 
-use std::{fs, iter, cmp};
+use std::{cmp, fs, iter};
 use std::fs::File;
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader};
 use std::borrow::Cow;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
@@ -69,12 +69,12 @@ macro_rules! pad_and_print {
     )
 }
 macro_rules! print_adjusted {
-    ($str: ident, $left: expr, $width: expr, $padding: expr) => ({
+    ($str: ident, $left: expr, $width: expr, $padding: expr) => {
         let field_width = cmp::max($width, $str.len());
         let mut result = String::with_capacity(field_width);
         pad_and_print!(result, $str, $left, field_width, $padding);
-    });
-    ($str: ident, $left: expr, $need_prefix: expr, $prefix: expr, $width: expr, $padding: expr) => ({
+    };
+    ($str: ident, $left: expr, $need_prefix: expr, $prefix: expr, $width: expr, $padding: expr) => {
         let mut field_width = cmp::max($width, $str.len());
         let mut result = String::with_capacity(field_width + $prefix.len());
         if $need_prefix {
@@ -82,7 +82,7 @@ macro_rules! print_adjusted {
             field_width -= $prefix.len();
         }
         pad_and_print!(result, $str, $left, field_width, $padding);
-    })
+    }
 }
 
 static NAME: &'static str = "stat";
@@ -119,13 +119,16 @@ pub enum Token {
 }
 
 pub trait ScanUtil {
-    fn scan_num<F>(&self) -> Option<(F, usize)> where F: std::str::FromStr;
+    fn scan_num<F>(&self) -> Option<(F, usize)>
+    where
+        F: std::str::FromStr;
     fn scan_char(&self, radix: u32) -> Option<(char, usize)>;
 }
 
 impl ScanUtil for str {
     fn scan_num<F>(&self) -> Option<(F, usize)>
-        where F: std::str::FromStr
+    where
+        F: std::str::FromStr,
     {
         let mut chars = self.chars();
         let mut i = 0;
@@ -196,7 +199,6 @@ pub fn group_num<'a>(s: &'a str) -> Cow<'a, str> {
     res.into()
 }
 
-
 pub struct Stater {
     follow: bool,
     showfs: bool,
@@ -208,7 +210,6 @@ pub struct Stater {
 }
 
 fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32) {
-
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -299,22 +300,26 @@ fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32
         OutputType::UnsignedOct => {
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
             let extended: Cow<str> = extend_digits!(arg, min_digits);
-            print_adjusted!(extended,
-                            left_align,
-                            should_alter,
-                            prefix,
-                            width,
-                            padding_char);
+            print_adjusted!(
+                extended,
+                left_align,
+                should_alter,
+                prefix,
+                width,
+                padding_char
+            );
         }
         OutputType::UnsignedHex => {
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
             let extended: Cow<str> = extend_digits!(arg, min_digits);
-            print_adjusted!(extended,
-                            left_align,
-                            should_alter,
-                            prefix,
-                            width,
-                            padding_char);
+            print_adjusted!(
+                extended,
+                left_align,
+                should_alter,
+                prefix,
+                width,
+                padding_char
+            );
         }
         _ => unreachable!(),
     }
@@ -322,14 +327,12 @@ fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32
 
 impl Stater {
     pub fn generate_tokens(fmtstr: &str, use_printf: bool) -> Result<Vec<Token>, String> {
-
         let mut tokens = Vec::new();
         let bound = fmtstr.len();
         let chars = fmtstr.chars().collect::<Vec<char>>();
 
         let mut i = 0_usize;
         while i < bound {
-
             match chars[i] {
                 '%' => {
                     let old = i;
@@ -398,7 +401,6 @@ impl Stater {
                         precision: precision,
                         format: chars[i],
                     })
-
                 }
                 '\\' => {
                     if !use_printf {
@@ -468,18 +470,21 @@ impl Stater {
         } else {
             try!(Stater::generate_tokens(&fmtstr, use_printf))
         };
-        let default_dev_tokens = Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true), use_printf)
-            .unwrap();
+        let default_dev_tokens =
+            Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true), use_printf).unwrap();
 
         let mount_list = if showfs {
             // mount points aren't displayed when showing filesystem information
             None
         } else {
-            let reader = BufReader::new(File::open(MOUNT_INFO).expect(&format!("Failed to read {}", MOUNT_INFO)));
-            let mut mount_list = reader.lines()
-                                       .filter_map(|s| s.ok())
-                                       .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
-                                       .collect::<Vec<String>>();
+            let reader = BufReader::new(
+                File::open(MOUNT_INFO).expect(&format!("Failed to read {}", MOUNT_INFO)),
+            );
+            let mut mount_list = reader
+                .lines()
+                .filter_map(|s| s.ok())
+                .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
+                .collect::<Vec<String>>();
             // Reverse sort. The longer comes first.
             mount_list.sort_by(|a, b| b.cmp(a));
             Some(mount_list)
@@ -520,7 +525,6 @@ impl Stater {
     }
 
     fn do_stat(&self, file: &str) -> i32 {
-
         if !self.showfs {
             let result = if self.follow {
                 fs::metadata(file)
@@ -530,17 +534,22 @@ impl Stater {
             match result {
                 Ok(meta) => {
                     let ftype = meta.file_type();
-                    let tokens = if self.from_user || !(ftype.is_char_device() || ftype.is_block_device()) {
-                        &self.default_tokens
-                    } else {
-                        &self.default_dev_tokens
-                    };
+                    let tokens =
+                        if self.from_user || !(ftype.is_char_device() || ftype.is_block_device()) {
+                            &self.default_tokens
+                        } else {
+                            &self.default_dev_tokens
+                        };
 
                     for t in tokens.into_iter() {
                         match t {
                             &Token::Char(c) => print!("{}", c),
-                            &Token::Directive { flag, width, precision, format } => {
-
+                            &Token::Directive {
+                                flag,
+                                width,
+                                precision,
+                                format,
+                            } => {
                                 let arg: String;
                                 let otype: OutputType;
 
@@ -587,7 +596,8 @@ impl Stater {
                                     }
                                     // file type
                                     'F' => {
-                                        arg = pretty_filetype(meta.mode() as mode_t, meta.len()).to_owned();
+                                        arg = pretty_filetype(meta.mode() as mode_t, meta.len())
+                                            .to_owned();
                                         otype = OutputType::Str;
                                     }
                                     // group ID of owner
@@ -597,7 +607,8 @@ impl Stater {
                                     }
                                     // group name of owner
                                     'G' => {
-                                        arg = entries::gid2grp(meta.gid()).unwrap_or("UNKNOWN".to_owned());
+                                        arg = entries::gid2grp(meta.gid())
+                                            .unwrap_or("UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
                                     // number of hard links
@@ -632,7 +643,11 @@ impl Stater {
                                                     return 1;
                                                 }
                                             };
-                                            arg = format!("`{}' -> `{}'", file, dst.to_string_lossy());
+                                            arg = format!(
+                                                "`{}' -> `{}'",
+                                                file,
+                                                dst.to_string_lossy()
+                                            );
                                         } else {
                                             arg = format!("`{}'", file);
                                         }
@@ -667,7 +682,8 @@ impl Stater {
                                     }
                                     // user name of owner
                                     'U' => {
-                                        arg = entries::uid2usr(meta.uid()).unwrap_or("UNKNOWN".to_owned());
+                                        arg = entries::uid2usr(meta.uid())
+                                            .unwrap_or("UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
 
@@ -737,8 +753,12 @@ impl Stater {
                     for t in tokens.into_iter() {
                         match t {
                             &Token::Char(c) => print!("{}", c),
-                            &Token::Directive { flag, width, precision, format } => {
-
+                            &Token::Directive {
+                                flag,
+                                width,
+                                precision,
+                                format,
+                            } => {
                                 let arg: String;
                                 let otype: OutputType;
                                 match format {
@@ -824,7 +844,6 @@ impl Stater {
 
     // taken from coreutils/src/stat.c
     fn default_fmt(showfs: bool, terse: bool, dev: bool) -> String {
-
         // SELinux related format is *ignored*
 
         let mut fmtstr = String::with_capacity(36);
@@ -832,9 +851,11 @@ impl Stater {
             if terse {
                 fmtstr.push_str("%n %i %l %t %s %S %b %f %a %c %d\n");
             } else {
-                fmtstr.push_str("  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock \
-                                 size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b \
-                                 Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n");
+                fmtstr.push_str(
+                    "  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock \
+                     size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b \
+                     Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n",
+                );
             }
         } else if terse {
             fmtstr.push_str("%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n");
@@ -859,15 +880,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "version", "output version information and exit");
 
     opts.optflag("L", "dereference", "follow links");
-    opts.optflag("f",
-                 "file-system",
-                 "display file system status instead of file status");
+    opts.optflag(
+        "f",
+        "file-system",
+        "display file system status instead of file status",
+    );
     opts.optflag("t", "terse", "print the information in terse form");
 
     // Omit the unused description as they are too long
     opts.optopt("c", "format", "", "FORMAT");
     opts.optopt("", "printf", "", "FORMAT");
-
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -903,7 +925,8 @@ fn version() -> i32 {
 }
 
 fn help() -> i32 {
-    let msg = format!(r#"Usage: {} [OPTION]... FILE...
+    let msg = format!(
+        r#"Usage: {} [OPTION]... FILE...
 Display file or file system status.
 
 Mandatory arguments to long options are mandatory for short options too.
@@ -969,7 +992,8 @@ Valid format sequences for file systems:
 NOTE: your shell may have its own version of stat, which usually supersedes
 the version described here.  Please refer to your shell's documentation
 for details about the options it supports."#,
-                      NAME);
+        NAME
+    );
     println!("{}", msg);
     0
 }

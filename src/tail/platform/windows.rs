@@ -7,10 +7,10 @@
  * file that was distributed with this source code.
  */
 
-extern crate winapi;
 extern crate kernel32;
+extern crate winapi;
 
-use self::kernel32::{OpenProcess, CloseHandle, WaitForSingleObject};
+use self::kernel32::{CloseHandle, OpenProcess, WaitForSingleObject};
 use self::winapi::shared::minwindef::DWORD;
 use self::winapi::um::winbase::{WAIT_OBJECT_0, WAIT_FAILED};
 use self::winapi::um::winnt::{HANDLE, SYNCHRONIZE};
@@ -19,17 +19,18 @@ pub type Pid = DWORD;
 
 pub struct ProcessChecker {
     dead: bool,
-    handle: HANDLE
+    handle: HANDLE,
 }
 
 impl ProcessChecker {
     pub fn new(process_id: self::Pid) -> ProcessChecker {
         #[allow(non_snake_case)]
         let FALSE = 0i32;
-        let h = unsafe {
-            OpenProcess(SYNCHRONIZE, FALSE, process_id as DWORD)
-        };
-        ProcessChecker { dead: h.is_null(), handle: h }
+        let h = unsafe { OpenProcess(SYNCHRONIZE, FALSE, process_id as DWORD) };
+        ProcessChecker {
+            dead: h.is_null(),
+            handle: h,
+        }
     }
 
     pub fn is_dead(&mut self) -> bool {

@@ -1,5 +1,5 @@
 extern crate libc;
-use libc::{mode_t, S_IRGRP, S_IWGRP, S_IROTH, S_IWOTH, S_IRUSR, S_IWUSR};
+use libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 use uucore::mode;
 

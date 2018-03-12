@@ -59,7 +59,7 @@ pub fn exec() {
             Err(err) => match err.raw_os_error() {
                 Some(0) | None => crash!(1, "failed to get username"),
                 Some(_) => crash!(1, "failed to get username: {}", err),
-            }
+            },
         }
     }
 }

@@ -10,9 +10,9 @@ pub use super::uucore::libc;
 extern crate time;
 
 use self::time::Timespec;
-pub use libc::{S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFREG, S_IFIFO, S_IFLNK, S_IFSOCK, S_ISUID, S_ISGID, S_ISVTX,
-               S_IRUSR, S_IWUSR, S_IXUSR, S_IRGRP, S_IWGRP, S_IXGRP, S_IROTH, S_IWOTH, S_IXOTH, mode_t, c_int,
-               strerror};
+pub use libc::{c_int, mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT,
+               S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP,
+               S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR};
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -98,16 +98,8 @@ pub fn pretty_access(mode: mode_t) -> String {
         _ => '?',
     });
 
-    result.push(if has!(mode, S_IRUSR) {
-        'r'
-    } else {
-        '-'
-    });
-    result.push(if has!(mode, S_IWUSR) {
-        'w'
-    } else {
-        '-'
-    });
+    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISUID as mode_t) {
         if has!(mode, S_IXUSR) {
             's'
@@ -120,16 +112,8 @@ pub fn pretty_access(mode: mode_t) -> String {
         '-'
     });
 
-    result.push(if has!(mode, S_IRGRP) {
-        'r'
-    } else {
-        '-'
-    });
-    result.push(if has!(mode, S_IWGRP) {
-        'w'
-    } else {
-        '-'
-    });
+    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISGID as mode_t) {
         if has!(mode, S_IXGRP) {
             's'
@@ -142,16 +126,8 @@ pub fn pretty_access(mode: mode_t) -> String {
         '-'
     });
 
-    result.push(if has!(mode, S_IROTH) {
-        'r'
-    } else {
-        '-'
-    });
-    result.push(if has!(mode, S_IWOTH) {
-        'w'
-    } else {
-        '-'
-    });
+    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISVTX as mode_t) {
         if has!(mode, S_IXOTH) {
             't'
@@ -268,7 +244,8 @@ impl FsMeta for Sstatfs {
 }
 
 pub fn statfs<P: AsRef<Path>>(path: P) -> Result<Sstatfs, String>
-    where Vec<u8>: From<P>
+where
+    Vec<u8>: From<P>,
 {
     match CString::new(path) {
         Ok(p) => {

@@ -9,9 +9,9 @@
 // file that was distributed with this source code.
 //
 
+extern crate platform_info;
 #[macro_use]
 extern crate uucore;
-extern crate platform_info;
 
 use platform_info::*;
 

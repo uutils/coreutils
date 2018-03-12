@@ -1,6 +1,6 @@
 // https://github.com/lazy-bitfield/rust-mockstream/pull/2
 
-use std::io::{Cursor, Read, Result, Error, ErrorKind};
+use std::io::{Cursor, Error, ErrorKind, Read, Result};
 use std::error::Error as errorError;
 
 /// `FailingMockStream` mocks a stream which will fail upon read or write
@@ -56,12 +56,16 @@ impl FailingMockStream {
     /// When `read` or `write` is called, it will return an error `repeat_count` times.
     /// `kind` and `message` can be specified to define the exact error.
     pub fn new(kind: ErrorKind, message: &'static str, repeat_count: i32) -> FailingMockStream {
-        FailingMockStream { kind: kind, message: message, repeat_count: repeat_count, }
+        FailingMockStream {
+            kind: kind,
+            message: message,
+            repeat_count: repeat_count,
+        }
     }
 
     fn error(&mut self) -> Result<usize> {
         if self.repeat_count == 0 {
-            return Ok(0)
+            return Ok(0);
         } else {
             if self.repeat_count > 0 {
                 self.repeat_count -= 1;
@@ -91,8 +95,12 @@ fn test_failing_mock_stream_read() {
 #[test]
 fn test_failing_mock_stream_chain_interrupted() {
     let mut c = Cursor::new(&b"abcd"[..])
-            .chain(FailingMockStream::new(ErrorKind::Interrupted, "Interrupted", 5))
-            .chain(Cursor::new(&b"ABCD"[..]));
+        .chain(FailingMockStream::new(
+            ErrorKind::Interrupted,
+            "Interrupted",
+            5,
+        ))
+        .chain(Cursor::new(&b"ABCD"[..]));
 
     let mut v = [0; 8];
     c.read_exact(v.as_mut()).unwrap();

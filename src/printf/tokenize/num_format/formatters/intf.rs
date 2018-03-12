@@ -4,8 +4,8 @@
 use std::u64;
 use std::i64;
 use super::super::format_field::FormatField;
-use super::super::formatter::{InPrefix, FormatPrimitive, Base, Formatter, warn_incomplete_conv,
-                              get_it_at};
+use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter,
+                              InPrefix};
 
 pub struct Intf {
     a: u32,
@@ -118,15 +118,13 @@ impl Intf {
     fn get_max(fchar: char, sign: i8) -> FormatPrimitive {
         let mut fmt_prim: FormatPrimitive = Default::default();
         fmt_prim.pre_decimal = Some(String::from(match fchar {
-            'd' | 'i' => {
-                match sign {
-                    1 => "9223372036854775807",
-                    _ => {
-                        fmt_prim.prefix = Some(String::from("-"));
-                        "9223372036854775808"
-                    }
+            'd' | 'i' => match sign {
+                1 => "9223372036854775807",
+                _ => {
+                    fmt_prim.prefix = Some(String::from("-"));
+                    "9223372036854775808"
                 }
-            }
+            },
             'x' | 'X' => "ffffffffffffffff",
             'o' => "1777777777777777777777",
             'u' | _ => "18446744073709551615",
@@ -150,56 +148,50 @@ impl Intf {
     //   for u64 output, the u64 max in the output radix
     fn conv_from_segment(segment: &str, radix_in: Base, fchar: char, sign: i8) -> FormatPrimitive {
         match fchar {
-            'i' | 'd' => {
-                match i64::from_str_radix(segment, radix_in as u32) {
-                    Ok(i) => {
-                        let mut fmt_prim: FormatPrimitive = Default::default();
-                        if sign == -1 {
-                            fmt_prim.prefix = Some(String::from("-"));
-                        }
-                        fmt_prim.pre_decimal = Some(format!("{}", i));
-                        fmt_prim
+            'i' | 'd' => match i64::from_str_radix(segment, radix_in as u32) {
+                Ok(i) => {
+                    let mut fmt_prim: FormatPrimitive = Default::default();
+                    if sign == -1 {
+                        fmt_prim.prefix = Some(String::from("-"));
                     }
-                    Err(_) => Intf::get_max(fchar, sign),
+                    fmt_prim.pre_decimal = Some(format!("{}", i));
+                    fmt_prim
                 }
-            }
-            _ => {
-                match u64::from_str_radix(segment, radix_in as u32) {
-                    Ok(u) => {
-                        let mut fmt_prim: FormatPrimitive = Default::default();
-                        let u_f = if sign == -1 {
-                            u64::MAX - (u - 1)
-                        } else {
-                            u
-                        };
-                        fmt_prim.pre_decimal = Some(match fchar {
-                            'X' => format!("{:X}", u_f),
-                            'x' => format!("{:x}", u_f),
-                            'o' => format!("{:o}", u_f),
-                            _ => format!("{}", u_f),
-                        });
-                        fmt_prim
-                    }
-                    Err(_) => Intf::get_max(fchar, sign),
+                Err(_) => Intf::get_max(fchar, sign),
+            },
+            _ => match u64::from_str_radix(segment, radix_in as u32) {
+                Ok(u) => {
+                    let mut fmt_prim: FormatPrimitive = Default::default();
+                    let u_f = if sign == -1 { u64::MAX - (u - 1) } else { u };
+                    fmt_prim.pre_decimal = Some(match fchar {
+                        'X' => format!("{:X}", u_f),
+                        'x' => format!("{:x}", u_f),
+                        'o' => format!("{:o}", u_f),
+                        _ => format!("{}", u_f),
+                    });
+                    fmt_prim
                 }
-            }
+                Err(_) => Intf::get_max(fchar, sign),
+            },
         }
     }
 }
 impl Formatter for Intf {
-    fn get_primitive(&self,
-                     field: &FormatField,
-                     inprefix: &InPrefix,
-                     str_in: &str)
-                     -> Option<FormatPrimitive> {
-
+    fn get_primitive(
+        &self,
+        field: &FormatField,
+        inprefix: &InPrefix,
+        str_in: &str,
+    ) -> Option<FormatPrimitive> {
         let begin = inprefix.offset;
 
         // get information about the string. see Intf::Analyze
         // def above.
-        let convert_hints = Intf::analyze(str_in,
-                                          *field.field_char == 'i' || *field.field_char == 'd',
-                                          inprefix);
+        let convert_hints = Intf::analyze(
+            str_in,
+            *field.field_char == 'i' || *field.field_char == 'd',
+            inprefix,
+        );
         // We always will have a formatprimitive to return
         Some(if convert_hints.len_digits == 0 || convert_hints.is_zero {
             // if non-digit or end is reached before a non-zero digit
@@ -224,10 +216,12 @@ impl Formatter for Intf {
             if convert_hints.check_past_max || decr_from_max || radix_mismatch {
                 // radix of in and out is the same.
                 let segment = String::from(&str_in[begin..end]);
-                let m = Intf::conv_from_segment(&segment,
-                                                inprefix.radix_in.clone(),
-                                                *field.field_char,
-                                                inprefix.sign);
+                let m = Intf::conv_from_segment(
+                    &segment,
+                    inprefix.radix_in.clone(),
+                    *field.field_char,
+                    inprefix.sign,
+                );
                 m
             } else {
                 // otherwise just do a straight string copy.
@@ -237,7 +231,6 @@ impl Formatter for Intf {
                 // zero doesn't get a sign, and conv_from_segment
                 // creates its format primitive separately
                 if inprefix.sign == -1 && *field.field_char == 'i' {
-
                     fmt_prim.prefix = Some(String::from("-"));
                 }
                 fmt_prim.pre_decimal = Some(String::from(&str_in[begin..end]));
@@ -246,7 +239,6 @@ impl Formatter for Intf {
         } else {
             Intf::get_max(*field.field_char, inprefix.sign)
         })
-
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
         let mut finalstr: String = String::new();
@@ -274,8 +266,10 @@ impl Formatter for Intf {
                 finalstr.push_str(&pre_decimal);
             }
             None => {
-                panic!("error, format primitives provided to int, will, incidentally under \
-                        correct behavior, always have a pre_dec value.");
+                panic!(
+                    "error, format primitives provided to int, will, incidentally under \
+                     correct behavior, always have a pre_dec value."
+                );
             }
         }
         finalstr

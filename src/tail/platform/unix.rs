@@ -13,7 +13,9 @@ use std::io::Error;
 
 pub type Pid = libc::pid_t;
 
-pub struct ProcessChecker { pid: self::Pid }
+pub struct ProcessChecker {
+    pid: self::Pid,
+}
 
 impl ProcessChecker {
     pub fn new(process_id: self::Pid) -> ProcessChecker {
@@ -22,21 +24,16 @@ impl ProcessChecker {
 
     // Borrowing mutably to be aligned with Windows implementation
     pub fn is_dead(&mut self) -> bool {
-        unsafe {
-            libc::kill(self.pid, 0) != 0 && get_errno() != libc::EPERM
-        }
+        unsafe { libc::kill(self.pid, 0) != 0 && get_errno() != libc::EPERM }
     }
 }
 
 impl Drop for ProcessChecker {
-    fn drop(&mut self) {
-    }
+    fn drop(&mut self) {}
 }
 
 pub fn supports_pid_checks(pid: self::Pid) -> bool {
-    unsafe {
-        !(libc::kill(pid, 0) != 0 && get_errno() == libc::ENOSYS)
-    }
+    unsafe { !(libc::kill(pid, 0) != 0 && get_errno() == libc::ENOSYS) }
 }
 
 #[inline]

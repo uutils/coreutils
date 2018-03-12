@@ -18,8 +18,10 @@ pub struct Memo {
 }
 
 fn warn_excess_args(first_arg: &str) {
-    cli::err_msg(&format!("warning: ignoring excess arguments, starting with '{}'",
-                          first_arg));
+    cli::err_msg(&format!(
+        "warning: ignoring excess arguments, starting with '{}'",
+        first_arg
+    ));
 }
 
 impl Memo {

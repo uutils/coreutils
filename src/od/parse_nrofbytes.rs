@@ -1,4 +1,3 @@
-
 pub fn parse_number_of_bytes(s: &String) -> Result<usize, &'static str> {
     let mut start = 0;
     let mut len = s.len();
@@ -17,7 +16,7 @@ pub fn parse_number_of_bytes(s: &String) -> Result<usize, &'static str> {
         Some('b') if radix != 16 => {
             multiply = 512;
             len -= 1;
-        },
+        }
         Some('k') | Some('K') => {
             multiply = 1024;
             len -= 1;
@@ -59,8 +58,8 @@ pub fn parse_number_of_bytes(s: &String) -> Result<usize, &'static str> {
                 Some('E') => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
                 _ => return Err("parse failed"),
             }
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
     match usize::from_str_radix(&s[start..len], radix) {
@@ -120,9 +119,15 @@ fn test_parse_number_of_bytes() {
 fn test_parse_number_of_bytes_64bits() {
     assert_eq!(1099511627776, parse_number_of_bytes_str("1T").unwrap());
     assert_eq!(1125899906842624, parse_number_of_bytes_str("1P").unwrap());
-    assert_eq!(1152921504606846976, parse_number_of_bytes_str("1E").unwrap());
+    assert_eq!(
+        1152921504606846976,
+        parse_number_of_bytes_str("1E").unwrap()
+    );
 
     assert_eq!(2000000000000, parse_number_of_bytes_str("2TB").unwrap());
     assert_eq!(2000000000000000, parse_number_of_bytes_str("2PB").unwrap());
-    assert_eq!(2000000000000000000, parse_number_of_bytes_str("2EB").unwrap());
+    assert_eq!(
+        2000000000000000000,
+        parse_number_of_bytes_str("2EB").unwrap()
+    );
 }
