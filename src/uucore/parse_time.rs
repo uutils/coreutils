@@ -12,7 +12,7 @@ use std::time::Duration;
 pub fn from_str(string: &str) -> Result<Duration, String> {
     let len = string.len();
     if len == 0 {
-        return Err("empty string".to_owned())
+        return Err("empty string".to_owned());
     }
     let slice = &string[..len - 1];
     let (numstr, times) = match string.chars().next_back().unwrap() {
@@ -26,13 +26,13 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
             } else if string == "inf" || string == "infinity" {
                 ("inf", 1)
             } else {
-                return Err(format!("invalid time interval '{}'", string))
+                return Err(format!("invalid time interval '{}'", string));
             }
         }
     };
     let num = match numstr.parse::<f64>() {
         Ok(m) => m,
-        Err(e) => return Err(format!("invalid time interval '{}': {}", string, e))
+        Err(e) => return Err(format!("invalid time interval '{}': {}", string, e)),
     };
 
     const NANOS_PER_SEC: u32 = 1_000_000_000;

@@ -7,10 +7,12 @@
  * that was distributed with this source code.
  */
 
-pub static DEFAULT_SIGNAL:usize= 15;
+pub static DEFAULT_SIGNAL: usize = 15;
 
-
-pub struct Signal<'a> { pub name:&'a str, pub value: usize}
+pub struct Signal<'a> {
+    pub name: &'a str,
+    pub value: usize,
+}
 
 /*
 
@@ -26,40 +28,132 @@ Linux Programmer's Manual
 */
 
 #[cfg(target_os = "linux")]
-pub static ALL_SIGNALS:[Signal<'static>; 31] = [
-    Signal{ name: "HUP",    value:1  },
-    Signal{ name: "INT",    value:2  },
-    Signal{ name: "QUIT",   value:3  },
-    Signal{ name: "ILL",    value:4  },
-    Signal{ name: "TRAP",   value:5  },
-    Signal{ name: "ABRT",   value:6  },
-    Signal{ name: "BUS",    value:7  },
-    Signal{ name: "FPE",    value:8  },
-    Signal{ name: "KILL",   value:9  },
-    Signal{ name: "USR1",   value:10 },
-    Signal{ name: "SEGV",   value:11 },
-    Signal{ name: "USR2",   value:12 },
-    Signal{ name: "PIPE",   value:13 },
-    Signal{ name: "ALRM",   value:14 },
-    Signal{ name: "TERM",   value:15 },
-    Signal{ name: "STKFLT", value:16 },
-    Signal{ name: "CHLD",   value:17 },
-    Signal{ name: "CONT",   value:18 },
-    Signal{ name: "STOP",   value:19 },
-    Signal{ name: "TSTP",   value:20 },
-    Signal{ name: "TTIN",   value:21 },
-    Signal{ name: "TTOU",   value:22 },
-    Signal{ name: "URG",    value:23 },
-    Signal{ name: "XCPU",   value:24 },
-    Signal{ name: "XFSZ",   value:25 },
-    Signal{ name: "VTALRM", value:26 },
-    Signal{ name: "PROF",   value:27 },
-    Signal{ name: "WINCH",  value:28 },
-    Signal{ name: "POLL",   value:29 },
-    Signal{ name: "PWR",    value:30 },
-    Signal{ name: "SYS",    value:31 },
+pub static ALL_SIGNALS: [Signal<'static>; 31] = [
+    Signal {
+        name: "HUP",
+        value: 1,
+    },
+    Signal {
+        name: "INT",
+        value: 2,
+    },
+    Signal {
+        name: "QUIT",
+        value: 3,
+    },
+    Signal {
+        name: "ILL",
+        value: 4,
+    },
+    Signal {
+        name: "TRAP",
+        value: 5,
+    },
+    Signal {
+        name: "ABRT",
+        value: 6,
+    },
+    Signal {
+        name: "BUS",
+        value: 7,
+    },
+    Signal {
+        name: "FPE",
+        value: 8,
+    },
+    Signal {
+        name: "KILL",
+        value: 9,
+    },
+    Signal {
+        name: "USR1",
+        value: 10,
+    },
+    Signal {
+        name: "SEGV",
+        value: 11,
+    },
+    Signal {
+        name: "USR2",
+        value: 12,
+    },
+    Signal {
+        name: "PIPE",
+        value: 13,
+    },
+    Signal {
+        name: "ALRM",
+        value: 14,
+    },
+    Signal {
+        name: "TERM",
+        value: 15,
+    },
+    Signal {
+        name: "STKFLT",
+        value: 16,
+    },
+    Signal {
+        name: "CHLD",
+        value: 17,
+    },
+    Signal {
+        name: "CONT",
+        value: 18,
+    },
+    Signal {
+        name: "STOP",
+        value: 19,
+    },
+    Signal {
+        name: "TSTP",
+        value: 20,
+    },
+    Signal {
+        name: "TTIN",
+        value: 21,
+    },
+    Signal {
+        name: "TTOU",
+        value: 22,
+    },
+    Signal {
+        name: "URG",
+        value: 23,
+    },
+    Signal {
+        name: "XCPU",
+        value: 24,
+    },
+    Signal {
+        name: "XFSZ",
+        value: 25,
+    },
+    Signal {
+        name: "VTALRM",
+        value: 26,
+    },
+    Signal {
+        name: "PROF",
+        value: 27,
+    },
+    Signal {
+        name: "WINCH",
+        value: 28,
+    },
+    Signal {
+        name: "POLL",
+        value: 29,
+    },
+    Signal {
+        name: "PWR",
+        value: 30,
+    },
+    Signal {
+        name: "SYS",
+        value: 31,
+    },
 ];
-
 
 /*
 
@@ -103,38 +197,131 @@ No    Name         Default Action       Description
 */
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-pub static ALL_SIGNALS:[Signal<'static>; 31] = [
-    Signal{ name: "HUP",    value:1  },
-    Signal{ name: "INT",    value:2  },
-    Signal{ name: "QUIT",   value:3  },
-    Signal{ name: "ILL",    value:4  },
-    Signal{ name: "TRAP",   value:5  },
-    Signal{ name: "ABRT",   value:6  },
-    Signal{ name: "EMT",    value:7  },
-    Signal{ name: "FPE",    value:8  },
-    Signal{ name: "KILL",   value:9  },
-    Signal{ name: "BUS",    value:10 },
-    Signal{ name: "SEGV",   value:11 },
-    Signal{ name: "SYS",    value:12 },
-    Signal{ name: "PIPE",   value:13 },
-    Signal{ name: "ALRM",   value:14 },
-    Signal{ name: "TERM",   value:15 },
-    Signal{ name: "URG",    value:16 },
-    Signal{ name: "STOP",   value:17 },
-    Signal{ name: "TSTP",   value:18 },
-    Signal{ name: "CONT",   value:19 },
-    Signal{ name: "CHLD",   value:20 },
-    Signal{ name: "TTIN",   value:21 },
-    Signal{ name: "TTOU",   value:22 },
-    Signal{ name: "IO",     value:23 },
-    Signal{ name: "XCPU",   value:24 },
-    Signal{ name: "XFSZ",   value:25 },
-    Signal{ name: "VTALRM", value:26 },
-    Signal{ name: "PROF",   value:27 },
-    Signal{ name: "WINCH",  value:28 },
-    Signal{ name: "INFO",   value:29 },
-    Signal{ name: "USR1",   value:30 },
-    Signal{ name: "USR2",   value:31 },
+pub static ALL_SIGNALS: [Signal<'static>; 31] = [
+    Signal {
+        name: "HUP",
+        value: 1,
+    },
+    Signal {
+        name: "INT",
+        value: 2,
+    },
+    Signal {
+        name: "QUIT",
+        value: 3,
+    },
+    Signal {
+        name: "ILL",
+        value: 4,
+    },
+    Signal {
+        name: "TRAP",
+        value: 5,
+    },
+    Signal {
+        name: "ABRT",
+        value: 6,
+    },
+    Signal {
+        name: "EMT",
+        value: 7,
+    },
+    Signal {
+        name: "FPE",
+        value: 8,
+    },
+    Signal {
+        name: "KILL",
+        value: 9,
+    },
+    Signal {
+        name: "BUS",
+        value: 10,
+    },
+    Signal {
+        name: "SEGV",
+        value: 11,
+    },
+    Signal {
+        name: "SYS",
+        value: 12,
+    },
+    Signal {
+        name: "PIPE",
+        value: 13,
+    },
+    Signal {
+        name: "ALRM",
+        value: 14,
+    },
+    Signal {
+        name: "TERM",
+        value: 15,
+    },
+    Signal {
+        name: "URG",
+        value: 16,
+    },
+    Signal {
+        name: "STOP",
+        value: 17,
+    },
+    Signal {
+        name: "TSTP",
+        value: 18,
+    },
+    Signal {
+        name: "CONT",
+        value: 19,
+    },
+    Signal {
+        name: "CHLD",
+        value: 20,
+    },
+    Signal {
+        name: "TTIN",
+        value: 21,
+    },
+    Signal {
+        name: "TTOU",
+        value: 22,
+    },
+    Signal {
+        name: "IO",
+        value: 23,
+    },
+    Signal {
+        name: "XCPU",
+        value: 24,
+    },
+    Signal {
+        name: "XFSZ",
+        value: 25,
+    },
+    Signal {
+        name: "VTALRM",
+        value: 26,
+    },
+    Signal {
+        name: "PROF",
+        value: 27,
+    },
+    Signal {
+        name: "WINCH",
+        value: 28,
+    },
+    Signal {
+        name: "INFO",
+        value: 29,
+    },
+    Signal {
+        name: "USR1",
+        value: 30,
+    },
+    Signal {
+        name: "USR2",
+        value: 31,
+    },
 ];
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
@@ -143,7 +330,9 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     }
     for signal in &ALL_SIGNALS {
         let long_name = format!("SIG{}", signal.name);
-        if signal.name == signal_name_or_value  || (signal_name_or_value == signal.value.to_string()) || (long_name == signal_name_or_value) {
+        if signal.name == signal_name_or_value || (signal_name_or_value == signal.value.to_string())
+            || (long_name == signal_name_or_value)
+        {
             return Some(signal.value);
         }
     }

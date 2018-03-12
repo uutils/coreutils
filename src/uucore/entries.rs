@@ -27,24 +27,29 @@
 
 #[cfg(any(target_os = "freebsd", target_os = "macos"))]
 use libc::time_t;
-use libc::{uid_t, gid_t, c_char, c_int};
-use libc::{passwd, group, getpwnam, getpwuid, getgrnam, getgrgid, getgroups};
+use libc::{c_char, c_int, gid_t, uid_t};
+use libc::{getgrgid, getgrnam, getgroups, getpwnam, getpwuid, group, passwd};
 
-use ::std::ptr;
-use ::std::io::ErrorKind;
-use ::std::io::Error as IOError;
-use ::std::io::Result as IOResult;
-use ::std::ffi::{CStr, CString};
-use ::std::borrow::Cow;
+use std::ptr;
+use std::io::ErrorKind;
+use std::io::Error as IOError;
+use std::io::Result as IOResult;
+use std::ffi::{CStr, CString};
+use std::borrow::Cow;
 
 extern "C" {
-    fn getgrouplist(name: *const c_char, gid: gid_t, groups: *mut gid_t, ngroups: *mut c_int) -> c_int;
+    fn getgrouplist(
+        name: *const c_char,
+        gid: gid_t,
+        groups: *mut gid_t,
+        ngroups: *mut c_int,
+    ) -> c_int;
 }
 
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let ngroups = unsafe { getgroups(0, ptr::null_mut()) };
     if ngroups == -1 {
-        return Err(IOError::last_os_error())
+        return Err(IOError::last_os_error());
     }
     let mut groups = Vec::with_capacity(ngroups as usize);
     let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
@@ -173,7 +178,9 @@ impl Group {
 
 /// Fetch desired entry.
 pub trait Locate<K> {
-    fn locate(key: K) -> IOResult<Self> where Self: ::std::marker::Sized;
+    fn locate(key: K) -> IOResult<Self>
+    where
+        Self: ::std::marker::Sized;
 }
 
 macro_rules! f {
