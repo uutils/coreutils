@@ -46,26 +46,34 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let string = if let Some(values) = matches.values_of("STRING") {
         let mut result = values.fold(String::new(), |res, s| res + s + " ");
         result.pop();
+        result.push('\n');
         Cow::from(result)
     } else {
-        Cow::from("y")
+        Cow::from("y\n")
     };
 
-    let mut multistring = String::with_capacity(BUF_SIZE);
-    while multistring.len() < BUF_SIZE - string.len() - 1 {
-        multistring.push_str(&string);
-        multistring.push_str("\n");
-    }
+    let mut buffer = [0; BUF_SIZE];
+    let bytes = if string.len() < BUF_SIZE / 2 {
+        let mut size = 0;
+        while size < BUF_SIZE - string.len() {
+            let (_, right) = buffer.split_at_mut(size);
+            right[..string.len()].copy_from_slice(string.as_bytes());
+            size += string.len();
+        }
+        &buffer[..size]
+    } else {
+        string.as_bytes()
+    };
 
-    exec(&multistring[..]);
+    exec(bytes);
 
     0
 }
 
-pub fn exec(string: &str) {
+pub fn exec(bytes: &[u8]) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
     loop {
-        writeln!(stdout, "{}", string).unwrap();
+        stdout.write_all(bytes).unwrap();
     }
 }
