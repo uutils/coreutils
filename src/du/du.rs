@@ -91,16 +91,23 @@ fn du(mut my_stat: Stat, options: &Options, depth: usize) -> Box<DoubleEndedIter
         };
 
         for f in read.into_iter() {
-            let entry = crash_if_err!(1, f);
-            let this_stat = Stat::new(entry.path());
-            if this_stat.is_dir {
-                futures.push(du(this_stat, options, depth + 1));
-            } else {
-                my_stat.size += this_stat.size;
-                my_stat.blocks += this_stat.blocks;
-                if options.all {
-                    stats.push(this_stat);
-                }
+            match f {
+                Ok(entry) => match fs::symlink_metadata(entry.path()) {
+                    Ok(_) => {
+                        let this_stat = Stat::new(entry.path());
+                        if this_stat.is_dir {
+                            futures.push(du(this_stat, options, depth + 1));
+                        } else {
+                            my_stat.size += this_stat.size;
+                            my_stat.blocks += this_stat.blocks;
+                            if options.all {
+                                stats.push(this_stat);
+                            }
+                        }
+                    }
+                    Err(error) => show_error!("{}", error),
+                },
+                Err(error) => show_error!("{}", error),
             }
         }
     }
