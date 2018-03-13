@@ -13,7 +13,6 @@ getopts = "0.2.14"
 
 [dependencies.uucore]
 path = "../uucore"
-default-features = false
 features = ["utmpx"]
 
 [[bin]]

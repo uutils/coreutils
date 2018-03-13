@@ -8,8 +8,9 @@ build = "../../mkmain.rs"
 name = "uu_base32"
 path = "base32.rs"
 
-[dependencies]
-uucore = { path="../uucore" }
+[dependencies.uucore]
+path = "../uucore"
+features = ["encoding"]
 
 [dependencies.clippy]
 version = "0.0.143"

@@ -12,7 +12,10 @@ path = "sort.rs"
 getopts = "0.2.14"
 semver = "0.7.0"
 itertools = "0.6.0"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+features = ["fs"]
 
 [[bin]]
 name = "sort"

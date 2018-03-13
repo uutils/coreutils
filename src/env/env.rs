@@ -9,7 +9,6 @@
  */
 
 /* last synced with: env (GNU coreutils) 8.13 */
-#![allow(non_camel_case_types)]
 
 #[macro_use]
 extern crate uucore;
@@ -25,7 +24,7 @@ static LONG_HELP: &'static str = "
  A mere - implies -i. If no COMMAND, print the resulting environment
 ";
 
-struct options {
+struct Options {
     ignore_env: bool,
     null: bool,
     unsets: Vec<String>,
@@ -52,7 +51,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         )
         .optopt("u", "unset", "remove variable from the environment", "NAME");
 
-    let mut opts = Box::new(options {
+    let mut opts = Box::new(Options {
         ignore_env: false,
         null: false,
         unsets: vec![],

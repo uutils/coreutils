@@ -11,63 +11,69 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-extern crate getopts;
-
+#[macro_use]
+extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
+use clap::Arg;
+use std::borrow::Cow;
+use std::io::{self, Write};
 
-static NAME: &'static str = "yes";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+// force a re-build whenever Cargo.toml changes
+const _CARGO_TOML: &'static str = include_str!("Cargo.toml");
 
 const BUF_SIZE: usize = 8192;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
+    let app = app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true));
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
+    let matches = match app.get_matches_from_safe(args) {
         Ok(m) => m,
-        Err(f) => crash!(1, "invalid options\n{}", f),
+        Err(ref e)
+            if e.kind == clap::ErrorKind::HelpDisplayed
+                || e.kind == clap::ErrorKind::VersionDisplayed =>
+        {
+            println!("{}", e);
+            return 0;
+        }
+        Err(f) => {
+            show_error!("{}", f);
+            return 1;
+        }
     };
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!("");
-        print!(
-            "{}",
-            opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'.")
-        );
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-    let string = if matches.free.is_empty() {
-        "y".to_owned()
+
+    let string = if let Some(values) = matches.values_of("STRING") {
+        let mut result = values.fold(String::new(), |res, s| res + s + " ");
+        result.pop();
+        result.push('\n');
+        Cow::from(result)
     } else {
-        matches.free.join(" ")
+        Cow::from("y\n")
     };
 
-    let mut multistring = string.clone();
-    while multistring.len() < BUF_SIZE - string.len() - 1 {
-        multistring.push_str("\n");
-        multistring.push_str(&string);
-    }
+    let mut buffer = [0; BUF_SIZE];
+    let bytes = if string.len() < BUF_SIZE / 2 {
+        let mut size = 0;
+        while size < BUF_SIZE - string.len() {
+            let (_, right) = buffer.split_at_mut(size);
+            right[..string.len()].copy_from_slice(string.as_bytes());
+            size += string.len();
+        }
+        &buffer[..size]
+    } else {
+        string.as_bytes()
+    };
 
-    exec(&multistring[..]);
+    exec(bytes);
 
     0
 }
 
-pub fn exec(string: &str) {
+pub fn exec(bytes: &[u8]) {
+    let stdout_raw = io::stdout();
+    let mut stdout = stdout_raw.lock();
     loop {
-        println!("{}", string)
+        stdout.write_all(bytes).unwrap();
     }
 }
