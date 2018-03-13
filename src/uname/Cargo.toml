@@ -11,10 +11,7 @@ path = "uname.rs"
 [dependencies]
 clap = "2.20.0"
 platform-info = { git = "https://github.com/uutils/platform-info" }
-
-[dependencies.uucore]
-path = "../uucore"
-default-features = false
+uucore = { path = "../uucore" }
 
 [[bin]]
 name = "uname"

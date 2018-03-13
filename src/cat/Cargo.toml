@@ -10,7 +10,10 @@ path = "cat.rs"
 
 [dependencies]
 quick-error = "1.1.0"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+features = ["fs"]
 
 [target.'cfg(unix)'.dependencies]
 unix_socket = "0.5.0"

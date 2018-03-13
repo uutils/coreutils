@@ -11,10 +11,7 @@ path = "yes.rs"
 
 [dependencies]
 clap = "2.31"
-
-[dependencies.uucore]
-path = "../uucore"
-default-features = false
+uucore = { path = "../uucore" }
 
 [[bin]]
 name = "yes"

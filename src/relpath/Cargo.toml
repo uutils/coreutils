@@ -10,7 +10,10 @@ path = "relpath.rs"
 
 [dependencies]
 getopts = "0.2.14"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+features = ["fs"]
 
 [[bin]]
 name = "relpath"

@@ -12,7 +12,6 @@ path = "users.rs"
 getopts = "0.2.14"
 
 [dependencies.uucore]
-default-features = false
 features = ["utmpx"]
 path = "../uucore"
 

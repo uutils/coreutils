@@ -15,7 +15,6 @@ time = "0.1.38"
 
 [dependencies.uucore]
 path = "../uucore"
-default-features = false
 features = ["libc"]
 
 [[bin]]

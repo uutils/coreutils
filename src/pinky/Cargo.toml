@@ -10,7 +10,6 @@ path = "pinky.rs"
 
 [dependencies.uucore]
 path = "../uucore"
-default-features = false
 features = ["utmpx", "entries"]
 
 [[bin]]

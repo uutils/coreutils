@@ -8,8 +8,9 @@ build = "../../mkmain.rs"
 name = "uu_base64"
 path = "base64.rs"
 
-[dependencies]
-uucore = { path="../uucore" }
+[dependencies.uucore]
+path = "../uucore"
+features = ["encoding"]
 
 [[bin]]
 name = "base64"

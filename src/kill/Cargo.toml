@@ -10,7 +10,10 @@ path = "kill.rs"
 
 [dependencies]
 libc = "0.2.26"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+features = ["signals"]
 
 [[bin]]
 name = "kill"

@@ -11,7 +11,10 @@ path = "unexpand.rs"
 [dependencies]
 getopts = "0.2.14"
 unicode-width = "0.1.4"
-uucore = { path="../uucore" }
+
+[dependencies.uucore]
+path = "../uucore"
+features = ["utf8"]
 
 [[bin]]
 name = "unexpand"
