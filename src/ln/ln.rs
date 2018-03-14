@@ -14,7 +14,7 @@ extern crate uucore;
 
 use std::fs;
 use std::io::{stdin, BufRead, BufReader, Result};
-#[cfg(any(unix, target_os = "redox"))]
+#[cfg(unix)]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
