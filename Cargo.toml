@@ -65,7 +65,6 @@ fuchsia = [
 ]
 generic = [
   "arch",
-  "cat",
   "hashsum",
   "hostname",
   "join",
@@ -96,6 +95,7 @@ redox_generic = [
   "base32",
   "base64",
   "basename",
+  "cat",
   "cksum",
   "comm",
   "cp",
