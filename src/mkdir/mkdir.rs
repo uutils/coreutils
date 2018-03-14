@@ -135,20 +135,18 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
         show_info!("created directory '{}'", path.display());
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "redox"))]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        use std::ffi::CString;
-        use std::io::Error;
+        use fs::{Permissions, set_permissions};
+        use std::os::unix::fs::{PermissionsExt};
 
-        let directory =
-            CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
-        let mode = mode as libc::mode_t;
+        let mode = Permissions::from_mode(mode as u32);
 
-        if unsafe { libc::chmod(directory.as_ptr(), mode) } != 0 {
+        if let Err(err) = set_permissions(path, mode) {
             show_info!(
-                "{}: errno {}",
+                "{}: error {}",
                 path.display(),
-                Error::last_os_error().raw_os_error().unwrap()
+                err
             );
             return 1;
         }
