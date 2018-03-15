@@ -55,21 +55,17 @@ struct Stat {
 
 impl Stat {
     fn new(path: PathBuf) -> Result<Stat> {
-        match fs::symlink_metadata(&path) {
-            Ok(metadata) => {
-                return Ok(Stat {
-                    path: path,
-                    is_dir: metadata.is_dir(),
-                    size: metadata.len(),
-                    blocks: metadata.blocks() as u64,
-                    nlink: metadata.nlink() as u64,
-                    created: metadata.mtime() as u64,
-                    accessed: metadata.atime() as u64,
-                    modified: metadata.mtime() as u64,
-                })
-            }
-            Err(e) => Err(e),
-        }
+        let metadata = fs::symlink_metadata(&path)?;
+        Ok(Stat {
+            path: path,
+            is_dir: metadata.is_dir(),
+            size: metadata.len(),
+            blocks: metadata.blocks() as u64,
+            nlink: metadata.nlink() as u64,
+            created: metadata.mtime() as u64,
+            accessed: metadata.atime() as u64,
+            modified: metadata.mtime() as u64,
+        })
     }
 }
 
