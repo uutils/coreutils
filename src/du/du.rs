@@ -16,7 +16,7 @@ extern crate uucore;
 
 use std::fs;
 use std::iter;
-use std::io::{stderr, Write};
+use std::io::{stderr, Result, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use time::Timespec;
@@ -54,9 +54,9 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf) -> Stat {
-        let metadata = safe_unwrap!(fs::symlink_metadata(&path));
-        Stat {
+    fn new(path: PathBuf) -> Result<Stat> {
+        let metadata = fs::symlink_metadata(&path)?;
+        Ok(Stat {
             path: path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -65,7 +65,7 @@ impl Stat {
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
-        }
+        })
     }
 }
 
@@ -91,16 +91,22 @@ fn du(mut my_stat: Stat, options: &Options, depth: usize) -> Box<DoubleEndedIter
         };
 
         for f in read.into_iter() {
-            let entry = crash_if_err!(1, f);
-            let this_stat = Stat::new(entry.path());
-            if this_stat.is_dir {
-                futures.push(du(this_stat, options, depth + 1));
-            } else {
-                my_stat.size += this_stat.size;
-                my_stat.blocks += this_stat.blocks;
-                if options.all {
-                    stats.push(this_stat);
-                }
+            match f {
+                Ok(entry) => match Stat::new(entry.path()) {
+                    Ok(this_stat) => {
+                        if this_stat.is_dir {
+                            futures.push(du(this_stat, options, depth + 1));
+                        } else {
+                            my_stat.size += this_stat.size;
+                            my_stat.blocks += this_stat.blocks;
+                            if options.all {
+                                stats.push(this_stat);
+                            }
+                        }
+                    }
+                    Err(error) => show_error!("{}", error),
+                },
+                Err(error) => show_error!("{}", error),
             }
         }
     }
@@ -327,67 +333,72 @@ Try '{} --help' for more information.",
     let mut grand_total = 0;
     for path_str in strs.into_iter() {
         let path = PathBuf::from(path_str);
-        let iter = du(Stat::new(path), &options, 0).into_iter();
-        let (_, len) = iter.size_hint();
-        let len = len.unwrap();
-        for (index, stat) in iter.enumerate() {
-            let size = if matches.opt_present("apparent-size") {
-                stat.nlink * stat.size
-            } else {
-                // C's stat is such that each block is assume to be 512 bytes
-                // See: http://linux.die.net/man/2/stat
-                stat.blocks * 512
-            };
-            if matches.opt_present("time") {
-                let tm = {
-                    let (secs, nsecs) = {
-                        let time = match matches.opt_str("time") {
-                            Some(s) => match &s[..] {
-                                "accessed" => stat.accessed,
-                                "created" => stat.created,
-                                "modified" => stat.modified,
-                                _ => {
-                                    show_error!(
-                                        "invalid argument 'modified' for '--time'
+        match Stat::new(path) {
+            Ok(stat) => {
+                let iter = du(stat, &options, 0).into_iter();
+                let (_, len) = iter.size_hint();
+                let len = len.unwrap();
+                for (index, stat) in iter.enumerate() {
+                    let size = if matches.opt_present("apparent-size") {
+                        stat.nlink * stat.size
+                    } else {
+                        // C's stat is such that each block is assume to be 512 bytes
+                        // See: http://linux.die.net/man/2/stat
+                        stat.blocks * 512
+                    };
+                    if matches.opt_present("time") {
+                        let tm = {
+                            let (secs, nsecs) = {
+                                let time = match matches.opt_str("time") {
+                                    Some(s) => match &s[..] {
+                                        "accessed" => stat.accessed,
+                                        "created" => stat.created,
+                                        "modified" => stat.modified,
+                                        _ => {
+                                            show_error!(
+                                                "invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
     Try '{} --help' for more information.",
-                                        NAME
-                                    );
-                                    return 1;
-                                }
-                            },
-                            None => stat.modified,
+                                                NAME
+                                            );
+                                            return 1;
+                                        }
+                                    },
+                                    None => stat.modified,
+                                };
+                                ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
+                            };
+                            time::at(Timespec::new(secs, nsecs))
                         };
-                        ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
-                    };
-                    time::at(Timespec::new(secs, nsecs))
-                };
-                if !summarize || (summarize && index == len - 1) {
-                    let time_str = tm.strftime(time_format_str).unwrap();
-                    print!(
-                        "{}\t{}\t{}{}",
-                        convert_size(size),
-                        time_str,
-                        stat.path.display(),
-                        line_separator
-                    );
-                }
-            } else {
-                if !summarize || (summarize && index == len - 1) {
-                    print!(
-                        "{}\t{}{}",
-                        convert_size(size),
-                        stat.path.display(),
-                        line_separator
-                    );
+                        if !summarize || (summarize && index == len - 1) {
+                            let time_str = tm.strftime(time_format_str).unwrap();
+                            print!(
+                                "{}\t{}\t{}{}",
+                                convert_size(size),
+                                time_str,
+                                stat.path.display(),
+                                line_separator
+                            );
+                        }
+                    } else {
+                        if !summarize || (summarize && index == len - 1) {
+                            print!(
+                                "{}\t{}{}",
+                                convert_size(size),
+                                stat.path.display(),
+                                line_separator
+                            );
+                        }
+                    }
+                    if options.total && index == (len - 1) {
+                        // The last element will be the total size of the the path under
+                        // path_str.  We add it to the grand total.
+                        grand_total += size;
+                    }
                 }
             }
-            if options.total && index == (len - 1) {
-                // The last element will be the total size of the the path under
-                // path_str.  We add it to the grand total.
-                grand_total += size;
-            }
+            Err(error) => show_error!("{}", error),
         }
     }
 
