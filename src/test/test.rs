@@ -349,8 +349,8 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 
     let path = OsStr::from_bytes(path);
 
-    static S_ISUID: u32 = 0o4000;
-    static S_ISGID: u32 = 0o2000;
+    const S_ISUID: u32 = 0o4000;
+    const S_ISGID: u32 = 0o2000;
 
     enum Permission {
         Read = 0o4,
