@@ -374,16 +374,13 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         }
     };
 
-    if cond == PathCondition::SymLink {
-        if let Ok(metadata) = fs::symlink_metadata(path) {
-            if metadata.file_type().is_symlink() {
-                return true;
-            }
-        }
-        return false;
-    }
+    let metadata = if cond == PathCondition::SymLink {
+        fs::symlink_metadata(path)
+    } else {
+        fs::metadata(path)
+    };
 
-    let metadata = match fs::metadata(path) {
+    let metadata = match metadata {
         Ok(metadata) => metadata,
         Err(_) => { return false; }
     };
@@ -397,7 +394,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         PathCondition::Exists => true,
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIDFlag => metadata.mode() & S_ISGID != 0,
-        PathCondition::SymLink => true,
+        PathCondition::SymLink => metadata.file_type().is_symlink(),
         PathCondition::FIFO => file_type.is_fifo(),
         PathCondition::Readable => perm(metadata, Permission::Read),
         PathCondition::Socket => file_type.is_socket(),
