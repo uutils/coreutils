@@ -71,7 +71,6 @@ generic = [
   "shred",
   "sync",
   "tail",
-  "test",
   "whoami",
   "redox_generic"
 ]
@@ -131,6 +130,7 @@ redox_generic = [
   "sum",
   "tac",
   "tee",
+  "test",
   "tr",
   "true",
   "truncate",

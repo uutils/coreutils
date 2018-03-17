@@ -1499,6 +1499,7 @@ name = "test"
 version = "0.0.1"
 dependencies = [
  "libc 0.2.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "redox_syscall 0.1.37 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
