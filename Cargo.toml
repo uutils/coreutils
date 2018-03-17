@@ -68,10 +68,8 @@ generic = [
   "hostname",
   "more",
   "nproc",
-  "shred",
   "sync",
   "tail",
-  "test",
   "whoami",
   "redox_generic"
 ]
@@ -124,6 +122,7 @@ redox_generic = [
   "rm",
   "rmdir",
   "seq",
+  "shred",
   "shuf",
   "sleep",
   "sort",
@@ -131,6 +130,7 @@ redox_generic = [
   "sum",
   "tac",
   "tee",
+  "test",
   "tr",
   "true",
   "truncate",

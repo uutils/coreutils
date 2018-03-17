@@ -10,6 +10,8 @@
  */
 
 extern crate libc;
+#[cfg(target_os = "redox")]
+extern crate syscall;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -142,11 +144,15 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
 }
 
 fn isatty(fd: &[u8]) -> bool {
-    use libc::isatty;
     from_utf8(fd)
         .ok()
         .and_then(|s| s.parse().ok())
-        .map_or(false, |i| unsafe { isatty(i) == 1 })
+        .map_or(false, |i| {
+            #[cfg(not(target_os = "redox"))]
+            unsafe { libc::isatty(i) == 1 }
+            #[cfg(target_os = "redox")]
+            syscall::dup(i, b"termios").map(syscall::close).is_ok()
+        })
 }
 
 fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
@@ -336,60 +342,66 @@ enum PathCondition {
 
 #[cfg(not(windows))]
 fn path(path: &[u8], cond: PathCondition) -> bool {
-    use libc::{lstat, stat, S_IFBLK, S_IFCHR, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG};
-    use libc::{mode_t, S_IFIFO};
-    use std::ffi::CString;
+    use std::os::unix::fs::{MetadataExt, FileTypeExt};
+    use std::os::unix::ffi::OsStrExt;
+    use std::fs::{self, Metadata};
+    use std::ffi::OsStr;
 
-    static S_ISUID: mode_t = 0o4000;
-    static S_ISGID: mode_t = 0o2000;
-    static S_IFSOCK: mode_t = 0o140000;
+    let path = OsStr::from_bytes(path);
+
+    const S_ISUID: u32 = 0o4000;
+    const S_ISGID: u32 = 0o2000;
 
     enum Permission {
         Read = 0o4,
         Write = 0o2,
         Execute = 0o1,
     }
-    let perm = |stat: stat, p: Permission| {
-        use libc::{getgid, getuid};
-        let (uid, gid) = unsafe { (getuid(), getgid()) };
-        if uid == stat.st_uid {
-            stat.st_mode & ((p as mode_t) << 6) != 0
-        } else if gid == stat.st_gid {
-            stat.st_mode & ((p as mode_t) << 3) != 0
+
+    let perm = |metadata: Metadata, p: Permission| {
+        #[cfg(not(target_os = "redox"))]
+        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        #[cfg(target_os = "redox")]
+        let (uid, gid) = (syscall::getuid().unwrap() as u32,
+                          syscall::getgid().unwrap() as u32);
+
+        if uid == metadata.uid() {
+            metadata.mode() & ((p as u32) << 6) != 0
+        } else if gid == metadata.gid() {
+            metadata.mode() & ((p as u32) << 3) != 0
         } else {
-            stat.st_mode & ((p as mode_t)) != 0
+            metadata.mode() & ((p as u32)) != 0
         }
     };
 
-    let path = CString::new(path).unwrap();
-    let mut stat = unsafe { std::mem::zeroed() };
-    if cond == PathCondition::SymLink {
-        if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {
-            if stat.st_mode & S_IFMT == S_IFLNK {
-                return true;
-            }
-        }
-        return false;
-    }
-    if unsafe { libc::stat(path.as_ptr(), &mut stat) } != 0 {
-        return false;
-    }
-    let file_type = stat.st_mode & S_IFMT;
+    let metadata = if cond == PathCondition::SymLink {
+        fs::symlink_metadata(path)
+    } else {
+        fs::metadata(path)
+    };
+
+    let metadata = match metadata {
+        Ok(metadata) => metadata,
+        Err(_) => { return false; }
+    };
+
+    let file_type = metadata.file_type();
+
     match cond {
-        PathCondition::BlockSpecial => file_type == S_IFBLK,
-        PathCondition::CharacterSpecial => file_type == S_IFCHR,
-        PathCondition::Directory => file_type == S_IFDIR,
+        PathCondition::BlockSpecial => file_type.is_block_device(),
+        PathCondition::CharacterSpecial => file_type.is_char_device(),
+        PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
-        PathCondition::Regular => file_type == S_IFREG,
-        PathCondition::GroupIDFlag => stat.st_mode & S_ISGID != 0,
-        PathCondition::SymLink => true,
-        PathCondition::FIFO => file_type == S_IFIFO,
-        PathCondition::Readable => perm(stat, Permission::Read),
-        PathCondition::Socket => file_type == S_IFSOCK,
-        PathCondition::NonEmpty => stat.st_size > 0,
-        PathCondition::UserIDFlag => stat.st_mode & S_ISUID != 0,
-        PathCondition::Writable => perm(stat, Permission::Write),
-        PathCondition::Executable => perm(stat, Permission::Execute),
+        PathCondition::Regular => file_type.is_file(),
+        PathCondition::GroupIDFlag => metadata.mode() & S_ISGID != 0,
+        PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::FIFO => file_type.is_fifo(),
+        PathCondition::Readable => perm(metadata, Permission::Read),
+        PathCondition::Socket => file_type.is_socket(),
+        PathCondition::NonEmpty => metadata.size() > 0,
+        PathCondition::UserIDFlag => metadata.mode() & S_ISUID != 0,
+        PathCondition::Writable => perm(metadata, Permission::Write),
+        PathCondition::Executable => perm(metadata, Permission::Execute),
     }
 }
 
