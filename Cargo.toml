@@ -68,7 +68,6 @@ generic = [
   "hostname",
   "nproc",
   "sync",
-  "tail",
   "whoami",
   "redox_generic"
 ]
@@ -129,6 +128,7 @@ redox_generic = [
   "split",
   "sum",
   "tac",
+  "tail",
   "tee",
   "test",
   "tr",

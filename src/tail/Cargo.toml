@@ -15,6 +15,9 @@ libc = "0.2.26"
 winapi = "0.3"
 uucore = { path="../uucore" }
 
+[target.'cfg(target_os = "redox")'.dependencies]
+redox_syscall = "0.1"
+
 [[bin]]
 name = "tail"
 path = "../../uumain.rs"
