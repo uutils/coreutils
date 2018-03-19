@@ -142,6 +142,8 @@ redox_generic = [
 ]
 redox = [
   "uname",
+  "chmod",
+  "install",
   "redox_generic"
 ]
 test_unimplemented = []
