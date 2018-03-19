@@ -12,6 +12,10 @@ path = "more.rs"
 getopts = "0.2.14"
 uucore = { path="../uucore" }
 
+[target.'cfg(target_os = "redox")'.dependencies]
+redox_termios = "0.1"
+redox_syscall = "0.1"
+
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = "0.8.1"
 

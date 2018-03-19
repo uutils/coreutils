@@ -23,6 +23,11 @@ extern crate nix;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::termios;
 
+#[cfg(target_os = "redox")]
+extern crate redox_termios;
+#[cfg(target_os = "redox")]
+extern crate syscall;
+
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
     More,
@@ -96,6 +101,18 @@ fn setup_term() -> usize {
     0
 }
 
+#[cfg(target_os = "redox")]
+fn setup_term() -> redox_termios::Termios {
+    let mut term = redox_termios::Termios::default();
+    let fd = syscall::dup(0, b"termios").unwrap();
+    syscall::read(fd, &mut term).unwrap();
+    term.c_lflag &= !redox_termios::ICANON;
+    term.c_lflag &= !redox_termios::ECHO;
+    syscall::write(fd, &term).unwrap();
+    let _ = syscall::close(fd);
+    term
+}
+
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn reset_term(term: &mut termios::Termios) {
     term.c_lflag.insert(termios::ICANON);
@@ -106,6 +123,16 @@ fn reset_term(term: &mut termios::Termios) {
 #[cfg(any(windows, target_os = "fuchsia"))]
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
+
+#[cfg(any(target_os = "redox"))]
+fn reset_term(term: &mut redox_termios::Termios) {
+    let fd = syscall::dup(0, b"termios").unwrap();
+    syscall::read(fd, term).unwrap();
+    term.c_lflag |= redox_termios::ICANON;
+    term.c_lflag |= redox_termios::ECHO;
+    syscall::write(fd, &term).unwrap();
+    let _ = syscall::close(fd);
+}
 
 fn more(matches: getopts::Matches) {
     let files = matches.free;
