@@ -47,10 +47,22 @@ fn test_du_soft_link() {
     assert_eq!(result.stdout, "32\tsubdir\n");
 }
 
+#[test]
+fn test_du_hard_link() {
+    let ts = TestScenario::new("du");
+
+    let link = ts.cmd("ln").arg(SUB_FILE).arg(SUB_LINK).run();
+    assert!(link.success);
+
+    let result = ts.ucmd().arg(SUB_DIR).run();
+    assert!(result.success);
+    assert_eq!(result.stderr, "");
+    // We do not double count hard links as the inodes are identicle
+    assert_eq!(result.stdout, "24\tsubdir\n");
+}
+
 // todo:
 // du on file with no permissions
-// du on soft link
-// du on hard link
 // du on multi dir with '-d'
 //
 /*

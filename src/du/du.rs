@@ -19,6 +19,7 @@ use std::iter;
 use std::io::{stderr, Result, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+use std::collections::HashSet;
 use time::Timespec;
 
 const NAME: &'static str = "du";
@@ -48,6 +49,7 @@ struct Stat {
     size: u64,
     blocks: u64,
     nlink: u64,
+    inode: u64,
     created: u64,
     accessed: u64,
     modified: u64,
@@ -62,6 +64,7 @@ impl Stat {
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
             nlink: metadata.nlink() as u64,
+            inode: metadata.ino() as u64,
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
@@ -81,7 +84,12 @@ fn get_default_blocks() -> u64 {
 
 // this takes `my_stat` to avoid having to stat files multiple times.
 // XXX: this should use the impl Trait return type when it is stabilized
-fn du(mut my_stat: Stat, options: &Options, depth: usize) -> Box<DoubleEndedIterator<Item = Stat>> {
+fn du(
+    mut my_stat: Stat,
+    options: &Options,
+    depth: usize,
+    inodes: &mut HashSet<u64>,
+) -> Box<DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
 
@@ -105,8 +113,12 @@ fn du(mut my_stat: Stat, options: &Options, depth: usize) -> Box<DoubleEndedIter
                 Ok(entry) => match Stat::new(entry.path()) {
                     Ok(this_stat) => {
                         if this_stat.is_dir {
-                            futures.push(du(this_stat, options, depth + 1));
+                            futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
+                            if inodes.contains(&this_stat.inode) {
+                                continue;
+                            }
+                            inodes.insert(this_stat.inode);
                             my_stat.size += this_stat.size;
                             my_stat.blocks += this_stat.blocks;
                             if options.all {
@@ -345,7 +357,9 @@ Try '{} --help' for more information.",
         let path = PathBuf::from(&path_str);
         match Stat::new(path) {
             Ok(stat) => {
-                let iter = du(stat, &options, 0).into_iter();
+                let mut inodes: HashSet<u64> = HashSet::new();
+
+                let iter = du(stat, &options, 0, &mut inodes).into_iter();
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
