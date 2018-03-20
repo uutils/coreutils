@@ -27,7 +27,7 @@ const LONG_HELP: &'static str = "
  Display  values  are  in  units  of  the  first  available  SIZE from
  --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
  ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
- POSIXLY_CORRECT is set).
+ POSIXLY_CORRECT is set or if OS is Apple).
 
  SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
  Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
@@ -67,6 +67,16 @@ impl Stat {
             modified: metadata.mtime() as u64,
         })
     }
+}
+
+#[cfg(target_os = "macos")]
+fn get_default_blocks() -> u64 {
+    512
+}
+
+#[cfg(not(target_os = "macos"))]
+fn get_default_blocks() -> u64 {
+    1024
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
@@ -285,7 +295,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             };
             number * multiple
         }
-        None => 1024,
+        None => get_default_blocks(),
     };
 
     let convert_size = |size: u64| -> String {
@@ -332,7 +342,7 @@ Try '{} --help' for more information.",
 
     let mut grand_total = 0;
     for path_str in strs.into_iter() {
-        let path = PathBuf::from(path_str);
+        let path = PathBuf::from(&path_str);
         match Stat::new(path) {
             Ok(stat) => {
                 let iter = du(stat, &options, 0).into_iter();
@@ -398,7 +408,9 @@ Try '{} --help' for more information.",
                     }
                 }
             }
-            Err(error) => show_error!("{}", error),
+            Err(_) => {
+                show_info!("{}: {}", path_str, "No such file or directory");
+            }
         }
     }
 
