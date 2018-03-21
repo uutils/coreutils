@@ -8,15 +8,27 @@ static SUB_LINK: &str = "subdir/links/sublink.txt";
 #[test]
 fn test_du_basics() {
     let (_at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.run();
+    assert!(result.success);
+    assert_eq!(result.stderr, "");
+}
+#[cfg(target_os = "macos")]
+fn _du_basics(s: String) {
     let answer = "32\t./subdir
 8\t./subdir/deeper
 24\t./subdir/links
 40\t./
 ";
-    let result = ucmd.run();
-    assert!(result.success);
-    assert_eq!(result.stderr, "");
-    assert_eq!(result.stdout, answer);
+    assert_eq!(s, answer);
+}
+#[cfg(not(target_os = "macos"))]
+fn _du_basics(s: String) {
+    let answer = "28\t./subdir
+8\t./subdir/deeper
+16\t./subdir/links
+36\t./
+";
+    assert_eq!(s, answer);
 }
 
 #[test]
@@ -26,7 +38,16 @@ fn test_du_basics_subdir() {
     let result = ucmd.arg(SUB_DIR).run();
     assert!(result.success);
     assert_eq!(result.stderr, "");
-    assert_eq!(result.stdout, "8\tsubdir/deeper\n");
+    _du_basics_subdir(result.stdout);
+}
+
+#[cfg(target_os = "macos")]
+fn _du_basics_subdir(s: String) {
+    assert_eq!(s, "8\tsubdir/deeper\n");
+}
+#[cfg(not(target_os = "macos"))]
+fn _du_basics_subdir(s: String) {
+    assert_eq!(s, "8\tsubdir/deeper\n");
 }
 
 #[test]
@@ -48,7 +69,16 @@ fn test_du_soft_link() {
     let result = ts.ucmd().arg(SUB_DIR_LINKS).run();
     assert!(result.success);
     assert_eq!(result.stderr, "");
-    assert_eq!(result.stdout, "32\tsubdir/links\n");
+    _du_soft_link(result.stdout);
+}
+
+#[cfg(target_os = "macos")]
+fn _du_soft_link(s: String) {
+    assert_eq!(s, "32\tsubdir/links\n");
+}
+#[cfg(not(target_os = "macos"))]
+fn _du_soft_link(s: String) {
+    assert_eq!(s, "16\tsubdir/links\n");
 }
 
 #[test]
@@ -62,7 +92,16 @@ fn test_du_hard_link() {
     assert!(result.success);
     assert_eq!(result.stderr, "");
     // We do not double count hard links as the inodes are identicle
-    assert_eq!(result.stdout, "24\tsubdir/links\n");
+    _du_hard_link(result.stdout);
+}
+
+#[cfg(target_os = "macos")]
+fn _du_hard_link(s: String) {
+    assert_eq!(s, "24\tsubdir/links\n")
+}
+#[cfg(not(target_os = "macos"))]
+fn _du_hard_link(s: String) {
+    assert_eq!(s, "16\tsubdir/links\n");
 }
 
 #[test]
@@ -72,5 +111,14 @@ fn test_du_d_flag() {
     let result = ts.ucmd().arg("-d").arg("1").run();
     assert!(result.success);
     assert_eq!(result.stderr, "");
-    assert_eq!(result.stdout, "32\t./subdir\n40\t./\n");
+    _du_d_flag(result.stdout);
+}
+
+#[cfg(target_os = "macos")]
+fn _du_d_flag(s: String) {
+    assert_eq!(s, "32\t./subdir\n40\t./\n");
+}
+#[cfg(not(target_os = "macos"))]
+fn _du_d_flag(s: String) {
+    assert_eq!(s, "28\t./subdir\n36\t./\n");
 }
