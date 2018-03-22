@@ -55,21 +55,31 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let mut buffer = [0; BUF_SIZE];
-    let bytes = if string.len() < BUF_SIZE / 2 {
-        let mut size = 0;
-        while size < BUF_SIZE - string.len() {
-            let (_, right) = buffer.split_at_mut(size);
-            right[..string.len()].copy_from_slice(string.as_bytes());
-            size += string.len();
-        }
-        &buffer[..size]
-    } else {
-        string.as_bytes()
-    };
+    let bytes = prepare_buffer(&string, &mut buffer);
 
     exec(bytes);
 
     0
+}
+
+#[cfg(not(feature = "latency"))]
+fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {
+    if input.len() < BUF_SIZE / 2 {
+        let mut size = 0;
+        while size < BUF_SIZE - input.len() {
+            let (_, right) = buffer.split_at_mut(size);
+            right[..input.len()].copy_from_slice(input.as_bytes());
+            size += input.len();
+        }
+        &buffer[..size]
+    } else {
+        input.as_bytes()
+    }
+}
+
+#[cfg(feature = "latency")]
+fn prepare_buffer<'a>(input: &'a str, _buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {
+    input.as_bytes()
 }
 
 pub fn exec(bytes: &[u8]) {
