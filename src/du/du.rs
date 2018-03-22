@@ -34,6 +34,9 @@ const LONG_HELP: &'static str = "
  ers of 1000).
 ";
 
+// TODO: Suport Z & Y (currently limited by size of u64)
+static UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
+
 struct Options {
     all: bool,
     program_name: String,
@@ -231,17 +234,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         matches.free.clone()
     };
 
-    let mb = if matches.opt_present("si") {
-        1000 * 1000
-    } else {
-        1024 * 1024
-    };
-    let kb = if matches.opt_present("si") {
-        1000
-    } else {
-        1024
-    };
-
     let block_size = match matches.opt_str("block-size") {
         Some(s) => {
             let mut found_number = false;
@@ -289,18 +281,24 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let convert_size = |size: u64| -> String {
+        let multiplier: u64 = if matches.opt_present("si") {
+            1000
+        } else {
+            1024
+        };
+
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            if size >= mb {
-                format!("{:.1}M", (size as f64) / (mb as f64))
-            } else if size >= kb {
-                format!("{:.1}K", (size as f64) / (kb as f64))
-            } else {
-                format!("{}B", size)
+            for &(unit, power) in &UNITS {
+                let limit = multiplier.pow(power);
+                if size >= limit {
+                    return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
+                }
             }
+            return format!("{}B", size);
         } else if matches.opt_present("k") {
-            format!("{}", ((size as f64) / (kb as f64)).ceil())
+            format!("{}", ((size as f64) / (multiplier as f64)).ceil())
         } else if matches.opt_present("m") {
-            format!("{}", ((size as f64) / (mb as f64)).ceil())
+            format!("{}", ((size as f64) / (multiplier.pow(2) as f64)).ceil())
         } else {
             format!("{}", ((size as f64) / (block_size as f64)).ceil())
         }
