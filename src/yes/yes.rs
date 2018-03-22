@@ -23,7 +23,9 @@ use std::io::{self, Write};
 // force a re-build whenever Cargo.toml changes
 const _CARGO_TOML: &'static str = include_str!("Cargo.toml");
 
-const BUF_SIZE: usize = 8192;
+// it's possible that using a smaller or larger buffer might provide better performance on some
+// systems, but honestly this is good enough
+const BUF_SIZE: usize = 16 * 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let app = app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true));
