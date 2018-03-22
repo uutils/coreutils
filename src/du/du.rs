@@ -28,7 +28,7 @@ const LONG_HELP: &'static str = "
  Display  values  are  in  units  of  the  first  available  SIZE from
  --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
  ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
- POSIXLY_CORRECT is set or if OS is Apple).
+ POSIXLY_CORRECT is set).
 
  SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
  Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
@@ -72,12 +72,6 @@ impl Stat {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn get_default_blocks() -> u64 {
-    512
-}
-
-#[cfg(not(target_os = "macos"))]
 fn get_default_blocks() -> u64 {
     1024
 }
@@ -423,7 +417,7 @@ Try '{} --help' for more information.",
                 }
             }
             Err(_) => {
-                show_info!("{}: {}", path_str, "No such file or directory");
+                show_error!("{}: {}", path_str, "No such file or directory");
             }
         }
     }

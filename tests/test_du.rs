@@ -1,9 +1,9 @@
 use common::util::*;
 
-static SUB_DIR: &str = "subdir/deeper";
-static SUB_DIR_LINKS: &str = "subdir/links";
-static SUB_FILE: &str = "subdir/links/subwords.txt";
-static SUB_LINK: &str = "subdir/links/sublink.txt";
+const SUB_DIR: &str = "subdir/deeper";
+const SUB_DIR_LINKS: &str = "subdir/links";
+const SUB_FILE: &str = "subdir/links/subwords.txt";
+const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
 fn test_du_basics() {
@@ -43,7 +43,7 @@ fn test_du_basics_subdir() {
 
 #[cfg(target_os = "macos")]
 fn _du_basics_subdir(s: String) {
-    assert_eq!(s, "8\tsubdir/deeper\n");
+    assert_eq!(s, "4\tsubdir/deeper\n");
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_basics_subdir(s: String) {
@@ -56,7 +56,10 @@ fn test_du_basics_bad_name() {
 
     let result = ucmd.arg("bad_name").run();
     assert_eq!(result.stdout, "");
-    assert_eq!(result.stderr, "du: bad_name: No such file or directory\n");
+    assert_eq!(
+        result.stderr,
+        "du: error: bad_name: No such file or directory\n"
+    );
 }
 
 #[test]
@@ -74,7 +77,7 @@ fn test_du_soft_link() {
 
 #[cfg(target_os = "macos")]
 fn _du_soft_link(s: String) {
-    assert_eq!(s, "32\tsubdir/links\n");
+    assert_eq!(s, "16\tsubdir/links\n");
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_soft_link(s: String) {
@@ -91,13 +94,13 @@ fn test_du_hard_link() {
     let result = ts.ucmd().arg(SUB_DIR_LINKS).run();
     assert!(result.success);
     assert_eq!(result.stderr, "");
-    // We do not double count hard links as the inodes are identicle
+    // We do not double count hard links as the inodes are identical
     _du_hard_link(result.stdout);
 }
 
 #[cfg(target_os = "macos")]
 fn _du_hard_link(s: String) {
-    assert_eq!(s, "24\tsubdir/links\n")
+    assert_eq!(s, "12\tsubdir/links\n")
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_hard_link(s: String) {
@@ -116,7 +119,7 @@ fn test_du_d_flag() {
 
 #[cfg(target_os = "macos")]
 fn _du_d_flag(s: String) {
-    assert_eq!(s, "32\t./subdir\n40\t./\n");
+    assert_eq!(s, "16\t./subdir\n20\t./\n");
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_d_flag(s: String) {
