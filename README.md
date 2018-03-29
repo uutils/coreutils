@@ -35,9 +35,7 @@ Requirements
 ### Rust Version ###
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.22.0`, but `1.20.0` is
-known to work as well (test failures when compiling with `1.20.0` are due to the tests
-themselves being broken by a change in the compiler).
+The current oldest supported version of the Rust compiler is `1.22.0`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
