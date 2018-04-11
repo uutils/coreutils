@@ -207,3 +207,38 @@ fn wrong_line_order() {
         .arg("fields_4.txt")
         .fails().stderr_is("fields_4.txt:5: is not sorted");
 }
+
+#[test]
+fn headers() {
+    new_ucmd!()
+        .arg("header_1.txt")
+        .arg("header_2.txt")
+        .arg("--header")
+        .succeeds().stdout_only_fixture("header.expected");
+}
+
+#[test]
+fn headers_autoformat() {
+    new_ucmd!()
+        .arg("header_1.txt")
+        .arg("header_2.txt")
+        .arg("--header")
+        .arg("-o")
+        .arg("auto")
+        .succeeds().stdout_only_fixture("header_autoformat.expected");
+}
+
+#[test]
+fn single_file_with_header() {
+    new_ucmd!()
+        .arg("capitalized.txt")
+        .arg("empty.txt")
+        .arg("--header")
+        .succeeds().stdout_is("A 1");
+
+    new_ucmd!()
+        .arg("empty.txt")
+        .arg("capitalized.txt")
+        .arg("--header")
+        .succeeds().stdout_is("A 1");
+}

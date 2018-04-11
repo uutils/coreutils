@@ -53,6 +53,7 @@ struct Settings {
     format: Vec<Spec>,
     empty: String,
     check_order: CheckOrder,
+    headers: bool,
 }
 
 impl Default for Settings {
@@ -67,6 +68,7 @@ impl Default for Settings {
             format: vec![],
             empty: String::new(),
             check_order: CheckOrder::Default,
+            headers: false,
         }
     }
 }
@@ -256,13 +258,10 @@ impl<'a> State<'a> {
     /// Skip the current unpaired line.
     fn skip_line(&mut self, input: &Input, repr: &Repr) {
         if self.print_unpaired {
-            self.print_unpaired_line(&self.seq[0], repr);
+            self.print_first_line(repr);
         }
 
-        match self.next_line(input) {
-            Some(line) => self.seq[0] = line,
-            None => self.seq.clear(),
-        }
+        self.reset_next_line(input);
     }
 
     /// Keep reading line sequence until the key does not change, return
@@ -283,6 +282,19 @@ impl<'a> State<'a> {
         }
 
         return None;
+    }
+
+    /// Print lines in the buffers as headers.
+    fn print_headers(&self, other: &State, repr: &Repr) {
+        if self.has_line() {
+            if other.has_line() {
+                self.combine(other, repr);
+            } else {
+                self.print_first_line(repr);
+            }
+        } else if other.has_line() {
+            other.print_first_line(repr);
+        }
     }
 
     /// Combine two line sequences.
@@ -326,6 +338,16 @@ impl<'a> State<'a> {
         }
     }
 
+    fn reset_read_line(&mut self, input: &Input) {
+        let line = self.read_line(input.separator);
+        self.reset(line);
+    }
+
+    fn reset_next_line(&mut self, input: &Input) {
+        let line = self.next_line(input);
+        self.reset(line);
+    }
+
     fn has_line(&self) -> bool {
         !self.seq.is_empty()
     }
@@ -342,21 +364,22 @@ impl<'a> State<'a> {
 
     fn finalize(&mut self, input: &Input, repr: &Repr) {
         if self.has_line() && self.print_unpaired {
-            self.print_unpaired_line(&self.seq[0], repr);
+            self.print_first_line(repr);
 
             while let Some(line) = self.next_line(input) {
-                self.print_unpaired_line(&line, repr);
+                self.print_line(&line, repr);
             }
         }
     }
 
+    /// Get the next line without the order check.
     fn read_line(&mut self, sep: Sep) -> Option<Line> {
         let value = self.lines.next()?;
         self.line_num += 1;
         Some(Line::new(crash_if_err!(1, value), sep))
     }
 
-    /// Prepare the next line.
+    /// Get the next line with the order check.
     fn next_line(&mut self, input: &Input) -> Option<Line> {
         let line = self.read_line(input.separator)?;
 
@@ -384,7 +407,7 @@ impl<'a> State<'a> {
         Some(line)
     }
 
-    fn print_unpaired_line(&self, line: &Line, repr: &Repr) {
+    fn print_line(&self, line: &Line, repr: &Repr) {
         if repr.uses_format() {
             repr.print_format(|spec| match spec {
                 &Spec::Key => line.get_field(self.key),
@@ -400,6 +423,10 @@ impl<'a> State<'a> {
         }
 
         println!();
+    }
+
+    fn print_first_line(&self, repr: &Repr) {
+        self.print_line(&self.seq[0], repr);
     }
 }
 
@@ -482,6 +509,10 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .long("nocheck-order")
                 .help("do not check that the input is correctly sorted"),
         )
+        .arg(Arg::with_name("header").long("header").help(
+            "treat the first line in each file as field headers, \
+             print them without trying to pair them",
+        ))
         .arg(
             Arg::with_name("file1")
                 .required(true)
@@ -544,6 +575,10 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         settings.check_order = CheckOrder::Enabled;
     }
 
+    if matches.is_present("header") {
+        settings.headers = true;
+    }
+
     let file1 = matches.value_of("file1").unwrap();
     let file2 = matches.value_of("file2").unwrap();
 
@@ -591,6 +626,12 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
     state1.initialize(settings.separator, settings.autoformat);
     state2.initialize(settings.separator, settings.autoformat);
 
+    if settings.headers {
+        state1.print_headers(&state2, &repr);
+        state1.reset_read_line(&input);
+        state2.reset_read_line(&input);
+    }
+
     while state1.has_line() && state2.has_line() {
         let diff = state1.compare(&state2, settings.ignore_case);
 
@@ -604,9 +645,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
             Ordering::Equal => {
                 let next_line1 = state1.extend(&input);
                 let next_line2 = state2.extend(&input);
-
                 state1.combine(&state2, &repr);
-
                 state1.reset(next_line1);
                 state2.reset(next_line2);
             }
