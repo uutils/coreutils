@@ -82,6 +82,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         NAME
     );
     let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+        .optflag("1", "", "list one file per line.")
         .optflag(
             "a",
             "all",
@@ -351,31 +352,35 @@ fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::
             display_item_long(item, strip, max_links, max_size, options);
         }
     } else {
-        let names: Vec<_> = items
-            .iter()
-            .filter_map(|i| {
-                let md = get_metadata(i, options);
-                match md {
-                    Err(e) => {
-                        let filename = get_file_name(i, strip);
-                        show_error!("{}: {}", filename, e);
-                        None
+        if !options.opt_present("1") {
+            let names = items
+                .iter()
+                .filter_map(|i| {
+                    let md = get_metadata(i, options);
+                    match md {
+                        Err(e) => {
+                            let filename = get_file_name(i, strip);
+                            show_error!("{}: {}", filename, e);
+                            None
+                        }
+                        Ok(md) => Some(display_file_name(&i, strip, &md, options)),
                     }
-                    Ok(md) => Some(display_file_name(&i, strip, &md, options)),
+                });
+
+            if let Some(size) = termsize::get() {
+                let mut grid = Grid::new(GridOptions {
+                    filling: Filling::Spaces(2),
+                    direction: Direction::TopToBottom,
+                });
+
+                for name in names {
+                    grid.add(name);
                 }
-            })
-            .collect();
-        if let Some(size) = termsize::get() {
-            let mut grid = Grid::new(GridOptions {
-                filling: Filling::Spaces(2),
-                direction: Direction::TopToBottom,
-            });
-            for name in names {
-                grid.add(name);
-            }
-            if let Some(output) = grid.fit_into_width(size.cols as usize) {
-                print!("{}", output);
-                return;
+
+                if let Some(output) = grid.fit_into_width(size.cols as usize) {
+                    print!("{}", output);
+                    return;
+                }
             }
         }
 
