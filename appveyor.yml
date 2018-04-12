@@ -19,13 +19,13 @@ environment:
     MSYS_BITS: 64
 
 install:
-  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe"
   - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin;C:\MinGW\bin
 
   # Use the system msys if we can
   - if defined MSYS_BITS set PATH=C:\msys64\mingw%MSYS_BITS%\bin;C:\msys64\usr\bin;%PATH%
 
   - ps: >-
+      Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe";
       if ((Test-Path Env:\MINGW_ARCHIVE) -and -not (Test-Path "${env:DIR_TEMP_MINGW}\${env:MINGW_ARCHIVE}")) {
         if (Test-Path "${env:DIR_TEMP_MINGW}") {
           rm -Recurse ${env:DIR_TEMP_MINGW}\*;

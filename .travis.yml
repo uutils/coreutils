@@ -1,5 +1,6 @@
 language: rust
 matrix:
+  fast_finish: true
   include:
     - rust: stable
       os: linux
@@ -19,6 +20,10 @@ matrix:
     - rust: nightly
       os: osx
       env: FEATURES=nightly
+    - rust: nightly
+      os: linux
+      env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
+  allow_failures:
     - rust: nightly
       os: linux
       env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
