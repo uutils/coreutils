@@ -327,7 +327,7 @@ impl<'a> State<'a> {
                 } else {
                     repr.print_field(key);
                     repr.print_fields(&line1, self.key, self.max_fields);
-                    repr.print_fields(&line2, other.key, self.max_fields);
+                    repr.print_fields(&line2, other.key, other.max_fields);
                 }
 
                 println!();
