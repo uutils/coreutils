@@ -147,6 +147,24 @@ impl Input {
             check_order,
         }
     }
+
+    fn compare(&self, field1: Option<&str>, field2: Option<&str>) -> Ordering {
+        if let (Some(field1), Some(field2)) = (field1, field2) {
+            if self.ignore_case {
+                field1.to_lowercase().cmp(&field2.to_lowercase())
+            } else {
+                field1.cmp(field2)
+            }
+        } else {
+            match field1 {
+                Some(_) => Ordering::Greater,
+                None => match field2 {
+                    Some(_) => Ordering::Less,
+                    None => Ordering::Equal,
+                },
+            }
+        }
+    }
 }
 
 enum Spec {
@@ -247,14 +265,6 @@ impl<'a> State<'a> {
         }
     }
 
-    /// Compare the key fields of the two current lines.
-    fn compare(&self, other: &State, ignore_case: bool) -> Ordering {
-        let key1 = self.seq[0].get_field(self.key);
-        let key2 = other.seq[0].get_field(other.key);
-
-        compare(key1, key2, ignore_case)
-    }
-
     /// Skip the current unpaired line.
     fn skip_line(&mut self, input: &Input, repr: &Repr) {
         if self.print_unpaired {
@@ -268,11 +278,7 @@ impl<'a> State<'a> {
     /// the first line whose key differs.
     fn extend(&mut self, input: &Input) -> Option<Line> {
         while let Some(line) = self.next_line(input) {
-            let diff = compare(
-                self.seq[0].get_field(self.key),
-                line.get_field(self.key),
-                input.ignore_case,
-            );
+            let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
             if diff == Ordering::Equal {
                 self.seq.push(line);
@@ -299,7 +305,7 @@ impl<'a> State<'a> {
 
     /// Combine two line sequences.
     fn combine(&self, other: &State, repr: &Repr) {
-        let key = self.seq[0].get_field(self.key);
+        let key = self.get_current_key();
 
         for line1 in &self.seq {
             for line2 in &other.seq {
@@ -387,11 +393,7 @@ impl<'a> State<'a> {
             return Some(line);
         }
 
-        let diff = compare(
-            self.seq[self.seq.len() - 1].get_field(self.key),
-            line.get_field(self.key),
-            input.ignore_case,
-        );
+        let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
         if diff == Ordering::Greater {
             eprintln!("{}:{}: is not sorted", self.file_name, self.line_num);
@@ -405,6 +407,11 @@ impl<'a> State<'a> {
         }
 
         Some(line)
+    }
+
+    /// Gets the key value of the lines stored in seq.
+    fn get_current_key(&self) -> Option<&str> {
+        self.seq[0].get_field(self.key)
     }
 
     fn print_line(&self, line: &Line, repr: &Repr) {
@@ -633,7 +640,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
     }
 
     while state1.has_line() && state2.has_line() {
-        let diff = state1.compare(&state2, settings.ignore_case);
+        let diff = input.compare(state1.get_current_key(), state2.get_current_key());
 
         match diff {
             Ordering::Less => {
@@ -689,22 +696,4 @@ fn parse_field_number(value: &str) -> usize {
 
 fn parse_field_number_option(value: Option<&str>) -> Option<usize> {
     Some(parse_field_number(value?))
-}
-
-fn compare(field1: Option<&str>, field2: Option<&str>, ignore_case: bool) -> Ordering {
-    if let (Some(field1), Some(field2)) = (field1, field2) {
-        return if ignore_case {
-            field1.to_lowercase().cmp(&field2.to_lowercase())
-        } else {
-            field1.cmp(field2)
-        };
-    }
-
-    match field1 {
-        Some(_) => Ordering::Greater,
-        None => match field2 {
-            Some(_) => Ordering::Less,
-            None => Ordering::Equal,
-        },
-    }
 }
