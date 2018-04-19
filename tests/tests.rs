@@ -91,6 +91,7 @@ generic! {
     "tsort", test_tsort;
     "unexpand", test_unexpand;
     "uniq", test_uniq;
+    "wc", test_wc;
     // Be aware of the trailing semicolon after the last item
-    "wc", test_wc
+    "hostname", test_hostname
 }

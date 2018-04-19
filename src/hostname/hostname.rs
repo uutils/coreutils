@@ -157,13 +157,12 @@ fn xgethostname() -> io::Result<String> {
     };
 
     if err == 0 {
-        let mut last_char = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
-        if last_char == name.len() {
+        let null_pos = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
+        if null_pos == namelen {
             name.push(0);
-            last_char += 1;
         }
 
-        Ok(CStr::from_bytes_with_nul(&name[..last_char])
+        Ok(CStr::from_bytes_with_nul(&name[..null_pos + 1])
             .unwrap()
             .to_string_lossy()
             .into_owned())
