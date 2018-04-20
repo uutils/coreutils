@@ -14,6 +14,8 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 
+// XXX: remove when we no longer support 1.22.0
+use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -37,7 +39,7 @@ const LONG_HELP: &'static str = "
 ";
 
 // TODO: Suport Z & Y (currently limited by size of u64)
-static UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
+const UNITS: [(char, u32); 6] = [('K', 1), ('M', 2), ('G', 3), ('T', 4), ('P', 5), ('E', 6)];
 
 struct Options {
     all: bool,
@@ -76,47 +78,39 @@ impl Stat {
     }
 }
 
+fn unit_string_to_number(s: &str) -> Option<u64> {
+    let mut offset = 0;
+    let mut s_chars = s.chars().rev();
+
+    let (mut ch, multiple) = match s_chars.next() {
+        Some('B') | Some('b') => ('B', 1000u64),
+        Some(ch) => (ch, 1024u64),
+        None => return None,
+    };
+    if ch == 'B' {
+        ch = s_chars.next()?;
+        offset += 1;
+    }
+    ch = ch.to_ascii_uppercase();
+
+    let unit = UNITS
+        .iter()
+        .find(|&&(unit_ch, _)| unit_ch == ch)
+        .map(|&(_, val)| {
+            // we found a match, so increment offset
+            offset += 1;
+            val
+        })
+        .or_else(|| if multiple == 1024 { Some(0) } else { None })?;
+
+    let number = s[..s.len() - offset].parse::<u64>().ok()?;
+
+    Some(number * multiple.pow(unit))
+}
+
 fn translate_to_pure_number(s: &Option<String>) -> Option<u64> {
     match s {
-        &Some(ref s) => {
-            let mut found_number = false;
-            let mut found_letter = false;
-            let mut numbers = String::new();
-            let mut letters = String::new();
-            for c in s.trim().chars() {
-                if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
-                    return None;
-                } else if c.is_digit(10) {
-                    found_number = true;
-                    numbers.push(c);
-                } else if c.is_alphabetic() {
-                    found_letter = true;
-                    letters.push(c);
-                }
-            }
-            let number = numbers.parse::<u64>().unwrap();
-            let multiple = match letters[..].to_uppercase().as_str() {
-                "" => 1,
-                "K" => 1024u64.pow(1),
-                "M" => 1024u64.pow(2),
-                "G" => 1024u64.pow(3),
-                "T" => 1024u64.pow(4),
-                "P" => 1024u64.pow(5),
-                "E" => 1024u64.pow(6),
-                "Z" => 1024u64.pow(7),
-                "Y" => 1024u64.pow(8),
-                "KB" => 1000u64.pow(1),
-                "MB" => 1000u64.pow(2),
-                "GB" => 1000u64.pow(3),
-                "TB" => 1000u64.pow(4),
-                "PB" => 1000u64.pow(5),
-                "EB" => 1000u64.pow(6),
-                "ZB" => 1000u64.pow(7),
-                "YB" => 1000u64.pow(8),
-                _ => return None,
-            };
-            Some(number * multiple)
-        }
+        &Some(ref s) => unit_string_to_number(s),
         &None => None,
     }
 }
@@ -125,15 +119,13 @@ fn read_block_size(s: Option<String>) -> u64 {
     match translate_to_pure_number(&s) {
         Some(v) => v,
         None => {
-            match s {
-                Some(value) => show_error!("invalid --block-size argument '{}'", value),
-                _ => (),
+            if let Some(value) = s {
+                show_error!("invalid --block-size argument '{}'", value);
             };
 
-            for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"].into_iter() {
-                match translate_to_pure_number(&env::var(env_var).ok()) {
-                    Some(quantity) => return quantity,
-                    None => (),
+            for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+                if let Some(quantity) = translate_to_pure_number(&env::var(env_var).ok()) {
+                    return quantity;
                 }
             }
 
@@ -174,46 +166,44 @@ fn du(
 
         for f in read.into_iter() {
             match f {
-                Ok(entry) => match Stat::new(entry.path()) {
-                    Ok(this_stat) => {
-                        if this_stat.is_dir {
-                            futures.push(du(this_stat, options, depth + 1, inodes));
-                        } else {
-                            if inodes.contains(&this_stat.inode) {
-                                continue;
-                            }
-                            inodes.insert(this_stat.inode);
-                            my_stat.size += this_stat.size;
-                            my_stat.blocks += this_stat.blocks;
-                            if options.all {
-                                stats.push(this_stat);
+                Ok(entry) => {
+                    match Stat::new(entry.path()) {
+                        Ok(this_stat) => {
+                            if this_stat.is_dir {
+                                futures.push(du(this_stat, options, depth + 1, inodes));
+                            } else {
+                                if inodes.contains(&this_stat.inode) {
+                                    continue;
+                                }
+                                inodes.insert(this_stat.inode);
+                                my_stat.size += this_stat.size;
+                                my_stat.blocks += this_stat.blocks;
+                                if options.all {
+                                    stats.push(this_stat);
+                                }
                             }
                         }
+                        Err(error) => show_error!("{}", error),
                     }
-                    Err(error) => show_error!("{}", error),
-                },
+                }
                 Err(error) => show_error!("{}", error),
             }
         }
     }
 
-    stats.extend(
-        futures
-            .into_iter()
-            .flat_map(|val| val)
-            .rev()
-            .filter_map(|stat| {
-                if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
-                    my_stat.size += stat.size;
-                    my_stat.blocks += stat.blocks;
-                }
-                if options.max_depth == None || depth < options.max_depth.unwrap() {
-                    Some(stat)
-                } else {
-                    None
-                }
-            }),
-    );
+    stats.extend(futures.into_iter().flat_map(|val| val).rev().filter_map(
+        |stat| {
+            if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
+                my_stat.size += stat.size;
+                my_stat.blocks += stat.blocks;
+            }
+            if options.max_depth == None || depth < options.max_depth.unwrap() {
+                Some(stat)
+            } else {
+                None
+            }
+        },
+    ));
     stats.push(my_stat);
     Box::new(stats.into_iter())
 }
@@ -344,24 +334,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let time_format_str = match matches.opt_str("time-style") {
-        Some(s) => match &s[..] {
-            "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
-            "long-iso" => "%Y-%m-%d %H:%M",
-            "iso" => "%Y-%m-%d",
-            _ => {
-                show_error!(
-                    "invalid argument '{}' for 'time style'
+        Some(s) => {
+            match &s[..] {
+                "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
+                "long-iso" => "%Y-%m-%d %H:%M",
+                "iso" => "%Y-%m-%d",
+                _ => {
+                    show_error!(
+                        "invalid argument '{}' for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
 Try '{} --help' for more information.",
-                    s,
-                    NAME
-                );
-                return 1;
+                        s,
+                        NAME
+                    );
+                    return 1;
+                }
             }
-        },
+        }
         None => "%Y-%m-%d %H:%M",
     };
 
@@ -389,21 +381,23 @@ Try '{} --help' for more information.",
                         let tm = {
                             let (secs, nsecs) = {
                                 let time = match matches.opt_str("time") {
-                                    Some(s) => match &s[..] {
-                                        "accessed" => stat.accessed,
-                                        "created" => stat.created,
-                                        "modified" => stat.modified,
-                                        _ => {
-                                            show_error!(
-                                                "invalid argument 'modified' for '--time'
+                                    Some(s) => {
+                                        match &s[..] {
+                                            "accessed" => stat.accessed,
+                                            "created" => stat.created,
+                                            "modified" => stat.modified,
+                                            _ => {
+                                                show_error!(
+                                                    "invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
     Try '{} --help' for more information.",
-                                                NAME
-                                            );
-                                            return 1;
+                                                    NAME
+                                                );
+                                                return 1;
+                                            }
                                         }
-                                    },
+                                    }
                                     None => stat.modified,
                                 };
                                 ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
