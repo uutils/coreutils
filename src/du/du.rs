@@ -14,12 +14,13 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 
+use std::collections::HashSet;
+use std::env;
 use std::fs;
-use std::iter;
 use std::io::{stderr, Result, Write};
+use std::iter;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::collections::HashSet;
 use time::Timespec;
 
 const NAME: &'static str = "du";
@@ -75,8 +76,74 @@ impl Stat {
     }
 }
 
-fn get_default_blocks() -> u64 {
-    1024
+fn translate_to_pure_number(s: &Option<String>) -> Option<u64> {
+    match s {
+        &Some(ref s) => {
+            let mut found_number = false;
+            let mut found_letter = false;
+            let mut numbers = String::new();
+            let mut letters = String::new();
+            for c in s.trim().chars() {
+                if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
+                    return None;
+                } else if c.is_digit(10) {
+                    found_number = true;
+                    numbers.push(c);
+                } else if c.is_alphabetic() {
+                    found_letter = true;
+                    letters.push(c);
+                }
+            }
+            let number = numbers.parse::<u64>().unwrap();
+            let multiple = match letters[..].to_uppercase().as_str() {
+                "" => 1,
+                "K" => 1024u64.pow(1),
+                "M" => 1024u64.pow(2),
+                "G" => 1024u64.pow(3),
+                "T" => 1024u64.pow(4),
+                "P" => 1024u64.pow(5),
+                "E" => 1024u64.pow(6),
+                "Z" => 1024u64.pow(7),
+                "Y" => 1024u64.pow(8),
+                "KB" => 1000u64.pow(1),
+                "MB" => 1000u64.pow(2),
+                "GB" => 1000u64.pow(3),
+                "TB" => 1000u64.pow(4),
+                "PB" => 1000u64.pow(5),
+                "EB" => 1000u64.pow(6),
+                "ZB" => 1000u64.pow(7),
+                "YB" => 1000u64.pow(8),
+                _ => return None,
+            };
+            Some(number * multiple)
+        }
+        &None => None,
+    }
+}
+
+fn read_block_size(s: Option<String>) -> u64 {
+    match translate_to_pure_number(&s) {
+        Some(v) => v,
+        None => {
+            match s {
+                Some(value) => show_error!("invalid --block-size argument '{}'", value),
+                _ => (),
+            };
+
+            for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"].into_iter() {
+                match translate_to_pure_number(&env::var(env_var).ok()) {
+                    Some(quantity) => return quantity,
+                    None => (),
+                }
+            }
+
+            if env::var("POSIXLY_CORRECT").is_ok() {
+                512
+            } else {
+                1024
+            }
+        }
+    }
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
@@ -250,51 +317,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         matches.free.clone()
     };
 
-    let block_size = match matches.opt_str("block-size") {
-        Some(s) => {
-            let mut found_number = false;
-            let mut found_letter = false;
-            let mut numbers = String::new();
-            let mut letters = String::new();
-            for c in s.chars() {
-                if found_letter && c.is_digit(10) || !found_number && !c.is_digit(10) {
-                    show_error!("invalid --block-size argument '{}'", s);
-                    return 1;
-                } else if c.is_digit(10) {
-                    found_number = true;
-                    numbers.push(c);
-                } else if c.is_alphabetic() {
-                    found_letter = true;
-                    letters.push(c);
-                }
-            }
-            let number = numbers.parse::<u64>().unwrap();
-            let multiple = match &letters[..] {
-                "K" => 1024u64.pow(1),
-                "M" => 1024u64.pow(2),
-                "G" => 1024u64.pow(3),
-                "T" => 1024u64.pow(4),
-                "P" => 1024u64.pow(5),
-                "E" => 1024u64.pow(6),
-                "Z" => 1024u64.pow(7),
-                "Y" => 1024u64.pow(8),
-                "KB" => 1000u64.pow(1),
-                "MB" => 1000u64.pow(2),
-                "GB" => 1000u64.pow(3),
-                "TB" => 1000u64.pow(4),
-                "PB" => 1000u64.pow(5),
-                "EB" => 1000u64.pow(6),
-                "ZB" => 1000u64.pow(7),
-                "YB" => 1000u64.pow(8),
-                _ => {
-                    show_error!("invalid --block-size argument '{}'", s);
-                    return 1;
-                }
-            };
-            number * multiple
-        }
-        None => get_default_blocks(),
-    };
+    let block_size = read_block_size(matches.opt_str("block-size"));
 
     let convert_size = |size: u64| -> String {
         let multiplier: u64 = if matches.opt_present("si") {
@@ -426,4 +449,36 @@ Try '{} --help' for more information.",
     }
 
     0
+}
+
+#[cfg(test)]
+mod test_du {
+    #[allow(unused_imports)]
+    use super::*;
+
+    #[test]
+    fn test_translate_to_pure_number() {
+        let test_data = [
+            (Some("10".to_string()), Some(10)),
+            (Some("10K".to_string()), Some(10 * 1024)),
+            (Some("5M".to_string()), Some(5 * 1024 * 1024)),
+            (Some("900KB".to_string()), Some(900 * 1000)),
+            (Some("BAD_STRING".to_string()), None),
+        ];
+        for it in test_data.into_iter() {
+            assert_eq!(translate_to_pure_number(&it.0), it.1);
+        }
+    }
+
+    #[test]
+    fn test_read_block_size() {
+        let test_data = [
+            (Some("10".to_string()), 10),
+            (None, 1024),
+            (Some("BAD_STRING".to_string()), 1024),
+        ];
+        for it in test_data.into_iter() {
+            assert_eq!(read_block_size(it.0.clone()), it.1);
+        }
+    }
 }
