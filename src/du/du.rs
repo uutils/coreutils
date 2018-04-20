@@ -39,7 +39,7 @@ const LONG_HELP: &'static str = "
 ";
 
 // TODO: Suport Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('K', 1), ('M', 2), ('G', 3), ('T', 4), ('P', 5), ('E', 6)];
+const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
 
 struct Options {
     all: bool,
@@ -95,6 +95,7 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
 
     let unit = UNITS
         .iter()
+        .rev()
         .find(|&&(unit_ch, _)| unit_ch == ch)
         .map(|&(_, val)| {
             // we found a match, so increment offset
@@ -208,6 +209,28 @@ fn du(
     Box::new(stats.into_iter())
 }
 
+fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
+    for &(unit, power) in &UNITS {
+        let limit = multiplier.pow(power);
+        if size >= limit {
+            return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
+        }
+    }
+    format!("{}B", size)
+}
+
+fn convert_size_k(size: u64, multiplier: u64, _block_size: u64) -> String {
+    format!("{}", ((size as f64) / (multiplier as f64)).ceil())
+}
+
+fn convert_size_m(size: u64, multiplier: u64, _block_size: u64) -> String {
+    format!("{}", ((size as f64) / ((multiplier * multiplier) as f64)).ceil())
+}
+
+fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
+    format!("{}", ((size as f64) / (block_size as f64)).ceil())
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
     let syntax = format!(
         "[OPTION]... [FILE]...
@@ -309,29 +332,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let block_size = read_block_size(matches.opt_str("block-size"));
 
-    let convert_size = |size: u64| -> String {
-        let multiplier: u64 = if matches.opt_present("si") {
-            1000
-        } else {
-            1024
-        };
-
+    let multiplier: u64 = if matches.opt_present("si") {
+        1000
+    } else {
+        1024
+    };
+    let convert_size_fn = {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            for &(unit, power) in &UNITS {
-                let limit = multiplier.pow(power);
-                if size >= limit {
-                    return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
-                }
-            }
-            return format!("{}B", size);
+            convert_size_human
         } else if matches.opt_present("k") {
-            format!("{}", ((size as f64) / (multiplier as f64)).ceil())
+            convert_size_k
         } else if matches.opt_present("m") {
-            format!("{}", ((size as f64) / (multiplier.pow(2) as f64)).ceil())
+            convert_size_m
         } else {
-            format!("{}", ((size as f64) / (block_size as f64)).ceil())
+            convert_size_other
         }
     };
+    let convert_size = |size| convert_size_fn(size, multiplier, block_size);
 
     let time_format_str = match matches.opt_str("time-style") {
         Some(s) => {
