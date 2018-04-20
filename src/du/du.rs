@@ -14,6 +14,8 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 
+// XXX: remove when we no longer support 1.22.0
+use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -37,7 +39,7 @@ const LONG_HELP: &'static str = "
 ";
 
 // TODO: Suport Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
+const UNITS: [(char, u32); 6] = [('K', 1), ('M', 2), ('G', 3), ('T', 4), ('P', 5), ('E', 6)];
 
 struct Options {
     all: bool,
@@ -89,14 +91,15 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
         ch = s_chars.next()?;
         offset += 1;
     }
+    ch = ch.to_ascii_uppercase();
 
     let unit = UNITS
         .iter()
-        .find(|(unit_ch, _)| *unit_ch == ch)
-        .map(|(_, val)| {
+        .find(|&&(unit_ch, _)| unit_ch == ch)
+        .map(|&(_, val)| {
             // we found a match, so increment offset
             offset += 1;
-            *val
+            val
         })
         .or_else(|| if multiple == 1024 { Some(0) } else { None })?;
 
