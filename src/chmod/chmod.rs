@@ -38,11 +38,10 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
         NAME
     );
     let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
-    opts.optflag("c", "changes", "like verbose but report only when a change is made \
-                                  (unimplemented)")
+    opts.optflag("c", "changes", "like verbose but report only when a change is made")
         // TODO: support --silent (can be done using clap)
-        .optflag("f", "quiet", "suppress most error messages (unimplemented)")
-        .optflag("v", "verbose", "output a diagnostic for every file processed (unimplemented)")
+        .optflag("f", "quiet", "suppress most error messages")
+        .optflag("v", "verbose", "output a diagnostic for every file processed")
         .optflag("", "no-preserve-root", "do not treat '/' specially (the default)")
         .optflag("", "preserve-root", "fail to operate recursively on '/'")
         .optopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE")
