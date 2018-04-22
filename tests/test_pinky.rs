@@ -48,5 +48,5 @@ fn test_short_format() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
-    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).args(args).run().stdout
+    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).env("LANGUAGE", "C").args(args).run().stdout
 }
