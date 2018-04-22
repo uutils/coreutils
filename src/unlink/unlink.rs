@@ -22,6 +22,7 @@ use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use libc::{c_char, lstat, stat, unlink};
 use std::io::{Error, ErrorKind};
 use std::mem::uninitialized;
+use std::ffi::CString;
 
 static NAME: &'static str = "unlink";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -69,9 +70,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let st_mode = {
         let mut buf: stat = unsafe { uninitialized() };
+        let c_string = CString::new(matches.free[0].clone()).unwrap(); // unwrap() cannot fail, the string comes from argv so it cannot contain a \0.
         let result = unsafe {
             lstat(
-                matches.free[0].as_ptr() as *const c_char,
+                c_string.as_ptr(),
                 &mut buf as *mut stat,
             )
         };
