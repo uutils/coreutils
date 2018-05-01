@@ -93,13 +93,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
     for dir in &dirs {
         let path = Path::new(dir);
         if recursive {
-            let mut pathbuf = PathBuf::new();
-            if !path.is_dir() {
-                for component in path.components() {
-                    pathbuf.push(component.as_os_str());
-                    mkdir(pathbuf.as_path(), recursive, mode, verbose);
-                }
-            }
+            status |= mkdir(path, recursive, mode, verbose);
         } else {
             match path.parent() {
                 Some(parent) => {
@@ -126,11 +120,16 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
-    if let Err(e) = fs::create_dir(path) {
-        if !recursive {
-            show_info!("{}: {}", path.display(), e.to_string());
+    if recursive {
+        if let Err(e) = fs::create_dir_all(path) {
+            show_info!("cannot create directory '{}': {}", path.display(), e.to_string());
+            return 1;
         }
-        return 1;
+    } else {
+        if let Err(e) = fs::create_dir(path) {
+            show_info!("{}: {}", path.display(), e.to_string());
+            return 1;
+        }
     }
 
     if verbose {
