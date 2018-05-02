@@ -22,6 +22,7 @@ use std::path::Path;
 use walker::Walker;
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::fs::display_permissions_unix;
 
 const NAME: &'static str = "chmod";
 static SUMMARY: &'static str = "Change the mode of each FILE to MODE.
@@ -226,10 +227,11 @@ impl Chmoder {
         Ok(())
     }
 
+    #[cfg(unix)]
     fn change_file(&self, fperm: u32, mode: u32, file: &Path, path: &str) -> Result<(), i32> {
         if fperm == mode {
             if self.verbose && !self.changes {
-                show_info!("mode of '{}' retained as {:o}", file.display(), fperm);
+                show_info!("mode of '{}' retained as {:o} ({})", file.display(), fperm, display_permissions_unix(fperm));
             }
             Ok(())
         } else if let Err(err) =
@@ -240,20 +242,24 @@ impl Chmoder {
             }
             if self.verbose {
                 show_info!(
-                    "failed to change mode of file '{}' from {:o} to {:o}",
+                    "failed to change mode of file '{}' from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
-                    mode
+                    display_permissions_unix(fperm),
+                    mode,
+                    display_permissions_unix(mode)
                 );
             }
             Err(1)
         } else {
             if self.verbose || self.changes {
                 show_info!(
-                    "mode of '{}' changed from {:o} to {:o}",
+                    "mode of '{}' changed from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
-                    mode
+                    display_permissions_unix(fperm),
+                    mode,
+                    display_permissions_unix(mode)
                 );
             }
             Ok(())
