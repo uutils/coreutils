@@ -19,7 +19,7 @@ unicode-width = "0.1.4"
 
 [dependencies.uucore]
 path = "../uucore"
-features = ["entries"]
+features = ["entries", "fs"]
 
 [[bin]]
 name = "ls"

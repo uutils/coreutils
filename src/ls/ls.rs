@@ -24,8 +24,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 #[cfg(unix)]
-use uucore::libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH,
-                   S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH,
+                   S_IXGRP, S_IXOTH, S_IXUSR};
 
 use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
@@ -395,6 +395,8 @@ fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::
     }
 }
 
+use uucore::fs::display_permissions;
+
 fn display_item_long(
     item: &PathBuf,
     strip: Option<&Path>,
@@ -697,57 +699,3 @@ fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
 }
 
-#[cfg(not(unix))]
-#[allow(unused_variables)]
-fn display_permissions(metadata: &Metadata) -> String {
-    String::from("---------")
-}
-
-#[cfg(unix)]
-fn display_permissions(metadata: &Metadata) -> String {
-    let mode = metadata.mode() as mode_t;
-    let mut result = String::with_capacity(9);
-    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISUID) {
-        if has!(mode, S_IXUSR) {
-            's'
-        } else {
-            'S'
-        }
-    } else if has!(mode, S_IXUSR) {
-        'x'
-    } else {
-        '-'
-    });
-
-    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISGID) {
-        if has!(mode, S_IXGRP) {
-            's'
-        } else {
-            'S'
-        }
-    } else if has!(mode, S_IXGRP) {
-        'x'
-    } else {
-        '-'
-    });
-
-    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISVTX) {
-        if has!(mode, S_IXOTH) {
-            't'
-        } else {
-            'T'
-        }
-    } else if has!(mode, S_IXOTH) {
-        'x'
-    } else {
-        '-'
-    });
-
-    result
-}

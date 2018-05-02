@@ -11,14 +11,25 @@ extern crate termion;
 
 #[cfg(unix)]
 use super::libc;
+#[cfg(unix)]
+use super::libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH,
+                  S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR};
 use std::env;
 use std::fs;
+#[cfg(any(unix, target_os = "redox"))]
+use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "redox")]
 use std::io;
 use std::io::{Error, ErrorKind};
 use std::io::Result as IOResult;
 use std::path::{Component, Path, PathBuf};
 use std::borrow::Cow;
+
+macro_rules! has {
+    ($mode:expr, $perm:expr) => (
+        $mode & ($perm as u32) != 0
+    )
+}
 
 pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
     if path.components().all(|e| e != Component::ParentDir) {
@@ -194,4 +205,64 @@ pub fn is_stderr_interactive() -> bool {
 #[cfg(target_os = "redox")]
 pub fn is_stderr_interactive() -> bool {
     termion::is_tty(&io::stderr())
+}
+
+#[cfg(not(unix))]
+#[allow(unused_variables)]
+pub fn display_permissions(metadata: &fs::Metadata) -> String {
+    String::from("---------")
+}
+
+#[cfg(unix)]
+pub fn display_permissions(metadata: &fs::Metadata) -> String {
+    let mode: mode_t = metadata.mode() as mode_t;
+    display_permissions_unix(mode as u32)
+}
+
+#[cfg(unix)]
+pub fn display_permissions_unix(mode: u32) -> String {
+    let mut result = String::with_capacity(9);
+    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
+    result.push(if has!(mode, S_ISUID) {
+        if has!(mode, S_IXUSR) {
+            's'
+        } else {
+            'S'
+        }
+    } else if has!(mode, S_IXUSR) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
+    result.push(if has!(mode, S_ISGID) {
+        if has!(mode, S_IXGRP) {
+            's'
+        } else {
+            'S'
+        }
+    } else if has!(mode, S_IXGRP) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
+    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
+    result.push(if has!(mode, S_ISVTX) {
+        if has!(mode, S_IXOTH) {
+            't'
+        } else {
+            'T'
+        }
+    } else if has!(mode, S_IXOTH) {
+        'x'
+    } else {
+        '-'
+    });
+
+    result
 }
