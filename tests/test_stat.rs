@@ -235,6 +235,6 @@ fn test_printf() {
 fn expected_result(args: &[&str]) -> String {
     use std::process::Command;
 
-    let output = Command::new(util_name!()).args(args).output().unwrap();
+    let output = Command::new(util_name!()).env("LANGUAGE", "C").args(args).output().unwrap();
     String::from_utf8_lossy(&output.stdout).into_owned()
 }

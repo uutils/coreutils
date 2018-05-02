@@ -68,5 +68,5 @@ fn test_all() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(arg: &str) -> String {
-    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).args(&[arg]).run().stdout
+    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).env("LANGUAGE", "C").args(&[arg]).run().stdout
 }
