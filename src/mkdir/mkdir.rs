@@ -92,26 +92,19 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
     let empty = Path::new("");
     for dir in &dirs {
         let path = Path::new(dir);
-        if recursive {
-            status |= mkdir(path, recursive, mode, verbose);
-        } else {
-            match path.parent() {
-                Some(parent) => {
-                    if parent != empty && !parent.exists() {
-                        show_info!(
-                            "cannot create directory '{}': No such file or directory",
-                            path.display()
-                        );
-                        status = 1;
-                    } else {
-                        status |= mkdir(path, recursive, mode, verbose);
-                    }
-                }
-                None => {
-                    status |= mkdir(path, recursive, mode, verbose);
+        if !recursive {
+            if let Some(parent) = path.parent() {
+                if parent != empty && !parent.exists() {
+                    show_info!(
+                        "cannot create directory '{}': No such file or directory",
+                        path.display()
+                    );
+                    status = 1;
+                    continue;
                 }
             }
         }
+        status |= mkdir(path, recursive, mode, verbose);
     }
     status
 }
@@ -120,16 +113,10 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
-    if recursive {
-        if let Err(e) = fs::create_dir_all(path) {
-            show_info!("cannot create directory '{}': {}", path.display(), e.to_string());
-            return 1;
-        }
-    } else {
-        if let Err(e) = fs::create_dir(path) {
-            show_info!("{}: {}", path.display(), e.to_string());
-            return 1;
-        }
+    let create_dir = if recursive { fs::create_dir_all } else { fs::create_dir };
+    if let Err(e) = create_dir(path) {
+        show_info!("{}: {}", path.display(), e.to_string());
+        return 1;
     }
 
     if verbose {
