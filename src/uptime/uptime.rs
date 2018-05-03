@@ -13,18 +13,15 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 extern crate getopts;
+extern crate time;
 
 #[macro_use]
 extern crate uucore;
 // import crate time from utmpx
-use uucore::utmpx::*;
-use uucore::libc::{c_double, time_t};
+use uucore::libc::time_t;
 pub use uucore::libc;
 
 use getopts::Options;
-use std::fs::File;
-use std::io::Read;
-use std::mem::transmute;
 
 static NAME: &'static str = "uptime";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -70,15 +67,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     print_time();
     let (boot_time, user_count) = process_utmpx();
-    let upsecs = get_uptime(boot_time) / 100;
-    print_uptime(upsecs);
-    print_nusers(user_count);
-    print_loadavg();
+    let uptime = get_uptime(boot_time);
+    if uptime < 0 {
+        show_error!("could not retrieve system uptime");
 
-    0
+        1
+    } else {
+        let upsecs = uptime / 100;
+        print_uptime(upsecs);
+        print_nusers(user_count);
+        print_loadavg();
+
+        0
+    }
 }
 
+#[cfg(unix)]
 fn print_loadavg() {
+    use libc::c_double;
+    use std::mem::transmute;
+
     let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
@@ -96,8 +104,16 @@ fn print_loadavg() {
     }
 }
 
+#[cfg(windows)]
+fn print_loadavg() {
+    // XXX: currently this is a noop as Windows does not seem to have anything comparable to
+    //      getloadavg()
+}
+
 #[cfg(unix)]
 fn process_utmpx() -> (Option<time_t>, usize) {
+    use uucore::utmpx::*;
+
     let mut nusers = 0;
     let mut boot_time = None;
 
@@ -140,6 +156,9 @@ fn print_time() {
 
 #[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
+    use std::fs::File;
+    use std::io::Read;
+
     let mut proc_uptime = String::new();
 
     if let Some(n) = File::open("/proc/uptime")
@@ -162,7 +181,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
 }
 
 #[cfg(windows)]
-fn get_uptime(boot_time: Option<time_t>) -> i64 {
+fn get_uptime(_boot_time: Option<time_t>) -> i64 {
     unsafe { GetTickCount() as i64 }
 }
 
