@@ -4,8 +4,8 @@ uutils coreutils
 [![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
 [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build status](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
-[![codecov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
+[![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils?ref=badge_shield)
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
@@ -60,6 +60,14 @@ every other Rust program:
 ```bash
 # to keep debug information, compile without --release
 $ cargo build --release
+```
+
+Because the above command attempts to build utilities that only work on
+Unix-like platforms at the moment, to build on Windows, you must do the
+following:
+```bash
+# to keep debug information, compile without --release
+$ cargo build --release --no-default-features --features generic
 ```
 
 If you don't want to build every utility available on your platform into the
