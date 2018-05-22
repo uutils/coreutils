@@ -2,6 +2,11 @@
 pub extern crate libc;
 #[cfg(feature = "winapi")]
 pub extern crate winapi;
+#[cfg(feature = "failure")]
+extern crate failure;
+#[cfg(feature = "failure_derive")]
+#[macro_use]
+extern crate failure_derive;
 
 #[macro_use]
 mod macros;
