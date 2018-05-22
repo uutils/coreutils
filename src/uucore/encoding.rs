@@ -7,10 +7,30 @@
 //
 
 extern crate data_encoding;
-use self::data_encoding::{decode, base32, base64};
-use std::io::Read;
+use self::data_encoding::{DecodeError, BASE32, BASE64};
+use std::io::{self, Read, Write};
 
-pub type DecodeResult = Result<Vec<u8>, decode::Error>;
+#[derive(Fail, Debug)]
+pub enum EncodingError {
+    #[fail(display = "{}", _0)]
+    Decode(#[cause] DecodeError),
+    #[fail(display = "{}", _0)]
+    Io(#[cause] io::Error),
+}
+
+impl From<io::Error> for EncodingError {
+    fn from(err: io::Error) -> EncodingError {
+        EncodingError::Io(err)
+    }
+}
+
+impl From<DecodeError> for EncodingError {
+    fn from(err: DecodeError) -> EncodingError {
+        EncodingError::Decode(err)
+    }
+}
+
+pub type DecodeResult = Result<Vec<u8>, EncodingError>;
 
 #[derive(Clone, Copy)]
 pub enum Format {
@@ -21,16 +41,16 @@ use self::Format::*;
 
 pub fn encode(f: Format, input: &[u8]) -> String {
     match f {
-        Base32 => base32::encode(input),
-        Base64 => base64::encode(input),
+        Base32 => BASE32.encode(input),
+        Base64 => BASE64.encode(input),
     }
 }
 
 pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
-    match f {
-        Base32 => base32::decode(input),
-        Base64 => base64::decode(input),
-    }
+    Ok(match f {
+        Base32 => BASE32.decode(input)?,
+        Base64 => BASE64.decode(input)?,
+    })
 }
 
 pub struct Data<R: Read> {
@@ -38,7 +58,7 @@ pub struct Data<R: Read> {
     ignore_garbage: bool,
     input: R,
     format: Format,
-    alphabet: &'static str,
+    alphabet: &'static [u8],
 }
 
 impl<R: Read> Data<R> {
@@ -49,8 +69,8 @@ impl<R: Read> Data<R> {
             input: input,
             format: format,
             alphabet: match format {
-                Base32 => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
-                Base64 => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
+                Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
+                Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
             },
         }
     }
@@ -66,18 +86,14 @@ impl<R: Read> Data<R> {
     }
 
     pub fn decode(&mut self) -> DecodeResult {
-        let mut buf = String::new();
-        self.input.read_to_string(&mut buf).unwrap();
-        let clean = if self.ignore_garbage {
-            buf.chars()
-                .filter(|&c| self.alphabet.contains(c))
-                .collect::<String>()
+        let mut buf = vec![];
+        self.input.read_to_end(&mut buf)?;
+        if self.ignore_garbage {
+            buf.retain(|c| self.alphabet.contains(c));
         } else {
-            buf.chars()
-                .filter(|&c| c != '\r' && c != '\n')
-                .collect::<String>()
+            buf.retain(|&c| c != b'\r' && c != b'\n');
         };
-        decode(self.format, clean.as_bytes())
+        decode(self.format, &buf)
     }
 
     pub fn encode(&mut self) -> String {
@@ -87,15 +103,25 @@ impl<R: Read> Data<R> {
     }
 }
 
+// NOTE: this will likely be phased out at some point
 pub fn wrap_print(line_wrap: usize, res: String) {
-    if line_wrap == 0 {
-        return print!("{}", res);
-    }
+    let stdout = io::stdout();
+    wrap_write(stdout.lock(), line_wrap, res).unwrap();
+}
+
+pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: String) -> io::Result<()> {
     use std::cmp::min;
+
+    if line_wrap == 0 {
+        return write!(writer, "{}", res);
+    }
+
     let mut start = 0;
     while start < res.len() {
         let end = min(start + line_wrap, res.len());
-        println!("{}", &res[start..end]);
+        writeln!(writer, "{}", &res[start..end])?;
         start = end;
     }
+
+    Ok(())
 }
