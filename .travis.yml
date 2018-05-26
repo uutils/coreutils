@@ -40,6 +40,9 @@ before_install:
 script:
   - cargo build $CARGO_ARGS --features "$FEATURES"
   - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
+  - mkdir installdir_test
+  - DESTDIR=installdir_test make install
+  - [ `ls installdir_test/usr/bin | wc -l` -gt 0 ]
 
 addons:
   apt:
