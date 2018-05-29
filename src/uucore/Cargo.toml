@@ -5,8 +5,10 @@ authors = []
 
 [dependencies]
 getopts = "0.2.14"
+failure = { version = "0.1.1", optional = true }
+failure_derive = { version = "0.1.1", optional = true }
 time = { version = "0.1.38", optional = true }
-data-encoding = { version = "^1.1", optional = true }
+data-encoding = { version = "^2.1", optional = true }
 libc = { version = "0.2.34", optional = true }
 
 [target.'cfg(target_os = "redox")'.dependencies]
@@ -15,7 +17,7 @@ termion = "1.5"
 [features]
 fs = ["libc"]
 utf8 = []
-encoding = ["data-encoding"]
+encoding = ["data-encoding", "failure", "failure_derive"]
 parse_time = []
 mode = ["libc"]
 utmpx = ["time", "libc"]

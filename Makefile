@@ -21,11 +21,9 @@ CARGOFLAGS ?=
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= /bin
-LIBDIR ?= /lib
 MANDIR ?= /man/man1
 
 INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
-INSTALLDIR_LIB=$(DESTDIR)$(PREFIX)$(LIBDIR)
 INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)/share/$(MANDIR)
 $(shell test -d $(INSTALLDIR_MAN))
 ifneq ($(.SHELLSTATUS),0)
@@ -248,12 +246,6 @@ ifeq ($(SYSTEM),Darwin)
 	DYLIB_FLAGS  := -dynamiclib -undefined dynamic_lookup
 endif
 
-# Libaries to install
-LIBS :=
-ifneq (,$(findstring stdbuf, $(INSTALLEES)))
-LIBS += libstdbuf.$(DYLIB_EXT)
-endif
-
 all: build
 
 do_install = $(INSTALL) ${1}
@@ -308,7 +300,6 @@ distclean: clean
 
 install: build
 	mkdir -p $(INSTALLDIR_BIN)
-	mkdir -p $(INSTALLDIR_LIB)
 	mkdir -p $(INSTALLDIR_MAN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
@@ -319,7 +310,6 @@ else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 endif
-	$(foreach lib, $(LIBS), $(INSTALL) $(BUILDDIR)/build/*/out/$(lib) $(INSTALLDIR_LIB)/$(PROG_PREFIX)$(lib) &&) :
 	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
 		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
 
@@ -330,6 +320,5 @@ endif
 	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)uutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
-	rm -f $(addprefix $(INSTALLDIR_LIB)/$(PROG_PREFIX),$(LIBS))
 
 .PHONY: all build build-uutils build-pkgs build-docs test distclean clean busytest install uninstall
