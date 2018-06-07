@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "2.31.1"
+version = "2.31.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "ansi_term 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -273,7 +273,7 @@ dependencies = [
 name = "cp"
 version = "0.0.1"
 dependencies = [
- "clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "filetime 0.1.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "ioctl-sys 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -376,7 +376,7 @@ name = "date"
 version = "0.0.1"
 dependencies = [
  "chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -673,7 +673,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "join"
 version = "0.0.1"
 dependencies = [
- "clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -1689,7 +1689,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "uname"
 version = "0.0.1"
 dependencies = [
- "clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "platform-info 0.1.0 (git+https://github.com/uutils/platform-info)",
  "uucore 0.0.1",
 ]
@@ -1962,7 +1962,7 @@ name = "whoami"
 version = "0.0.1"
 dependencies = [
  "advapi32-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
  "winapi 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -2008,7 +2008,7 @@ dependencies = [
 name = "yes"
 version = "0.0.1"
 dependencies = [
- "clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -2031,7 +2031,7 @@ dependencies = [
 "checksum cc 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "fedf677519ac9e865c4ff43ef8f930773b37ed6e6ea61b6b83b400a7b5787f49"
 "checksum cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d4c819a1287eb618df47cc647173c5c4c66ba19d888a6e50d605672aed3140de"
 "checksum chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7c20ebe0b2b08b0aeddba49c609fe7957ba2e33449882cb186a180bc60682fa9"
-"checksum clap 2.31.1 (registry+https://github.com/rust-lang/crates.io-index)" = "5dc18f6f4005132120d9711636b32c46a233fad94df6217fa1d81c5e97a9f200"
+"checksum clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f0f16b89cbb9ee36d87483dc939fe9f1e13c05898d56d7b230a0d4dff033a536"
 "checksum clippy 0.0.143 (registry+https://github.com/rust-lang/crates.io-index)" = "0ba494d48c1022ff0ded833291488c399a24cf4b3ca42c90870a4e354f73482b"
 "checksum clippy_lints 0.0.143 (registry+https://github.com/rust-lang/crates.io-index)" = "305d52f00df613fc9078dddbd820f03242a2682d57d9f7e7628891bdc041dbf5"
 "checksum cmake 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)" = "56d741ea7a69e577f6d06b36b7dff4738f680593dc27a701ffa8506b73ce28bb"

@@ -15,7 +15,7 @@ path = "cp.rs"
 getopts = "0.2.14"
 libc = "0.2.26"
 walkdir = "1.0.7"
-clap = "2.20.0"
+clap = "2.31.2"
 quick-error = "1.1.0"
 filetime = "0.1"
 
