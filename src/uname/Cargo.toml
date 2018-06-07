@@ -9,7 +9,7 @@ name = "uu_uname"
 path = "uname.rs"
 
 [dependencies]
-clap = "2.20.0"
+clap = "2.31.2"
 platform-info = { git = "https://github.com/uutils/platform-info" }
 uucore = { path = "../uucore" }
 
