@@ -86,6 +86,18 @@ fn unpaired_lines() {
 }
 
 #[test]
+fn suppress_joined() {
+    new_ucmd!()
+        .arg("fields_3.txt")
+        .arg("fields_2.txt")
+        .arg("-1")
+        .arg("2")
+        .arg("-v")
+        .arg("2")
+        .succeeds().stdout_only_fixture("suppress_joined.expected");
+}
+
+#[test]
 fn case_insensitive() {
     new_ucmd!()
         .arg("capitalized.txt")
