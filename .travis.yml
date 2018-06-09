@@ -37,12 +37,21 @@ sudo: true
 before_install:
   - if [ $REDOX ]; then ./.travis/redox-toolchain.sh; fi
 
+install:
+  - if [ $TRAVIS_OS_NAME = linux ]; then sudo apt-get install python-pip && sudo pip install sphinx; fi
+  - |
+    if [ $TRAVIS_OS_NAME = osx ]; then
+      brew update
+      brew upgrade python
+      pip3 install sphinx
+    fi
+
 script:
   - cargo build $CARGO_ARGS --features "$FEATURES"
   - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
   - mkdir installdir_test
   - DESTDIR=installdir_test make install
-  - "[ `ls installdir_test/usr/bin | wc -l` -gt 0 ]"
+  - "[ `ls installdir_test/usr/local/bin | wc -l` -gt 0 ]"
 
 addons:
   apt:
