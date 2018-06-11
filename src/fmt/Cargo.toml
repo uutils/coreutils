@@ -9,7 +9,7 @@ name = "uu_fmt"
 path = "fmt.rs"
 
 [dependencies]
-libc = "0.2.26"
+libc = "0.2.42"
 unicode-width = "0.1.4"
 uucore = { path="../uucore" }
 

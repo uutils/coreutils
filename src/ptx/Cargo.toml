@@ -10,7 +10,7 @@ path = "ptx.rs"
 
 [dependencies]
 getopts = "0.2.14"
-libc = "0.2.26"
+libc = "0.2.42"
 aho-corasick = "0.6.3"
 memchr = "1.0.1"
 regex-syntax = "0.5.0"

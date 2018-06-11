@@ -9,7 +9,7 @@ name = "uu_link"
 path = "link.rs"
 
 [dependencies]
-libc = "0.2.26"
+libc = "0.2.42"
 uucore = { path="../uucore" }
 
 [[bin]]
