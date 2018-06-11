@@ -8,7 +8,7 @@ name = "uu_cksum"
 path = "cksum.rs"
 
 [dependencies]
-libc = "0.2.26"
+libc = "0.2.42"
 uucore = { path="../uucore" }
 
 [[bin]]
