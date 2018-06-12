@@ -47,6 +47,7 @@ struct Settings {
     key1: usize,
     key2: usize,
     print_unpaired: FileNum,
+    print_joined: bool,
     ignore_case: bool,
     separator: Sep,
     autoformat: bool,
@@ -62,6 +63,7 @@ impl Default for Settings {
             key1: 0,
             key2: 0,
             print_unpaired: FileNum::None,
+            print_joined: true,
             ignore_case: false,
             separator: Sep::Whitespaces,
             autoformat: false,
@@ -460,6 +462,12 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 ),
         )
         .arg(
+            Arg::with_name("v")
+                .short("v")
+                .value_name("FILENUM")
+                .help("like -a FILENUM, but suppress joined output lines"),
+        )
+        .arg(
             Arg::with_name("e")
                 .short("e")
                 .takes_value(true)
@@ -539,14 +547,14 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
     let key2 = parse_field_number_option(matches.value_of("2"));
 
     let mut settings: Settings = Default::default();
-    settings.print_unpaired = match matches.value_of("a") {
-        Some(value) => match value {
-            "1" => FileNum::File1,
-            "2" => FileNum::File2,
-            value => crash!(1, "invalid file number: '{}'", value),
-        },
-        None => FileNum::None,
-    };
+
+    if let Some(value) = matches.value_of("v") {
+        settings.print_unpaired = parse_file_number(value);
+        settings.print_joined = false;
+    } else if let Some(value) = matches.value_of("a") {
+        settings.print_unpaired = parse_file_number(value);
+    }
+
     settings.ignore_case = matches.is_present("i");
     settings.key1 = get_field_number(keys, key1);
     settings.key2 = get_field_number(keys, key2);
@@ -652,7 +660,11 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
             Ordering::Equal => {
                 let next_line1 = state1.extend(&input);
                 let next_line2 = state2.extend(&input);
-                state1.combine(&state2, &repr);
+
+                if settings.print_joined {
+                    state1.combine(&state2, &repr);
+                }
+
                 state1.reset(next_line1);
                 state2.reset(next_line2);
             }
@@ -691,6 +703,14 @@ fn parse_field_number(value: &str) -> usize {
     match value.parse::<usize>() {
         Ok(result) if result > 0 => result - 1,
         _ => crash!(1, "invalid field number: '{}'", value),
+    }
+}
+
+fn parse_file_number(value: &str) -> FileNum {
+    match value {
+        "1" => FileNum::File1,
+        "2" => FileNum::File2,
+        value => crash!(1, "invalid file number: '{}'", value),
     }
 }
 
