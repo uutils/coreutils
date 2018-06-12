@@ -12,7 +12,7 @@ path = "od.rs"
 getopts = "0.2.14"
 libc = "0.2.42"
 byteorder = "1.1.0"
-half = "1.0.0"
+half = "1.1.0"
 uucore = { path="../uucore" }
 
 [[bin]]
