@@ -10,7 +10,7 @@ path = "stdbuf.rs"
 
 [dependencies]
 getopts = "0.2.14"
-tempdir = "0.3.5"
+tempdir = "0.3.7"
 uucore = { path="../uucore" }
 
 [build-dependencies]
