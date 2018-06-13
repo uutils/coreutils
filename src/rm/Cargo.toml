@@ -11,7 +11,7 @@ path = "rm.rs"
 [dependencies]
 getopts = "0.2.14"
 walkdir = "2.1.4"
-remove_dir_all = "0.2"
+remove_dir_all = "0.5.1"
 uucore = { path="../uucore" }
 
 [[bin]]
