@@ -38,7 +38,7 @@ macro_rules! to_local(
 macro_rules! local_tm_to_filetime(
     ($exp:expr) => ({
         let ts = $exp.to_timespec();
-        FileTime::from_seconds_since_1970(ts.sec as u64, ts.nsec as u32)
+        FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
     })
 );
 
