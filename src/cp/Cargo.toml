@@ -17,7 +17,7 @@ libc = "0.2.42"
 walkdir = "2.1.4"
 clap = "2.31.2"
 quick-error = "1.2.2"
-filetime = "0.1"
+filetime = "0.2"
 
 [dependencies.uucore]
 path = "../uucore"

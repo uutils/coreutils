@@ -250,7 +250,7 @@ yes      = { optional=true, path="src/yes" }
 
 [dev-dependencies]
 time = "0.1.38"
-filetime = "0.1.10"
+filetime = "0.2.1"
 libc = "0.2.42"
 regex = "0.2.2"
 rand = "0.4.2"

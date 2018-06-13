@@ -9,7 +9,7 @@ name = "uu_touch"
 path = "touch.rs"
 
 [dependencies]
-filetime = "0.1.10"
+filetime = "0.2.1"
 getopts = "0.2.14"
 time = "0.1.38"
 
