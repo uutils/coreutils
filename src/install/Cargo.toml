@@ -14,7 +14,7 @@ libc = ">= 0.2"
 uucore = { path="../uucore" }
 
 [dev-dependencies]
-time = "0.1.38"
+time = "0.1.40"
 
 [[bin]]
 name = "install"
