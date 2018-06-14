@@ -14,7 +14,7 @@ libc = "0.2.42"
 aho-corasick = "0.6.3"
 memchr = "1.0.1"
 regex = "0.2.2"
-regex-syntax = "0.6.0"
+regex-syntax = "0.6.1"
 uucore = { path="../uucore" }
 
 [[bin]]
