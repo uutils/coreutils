@@ -195,7 +195,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -422,7 +422,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "du"
 version = "0.0.1"
 dependencies = [
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -679,7 +679,7 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -797,7 +797,7 @@ dependencies = [
  "pretty-bytes 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "term_grid 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "termsize 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
@@ -1429,7 +1429,7 @@ dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -1473,7 +1473,7 @@ name = "stat"
 version = "0.0.1"
 dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.1.39"
+version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1670,7 +1670,7 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -1688,7 +1688,7 @@ version = "0.0.1"
 dependencies = [
  "filetime 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -1834,7 +1834,7 @@ name = "uptime"
 version = "0.0.1"
 dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -1871,7 +1871,7 @@ dependencies = [
  "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1961,7 +1961,7 @@ dependencies = [
  "tee 0.0.1",
  "tempdir 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "test 0.0.1",
- "time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "timeout 0.0.1",
  "touch 0.0.1",
  "tr 0.0.1",
@@ -2199,7 +2199,7 @@ dependencies = [
 "checksum termsize 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "4e3cde4e7c68acfef795660eba99817550b0d7b6d79ebb8e75439358ca5b680f"
 "checksum textwrap 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c0b59b6b4b44d867f1370ef1bd91bfb262bf07bf0ae65c202ea2fbc16153b693"
 "checksum thread_local 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "279ef31c19ededf577bfd12dfae728040a21f635b06a24cd670ff510edd38963"
-"checksum time 0.1.39 (registry+https://github.com/rust-lang/crates.io-index)" = "a15375f1df02096fb3317256ce2cee6a1f42fc84ea5ad5fc8c421cfe40c73098"
+"checksum time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)" = "d825be0eb33fda1a7e68012d51e9c7f451dc1a69391e7fdc197060bb8c56667b"
 "checksum toml 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "a7540f4ffc193e0d3c94121edb19b055670d369f77d5804db11ae053a45b6e7e"
 "checksum typenum 1.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "612d636f949607bdf9b123b4a6f6d966dedf3ff669f7f045890d3a4a73948169"
 "checksum ucd-util 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "fd2be2d6639d0f8fe6cdda291ad456e23629558d466e2789d2c3e9892bda285d"

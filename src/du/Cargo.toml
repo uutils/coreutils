@@ -9,7 +9,7 @@ name = "uu_du"
 path = "du.rs"
 
 [dependencies]
-time = "0.1.38"
+time = "0.1.40"
 uucore = { path="../uucore" }
 
 [[bin]]
