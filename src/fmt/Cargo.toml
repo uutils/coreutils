@@ -10,7 +10,7 @@ path = "fmt.rs"
 
 [dependencies]
 libc = "0.2.42"
-unicode-width = "0.1.4"
+unicode-width = "0.1.5"
 uucore = { path="../uucore" }
 
 [[bin]]
