@@ -17,7 +17,7 @@ path = "../uucore"
 features = ["entries", "fs"]
 
 [dependencies.clippy]
-version = "0.0.206"
+version = "0.0.207"
 optional = true
 
 [[bin]]
