@@ -10,7 +10,7 @@ path = "tr.rs"
 
 [dependencies]
 getopts = "0.2.14"
-bit-set = "0.4.0"
+bit-set = "0.5.0"
 fnv = "1.0.5"
 uucore = { path = "../uucore" }
 
