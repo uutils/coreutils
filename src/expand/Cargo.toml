@@ -9,7 +9,7 @@ name = "uu_expand"
 path = "expand.rs"
 
 [dependencies]
-unicode-width = "0.1.4"
+unicode-width = "0.1.5"
 getopts = "0.2.14"
 uucore = { path="../uucore" }
 
