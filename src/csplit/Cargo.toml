@@ -1,0 +1,22 @@
+[package]
+name = "csplit"
+version = "0.0.1"
+authors = []
+build = "../../mkmain.rs"
+
+[lib]
+name = "uu_csplit"
+path = "mod.rs"
+
+[dependencies]
+getopts = "0.2.17"
+failure = "0.1.1"
+failure_derive = "0.1.1"
+regex = "1.0.0"
+
+[dependencies.uucore]
+path = "../uucore"
+
+[[bin]]
+name = "csplit"
+path = "../../uumain.rs"

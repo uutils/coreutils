@@ -54,6 +54,7 @@ PROGS       := \
   comm \
   cp \
   cut \
+  csplit \
   dircolors \
   dirname \
   echo \
@@ -159,6 +160,7 @@ TEST_PROGS  := \
 	cksum \
 	comm \
 	cp \
+	csplit \
 	cut \
 	dircolors \
 	dirname \

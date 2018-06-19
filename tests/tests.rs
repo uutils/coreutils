@@ -50,6 +50,7 @@ generic! {
     "comm", test_comm;
     "cp", test_cp;
     "cut", test_cut;
+    "csplit", test_csplit;
     "dircolors", test_dircolors;
     "dirname", test_dirname;
     "du", test_du;

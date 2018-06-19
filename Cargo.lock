@@ -374,6 +374,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "csplit"
+version = "0.0.1"
+dependencies = [
+ "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "getopts 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
 name = "cut"
 version = "0.0.1"
 dependencies = [
@@ -1841,6 +1852,7 @@ dependencies = [
  "cksum 0.0.1",
  "comm 0.0.1",
  "cp 0.0.1",
+ "csplit 0.0.1",
  "cut 0.0.1",
  "date 0.0.1",
  "dircolors 0.0.1",
@@ -1855,6 +1867,7 @@ dependencies = [
  "filetime 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "fmt 0.0.1",
  "fold 0.0.1",
+ "glob 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "groups 0.0.1",
  "hashsum 0.0.1",
  "head 0.0.1",
