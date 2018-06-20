@@ -9,7 +9,7 @@ name = "uu_shred"
 path = "shred.rs"
 
 [dependencies]
-rand = "0.4"
+rand = "0.5"
 filetime = "0.2.1"
 getopts = "0.2.14"
 libc = "0.2.42"
