@@ -331,3 +331,19 @@ fn test_option_quiet() {
     assert_eq!(at.read("xx1"), generate(25, 30));
     assert_eq!(at.read("xx2"), generate(30, 51));
 }
+
+#[test]
+fn test_option_prefix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--prefix", "dog", "numbers50.txt", "13", "%25%", "/0$/"])
+        .succeeds()
+        .stdout_only("27\n15\n63\n");
+
+    let count = glob(&at.plus_as_string("dog*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("dog0"), generate(1, 13));
+    assert_eq!(at.read("dog1"), generate(25, 30));
+    assert_eq!(at.read("dog2"), generate(30, 51));
+}
