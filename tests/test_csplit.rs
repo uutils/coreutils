@@ -9,6 +9,22 @@ fn generate(from: u32, to: u32) -> String {
 }
 
 #[test]
+fn test_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "10"])
+        .pipe_in(generate(1, 51))
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx0"), generate(1, 10));
+    assert_eq!(at.read("xx1"), generate(10, 51));
+}
+
+#[test]
 fn test_up_to_line() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10"])

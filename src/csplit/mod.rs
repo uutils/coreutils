@@ -9,6 +9,7 @@ extern crate regex;
 use getopts::Matches;
 use regex::Regex;
 use std::fs::File;
+use std::io::{self, BufReader};
 
 pub mod csplit_impl;
 
@@ -216,20 +217,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
         disp_err!("missing operand after '{}'", matches.free[0]);
         exit!(1);
     }
-    // get the file to split
-    let file_name: &str = &matches.free[0];
-    let file = return_if_err!(1, File::open(file_name));
-    let file_metadata = return_if_err!(1, file.metadata());
-    if !file_metadata.is_file() {
-        show_error!("'{}' is not a regular file", file_name);
-        exit!(1);
-    }
     // get the patterns to split on
     let patterns = return_if_err!(1, get_patterns(&matches.free[1..]));
-    return return_if_err!(
-        1,
-        csplit_impl::csplit(CsplitOptions::new(&matches), patterns, file,)
-    );
+    // get the file to split
+    let file_name: &str = &matches.free[0];
+    if file_name == "-" {
+        let stdin = io::stdin();
+        return return_if_err!(
+            1,
+            csplit_impl::csplit(CsplitOptions::new(&matches), patterns, stdin.lock())
+        );
+    } else {
+        let file = return_if_err!(1, File::open(file_name));
+        let file_metadata = return_if_err!(1, file.metadata());
+        if !file_metadata.is_file() {
+            show_error!("'{}' is not a regular file", file_name);
+            exit!(1);
+        }
+        return return_if_err!(
+            1,
+            csplit_impl::csplit(CsplitOptions::new(&matches), patterns, BufReader::new(file))
+        );
+    };
 }
 
 #[cfg(test)]

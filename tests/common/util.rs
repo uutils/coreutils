@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 extern crate tempdir;
 
+use self::tempdir::TempDir;
 use std::env;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
@@ -10,12 +12,10 @@ use std::os::unix::fs::symlink as symlink_file;
 use std::os::windows::fs::symlink_file;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::str::from_utf8;
-use std::ffi::OsStr;
 use std::rc::Rc;
+use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
-use self::tempdir::TempDir;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "uutils.exe";

@@ -1,17 +1,18 @@
 use std::fs::remove_file;
 use std::fs::File;
-use std::io;
-use std::io::{BufRead, BufReader};
-use std::io::{BufWriter, Write};
+use std::io::{self, BufRead, BufWriter, Write};
 
 /// Splits a file into severals according to the command line patterns.
 ///
 /// # Errors
 ///
 /// Returns a [`io::Error`] if there is some problem reading/writing from/to a file.
-pub fn csplit(options: ::CsplitOptions, patterns: Vec<::Pattern>, file: File) -> io::Result<i32> {
+pub fn csplit<T>(options: ::CsplitOptions, patterns: Vec<::Pattern>, input: T) -> io::Result<i32>
+where
+    T: BufRead,
+{
     let mut split_writer = SplitWriter::new(&options)?;
-    let mut input_iter = BufReader::new(file).lines().enumerate().peekable();
+    let mut input_iter = input.lines().enumerate().peekable();
     let mut offset_buffer: OffsetBuffer = Default::default();
 
     // split the file based on patterns
