@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "chrono"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num-integer 0.1.36 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -385,7 +385,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "date"
 version = "0.0.1"
 dependencies = [
- "chrono 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chrono 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
@@ -2051,7 +2051,7 @@ dependencies = [
 "checksum cargo_metadata 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)" = "682476b87b3e22cd3820d86b26cd8603cd84ab76dce7547b2631858347aa8967"
 "checksum cc 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "fedf677519ac9e865c4ff43ef8f930773b37ed6e6ea61b6b83b400a7b5787f49"
 "checksum cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d4c819a1287eb618df47cc647173c5c4c66ba19d888a6e50d605672aed3140de"
-"checksum chrono 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "a81892f0d5a53f46fc05ef0b917305a81c13f1f13bb59ac91ff595817f0764b1"
+"checksum chrono 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "6962c635d530328acc53ac6a955e83093fedc91c5809dfac1fa60fa470830a37"
 "checksum clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f0f16b89cbb9ee36d87483dc939fe9f1e13c05898d56d7b230a0d4dff033a536"
 "checksum clippy 0.0.209 (registry+https://github.com/rust-lang/crates.io-index)" = "fe56cba96f8d67cd3af996bd2c61fbfea263cc555db9180dc1f7413418454c7d"
 "checksum clippy_lints 0.0.209 (registry+https://github.com/rust-lang/crates.io-index)" = "891679ac4d0890425ce9aa4db6ab7c05a60506048fb5e0fc2ae2eeaeb02626e8"

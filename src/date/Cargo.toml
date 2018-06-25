@@ -9,7 +9,7 @@ name = "uu_date"
 path = "date.rs"
 
 [dependencies]
-chrono = "0.4.3"
+chrono = "0.4.4"
 clap = "2.31.2"
 uucore = { path="../uucore" }
 
