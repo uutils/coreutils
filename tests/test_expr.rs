@@ -13,6 +13,17 @@ fn test_simple_arithmetic() {
 }
 
 #[test]
+fn test_complex_arithmetic() {
+    let run = new_ucmd!().args(&["9223372036854775807", "+", "9223372036854775807"]).run();
+    run.stdout_is("");
+    run.stderr_is("expr: error: +: Numerical result out of range");
+
+    let run = new_ucmd!().args(&["9", "/", "0"]).run();
+    run.stdout_is("");
+    run.stderr_is("expr: error: division by zero");
+}
+
+#[test]
 fn test_parenthesis() {
     new_ucmd!().args(&["(", "1", "+", "1", ")", "*", "2"]).run().stdout_is("4\n");
 }
