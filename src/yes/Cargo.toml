@@ -10,7 +10,7 @@ name = "uu_yes"
 path = "yes.rs"
 
 [dependencies]
-clap = "2.31"
+clap = "2.32"
 uucore = { path = "../uucore" }
 
 [features]

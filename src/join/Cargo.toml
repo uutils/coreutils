@@ -9,7 +9,7 @@ name = "uu_join"
 path = "join.rs"
 
 [dependencies]
-clap = "2.31.2"
+clap = "2.32.0"
 uucore = { path="../uucore" }
 
 [[bin]]
