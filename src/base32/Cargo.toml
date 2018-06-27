@@ -13,7 +13,7 @@ path = "../uucore"
 features = ["encoding"]
 
 [dependencies.clippy]
-version = "0.0.209"
+version = "0.0.210"
 optional = true
 
 [[bin]]
