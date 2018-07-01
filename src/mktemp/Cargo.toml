@@ -11,7 +11,7 @@ path = "mktemp.rs"
 [dependencies]
 uucore = { path="../uucore" }
 getopts = "0.2.14"
-rand = "0.4"
+rand = "0.5"
 tempfile = "2.1.5"
 
 [[bin]]
