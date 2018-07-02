@@ -13,7 +13,7 @@ path = "../uucore"
 features = ["utmpx"]
 
 [dependencies.clippy]
-version = "0.0.209"
+version = "0.0.211"
 optional = true
 
 [[bin]]
