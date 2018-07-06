@@ -9,7 +9,7 @@ name = "uu_ls"
 path = "ls.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 pretty-bytes = "0.2.1"
 term_grid = "0.1.5"
 termsize = "0.1.4"

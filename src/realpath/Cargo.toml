@@ -9,7 +9,7 @@ name = "uu_realpath"
 path = "realpath.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 
 [dependencies.uucore]
 path = "../uucore"

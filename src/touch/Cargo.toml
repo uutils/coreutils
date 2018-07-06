@@ -10,7 +10,7 @@ path = "touch.rs"
 
 [dependencies]
 filetime = "0.2.1"
-getopts = "0.2.14"
+getopts = "0.2.18"
 time = "0.1.40"
 
 [dependencies.uucore]

@@ -9,7 +9,7 @@ name = "uu_rmdir"
 path = "rmdir.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 uucore = { path="../uucore" }
 
 [[bin]]

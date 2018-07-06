@@ -9,7 +9,7 @@ name = "uu_nohup"
 path = "nohup.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 libc = "0.2.42"
 
 [dependencies.uucore]

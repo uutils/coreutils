@@ -10,7 +10,7 @@ path = "expand.rs"
 
 [dependencies]
 unicode-width = "0.1.5"
-getopts = "0.2.14"
+getopts = "0.2.18"
 uucore = { path="../uucore" }
 
 [[bin]]
