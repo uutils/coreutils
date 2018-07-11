@@ -9,7 +9,7 @@ name = "uu_stat"
 path = "stat.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 time = "0.1.40"
 
 [dependencies.uucore]

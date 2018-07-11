@@ -12,7 +12,7 @@ name = "uu_cp"
 path = "cp.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 libc = "0.2.42"
 walkdir = "2.1.4"
 clap = "2.32.0"

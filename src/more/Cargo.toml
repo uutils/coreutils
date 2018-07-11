@@ -9,7 +9,7 @@ name = "uu_more"
 path = "more.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 uucore = { path="../uucore" }
 
 [target.'cfg(target_os = "redox")'.dependencies]
