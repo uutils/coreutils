@@ -66,7 +66,7 @@ dependencies = [
 name = "base32"
 version = "0.0.1"
 dependencies = [
- "clippy 0.0.211 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clippy 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -183,7 +183,7 @@ dependencies = [
 name = "chown"
 version = "0.0.1"
 dependencies = [
- "clippy 0.0.211 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clippy 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)",
  "glob 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
  "walkdir 2.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -231,19 +231,22 @@ dependencies = [
 
 [[package]]
 name = "clippy"
-version = "0.0.211"
+version = "0.0.212"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "ansi_term 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "clippy_lints 0.0.211 (registry+https://github.com/rust-lang/crates.io-index)",
+ "backtrace 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clippy_lints 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-traits 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc_version 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "clippy_lints"
-version = "0.0.211"
+version = "0.0.212"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cargo_metadata 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1968,7 +1971,7 @@ dependencies = [
 name = "who"
 version = "0.0.1"
 dependencies = [
- "clippy 0.0.211 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clippy 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
 ]
 
@@ -2047,8 +2050,8 @@ dependencies = [
 "checksum cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d4c819a1287eb618df47cc647173c5c4c66ba19d888a6e50d605672aed3140de"
 "checksum chrono 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "6962c635d530328acc53ac6a955e83093fedc91c5809dfac1fa60fa470830a37"
 "checksum clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b957d88f4b6a63b9d70d5f454ac8011819c6efa7727858f458ab71c756ce2d3e"
-"checksum clippy 0.0.211 (registry+https://github.com/rust-lang/crates.io-index)" = "88130e594af68f9cfd8835fe9a1329b575f57e39e79ac65818f24b3dc27995d9"
-"checksum clippy_lints 0.0.211 (registry+https://github.com/rust-lang/crates.io-index)" = "af5c9410d051eeb63e8f9535271477677df56b05b4ed6be8c7c14a9646a413db"
+"checksum clippy 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)" = "7e253af13a0cc39c7f22cf16f1be49d593dedc5895fe2fbb15f14d66ead00533"
+"checksum clippy_lints 0.0.212 (registry+https://github.com/rust-lang/crates.io-index)" = "bd2326065405649672adbd5cb30dad2fad3a470935653d51c70591d47d3a8512"
 "checksum cmake 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)" = "56d741ea7a69e577f6d06b36b7dff4738f680593dc27a701ffa8506b73ce28bb"
 "checksum cpp 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2d1cd8699ffa1b18fd388183f7762e0545eddbd5c6ec95e9e3b42a4a71a507ff"
 "checksum cpp_build 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c47531e7e09532ad4827098729794f5e1a5b1c2ccbb5e295498d2e7ab451c445"
