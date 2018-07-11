@@ -72,7 +72,7 @@ impl Uniq {
         }
     }
 
-    fn skip_fields(&self, line: &str) -> String {
+    fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
         if let Some(skip_fields) = self.skip_fields {
             if line.split_whitespace().count() > skip_fields {
                 let mut field = 0;
@@ -86,12 +86,12 @@ impl Uniq {
                     }
                     field = field + 1;
                 }
-                line[i..].to_owned()
+                &line[i..]
             } else {
-                "".to_owned()
+                ""
             }
         } else {
-            line[..].to_owned()
+            line
         }
     }
 
@@ -104,7 +104,7 @@ impl Uniq {
     }
 
     fn cmp_key(&self, line: &str) -> String {
-        let fields_to_check = &self.skip_fields(line);
+        let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
         if len > 0 {
             fields_to_check
