@@ -85,18 +85,25 @@ impl ASTNode {
             ASTNode::Node { ref op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
-                    "+" => infix_operator_two_ints(|a: i64, b: i64| Ok(a + b), &operand_values),
-                    "-" => infix_operator_two_ints(|a: i64, b: i64| Ok(a - b), &operand_values),
-                    "*" => infix_operator_two_ints(|a: i64, b: i64| Ok(a * b), &operand_values),
-                    "/" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
+                    "+" => infix_operator_two_ints(|a: i64, b: i64| {
+                            checked_binop(|| a.checked_add(b), "+")
+                        }, &operand_values
+                    ),
+                    "-" => infix_operator_two_ints(|a: i64, b: i64| {
+                            checked_binop(|| a.checked_sub(b), "-")
+                        }, &operand_values
+                    ),
+                    "*" => infix_operator_two_ints(|a: i64, b: i64| {
+                            checked_binop(|| a.checked_mul(b), "*")
+                        }, &operand_values
+                    ),
+                    "/" => infix_operator_two_ints(|a: i64, b: i64| {
                             if b == 0 {
                                 Err("division by zero".to_owned())
                             } else {
-                                Ok(a / b)
+                                checked_binop(|| a.checked_div(b), "/")
                             }
-                        },
-                        &operand_values,
+                        }, &operand_values
                     ),
                     "%" => infix_operator_two_ints(
                         |a: i64, b: i64| {
@@ -108,7 +115,6 @@ impl ASTNode {
                         },
                         &operand_values,
                     ),
-
                     "=" => infix_operator_two_ints_or_two_strings(
                         |a: i64, b: i64| Ok(bool_as_int(a == b)),
                         |a: &String, b: &String| Ok(bool_as_string(a == b)),
@@ -381,6 +387,13 @@ fn move_till_match_paren(
             Some((_, Token::ParOpen)) => return Ok(()),
             Some(other) => out_stack.push(other),
         }
+    }
+}
+
+fn checked_binop<F: Fn() -> Option<T>, T>(cb: F, op: &str) -> Result<T, String> {
+    match cb() {
+        Some(v) => Ok(v),
+        None => Err(format!("{}: Numerical result out of range", op)),
     }
 }
 
