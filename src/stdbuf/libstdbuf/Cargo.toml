@@ -15,4 +15,4 @@ libc = "0.2"
 cpp = "0.4"
 
 [build-dependencies]
-cpp_build = "0.3"
+cpp_build = "0.4"
