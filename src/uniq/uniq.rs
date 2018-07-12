@@ -113,6 +113,19 @@ impl Uniq {
         let slice_start = self.slice_start.unwrap_or(0);
         let slice_stop = self.slice_stop.unwrap_or(len);
         if len > 0 {
+            // fast path: avoid doing any work if there is no need to skip or map to lower-case
+            if !self.ignore_case && slice_start == 0 && slice_stop == len {
+                return Box::new(fields_to_check.chars());
+            }
+
+            // fast path: avoid skipping
+            if self.ignore_case && slice_start == 0 && slice_stop == len {
+                return Box::new(fields_to_check.chars().map(|c| match c {
+                    'a'...'z' => ((c as u8) - 32) as char,
+                    _ => c,
+                }));
+            }
+
             // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
             if !self.ignore_case {
                 return Box::new(fields_to_check.chars().skip(slice_start).take(slice_stop));
@@ -123,8 +136,8 @@ impl Uniq {
                     .chars()
                     .skip(slice_start)
                     .take(slice_stop)
-                    .map(move |c| match c {
-                        'a'...'z' if self.ignore_case => ((c as u8) - 32) as char,
+                    .map(|c| match c {
+                        'a'...'z' => ((c as u8) - 32) as char,
                         _ => c,
                     }),
             )
