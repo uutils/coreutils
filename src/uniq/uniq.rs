@@ -110,12 +110,19 @@ impl Uniq {
     fn cmp_key<'a>(&'a self, line: &'a str) -> Box<Iterator<Item = char> + 'a> {
         let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
+        let slice_start = self.slice_start.unwrap_or(0);
+        let slice_stop = self.slice_stop.unwrap_or(len);
         if len > 0 {
+            // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
+            if !self.ignore_case {
+                return Box::new(fields_to_check.chars().skip(slice_start).take(slice_stop));
+            }
+
             Box::new(
                 fields_to_check
                     .chars()
-                    .skip(self.slice_start.unwrap_or(0))
-                    .take(self.slice_stop.unwrap_or(len))
+                    .skip(slice_start)
+                    .take(slice_stop)
                     .map(move |c| match c {
                         'a'...'z' if self.ignore_case => ((c as u8) - 32) as char,
                         _ => c,
