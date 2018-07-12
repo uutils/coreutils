@@ -44,6 +44,10 @@ struct Uniq {
     zero_terminated: bool,
 }
 
+fn iter_ne<'a>(lhs: Box<Iterator<Item = char> + 'a>, rhs: Box<Iterator<Item = char> + 'a>) -> bool {
+    lhs.ne(rhs)
+}
+
 impl Uniq {
     pub fn print_uniq<R: Read, W: Write>(
         &self,
@@ -57,7 +61,7 @@ impl Uniq {
 
         for io_line in reader.split(line_terminator) {
             let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
-            if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
+            if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
                 let print_delimiter = delimiters == &Delimiters::Prepend
                     || (delimiters == &Delimiters::Separate && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
@@ -103,21 +107,22 @@ impl Uniq {
         }
     }
 
-    fn cmp_key(&self, line: &str) -> String {
+    fn cmp_key<'a>(&'a self, line: &'a str) -> Box<Iterator<Item = char> + 'a> {
         let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
         if len > 0 {
-            fields_to_check
-                .chars()
-                .skip(self.slice_start.unwrap_or(0))
-                .take(self.slice_stop.unwrap_or(len))
-                .map(|c| match c {
-                    'a'...'z' if self.ignore_case => ((c as u8) - 32) as char,
-                    _ => c,
-                })
-                .collect()
+            Box::new(
+                fields_to_check
+                    .chars()
+                    .skip(self.slice_start.unwrap_or(0))
+                    .take(self.slice_stop.unwrap_or(len))
+                    .map(move |c| match c {
+                        'a'...'z' if self.ignore_case => ((c as u8) - 32) as char,
+                        _ => c,
+                    }),
+            )
         } else {
-            fields_to_check.to_owned()
+            Box::new(fields_to_check.chars())
         }
     }
 
