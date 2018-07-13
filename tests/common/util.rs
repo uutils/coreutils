@@ -349,7 +349,8 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
-        let s = self.subdir
+        let s = self
+            .subdir
             .canonicalize()
             .unwrap()
             .to_str()
@@ -548,7 +549,8 @@ impl UCommand {
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let mut result = self.raw
+        let mut result = self
+            .raw
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
