@@ -24,11 +24,18 @@ use std::str::FromStr;
 static NAME: &'static str = "uniq";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+#[derive(PartialEq)]
+enum Delimiters {
+    Prepend,
+    Separate,
+    None,
+}
+
 struct Uniq {
     repeats_only: bool,
     uniques_only: bool,
     all_repeated: bool,
-    delimiters: String,
+    delimiters: Delimiters,
     show_counts: bool,
     skip_fields: Option<usize>,
     slice_start: Option<usize>,
@@ -45,22 +52,22 @@ impl Uniq {
     ) {
         let mut lines: Vec<String> = vec![];
         let mut first_line_printed = false;
-        let delimiters = &self.delimiters[..];
+        let delimiters = &self.delimiters;
         let line_terminator = self.get_line_terminator();
 
         for io_line in reader.split(line_terminator) {
             let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
             if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
-                let print_delimiter =
-                    delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
+                let print_delimiter = delimiters == &Delimiters::Prepend
+                    || (delimiters == &Delimiters::Separate && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
                 lines.truncate(0);
             }
             lines.push(line);
         }
         if !lines.is_empty() {
-            let print_delimiter =
-                delimiters == "prepend" || (delimiters == "separate" && first_line_printed);
+            let print_delimiter = delimiters == &Delimiters::Prepend
+                || (delimiters == &Delimiters::Separate && first_line_printed);
             self.print_lines(writer, &lines, print_delimiter);
         }
     }
@@ -248,18 +255,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
             uniques_only: matches.opt_present("unique"),
             all_repeated: matches.opt_present("all-repeated"),
             delimiters: match matches.opt_default("all-repeated", "none") {
-                Some(ref opt_arg) if opt_arg != "none" => {
-                    let rep_args = ["prepend".to_owned(), "separate".to_owned()];
-                    if !rep_args.contains(opt_arg) {
-                        crash!(
-                            1,
-                            "Incorrect argument for all-repeated: {}",
-                            opt_arg.clone()
-                        );
-                    }
-                    opt_arg.clone()
-                }
-                _ => "".to_owned(),
+                Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
+                    "prepend" => Delimiters::Prepend,
+                    "separate" => Delimiters::Separate,
+                    _ => crash!(1, "Incorrect argument for all-repeated: {}", opt_arg),
+                },
+                _ => Delimiters::None,
             },
             show_counts: matches.opt_present("count"),
             skip_fields: opt_parsed("skip-fields", &matches),
