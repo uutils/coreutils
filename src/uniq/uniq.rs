@@ -44,10 +44,6 @@ struct Uniq {
     zero_terminated: bool,
 }
 
-fn iter_ne<'a>(lhs: Box<Iterator<Item = char> + 'a>, rhs: Box<Iterator<Item = char> + 'a>) -> bool {
-    lhs.ne(rhs)
-}
-
 impl Uniq {
     pub fn print_uniq<R: Read, W: Write>(
         &self,
@@ -107,7 +103,16 @@ impl Uniq {
         }
     }
 
-    fn cmp_key<'a>(&'a self, line: &'a str) -> Box<Iterator<Item = char> + 'a> {
+    fn cmp_keys(&self, first: &str, second: &str) -> bool {
+        self.cmp_key(first, |first_iter| {
+            self.cmp_key(second, |second_iter| first_iter.ne(second_iter))
+        })
+    }
+
+    fn cmp_key<F>(&self, line: &str, mut closure: F) -> bool
+    where
+        F: FnMut(&mut Iterator<Item = char>) -> bool,
+    {
         let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
         let slice_start = self.slice_start.unwrap_or(0);
@@ -115,12 +120,12 @@ impl Uniq {
         if len > 0 {
             // fast path: avoid doing any work if there is no need to skip or map to lower-case
             if !self.ignore_case && slice_start == 0 && slice_stop == len {
-                return Box::new(fields_to_check.chars());
+                return closure(&mut fields_to_check.chars());
             }
 
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
-                return Box::new(fields_to_check.chars().map(|c| match c {
+                return closure(&mut fields_to_check.chars().map(|c| match c {
                     'a'...'z' => ((c as u8) - 32) as char,
                     _ => c,
                 }));
@@ -128,11 +133,11 @@ impl Uniq {
 
             // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
             if !self.ignore_case {
-                return Box::new(fields_to_check.chars().skip(slice_start).take(slice_stop));
+                return closure(&mut fields_to_check.chars().skip(slice_start).take(slice_stop));
             }
 
-            Box::new(
-                fields_to_check
+            closure(
+                &mut fields_to_check
                     .chars()
                     .skip(slice_start)
                     .take(slice_stop)
@@ -142,7 +147,7 @@ impl Uniq {
                     }),
             )
         } else {
-            Box::new(fields_to_check.chars())
+            closure(&mut fields_to_check.chars())
         }
     }
 
