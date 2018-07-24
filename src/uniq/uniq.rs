@@ -57,7 +57,7 @@ impl Uniq {
 
         for io_line in reader.split(line_terminator) {
             let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
-            if !lines.is_empty() && self.cmp_key(&lines[0]) != self.cmp_key(&line) {
+            if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
                 let print_delimiter = delimiters == &Delimiters::Prepend
                     || (delimiters == &Delimiters::Separate && first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
@@ -72,7 +72,7 @@ impl Uniq {
         }
     }
 
-    fn skip_fields(&self, line: &str) -> String {
+    fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
         if let Some(skip_fields) = self.skip_fields {
             if line.split_whitespace().count() > skip_fields {
                 let mut field = 0;
@@ -86,12 +86,12 @@ impl Uniq {
                     }
                     field = field + 1;
                 }
-                line[i..].to_owned()
+                &line[i..]
             } else {
-                "".to_owned()
+                ""
             }
         } else {
-            line[..].to_owned()
+            line
         }
     }
 
@@ -103,21 +103,51 @@ impl Uniq {
         }
     }
 
-    fn cmp_key(&self, line: &str) -> String {
-        let fields_to_check = &self.skip_fields(line);
+    fn cmp_keys(&self, first: &str, second: &str) -> bool {
+        self.cmp_key(first, |first_iter| {
+            self.cmp_key(second, |second_iter| first_iter.ne(second_iter))
+        })
+    }
+
+    fn cmp_key<F>(&self, line: &str, mut closure: F) -> bool
+    where
+        F: FnMut(&mut Iterator<Item = char>) -> bool,
+    {
+        let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
+        let slice_start = self.slice_start.unwrap_or(0);
+        let slice_stop = self.slice_stop.unwrap_or(len);
         if len > 0 {
-            fields_to_check
-                .chars()
-                .skip(self.slice_start.unwrap_or(0))
-                .take(self.slice_stop.unwrap_or(len))
-                .map(|c| match c {
-                    'a'...'z' if self.ignore_case => ((c as u8) - 32) as char,
+            // fast path: avoid doing any work if there is no need to skip or map to lower-case
+            if !self.ignore_case && slice_start == 0 && slice_stop == len {
+                return closure(&mut fields_to_check.chars());
+            }
+
+            // fast path: avoid skipping
+            if self.ignore_case && slice_start == 0 && slice_stop == len {
+                return closure(&mut fields_to_check.chars().map(|c| match c {
+                    'a'...'z' => ((c as u8) - 32) as char,
                     _ => c,
-                })
-                .collect()
+                }));
+            }
+
+            // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
+            if !self.ignore_case {
+                return closure(&mut fields_to_check.chars().skip(slice_start).take(slice_stop));
+            }
+
+            closure(
+                &mut fields_to_check
+                    .chars()
+                    .skip(slice_start)
+                    .take(slice_stop)
+                    .map(|c| match c {
+                        'a'...'z' => ((c as u8) - 32) as char,
+                        _ => c,
+                    }),
+            )
         } else {
-            fields_to_check.to_owned()
+            closure(&mut fields_to_check.chars())
         }
     }
 
