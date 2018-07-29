@@ -13,7 +13,6 @@ include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 
 use std::collections::hash_map::HashMap;
 use std::path::Path;
-use std::env;
 use std::io::Write;
 
 extern crate uucore;
@@ -40,7 +39,7 @@ fn main() {
     uucore::panic::install_sigpipe_hook();
 
     let umap = util_map();
-    let mut args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = uucore::args().collect();
 
     // try binary name as util name.
     let args0 = args[0].clone();
