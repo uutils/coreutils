@@ -1,11 +1,11 @@
 extern crate wild;
 
 pub fn args() -> Box<Iterator<Item=String>> {
-    Box::new( wild::args().map(|s| s.into_string().unwrap()) )
+    wild::args()
 }
 
 pub fn args_os() -> Box<Iterator<Item=std::ffi::OsString>> {
-    Box::new( wild::args() )
+    wild::args_os()
 }
 
 #[cfg(feature = "libc")]
