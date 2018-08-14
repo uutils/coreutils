@@ -132,6 +132,15 @@ struct SplitWriter<'a> {
     dev_null: bool,
 }
 
+impl<'a> Drop for SplitWriter<'a> {
+    fn drop(&mut self) {
+        if self.options.elide_empty_files && self.size == 0 {
+            let file_name = self.options.split_name.get(self.counter);
+            remove_file(file_name).expect("Failed to elide split");
+        }
+    }
+}
+
 impl<'a> SplitWriter<'a> {
     fn new(options: &::CsplitOptions) -> io::Result<SplitWriter> {
         Ok(SplitWriter {
@@ -194,8 +203,6 @@ impl<'a> SplitWriter<'a> {
     fn finish_split(&mut self) -> io::Result<()> {
         if !self.dev_null {
             if self.options.elide_empty_files && self.size == 0 {
-                let file_name = self.options.split_name.get(self.counter - 1);
-                remove_file(file_name)?;
                 self.counter -= 1;
             } else if !self.options.quiet {
                 println!("{}", self.size);
