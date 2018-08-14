@@ -57,13 +57,23 @@ pub struct CmdResult {
 impl CmdResult {
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> Box<&CmdResult> {
-        assert!(self.success);
+        if !self.success {
+            panic!(
+                "Expected command to pass.\nStdout: {}\nStderr: {}",
+                self.stdout, self.stderr
+            );
+        }
         Box::new(self)
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> Box<&CmdResult> {
-        assert!(!self.success);
+        if self.success {
+            panic!(
+                "Expected command to fail.\nStdout: {}\nStderr: {}",
+                self.stdout, self.stderr
+            );
+        }
         Box::new(self)
     }
 
