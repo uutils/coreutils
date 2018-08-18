@@ -16,6 +16,7 @@ extern crate uucore;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use uucore::libc;
 
 static NAME: &'static str = "tee";
@@ -87,12 +88,24 @@ fn exec(options: Options) -> Result<()> {
     }
 }
 
+#[cfg(unix)]
+fn ignore_interrupts() -> Result<()> {
+    let ret = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+    if ret == libc::SIG_ERR {
+        return Err(Error::new(ErrorKind::Other, ""));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ignore_interrupts() -> Result<()> {
+    // Do nothing.
+    Ok(())
+}
+
 fn tee(options: Options) -> Result<()> {
     if options.ignore_interrupts {
-        let ret = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
-        if ret == libc::SIG_ERR {
-            return Err(Error::new(ErrorKind::Other, ""));
-        }
+        ignore_interrupts()?
     }
     let writers: Vec<Box<Write>> = options
         .files
