@@ -16,6 +16,7 @@ extern crate uucore;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
+use uucore::libc;
 
 static NAME: &'static str = "tee";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -87,6 +88,12 @@ fn exec(options: Options) -> Result<()> {
 }
 
 fn tee(options: Options) -> Result<()> {
+    if options.ignore_interrupts {
+        let ret = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+        if ret == libc::SIG_ERR {
+            return Err(Error::new(ErrorKind::Other, ""));
+        }
+    }
     let writers: Vec<Box<Write>> = options
         .files
         .clone()
