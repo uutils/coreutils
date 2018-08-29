@@ -3,6 +3,7 @@ name = "uutils"
 version = "0.0.1"
 authors = []
 build = "build.rs"
+autotests = false
 
 [features]
 unix = [
