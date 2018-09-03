@@ -1,11 +1,7 @@
 extern crate wild;
 
-pub fn args() -> Box<Iterator<Item=String>> {
+pub fn args() -> impl Iterator<Item=String> {
     wild::args()
-}
-
-pub fn args_os() -> Box<Iterator<Item=std::ffi::OsString>> {
-    wild::args_os()
 }
 
 #[cfg(feature = "libc")]
