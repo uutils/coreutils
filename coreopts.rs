@@ -18,7 +18,7 @@ impl<'a> CoreOptions<'a> {
     pub fn new(help_text: HelpText<'a>) -> Self {
         let mut ret = CoreOptions {
             options: getopts::Options::new(),
-            help_text: help_text,
+            help_text,
         };
         ret.options
             .optflag("", "help", "print usage information")
