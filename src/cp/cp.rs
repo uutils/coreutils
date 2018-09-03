@@ -730,7 +730,7 @@ fn preserve_hardlinks(
                 }
                 #[cfg(windows)]
                 {
-                    let mut stat = mem::uninitialized();
+                    let stat = mem::uninitialized();
                     let handle = CreateFile2(
                         src_path.as_ptr() as *const u16,
                         winapi::um::winnt::GENERIC_READ,
