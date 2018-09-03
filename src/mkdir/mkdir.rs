@@ -16,7 +16,7 @@ extern crate libc;
 extern crate uucore;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 static NAME: &'static str = "mkdir";
 static VERSION: &'static str = env!("CARGO_PKG_VERSION");

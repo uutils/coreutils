@@ -25,9 +25,6 @@ extern crate walkdir;
 extern crate xattr;
 
 #[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
-
-#[cfg(windows)]
 extern crate kernel32;
 #[cfg(windows)]
 use kernel32::GetFileInformationByHandle;
