@@ -25,9 +25,9 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use time::Timespec;
 
-const NAME: &'static str = "du";
-const SUMMARY: &'static str = "estimate file space usage";
-const LONG_HELP: &'static str = "
+const NAME: &str = "du";
+const SUMMARY: &str = "estimate file space usage";
+const LONG_HELP: &str = "
  Display  values  are  in  units  of  the  first  available  SIZE from
  --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
  ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
@@ -65,7 +65,7 @@ impl Stat {
     fn new(path: PathBuf) -> Result<Stat> {
         let metadata = fs::symlink_metadata(&path)?;
         Ok(Stat {
-            path: path,
+            path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
@@ -110,9 +110,9 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
 }
 
 fn translate_to_pure_number(s: &Option<String>) -> Option<u64> {
-    match s {
-        &Some(ref s) => unit_string_to_number(s),
-        &None => None,
+    match *s {
+        Some(ref s) => unit_string_to_number(s),
+        None => None,
     }
 }
 
@@ -165,7 +165,7 @@ fn du(
             }
         };
 
-        for f in read.into_iter() {
+        for f in read {
             match f {
                 Ok(entry) => {
                     match Stat::new(entry.path()) {
@@ -319,7 +319,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let options = Options {
         all: matches.opt_present("all"),
         program_name: NAME.to_owned(),
-        max_depth: max_depth,
+        max_depth,
         total: matches.opt_present("total"),
         separate_dirs: matches.opt_present("S"),
     };
@@ -377,13 +377,13 @@ Try '{} --help' for more information.",
     let line_separator = if matches.opt_present("0") { "\0" } else { "\n" };
 
     let mut grand_total = 0;
-    for path_str in strs.into_iter() {
+    for path_str in strs {
         let path = PathBuf::from(&path_str);
         match Stat::new(path) {
             Ok(stat) => {
                 let mut inodes: HashSet<u64> = HashSet::new();
 
-                let iter = du(stat, &options, 0, &mut inodes).into_iter();
+                let iter = du(stat, &options, 0, &mut inodes);
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
@@ -417,11 +417,11 @@ Try '{} --help' for more information.",
                                     }
                                     None => stat.modified,
                                 };
-                                ((time / 1000) as i64, (time % 1000 * 1000000) as i32)
+                                ((time / 1000) as i64, (time % 1000 * 1_000_000) as i32)
                             };
                             time::at(Timespec::new(secs, nsecs))
                         };
-                        if !summarize || (summarize && index == len - 1) {
+                        if !summarize || index == len - 1 {
                             let time_str = tm.strftime(time_format_str).unwrap();
                             print!(
                                 "{}\t{}\t{}{}",
@@ -431,15 +431,13 @@ Try '{} --help' for more information.",
                                 line_separator
                             );
                         }
-                    } else {
-                        if !summarize || (summarize && index == len - 1) {
-                            print!(
-                                "{}\t{}{}",
-                                convert_size(size),
-                                stat.path.display(),
-                                line_separator
-                            );
-                        }
+                    } else if !summarize || index == len - 1 {
+                        print!(
+                            "{}\t{}{}",
+                            convert_size(size),
+                            stat.path.display(),
+                            line_separator
+                        );
                     }
                     if options.total && index == (len - 1) {
                         // The last element will be the total size of the the path under

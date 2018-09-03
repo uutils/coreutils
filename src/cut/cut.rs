@@ -23,11 +23,11 @@ mod buffer;
 mod ranges;
 mod searcher;
 
-static SYNTAX: &'static str =
+static SYNTAX: &str =
     "[-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
-static SUMMARY: &'static str =
+static SUMMARY: &str =
     "Prints specified byte or field columns from each line of stdin or the input files";
-static LONG_HELP: &'static str = "
+static LONG_HELP: &str = "
  Each call must specify a mode (what to use for columns),
  a sequence (which columns to print), and provide a data source
 
@@ -169,14 +169,11 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
                 }
             }
 
-            match opts.out_delim {
-                Some(ref delim) => {
-                    if print_delim {
-                        crash_if_err!(1, out.write_all(delim.as_bytes()));
-                    }
-                    print_delim = true;
+            if let Some(ref delim) = opts.out_delim {
+                if print_delim {
+                    crash_if_err!(1, out.write_all(delim.as_bytes()));
                 }
-                None => (),
+                print_delim = true;
             }
 
             // write out from low to high
@@ -293,18 +290,15 @@ fn cut_fields_delimiter<R: Read>(
 
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    match opts.out_delimeter {
-        Some(ref o_delim) => {
-            return cut_fields_delimiter(
-                reader,
-                ranges,
-                &opts.delimiter,
-                opts.only_delimited,
-                newline_char,
-                o_delim,
-            )
-        }
-        None => (),
+    if let Some(ref o_delim) = opts.out_delimeter {
+        return cut_fields_delimiter(
+            reader,
+            ranges,
+            &opts.delimiter,
+            opts.only_delimited,
+            newline_char,
+            o_delim,
+        );
     }
 
     let mut buf_in = BufReader::new(reader);
@@ -348,10 +342,8 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
                 };
             }
 
-            if print_delim {
-                if low_idx >= opts.delimiter.as_bytes().len() {
-                    low_idx -= opts.delimiter.as_bytes().len();
-                }
+            if print_delim && low_idx >= opts.delimiter.as_bytes().len() {
+                low_idx -= opts.delimiter.as_bytes().len();
             }
 
             match delim_search.nth(high - low) {
@@ -509,8 +501,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                 FieldOptions {
                                     delimiter: delim,
                                     out_delimeter: out_delim,
-                                    only_delimited: only_delimited,
-                                    zero_terminated: zero_terminated,
+                                    only_delimited,
+                                    zero_terminated,
                                 },
                             ))
                         }
@@ -520,8 +512,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         FieldOptions {
                             delimiter: "\t".to_owned(),
                             out_delimeter: out_delim,
-                            only_delimited: only_delimited,
-                            zero_terminated: zero_terminated,
+                            only_delimited,
+                            zero_terminated,
                         },
                     )),
                 }

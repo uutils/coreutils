@@ -147,7 +147,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else {
             // is it a NAME=VALUE like opt ?
-            let mut sp = opt.splitn(2, "=");
+            let mut sp = opt.splitn(2, '=');
             let name = sp.next();
             let value = sp.next();
 
@@ -187,7 +187,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         env::set_var(name, val);
     }
 
-    if opts.program.len() >= 1 {
+    if !opts.program.is_empty() {
         let prog = opts.program[0].clone();
         let args = &opts.program[1..];
         match Command::new(prog).args(args).status() {

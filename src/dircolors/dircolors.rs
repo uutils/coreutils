@@ -18,9 +18,9 @@ use std::io::{BufRead, BufReader};
 use std::borrow::Borrow;
 use std::env;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]";
-static SUMMARY: &'static str = "Output commands to set the LS_COLORS environment variable.";
-static LONG_HELP: &'static str = "
+static SYNTAX: &str = "[OPTION]... [FILE]";
+static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
+static LONG_HELP: &str = "
  If FILE is specified, read it to determine which colors to use for which
  file types and extensions.  Otherwise, a precompiled database is used.
  For details on the format of these files, run 'dircolors --print-database'
@@ -252,7 +252,7 @@ where
     table.insert("multihardlink", "mh");
     table.insert("clrtoeol", "cl");
 
-    let term = env::var("TERM").unwrap_or("none".to_owned());
+    let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let term = term.as_str();
 
     let mut state = ParseState::Global;
@@ -286,18 +286,16 @@ where
                 state = ParseState::Continue;
             }
             if state != ParseState::Pass {
-                if key.starts_with(".") {
+                if key.starts_with('.') {
                     result.push_str(format!("*{}={}:", key, val).as_str());
-                } else if key.starts_with("*") {
+                } else if key.starts_with('*') {
                     result.push_str(format!("{}={}:", key, val).as_str());
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
-                    // Slackware only. Ignore
+                // Slackware only. Ignore
+                } else if let Some(s) = table.get(lower.as_str()) {
+                    result.push_str(format!("{}={}:", s, val).as_str());
                 } else {
-                    if let Some(s) = table.get(lower.as_str()) {
-                        result.push_str(format!("{}={}:", s, val).as_str());
-                    } else {
-                        return Err(format!("{}:{}: unrecognized keyword {}", fp, num, key));
-                    }
+                    return Err(format!("{}:{}: unrecognized keyword {}", fp, num, key));
                 }
             }
         }

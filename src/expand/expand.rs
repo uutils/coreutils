@@ -92,11 +92,11 @@ impl Options {
         };
 
         Options {
-            files: files,
-            tabstops: tabstops,
-            tspaces: tspaces,
-            iflag: iflag,
-            uflag: uflag,
+            files,
+            tabstops,
+            tspaces,
+            iflag,
+            uflag,
         }
     }
 }

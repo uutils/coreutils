@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(args);
 
     // too few arguments
-    if matches.free.len() < 1 {
+    if matches.free.is_empty() {
         crash!(
             1,
             "{0}: {1}\nTry '{0} --help' for more information.",

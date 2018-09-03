@@ -20,9 +20,9 @@ use std::path::Path;
 
 include!(concat!(env!("OUT_DIR"), "/crc_table.rs"));
 
-static SYNTAX: &'static str = "[OPTIONS] [FILE]...";
-static SUMMARY: &'static str = "Print CRC and size for each file";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "[OPTIONS] [FILE]...";
+static SUMMARY: &str = "Print CRC and size for each file";
+static LONG_HELP: &str = "";
 
 #[inline]
 fn crc_update(crc: u32, input: u8) -> u32 {

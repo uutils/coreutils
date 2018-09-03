@@ -66,8 +66,8 @@ impl<R: Read> Data<R> {
         Data {
             line_wrap: 76,
             ignore_garbage: false,
-            input: input,
-            format: format,
+            input,
+            format,
             alphabet: match format {
                 Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
                 Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",

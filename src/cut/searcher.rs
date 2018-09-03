@@ -17,8 +17,8 @@ pub struct Searcher<'a> {
 impl<'a> Searcher<'a> {
     pub fn new(haystack: &'a [u8], needle: &'a [u8]) -> Searcher<'a> {
         Searcher {
-            haystack: haystack,
-            needle: needle,
+            haystack,
+            needle,
             position: 0,
         }
     }

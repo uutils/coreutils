@@ -16,8 +16,8 @@ extern crate uucore;
 mod tokens;
 mod syntax_tree;
 
-static NAME: &'static str = "expr";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "expr";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // For expr utility we do not want getopts.
@@ -35,13 +35,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 }
 
-fn process_expr(token_strings: &Vec<String>) -> Result<String, String> {
+fn process_expr(token_strings: &[String]) -> Result<String, String> {
     let maybe_tokens = tokens::strings_to_tokens(&token_strings);
     let maybe_ast = syntax_tree::tokens_to_ast(maybe_tokens);
     evaluate_ast(maybe_ast)
 }
 
-fn print_expr_ok(expr_result: &String) -> i32 {
+fn print_expr_ok(expr_result: &str) -> i32 {
     println!("{}", expr_result);
     if expr_result == "0" || expr_result == "" {
         1
@@ -50,7 +50,7 @@ fn print_expr_ok(expr_result: &String) -> i32 {
     }
 }
 
-fn print_expr_error(expr_error: &String) -> ! {
+fn print_expr_error(expr_error: &str) -> ! {
     crash!(2, "{}", expr_error)
 }
 
@@ -62,7 +62,7 @@ fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::ASTNode>, String>) -> Result<
     }
 }
 
-fn maybe_handle_help_or_version(args: &Vec<String>) -> bool {
+fn maybe_handle_help_or_version(args: &[String]) -> bool {
     if args.len() == 2 {
         if args[1] == "--help" {
             print_help();

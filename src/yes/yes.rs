@@ -21,7 +21,7 @@ use std::borrow::Cow;
 use std::io::{self, Write};
 
 // force a re-build whenever Cargo.toml changes
-const _CARGO_TOML: &'static str = include_str!("Cargo.toml");
+const _CARGO_TOML: &str = include_str!("Cargo.toml");
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough

@@ -140,7 +140,7 @@ fn enter_chroot(root: &Path) {
     let root_str = root.display();
     std::env::set_current_dir(root).unwrap();
     let err = unsafe {
-        chroot(CString::new(".".as_bytes())
+        chroot(CString::new(".")
             .unwrap()
             .as_bytes_with_nul()
             .as_ptr() as *const libc::c_char)
