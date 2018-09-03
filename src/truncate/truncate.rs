@@ -14,8 +14,6 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
-#[allow(unused_imports)]
-use std::ascii::AsciiExt;
 use std::fs::{metadata, File, OpenOptions};
 use std::io::Result;
 use std::path::Path;

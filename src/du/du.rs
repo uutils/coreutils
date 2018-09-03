@@ -14,8 +14,6 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 
-// XXX: remove when we no longer support 1.22.0
-use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::env;
 use std::fs;

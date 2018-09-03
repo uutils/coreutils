@@ -16,8 +16,6 @@ extern crate uucore;
 
 use getopts::{Matches, Options};
 
-#[allow(unused_imports)]
-use std::ascii::AsciiExt;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
