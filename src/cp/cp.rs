@@ -745,7 +745,7 @@ fn preserve_hardlinks(
                             std::io::Error::last_os_error()
                         ).into());
                     }
-                    inode = (((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64);
+                    inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
                     nlinks = (*stat).nNumberOfLinks as u64;
                 }
 
