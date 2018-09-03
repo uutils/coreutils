@@ -1,6 +1,7 @@
 #[macro_use]
 mod common;
 
+#[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
 
