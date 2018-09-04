@@ -16,10 +16,10 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]...";
-static SUMMARY: &'static str = "Writes each file (or standard input if no files are given)
+static SYNTAX: &str = "[OPTION]... [FILE]...";
+static SUMMARY: &str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);
@@ -70,7 +70,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.chars().next().unwrap() == '-' && slice.len() > 1
+        if slice.starts_with('-') && slice.len() > 1
             && slice.chars().nth(1).unwrap().is_digit(10)
         {
             let mut v = args.to_vec();
@@ -123,10 +123,10 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
             }
         } else {
             let mut len = line.chars().count();
-            let newline = line.ends_with("\n");
+            let newline = line.ends_with('\n');
             if newline {
                 if len == 1 {
-                    println!("");
+                    println!();
                     continue;
                 }
                 len -= 1;

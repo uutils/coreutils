@@ -22,10 +22,10 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write}
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
-static NAME: &'static str = "unexpand";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "unexpand";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static DEFAULT_TABSTOP: usize = 8;
+const DEFAULT_TABSTOP: usize = 8;
 
 fn tabstops_parse(s: String) -> Vec<usize> {
     let words = s.split(',').collect::<Vec<&str>>();

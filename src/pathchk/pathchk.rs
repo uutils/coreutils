@@ -30,12 +30,12 @@ enum Mode {
     Version, // show version information
 }
 
-static NAME: &'static str = "pathchk";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "pathchk";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // a few global constants as used in the GNU implementation
-static POSIX_PATH_MAX: usize = 256;
-static POSIX_NAME_MAX: usize = 14;
+const POSIX_PATH_MAX: usize = 256;
+const POSIX_NAME_MAX: usize = 14;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // add options

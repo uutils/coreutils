@@ -23,10 +23,10 @@ use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 
-static NAME: &'static str = "chroot";
-static SYNTAX: &'static str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
-static SUMMARY: &'static str = "Run COMMAND with root directory set to NEWROOT.";
-static LONG_HELP: &'static str = "
+static NAME: &str = "chroot";
+static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
+static SUMMARY: &str = "Run COMMAND with root directory set to NEWROOT.";
+static LONG_HELP: &str = "
  If COMMAND is not specified, it defaults to '$(SHELL) -i'.
  If $(SHELL) is not set, /bin/sh is used.
 ";

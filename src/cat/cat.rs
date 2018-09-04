@@ -31,10 +31,10 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]...";
-static SUMMARY: &'static str = "Concatenate FILE(s), or standard input, to standard output
+static SYNTAX: &str = "[OPTION]... [FILE]...";
+static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 #[derive(PartialEq)]
 enum NumberingMode {

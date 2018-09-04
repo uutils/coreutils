@@ -15,8 +15,8 @@ use getopts::{Matches, Options};
 use std::io::BufRead;
 use std::fmt;
 
-static NAME: &'static str = "numfmt";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "numfmt";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 type Result<T> = std::result::Result<T, String>;
 

@@ -20,9 +20,9 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "ln";
-static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "
+static NAME: &str = "ln";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "
  In the 1st form, create a link to TARGET with the name LINK_NAME.
  In the 2nd form, create a link to TARGET in the current directory.
  In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.

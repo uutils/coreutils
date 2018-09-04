@@ -26,8 +26,8 @@ enum Mode {
     InputRange((usize, usize)),
 }
 
-static NAME: &'static str = "shuf";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "shuf";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

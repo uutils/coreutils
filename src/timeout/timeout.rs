@@ -21,10 +21,10 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
 
-static NAME: &'static str = "timeout";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "timeout";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static ERR_EXIT_STATUS: i32 = 125;
+const ERR_EXIT_STATUS: i32 = 125;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let program = args[0].clone();

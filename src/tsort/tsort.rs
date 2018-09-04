@@ -20,8 +20,8 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
-static NAME: &'static str = "tsort";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tsort";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

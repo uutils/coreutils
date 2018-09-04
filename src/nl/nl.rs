@@ -26,9 +26,9 @@ use std::path::Path;
 
 mod helper;
 
-static NAME: &'static str = "nl";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-static USAGE: &'static str = "nl [OPTION]... [FILE]...";
+static NAME: &str = "nl";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = "nl [OPTION]... [FILE]...";
 // A regular expression matching everything.
 
 // Settings store options used by nl to produce its output.

@@ -24,8 +24,8 @@ extern "C" {
     fn ttyname(filedesc: libc::c_int) -> *const libc::c_char;
 }
 
-static NAME: &'static str = "tty";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tty";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

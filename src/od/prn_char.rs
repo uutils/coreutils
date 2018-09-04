@@ -13,7 +13,7 @@ pub static FORMAT_ITEM_C: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::MultibyteWriter(format_item_c),
 };
 
-static A_CHRS: [&'static str; 128] = [
+static A_CHRS: [&str; 128] = [
     "nul", "soh", "stx", "etx", "eot", "enq", "ack", "bel", "bs", "ht", "nl", "vt", "ff", "cr",
     "so", "si", "dle", "dc1", "dc2", "dc3", "dc4", "nak", "syn", "etb", "can", "em", "sub", "esc",
     "fs", "gs", "rs", "us", "sp", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-",

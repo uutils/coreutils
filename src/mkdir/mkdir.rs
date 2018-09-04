@@ -18,8 +18,8 @@ extern crate uucore;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "mkdir";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "mkdir";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /**
  * Handles option parsing

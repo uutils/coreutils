@@ -29,8 +29,8 @@ use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
 
-static NAME: &'static str = "tail";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tail";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 enum FilterMode {
     Bytes(u64),

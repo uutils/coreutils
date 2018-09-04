@@ -11,8 +11,8 @@ extern crate uucore;
 use std::cmp;
 use std::io::{stdout, Write};
 
-static NAME: &'static str = "seq";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "seq";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone)]
 struct SeqOptions {

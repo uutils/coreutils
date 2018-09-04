@@ -26,11 +26,11 @@ use uucore::fs::is_stdin_interactive;
 use semver::Version;
 use itertools::Itertools; // for Iterator::dedup()
 
-static NAME: &'static str = "sort";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "sort";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static DECIMAL_PT: char = '.';
-static THOUSANDS_SEP: char = ',';
+const DECIMAL_PT: char = '.';
+const THOUSANDS_SEP: char = ',';
 
 enum SortMode {
     Numeric,

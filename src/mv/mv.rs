@@ -19,8 +19,8 @@ use std::env;
 use std::io::{stdin, BufRead, BufReader, Result};
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "mv";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "mv";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct Behaviour {
     overwrite: OverwriteMode,

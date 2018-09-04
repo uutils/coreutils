@@ -18,8 +18,8 @@ use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
 
-static NAME: &'static str = "sum";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "sum";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
     let mut buf = [0; 1024];

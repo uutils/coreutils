@@ -26,9 +26,9 @@ use tempfile::NamedTempFileOptions;
 
 mod tempdir;
 
-static NAME: &'static str = "mktemp";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-static DEFAULT_TEMPLATE: &'static str = "tmp.XXXXXXXXXX";
+static NAME: &str = "mktemp";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

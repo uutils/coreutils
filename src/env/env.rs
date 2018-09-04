@@ -17,10 +17,10 @@ use std::env;
 use std::io::{stdout, Write};
 use std::process::Command;
 
-static NAME: &'static str = "env";
-static SYNTAX: &'static str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
-static SUMMARY: &'static str = "Set each NAME to VALUE in the environment and run COMMAND";
-static LONG_HELP: &'static str = "
+static NAME: &str = "env";
+static SYNTAX: &str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
+static SUMMARY: &str = "Set each NAME to VALUE in the environment and run COMMAND";
+static LONG_HELP: &str = "
  A mere - implies -i. If no COMMAND, print the resulting environment
 ";
 

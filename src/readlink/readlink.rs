@@ -19,8 +19,8 @@ use std::io::{stdout, Write};
 use std::path::PathBuf;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
-const NAME: &'static str = "readlink";
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const NAME: &str = "readlink";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

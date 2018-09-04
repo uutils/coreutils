@@ -13,7 +13,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-static CRC_TABLE_LEN: usize = 256;
+const CRC_TABLE_LEN: usize = 256;
 
 #[path = "../../mkmain.rs"]
 mod mkmain;

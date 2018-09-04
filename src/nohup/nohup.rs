@@ -25,8 +25,8 @@ use std::path::{Path, PathBuf};
 use std::env;
 use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
 
-static NAME: &'static str = "nohup";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "nohup";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(target_os = "macos")]
 extern "C" {

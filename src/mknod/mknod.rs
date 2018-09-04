@@ -23,8 +23,8 @@ use getopts::Options;
 
 use std::ffi::CString;
 
-static NAME: &'static str = "mknod";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "mknod";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 

@@ -23,10 +23,10 @@ use std::iter::repeat;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]...";
-static SUMMARY: &'static str = "Convert tabs in each FILE to spaces, writing to standard output.
+static SYNTAX: &str = "[OPTION]... [FILE]...";
+static SUMMARY: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
 

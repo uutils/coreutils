@@ -19,9 +19,9 @@ use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
 
-static SYNTAX: &'static str = "";
-static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "";
 
 enum FilterMode {
     Bytes(usize),
@@ -90,16 +90,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         }
-        None => match matches.opt_str("c") {
-            Some(count) => match count.parse::<usize>() {
+        None => if let Some(count) = matches.opt_str("c") {
+            match count.parse::<usize>() {
                 Ok(m) => settings.mode = FilterMode::Bytes(m),
                 Err(e) => {
                     show_error!("invalid byte count '{}': {}", count, e);
                     return 1;
                 }
-            },
-            None => {}
-        },
+            }
+        }
     };
 
     let quiet = matches.opt_present("q");
@@ -129,7 +128,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         for file in &files {
             if settings.verbose {
                 if !firstime {
-                    println!("");
+                    println!();
                 }
                 println!("==> {} <==", file);
             }
@@ -160,7 +159,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
         let current = options[a].clone();
         let current = current.as_bytes();
 
-        if current.len() > 1 && current[0] == '-' as u8 {
+        if current.len() > 1 && current[0] == b'-' {
             let len = current.len();
             for pos in 1..len {
                 // Ensure that the argument is only made out of digits

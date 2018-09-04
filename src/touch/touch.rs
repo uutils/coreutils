@@ -21,8 +21,8 @@ use std::fs::{self, File};
 use std::io::{self, Error};
 use std::path::Path;
 
-static NAME: &'static str = "touch";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "touch";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Since touch's date/timestamp parsing doesn't account for timezone, the
 // returned value from time::strptime() is UTC. We get system's timezone to

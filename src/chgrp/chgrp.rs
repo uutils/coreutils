@@ -29,9 +29,9 @@ use std::path::Path;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static SYNTAX: &'static str =
+static SYNTAX: &str =
     "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
-static SUMMARY: &'static str = "Change the group of each FILE to GROUP.";
+static SUMMARY: &str = "Change the group of each FILE to GROUP.";
 
 const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;

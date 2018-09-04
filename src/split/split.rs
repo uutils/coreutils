@@ -19,8 +19,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-static NAME: &'static str = "split";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "split";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

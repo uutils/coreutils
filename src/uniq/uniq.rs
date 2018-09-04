@@ -21,8 +21,8 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-static NAME: &'static str = "uniq";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "uniq";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(PartialEq)]
 enum Delimiters {

@@ -34,9 +34,9 @@ mod linebreak;
 mod parasplit;
 
 // program's NAME and VERSION are used for -V and -h
-static SYNTAX: &'static str = "[OPTION]... [FILE]...";
-static SUMMARY: &'static str = "Reformat paragraphs from input files (or stdin) to stdout.";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "[OPTION]... [FILE]...";
+static SUMMARY: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
+static LONG_HELP: &str = "";
 
 pub type FileOrStdReader = BufReader<Box<Read + 'static>>;
 pub struct FmtOptions {
@@ -120,62 +120,47 @@ pub fn uumain(args: Vec<String>) -> i32 {
         fmt_opts.xanti_prefix = true;
     }
 
-    match matches.opt_str("p") {
-        Some(s) => {
-            fmt_opts.prefix = s;
-            fmt_opts.use_prefix = true;
-        }
-        None => (),
+    if let Some(s) = matches.opt_str("p") {
+        fmt_opts.prefix = s;
+        fmt_opts.use_prefix = true;
     };
 
-    match matches.opt_str("P") {
-        Some(s) => {
-            fmt_opts.anti_prefix = s;
-            fmt_opts.use_anti_prefix = true;
-        }
-        None => (),
+    if let Some(s) = matches.opt_str("P") {
+        fmt_opts.anti_prefix = s;
+        fmt_opts.use_anti_prefix = true;
     };
 
-    match matches.opt_str("w") {
-        Some(s) => {
-            fmt_opts.width = match s.parse::<usize>() {
-                Ok(t) => t,
-                Err(e) => {
-                    crash!(1, "Invalid WIDTH specification: `{}': {}", s, e);
-                }
-            };
-            fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
-        }
-        None => (),
-    };
-
-    match matches.opt_str("g") {
-        Some(s) => {
-            fmt_opts.goal = match s.parse::<usize>() {
-                Ok(t) => t,
-                Err(e) => {
-                    crash!(1, "Invalid GOAL specification: `{}': {}", s, e);
-                }
-            };
-            if !matches.opt_present("w") {
-                fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
-            } else if fmt_opts.goal > fmt_opts.width {
-                crash!(1, "GOAL cannot be greater than WIDTH.");
+    if let Some(s) = matches.opt_str("w") {
+        fmt_opts.width = match s.parse::<usize>() {
+            Ok(t) => t,
+            Err(e) => {
+                crash!(1, "Invalid WIDTH specification: `{}': {}", s, e);
             }
-        }
-        None => (),
+        };
+        fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
     };
 
-    match matches.opt_str("T") {
-        Some(s) => {
-            fmt_opts.tabwidth = match s.parse::<usize>() {
-                Ok(t) => t,
-                Err(e) => {
-                    crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e);
-                }
-            };
+    if let Some(s) = matches.opt_str("g") {
+        fmt_opts.goal = match s.parse::<usize>() {
+            Ok(t) => t,
+            Err(e) => {
+                crash!(1, "Invalid GOAL specification: `{}': {}", s, e);
+            }
+        };
+        if !matches.opt_present("w") {
+            fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
+        } else if fmt_opts.goal > fmt_opts.width {
+            crash!(1, "GOAL cannot be greater than WIDTH.");
         }
-        None => (),
+    };
+
+    if let Some(s) = matches.opt_str("T") {
+        fmt_opts.tabwidth = match s.parse::<usize>() {
+            Ok(t) => t,
+            Err(e) => {
+                crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e);
+            }
+        };
     };
 
     if fmt_opts.tabwidth < 1 {
@@ -208,7 +193,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             match para_result {
                 Err(s) => {
                     silent_unwrap!(ostream.write_all(s.as_bytes()));
-                    silent_unwrap!(ostream.write_all("\n".as_bytes()));
+                    silent_unwrap!(ostream.write_all(b"\n"));
                 }
                 Ok(para) => break_lines(&para, &fmt_opts, &mut ostream),
             }

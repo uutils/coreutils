@@ -7,12 +7,12 @@ mod mkmain;
 
 #[cfg(target_os = "linux")]
 mod platform {
-    pub const DYLIB_EXT: &'static str = ".so";
+    pub const DYLIB_EXT: &str = ".so";
 }
 
 #[cfg(target_os = "macos")]
 mod platform {
-    pub const DYLIB_EXT: &'static str = ".dylib";
+    pub const DYLIB_EXT: &str = ".dylib";
 }
 
 fn main() {

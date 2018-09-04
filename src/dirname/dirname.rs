@@ -14,10 +14,10 @@ extern crate uucore;
 
 use std::path::Path;
 
-static NAME: &'static str = "dirname";
-static SYNTAX: &'static str = "[OPTION] NAME...";
-static SUMMARY: &'static str = "strip last component from file name";
-static LONG_HELP: &'static str = "
+static NAME: &str = "dirname";
+static SYNTAX: &str = "[OPTION] NAME...";
+static SUMMARY: &str = "strip last component from file name";
+static LONG_HELP: &str = "
  Output each NAME with its last non-slash component and trailing slashes
  removed; if NAME contains no /'s, output '.' (meaning the current
  directory).
