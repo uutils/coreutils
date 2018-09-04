@@ -382,8 +382,10 @@ fn permissive_f64_parse(a: &str) -> f64 {
     // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
     // because there's no way to handle both CSV and thousands separators without a new flag.
     // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
+    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     let sa: &str = a.split_whitespace().next().unwrap();
     match sa.parse::<f64>() {
+        Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
         Ok(a) => a,
         Err(_) => std::f64::NEG_INFINITY,
     }
