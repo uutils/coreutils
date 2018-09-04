@@ -239,7 +239,7 @@ fn unexpand(options: Options) {
                 }
 
                 let (ctype, cwidth, nbytes) = if options.uflag {
-                    let nbytes = uucore::utf8::utf8_char_width(buf[byte]);
+                    let nbytes = char::from(buf[byte]).len_utf8();
 
                     // figure out how big the next char is, if it's UTF-8
                     if byte + nbytes > buf.len() {

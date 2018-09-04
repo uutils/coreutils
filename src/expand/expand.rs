@@ -179,7 +179,7 @@ fn expand(options: Options) {
 
             while byte < buf.len() {
                 let (ctype, cwidth, nbytes) = if options.uflag {
-                    let nbytes = uucore::utf8::utf8_char_width(buf[byte]);
+                    let nbytes = char::from(buf[byte]).len_utf8();
 
                     if byte + nbytes > buf.len() {
                         // don't overrun buffer because of invalid UTF-8

@@ -14,7 +14,6 @@ unicode-width = "0.1.5"
 
 [dependencies.uucore]
 path = "../uucore"
-features = ["utf8"]
 
 [[bin]]
 name = "unexpand"
