@@ -64,7 +64,7 @@ macro_rules! chars2string {
 
 #[cfg(target_os = "linux")]
 mod ut {
-    pub static DEFAULT_FILE: &'static str = "/var/run/utmp";
+    pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
@@ -85,7 +85,7 @@ mod ut {
 
 #[cfg(target_os = "macos")]
 mod ut {
-    pub static DEFAULT_FILE: &'static str = "/var/run/utmpx";
+    pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
     pub use libc::_UTX_LINESIZE as UT_LINESIZE;
     pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
@@ -110,7 +110,7 @@ mod ut {
 mod ut {
     use super::libc;
 
-    pub static DEFAULT_FILE: &'static str = "";
+    pub static DEFAULT_FILE: &str = "";
 
     pub const UT_LINESIZE: usize = 16;
     pub const UT_NAMESIZE: usize = 32;
