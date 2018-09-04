@@ -13,6 +13,11 @@ fn test_numeric_floats() {
 }
 
 #[test]
+fn test_numeric_floats_with_nan() {
+    test_helper("numeric_floats_with_nan", "-n");
+}
+
+#[test]
 fn test_numeric_unfixed_floats() {
     test_helper("numeric_unfixed_floats", "-n");
 }
