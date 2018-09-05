@@ -24,8 +24,8 @@ use std::os::unix::fs::MetadataExt;
 
 use std::path::PathBuf;
 
-static SYNTAX: &'static str = "[OPTION]... [USER]...";
-static SUMMARY: &'static str = "A lightweight 'finger' program;  print user information.";
+static SYNTAX: &str = "[OPTION]... [USER]...";
+static SUMMARY: &str = "A lightweight 'finger' program;  print user information.";
 
 const BUFSIZE: usize = 1024;
 

@@ -18,7 +18,7 @@ use std::ffi::OsString;
 use std::env::args_os;
 use std::str::from_utf8;
 
-static NAME: &'static str = "test";
+static NAME: &str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
 // Definitely don't use [u8], try keeping it as OsStr or OsString instead

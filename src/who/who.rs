@@ -19,9 +19,9 @@ use std::ffi::CStr;
 use std::path::PathBuf;
 use std::os::unix::fs::MetadataExt;
 
-static SYNTAX: &'static str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
-static SUMMARY: &'static str = "Print information about users who are currently logged in.";
-static LONG_HELP: &'static str = "
+static SYNTAX: &str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
+static SUMMARY: &str = "Print information about users who are currently logged in.";
+static LONG_HELP: &str = "
   -a, --all         same as -b -d --login -p -r -t -T -u
   -b, --boot        time of last system boot
   -d, --dead        print dead processes

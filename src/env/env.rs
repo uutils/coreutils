@@ -17,10 +17,10 @@ use std::env;
 use std::io::{stdout, Write};
 use std::process::Command;
 
-static NAME: &'static str = "env";
-static SYNTAX: &'static str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
-static SUMMARY: &'static str = "Set each NAME to VALUE in the environment and run COMMAND";
-static LONG_HELP: &'static str = "
+static NAME: &str = "env";
+static SYNTAX: &str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
+static SUMMARY: &str = "Set each NAME to VALUE in the environment and run COMMAND";
+static LONG_HELP: &str = "
  A mere - implies -i. If no COMMAND, print the resulting environment
 ";
 
@@ -147,7 +147,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             }
         } else {
             // is it a NAME=VALUE like opt ?
-            let mut sp = opt.splitn(2, "=");
+            let mut sp = opt.splitn(2, '=');
             let name = sp.next();
             let value = sp.next();
 
@@ -187,7 +187,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         env::set_var(name, val);
     }
 
-    if opts.program.len() >= 1 {
+    if !opts.program.is_empty() {
         let prog = opts.program[0].clone();
         let args = &opts.program[1..];
         match Command::new(prog).args(args).status() {

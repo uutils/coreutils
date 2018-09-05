@@ -30,9 +30,9 @@ use std::convert::AsRef;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static SYNTAX: &'static str =
+static SYNTAX: &str =
     "[OPTION]... [OWNER][:[GROUP]] FILE...\n chown [OPTION]... --reference=RFILE FILE...";
-static SUMMARY: &'static str = "change file owner and group";
+static SUMMARY: &str = "change file owner and group";
 
 const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;
@@ -136,7 +136,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         IfFrom::All
     };
 
-    if matches.free.len() < 1 {
+    if matches.free.is_empty() {
         disp_err!("missing operand");
         return 1;
     } else if matches.free.len() < 2 && !matches.opt_present("reference") {
@@ -172,15 +172,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut files = matches.free;
     files.remove(0);
     let executor = Chowner {
-        bit_flag: bit_flag,
-        dest_uid: dest_uid,
-        dest_gid: dest_gid,
-        verbosity: verbosity,
-        recursive: recursive,
+        bit_flag,
+        dest_uid,
+        dest_gid,
+        verbosity,
+        recursive,
         dereference: derefer != 0,
-        filter: filter,
-        preserve_root: preserve_root,
-        files: files,
+        filter,
+        preserve_root,
+        files,
     };
     executor.exec()
 }

@@ -25,10 +25,10 @@ use std::path::{Path, PathBuf};
 #[macro_use]
 extern crate uucore;
 
-static NAME: &'static str = "shred";
-static VERSION_STR: &'static str = "1.0.0";
+static NAME: &str = "shred";
+static VERSION_STR: &str = "1.0.0";
 const BLOCK_SIZE: usize = 512;
-const NAMESET: &'static str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
+const NAMESET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
 const PATTERNS: [&'static [u8]; 22] = [

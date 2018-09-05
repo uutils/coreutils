@@ -21,8 +21,8 @@ extern crate uucore;
 #[cfg(not(windows))]
 extern crate uucore;
 
-static NAME: &'static str = "sync";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "sync";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
 mod platform {

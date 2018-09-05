@@ -16,9 +16,9 @@ use std::fs::hard_link;
 use std::path::Path;
 use std::io::Error;
 
-static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2";
-static SUMMARY: &'static str = "Create a link named FILE2 to FILE1";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
+static SUMMARY: &str = "Create a link named FILE2 to FILE1";
+static LONG_HELP: &str = "";
 
 pub fn normalize_error_message(e: Error) -> String {
     match e.raw_os_error() {

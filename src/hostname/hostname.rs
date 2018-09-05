@@ -38,9 +38,9 @@ use libc::gethostname;
 #[cfg(not(windows))]
 use libc::sethostname;
 
-const SYNTAX: &'static str = "[OPTION]... [HOSTNAME]";
-const SUMMARY: &'static str = "Print or set the system's host name.";
-const LONG_HELP: &'static str = "";
+const SYNTAX: &str = "[OPTION]... [HOSTNAME]";
+const SUMMARY: &str = "Print or set the system's host name.";
+const LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     #[cfg(windows)]

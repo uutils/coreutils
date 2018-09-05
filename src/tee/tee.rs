@@ -17,8 +17,8 @@ use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "tee";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tee";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     match options(&args).and_then(exec) {

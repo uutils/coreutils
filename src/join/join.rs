@@ -19,8 +19,8 @@ use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 use std::cmp::{min, Ordering};
 use clap::{App, Arg};
 
-static NAME: &'static str = "join";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "join";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {

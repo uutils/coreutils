@@ -8,10 +8,10 @@ mod cli;
 mod memo;
 mod tokenize;
 
-static NAME: &'static str = "printf";
-static VERSION: &'static str = "0.0.1";
-static SHORT_USAGE: &'static str = "printf: usage: printf [-v var] format [arguments]";
-static LONGHELP_LEAD: &'static str = "printf
+static NAME: &str = "printf";
+static VERSION: &str = "0.0.1";
+static SHORT_USAGE: &str = "printf: usage: printf [-v var] format [arguments]";
+static LONGHELP_LEAD: &str = "printf
 
  USAGE: printf FORMATSTRING [ARGUMENT]...
 
@@ -26,7 +26,7 @@ Options:
     --version           output version information and exit
 
 ";
-static LONGHELP_BODY: &'static str = "
+static LONGHELP_BODY: &str = "
   Prints the , replacing escaped character sequences with character literals
     and substitution field sequences with passed arguments
 

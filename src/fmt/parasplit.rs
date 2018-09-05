@@ -73,8 +73,8 @@ pub struct FileLines<'a> {
 impl<'a> FileLines<'a> {
     fn new<'b>(opts: &'b FmtOptions, lines: Lines<&'b mut FileOrStdReader>) -> FileLines<'b> {
         FileLines {
-            opts: opts,
-            lines: lines,
+            opts,
+            lines,
         }
     }
 
@@ -197,10 +197,10 @@ impl<'a> Iterator for FileLines<'a> {
 
         Some(Line::FormatLine(FileLine {
             line: n,
-            indent_end: indent_end,
+            indent_end,
             pfxind_end: poffset,
-            indent_len: indent_len,
-            prefix_len: prefix_len,
+            indent_len,
+            prefix_len,
         }))
     }
 }
@@ -234,9 +234,9 @@ impl<'a> ParagraphStream<'a> {
         let lines = FileLines::new(opts, reader.lines()).peekable();
         // at the beginning of the file, we might find mail headers
         ParagraphStream {
-            lines: lines,
+            lines,
             next_mail: true,
-            opts: opts,
+            opts,
         }
     }
 
@@ -405,12 +405,12 @@ impl<'a> Iterator for ParagraphStream<'a> {
 
         Some(Ok(Paragraph {
             lines: p_lines,
-            init_str: init_str,
-            init_len: init_len,
-            init_end: init_end,
-            indent_str: indent_str,
-            indent_len: indent_len,
-            indent_end: indent_end,
+            init_str,
+            init_len,
+            init_end,
+            indent_str,
+            indent_len,
+            indent_end,
             mail_header: in_mail,
         }))
     }
@@ -425,8 +425,8 @@ pub struct ParaWords<'a> {
 impl<'a> ParaWords<'a> {
     pub fn new<'b>(opts: &'b FmtOptions, para: &'b Paragraph) -> ParaWords<'b> {
         let mut pw = ParaWords {
-            opts: opts,
-            para: para,
+            opts,
+            para,
             words: Vec::new(),
         };
         pw.create_words();
@@ -522,7 +522,7 @@ impl<'a> WordSplit<'a> {
         // wordsplits *must* start at a non-whitespace character
         let trim_string = string.trim_left();
         WordSplit {
-            opts: opts,
+            opts,
             string: trim_string,
             length: string.len(),
             position: 0,
@@ -610,14 +610,14 @@ impl<'a> Iterator for WordSplit<'a> {
         };
 
         Some(WordInfo {
-            word: word,
+            word,
             word_start: word_start_relative,
-            word_nchars: word_nchars,
-            before_tab: before_tab,
-            after_tab: after_tab,
+            word_nchars,
+            before_tab,
+            after_tab,
             sentence_start: is_start_of_sentence,
             ends_punct: self.prev_punct,
-            new_line: new_line,
+            new_line,
         })
     }
 }

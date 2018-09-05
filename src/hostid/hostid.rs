@@ -16,9 +16,9 @@ extern crate uucore;
 
 use libc::c_long;
 
-static SYNTAX: &'static str = "[options]";
-static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "[options]";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "";
 
 pub enum Mode {
     HostId,
@@ -49,6 +49,6 @@ fn hostid() {
         result = gethostid();
     }
 
-    result &= 0xffffffff;
+    result &= 0xffff_ffff;
     println!("{:0>8x}", result);
 }

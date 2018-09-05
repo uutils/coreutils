@@ -24,8 +24,8 @@ use std::io::{Error, ErrorKind};
 use std::mem::uninitialized;
 use std::ffi::CString;
 
-static NAME: &'static str = "unlink";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "unlink";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();

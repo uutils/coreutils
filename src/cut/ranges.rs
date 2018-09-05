@@ -39,11 +39,11 @@ impl FromStr for Range {
                     Err(inval)
                 }
             }
-            (Some(n), Some(m)) if m.len() == 0 => {
+            (Some(n), Some(m)) if m.is_empty() => {
                 if let Ok(low) = n.parse::<usize>() {
                     if low > 0 {
                         Ok(Range {
-                            low: low,
+                            low,
                             high: MAX - 1,
                         })
                     } else {
@@ -56,7 +56,7 @@ impl FromStr for Range {
             (Some(n), Some(m)) if n.len() == 0 => {
                 if let Ok(high) = m.parse::<usize>() {
                     if high > 0 {
-                        Ok(Range { low: 1, high: high })
+                        Ok(Range { low: 1, high })
                     } else {
                         Err(field)
                     }
@@ -68,8 +68,8 @@ impl FromStr for Range {
                 (Ok(low), Ok(high)) => {
                     if low > 0 && low <= high {
                         Ok(Range {
-                            low: low,
-                            high: high,
+                            low,
+                            high,
                         })
                     } else if low == 0 {
                         Err(field)
@@ -118,7 +118,7 @@ pub fn complement(ranges: &[Range]) -> Vec<Range> {
 
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
-    if ranges.len() > 0 && ranges[0].low > 1 {
+    if !ranges.is_empty() && ranges[0].low > 1 {
         complements.push(Range {
             low: 1,
             high: ranges[0].low - 1,

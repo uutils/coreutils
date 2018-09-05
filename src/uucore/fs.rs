@@ -31,7 +31,7 @@ macro_rules! has {
     )
 }
 
-pub fn resolve_relative_path<'a>(path: &'a Path) -> Cow<'a, Path> {
+pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
     if path.components().all(|e| e != Component::ParentDir) {
         return path.into();
     }

@@ -29,9 +29,9 @@ use std::path::Path;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static SYNTAX: &'static str =
+static SYNTAX: &str =
     "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
-static SUMMARY: &'static str = "Change the group of each FILE to GROUP.";
+static SUMMARY: &str = "Change the group of each FILE to GROUP.";
 
 const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;
@@ -117,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Verbosity::Normal
     };
 
-    if matches.free.len() < 1 {
+    if matches.free.is_empty() {
         disp_err!("missing operand");
         return 1;
     } else if matches.free.len() < 2 && !matches.opt_present("reference") {
@@ -153,13 +153,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let executor = Chgrper {
-        bit_flag: bit_flag,
-        dest_gid: dest_gid,
-        verbosity: verbosity,
-        recursive: recursive,
+        bit_flag,
+        dest_gid,
+        verbosity,
+        recursive,
         dereference: derefer != 0,
-        preserve_root: preserve_root,
-        files: files,
+        preserve_root,
+        files,
     };
     executor.exec()
 }

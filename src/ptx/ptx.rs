@@ -26,8 +26,8 @@ use std::default::Default;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 
-static NAME: &'static str = "ptx";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "ptx";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 enum OutFormat {

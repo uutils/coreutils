@@ -18,8 +18,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
-static NAME: &'static str = "relpath";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "relpath";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

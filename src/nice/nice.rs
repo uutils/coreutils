@@ -19,8 +19,8 @@ use libc::{c_char, c_int, execvp};
 use std::ffi::CString;
 use std::io::Error;
 
-const NAME: &'static str = "nice";
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const NAME: &str = "nice";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
 const PRIO_PROCESS: c_int = 0;

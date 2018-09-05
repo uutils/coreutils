@@ -66,17 +66,17 @@ impl ASTNode {
         }
     }
 
-    fn new_node(token_idx: usize, op_type: &String, operands: OperandsList) -> Box<ASTNode> {
+    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<ASTNode> {
         Box::new(ASTNode::Node {
             token_idx: token_idx,
-            op_type: op_type.clone(),
+            op_type: op_type.into(),
             operands: operands,
         })
     }
-    fn new_leaf(token_idx: usize, value: &String) -> Box<ASTNode> {
+    fn new_leaf(token_idx: usize, value: &str) -> Box<ASTNode> {
         Box::new(ASTNode::Leaf {
-            token_idx: token_idx,
-            value: value.clone(),
+            token_idx,
+            value: value.into(),
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
@@ -252,7 +252,7 @@ fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<ASTNode>, String> {
 }
 fn maybe_ast_node(
     token_idx: usize,
-    op_type: &String,
+    op_type: &str,
     arity: usize,
     rpn: &mut TokenStack,
 ) -> Result<Box<ASTNode>, String> {
@@ -351,7 +351,10 @@ fn push_op_to_stack(
             match op_stack.last() {
                 None => return Ok(op_stack.push((token_idx, token.clone()))),
 
-                Some(&(_, Token::ParOpen)) => return Ok(op_stack.push((token_idx, token.clone()))),
+                Some(&(_, Token::ParOpen)) => {
+                    op_stack.push((token_idx, token.clone()));
+                    return Ok(());
+                }
 
                 Some(&(
                     _,
@@ -362,11 +365,13 @@ fn push_op_to_stack(
                 )) => if la && prev_prec >= prec || !la && prev_prec > prec {
                     out_stack.push(op_stack.pop().unwrap())
                 } else {
-                    return Ok(op_stack.push((token_idx, token.clone())));
+                    op_stack.push((token_idx, token.clone()));
+                    return Ok(());
                 },
 
                 Some(&(_, Token::PrefixOp { .. })) => {
-                    return Ok(op_stack.push((token_idx, token.clone())))
+                    op_stack.push((token_idx, token.clone()));
+                    return Ok(());
                 }
 
                 Some(_) => panic!("Non-operator on op_stack"),
@@ -397,13 +402,13 @@ fn checked_binop<F: Fn() -> Option<T>, T>(cb: F, op: &str) -> Result<T, String> 
     }
 }
 
-fn infix_operator_two_ints<F>(f: F, values: &Vec<String>) -> Result<String, String>
+fn infix_operator_two_ints<F>(f: F, values: &[String]) -> Result<String, String>
 where
     F: Fn(i64, i64) -> Result<i64, String>,
 {
     assert!(values.len() == 2);
-    if let Some(left) = values[0].parse::<i64>().ok() {
-        if let Some(right) = values[1].parse::<i64>().ok() {
+    if let Ok(left) = values[0].parse::<i64>() {
+        if let Ok(right) = values[1].parse::<i64>() {
             return match f(left, right) {
                 Ok(result) => Ok(result.to_string()),
                 Err(reason) => Err(reason),
@@ -416,7 +421,7 @@ where
 fn infix_operator_two_ints_or_two_strings<FI, FS>(
     fi: FI,
     fs: FS,
-    values: &Vec<String>,
+    values: &[String],
 ) -> Result<String, String>
 where
     FI: Fn(i64, i64) -> Result<i64, String>,
@@ -435,7 +440,7 @@ where
     }
 }
 
-fn infix_operator_or(values: &Vec<String>) -> Result<String, String> {
+fn infix_operator_or(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
     if value_as_bool(&values[0]) {
         Ok(values[0].clone())
@@ -444,7 +449,7 @@ fn infix_operator_or(values: &Vec<String>) -> Result<String, String> {
     }
 }
 
-fn infix_operator_and(values: &Vec<String>) -> Result<String, String> {
+fn infix_operator_and(values: &[String]) -> Result<String, String> {
     if value_as_bool(&values[0]) && value_as_bool(&values[1]) {
         Ok(values[0].clone())
     } else {
@@ -452,7 +457,7 @@ fn infix_operator_and(values: &Vec<String>) -> Result<String, String> {
     }
 }
 
-fn operator_match(values: &Vec<String>) -> Result<String, String> {
+fn operator_match(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
     let re = match Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
     {
@@ -472,12 +477,12 @@ fn operator_match(values: &Vec<String>) -> Result<String, String> {
     }
 }
 
-fn prefix_operator_length(values: &Vec<String>) -> Result<String, String> {
+fn prefix_operator_length(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 1);
     Ok(values[0].len().to_string())
 }
 
-fn prefix_operator_index(values: &Vec<String>) -> Result<String, String> {
+fn prefix_operator_index(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
     let haystack = &values[0];
     let needles = &values[1];
@@ -495,7 +500,7 @@ fn prefix_operator_index(values: &Vec<String>) -> Result<String, String> {
     Ok("0".to_string())
 }
 
-fn prefix_operator_substr(values: &Vec<String>) -> Result<String, String> {
+fn prefix_operator_substr(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 3);
     let subj = &values[0];
     let mut idx = match values[1].parse::<i64>() {
@@ -541,7 +546,7 @@ fn bool_as_string(b: bool) -> String {
     }
 }
 fn value_as_bool(s: &str) -> bool {
-    if s.len() == 0 {
+    if s.is_empty() {
         return false;
     }
     match s.parse::<i64>() {

@@ -676,14 +676,14 @@ impl TargetType {
 fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<Source>, Target)> {
     let mut paths = path_args.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    if paths.len() < 1 {
+    if paths.is_empty() {
         // No files specified
         return Err("missing file operand".into());
     }
 
     // Return an error if the user requested to copy more than one
     // file source to a file target
-    if options.no_target_dir && !options.target_dir.is_some() && paths.len() > 2 {
+    if options.no_target_dir && options.target_dir.is_none() && paths.len() > 2 {
         return Err(format!("extra operand {:?}", paths[2]).into());
     }
 

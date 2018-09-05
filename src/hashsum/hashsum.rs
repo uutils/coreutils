@@ -38,8 +38,8 @@ use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
-static NAME: &'static str = "hashsum";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "hashsum";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn is_custom_binary(program: &str) -> bool {
     match program {
@@ -493,8 +493,8 @@ fn digest_reader<'a, T: Read>(
 
     // Digest file, do not hold too much in memory at any given moment
     let windows = cfg!(windows);
-    let mut buffer = Vec::with_capacity(524288);
-    let mut vec = Vec::with_capacity(524288);
+    let mut buffer = Vec::with_capacity(524_288);
+    let mut vec = Vec::with_capacity(524_288);
     let mut looking_for_newline = false;
     loop {
         match reader.read_to_end(&mut buffer) {
@@ -504,17 +504,17 @@ fn digest_reader<'a, T: Read>(
             Ok(nread) => {
                 if windows && !binary {
                     // Windows text mode returns '\n' when reading '\r\n'
-                    for i in 0..nread {
+                    for &b in buffer.iter().take(nread) {
                         if looking_for_newline {
-                            if buffer[i] != ('\n' as u8) {
-                                vec.push('\r' as u8);
+                            if b != b'\n' {
+                                vec.push(b'\r');
                             }
-                            if buffer[i] != ('\r' as u8) {
-                                vec.push(buffer[i]);
+                            if b != b'\r' {
+                                vec.push(b);
                                 looking_for_newline = false;
                             }
-                        } else if buffer[i] != ('\r' as u8) {
-                            vec.push(buffer[i]);
+                        } else if b != b'\r' {
+                            vec.push(b);
                         } else {
                             looking_for_newline = true;
                         }
@@ -529,7 +529,7 @@ fn digest_reader<'a, T: Read>(
         }
     }
     if windows && looking_for_newline {
-        vec.push('\r' as u8);
+        vec.push(b'\r');
         digest.input(&vec);
     }
 

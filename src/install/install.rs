@@ -21,10 +21,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
-static NAME: &'static str = "install";
-static SUMMARY: &'static str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+static NAME: &str = "install";
+static SUMMARY: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 const DEFAULT_MODE: u32 = 755;
 

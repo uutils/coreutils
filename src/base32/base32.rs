@@ -16,10 +16,10 @@ use std::fs::File;
 use std::io::{stdin, BufReader, Read};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]";
-static SUMMARY: &'static str =
+static SYNTAX: &str = "[OPTION]... [FILE]";
+static SUMMARY: &str =
     "Base32 encode or decode FILE, or standard input, to standard output.";
-static LONG_HELP: &'static str = "
+static LONG_HELP: &str = "
  With no FILE, or when FILE is -, read standard input.
 
  The data are encoded as described for the base32 alphabet in RFC

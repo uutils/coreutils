@@ -24,10 +24,10 @@ use walker::Walker;
 use uucore::mode;
 use uucore::fs::display_permissions_unix;
 
-const NAME: &'static str = "chmod";
-static SUMMARY: &'static str = "Change the mode of each FILE to MODE.
+const NAME: &str = "chmod";
+static SUMMARY: &str = "Change the mode of each FILE to MODE.
  With --reference, change the mode of each FILE to that of RFILE.";
-static LONG_HELP: &'static str = "
+static LONG_HELP: &str = "
  Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
 ";
 
@@ -81,13 +81,13 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
             None
         };
         let chmoder = Chmoder {
-            changes: changes,
-            quiet: quiet,
-            verbose: verbose,
-            preserve_root: preserve_root,
-            recursive: recursive,
-            fmode: fmode,
-            cmode: cmode,
+            changes,
+            quiet,
+            verbose,
+            preserve_root,
+            recursive,
+            fmode,
+            cmode,
         };
         match chmoder.chmod(matches.free) {
             Ok(()) => {}

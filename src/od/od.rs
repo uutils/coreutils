@@ -47,10 +47,10 @@ use inputoffset::{InputOffset, Radix};
 use inputdecoder::{InputDecoder, MemoryDecoder};
 use output_info::OutputInfo;
 
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
-static USAGE: &'static str = r#"Usage:
+static USAGE: &str = r#"Usage:
     od [OPTION]... [--] [FILENAME]...
     od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
     od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]

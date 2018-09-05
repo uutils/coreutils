@@ -19,9 +19,9 @@ use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2";
-static SUMMARY: &'static str = "Compare sorted files line by line";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
+static SUMMARY: &str = "Compare sorted files line by line";
+static LONG_HELP: &str = "";
 
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();

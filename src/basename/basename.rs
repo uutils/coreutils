@@ -14,11 +14,11 @@ extern crate uucore;
 
 use std::path::{is_separator, PathBuf};
 
-static NAME: &'static str = "basename";
-static SYNTAX: &'static str = "NAME [SUFFIX]";
-static SUMMARY: &'static str = "Print NAME with any leading directory components removed
+static NAME: &str = "basename";
+static SYNTAX: &str = "NAME [SUFFIX]";
+static SUMMARY: &str = "Print NAME with any leading directory components removed
  If specified, also remove a trailing SUFFIX";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     //
@@ -44,7 +44,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(args);
 
     // too few arguments
-    if matches.free.len() < 1 {
+    if matches.free.is_empty() {
         crash!(
             1,
             "{0}: {1}\nTry '{0} --help' for more information.",

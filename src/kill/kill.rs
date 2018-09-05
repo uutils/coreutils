@@ -18,9 +18,9 @@ use libc::{c_int, pid_t};
 use std::io::Error;
 use uucore::signals::ALL_SIGNALS;
 
-static SYNTAX: &'static str = "[options] <pid> [...]";
-static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "[options] <pid> [...]";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "";
 
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;

@@ -15,8 +15,8 @@ use getopts::{Matches, Options};
 use std::fmt;
 use std::io::BufRead;
 
-static NAME: &'static str = "numfmt";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "numfmt";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const IEC_BASES: [f64; 10] = [
     //premature optimization

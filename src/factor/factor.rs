@@ -29,10 +29,10 @@ mod numeric;
 
 include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
 
-static SYNTAX: &'static str = "[OPTION] [NUMBER]...";
-static SUMMARY: &'static str = "Print the prime factors of the given number(s).
+static SYNTAX: &str = "[OPTION] [NUMBER]...";
+static SUMMARY: &str = "Print the prime factors of the given number(s).
  If none are specified, read from standard input.";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {
@@ -148,7 +148,7 @@ fn print_factors(num: u64) {
     for fac in &factors {
         print!(" {}", fac);
     }
-    println!("");
+    println!();
 }
 
 fn print_factors_str(num_str: &str) {

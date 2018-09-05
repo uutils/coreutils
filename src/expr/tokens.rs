@@ -39,15 +39,15 @@ pub enum Token {
     },
 }
 impl Token {
-    fn new_infix_op(v: &String, left_assoc: bool, precedence: u8) -> Self {
+    fn new_infix_op(v: &str, left_assoc: bool, precedence: u8) -> Self {
         Token::InfixOp {
-            left_assoc: left_assoc,
-            precedence: precedence,
-            value: v.clone(),
+            left_assoc,
+            precedence,
+            value: v.into(),
         }
     }
-    fn new_value(v: &String) -> Self {
-        Token::Value { value: v.clone() }
+    fn new_value(v: &str) -> Self {
+        Token::Value { value: v.into() }
     }
 
     fn is_infix_plus(&self) -> bool {
@@ -148,7 +148,7 @@ fn push_token_if_not_escaped(
     acc: &mut Vec<(usize, Token)>,
     tok_idx: usize,
     token: Token,
-    s: &String,
+    s: &str,
 ) {
     // Smells heuristics... :(
     let prev_is_plus = match acc.last() {

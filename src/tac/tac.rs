@@ -17,8 +17,8 @@ extern crate uucore;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
 
-static NAME: &'static str = "tac";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tac";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

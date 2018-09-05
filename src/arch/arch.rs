@@ -15,9 +15,9 @@ extern crate uucore;
 
 use platform_info::*;
 
-static SYNTAX: &'static str = "";
-static SUMMARY: &'static str = "Determine architecture name for current machine.";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "";
+static SUMMARY: &str = "Determine architecture name for current machine.";
+static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);

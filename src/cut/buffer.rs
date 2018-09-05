@@ -43,7 +43,7 @@ impl<R: Read> ByteReader<R> {
     pub fn new(read: R, newline_char: u8) -> ByteReader<R> {
         ByteReader {
             inner: BufReader::with_capacity(4096, read),
-            newline_char: newline_char,
+            newline_char,
         }
     }
 }
@@ -75,7 +75,7 @@ impl<R: Read> ByteReader<R> {
                 // need filled_buf to go out of scope
                 let filled_buf = match self.fill_buf() {
                     Ok(b) => {
-                        if b.len() == 0 {
+                        if b.is_empty() {
                             return bytes_consumed;
                         } else {
                             b
@@ -137,9 +137,8 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
                 },
             };
 
-            match out {
-                Some(out) => crash_if_err!(1, out.write_all(&buffer[0..consume_val])),
-                None => (),
+            if let Some(out) = out {
+                crash_if_err!(1, out.write_all(&buffer[0..consume_val]));
             }
             (res, consume_val)
         };

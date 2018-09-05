@@ -67,8 +67,8 @@ struct Result {
     max_line_length: usize,
 }
 
-static NAME: &'static str = "wc";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "wc";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();

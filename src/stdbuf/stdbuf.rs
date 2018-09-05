@@ -23,10 +23,10 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-static NAME: &'static str = "stdbuf";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "stdbuf";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const STDBUF_INJECT: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
 enum BufferType {
     Default,

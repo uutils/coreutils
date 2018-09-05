@@ -29,8 +29,8 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
 #[cfg(target_os = "netbsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 
-static NAME: &'static str = "nproc";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "nproc";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();

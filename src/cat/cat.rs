@@ -31,10 +31,10 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
 
-static SYNTAX: &'static str = "[OPTION]... [FILE]...";
-static SUMMARY: &'static str = "Concatenate FILE(s), or standard input, to standard output
+static SYNTAX: &str = "[OPTION]... [FILE]...";
+static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -174,32 +174,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let success = if can_write_fast {
         write_fast(files).is_ok()
     } else {
-        let tab = match show_tabs {
-            true => "^I",
-            false => "\t",
-        }.to_owned();
+        let tab = if show_tabs { "^I" } else { "\t" }.to_owned();
 
-        let end_of_line = match show_ends {
-            true => "$\n",
-            false => "\n",
-        }.to_owned();
+        let end_of_line = if show_ends { "$\n" } else { "\n" }.to_owned();
 
         let options = OutputOptions {
-            end_of_line: end_of_line,
+            end_of_line,
             number: number_mode,
-            show_nonprint: show_nonprint,
-            show_tabs: show_tabs,
-            squeeze_blank: squeeze_blank,
-            tab: tab,
+            show_nonprint,
+            show_tabs,
+            squeeze_blank,
+            tab,
         };
 
         write_lines(files, &options).is_ok()
     };
 
-    match success {
-        true => 0,
-        false => 1,
-    }
+    if success { 0 } else { 1 }
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -363,7 +354,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
         let mut pos = 0;
         while pos < n {
             // skip empty line_number enumerating them if needed
-            if in_buf[pos] == '\n' as u8 {
+            if in_buf[pos] == b'\n' {
                 if !state.at_line_start || !options.squeeze_blank || !one_blank_kept {
                     one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::NumberAll {
@@ -415,7 +406,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
 // Write all symbols till end of line or end of buffer is reached
 // Return the (number of written symbols + 1) or 0 if the end of buffer is reached
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == '\n' as u8) {
+    match in_buf.iter().position(|c| *c == b'\n') {
         Some(p) => {
             writer.write_all(&in_buf[..p]).unwrap();
             p + 1
@@ -431,14 +422,14 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     loop {
         match in_buf
             .iter()
-            .position(|c| *c == '\n' as u8 || *c == '\t' as u8)
+            .position(|c| *c == b'\n' || *c == b'\t')
         {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
-                if in_buf[p] == '\n' as u8 {
+                if in_buf[p] == b'\n' {
                     return p + 1;
                 } else {
-                    writer.write_all("^I".as_bytes()).unwrap();
+                    writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
                 }
             }
@@ -454,17 +445,17 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
     let mut count = 0;
 
     for byte in in_buf.iter().map(|c| *c) {
-        if byte == '\n' as u8 {
+        if byte == b'\n' {
             break;
         }
         match byte {
             9 => writer.write_all(tab),
-            0...8 | 10...31 => writer.write_all(&['^' as u8, byte + 64]),
+            0...8 | 10...31 => writer.write_all(&[b'^', byte + 64]),
             32...126 => writer.write_all(&[byte]),
-            127 => writer.write_all(&['^' as u8, byte - 64]),
-            128...159 => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, byte - 64]),
-            160...254 => writer.write_all(&['M' as u8, '-' as u8, byte - 128]),
-            _ => writer.write_all(&['M' as u8, '-' as u8, '^' as u8, 63]),
+            127 => writer.write_all(&[b'^', byte - 64]),
+            128...159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
+            160...254 => writer.write_all(&[b'M', b'-', byte - 128]),
+            _ => writer.write_all(&[b'M', b'-', b'^', 63]),
         }.unwrap();
         count += 1;
     }

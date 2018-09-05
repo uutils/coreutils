@@ -53,7 +53,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     let (w, w_len) = match p_words_words.next() {
         Some(winfo) => (winfo.word, winfo.word_nchars),
         None => {
-            silent_unwrap!(ostream.write_all("\n".as_bytes()));
+            silent_unwrap!(ostream.write_all(b"\n"));
             return;
         }
     };
@@ -77,12 +77,12 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     let uniform = para.mail_header || opts.uniform;
 
     let mut break_args = BreakArgs {
-        opts: opts,
+        opts,
         init_len: p_init_len,
         indent_str: &p_indent[..],
         indent_len: p_indent_len,
-        uniform: uniform,
-        ostream: ostream,
+        uniform,
+        ostream,
     };
 
     if opts.quick || para.mail_header {
@@ -98,7 +98,7 @@ fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(iter: T, args: &mut Br
     iter.fold((args.init_len, false), |l, winfo| {
         accum_words_simple(args, l, winfo)
     });
-    silent_unwrap!(args.ostream.write_all("\n".as_bytes()));
+    silent_unwrap!(args.ostream.write_all(b"\n"));
 }
 
 fn accum_words_simple<'a>(
@@ -199,7 +199,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         fresh = false;
         write_with_spaces(word, slen, args.ostream);
     }
-    silent_unwrap!(args.ostream.write_all("\n".as_bytes()));
+    silent_unwrap!(args.ostream.write_all(b"\n"));
 }
 
 struct LineBreak<'a> {
@@ -381,7 +381,7 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
 }
 
 // "infinite" badness is more like (1+BAD_INFTY)^2 because of how demerits are computed
-const BAD_INFTY: i64 = 10000000;
+const BAD_INFTY: i64 = 10_000_000;
 const BAD_INFTY_SQ: i64 = BAD_INFTY * BAD_INFTY;
 // badness = BAD_MULT * abs(r) ^ 3
 const BAD_MULT: f32 = 100.0;
@@ -451,7 +451,7 @@ fn restart_active_breaks<'a>(
     LineBreak {
         prev: act_idx,
         linebreak: Some(w),
-        break_before: break_before,
+        break_before,
         demerits: 0, // this is the only active break, so we can reset the demerit count
         prev_rat: if break_before { 1.0 } else { -1.0 },
         length: line_length,
@@ -492,16 +492,16 @@ fn slice_if_fresh(
 
 // Write a newline and add the indent.
 fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) {
-    silent_unwrap!(ostream.write_all("\n".as_bytes()));
+    silent_unwrap!(ostream.write_all(b"\n"));
     silent_unwrap!(ostream.write_all(indent.as_bytes()));
 }
 
 // Write the word, along with slen spaces.
 fn write_with_spaces(word: &str, slen: usize, ostream: &mut BufWriter<Stdout>) {
     if slen == 2 {
-        silent_unwrap!(ostream.write_all("  ".as_bytes()));
+        silent_unwrap!(ostream.write_all(b"  "));
     } else if slen == 1 {
-        silent_unwrap!(ostream.write_all(" ".as_bytes()));
+        silent_unwrap!(ostream.write_all(b" "));
     }
     silent_unwrap!(ostream.write_all(word.as_bytes()));
 }

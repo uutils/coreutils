@@ -19,35 +19,35 @@ extern crate uucore;
 use clap::{App, Arg};
 use platform_info::*;
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const ABOUT: &'static str = "Print certain system information.  With no OPTION, same as -s.";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
 
-const OPT_ALL: &'static str = "all";
-const OPT_KERNELNAME: &'static str = "kernel-name";
-const OPT_NODENAME: &'static str = "nodename";
-const OPT_KERNELVERSION: &'static str = "kernel-version";
-const OPT_KERNELRELEASE: &'static str = "kernel-release";
-const OPT_MACHINE: &'static str = "machine";
+const OPT_ALL: &str = "all";
+const OPT_KERNELNAME: &str = "kernel-name";
+const OPT_NODENAME: &str = "nodename";
+const OPT_KERNELVERSION: &str = "kernel-version";
+const OPT_KERNELRELEASE: &str = "kernel-release";
+const OPT_MACHINE: &str = "machine";
 
 //FIXME: unimplemented options
 //const OPT_PROCESSOR: &'static str = "processor";
 //const OPT_HWPLATFORM: &'static str = "hardware-platform";
-const OPT_OS: &'static str = "operating-system";
+const OPT_OS: &str = "operating-system";
 
 #[cfg(target_os = "linux")]
-const HOST_OS: &'static str = "GNU/Linux";
+const HOST_OS: &str = "GNU/Linux";
 #[cfg(target_os = "windows")]
-const HOST_OS: &'static str = "Windows NT";
+const HOST_OS: &str = "Windows NT";
 #[cfg(target_os = "freebsd")]
-const HOST_OS: &'static str = "FreeBSD";
+const HOST_OS: &str = "FreeBSD";
 #[cfg(target_os = "openbsd")]
-const HOST_OS: &'static str = "OpenBSD";
+const HOST_OS: &str = "OpenBSD";
 #[cfg(target_os = "macos")]
-const HOST_OS: &'static str = "Darwin";
+const HOST_OS: &str = "Darwin";
 #[cfg(target_os = "fuchsia")]
-const HOST_OS: &'static str = "Fuchsia";
+const HOST_OS: &str = "Fuchsia";
 #[cfg(target_os = "redox")]
-const HOST_OS: &'static str = "Redox";
+const HOST_OS: &str = "Redox";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let usage = format!("{} [OPTION]...", executable!());

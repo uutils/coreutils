@@ -23,8 +23,8 @@ pub use uucore::libc;
 
 use getopts::Options;
 
-static NAME: &'static str = "uptime";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "uptime";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
 use libc::getloadavg;

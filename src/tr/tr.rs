@@ -28,8 +28,8 @@ use expand::ExpandSet;
 
 mod expand;
 
-static NAME: &'static str = "tr";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tr";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUFFER_LEN: usize = 1024;
 
 trait SymbolTranslator {

@@ -18,8 +18,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::io;
 
-static NAME: &'static str = "pwd";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "pwd";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     let path_buf = path.canonicalize()?;

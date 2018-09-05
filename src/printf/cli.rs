@@ -4,8 +4,8 @@
 use std::io::{stderr, stdout, Write};
 use std::env;
 
-pub static EXIT_OK: i32 = 0;
-pub static EXIT_ERR: i32 = 1;
+pub const EXIT_OK: i32 = 0;
+pub const EXIT_ERR: i32 = 1;
 
 pub fn err_msg(msg: &str) {
     let exe_path = match env::current_exe() {
