@@ -106,3 +106,17 @@ fn test_header_default() {
         .run()
         .stdout_is("header\n1000\n1100000\n100000000");
 }
+
+#[test]
+fn test_negative() {
+    new_ucmd!()
+        .args(&["--from=si"])
+        .pipe_in("-1000\n-1.1M\n-0.1G")
+        .run()
+        .stdout_is("-1000\n-1100000\n-100000000");
+    new_ucmd!()
+        .args(&["--to=iec-i"])
+        .pipe_in("-1024\n-1153434\n-107374182")
+        .run()
+        .stdout_is("-1.0Ki\n-1.1Mi\n-102.4Mi");
+}
