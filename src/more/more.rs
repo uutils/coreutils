@@ -146,7 +146,7 @@ fn more(matches: getopts::Matches) {
         if sz == 0 {
             break;
         }
-        stdout().write(&buffer[0..sz]).unwrap();
+        stdout().write_all(&buffer[0..sz]).unwrap();
         for byte in std::io::stdin().bytes() {
             match byte.unwrap() {
                 b' ' => break,
@@ -164,5 +164,5 @@ fn more(matches: getopts::Matches) {
     }
 
     reset_term(&mut term);
-    println!("");
+    println!();
 }
