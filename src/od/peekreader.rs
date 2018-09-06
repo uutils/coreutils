@@ -61,7 +61,7 @@ impl<R: Read> PeekReader<R> {
     fn write_to_tempbuffer(&mut self, bytes: &[u8]) {
         // if temp_buffer is not empty, data has to be inserted in front
         let org_buffer: Vec<_> = self.temp_buffer.drain(..).collect();
-        self.temp_buffer.write(bytes).unwrap();
+        self.temp_buffer.write_all(bytes).unwrap();
         self.temp_buffer.extend(org_buffer);
     }
 }
