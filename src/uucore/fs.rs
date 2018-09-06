@@ -36,7 +36,7 @@ pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
         return path.into();
     }
     let root = Component::RootDir.as_os_str();
-    let mut result = env::current_dir().unwrap_or(PathBuf::from(root));
+    let mut result = env::current_dir().unwrap_or_else(|_| PathBuf::from(root));
     for comp in path.components() {
         match comp {
             Component::ParentDir => {

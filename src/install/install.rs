@@ -244,8 +244,8 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
     };
 
     Ok(Behaviour {
-        main_function: main_function,
-        specified_mode: specified_mode,
+        main_function,
+        specified_mode,
         suffix: backup_suffix,
         verbose: matches.opt_present("v"),
     })

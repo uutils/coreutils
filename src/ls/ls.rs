@@ -57,12 +57,13 @@ static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do
 
 #[cfg(unix)]
 lazy_static! {
-    static ref LS_COLORS: String = std::env::var("LS_COLORS").unwrap_or(DEFAULT_COLORS.to_string());
+    static ref LS_COLORS: String = std::env::var("LS_COLORS")
+        .unwrap_or_else(|_| DEFAULT_COLORS.to_string());
     static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
-        let codes = LS_COLORS.split(":");
+        let codes = LS_COLORS.split(':');
         let mut map = HashMap::new();
         for c in codes {
-            let p: Vec<_> = c.split("=").collect();
+            let p: Vec<_> = c.split('=').collect();
             if p.len() == 2 {
                 map.insert(p[0], p[1]);
             }
@@ -168,7 +169,7 @@ fn list(options: getopts::Matches) {
     let locs: Vec<String> = if options.free.is_empty() {
         vec![String::from(".")]
     } else {
-        options.free.iter().cloned().collect()
+        options.free.to_vec()
     };
 
     let mut files = Vec::<PathBuf>::new();
@@ -274,15 +275,13 @@ fn max(lhs: usize, rhs: usize) -> usize {
 fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
-    if !options.opt_present("a") && !options.opt_present("A") {
-        if name.starts_with('.') {
-            return false;
-        }
+    if !options.opt_present("a") && !options.opt_present("A") && name.starts_with('.') {
+        return false;
     }
     if options.opt_present("B") && name.ends_with('~') {
         return false;
     }
-    return true;
+    true
 }
 
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
@@ -313,7 +312,7 @@ fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
 
 fn get_metadata(entry: &PathBuf, options: &getopts::Matches) -> std::io::Result<Metadata> {
     if options.opt_present("L") {
-        entry.metadata().or(entry.symlink_metadata())
+        entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
         entry.symlink_metadata()
     }
@@ -333,14 +332,14 @@ fn display_dir_entry_size(entry: &PathBuf, options: &getopts::Matches) -> (usize
 fn pad_left(string: String, count: usize) -> String {
     if count > string.len() {
         let pad = count - string.len();
-        let pad = String::from_utf8(vec![' ' as u8; pad]).unwrap();
+        let pad = String::from_utf8(vec![b' '; pad]).unwrap();
         format!("{}{}", pad, string)
     } else {
         string
     }
 }
 
-fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::Matches) {
+fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Matches) {
     if options.opt_present("long") || options.opt_present("numeric-uid-gid") {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -682,7 +681,7 @@ fn display_file_name(
 
     Cell {
         contents: name,
-        width: width,
+        width,
     }
 }
 

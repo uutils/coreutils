@@ -117,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!(
             "{}",
             if nflag {
-                entries::gid2grp(id).unwrap_or(id.to_string())
+                entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
             } else {
                 id.to_string()
             }
@@ -132,7 +132,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!(
             "{}",
             if nflag {
-                entries::uid2usr(id).unwrap_or(id.to_string())
+                entries::uid2usr(id).unwrap_or_else(|_| id.to_string())
             } else {
                 id.to_string()
             }
@@ -146,7 +146,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if nflag {
                 possible_pw
                     .map(|p| p.belongs_to())
-                    .unwrap_or(entries::get_groups().unwrap())
+                    .unwrap_or_else(|| entries::get_groups().unwrap())
                     .iter()
                     .map(|&id| entries::gid2grp(id).unwrap())
                     .collect::<Vec<_>>()
@@ -154,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             } else {
                 possible_pw
                     .map(|p| p.belongs_to())
-                    .unwrap_or(entries::get_groups().unwrap())
+                    .unwrap_or_else(|| entries::get_groups().unwrap())
                     .iter()
                     .map(|&id| id.to_string())
                     .collect::<Vec<_>>()
@@ -258,7 +258,7 @@ fn pline(possible_uid: Option<uid_t>) {
 
 #[cfg(target_os = "linux")]
 fn pline(possible_uid: Option<uid_t>) {
-    let uid = possible_uid.unwrap_or(getuid());
+    let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
 
     println!(

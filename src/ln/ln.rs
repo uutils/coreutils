@@ -159,7 +159,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
-    if files.len() == 0 {
+    if files.is_empty() {
         show_error!(
             "missing file operand\nTry '{} --help' for more information.",
             NAME
@@ -201,7 +201,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
         );
         return 1;
     }
-    assert!(files.len() != 0);
+    assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => 0,
@@ -295,7 +295,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         print!("'{}' -> '{}'", dst.display(), src.display());
         match backup_path {
             Some(path) => println!(" (backup: '{}')", path.display()),
-            None => println!(""),
+            None => println!(),
         }
     }
     Ok(())

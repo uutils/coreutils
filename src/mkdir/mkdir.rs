@@ -16,7 +16,7 @@ extern crate libc;
 extern crate uucore;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 static NAME: &str = "mkdir";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -76,7 +76,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn print_help(opts: &getopts::Options) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     print!(
         "{}",
@@ -128,7 +128,7 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
         use fs::{Permissions, set_permissions};
         use std::os::unix::fs::{PermissionsExt};
 
-        let mode = Permissions::from_mode(mode as u32);
+        let mode = Permissions::from_mode(u32::from(mode));
 
         if let Err(err) = set_permissions(path, mode) {
             show_error!(

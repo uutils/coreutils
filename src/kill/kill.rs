@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             return kill(
                 &matches
                     .opt_str("signal")
-                    .unwrap_or(obs_signal.unwrap_or("9".to_owned())),
+                    .unwrap_or_else(|| obs_signal.unwrap_or_else(|| "9".to_owned())),
                 matches.free,
             )
         }
@@ -74,7 +74,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
         let slice = &args[i].clone();
-        if slice.chars().next().unwrap() == '-' && slice.len() > 1
+        if slice.starts_with('-') && slice.len() > 1
             && slice.chars().nth(1).unwrap().is_digit(10)
         {
             let val = &slice[1..];
@@ -107,7 +107,7 @@ fn table() {
         //TODO: obtain max signal width here
 
         if (idx + 1) % 7 == 0 {
-            println!("");
+            println!();
         }
     }
 }
@@ -133,7 +133,7 @@ fn print_signals() {
         pos += signal.name.len();
         print!("{}", signal.name);
         if idx > 0 && pos > 73 {
-            println!("");
+            println!();
             pos = 0;
         } else {
             pos += 1;
