@@ -71,9 +71,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     unsafe { signal(SIGHUP, SIG_IGN) };
 
-    if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() {
+    if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         crash!(2, "Cannot detach from console")
-    };
+    }
 
     let cstrs: Vec<CString> = matches
         .free
@@ -105,10 +105,8 @@ fn replace_fds() {
         }
     }
 
-    if is_stderr_interactive() {
-        if unsafe { dup2(1, 2) } != 2 {
-            crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
-        }
+    if is_stderr_interactive() && unsafe { dup2(1, 2) } != 2 {
+        crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
     }
 }
 

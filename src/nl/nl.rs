@@ -272,7 +272,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         if matched_groups > 0 {
             // The current line is a section delimiter, so we output
             // a blank line.
-            println!("");
+            println!();
             // However the line does not count as a blank line, so we
             // reset the counter used for --join-blank-lines.
             empty_line_count = 0;
@@ -333,10 +333,11 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         // way, start counting empties from zero once more.
         empty_line_count = 0;
         // A line number is to be printed.
-        let mut w: usize = 0;
-        if settings.number_width > line_no_width {
-            w = settings.number_width - line_no_width;
-        }
+        let w: usize = if settings.number_width > line_no_width {
+            settings.number_width - line_no_width
+        } else {
+            0
+        };
         let fill: String = repeat(fill_char).take(w).collect();
         match settings.number_format {
             NumberFormat::Left => println!(
@@ -364,7 +365,7 @@ fn pass_regex(line: &str, re: &regex::Regex) -> bool {
 }
 
 fn pass_nonempty(line: &str, _: &regex::Regex) -> bool {
-    line.len() > 0
+    !line.is_empty()
 }
 
 fn pass_none(_: &str, _: &regex::Regex) -> bool {

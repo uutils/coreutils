@@ -115,12 +115,10 @@ fn num_cpus_all() -> usize {
         // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
         // However, we want to guarantee that `nproc --all` >= `nproc`.
         num_cpus::get()
+    } else if nprocs > 0 {
+        nprocs as usize
     } else {
-        if nprocs > 0 {
-            nprocs as usize
-        } else {
-            1
-        }
+        1
     }
 }
 

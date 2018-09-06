@@ -120,7 +120,7 @@ process).",
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
     let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
-    args.push(0 as *const c_char);
+    args.push(std::ptr::null());
     unsafe {
         execvp(args[0], args.as_mut_ptr());
     }

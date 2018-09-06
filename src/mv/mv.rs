@@ -124,7 +124,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let paths: Vec<PathBuf> = {
-        fn strip_slashes<'a>(p: &'a Path) -> &'a Path {
+        fn strip_slashes(p: &Path) -> &Path {
             p.components().as_path()
         }
         let to_owned = |p: &Path| p.to_owned();
@@ -202,12 +202,12 @@ fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) 
                 );
             }
         }
+    } else if let (Ok(s), BackupMode::SimpleBackup) =
+        (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode)
+    {
+        s
     } else {
-        if let (Ok(s), BackupMode::SimpleBackup) = (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode) {
-            s
-        } else {
-            "~".to_owned()
-        }
+        "~".to_owned()
     }
 }
 
@@ -349,24 +349,23 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
         };
         if let Some(ref p) = backup_path {
-            try!(fs::rename(to, p));
+            fs::rename(to, p)?;
         }
 
-        if b.update {
-            if try!(try!(fs::metadata(from)).modified()) <= try!(try!(fs::metadata(to)).modified())
-            {
-                return Ok(());
-            }
+        if b.update &&
+           (fs::metadata(from))?.modified()? <= fs::metadata(to)?.modified()?
+        {
+            return Ok(());
         }
     }
 
-    try!(fs::rename(from, to));
+    fs::rename(from, to)?;
 
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
         match backup_path {
             Some(path) => println!(" (backup: ‘{}’)", path.display()),
-            None => println!(""),
+            None => println!(),
         }
     }
     Ok(())
