@@ -242,7 +242,8 @@ impl UtmpxIter {
     ///
     /// If not set, default record file will be used(file path depends on the target OS)
     pub fn read_from(self, f: &str) -> Self {
-        let res = unsafe { utmpxname(CString::new(f).unwrap().as_ptr()) };
+        let s = CString::new(f).unwrap();
+        let res = unsafe { utmpxname(s.as_ptr()) };
         if res != 0 {
             println!("Warning: {}", IOError::last_os_error());
         }
