@@ -45,8 +45,9 @@ macro_rules! local_tm_to_filetime(
 macro_rules! to_timeval {
     ($ft:expr) => (
         timeval {
-            tv_sec: time_t::from($ft.seconds()),
-            tv_usec: suseconds_t::from($ft.nanoseconds() / 1000),
+            // On some platforms we have to truncate.
+            tv_sec: $ft.seconds() as time_t,
+            tv_usec: ($ft.nanoseconds() / 1000) as suseconds_t,
         }
     )
 }
