@@ -139,7 +139,7 @@ fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
 
 fn show_usage(opts: &getopts::Options) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage: {0} [OPTION]... [FILE]...", NAME);
     print!("Print value of a symbolic link or canonical file name");
     print!("{}", opts.usage(""));

@@ -15,12 +15,12 @@ use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
 // use std::collections::HashSet;
 
-fn err_conv(sofar: &String) {
+fn err_conv(sofar: &str) {
     cli::err_msg(&format!("%{}: invalid conversion specification", sofar));
     exit(cli::EXIT_ERR);
 }
 
-fn convert_asterisk_arg_int(asterisk_arg: &String) -> isize {
+fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
     // this is a costly way to parse the
     // args used for asterisk values into integers
     // from various bases. Actually doing it correctly
@@ -80,11 +80,11 @@ impl Sub {
             }
         };
         Sub {
-            min_width: min_width,
-            second_field: second_field,
-            field_char: field_char,
-            field_type: field_type,
-            orig: orig,
+            min_width,
+            second_field,
+            field_char,
+            field_type,
+            orig,
         }
     }
 }
@@ -177,7 +177,7 @@ impl SubParser {
 
         // divide substitution from %([0-9]+)?(.[0-9+])?([a-zA-Z])
         // into min_width, second_field, field_char
-        while let Some(ch) = it.next() {
+        for ch in it {
             self.text_so_far.push(ch);
             match ch as char {
                 '-' | '*' | '0'...'9' => {
@@ -190,7 +190,7 @@ impl SubParser {
                         }
                         match self.min_width_tmp.as_mut() {
                             Some(x) => {
-                                if (ch == '-' || ch == '*') && x.len() > 0 {
+                                if (ch == '-' || ch == '*') && !x.is_empty() {
                                     err_conv(&self.text_so_far);
                                 }
                                 if ch == '*' {
@@ -213,7 +213,7 @@ impl SubParser {
                         }
                         match self.second_field_tmp.as_mut() {
                             Some(x) => {
-                                if ch == '*' && x.len() > 0 {
+                                if ch == '*' && !x.is_empty() {
                                     err_conv(&self.text_so_far);
                                 }
                                 if ch == '*' {
@@ -252,7 +252,7 @@ impl SubParser {
                 }
             }
         }
-        if !self.field_char.is_some() {
+        if self.field_char.is_none() {
             err_conv(&self.text_so_far);
         }
         let field_char_retrieved = self.field_char.unwrap();
@@ -262,13 +262,10 @@ impl SubParser {
         self.validate_field_params(field_char_retrieved);
         // if the dot is provided without a second field
         // printf interprets it as 0.
-        match self.second_field_tmp.as_mut() {
-            Some(x) => {
-                if x.len() == 0 {
-                    self.min_width_tmp = Some(String::from("0"));
-                }
+        if let Some(x) = self.second_field_tmp.as_mut() {
+            if x.is_empty() {
+                self.min_width_tmp = Some(String::from("0"));
             }
-            _ => {}
         }
 
         true
@@ -292,8 +289,8 @@ impl SubParser {
                 }
             }
         } else {
-            n_ch.map(|x| it.put_back(x));
-            preface.map(|x| it.put_back(x));
+            if let Some(x) = n_ch { it.put_back(x); }
+            if let Some(x) = preface { it.put_back(x); }
             false
         }
     }
@@ -387,42 +384,39 @@ impl token::Token for Sub {
             }
             _ => {
                 // non string/char fields are delegated to num_format
-                num_format::num_format(&field, pf_arg)
+                num_format::num_format(&field, pf_arg.map(|x| x.as_ref()))
             }
         };
-        match pre_min_width_opt {
+        if let Some(pre_min_width) = pre_min_width_opt {
             // if have a string, print it, ensuring minimum width is met.
-            Some(pre_min_width) => {
-                print!(
-                    "{}",
-                    match field.min_width {
-                        Some(min_width) => {
-                            let diff: isize =
-                                min_width.abs() as isize - pre_min_width.len() as isize;
-                            if diff > 0 {
-                                let mut final_str = String::new();
-                                // definitely more efficient ways
-                                //  to do this.
-                                let pad_before = min_width > 0;
-                                if !pad_before {
-                                    final_str.push_str(&pre_min_width);
-                                }
-                                for _ in 0..diff {
-                                    final_str.push(' ');
-                                }
-                                if pad_before {
-                                    final_str.push_str(&pre_min_width);
-                                }
-                                final_str
-                            } else {
-                                pre_min_width
+            print!(
+                "{}",
+                match field.min_width {
+                    Some(min_width) => {
+                        let diff: isize =
+                            min_width.abs() as isize - pre_min_width.len() as isize;
+                        if diff > 0 {
+                            let mut final_str = String::new();
+                            // definitely more efficient ways
+                            //  to do this.
+                            let pad_before = min_width > 0;
+                            if !pad_before {
+                                final_str.push_str(&pre_min_width);
                             }
+                            for _ in 0..diff {
+                                final_str.push(' ');
+                            }
+                            if pad_before {
+                                final_str.push_str(&pre_min_width);
+                            }
+                            final_str
+                        } else {
+                            pre_min_width
                         }
-                        None => pre_min_width,
                     }
-                );
-            }
-            None => {}
+                    None => pre_min_width,
+                }
+            );
         }
     }
 }

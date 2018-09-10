@@ -1,5 +1,4 @@
 //! Traits and enums dealing with Tokenization of printf Format String
-#[allow(unused_must_use)]
 
 use std::iter::Peekable;
 use std::str::Chars;

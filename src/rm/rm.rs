@@ -84,20 +84,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         println!("{}", opts.usage("Remove (unlink) the FILE(s)."));
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
-        println!("");
+        println!();
         println!("To remove a file whose name starts with a '-', for example '-foo',");
         println!("use one of these commands:");
         println!("rm -- -foo");
-        println!("");
+        println!();
         println!("rm ./-foo");
-        println!("");
+        println!();
         println!("Note that if you use rm to remove a file, it might be possible to recover");
         println!("some of its contents, given sufficient expertise and/or time.  For greater");
         println!("assurance that the contents are truly unrecoverable, consider using shred.");
@@ -109,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     } else {
         let options = Options {
-            force: force,
+            force,
             interactive: {
                 if matches.opt_present("i") {
                     InteractiveMode::InteractiveAlways
@@ -223,17 +223,15 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         }
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
+    } else if options.recursive {
+        show_error!("could not remove directory '{}'", path.display());
+        had_err = true;
     } else {
-        if options.recursive {
-            show_error!("could not remove directory '{}'", path.display());
-            had_err = true;
-        } else {
-            show_error!(
-                "could not remove directory '{}' (did you mean to pass '-r'?)",
-                path.display()
-            );
-            had_err = true;
-        }
+        show_error!(
+            "could not remove directory '{}' (did you mean to pass '-r'?)",
+            path.display()
+        );
+        had_err = true;
     }
 
     had_err
@@ -297,7 +295,7 @@ fn prompt(msg: &str) -> bool {
     let stdin = stdin();
     let mut stdin = stdin.lock();
 
-    match stdin.read_until('\n' as u8, &mut buf) {
+    match stdin.read_until(b'\n', &mut buf) {
         Ok(x) if x > 0 => match buf[0] {
             b'y' | b'Y' => true,
             _ => false,

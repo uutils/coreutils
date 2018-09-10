@@ -125,13 +125,13 @@ The utmp file will be {}",
     }
 
     let pk = Pinky {
-        include_idle: include_idle,
-        include_heading: include_heading,
-        include_fullname: include_fullname,
-        include_project: include_project,
-        include_plan: include_plan,
-        include_home_and_shell: include_home_and_shell,
-        include_where: include_where,
+        include_idle,
+        include_heading,
+        include_fullname,
+        include_project,
+        include_plan,
+        include_home_and_shell,
+        include_where,
         names: matches.free,
     };
 
@@ -256,7 +256,7 @@ impl Pinky {
             let ut_host = ut.host();
             let mut res = ut_host.splitn(2, ':');
             let host = match res.next() {
-                Some(_) => ut.canon_host().unwrap_or(ut_host.clone()),
+                Some(_) => ut.canon_host().unwrap_or_else(|_| ut_host.clone()),
                 None => ut_host.clone(),
             };
             match res.next() {
@@ -265,7 +265,7 @@ impl Pinky {
             }
         }
 
-        println!("");
+        println!();
     }
 
     fn print_heading(&self) {
@@ -281,7 +281,7 @@ impl Pinky {
         if self.include_where {
             print!(" Where");
         }
-        println!("");
+        println!();
     }
 
     fn short_pinky(&self) -> IOResult<()> {
@@ -292,10 +292,8 @@ impl Pinky {
             if ut.is_user_process() {
                 if self.names.is_empty() {
                     self.print_entry(&ut)
-                } else {
-                    if self.names.iter().any(|n| n.as_str() == ut.user()) {
-                        self.print_entry(&ut);
-                    }
+                } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
+                    self.print_entry(&ut);
                 }
             }
         }
@@ -327,7 +325,7 @@ impl Pinky {
                         read_to_console(f);
                     }
                 }
-                println!("");
+                println!();
             } else {
                 println!(" ???");
             }

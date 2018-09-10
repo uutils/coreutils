@@ -282,7 +282,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         );
         return 1;
     }
-    let ref formatstr = args[1];
+    let formatstr = &args[1];
 
     if formatstr == "--help" {
         print!("{} {}", LONGHELP_LEAD, LONGHELP_BODY);
@@ -292,5 +292,5 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let printf_args = &args[2..];
         memo::Memo::run_all(formatstr, printf_args);
     }
-    return 0;
+    0
 }

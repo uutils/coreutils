@@ -1,9 +1,9 @@
-pub fn arrnum_int_mult(arr_num: &Vec<u8>, basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
+pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
     let mut carry: u16 = 0;
     let mut rem: u16;
     let mut new_amount: u16;
-    let fact: u16 = base_ten_int_fact as u16;
-    let base: u16 = basenum as u16;
+    let fact = u16::from(base_ten_int_fact);
+    let base = u16::from(basenum);
 
     let mut ret_rev: Vec<u8> = Vec::new();
     let mut it = arr_num.iter().rev();
@@ -11,7 +11,7 @@ pub fn arrnum_int_mult(arr_num: &Vec<u8>, basenum: u8, base_ten_int_fact: u8) ->
         let i = it.next();
         match i {
             Some(u) => {
-                new_amount = ((u.clone() as u16) * fact) + carry;
+                new_amount = (u16::from(*u) * fact) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
                 ret_rev.push(rem as u8)
@@ -26,7 +26,7 @@ pub fn arrnum_int_mult(arr_num: &Vec<u8>, basenum: u8, base_ten_int_fact: u8) ->
             }
         }
     }
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| x.clone()).collect();
+    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
     ret
 }
 
@@ -41,12 +41,12 @@ pub struct DivOut<'a> {
     pub remainder: Remainder<'a>,
 }
 
-pub fn arrnum_int_div_step<'a>(
-    rem_in: Remainder<'a>,
+pub fn arrnum_int_div_step(
+    rem_in: Remainder,
     radix_in: u8,
     base_ten_int_divisor: u8,
     after_decimal: bool,
-) -> DivOut<'a> {
+) -> DivOut {
     let mut rem_out = Remainder {
         position: rem_in.position,
         replace: Vec::new(),
@@ -54,8 +54,8 @@ pub fn arrnum_int_div_step<'a>(
     };
 
     let mut bufferval: u16 = 0;
-    let base: u16 = radix_in as u16;
-    let divisor: u16 = base_ten_int_divisor as u16;
+    let base = u16::from(radix_in);
+    let divisor = u16::from(base_ten_int_divisor);
     let mut traversed = 0;
 
     let mut quotient = 0;
@@ -64,9 +64,9 @@ pub fn arrnum_int_div_step<'a>(
     let mut it_f = refd_vals.iter();
     loop {
         let u = match it_replace.next() {
-            Some(u_rep) => u_rep.clone() as u16,
+            Some(u_rep) => u16::from(*u_rep),
             None => match it_f.next() {
-                Some(u_orig) => u_orig.clone() as u16,
+                Some(u_orig) => u16::from(*u_orig),
                 None => {
                     if !after_decimal {
                         break;
@@ -96,7 +96,7 @@ pub fn arrnum_int_div_step<'a>(
         }
     }
     DivOut {
-        quotient: quotient,
+        quotient,
         remainder: rem_out,
     }
 }
@@ -164,11 +164,11 @@ pub fn arrnum_int_div_step<'a>(
 // ArrFloatDivOut { quotient: quotient, remainder: remainder }
 // }
 //
-pub fn arrnum_int_add(arrnum: &Vec<u8>, basenum: u8, base_ten_int_term: u8) -> Vec<u8> {
-    let mut carry: u16 = base_ten_int_term as u16;
+pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<u8> {
+    let mut carry = u16::from(base_ten_int_term);
     let mut rem: u16;
     let mut new_amount: u16;
-    let base: u16 = basenum as u16;
+    let base = u16::from(basenum);
 
     let mut ret_rev: Vec<u8> = Vec::new();
     let mut it = arrnum.iter().rev();
@@ -176,7 +176,7 @@ pub fn arrnum_int_add(arrnum: &Vec<u8>, basenum: u8, base_ten_int_term: u8) -> V
         let i = it.next();
         match i {
             Some(u) => {
-                new_amount = (u.clone() as u16) + carry;
+                new_amount = u16::from(*u) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
                 ret_rev.push(rem as u8)
@@ -191,23 +191,23 @@ pub fn arrnum_int_add(arrnum: &Vec<u8>, basenum: u8, base_ten_int_term: u8) -> V
             }
         }
     }
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| x.clone()).collect();
+    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
     ret
 }
 
-pub fn base_conv_vec(src: &Vec<u8>, radix_src: u8, radix_dest: u8) -> Vec<u8> {
+pub fn base_conv_vec(src: &[u8], radix_src: u8, radix_dest: u8) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     result.push(0);
     for i in src {
         result = arrnum_int_mult(&result, radix_dest, radix_src);
-        result = arrnum_int_add(&result, radix_dest, i.clone());
+        result = arrnum_int_add(&result, radix_dest, *i);
     }
     result
 }
 
 pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
-    let mut src_tmp: u16 = src.clone();
+    let mut src_tmp: u16 = src;
     while src_tmp > 0 {
         result.push((src_tmp % 10) as u8);
         src_tmp /= 10;
@@ -218,7 +218,7 @@ pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
 
 // temporary needs-improvement-function
 #[allow(unused_variables)]
-pub fn base_conv_float(src: &Vec<u8>, radix_src: u8, radix_dest: u8) -> f64 {
+pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
     // it would require a lot of addl code
     // to implement this for arbitrary string input.
     // until then, the below operates as an outline
@@ -226,16 +226,14 @@ pub fn base_conv_float(src: &Vec<u8>, radix_src: u8, radix_dest: u8) -> f64 {
     let mut result: Vec<u8> = Vec::new();
     result.push(0);
     let mut factor: f64 = 1.;
-    let radix_src_float: f64 = radix_src as f64;
-    let mut i = 0;
-    let mut r: f64 = 0 as f64;
-    for u in src {
+    let radix_src_float: f64 = f64::from(radix_src);
+    let mut r: f64 = 0.;
+    for (i, u) in src.iter().enumerate() {
         if i > 15 {
             break;
         }
-        i += 1;
         factor /= radix_src_float;
-        r += factor * (u.clone() as f64)
+        r += factor * f64::from(*u);
     }
     r
 }
@@ -253,14 +251,14 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &RadixDef) -> Vec<u8> {
     intermed_in
 }
 
-pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &RadixDef) -> String {
+pub fn arrnum_to_str(src: &[u8], radix_def_dest: &RadixDef) -> String {
     let mut str_out = String::new();
-    for u in src.iter() {
-        match radix_def_dest.from_u8(u.clone()) {
+    for &u in src {
+        match radix_def_dest.from_u8(u) {
             Some(c) => {
                 str_out.push(c);
-            }
-            None => {} //todo
+            },
+            None => {}, //todo
         }
     }
     str_out
@@ -284,9 +282,9 @@ pub trait RadixDef {
 }
 pub struct RadixTen;
 
-const ZERO_ASC: u8 = '0' as u8;
-const UPPER_A_ASC: u8 = 'A' as u8;
-const LOWER_A_ASC: u8 = 'a' as u8;
+const ZERO_ASC: u8 = b'0';
+const UPPER_A_ASC: u8 = b'A';
+const LOWER_A_ASC: u8 = b'a';
 
 impl RadixDef for RadixTen {
     fn get_max(&self) -> u8 {

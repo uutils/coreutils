@@ -1,5 +1,4 @@
 //! stdio convenience fns
-#[allow(unused_must_use)]
 
 use std::io::{stderr, stdout, Write};
 use std::env;
@@ -17,18 +16,17 @@ pub fn err_msg(msg: &str) {
 
 // by default stdout only flushes
 // to console when a newline is passed.
-#[allow(unused_must_use)]
-pub fn flush_char(c: &char) {
+pub fn flush_char(c: char) {
     print!("{}", c);
-    stdout().flush();
+    stdout().flush().unwrap();
 }
-#[allow(unused_must_use)]
+
 pub fn flush_str(s: &str) {
     print!("{}", s);
-    stdout().flush();
+    stdout().flush().unwrap();
 }
-#[allow(unused_must_use)]
+
 pub fn flush_bytes(bslice: &[u8]) {
-    stdout().write(bslice);
-    stdout().flush();
+    stdout().write_all(bslice).unwrap();
+    stdout().flush().unwrap();
 }

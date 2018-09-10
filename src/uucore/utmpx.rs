@@ -160,7 +160,7 @@ impl Utmpx {
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> Tm {
         time::at(Timespec::new(
-            self.inner.ut_tv.tv_sec as i64,
+            i64::from(self.inner.ut_tv.tv_sec),
             self.inner.ut_tv.tv_usec as i32,
         ))
     }

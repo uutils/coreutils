@@ -216,13 +216,12 @@ impl Formatter for Intf {
             if convert_hints.check_past_max || decr_from_max || radix_mismatch {
                 // radix of in and out is the same.
                 let segment = String::from(&str_in[begin..end]);
-                let m = Intf::conv_from_segment(
+                Intf::conv_from_segment(
                     &segment,
                     inprefix.radix_in.clone(),
                     *field.field_char,
                     inprefix.sign,
-                );
-                m
+                )
             } else {
                 // otherwise just do a straight string copy.
                 let mut fmt_prim: FormatPrimitive = Default::default();
@@ -242,26 +241,20 @@ impl Formatter for Intf {
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
         let mut finalstr: String = String::new();
-        match prim.prefix {
-            Some(ref prefix) => {
-                finalstr.push_str(&prefix);
-            }
-            None => {}
+        if let Some(ref prefix) = prim.prefix {
+            finalstr.push_str(&prefix);
         }
         // integral second fields is zero-padded minimum-width
         // which gets handled before general minimum-width
         match prim.pre_decimal {
             Some(ref pre_decimal) => {
-                match field.second_field {
-                    Some(min) => {
-                        let mut i = min;
-                        let len = pre_decimal.len() as u32;
-                        while i > len {
-                            finalstr.push('0');
-                            i -= 1;
-                        }
+                if let Some(min) = field.second_field {
+                    let mut i = min;
+                    let len = pre_decimal.len() as u32;
+                    while i > len {
+                        finalstr.push('0');
+                        i -= 1;
                     }
-                    None => {}
                 }
                 finalstr.push_str(&pre_decimal);
             }

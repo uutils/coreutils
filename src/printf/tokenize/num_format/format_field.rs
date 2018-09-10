@@ -37,5 +37,5 @@ pub struct FormatField<'a> {
     pub second_field: Option<u32>,
     pub field_char: &'a char,
     pub field_type: &'a FieldType,
-    pub orig: &'a String,
+    pub orig: &'a str,
 }

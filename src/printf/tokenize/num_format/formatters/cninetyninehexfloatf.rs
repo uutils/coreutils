@@ -60,7 +60,7 @@ fn get_primitive_hex(
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
         None => (&str_in[..], "0"),
     };
-    if first_segment_raw.len() == 0 {
+    if first_segment_raw.is_empty() {
         first_segment_raw = "0";
     }
     // convert to string, hexifying if input is in dec.

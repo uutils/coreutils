@@ -11,25 +11,22 @@ use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
 use super::formatters::scif::Scif;
 use super::formatters::decf::Decf;
 
-pub fn warn_expected_numeric(pf_arg: &String) {
+pub fn warn_expected_numeric(pf_arg: &str) {
     // important: keep println here not print
     cli::err_msg(&format!("{}: expected a numeric value", pf_arg));
 }
 
 // when character constant arguments have excess characters
 // issue a warning when POSIXLY_CORRECT is not set
-fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
+fn warn_char_constant_ign(remaining_bytes: &[u8]) {
     match env::var("POSIXLY_CORRECT") {
-        Ok(_) => {}
-        Err(e) => match e {
-            env::VarError::NotPresent => {
-                cli::err_msg(&format!(
-                    "warning: {:?}: character(s) following character \
-                     constant have been ignored",
-                    &*remaining_bytes
-                ));
-            }
-            _ => {}
+        Ok(_) => {},
+        Err(e) => if let env::VarError::NotPresent = e {
+            cli::err_msg(&format!(
+                "warning: {:?}: character(s) following character \
+                 constant have been ignored",
+                &*remaining_bytes
+            ));
         },
     }
 }
@@ -37,7 +34,7 @@ fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
 // this function looks at the first few
 // characters of an argument and returns a value if we can learn
 // a value from that (e.g. no argument? return 0, char constant? ret value)
-fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
+fn get_provided(str_in_opt: Option<&str>) -> Option<u8> {
     const C_S_QUOTE: u8 = 39;
     const C_D_QUOTE: u8 = 34;
     match str_in_opt {
@@ -49,11 +46,11 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                         return Some(match byte_it.next() {
                             Some(second_byte) => {
                                 let mut ignored: Vec<u8> = Vec::new();
-                                while let Some(cont) = byte_it.next() {
+                                for cont in byte_it {
                                     ignored.push(cont);
                                 }
-                                if ignored.len() > 0 {
-                                    warn_char_constant_ign(ignored);
+                                if !ignored.is_empty() {
+                                    warn_char_constant_ign(&ignored);
                                 }
                                 second_byte as u8
                             }
@@ -83,26 +80,19 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
 // a base,
 // and an offset for index after all
 //  initial spacing, sign, base prefix, and leading zeroes
-fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
+fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
     let mut str_it = str_in.chars();
     let mut ret = InPrefix {
         radix_in: Base::Ten,
         sign: 1,
         offset: 0,
     };
-    let mut topchar = str_it.next().clone();
+    let mut topchar = str_it.next();
     // skip spaces and ensure topchar is the first non-space char
     // (or None if none exists)
-    loop {
-        match topchar {
-            Some(' ') => {
-                ret.offset += 1;
-                topchar = str_it.next();
-            }
-            _ => {
-                break;
-            }
-        }
+    while let Some(' ') = topchar {
+        ret.offset += 1;
+        topchar = str_it.next();
     }
     // parse sign
     match topchar {
@@ -145,11 +135,8 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
                 }
                 e @ '0'...'9' => {
                     ret.offset += 1;
-                    match *field_type {
-                        FieldType::Intf => {
-                            ret.radix_in = Base::Octal;
-                        }
-                        _ => {}
+                    if let FieldType::Intf = *field_type {
+                        ret.radix_in = Base::Octal;
                     }
                     if e == '0' {
                         do_clean_lead_zeroes = true;
@@ -159,7 +146,7 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
             }
             if do_clean_lead_zeroes {
                 let mut first = true;
-                while let Some(ch_zero) = str_it.next() {
+                for ch_zero in str_it {
                     // see notes on offset above:
                     // this is why the offset for octals and decimals
                     // that reach this branch is 1 even though
@@ -202,8 +189,8 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
 // this is the function a Sub's print will delegate to
 // if it is a numeric field, passing the field details
 // and an iterator to the argument
-pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<String> {
-    let fchar = field.field_char.clone();
+pub fn num_format(field: &FormatField, in_str_opt: Option<&str>) -> Option<String> {
+    let fchar = field.field_char;
 
     // num format mainly operates by further delegating to one of
     // several Formatter structs depending on the field
