@@ -41,7 +41,7 @@ impl<R> PeekReader<R> {
     /// Create a new `PeekReader` wrapping `inner`
     pub fn new(inner: R) -> Self {
         PeekReader {
-            inner: inner,
+            inner,
             temp_buffer: Vec::new(),
         }
     }

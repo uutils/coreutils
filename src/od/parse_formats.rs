@@ -15,8 +15,8 @@ impl ParsedFormatterItemInfo {
         add_ascii_dump: bool,
     ) -> ParsedFormatterItemInfo {
         ParsedFormatterItemInfo {
-            formatter_item_info: formatter_item_info,
-            add_ascii_dump: add_ascii_dump,
+            formatter_item_info,
+            add_ascii_dump,
         }
     }
 }
@@ -100,14 +100,14 @@ fn od_argument_with_option(ch: char) -> bool {
 /// arguments with parameters like -w16 can only appear at the end: -fvoxw16
 /// parameters of -t/--format specify 1 or more formats.
 /// if -- appears on the commandline, parsing should stop.
-pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemInfo>, String> {
+pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
     // args[0] is the name of the binary
-    let mut arg_iter = args.iter().skip(1);
+    let arg_iter = args.iter().skip(1);
     let mut expect_type_string = false;
 
-    while let Some(arg) = arg_iter.next() {
+    for arg in arg_iter {
         if expect_type_string {
             match parse_type_string(arg) {
                 Ok(v) => formats.extend(v.into_iter()),
@@ -128,7 +128,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
             if arg == "--format" {
                 expect_type_string = true;
             }
-        } else if arg.starts_with("-") {
+        } else if arg.starts_with('-') {
             let mut flags = arg.chars().skip(1);
             let mut format_spec = String::new();
             while let Some(c) = flags.next() {
@@ -155,9 +155,9 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
         }
     }
     if expect_type_string {
-        return Err(format!(
-            "missing format specification after '--format' / '-t'"
-        ));
+        return Err(
+            "missing format specification after '--format' / '-t'".to_string()
+        );
     }
 
     if formats.is_empty() {
@@ -256,8 +256,8 @@ fn is_format_size_decimal(
     match ch {
         Some(d) if d.is_digit(10) => {
             decimal_size.push(d);
-            return true;
-        }
+            true
+        },
         _ => false,
     }
 }
@@ -266,13 +266,13 @@ fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
     match ch {
         Some('z') => {
             *show_ascii_dump = true;
-            return true;
-        }
+            true
+        },
         _ => false,
     }
 }
 
-fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, String> {
+fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
     let mut chars = params.chars();

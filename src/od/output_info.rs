@@ -69,11 +69,11 @@ impl OutputInfo {
 
         OutputInfo {
             byte_size_line: line_bytes,
-            print_width_line: print_width_line,
-            byte_size_block: byte_size_block,
-            print_width_block: print_width_block,
-            spaced_formatters: spaced_formatters,
-            output_duplicates: output_duplicates,
+            print_width_line,
+            byte_size_block,
+            print_width_block,
+            spaced_formatters,
+            output_duplicates,
         }
     }
 

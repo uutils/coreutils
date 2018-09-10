@@ -36,7 +36,7 @@ impl<'b> MultifileReader<'b> {
     fn next_file(&mut self) {
         // loop retries with subsequent files if err - normally 'loops' once
         loop {
-            if self.ni.len() == 0 {
+            if self.ni.is_empty() {
                 self.curr_file = None;
                 break;
             }

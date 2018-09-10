@@ -224,7 +224,7 @@ impl OdOptions {
         let formats = match parse_format_flags(&args) {
             Ok(f) => f,
             Err(e) => {
-                return Err(format!("{}", e));
+                return Err(e.to_string());
             }
         };
 
@@ -260,7 +260,7 @@ impl OdOptions {
             Some(s) => {
                 let st = s.into_bytes();
                 if st.len() != 1 {
-                    return Err(format!("Radix must be one of [d, o, n, x]"));
+                    return Err("Radix must be one of [d, o, n, x]".to_string());
                 } else {
                     let radix: char =
                         *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
@@ -269,22 +269,22 @@ impl OdOptions {
                         'x' => Radix::Hexadecimal,
                         'o' => Radix::Octal,
                         'n' => Radix::NoPrefix,
-                        _ => return Err(format!("Radix must be one of [d, o, n, x]")),
+                        _ => return Err("Radix must be one of [d, o, n, x]".to_string()),
                     }
                 }
             }
         };
 
         Ok(OdOptions {
-            byte_order: byte_order,
-            skip_bytes: skip_bytes,
-            read_bytes: read_bytes,
-            label: label,
-            input_strings: input_strings,
-            formats: formats,
-            line_bytes: line_bytes,
-            output_duplicates: output_duplicates,
-            radix: radix,
+            byte_order,
+            skip_bytes,
+            read_bytes,
+            label,
+            input_strings,
+            formats,
+            line_bytes,
+            output_duplicates,
+            radix,
         })
     }
 }
@@ -469,7 +469,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
             // lines of multi-format rasters.
             print!("{:>width$}", "", width = prefix.chars().count());
         }
-        print!("{}\n", output_text);
+        println!("{}", output_text);
     }
 }
 
@@ -478,7 +478,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader<'a>(
-    input_strings: &'a Vec<String>,
+    input_strings: &'a [String],
     skip_bytes: usize,
     read_bytes: Option<usize>,
 ) -> PeekReader<PartialReader<MultifileReader<'a>>> {

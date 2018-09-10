@@ -43,12 +43,12 @@ impl<'a, I> InputDecoder<'a, I> {
         } // fast but uninitialized
 
         InputDecoder {
-            input: input,
+            input,
             data: bytes,
             reserved_peek_length: peek_length,
             used_normal_length: 0,
             used_peek_length: 0,
-            byte_order: byte_order,
+            byte_order,
         }
     }
 }
@@ -133,9 +133,9 @@ impl<'a> MemoryDecoder<'a> {
     /// Returns a u8/u16/u32/u64 from the internal buffer at position `start`.
     pub fn read_uint(&self, start: usize, byte_size: usize) -> u64 {
         match byte_size {
-            1 => self.data[start] as u64,
-            2 => self.byte_order.read_u16(&self.data[start..start + 2]) as u64,
-            4 => self.byte_order.read_u32(&self.data[start..start + 4]) as u64,
+            1 => self.data[start].into(),
+            2 => self.byte_order.read_u16(&self.data[start..start + 2]).into(),
+            4 => self.byte_order.read_u32(&self.data[start..start + 4]).into(),
             8 => self.byte_order.read_u64(&self.data[start..start + 8]),
             _ => panic!("Invalid byte_size: {}", byte_size),
         }
@@ -147,7 +147,7 @@ impl<'a> MemoryDecoder<'a> {
             2 => f64::from(f16::from_bits(
                 self.byte_order.read_u16(&self.data[start..start + 2]),
             )),
-            4 => self.byte_order.read_f32(&self.data[start..start + 4]) as f64,
+            4 => self.byte_order.read_f32(&self.data[start..start + 4]).into(),
             8 => self.byte_order.read_f64(&self.data[start..start + 8]),
             _ => panic!("Invalid byte_size: {}", byte_size),
         }

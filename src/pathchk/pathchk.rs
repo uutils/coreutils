@@ -20,14 +20,20 @@ use getopts::Options;
 use std::fs;
 use std::io::{ErrorKind, Write};
 
-// operating mode
+/// Operating mode.
 enum Mode {
-    Default, // use filesystem to determine information and limits
-    Basic,   // check basic compatibility with POSIX
-    Extra,   // check for leading dashes and empty names
-    Both,    // a combination of `Basic` and `Extra`
-    Help,    // show help
-    Version, // show version information
+    /// Use filesystem to determine information and limits.
+    Default,
+    /// Check basic compatibility with POSIX.
+    Basic,
+    /// Check for leading dashes and empty names.
+    Extra,
+    /// A combination of `Basic` and `Extra`.
+    Both,
+    /// Show help.
+    Help,
+    /// Show version information.
+    Version,
 }
 
 static NAME: &str = "pathchk";
@@ -86,11 +92,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
             0
         }
         _ => {
-            let mut res = true;
-            if matches.free.len() == 0 {
+            let mut res = if matches.free.is_empty() {
                 show_error!("missing operand\nTry {} --help for more information", NAME);
-                res = false;
-            }
+                false
+            } else {
+                true
+            };
             // free strings are path operands
             // FIXME: TCS, seems inefficient and overly verbose (?)
             for p in matches.free {
@@ -110,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 }
 
-// print help
+/// Print help.
 fn help(opts: Options) {
     let msg = format!(
         "Usage: {} [OPTION]... NAME...\n\n\
@@ -121,12 +128,12 @@ fn help(opts: Options) {
     print!("{}", opts.usage(&msg));
 }
 
-// print version information
+/// Print version information.
 fn version() {
     println!("{} {}", NAME, VERSION);
 }
 
-// check a path, given as a slice of it's components and an operating mode
+/// Check a path, given as a slice of it's components and an operating mode.
 fn check_path(mode: &Mode, path: &[String]) -> bool {
     match *mode {
         Mode::Basic => check_basic(&path),
@@ -136,7 +143,7 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
     }
 }
 
-// check a path in basic compatibility mode
+/// Check a path in basic compatibility mode.
 fn check_basic(path: &[String]) -> bool {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
@@ -175,7 +182,7 @@ fn check_basic(path: &[String]) -> bool {
     check_searchable(&joined_path)
 }
 
-// check a path in extra compatibility mode
+/// Check a path in extra compatibility mode.
 fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
@@ -189,14 +196,14 @@ fn check_extra(path: &[String]) -> bool {
         }
     }
     // path length
-    if path.join("/").len() == 0 {
+    if path.join("/").is_empty() {
         writeln!(&mut std::io::stderr(), "empty file name");
         return false;
     }
     true
 }
 
-// check a path in default mode (using the file system)
+/// Check a path in default mode (using the file system).
 fn check_default(path: &[String]) -> bool {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
@@ -229,8 +236,8 @@ fn check_default(path: &[String]) -> bool {
     check_searchable(&joined_path)
 }
 
-// check whether a path is or if other problems arise
-fn check_searchable(path: &String) -> bool {
+/// Check whether a path is or if other problems arise.
+fn check_searchable(path: &str) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
@@ -243,13 +250,13 @@ fn check_searchable(path: &String) -> bool {
     }
 }
 
-// check for a hyphen at the beginning of a path segment
-fn no_leading_hyphen(path_segment: &String) -> bool {
+/// Check for a hyphen at the beginning of a path segment.
+fn no_leading_hyphen(path_segment: &str) -> bool {
     !path_segment.starts_with('-')
 }
 
-// check whether a path segment contains only valid (read: portable) characters
-fn check_portable_chars(path_segment: &String) -> bool {
+/// Check whether a path segment contains only valid (read: portable) characters.
+fn check_portable_chars(path_segment: &str) -> bool {
     let valid_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-".to_string();
     for ch in path_segment.chars() {
         if !valid_str.contains(ch) {

@@ -60,14 +60,15 @@ FILE, separated by TABs, to standard output.",
         println!("{} {}", NAME, VERSION);
     } else {
         let serial = matches.opt_present("serial");
-        let delimiters = matches.opt_str("delimiters").unwrap_or("\t".to_owned());
-        paste(matches.free, serial, delimiters);
+        let delimiters = matches.opt_str("delimiters")
+                                .unwrap_or_else(|| "\t".to_owned());
+        paste(matches.free, serial, &delimiters);
     }
 
     0
 }
 
-fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
+fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) {
     let mut files: Vec<BufReader<Box<Read>>> = filenames
         .into_iter()
         .map(|name| {
@@ -136,7 +137,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
 
 // Unescape all special characters
 // TODO: this will need work to conform to GNU implementation
-fn unescape(s: String) -> String {
+fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")

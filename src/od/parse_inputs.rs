@@ -52,28 +52,24 @@ pub fn parse_inputs(matches: &CommandLineOpts) -> Result<CommandLineInputs, Stri
         if !matches.opts_present(&["A", "j", "N", "t", "v", "w"]) {
             // test if the last input can be parsed as an offset.
             let offset = parse_offset_operand(&input_strings[input_strings.len() - 1]);
-            match offset {
-                Ok(n) => {
-                    // if there is just 1 input (stdin), an offset must start with '+'
-                    if input_strings.len() == 1 && input_strings[0].starts_with("+") {
-                        return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
-                    }
-                    if input_strings.len() == 2 {
-                        return Ok(CommandLineInputs::FileAndOffset((
-                            input_strings[0].clone(),
-                            n,
-                            None,
-                        )));
-                    }
+            if let Ok(n) = offset {
+                // if there is just 1 input (stdin), an offset must start with '+'
+                if input_strings.len() == 1 && input_strings[0].starts_with('+') {
+                    return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
                 }
-                _ => {
-                    // if it cannot be parsed, it is considered a filename
+                if input_strings.len() == 2 {
+                    return Ok(CommandLineInputs::FileAndOffset((
+                        input_strings[0].clone(),
+                        n,
+                        None,
+                    )));
                 }
             }
+            // if it cannot be parsed, it is considered a filename
         }
     }
 
-    if input_strings.len() == 0 {
+    if input_strings.is_empty() {
         input_strings.push("-".to_string());
     }
     Ok(CommandLineInputs::FileNames(input_strings))
@@ -131,13 +127,13 @@ pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLin
 }
 
 /// parses format used by offset and label on the commandline
-pub fn parse_offset_operand(s: &String) -> Result<usize, &'static str> {
+pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
     let mut start = 0;
     let mut len = s.len();
     let mut radix = 8;
     let mut multiply = 1;
 
-    if s.starts_with("+") {
+    if s.starts_with('+') {
         start += 1;
     }
 
@@ -145,11 +141,11 @@ pub fn parse_offset_operand(s: &String) -> Result<usize, &'static str> {
         start += 2;
         radix = 16;
     } else {
-        if s[start..len].ends_with("b") {
+        if s[start..len].ends_with('b') {
             len -= 1;
             multiply = 512;
         }
-        if s[start..len].ends_with(".") {
+        if s[start..len].ends_with('.') {
             len -= 1;
             radix = 10;
         }
@@ -177,7 +173,7 @@ mod tests {
         fn new(inputs: Vec<&'a str>, option_names: Vec<&'a str>) -> MockOptions<'a> {
             MockOptions {
                 inputs: inputs.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-                option_names: option_names,
+                option_names,
             }
         }
     }

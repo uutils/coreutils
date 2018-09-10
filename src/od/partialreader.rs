@@ -22,9 +22,9 @@ impl<R> PartialReader<R> {
     /// to `None` if there should be no limit.
     pub fn new(inner: R, skip: usize, limit: Option<usize>) -> Self {
         PartialReader {
-            inner: inner,
-            skip: skip,
-            limit: limit,
+            inner,
+            skip,
+            limit,
         }
     }
 }

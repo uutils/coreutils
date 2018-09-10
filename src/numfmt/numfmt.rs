@@ -82,7 +82,7 @@ impl fmt::Display for DisplayableSuffix {
 }
 
 fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
-    let with_i = s.ends_with("i");
+    let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
         iter.next_back();
@@ -252,13 +252,13 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
     }?;
 
     Ok(NumfmtOptions {
-        transform: transform,
-        padding: padding,
-        header: header,
+        transform,
+        padding,
+        header,
     })
 }
 
-fn handle_args(args: &Vec<String>, options: NumfmtOptions) -> Result<()> {
+fn handle_args(args: &[String], options: NumfmtOptions) -> Result<()> {
     for l in args {
         println!("{}", format_string(l.clone(), &options)?)
     }
@@ -277,7 +277,8 @@ fn handle_stdin(options: NumfmtOptions) -> Result<()> {
     for l in lines {
         l.map_err(|e| e.to_string()).and_then(|l| {
             let l = format_string(l, &options)?;
-            Ok(println!("{}", l))
+            println!("{}", l);
+            Ok(())
         })?
     }
     Ok(())
@@ -316,10 +317,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = opts.parse(&args[1..]).unwrap();
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage("Convert numbers from/to human-readable strings")
@@ -354,7 +355,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let options = parse_options(&matches).unwrap();
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         handle_stdin(options).unwrap()
     } else {
         handle_args(&matches.free, options).unwrap()
