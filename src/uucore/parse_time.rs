@@ -37,7 +37,7 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
 
     const NANOS_PER_SEC: u32 = 1_000_000_000;
     let whole_secs = num.trunc();
-    let nanos = (num.fract() * (NANOS_PER_SEC as f64)).trunc();
+    let nanos = (num.fract() * f64::from(NANOS_PER_SEC)).trunc();
     let duration = Duration::new(whole_secs as u64, nanos as u32);
     Ok(duration * times)
 }

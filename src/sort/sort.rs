@@ -49,7 +49,7 @@ struct Settings {
     unique: bool,
     check: bool,
     ignore_case: bool,
-    compare_fns: Vec<fn(&String, &String) -> Ordering>,
+    compare_fns: Vec<fn(&str, &str) -> Ordering>,
 }
 
 impl Default for Settings {
@@ -106,20 +106,17 @@ impl<'a> FileMerger<'a> {
     fn new(settings: &'a Settings) -> FileMerger<'a> {
         FileMerger {
             heap: BinaryHeap::new(),
-            settings: settings,
+            settings,
         }
     }
     fn push_file(&mut self, mut lines: Lines<BufReader<Box<Read>>>) {
-        match lines.next() {
-            Some(Ok(next_line)) => {
-                let mergeable_file = MergeableFile {
-                    lines: lines,
-                    current_line: next_line,
-                    settings: &self.settings,
-                };
-                self.heap.push(mergeable_file);
-            }
-            _ => {}
+        if let Some(Ok(next_line)) = lines.next() {
+            let mergeable_file = MergeableFile {
+                lines,
+                current_line: next_line,
+                settings: &self.settings,
+            };
+            self.heap.push(mergeable_file);
         }
     }
 }
@@ -254,13 +251,13 @@ With no FILE, or when FILE is -, read standard input.",
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
-        SortMode::Default => String::cmp,
+        SortMode::Default => str::cmp,
     });
 
     if !settings.stable {
         match settings.mode {
             SortMode::Default => {}
-            _ => settings.compare_fns.push(String::cmp),
+            _ => settings.compare_fns.push(str::cmp),
         }
     }
 
@@ -302,12 +299,10 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
+    } else if settings.unique {
+        print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
-        if settings.unique {
-            print_sorted(lines.iter().dedup(), &settings.outfile)
-        } else {
-            print_sorted(lines.iter(), &settings.outfile)
-        }
+        print_sorted(lines.iter(), &settings.outfile)
     }
 
     0
@@ -352,13 +347,13 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.sort_by(|a, b| compare_by(a, b, &settings))
 }
 
-fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
+fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     // Convert to uppercase if necessary
     let (a_upper, b_upper): (String, String);
     let (a, b) = if settings.ignore_case {
         a_upper = a.to_uppercase();
         b_upper = b.to_uppercase();
-        (&a_upper, &b_upper)
+        (&a_upper[..], &b_upper[..])
     } else {
         (a, b)
     };
@@ -373,7 +368,8 @@ fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
             }
         }
     }
-    return Ordering::Equal;
+
+    Ordering::Equal
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
@@ -394,7 +390,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
 /// Compares two floating point numbers, with errors being assumed to be -inf.
 /// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
 /// 1,000 will parse as -inf.
-fn numeric_compare(a: &String, b: &String) -> Ordering {
+fn numeric_compare(a: &str, b: &str) -> Ordering {
     let fa = permissive_f64_parse(a);
     let fb = permissive_f64_parse(b);
     // f64::cmp isn't implemented because NaN messes with it
@@ -408,7 +404,7 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     }
 }
 
-fn human_numeric_convert(a: &String) -> f64 {
+fn human_numeric_convert(a: &str) -> f64 {
     let int_iter = a.chars();
     let suffix_iter = a.chars();
     let int_str: String = int_iter.take_while(|c| c.is_numeric()).collect();
@@ -430,7 +426,7 @@ fn human_numeric_convert(a: &String) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_numeric_size_compare(a: &String, b: &String) -> Ordering {
+fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
     if fa > fb {
@@ -460,7 +456,7 @@ enum Month {
 }
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
-fn month_parse(line: &String) -> Month {
+fn month_parse(line: &str) -> Month {
     match line.split_whitespace()
         .next()
         .unwrap()
@@ -483,11 +479,11 @@ fn month_parse(line: &String) -> Month {
     }
 }
 
-fn month_compare(a: &String, b: &String) -> Ordering {
+fn month_compare(a: &str, b: &str) -> Ordering {
     month_parse(a).cmp(&month_parse(b))
 }
 
-fn version_compare(a: &String, b: &String) -> Ordering {
+fn version_compare(a: &str, b: &str) -> Ordering {
     let ver_a = Version::parse(a);
     let ver_b = Version::parse(b);
     if ver_a > ver_b {
@@ -516,12 +512,9 @@ where
 
     for line in iter {
         let str = format!("{}\n", line);
-        match file.write_all(str.as_bytes()) {
-            Err(e) => {
-                show_error!("sort: {0}", e.to_string());
-                panic!("Write failed");
-            }
-            Ok(_) => (),
+        if let Err(e) = file.write_all(str.as_bytes()) {
+            show_error!("sort: {0}", e.to_string());
+            panic!("Write failed");
         }
     }
 }

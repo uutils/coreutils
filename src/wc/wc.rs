@@ -92,10 +92,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage("Print newline, word and byte counts for each FILE")
@@ -123,12 +123,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-const CR: u8 = '\r' as u8;
-const LF: u8 = '\n' as u8;
-const SPACE: u8 = ' ' as u8;
-const TAB: u8 = '\t' as u8;
-const SYN: u8 = 0x16 as u8;
-const FF: u8 = 0x0C as u8;
+const CR: u8 = b'\r';
+const LF: u8 = b'\n';
+const SPACE: u8 = b' ';
+const TAB: u8 = b'\t';
+const SYN: u8 = 0x16;
+const FF: u8 = 0x0C;
 
 #[inline(always)]
 fn is_word_seperator(byte: u8) -> bool {
@@ -256,7 +256,7 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     if result.title != "-" {
         println!(" {}", result.title);
     } else {
-        println!("");
+        println!();
     }
 }
 

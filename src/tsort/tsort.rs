@@ -36,10 +36,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("h") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [OPTIONS] FILE", NAME);
-        println!("");
+        println!();
         println!("{}", opts.usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead."));
         return 0;
     }
@@ -132,15 +132,15 @@ impl Graph {
     }
 
     fn has_edge(&self, from: &str, to: &str) -> bool {
-        self.in_edges.get(to).unwrap().contains(from)
+        self.in_edges[to].contains(from)
     }
 
-    fn init_node(&mut self, n: &String) {
-        self.in_edges.insert(n.clone(), HashSet::new());
-        self.out_edges.insert(n.clone(), vec![]);
+    fn init_node(&mut self, n: &str) {
+        self.in_edges.insert(n.to_string(), HashSet::new());
+        self.out_edges.insert(n.to_string(), vec![]);
     }
 
-    fn add_edge(&mut self, from: &String, to: &String) {
+    fn add_edge(&mut self, from: &str, to: &str) {
         if !self.has_node(to) {
             self.init_node(to);
         }
@@ -150,8 +150,8 @@ impl Graph {
         }
 
         if !self.has_edge(from, to) {
-            self.in_edges.get_mut(to).unwrap().insert(from.clone());
-            self.out_edges.get_mut(from).unwrap().push(to.clone());
+            self.in_edges.get_mut(to).unwrap().insert(from.to_string());
+            self.out_edges.get_mut(from).unwrap().push(to.to_string());
         }
     }
 
@@ -185,7 +185,7 @@ impl Graph {
     }
 
     fn is_acyclic(&self) -> bool {
-        for (_, edges) in &self.out_edges {
+        for edges in self.out_edges.values() {
             if !edges.is_empty() {
                 return false;
             }

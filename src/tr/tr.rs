@@ -45,7 +45,7 @@ impl DeleteOperation {
     fn new(set: ExpandSet, complement: bool) -> DeleteOperation {
         DeleteOperation {
             bset: set.map(|c| c as usize).collect(),
-            complement: complement,
+            complement,
         }
     }
 }
@@ -70,7 +70,7 @@ impl SqueezeOperation {
     fn new(squeeze_set: ExpandSet, complement: bool) -> SqueezeOperation {
         SqueezeOperation {
             squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement: complement,
+            complement,
         }
     }
 }
@@ -100,7 +100,7 @@ impl DeleteAndSqueezeOperation {
         DeleteAndSqueezeOperation {
             delete_set: delete_set.map(|c| c as usize).collect(),
             squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement: complement,
+            complement,
         }
     }
 }
@@ -174,10 +174,10 @@ fn translate_input<T: SymbolTranslator>(input: &mut BufRead, output: &mut Write,
 
 fn usage(opts: &Options) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [OPTIONS] SET1 [SET2]", NAME);
-    println!("");
+    println!();
     println!("{}", opts.usage("Translate or delete characters."));
 }
 

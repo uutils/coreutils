@@ -93,7 +93,7 @@ fn tee(options: Options) -> Result<()> {
         .into_iter()
         .map(|file| open(file, options.append))
         .collect();
-    let output = &mut MultiWriter { writers: writers };
+    let output = &mut MultiWriter { writers };
     let input = &mut NamedReader {
         inner: Box::new(stdin()) as Box<Read>,
     };
@@ -122,8 +122,8 @@ fn open(name: String, append: bool) -> Box<Write> {
         }
     };
     Box::new(NamedWriter {
-        inner: inner,
-        path: path,
+        inner,
+        path,
     }) as Box<Write>
 }
 

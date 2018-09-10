@@ -45,8 +45,8 @@ macro_rules! local_tm_to_filetime(
 macro_rules! to_timeval {
     ($ft:expr) => (
         timeval {
-            tv_sec: $ft.seconds() as time_t,
-            tv_usec: ($ft.nanoseconds() / 1000) as suseconds_t,
+            tv_sec: time_t::from($ft.seconds()),
+            tv_usec: suseconds_t::from($ft.nanoseconds() / 1000),
         }
     )
 }
@@ -58,13 +58,13 @@ fn set_symlink_times(p: &str, atime: FileTime, mtime: FileTime) -> io::Result<()
 
     let times = [to_timeval!(atime), to_timeval!(mtime)];
     let p = try!(CString::new(p));
-    return unsafe {
+    unsafe {
         if lutimes(p.as_ptr() as *const _, times.as_ptr()) == 0 {
             Ok(())
         } else {
             Err(io::Error::last_os_error())
         }
-    };
+    }
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -120,9 +120,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") || matches.free.is_empty() {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage: {} [OPTION]... FILE...", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage(
@@ -207,10 +207,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if let Err(e) = set_symlink_times(path, atime, mtime) {
                 show_warning!("cannot touch '{}': {}", path, e);
             }
-        } else {
-            if let Err(e) = filetime::set_file_times(path, atime, mtime) {
-                show_warning!("cannot touch '{}': {}", path, e);
-            }
+        } else if let Err(e) = filetime::set_file_times(path, atime, mtime) {
+            show_warning!("cannot touch '{}': {}", path, e);
         }
     }
 

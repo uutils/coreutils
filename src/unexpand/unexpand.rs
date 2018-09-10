@@ -76,10 +76,10 @@ impl Options {
         };
 
         Options {
-            files: files,
-            tabstops: tabstops,
-            aflag: aflag,
-            uflag: uflag,
+            files,
+            tabstops,
+            aflag,
+            uflag,
         }
     }
 }
@@ -189,13 +189,13 @@ fn write_tabs(
                 break;
             }
 
-            safe_unwrap!(output.write_all("\t".as_bytes()));
+            safe_unwrap!(output.write_all(b"\t"));
             scol += nts;
         }
     }
 
     while col > scol {
-        safe_unwrap!(output.write_all(" ".as_bytes()));
+        safe_unwrap!(output.write_all(b" "));
         scol += 1;
     }
 }
@@ -216,10 +216,10 @@ fn unexpand(options: Options) {
     let mut buf = Vec::new();
     let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
 
-    for file in options.files.into_iter() {
+    for file in options.files {
         let mut fh = open(file);
 
-        while match fh.read_until('\n' as u8, &mut buf) {
+        while match fh.read_until(b'\n', &mut buf) {
             Ok(s) => s > 0,
             Err(_) => !buf.is_empty(),
         } {

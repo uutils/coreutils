@@ -41,10 +41,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [OPTION]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage("Print the file name of the terminal connected to standard input.")

@@ -43,7 +43,7 @@ impl<'a> Iterator for Unescape<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.string.len() == 0 {
+        if self.string.is_empty() {
             return None;
         }
 
