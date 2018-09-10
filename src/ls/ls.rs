@@ -450,7 +450,7 @@ fn display_uname(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("numeric-uid-gid") {
         metadata.uid().to_string()
     } else {
-        entries::uid2usr(metadata.uid()).unwrap_or(metadata.uid().to_string())
+        entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
     }
 }
 
@@ -459,7 +459,7 @@ fn display_group(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("numeric-uid-gid") {
         metadata.gid().to_string()
     } else {
-        entries::gid2grp(metadata.gid()).unwrap_or(metadata.gid().to_string())
+        entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
     }
 }
 
@@ -526,7 +526,7 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
         Some(prefix) => name.strip_prefix(prefix).unwrap_or(name),
         None => name,
     };
-    if name.as_os_str().len() == 0 {
+    if name.as_os_str().is_empty() {
         name = Path::new(".");
     }
     name.to_string_lossy().into_owned()
