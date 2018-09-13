@@ -16,6 +16,8 @@ extern crate quick_error;
 extern crate unix_socket;
 #[macro_use]
 extern crate uucore;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+extern crate nix;
 
 // last synced with: cat (GNU coreutils) 8.13
 use quick_error::ResultExt;
@@ -30,6 +32,14 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
+
+/// Linux splice support
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::{splice, SpliceFFlags};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::unistd::pipe;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::unix::io::{AsRawFd, RawFd};
 
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
@@ -100,6 +110,8 @@ struct OutputOptions {
 
 /// Represents an open file handle, stream, or other device
 struct InputHandle {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    file_descriptor: RawFd,
     reader: Box<Read>,
     is_interactive: bool,
 }
@@ -241,6 +253,8 @@ fn open(path: &str) -> CatResult<InputHandle> {
     if path == "-" {
         let stdin = stdin();
         return Ok(InputHandle {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            file_descriptor: stdin.as_raw_fd(),
             reader: Box::new(stdin) as Box<Read>,
             is_interactive: is_stdin_interactive(),
         });
@@ -253,6 +267,8 @@ fn open(path: &str) -> CatResult<InputHandle> {
             let socket = UnixStream::connect(path).context(path)?;
             socket.shutdown(Shutdown::Write).context(path)?;
             Ok(InputHandle {
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                file_descriptor: socket.as_raw_fd(),
                 reader: Box::new(socket) as Box<Read>,
                 is_interactive: false,
             })
@@ -260,6 +276,8 @@ fn open(path: &str) -> CatResult<InputHandle> {
         _ => {
             let file = File::open(path).context(path)?;
             Ok(InputHandle {
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                file_descriptor: file.as_raw_fd(),
                 reader: Box::new(file) as Box<Read>,
                 is_interactive: false,
             })
@@ -275,6 +293,7 @@ fn open(path: &str) -> CatResult<InputHandle> {
 ///
 /// * `files` - There is no short circuit when encountiner an error
 /// reading a file in this vector
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn write_fast(files: Vec<String>) -> CatResult<()> {
     let mut writer = stdout();
     let mut in_buf = [0; 1024 * 64];
@@ -300,6 +319,52 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
         _ => Err(CatError::EncounteredErrors(error_count)),
     }
 }
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn write_fast(files: Vec<String>) -> CatResult<()> {
+    const BUF_SIZE: usize = 1024 * 16;
+    let writer = stdout();
+    // let _handle = writer.lock();
+    let (pipe_rd, pipe_wr) = pipe().unwrap();
+    let mut error_count = 0;
+
+    for file in files {
+        match open(&file[..]) {
+            Ok(handle) => loop {
+                let res = splice(
+                    handle.file_descriptor,
+                    None,
+                    pipe_wr,
+                    None,
+                    BUF_SIZE,
+                    SpliceFFlags::empty(),
+                ).unwrap();
+                if res == 0 {
+                    // We read 0 bytes from the input,
+                    // which means we're done copying.
+                    break;
+                }
+                let _res = splice (
+                    pipe_rd,
+                    None,
+                    writer.as_raw_fd(),
+                    None,
+                    BUF_SIZE,
+                    SpliceFFlags::empty(),
+                ).unwrap();
+            },
+            Err(error) => {
+                writeln!(&mut stderr(), "{}", error)?;
+                error_count += 1;
+            }
+
+        }
+    }
+    match error_count {
+        0 => Ok(()),
+        _ => Err(CatError::EncounteredErrors(error_count)),
+    }
+}
+
 
 /// State that persists between output of each file
 struct OutputState {
