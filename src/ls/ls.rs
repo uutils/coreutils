@@ -507,6 +507,9 @@ fn display_date(metadata: &Metadata, options: &getopts::Matches) -> String {
 fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("human-readable") {
         convert(metadata.len() as f64)
+            .replace(" ", "")
+            .trim_right_matches("B")
+            .to_uppercase()
     } else {
         metadata.len().to_string()
     }
