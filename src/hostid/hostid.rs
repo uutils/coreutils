@@ -20,12 +20,6 @@ static SYNTAX: &str = "[options]";
 static SUMMARY: &str = "";
 static LONG_HELP: &str = "";
 
-pub enum Mode {
-    HostId,
-    Help,
-    Version,
-}
-
 // currently rust libc interface doesn't include gethostid
 extern "C" {
     pub fn gethostid() -> c_long;
