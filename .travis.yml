@@ -2,6 +2,9 @@ language: rust
 matrix:
   fast_finish: true
   include:
+    - rust: 1.27.0
+      os: linux
+      env: FEATURES=''
     - rust: stable
       os: linux
       env: FEATURES=''
@@ -64,4 +67,3 @@ after_success: |
     cargo tarpaulin --out Xml
     bash <(curl -s https://codecov.io/bash)
   fi
-
