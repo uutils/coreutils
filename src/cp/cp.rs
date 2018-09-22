@@ -579,7 +579,7 @@ impl Options {
         let recursive = matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_ALIAS)
             || matches.is_present(OPT_ARCHIVE);
 
-        let backup = matches.is_present(OPT_BACKUP) || matches.is_present(OPT_SUFFIX);
+        let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
 
         // Parse target directory options
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
