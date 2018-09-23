@@ -306,7 +306,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.as_os_str().to_str() {
+        let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
             None => {
                 show_error!(
