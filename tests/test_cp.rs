@@ -32,6 +32,23 @@ fn test_cp_cp() {
 
 
 #[test]
+fn test_cp_existing_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .run();
+
+    assert!(result.success);
+
+    // Check the content of the destination file
+    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+
+    // No backup should have been created
+    assert!(!at.file_exists(&*format!("{}~", TEST_EXISTING_FILE)));
+}
+
+
+#[test]
 fn test_cp_duplicate_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
