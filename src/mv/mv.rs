@@ -257,7 +257,10 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
 
                     return match rename(source, target, &b) {
                         Err(e) => {
-                            show_error!("{}", e);
+                            show_error!(
+                                "cannot move ‘{}’ to ‘{}’: {}",
+                                source.display(), target.display(), e
+                            );
                             1
                         }
                         _ => 0,
