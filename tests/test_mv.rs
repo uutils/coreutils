@@ -368,8 +368,7 @@ fn test_mv_errors() {
     // $ mv -T -t a b
     // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
     scene.ucmd().arg("-T").arg("-t").arg(dir).arg(file_a).arg(file_b).fails()
-    .stderr_is("mv: error: cannot combine --target-directory (-t) and --no-target-directory \
-                (-T)\n");
+    .stderr_is("mv: error: cannot combine --target-directory (-t) and --no-target-directory (-T)\n");
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir

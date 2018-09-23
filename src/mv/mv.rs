@@ -265,6 +265,12 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 }
 
                 return move_files_into_dir(&[source.clone()], target, &b);
+            } else if target.exists() && source.is_dir() {
+                show_error!(
+                    "cannot overwrite non-directory ‘{}’ with directory ‘{}’",
+                    target.display(), source.display()
+                );
+                return 1;
             }
 
             if let Err(e) = rename(source, target, &b) {
@@ -360,6 +366,18 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         }
     }
 
+    // "to" may no longer exist if it was backed up
+    if to.exists() && to.is_dir() {
+        // normalize behavior between *nix and windows
+        if from.is_dir() {
+            if is_empty_dir(to) {
+                try!(fs::remove_dir(to))
+            } else {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
+            }
+        }
+    }
+
     try!(fs::rename(from, to));
 
     if b.verbose {
@@ -403,5 +421,14 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
         numbered_backup_path(path)
     } else {
         simple_backup_path(path, suffix)
+    }
+}
+
+fn is_empty_dir(path: &PathBuf) -> bool {
+    match fs::read_dir(path) {
+        Ok(contents) => {
+            return contents.peekable().peek().is_none();
+        },
+        Err(_e) => { return false; }
     }
 }
