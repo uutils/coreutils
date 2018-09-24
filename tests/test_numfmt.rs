@@ -120,3 +120,28 @@ fn test_negative() {
         .run()
         .stdout_is("-1.0Ki\n-1.1Mi\n-102.4Mi");
 }
+
+#[test]
+fn test_no_op() {
+    new_ucmd!()
+        .pipe_in("1024\n1234567")
+        .run()
+        .stdout_is("1024\n1234567");
+}
+
+#[test]
+fn test_normalize() {
+    new_ucmd!()
+        .args(&["--from=si", "--to=si"])
+        .pipe_in("10000000K\n0.001K")
+        .run()
+        .stdout_is("10.0G\n1");
+}
+
+#[test]
+fn test_si_to_iec() {
+    new_ucmd!()
+        .args(&["--from=si", "--to=iec", "15334263563K"])
+        .run()
+        .stdout_is("13.9T");
+}

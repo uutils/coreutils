@@ -34,17 +34,13 @@ const IEC_BASES: [f64; 10] = [
 
 type Result<T> = std::result::Result<T, String>;
 
-enum TransformDirection {
-    From,
-    To,
-}
-
 type WithI = bool;
 
 enum Unit {
     Auto,
     Si,
     Iec(WithI),
+    None,
 }
 
 enum RawSuffix {
@@ -119,12 +115,17 @@ fn parse_unit(s: String) -> Result<Unit> {
         "si" => Ok(Unit::Si),
         "iec" => Ok(Unit::Iec(false)),
         "iec-i" => Ok(Unit::Iec(true)),
+        "none" => Ok(Unit::None),
         _ => Err("Unsupported unit is specified".to_owned()),
     }
 }
 
 struct TransformOptions {
-    direction: TransformDirection,
+    from: Transform,
+    to: Transform,
+}
+
+struct Transform {
     unit: Unit,
 }
 
@@ -165,9 +166,9 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: String, unit: &Unit) -> Result<String> {
+fn transform_from(s: String, opts: &Transform) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
-    remove_suffix(i, suffix, unit).map(|n| n.round().to_string())
+    remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
 }
 
 fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
@@ -198,12 +199,12 @@ fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
             _ => Err("Number is too big and unsupported".to_owned()),
         },
         Unit::Auto => Err("Unit 'auto' isn't supported with --to options".to_owned()),
+        Unit::None => Ok((i, None)),
     }
 }
 
-fn transform_to(s: String, unit: &Unit) -> Result<String> {
-    let i = s.parse::<f64>().map_err(|err| err.to_string())?;
-    let (i2, s) = consider_suffix(i, unit)?;
+fn transform_to(s: f64, opts: &Transform) -> Result<String> {
+    let (i2, s) = consider_suffix(s, &opts.unit)?;
     Ok(match s {
         None => format!("{}", i2),
         Some(s) => format!("{:.1}{}", i2, DisplayableSuffix(s)),
@@ -211,10 +212,10 @@ fn transform_to(s: String, unit: &Unit) -> Result<String> {
 }
 
 fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
-    let number = match options.transform.direction {
-        TransformDirection::From => transform_from(source, &options.transform.unit)?,
-        TransformDirection::To => transform_to(source, &options.transform.unit)?,
-    };
+    let number = transform_to(
+        transform_from(source, &options.transform.from)?,
+        &options.transform.to,
+    )?;
 
     Ok(match options.padding {
         p if p == 0 => number,
@@ -224,21 +225,19 @@ fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
 }
 
 fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
-    let transform = if args.opt_present("from") {
-        TransformOptions {
-            direction: TransformDirection::From,
-            unit: parse_unit(
-                args.opt_str("from")
-                    .ok_or("'--from' should have argument")?,
-            )?,
-        }
-    } else if args.opt_present("to") {
-        TransformOptions {
-            direction: TransformDirection::To,
-            unit: parse_unit(args.opt_str("to").ok_or("'--to' should have argument")?)?,
-        }
-    } else {
-        return Err("Either '--from' or '--to' should be specified".to_owned());
+    let transform = TransformOptions {
+        from: Transform {
+            unit: args
+                .opt_str("from")
+                .map(parse_unit)
+                .unwrap_or(Ok(Unit::None))?,
+        },
+        to: Transform {
+            unit: args
+                .opt_str("to")
+                .map(parse_unit)
+                .unwrap_or(Ok(Unit::None))?,
+        },
     };
 
     let padding = match args.opt_str("padding") {
