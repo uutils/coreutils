@@ -388,7 +388,7 @@ Try '{} --help' for more information.",
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
                     let size = if matches.opt_present("apparent-size") {
-                        stat.nlink * stat.size
+                        stat.size
                     } else {
                         // C's stat is such that each block is assume to be 512 bytes
                         // See: http://linux.die.net/man/2/stat
