@@ -219,6 +219,10 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
     format!("{}B", size)
 }
 
+fn convert_size_b(size: u64, _multiplier: u64, _block_size: u64) -> String {
+    format!("{}", ((size as f64) / ((1) as f64)).ceil())
+}
+
 fn convert_size_k(size: u64, multiplier: u64, _block_size: u64) -> String {
     format!("{}", ((size as f64) / (multiplier as f64)).ceil())
 }
@@ -339,7 +343,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     let convert_size_fn = {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            convert_size_human
+            convert_size_human        
+        } else if matches.opt_present("b") {
+            convert_size_b
         } else if matches.opt_present("k") {
             convert_size_k
         } else if matches.opt_present("m") {
@@ -389,6 +395,8 @@ Try '{} --help' for more information.",
                 for (index, stat) in iter.enumerate() {
                     let size = if matches.opt_present("apparent-size") {
                         stat.nlink * stat.size
+                    } else if matches.opt_present("b") {
+                        stat.size
                     } else {
                         // C's stat is such that each block is assume to be 512 bytes
                         // See: http://linux.die.net/man/2/stat
