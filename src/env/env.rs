@@ -40,6 +40,17 @@ fn print_env(null: bool) {
     }
 }
 
+#[cfg(not(windows))]
+fn build_command(mut args: Vec<String>) -> (String, Vec<String>) {
+    (args.remove(0), args)
+}
+
+#[cfg(windows)]
+fn build_command(mut args: Vec<String>) -> (String, Vec<String>) {
+    args.insert(0, "/d/c".to_string());
+    (env::var("ComSpec").unwrap_or("cmd".to_string()), args)
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut core_opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
     core_opts
@@ -198,8 +209,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if !opts.program.is_empty() {
-        let prog = opts.program[0].clone();
-        let args = &opts.program[1..];
+        let (prog, args) = build_command(opts.program);
         match Command::new(prog).args(args).status() {
             Ok(exit) => {
                 return if exit.success() {
