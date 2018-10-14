@@ -19,7 +19,9 @@ extern crate rand;
 extern crate uucore;
 
 use numeric::*;
-use rand::distributions::{IndependentSample, Range};
+use rand::distributions::{Distribution, Uniform};
+use rand::{SeedableRng, thread_rng};
+use rand::rngs::SmallRng;
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead, BufReader};
 use std::num::Wrapping;
@@ -51,12 +53,12 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 fn rho_pollard_find_divisor(num: u64) -> u64 {
-    let range = Range::new(1, num);
-    let mut rng = rand::weak_rng();
-    let mut x = range.ind_sample(&mut rng);
+    let range = Uniform::new(1, num);
+    let mut rng = SmallRng::from_rng(&mut thread_rng()).unwrap();
+    let mut x = range.sample(&mut rng);
     let mut y = x;
-    let mut a = range.ind_sample(&mut rng);
-    let mut b = range.ind_sample(&mut rng);
+    let mut a = range.sample(&mut rng);
+    let mut b = range.sample(&mut rng);
 
     loop {
         x = rho_pollard_pseudorandom_function(x, a, b, num);
@@ -65,10 +67,10 @@ fn rho_pollard_find_divisor(num: u64) -> u64 {
         let d = gcd(num, max(x, y) - min(x, y));
         if d == num {
             // Failure, retry with different function
-            x = range.ind_sample(&mut rng);
+            x = range.sample(&mut rng);
             y = x;
-            a = range.ind_sample(&mut rng);
-            b = range.ind_sample(&mut rng);
+            a = range.sample(&mut rng);
+            b = range.sample(&mut rng);
         } else if d > 1 {
             return d;
         }

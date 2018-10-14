@@ -2,6 +2,7 @@
 
 extern crate rand;
 use rand::{thread_rng, Rng};
+use rand::distributions::Alphanumeric;
 
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};
@@ -32,7 +33,7 @@ pub fn new_in<P: AsRef<Path>>(
 ) -> IOResult<String> {
     let mut rng = thread_rng();
     for _ in 0..NUM_RETRIES {
-        let rand_chars: String = rng.gen_ascii_chars().take(rand).collect();
+        let rand_chars: String = rng.sample_iter(&Alphanumeric).take(rand).collect();
         let leaf = format!("{}{}{}", prefix, rand_chars, suffix);
         let path = tmpdir.as_ref().join(&leaf);
         match create_dir(&path) {

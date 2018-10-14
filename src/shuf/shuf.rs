@@ -283,8 +283,8 @@ enum WrappedRng {
 impl WrappedRng {
     fn next_usize(&mut self) -> usize {
         match *self {
-            WrappedRng::RngFile(ref mut r) => r.next_u32() as usize,
-            WrappedRng::RngDefault(ref mut r) => r.next_u32() as usize,
+            WrappedRng::RngFile(ref mut r) => r.gen(),
+            WrappedRng::RngDefault(ref mut r) => r.gen(),
         }
     }
 }

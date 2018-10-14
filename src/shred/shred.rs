@@ -180,7 +180,7 @@ impl<'a> Iterator for BytesGenerator<'a> {
                     bytes.set_len(this_block_size);
                 }
                 let mut rng = self.rng.as_ref().unwrap().borrow_mut();
-                rng.fill_bytes(&mut bytes[..]);
+                rng.fill(&mut bytes[..]);
             }
             PassType::Pattern(pattern) => {
                 let skip = {

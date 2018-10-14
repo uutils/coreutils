@@ -10,7 +10,7 @@ path = "shuf.rs"
 
 [dependencies]
 getopts = "0.2.18"
-rand = "0.4.2"
+rand = "0.5"
 uucore = { path="../uucore" }
 
 [[bin]]

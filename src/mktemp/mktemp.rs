@@ -176,7 +176,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     unsafe {
         // We guarantee utf8.
         let bytes = &mut buf.as_mut_vec()[prefix.len()..prefix.len() + rand];
-        rand::thread_rng().fill_bytes(bytes);
+        rand::thread_rng().fill(bytes);
         for byte in bytes.iter_mut() {
             *byte = match *byte % 62 {
                 v @ 0...9 => (v + '0' as u8),
