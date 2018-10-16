@@ -352,8 +352,8 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             fs::rename(to, p)?;
         }
 
-        if b.update &&
-           (fs::metadata(from))?.modified()? <= fs::metadata(to)?.modified()?
+        if b.update
+           && (fs::metadata(from))?.modified()? <= fs::metadata(to)?.modified()?
         {
             return Ok(());
         }

@@ -333,7 +333,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         // way, start counting empties from zero once more.
         empty_line_count = 0;
         // A line number is to be printed.
-        let w: usize = if settings.number_width > line_no_width {
+        let w = if settings.number_width > line_no_width {
             settings.number_width - line_no_width
         } else {
             0

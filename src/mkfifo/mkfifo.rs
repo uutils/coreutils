@@ -77,10 +77,12 @@ Create a FIFO with the given name.",
     for f in &matches.free {
         let err = {
             let path = CString::new(f.as_bytes()).unwrap();
-            unsafe { mkfifo(
-                path.as_ptr(),
-                mode as libc::mode_t,
-            ) }
+            unsafe {
+                mkfifo(
+                    path.as_ptr(),
+                    mode as libc::mode_t,
+                )
+            }
         };
         if err == -1 {
             show_error!(
