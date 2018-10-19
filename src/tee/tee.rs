@@ -50,7 +50,7 @@ fn options(args: &[String]) -> Result<Options> {
             let version = format!("{} {}", NAME, VERSION);
             let arguments = "[OPTION]... [FILE]...";
             let brief = "Copy standard input to each FILE, and also to standard output.";
-            let comment = "If a FILE is -, copy again to standard output.";
+            let comment = "If a FILE is -, it refers to a file named - .";
             let help = format!(
                 "{}\n\nUsage:\n  {} {}\n\n{}\n{}",
                 version,
@@ -59,8 +59,7 @@ fn options(args: &[String]) -> Result<Options> {
                 opts.usage(brief),
                 comment
             );
-            let mut names: Vec<String> = m.free.clone().into_iter().collect();
-            names.push("-".to_owned());
+            let names: Vec<String> = m.free.clone().into_iter().collect();
             let to_print = if m.opt_present("help") {
                 Some(help)
             } else if m.opt_present("version") {
@@ -87,12 +86,13 @@ fn exec(options: Options) -> Result<()> {
 }
 
 fn tee(options: Options) -> Result<()> {
-    let writers: Vec<Box<Write>> = options
+    let mut writers: Vec<Box<Write>> = options
         .files
         .clone()
         .into_iter()
         .map(|file| open(file, options.append))
         .collect();
+    writers.push(Box::new(stdout()));
     let output = &mut MultiWriter { writers: writers };
     let input = &mut NamedReader {
         inner: Box::new(stdin()) as Box<Read>,
@@ -105,11 +105,8 @@ fn tee(options: Options) -> Result<()> {
 }
 
 fn open(name: String, append: bool) -> Box<Write> {
-    let is_stdout = name == "-";
     let path = PathBuf::from(name);
-    let inner: Box<Write> = if is_stdout {
-        Box::new(stdout())
-    } else {
+    let inner: Box<Write> = {
         let mut options = OpenOptions::new();
         let mode = if append {
             options.append(true)
