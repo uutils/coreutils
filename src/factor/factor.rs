@@ -23,7 +23,7 @@ use rand::distributions::{Distribution, Uniform};
 use rand::{SeedableRng, thread_rng};
 use rand::rngs::SmallRng;
 use std::cmp::{max, min};
-use std::io::{stdin, BufRead, BufReader};
+use std::io::{stdin, BufRead};
 use std::num::Wrapping;
 use std::mem::swap;
 
@@ -163,7 +163,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     if matches.free.is_empty() {
-        for line in BufReader::new(stdin()).lines() {
+        let stdin = stdin();
+        for line in stdin.lock().lines() {
             for number in line.unwrap().split_whitespace() {
                 print_factors_str(number);
             }
