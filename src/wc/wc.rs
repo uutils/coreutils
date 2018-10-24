@@ -30,6 +30,7 @@ struct Settings {
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
+    show_min_line_length: bool,
 }
 
 impl Settings {
@@ -40,10 +41,11 @@ impl Settings {
             show_lines: matches.opt_present("lines"),
             show_words: matches.opt_present("words"),
             show_max_line_length: matches.opt_present("L"),
+            show_min_line_length: matches.opt_present("S"),
         };
 
         if settings.show_bytes || settings.show_chars || settings.show_lines || settings.show_words
-            || settings.show_max_line_length
+            || settings.show_max_line_length || settings.show_min_line_length
         {
             return settings;
         }
@@ -54,6 +56,7 @@ impl Settings {
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
+            show_min_line_length: false,
         }
     }
 }
@@ -65,6 +68,7 @@ struct Result {
     lines: usize,
     words: usize,
     max_line_length: usize,
+    min_line_length: usize,
 }
 
 static NAME: &str = "wc";
@@ -80,6 +84,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "L",
         "max-line-length",
         "print the length of the longest line",
+    );
+    opts.optflag(
+        "S",
+        "min-line-length",
+        "print the length of the shortest line",
     );
     opts.optflag("w", "words", "print the word counts");
     opts.optflag("h", "help", "display this help and exit");
@@ -141,6 +150,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut total_char_count: usize = 0;
     let mut total_byte_count: usize = 0;
     let mut total_longest_line_length: usize = 0;
+    let mut total_shortest_line_length: usize = 0;
 
     let mut results = vec![];
     let mut max_width: usize = 0;
@@ -153,7 +163,9 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         let mut byte_count: usize = 0;
         let mut char_count: usize = 0;
         let mut longest_line_length: usize = 0;
+        let mut shortest_line_length: usize = 0;
         let mut raw_line = Vec::new();
+        let mut shortest_line_length_initialized: bool = false;
 
         // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
         // hence the option wrapped in a result here
@@ -185,6 +197,17 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
                 }
             }
             char_count += current_char_count;
+            if shortest_line_length_initialized == false {
+                shortest_line_length = current_char_count - 1;
+                shortest_line_length_initialized = true;
+            }
+
+            if current_char_count <= shortest_line_length {
+                // we subtract one here because `line.len()` includes the LF
+                // matches GNU 'wc' behaviour
+                shortest_line_length = current_char_count - 1;
+            }
+
 
             if current_char_count > longest_line_length {
                 // we subtract one here because `line.len()` includes the LF
@@ -202,12 +225,17 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             lines: line_count,
             words: word_count,
             max_line_length: longest_line_length,
+            min_line_length: shortest_line_length,
         });
 
         total_line_count += line_count;
         total_word_count += word_count;
         total_char_count += char_count;
         total_byte_count += byte_count;
+
+        if shortest_line_length < total_shortest_line_length {
+            total_shortest_line_length = shortest_line_length;
+        }
 
         if longest_line_length > total_longest_line_length {
             total_longest_line_length = longest_line_length;
@@ -229,6 +257,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             lines: total_line_count,
             words: total_word_count,
             max_line_length: total_longest_line_length,
+            min_line_length: total_shortest_line_length,
         };
         print_stats(settings, &result, max_width);
     }
@@ -251,6 +280,10 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     }
     if settings.show_max_line_length {
         print!("{:1$}", result.max_line_length, max_width);
+    }
+
+    if settings.show_min_line_length {
+        print!("{:1$}", result.min_line_length, max_width);
     }
 
     if result.title != "-" {
