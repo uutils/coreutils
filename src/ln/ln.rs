@@ -13,7 +13,7 @@
 extern crate uucore;
 
 use std::fs;
-use std::io::{stdin, BufRead, BufReader, Result};
+use std::io::{stdin, Result};
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -303,7 +303,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
 
 fn read_yes() -> bool {
     let mut s = String::new();
-    match BufReader::new(stdin()).read_line(&mut s) {
+    match stdin().read_line(&mut s) {
         Ok(_) => match s.char_indices().nth(0) {
             Some((_, x)) => x == 'y' || x == 'Y',
             _ => false,

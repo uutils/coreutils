@@ -16,7 +16,7 @@ extern crate uucore;
 
 use std::fs;
 use std::env;
-use std::io::{stdin, BufRead, BufReader, Result};
+use std::io::{stdin, Result};
 use std::path::{Path, PathBuf};
 
 static NAME: &str = "mv";
@@ -374,7 +374,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
 
 fn read_yes() -> bool {
     let mut s = String::new();
-    match BufReader::new(stdin()).read_line(&mut s) {
+    match stdin().read_line(&mut s) {
         Ok(_) => match s.chars().nth(0) {
             Some(x) => x == 'y' || x == 'Y',
             _ => false,
