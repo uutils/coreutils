@@ -10,7 +10,7 @@ fn test_symlink_existing_file() {
     at.touch(file);
 
     ucmd.args(&["-s", file, link]).succeeds().no_stderr();
-    
+
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
@@ -87,7 +87,7 @@ fn test_symlink_overwrite_force() {
     let link = "test_symlink_overwrite_force_link";
 
     // Create symlink
-    at.symlink(file_a, link);
+    at.symlink_file(file_a, link);
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file_a);
 
@@ -130,7 +130,7 @@ fn test_symlink_simple_backup() {
     let link = "test_symlink_simple_backup_link";
 
     at.touch(file);
-    at.symlink(file, link);
+    at.symlink_file(file, link);
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
@@ -155,7 +155,7 @@ fn test_symlink_custom_backup_suffix() {
     let suffix = "super-suffix-of-the-century";
 
     at.touch(file);
-    at.symlink(file, link);
+    at.symlink_file(file, link);
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
@@ -179,7 +179,7 @@ fn test_symlink_backup_numbering() {
     let link = "test_symlink_backup_numbering_link";
 
     at.touch(file);
-    at.symlink(file, link);
+    at.symlink_file(file, link);
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
@@ -205,13 +205,13 @@ fn test_symlink_existing_backup() {
 
     // Create symlink and verify
     at.touch(file);
-    at.symlink(file, link);
+    at.symlink_file(file, link);
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
     // Create backup symlink and verify
-    at.symlink(file, link_backup);
+    at.symlink_file(file, link_backup);
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link_backup));
     assert_eq!(at.resolve_link(link_backup), file);
