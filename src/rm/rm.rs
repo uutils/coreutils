@@ -163,6 +163,8 @@ fn remove(files: Vec<String>, options: Options) -> bool {
             Ok(metadata) => {
                 if metadata.is_dir() {
                     handle_dir(file, &options)
+                } else if is_symlink_dir(&metadata) {
+                    remove_dir(file, &options)
                 } else {
                     remove_file(file, &options)
                 }
@@ -304,4 +306,21 @@ fn prompt(msg: &str) -> bool {
         },
         _ => false,
     }
+}
+
+#[cfg(not(windows))]
+fn is_symlink_dir(_metadata: &fs::Metadata) -> bool {
+    false
+}
+
+#[cfg(windows)]
+use std::os::windows::prelude::MetadataExt;
+
+#[cfg(windows)]
+fn is_symlink_dir(metadata: &fs::Metadata) -> bool {
+    use std::os::raw::c_ulong;
+    pub type DWORD = c_ulong;
+    pub const FILE_ATTRIBUTE_DIRECTORY: DWORD = 0x10;
+
+    metadata.file_type().is_symlink() && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
 }
