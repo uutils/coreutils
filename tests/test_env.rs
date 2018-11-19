@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_env_help() {
     assert!(new_ucmd!().arg("--help").succeeds().no_stderr().stdout.contains("Options:"));
@@ -9,6 +8,24 @@ fn test_env_help() {
 #[test]
 fn test_env_version() {
     assert!(new_ucmd!().arg("--version").succeeds().no_stderr().stdout.contains(util_name!()));
+}
+
+#[test]
+fn test_echo() {
+    // assert!(new_ucmd!().arg("printf").arg("FOO-bar").succeeds().no_stderr().stdout.contains("FOO-bar"));
+    let mut cmd = new_ucmd!();
+    cmd.arg("echo").arg("FOO-bar");
+    println!("cmd={:?}", cmd);
+
+    let result = cmd.run();
+    println!("success={:?}", result.success);
+    println!("stdout={:?}", result.stdout);
+    println!("stderr={:?}", result.stderr);
+    assert!(result.success);
+
+    let out = result.stdout.trim_right();
+
+    assert_eq!(out, "FOO-bar");
 }
 
 #[test]
