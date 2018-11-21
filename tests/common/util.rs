@@ -447,6 +447,7 @@ impl TestScenario {
 /// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
 ///     the test failure can display the exact call which preceded an assertion failure.
 /// 3. it provides convenience construction arguments to set the Command working directory and/or clear its environment.
+#[derive(Debug)]
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
