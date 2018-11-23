@@ -1,3 +1,6 @@
+# spell-checker:words POSIX repo SDK SDKs toolchain toolchains
+# spell-checker:ignore uutils ARCH ABI BACKTRACE BINDIR cl COMNTOOLS dllcrt findstr maint MINGW MINGWDIR mkdir MSVC MSYS rustc rustlib rustup USERPROFILE vcvarsall
+
 version: "{build} ~ {branch}"
 
 branches:
@@ -6,111 +9,156 @@ branches:
 
 os: Visual Studio 2015
 
+artifacts:
+  - path: target\%TARGET%\debug\uutils.exe
+    name: uutils.exe
+
 matrix:
   allow_failures:
   - CHANNEL: nightly
+#   - ABI: gnu
 
 environment:
   global:
     FEATURES: "generic"
+    BUILD_OPTIONS: "--no-default-features"
+    TEST_OPTIONS: "--no-default-features --no-fail-fast"
+
   matrix:
+  # minimum version
   - CHANNEL: 1.27.0
     ARCH: i686
-    TOOLCHAIN: msvc
+    ABI: msvc
+  # "msvc" ABI
   - CHANNEL: stable
     ARCH: i686
-    TOOLCHAIN: msvc
+    ABI: msvc
   - CHANNEL: stable
     ARCH: x86_64
-    TOOLCHAIN: msvc
+    ABI: msvc
 #   - CHANNEL: beta
 #     ARCH: i686
-#     TOOLCHAIN: msvc
+#     ABI: msvc
 #   - CHANNEL: beta
 #     ARCH: x86_64
-#     TOOLCHAIN: msvc
+#     ABI: msvc
   - CHANNEL: nightly
     ARCH: i686
-    TOOLCHAIN: msvc
+    ABI: msvc
+    FEATURES: "generic nightly"
   - CHANNEL: nightly
     ARCH: x86_64
-    TOOLCHAIN: msvc
+    ABI: msvc
+    FEATURES: "generic nightly"
+  # "gnu" ABI
   - CHANNEL: stable
     ARCH: i686
-    TOOLCHAIN: gnu
+    ABI: gnu
   - CHANNEL: stable
     ARCH: x86_64
-    TOOLCHAIN: gnu
+    ABI: gnu
 #   - CHANNEL: beta
 #     ARCH: i686
-#     TOOLCHAIN: gnu
+#     ABI: gnu
 #   - CHANNEL: beta
 #     ARCH: x86_64
-#     TOOLCHAIN: gnu
-  - CHANNEL: nightly
-    ARCH: i686
-    TOOLCHAIN: gnu
-  - CHANNEL: nightly
-    ARCH: x86_64
-    TOOLCHAIN: gnu
+#     ABI: gnu
+#   - CHANNEL: nightly
+#     ARCH: i686
+#     ABI: gnu
+#   - CHANNEL: nightly
+#     ARCH: x86_64
+#     ABI: gnu
+  # * specific gnu compilers
   - CHANNEL: stable
     ARCH: i686
-    TOOLCHAIN: gnu
+    ABI: gnu
     MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z/download
     MINGW_ARCHIVE: i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
-    MINGW_DIR: mingw32
-    DIR_TEMP_MINGW: C:\cached\mingw
+  - CHANNEL: stable
+    ARCH: x86_64
+    ABI: gnu
+    MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/7.3.0/threads-posix/seh/x86_64-7.3.0-release-posix-seh-rt_v5-rev0.7z/download#mingw-w64-x86_64-7.3.0-posix-seh.7z
 
 install:
   # force branch checkout (if knowable), then reset to the specific commit ## (can be needed for accurate code coverage info)
   # * this allows later apps to see the branch name using standard `git branch` operations, yet always builds the correct specific commit
   # * ref: <https://github.com/appveyor/ci/issues/1606>[`@`](https://archive.is/RVpnF)
-  - if DEFINED APPVEYOR_REPO_BRANCH if /I "%APPVEYOR_REPO_SCM%"=="git" ( git checkout "%APPVEYOR_REPO_BRANCH%" & git reset --hard "%APPVEYOR_REPO_COMMIT%" )
+  - if DEFINED APPVEYOR_REPO_BRANCH if /I "%APPVEYOR_REPO_SCM%"=="git" ( git checkout "%APPVEYOR_REPO_BRANCH%" 2>NUL & git reset --hard "%APPVEYOR_REPO_COMMIT%" )
   # ensure CWD is project main directory
   - cd "%APPVEYOR_BUILD_FOLDER%"
   # create a working area
   - ps: if ( ! $env:CI_TEMP_DIR ) { $env:CI_TEMP_DIR = "${env:TEMP}\${env:APPVEYOR_JOB_ID}" ; mkdir -force $env:CI_TEMP_DIR | out-null }
-  - set "TARGET=%ARCH%-pc-windows-%TOOLCHAIN%"
-  # install `rust` via `rustup`
-  - call appveyor DownloadFile "https://win.rustup.rs/" -FileName "%CI_TEMP_DIR%\rustup-init.exe"
-  - call "%CI_TEMP_DIR%\\rustup-init.exe" -y --default-toolchain %CHANNEL% --default-host %TARGET% --no-modify-path
+
+  # define the TARGET host
+  - set "TARGET=%ARCH%-pc-windows-%ABI%"
+
+  # show relevant environment settings
+  - ps: ('CHANNEL', 'ARCH', 'ABI', 'FEATURES', 'BUILD_OPTIONS', 'TEST_OPTIONS', 'TARGET') |% { write-host -f yellow "$_=$(get-content -ea silent env:/$_)" }
+
+  # rust installation
+  # * install `rust` via `rustup`
+  - appveyor DownloadFile "https://win.rustup.rs/" -FileName "%CI_TEMP_DIR%\rustup-init.exe"
+  - call "%CI_TEMP_DIR%\rustup-init.exe" -y --default-toolchain %CHANNEL% --default-host %TARGET% --no-modify-path >NUL
   - set "PATH=%PATH%;%USERPROFILE%\.cargo\bin"
+  - ps: $env:TOOLCHAIN = $("$(rustup show active-toolchain)" -split '\s+')[0]
+  # * set RUST_BACKTRACE for enhanced error messages
+  - set RUST_BACKTRACE=1
+  # * show rust versions
   - rustc -vV
   - cargo -vV
 
-  # finalize FEATURES
-  - if /I "%CHANNEL%"=="nightly" set "FEATURES=nightly %FEATURES%"
-
-  # "gnu" toolchain setup
-  - if /I "%TOOLCHAIN%"=="gnu" set "PATH=%PATH%;C:\MinGW\bin"
-  # * use the system MSYS if we can
-  - if /I "%TOOLCHAIN%"=="gnu" if /I "%ARCH%"=="i686"   set "MSYS_BITS=32"
-  - if /I "%TOOLCHAIN%"=="gnu" if /I "%ARCH%"=="x86_64" set "MSYS_BITS=64"
-  - if defined MSYS_BITS set PATH=C:\msys64\mingw%MSYS_BITS%\bin;C:\msys64\usr\bin;%PATH%
+  # "gnu" ABI setup
+  # * use the system MinGW/MSYS if we can
+  - if /i "%ABI%"=="gnu" set MSYS_BINDIR=C:\msys64\usr\bin
+  - if /i "%ABI%"=="gnu" if /i "%ARCH%"=="i686"   set "MSYS_BITS=32"
+  - if /i "%ABI%"=="gnu" if /i "%ARCH%"=="x86_64" set "MSYS_BITS=64"
+  - if defined MSYS_BITS set "MSYS_MINGWDIR=C:\msys64\mingw%MSYS_BITS%"
+  - if defined MSYS_MINGWDIR set "MSYS_BINDIR=C:\msys64\usr\bin"
+  ## * workaround for rust-lang/rust#47048 / rust-lang/rust#53454  ## !maint: remove when resolved
+  - if /i "%ABI%"=="gnu" if /i "%ARCH%"=="i686" if not DEFINED MINGW_URL set "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains targetting Win32/Personal Builds/mingw-builds/8.1.0/threads-posix/dwarf/i686-8.1.0-release-posix-dwarf-rt_v6-rev0.7z"
+  - if /i "%ABI%"=="gnu" if /i "%ARCH%"=="x86_64" if not DEFINED MINGW_URL set "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains targetting Win64/Personal Builds/mingw-builds/8.1.0/threads-posix/seh/x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z"
+  ## (end workaround)
   # * specific MinGW, if specified
-  - ps: |
-      if ((Test-Path Env:\MINGW_ARCHIVE) -and -not (Test-Path "${env:DIR_TEMP_MINGW}\${env:MINGW_ARCHIVE}")) {
-        if (Test-Path "${env:DIR_TEMP_MINGW}") {
-          rm -Recurse ${env:DIR_TEMP_MINGW}\*;
-        }
-        New-Item -ItemType Directory -Force -Path ${env:DIR_TEMP_MINGW} | Out-Null;
-        $download_loc = ${env:MINGW_URL};
-        appveyor DownloadFile $download_loc -FileName "${env:DIR_TEMP_MINGW}\${env:MINGW_ARCHIVE}";
-      }
-  - if defined MINGW_ARCHIVE 7z x -y "%DIR_TEMP_MINGW%\%MINGW_ARCHIVE%" > nul
-  - if defined MINGW_ARCHIVE set PATH=%CD%\%MINGW_DIR%\bin;C:\msys64\usr\bin;%PATH%
+  - ps: if ( ! $env:MINGW_ARCHIVE -and $env:MINGW_URL ) { $env:MINGW_ARCHIVE = $($([URI]$env:MINGW_URL).fragment).TrimStart('#') }
+  - ps: if ( ! $env:MINGW_ARCHIVE -and $env:MINGW_URL ) { $env:MINGW_ARCHIVE = $([URI]$env:MINGW_URL).segments[-1] }
+  - if defined MINGW_ARCHIVE curl --insecure -fsSL "%MINGW_URL%" -o "%CI_TEMP_DIR%\%MINGW_ARCHIVE%"
+  - if defined MINGW_ARCHIVE mkdir "%CI_TEMP_DIR%\MinGW" >NUL
+  - if defined MINGW_ARCHIVE 7z x -y "%CI_TEMP_DIR%\%MINGW_ARCHIVE%" -o"%CI_TEMP_DIR%\MinGW" >NUL
+  - if defined MINGW_ARCHIVE set "MSYS_MINGWDIR=%CI_TEMP_DIR%\MinGW\mingw%MSYS_BITS%"
+  - if defined MINGW_ARCHIVE set "MSYS_BINDIR=%MSYS_MINGWDIR%\bin"
+  # * MinGW/MSYS PATH setup
+  - if defined MSYS_MINGWDIR set PATH=%MSYS_MINGWDIR%\%ARCH%-w64-mingw32\bin;%MSYS_BINDIR%;%PATH%
+  ## * workaround for rust-lang/rust#47048 / rust-lang/rust#53454  ## !maint: remove when resolved
+  # ** ref: <https://github.com/rust-lang/rust/issues/47048>, <https://github.com/rust-lang/rust/issues/53454>
+  # ** egs: <https://github.com/pkgw/tectonic/commit/29686db533d8732d7d97fc94270ed33b77f29295>, <https://github.com/rukai/PF_Sandbox/blob/e842613cf9ff102dfb3fbd87381319e6e6dfe3ae/appveyor.yml>
+  - if /i "%ABI%"=="gnu" rustup install %CHANNEL%-%ARCH%-pc-windows-msvc
+  - if /i "%ABI%"=="gnu" rustup default %CHANNEL%-%ARCH%-pc-windows-msvc
+  - if /i "%ABI%"=="gnu" rustup target add %TARGET%
+  - ps: $env:TOOLCHAIN = $("$(rustup show active-toolchain)" -split '\s+')[0]
+  - if /i "%ABI%"=="gnu" rustup show
+  - if /i "%ABI%"=="gnu" rustc -vV
+  # ** copy libs from gcc toolchain to rust toolchain (more specifically, "crt2.o" and "dllcrt2.o" are needed)
+  - if defined MSYS_MINGWDIR copy /y "%MSYS_MINGWDIR%\%ARCH%-w64-mingw32\lib\*.o" "%USERPROFILE%\.rustup\toolchains\%TOOLCHAIN%\lib\rustlib\%TARGET%\lib" >NUL
+  ## (end workaround)
+  # * show `gcc` info
+  - if /i "%ABI%"=="gnu" ( where gcc && gcc --version )
 
-  # "msvc" toolchain setup
-  - if "%TOOLCHAIN%" == "msvc" if "%ARCH%" == "i686" call "%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat"
-  - if "%TOOLCHAIN%" == "msvc" if "%ARCH%" == "x86_64" "C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x64
-  - if "%TOOLCHAIN%" == "msvc" if "%ARCH%" == "x86_64" call "%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat" x86_amd64
+  # "msvc" ABI setup
+  - if /i "%ABI%" == "msvc" if /i "%ARCH%" == "i686" call "%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat"
+  - if /i "%ABI%" == "msvc" if /i "%ARCH%" == "x86_64" call "C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x64
+  - if /i "%ABI%" == "msvc" if /i "%ARCH%" == "x86_64" call "%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat" x86_amd64
+  # * show `cl` info
+  - if /i "%ABI%"=="msvc" ( where cl && cl 2>&1 | findstr /i /c:"version" )
 
-artifacts:
-  - path: target\debug\uutils.exe
-    name: uutils.exe
+  # finalize options
+  - ps: if ("$env:FEATURES".length) { $env:BUILD_OPTIONS = $(($env:BUILD_OPTIONS, "--features `"${env:FEATURES}`"")|?{$_}) -join ' ' }
+  - ps: if ("$env:FEATURES".length) { $env:TEST_OPTIONS = $(($env:TEST_OPTIONS, "--features `"${env:FEATURES}`"")|?{$_}) -join ' ' }
 
 build_script:
-  - cargo build --features "%FEATURES%" --no-default-features
+  - ps: $env:BUILD_CMD = $(("cargo +${env:TOOLCHAIN} build --target=${env:TARGET}", $env:BUILD_OPTIONS)|?{$_}) -join ' '
+  - echo [ `%BUILD_CMD%` ] & %BUILD_CMD%
 
 test_script:
-  - cargo test --no-fail-fast --features "%FEATURES%" --no-default-features
+  - ps: $env:TEST_CMD = $(("cargo +${env:TOOLCHAIN} test --target=${env:TARGET}", $env:TEST_OPTIONS)|?{$_}) -join ' '
+  - echo [ `%TEST_CMD%` ] & %TEST_CMD%
