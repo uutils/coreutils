@@ -18,7 +18,7 @@ extern crate uucore;
 
 use filetime::*;
 use std::fs::{self, File};
-use std::io::{self, Error};
+use std::io::Error;
 use std::path::Path;
 
 static NAME: &str = "touch";
@@ -41,31 +41,6 @@ macro_rules! local_tm_to_filetime(
         FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
     })
 );
-
-macro_rules! to_timeval {
-    ($ft:expr) => (
-        timeval {
-            tv_sec: $ft.seconds() as time_t,
-            tv_usec: ($ft.nanoseconds() / 1000) as suseconds_t,
-        }
-    )
-}
-
-#[cfg(unix)]
-fn set_symlink_times(p: &str, atime: FileTime, mtime: FileTime) -> io::Result<()> {
-    use std::ffi::CString;
-    use uucore::libc::{lutimes, suseconds_t, time_t, timeval};
-
-    let times = [to_timeval!(atime), to_timeval!(mtime)];
-    let p = try!(CString::new(p));
-    return unsafe {
-        if lutimes(p.as_ptr() as *const _, times.as_ptr()) == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
-    };
-}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -204,7 +179,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         if matches.opt_present("h") {
-            if let Err(e) = set_symlink_times(path, atime, mtime) {
+            if let Err(e) = set_symlink_file_times(path, atime, mtime) {
                 show_warning!("cannot touch '{}': {}", path, e);
             }
         } else {
