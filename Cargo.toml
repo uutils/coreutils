@@ -56,7 +56,6 @@ fuchsia = [
   "nice",
   "pathchk",
   "stdbuf",
-  "touch",
   "tty",
   "uname",
   "unlink",
@@ -69,6 +68,7 @@ generic = [
   "hostname",
   "nproc",
   "sync",
+  "touch",
   "whoami",
   "redox_generic"
 ]
