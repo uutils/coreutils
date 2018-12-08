@@ -1066,6 +1066,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pr"
+version = "0.0.1"
+dependencies = [
+ "getopts 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1",
+]
+
+[[package]]
 name = "pretty-bytes"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1910,6 +1919,7 @@ dependencies = [
  "paste 0.0.1",
  "pathchk 0.0.1",
  "pinky 0.0.1",
+ "pr 0.0.1",
  "printenv 0.0.1",
  "printf 0.0.1",
  "ptx 0.0.1",

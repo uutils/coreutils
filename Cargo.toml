@@ -34,6 +34,7 @@ unix = [
   "uptime",
   "users",
   "who",
+  "pr",
 ]
 # Feature "fuchsia" contains the exclusive list of utilities
 # that can be compiled and run on Fuchsia. Should be built
@@ -247,6 +248,7 @@ wc       = { optional=true, path="src/wc" }
 who      = { optional=true, path="src/who" }
 whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
+pr      = { optional=true, path="src/pr" }
 
 [dev-dependencies]
 time = "0.1.40"

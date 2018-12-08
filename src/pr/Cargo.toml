@@ -1,0 +1,21 @@
+[package]
+name = "pr"
+version = "0.0.1"
+authors = ["Tilak Patidar <tilakpatidar@gmail.com>"]
+build = "../../mkmain.rs"
+
+[lib]
+name = "uu_pr"
+path = "pr.rs"
+
+[dependencies]
+getopts = "0.2.18"
+time = "0.1.40"
+
+[dependencies.uucore]
+path = "../uucore"
+features = ["libc"]
+
+[[bin]]
+name = "pr"
+path = "../../uumain.rs"
