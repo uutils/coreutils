@@ -64,6 +64,7 @@ feat_common_core = [
     "nl",
     "od",
     "paste",
+    "pr",
     "printenv",
     "printf",
     "ptx",
@@ -285,6 +286,7 @@ od       = { optional=true, version="0.0.4", package="uu_od", path="src/uu/od" }
 paste    = { optional=true, version="0.0.4", package="uu_paste", path="src/uu/paste" }
 pathchk  = { optional=true, version="0.0.4", package="uu_pathchk", path="src/uu/pathchk" }
 pinky    = { optional=true, version="0.0.4", package="uu_pinky", path="src/uu/pinky" }
+pr       = { optional=true, path="src/pr" }
 printenv = { optional=true, version="0.0.4", package="uu_printenv", path="src/uu/printenv" }
 printf   = { optional=true, version="0.0.4", package="uu_printf", path="src/uu/printf" }
 ptx      = { optional=true, version="0.0.4", package="uu_ptx", path="src/uu/ptx" }
