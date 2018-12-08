@@ -7,12 +7,17 @@
 //
 
 extern crate getopts;
+extern crate chrono;
 
 //#[macro_use]
 //extern crate uucore;
+use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::vec::Vec;
+use chrono::offset::Local;
+use chrono::DateTime;
+
 //use uucore::fs::is_stdin_interactive;
 
 
@@ -94,6 +99,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn open(path: &str) -> std::io::Result<()> {
     let file = File::open(path)?;
+    let file_last_modified_time = file_last_modified_time(path);
     let lines = BufReader::new(file).lines();
     let mut i = 0;
     let mut page: i32 = 0;
@@ -102,27 +108,30 @@ fn open(path: &str) -> std::io::Result<()> {
         if i == CONTENT_LINES_PER_PAGE {
             page = page + 1;
             i = 0;
-            print!("{}", print_page(&buffered_content));
+            let header = header_content(&file_last_modified_time, path, page);
+            print!("{}", print_page(&header, &buffered_content));
             buffered_content.clear();
         }
         i = i + 1;
         buffered_content.push(line?);
     }
     if i != 0 {
-        print!("{}", print_page(&buffered_content));
+        let header = header_content(&file_last_modified_time, path, page);
+        print!("{}", print_page(&header, &buffered_content));
         buffered_content.clear();
     }
     Ok(())
 }
 
-fn print_page(lines: &Vec<String>) -> String {
+fn print_page(header_content: &Vec<String>, lines: &Vec<String>) -> String {
     let mut page_content: Vec<String> = Vec::new();
-    let header_content = header_content();
     let trailer_content = trailer_content();
     assert_eq!(lines.len() <= CONTENT_LINES_PER_PAGE, true, "Only {} lines of content allowed in a pr output page", CONTENT_LINES_PER_PAGE.to_string());
     assert_eq!(header_content.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE.to_string());
     assert_eq!(trailer_content.len(), TRAILER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr trailer", TRAILER_LINES_PER_PAGE.to_string());
-    page_content.extend(header_content);
+    for x in header_content {
+        page_content.push(x.to_string());
+    }
     for x in lines {
         page_content.push(x.to_string());
     }
@@ -130,8 +139,19 @@ fn print_page(lines: &Vec<String>) -> String {
     page_content.join("\n")
 }
 
-fn header_content() -> Vec<String> {
-    vec!["".to_string(), "".to_string(), "".to_string(), "".to_string(), "".to_string()]
+fn header_content(last_modified: &String, path: &str, page: i32) -> Vec<String> {
+    let first_line: String = format!("{} {} Page {}", last_modified, path, page.to_string());
+    vec![first_line, "".to_string(), "".to_string(), "".to_string(), "".to_string()]
+}
+
+fn file_last_modified_time(path: &str) -> String {
+    let file_metadata = fs::metadata(path);
+    return file_metadata.map(|i| {
+        return i.modified().map(|x| {
+            let datetime: DateTime<Local> = x.into();
+            datetime.format("%b %d %H:%M %Y").to_string()
+        }).unwrap_or(String::new());
+    }).unwrap_or(String::new());
 }
 
 fn trailer_content() -> Vec<String> {
