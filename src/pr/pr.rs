@@ -17,6 +17,7 @@ use std::io::{BufRead, BufReader};
 use std::vec::Vec;
 use chrono::offset::Local;
 use chrono::DateTime;
+use getopts::Matches;
 
 //use uucore::fs::is_stdin_interactive;
 
@@ -128,8 +129,23 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let path = &matches.free[0];
-    let header: String = matches.opt_str("h").unwrap_or(path.to_string());
+
+    let mut files = matches.free.clone();
+    if files.is_empty() {
+        //For stdin
+        files.push("-".to_owned());
+    }
+
+    for f in files {
+        let header: String = matches.opt_str("h").unwrap_or(f.to_string());
+        let options = build_options(&matches, header);
+        pr(&f, options);
+    }
+
+    0
+}
+
+fn build_options(matches: &Matches, header: String) -> OutputOptions {
     let numbering_options = matches.opt_str("n").map(|i| {
         NumberingMode {
             width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
@@ -141,15 +157,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
         return None;
     });
-
-    let options = OutputOptions {
+    OutputOptions {
         number: numbering_options,
         header,
-    };
-
-    pr(&path, options);
-
-    0
+    }
 }
 
 fn pr(path: &str, options: OutputOptions) -> std::io::Result<()> {
