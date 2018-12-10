@@ -12,6 +12,7 @@ path = "pr.rs"
 getopts = "0.2.18"
 time = "0.1.40"
 chrono = "0.4.6"
+quick-error = "1.2.2"
 
 [dependencies.uucore]
 path = "../uucore"

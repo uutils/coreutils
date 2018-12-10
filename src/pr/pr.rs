@@ -6,24 +6,23 @@
 // that was distributed with this source code.
 //
 
-extern crate getopts;
-extern crate chrono;
 #[cfg(unix)]
 extern crate unix_socket;
-
 #[macro_use]
+extern crate quick_error;
+extern crate chrono;
+extern crate getopts;
 extern crate uucore;
 
-use std::io::{BufRead, BufReader, Lines, stdin};
+use std::io::{BufRead, BufReader, stdin, stdout, stderr, Error, Read, Write, Stdout};
 use std::vec::Vec;
 use chrono::offset::Local;
 use chrono::DateTime;
-use getopts::Matches;
-use getopts::Options;
-use std::io::{self, Read};
+use getopts::{Matches, Options};
 use std::fs::{metadata, File};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use quick_error::ResultExt;
 
 
 static NAME: &str = "pr";
@@ -77,6 +76,27 @@ enum InputType {
     Socket,
 }
 
+quick_error! {
+    #[derive(Debug)]
+    enum PrError {
+        Input(err: Error, path: String) {
+            context(path: &'a str, err: Error) -> (err, path.to_owned())
+            display("pr: Reading from input {0} gave error", path)
+            cause(err)
+        }
+
+        UnknownFiletype(path: String) {
+            display("pr: {0}: unknown filetype", path)
+        }
+
+        EncounteredErrors(msg: String) {
+            display("pr: {0} encountered", msg)
+        }
+        IsDirectory(path: String) {
+            display("pr: {0}: Is a directory", path)
+        }
+    }
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -112,7 +132,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let mut files = matches.free.clone();
+    let mut files: Vec<String> = matches.free.clone();
     if files.is_empty() {
         //For stdin
         files.push("-".to_owned());
@@ -122,14 +142,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return print_usage(&mut opts, &matches);
     }
 
-
     for f in files {
-        let header: String = matches.opt_str("h").unwrap_or(f.to_string());
-        let options = build_options(&matches, header);
-        pr(&f, options);
+        let header: &String = &matches.opt_str("h").unwrap_or(f.to_string());
+        let options: &OutputOptions = &build_options(&matches, header);
+        let status: i32 = pr(&f, options);
+        if status != 0 {
+            return status;
+        }
     }
-
-    0
+    return 0;
 }
 
 fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
@@ -167,8 +188,8 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     return 0;
 }
 
-fn build_options(matches: &Matches, header: String) -> OutputOptions {
-    let numbering_options = matches.opt_str("n").map(|i| {
+fn build_options(matches: &Matches, header: &String) -> OutputOptions {
+    let numbering_options: Option<NumberingMode> = matches.opt_str("n").map(|i| {
         NumberingMode {
             width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
             separator: NumberingMode::default().separator,
@@ -181,68 +202,75 @@ fn build_options(matches: &Matches, header: String) -> OutputOptions {
     });
     OutputOptions {
         number: numbering_options,
-        header,
+        header: header.to_string(),
     }
 }
 
-fn open(path: &str) -> Option<Box<Read>> {
-    // TODO Use Result instead of Option
-    if path == "-" {
-        let stdin = stdin();
-        return Some(Box::new(stdin) as Box<Read>);
-    }
-
-    match get_input_type(path)? {
-        InputType::Directory => None,
+fn open(path: &str) -> Result<Box<Read>, PrError> {
+    match get_input_type(path) {
+        Some(InputType::Directory) => Err(PrError::IsDirectory(path.to_string())),
         #[cfg(unix)]
-        InputType::Socket => {
+        Some(InputType::Socket) => {
             // TODO Add reading from socket
-            None
+            Err(PrError::EncounteredErrors("Reading from socket not supported yet".to_string()))
         }
-        _ => {
-            match File::open(path) {
-                Ok(file) => Some(Box::new(file) as Box<Read>),
-                _ => None
-            }
+        Some(InputType::StdIn) => {
+            let stdin = stdin();
+            Ok(Box::new(stdin) as Box<Read>)
         }
+        Some(_) => Ok(Box::new(File::open(path).context(path)?) as Box<Read>),
+        None => Err(PrError::UnknownFiletype(path.to_string()))
     }
 }
 
-fn pr(path: &str, options: OutputOptions) -> std::io::Result<()> {
+fn pr(path: &str, options: &OutputOptions) -> i32 {
     let mut i = 0;
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
     let file_last_modified_time = file_last_modified_time(path);
-    let reader = open(path);
-    // TODO Handle error here
-    let lines: Lines<BufReader<Box<Read>>> = reader.map(|i| {
-        BufReader::new(i).lines()
-    }).unwrap();
+    match open(path) {
+        Ok(reader) => {
+            // TODO Replace the loop
+            for line in BufReader::new(reader).lines() {
+                if i == CONTENT_LINES_PER_PAGE {
+                    page = page + 1;
+                    i = 0;
+                    prepare_page(&file_last_modified_time, &mut buffered_content, options, &page);
+                }
+                match line {
+                    Ok(content) => buffered_content.push(content),
+                    Err(error) => {
+                        writeln!(&mut stderr(), "pr: Unable to read from input type {}\n{}", path, error.to_string());
+                        return -1;
+                    }
+                }
+                i = i + 1;
+            }
 
-    for line in lines {
-        if i == CONTENT_LINES_PER_PAGE {
-            page = page + 1;
-            i = 0;
-            flush_buffered_page(&file_last_modified_time, &mut buffered_content, &options, page);
+            if i != 0 {
+                page = page + 1;
+                prepare_page(&file_last_modified_time, &mut buffered_content, options, &page);
+            }
         }
-        i = i + 1;
-        buffered_content.push(line?);
+        Err(error) => {
+            writeln!(&mut stderr(), "{}", error);
+            return -1;
+        }
     }
-    if i != 0 {
-        page = page + 1;
-        flush_buffered_page(&file_last_modified_time, &mut buffered_content, &options, page);
-    }
-    Ok(())
+    return 0;
 }
 
-fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &OutputOptions, page: usize) -> String {
-    let mut page_content: Vec<String> = Vec::new();
-    let trailer_content = trailer_content();
-    assert_eq!(lines.len() <= CONTENT_LINES_PER_PAGE, true, "Only {} lines of content allowed in a pr output page", CONTENT_LINES_PER_PAGE.to_string());
-    assert_eq!(header_content.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE.to_string());
-    assert_eq!(trailer_content.len(), TRAILER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr trailer", TRAILER_LINES_PER_PAGE.to_string());
+fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &OutputOptions, page: &usize) {
+    let trailer_content: Vec<String> = trailer_content();
+    assert_eq!(lines.len() <= CONTENT_LINES_PER_PAGE, true, "Only {} lines of content allowed in a pr output page", CONTENT_LINES_PER_PAGE);
+    assert_eq!(header_content.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE);
+    assert_eq!(trailer_content.len(), TRAILER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr trailer", TRAILER_LINES_PER_PAGE);
+    let out: &mut Stdout = &mut stdout();
+    let new_line: &[u8] = "\n".as_bytes();
+    out.lock();
     for x in header_content {
-        page_content.push(x.to_string());
+        out.write(x.as_bytes());
+        out.write(new_line);
     }
 
     let width: usize = options.as_ref()
@@ -258,37 +286,39 @@ fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &Outpu
     let mut i = 1;
     for x in lines {
         if options.number.is_none() {
-            page_content.push(x.to_string());
+            out.write(x.as_bytes());
         } else {
-            let fmtd_line_number: String = get_fmtd_line_number(width, prev_lines + i, &separator);
-            page_content.push(format!("{}{}", fmtd_line_number, x.to_string()));
+            let fmtd_line_number: String = get_fmtd_line_number(&width, prev_lines + i, &separator);
+            out.write(format!("{}{}", fmtd_line_number, x).as_bytes());
         }
+        out.write(new_line);
         i = i + 1;
     }
-    page_content.extend(trailer_content);
-    page_content.join("\n")
+    for x in trailer_content {
+        out.write(x.as_bytes());
+        out.write(new_line);
+    }
+    out.flush();
 }
 
-fn get_fmtd_line_number(width: usize, line_number: usize, separator: &String) -> String {
-    format!("{:>width$}{}", take_last_n(&line_number.to_string(), width), separator, width = width)
-}
-
-fn take_last_n(s: &String, n: usize) -> &str {
-    if s.len() >= n {
-        &s[s.len() - n..]
+fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -> String {
+    let line_str = line_number.to_string();
+    if line_str.len() >= *width {
+        format!("{:>width$}{}", &line_str[line_str.len() - *width..], separator, width = width)
     } else {
-        s
+        format!("{:>width$}{}", line_str, separator, width = width)
     }
 }
 
-fn flush_buffered_page(file_last_modified_time: &String, buffered_content: &mut Vec<String>, options: &OutputOptions, page: usize) {
-    let header = header_content(file_last_modified_time, &options.header, page);
-    print!("{}", print_page(&header, buffered_content, &options, page));
+
+fn prepare_page(file_last_modified_time: &String, buffered_content: &mut Vec<String>, options: &OutputOptions, page: &usize) {
+    let header: Vec<String> = header_content(file_last_modified_time, &options.header, &page);
+    print_page(&header, buffered_content, &options, &page);
     buffered_content.clear();
 }
 
-fn header_content(last_modified: &String, header: &String, page: usize) -> Vec<String> {
-    let first_line: String = format!("{} {} Page {}", last_modified, header, page.to_string());
+fn header_content(last_modified: &String, header: &String, page: &usize) -> Vec<String> {
+    let first_line: String = format!("{} {} Page {}", last_modified, header, page);
     vec!["".to_string(), "".to_string(), first_line, "".to_string(), "".to_string()]
 }
 
