@@ -8,18 +8,22 @@
 
 extern crate getopts;
 extern crate chrono;
+#[cfg(unix)]
+extern crate unix_socket;
 
-//#[macro_use]
-//extern crate uucore;
-use std::fs;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+#[macro_use]
+extern crate uucore;
+
+use std::io::{BufRead, BufReader, Lines, stdin};
 use std::vec::Vec;
 use chrono::offset::Local;
 use chrono::DateTime;
 use getopts::Matches;
-
-//use uucore::fs::is_stdin_interactive;
+use getopts::Options;
+use std::io::{self, Read};
+use std::fs::{metadata, File};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 
 
 static NAME: &str = "pr";
@@ -58,6 +62,21 @@ impl Default for NumberingMode {
     }
 }
 
+enum InputType {
+    Directory,
+    File,
+    StdIn,
+    SymLink,
+    #[cfg(unix)]
+    BlockDevice,
+    #[cfg(unix)]
+    CharacterDevice,
+    #[cfg(unix)]
+    Fifo,
+    #[cfg(unix)]
+    Socket,
+}
+
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -93,16 +112,35 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
+    let mut files = matches.free.clone();
+    if files.is_empty() {
+        //For stdin
+        files.push("-".to_owned());
+    }
 
-    if matches.opt_present("help") || matches.free.is_empty() {
-        println!("{} {} -- print files", NAME, VERSION);
-        println!();
-        println!("Usage: {} [+page] [-column] [-adFfmprt] [[-e] [char] [gap]]
+    if matches.opt_present("help") {
+        return print_usage(&mut opts, &matches);
+    }
+
+
+    for f in files {
+        let header: String = matches.opt_str("h").unwrap_or(f.to_string());
+        let options = build_options(&matches, header);
+        pr(&f, options);
+    }
+
+    0
+}
+
+fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
+    println!("{} {} -- print files", NAME, VERSION);
+    println!();
+    println!("Usage: {} [+page] [-column] [-adFfmprt] [[-e] [char] [gap]]
         [-L locale] [-h header] [[-i] [char] [gap]]
         [-l lines] [-o offset] [[-s] [char]] [[-n] [char]
         [width]] [-w width] [-] [file ...].", NAME);
-        println!();
-        let usage: &str = "The pr utility is a printing and pagination filter
+    println!();
+    let usage: &str = "The pr utility is a printing and pagination filter
      for text files.  When multiple input files are spec-
      ified, each is read, formatted, and written to stan-
      dard output.  By default, the input is separated
@@ -122,27 +160,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
      are separated by at least one <blank>.  Input lines
      that do not fit into a text column are truncated.
      Lines are not truncated under single column output.";
-        println!("{}", opts.usage(usage));
-        if matches.free.is_empty() {
-            return 1;
-        }
-        return 0;
+    println!("{}", opts.usage(usage));
+    if matches.free.is_empty() {
+        return 1;
     }
-
-
-    let mut files = matches.free.clone();
-    if files.is_empty() {
-        //For stdin
-        files.push("-".to_owned());
-    }
-
-    for f in files {
-        let header: String = matches.opt_str("h").unwrap_or(f.to_string());
-        let options = build_options(&matches, header);
-        pr(&f, options);
-    }
-
-    0
+    return 0;
 }
 
 fn build_options(matches: &Matches, header: String) -> OutputOptions {
@@ -163,13 +185,40 @@ fn build_options(matches: &Matches, header: String) -> OutputOptions {
     }
 }
 
+fn open(path: &str) -> Option<Box<Read>> {
+    // TODO Use Result instead of Option
+    if path == "-" {
+        let stdin = stdin();
+        return Some(Box::new(stdin) as Box<Read>);
+    }
+
+    match get_input_type(path)? {
+        InputType::Directory => None,
+        #[cfg(unix)]
+        InputType::Socket => {
+            // TODO Add reading from socket
+            None
+        }
+        _ => {
+            match File::open(path) {
+                Ok(file) => Some(Box::new(file) as Box<Read>),
+                _ => None
+            }
+        }
+    }
+}
+
 fn pr(path: &str, options: OutputOptions) -> std::io::Result<()> {
-    let file = File::open(path)?;
-    let file_last_modified_time = file_last_modified_time(path);
-    let lines = BufReader::new(file).lines();
     let mut i = 0;
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
+    let file_last_modified_time = file_last_modified_time(path);
+    let reader = open(path);
+    // TODO Handle error here
+    let lines: Lines<BufReader<Box<Read>>> = reader.map(|i| {
+        BufReader::new(i).lines()
+    }).unwrap();
+
     for line in lines {
         if i == CONTENT_LINES_PER_PAGE {
             page = page + 1;
@@ -244,7 +293,7 @@ fn header_content(last_modified: &String, header: &String, page: usize) -> Vec<S
 }
 
 fn file_last_modified_time(path: &str) -> String {
-    let file_metadata = fs::metadata(path);
+    let file_metadata = metadata(path);
     return file_metadata.map(|i| {
         return i.modified().map(|x| {
             let datetime: DateTime<Local> = x.into();
@@ -255,4 +304,39 @@ fn file_last_modified_time(path: &str) -> String {
 
 fn trailer_content() -> Vec<String> {
     vec!["".to_string(), "".to_string(), "".to_string(), "".to_string(), "".to_string()]
+}
+
+fn get_input_type(path: &str) -> Option<InputType> {
+    if path == "-" {
+        return Some(InputType::StdIn);
+    }
+
+    metadata(path).map(|i| {
+        match i.file_type() {
+            #[cfg(unix)]
+            ft if ft.is_block_device() =>
+                {
+                    Some(InputType::BlockDevice)
+                }
+            #[cfg(unix)]
+            ft if ft.is_char_device() =>
+                {
+                    Some(InputType::CharacterDevice)
+                }
+            #[cfg(unix)]
+            ft if ft.is_fifo() =>
+                {
+                    Some(InputType::Fifo)
+                }
+            #[cfg(unix)]
+            ft if ft.is_socket() =>
+                {
+                    Some(InputType::Socket)
+                }
+            ft if ft.is_dir() => Some(InputType::Directory),
+            ft if ft.is_file() => Some(InputType::File),
+            ft if ft.is_symlink() => Some(InputType::SymLink),
+            _ => None
+        }
+    }).unwrap_or(None)
 }

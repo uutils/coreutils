@@ -17,6 +17,9 @@ chrono = "0.4.6"
 path = "../uucore"
 features = ["libc"]
 
+[target.'cfg(unix)'.dependencies]
+unix_socket = "0.5.0"
+
 [[bin]]
 name = "pr"
 path = "../../uumain.rs"
