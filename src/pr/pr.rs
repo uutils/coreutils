@@ -38,6 +38,8 @@ struct OutputOptions {
     /// Line numbering mode
     number: Option<NumberingMode>,
     header: String,
+    double_spaced: bool,
+    line_separator: String
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -107,6 +109,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "Use the string header to replace the file name \
      in the header line.",
         "STRING",
+    );
+
+    opts.optflag(
+        "d",
+        "",
+        "Produce output that is double spaced. An extra <newline> character is output following every <newline>
+           found in the input.",
     );
 
     opts.optflagopt(
@@ -200,9 +209,18 @@ fn build_options(matches: &Matches, header: &String) -> OutputOptions {
         }
         return None;
     });
+
+    let line_separator: String = if matches.opt_present("d") {
+        "\n\n".to_string()
+    } else {
+        "\n".to_string()
+    };
+
     OutputOptions {
         number: numbering_options,
         header: header.to_string(),
+        double_spaced: matches.opt_present("d"),
+        line_separator
     }
 }
 
@@ -266,11 +284,12 @@ fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &Outpu
     assert_eq!(header_content.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE);
     assert_eq!(trailer_content.len(), TRAILER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr trailer", TRAILER_LINES_PER_PAGE);
     let out: &mut Stdout = &mut stdout();
-    let new_line: &[u8] = "\n".as_bytes();
+    let line_separator = options.as_ref().line_separator.as_bytes();
+
     out.lock();
     for x in header_content {
         out.write(x.as_bytes());
-        out.write(new_line);
+        out.write(line_separator);
     }
 
     let width: usize = options.as_ref()
@@ -291,12 +310,12 @@ fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &Outpu
             let fmtd_line_number: String = get_fmtd_line_number(&width, prev_lines + i, &separator);
             out.write(format!("{}{}", fmtd_line_number, x).as_bytes());
         }
-        out.write(new_line);
+        out.write(line_separator);
         i = i + 1;
     }
     for x in trailer_content {
         out.write(x.as_bytes());
-        out.write(new_line);
+        out.write(line_separator);
     }
     out.flush();
 }
