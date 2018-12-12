@@ -36,6 +36,7 @@ static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
 static STRING_HEADER_OPTION: &str = "h";
 static DOUBLE_SPACE_OPTION: &str = "d";
 static NUMBERING_MODE_OPTION: &str = "n";
+static PAGE_RANGE_OPTION: &str = "page";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 
@@ -45,6 +46,8 @@ struct OutputOptions {
     header: String,
     line_separator: String,
     last_modified_time: String,
+    start_page: Option<usize>,
+    end_page: Option<usize>,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -89,6 +92,12 @@ impl From<Error> for PrError {
     }
 }
 
+impl From<std::num::ParseIntError> for PrError {
+    fn from(err: std::num::ParseIntError) -> Self {
+        PrError::EncounteredErrors(err.to_string())
+    }
+}
+
 quick_error! {
     #[derive(Debug)]
     enum PrError {
@@ -103,7 +112,7 @@ quick_error! {
         }
 
         EncounteredErrors(msg: String) {
-            display("pr: {0} encountered", msg)
+            display("pr: {0}", msg)
         }
 
         IsDirectory(path: String) {
@@ -118,6 +127,13 @@ quick_error! {
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
+
+    opts.optflagopt(
+        "",
+        PAGE_RANGE_OPTION,
+        "Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]",
+        "FIRST_PAGE[:LAST_PAGE]",
+    );
 
     opts.optopt(
         STRING_HEADER_OPTION,
@@ -169,12 +185,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     for f in files {
         let header: &String = &matches.opt_str(STRING_HEADER_OPTION).unwrap_or(f.to_string());
-        let options: &OutputOptions = &build_options(&matches, header, &f);
+        let result_options = build_options(&matches, header, &f);
+        if result_options.is_err() {
+            writeln!(&mut stderr(), "{}", result_options.err().unwrap());
+            return 1;
+        }
+        let options = &result_options.unwrap();
         let status: i32 = match pr(&f, options) {
             Err(error) => {
                 writeln!(&mut stderr(), "{}", error);
-                -1
-            },
+                1
+            }
             _ => 0
         };
         if status != 0 {
@@ -219,7 +240,7 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     return 0;
 }
 
-fn build_options(matches: &Matches, header: &String, path: &String) -> OutputOptions {
+fn build_options(matches: &Matches, header: &String, path: &String) -> Result<OutputOptions, PrError> {
     let numbering_options: Option<NumberingMode> = matches.opt_str(NUMBERING_MODE_OPTION).map(|i| {
         NumberingMode {
             width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
@@ -244,12 +265,36 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> OutputOpt
         file_last_modified_time(path)
     };
 
-    OutputOptions {
+    let start_page = match matches.opt_str(PAGE_RANGE_OPTION).map(|i| {
+        let x: Vec<&str> = i.split(":").collect();
+        x[0].parse::<usize>()
+    }) {
+        Some(res) => Some(res?),
+        _ => None
+    };
+
+    let end_page = match matches.opt_str(PAGE_RANGE_OPTION)
+        .filter(|i| i.contains(":"))
+        .map(|i| {
+            let x: Vec<&str> = i.split(":").collect();
+            x[1].parse::<usize>()
+        }) {
+        Some(res) => Some(res?),
+        _ => None
+    };
+
+    if start_page.is_some() && end_page.is_some() && start_page.unwrap() > end_page.unwrap() {
+        return Err(PrError::EncounteredErrors(format!("invalid page range ‘{}:{}’", start_page.unwrap(), end_page.unwrap())));
+    }
+
+    Ok(OutputOptions {
         number: numbering_options,
         header: header.to_string(),
         line_separator,
         last_modified_time,
-    }
+        start_page,
+        end_page,
+    })
 }
 
 fn open(path: &str) -> Result<Box<Read>, PrError> {
@@ -292,6 +337,13 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 }
 
 fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
+    let start_page = options.as_ref().start_page.as_ref();
+    let last_page = options.as_ref().end_page.as_ref();
+    let is_within_print_range = (start_page.is_none() || page >= start_page.unwrap()) &&
+        (last_page.is_none() || page <= last_page.unwrap());
+    if !is_within_print_range {
+        return Ok(0);
+    }
     let header: Vec<String> = header_content(options, page);
     let trailer_content: Vec<String> = trailer_content();
     assert_eq!(lines.len() <= CONTENT_LINES_PER_PAGE, true, "Only {} lines of content allowed in a pr output page", CONTENT_LINES_PER_PAGE);
