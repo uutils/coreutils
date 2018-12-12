@@ -33,6 +33,9 @@ static TRAILER_LINES_PER_PAGE: usize = 5;
 static CONTENT_LINES_PER_PAGE: usize = LINES_PER_PAGE - HEADER_LINES_PER_PAGE - TRAILER_LINES_PER_PAGE;
 static NUMBERING_MODE_DEFAULT_SEPARATOR: &str = "\t";
 static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
+static STRING_HEADER_OPTION: &str = "h";
+static NUMBERING_MODE_OPTION: &str = "n";
+static FILE_STDIN: &str = "-";
 
 struct OutputOptions {
     /// Line numbering mode
@@ -105,7 +108,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
     opts.optopt(
-        "h",
+        STRING_HEADER_OPTION,
         "",
         "Use the string header to replace the file name \
      in the header line.",
@@ -120,7 +123,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     );
 
     opts.optflagopt(
-        "n",
+        NUMBERING_MODE_OPTION,
         "",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
            the first width column positions of each text column or each line of -m output.  If char (any nondigit
@@ -145,7 +148,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut files: Vec<String> = matches.free.clone();
     if files.is_empty() {
         //For stdin
-        files.push("-".to_owned());
+        files.push(FILE_STDIN.to_owned());
     }
 
     if matches.opt_present("help") {
@@ -153,7 +156,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     for f in files {
-        let header: &String = &matches.opt_str("h").unwrap_or(f.to_string());
+        let header: &String = &matches.opt_str(STRING_HEADER_OPTION).unwrap_or(f.to_string());
         let options: &OutputOptions = &build_options(&matches, header, &f);
         let status: i32 = pr(&f, options);
         if status != 0 {
@@ -199,13 +202,13 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
 }
 
 fn build_options(matches: &Matches, header: &String, path: &String) -> OutputOptions {
-    let numbering_options: Option<NumberingMode> = matches.opt_str("n").map(|i| {
+    let numbering_options: Option<NumberingMode> = matches.opt_str(NUMBERING_MODE_OPTION).map(|i| {
         NumberingMode {
             width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
             separator: NumberingMode::default().separator,
         }
     }).or_else(|| {
-        if matches.opt_present("n") {
+        if matches.opt_present(NUMBERING_MODE_OPTION) {
             return Some(NumberingMode::default());
         }
         return None;
@@ -217,7 +220,7 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> OutputOpt
         "\n".to_string()
     };
 
-    let last_modified_time = if path.eq("-") {
+    let last_modified_time = if path.eq(FILE_STDIN) {
         current_time()
     } else {
         file_last_modified_time(path)
@@ -368,7 +371,7 @@ fn trailer_content() -> Vec<String> {
 }
 
 fn get_input_type(path: &str) -> Option<InputType> {
-    if path == "-" {
+    if path == FILE_STDIN {
         return Some(InputType::StdIn);
     }
 
