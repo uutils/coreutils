@@ -44,6 +44,7 @@ struct OutputOptions {
     /// Line numbering mode
     number: Option<NumberingMode>,
     header: String,
+    double_space: bool,
     line_separator: String,
     last_modified_time: String,
     start_page: Option<usize>,
@@ -253,11 +254,15 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         return None;
     });
 
-    let line_separator: String = if matches.opt_present("d") {
+    let double_space = matches.opt_present(DOUBLE_SPACE_OPTION);
+
+    let line_separator: String = if double_space {
         "\n\n".to_string()
     } else {
         "\n".to_string()
     };
+
+
 
     let last_modified_time = if path.eq(FILE_STDIN) {
         current_time()
@@ -290,6 +295,7 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
     Ok(OutputOptions {
         number: numbering_options,
         header: header.to_string(),
+        double_space,
         line_separator,
         last_modified_time,
         start_page,
@@ -317,9 +323,13 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut i = 0;
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
-
+    let lines_per_page = if options.as_ref().double_space {
+        CONTENT_LINES_PER_PAGE / 2
+    } else {
+        CONTENT_LINES_PER_PAGE
+    };
     for line in BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines() {
-        if i == CONTENT_LINES_PER_PAGE {
+        if i == lines_per_page {
             page = page + 1;
             i = 0;
             print_page(&buffered_content, options, &page)?;
