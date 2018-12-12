@@ -34,6 +34,7 @@ static CONTENT_LINES_PER_PAGE: usize = LINES_PER_PAGE - HEADER_LINES_PER_PAGE - 
 static NUMBERING_MODE_DEFAULT_SEPARATOR: &str = "\t";
 static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
 static STRING_HEADER_OPTION: &str = "h";
+static DOUBLE_SPACE_OPTION: &str = "d";
 static NUMBERING_MODE_OPTION: &str = "n";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
@@ -120,15 +121,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.optopt(
         STRING_HEADER_OPTION,
-        "",
+        "header",
         "Use the string header to replace the file name \
      in the header line.",
         "STRING",
     );
 
     opts.optflag(
-        "d",
-        "",
+        DOUBLE_SPACE_OPTION,
+        "double-space",
         "Produce output that is double spaced. An extra <newline> character is output following every <newline>
            found in the input.",
     );
