@@ -98,8 +98,13 @@ quick_error! {
         EncounteredErrors(msg: String) {
             display("pr: {0} encountered", msg)
         }
+
         IsDirectory(path: String) {
             display("pr: {0}: Is a directory", path)
+        }
+
+        IsSocket(path: String) {
+            display("pr: cannot open {}, Operation not supported on socket", path)
         }
     }
 }
@@ -240,8 +245,7 @@ fn open(path: &str) -> Result<Box<Read>, PrError> {
         Some(InputType::Directory) => Err(PrError::IsDirectory(path.to_string())),
         #[cfg(unix)]
         Some(InputType::Socket) => {
-            // TODO Add reading from socket
-            Err(PrError::EncounteredErrors("Reading from socket not supported yet".to_string()))
+            Err(PrError::IsSocket(path.to_string()))
         }
         Some(InputType::StdIn) => {
             let stdin = stdin();
