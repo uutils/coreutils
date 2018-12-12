@@ -23,7 +23,7 @@ use std::fs::{metadata, File};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use quick_error::ResultExt;
-
+use std::convert::From;
 
 static NAME: &str = "pr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -36,12 +36,12 @@ static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
 static STRING_HEADER_OPTION: &str = "h";
 static NUMBERING_MODE_OPTION: &str = "n";
 static FILE_STDIN: &str = "-";
+static READ_BUFFER_SIZE: usize = 1024 * 64;
 
 struct OutputOptions {
     /// Line numbering mode
     number: Option<NumberingMode>,
     header: String,
-    double_spaced: bool,
     line_separator: String,
     last_modified_time: String,
 }
@@ -80,6 +80,12 @@ enum InputType {
     Fifo,
     #[cfg(unix)]
     Socket,
+}
+
+impl From<Error> for PrError {
+    fn from(err: Error) -> Self {
+        PrError::EncounteredErrors(err.to_string())
+    }
 }
 
 quick_error! {
@@ -163,7 +169,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     for f in files {
         let header: &String = &matches.opt_str(STRING_HEADER_OPTION).unwrap_or(f.to_string());
         let options: &OutputOptions = &build_options(&matches, header, &f);
-        let status: i32 = pr(&f, options);
+        let status: i32 = match pr(&f, options) {
+            Err(error) => {
+                writeln!(&mut stderr(), "{}", error);
+                -1
+            },
+            _ => 0
+        };
         if status != 0 {
             return status;
         }
@@ -234,7 +246,6 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> OutputOpt
     OutputOptions {
         number: numbering_options,
         header: header.to_string(),
-        double_spaced: matches.opt_present("d"),
         line_separator,
         last_modified_time,
     }
@@ -256,54 +267,44 @@ fn open(path: &str) -> Result<Box<Read>, PrError> {
     }
 }
 
-fn pr(path: &str, options: &OutputOptions) -> i32 {
+fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut i = 0;
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
-    match open(path) {
-        Ok(reader) => {
-            // TODO Replace the loop
-            for line in BufReader::new(reader).lines() {
-                if i == CONTENT_LINES_PER_PAGE {
-                    page = page + 1;
-                    i = 0;
-                    prepare_page(&mut buffered_content, options, &page);
-                }
-                match line {
-                    Ok(content) => buffered_content.push(content),
-                    Err(error) => {
-                        writeln!(&mut stderr(), "pr: Unable to read from input type {}\n{}", path, error.to_string());
-                        return -1;
-                    }
-                }
-                i = i + 1;
-            }
 
-            if i != 0 {
-                page = page + 1;
-                prepare_page(&mut buffered_content, options, &page);
-            }
+    for line in BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines() {
+        if i == CONTENT_LINES_PER_PAGE {
+            page = page + 1;
+            i = 0;
+            print_page(&buffered_content, options, &page)?;
+            buffered_content = Vec::new();
         }
-        Err(error) => {
-            writeln!(&mut stderr(), "{}", error);
-            return -1;
-        }
+        buffered_content.push(line?);
+        i = i + 1;
     }
-    return 0;
+
+    if i != 0 {
+        page = page + 1;
+        print_page(&buffered_content, options, &page)?;
+    }
+    return Ok(0);
 }
 
-fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &OutputOptions, page: &usize) {
+fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
+    let header: Vec<String> = header_content(options, page);
     let trailer_content: Vec<String> = trailer_content();
     assert_eq!(lines.len() <= CONTENT_LINES_PER_PAGE, true, "Only {} lines of content allowed in a pr output page", CONTENT_LINES_PER_PAGE);
-    assert_eq!(header_content.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE);
+    assert_eq!(header.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE);
     assert_eq!(trailer_content.len(), TRAILER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr trailer", TRAILER_LINES_PER_PAGE);
     let out: &mut Stdout = &mut stdout();
     let line_separator = options.as_ref().line_separator.as_bytes();
+    let mut lines_written = 0;
 
     out.lock();
-    for x in header_content {
-        out.write(x.as_bytes());
-        out.write(line_separator);
+    for x in header {
+        out.write(x.as_bytes())?;
+        out.write(line_separator)?;
+        lines_written += 1;
     }
 
     let width: usize = options.as_ref()
@@ -319,19 +320,22 @@ fn print_page(header_content: &Vec<String>, lines: &Vec<String>, options: &Outpu
     let mut i = 1;
     for x in lines {
         if options.number.is_none() {
-            out.write(x.as_bytes());
+            out.write(x.as_bytes())?;
         } else {
             let fmtd_line_number: String = get_fmtd_line_number(&width, prev_lines + i, &separator);
-            out.write(format!("{}{}", fmtd_line_number, x).as_bytes());
+            out.write(format!("{}{}", fmtd_line_number, x).as_bytes())?;
         }
-        out.write(line_separator);
+        out.write(line_separator)?;
         i = i + 1;
     }
+    lines_written += i - 1;
     for x in trailer_content {
-        out.write(x.as_bytes());
-        out.write(line_separator);
+        out.write(x.as_bytes())?;
+        out.write(line_separator)?;
+        lines_written += 1;
     }
-    out.flush();
+    out.flush()?;
+    Ok(lines_written)
 }
 
 fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -> String {
@@ -343,12 +347,6 @@ fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -
     }
 }
 
-
-fn prepare_page(buffered_content: &mut Vec<String>, options: &OutputOptions, page: &usize) {
-    let header: Vec<String> = header_content(&options, &page);
-    print_page(&header, buffered_content, &options, &page);
-    buffered_content.clear();
-}
 
 fn header_content(options: &OutputOptions, page: &usize) -> Vec<String> {
     let first_line: String = format!("{} {} Page {}", options.last_modified_time, options.header, page);
