@@ -39,7 +39,8 @@ struct OutputOptions {
     number: Option<NumberingMode>,
     header: String,
     double_spaced: bool,
-    line_separator: String
+    line_separator: String,
+    last_modified_time: String,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -153,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     for f in files {
         let header: &String = &matches.opt_str("h").unwrap_or(f.to_string());
-        let options: &OutputOptions = &build_options(&matches, header);
+        let options: &OutputOptions = &build_options(&matches, header, &f);
         let status: i32 = pr(&f, options);
         if status != 0 {
             return status;
@@ -197,7 +198,7 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     return 0;
 }
 
-fn build_options(matches: &Matches, header: &String) -> OutputOptions {
+fn build_options(matches: &Matches, header: &String, path: &String) -> OutputOptions {
     let numbering_options: Option<NumberingMode> = matches.opt_str("n").map(|i| {
         NumberingMode {
             width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
@@ -216,11 +217,18 @@ fn build_options(matches: &Matches, header: &String) -> OutputOptions {
         "\n".to_string()
     };
 
+    let last_modified_time = if path.eq("-") {
+        current_time()
+    } else {
+        file_last_modified_time(path)
+    };
+
     OutputOptions {
         number: numbering_options,
         header: header.to_string(),
         double_spaced: matches.opt_present("d"),
-        line_separator
+        line_separator,
+        last_modified_time,
     }
 }
 
@@ -245,7 +253,6 @@ fn pr(path: &str, options: &OutputOptions) -> i32 {
     let mut i = 0;
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
-    let file_last_modified_time = file_last_modified_time(path);
     match open(path) {
         Ok(reader) => {
             // TODO Replace the loop
@@ -253,7 +260,7 @@ fn pr(path: &str, options: &OutputOptions) -> i32 {
                 if i == CONTENT_LINES_PER_PAGE {
                     page = page + 1;
                     i = 0;
-                    prepare_page(&file_last_modified_time, &mut buffered_content, options, &page);
+                    prepare_page(&mut buffered_content, options, &page);
                 }
                 match line {
                     Ok(content) => buffered_content.push(content),
@@ -267,7 +274,7 @@ fn pr(path: &str, options: &OutputOptions) -> i32 {
 
             if i != 0 {
                 page = page + 1;
-                prepare_page(&file_last_modified_time, &mut buffered_content, options, &page);
+                prepare_page(&mut buffered_content, options, &page);
             }
         }
         Err(error) => {
@@ -330,14 +337,14 @@ fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -
 }
 
 
-fn prepare_page(file_last_modified_time: &String, buffered_content: &mut Vec<String>, options: &OutputOptions, page: &usize) {
-    let header: Vec<String> = header_content(file_last_modified_time, &options.header, &page);
+fn prepare_page(buffered_content: &mut Vec<String>, options: &OutputOptions, page: &usize) {
+    let header: Vec<String> = header_content(&options, &page);
     print_page(&header, buffered_content, &options, &page);
     buffered_content.clear();
 }
 
-fn header_content(last_modified: &String, header: &String, page: &usize) -> Vec<String> {
-    let first_line: String = format!("{} {} Page {}", last_modified, header, page);
+fn header_content(options: &OutputOptions, page: &usize) -> Vec<String> {
+    let first_line: String = format!("{} {} Page {}", options.last_modified_time, options.header, page);
     vec!["".to_string(), "".to_string(), first_line, "".to_string(), "".to_string()]
 }
 
@@ -349,6 +356,11 @@ fn file_last_modified_time(path: &str) -> String {
             datetime.format("%b %d %H:%M %Y").to_string()
         }).unwrap_or(String::new());
     }).unwrap_or(String::new());
+}
+
+fn current_time() -> String {
+    let datetime: DateTime<Local> = Local::now();
+    datetime.format("%b %d %H:%M %Y").to_string()
 }
 
 fn trailer_content() -> Vec<String> {
