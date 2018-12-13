@@ -40,6 +40,8 @@ static NUMBERING_MODE_OPTION: &str = "n";
 static PAGE_RANGE_OPTION: &str = "page";
 static NO_HEADER_TRAILER_OPTION: &str = "t";
 static PAGE_LENGTH_OPTION: &str = "l";
+static SUPPRESS_PRINTING_ERROR: &str = "r";
+static FORM_FEED_OPTION: &str = "F";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 
@@ -55,6 +57,8 @@ struct OutputOptions {
     display_header: bool,
     display_trailer: bool,
     content_lines_per_page: usize,
+    suppress_errors: bool,
+    page_separator_char: String,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -197,6 +201,24 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Occur::Optional,
     );
 
+    opts.opt(
+        SUPPRESS_PRINTING_ERROR,
+        "no-file-warnings",
+        "omit warning when a file cannot be opened",
+        "",
+        HasArg::No,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        FORM_FEED_OPTION,
+        "form-feed",
+        "Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.",
+        "",
+        HasArg::No,
+        Occur::Optional,
+    );
+
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -230,7 +252,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let options = &result_options.unwrap();
         let status: i32 = match pr(&f, options) {
             Err(error) => {
-                writeln!(&mut stderr(), "{}", error);
+                if !options.suppress_errors {
+                    writeln!(&mut stderr(), "{}", error);
+                }
                 1
             }
             _ => 0
@@ -338,6 +362,11 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
     let display_header_and_trailer = !(page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE))
         && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
 
+    let suppress_errors = matches.opt_present(SUPPRESS_PRINTING_ERROR);
+
+    let page_separator_char = matches.opt_str(FORM_FEED_OPTION).map(|i| {
+        '\u{000A}'.to_string()
+    }).unwrap_or("\n".to_string());
 
     Ok(OutputOptions {
         number: numbering_options,
@@ -350,6 +379,8 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         display_header: display_header_and_trailer,
         display_trailer: display_header_and_trailer,
         content_lines_per_page,
+        suppress_errors,
+        page_separator_char,
     })
 }
 
@@ -403,6 +434,7 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Res
     let content_lines_per_page = options.as_ref().content_lines_per_page;
     let is_within_print_range = (start_page.is_none() || page >= start_page.unwrap()) &&
         (last_page.is_none() || page <= last_page.unwrap());
+    let page_separator = options.as_ref().page_separator_char.as_bytes();
     if !is_within_print_range {
         return Ok(0);
     }
@@ -447,13 +479,24 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Res
             let fmtd_line_number: String = get_fmtd_line_number(&width, prev_lines + i, &separator);
             out.write(format!("{}{}", fmtd_line_number, x).as_bytes())?;
         }
-        out.write(line_separator)?;
+
+        if i == trailer_content.len() {
+            out.write(page_separator)?;
+        } else {
+            out.write(line_separator)?;
+        }
+
         i = i + 1;
     }
     lines_written += i - 1;
-    for x in trailer_content {
+    for index in 0..trailer_content.len() {
+        let x: &String = trailer_content.get(index).unwrap();
         out.write(x.as_bytes())?;
-        out.write(line_separator)?;
+        if index + 1 == trailer_content.len() {
+            out.write(page_separator)?;
+        } else {
+            out.write(line_separator)?;
+        }
         lines_written += 1;
     }
     out.flush()?;
