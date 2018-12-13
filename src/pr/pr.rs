@@ -24,19 +24,22 @@ use std::fs::{metadata, File};
 use std::os::unix::fs::FileTypeExt;
 use quick_error::ResultExt;
 use std::convert::From;
+use getopts::HasArg;
+use getopts::Occur;
 
 static NAME: &str = "pr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static LINES_PER_PAGE: usize = 66;
 static HEADER_LINES_PER_PAGE: usize = 5;
 static TRAILER_LINES_PER_PAGE: usize = 5;
-static CONTENT_LINES_PER_PAGE: usize = LINES_PER_PAGE - HEADER_LINES_PER_PAGE - TRAILER_LINES_PER_PAGE;
 static NUMBERING_MODE_DEFAULT_SEPARATOR: &str = "\t";
 static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
 static STRING_HEADER_OPTION: &str = "h";
 static DOUBLE_SPACE_OPTION: &str = "d";
 static NUMBERING_MODE_OPTION: &str = "n";
 static PAGE_RANGE_OPTION: &str = "page";
+static NO_HEADER_TRAILER_OPTION: &str = "t";
+static PAGE_LENGTH_OPTION: &str = "l";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 
@@ -49,6 +52,9 @@ struct OutputOptions {
     last_modified_time: String,
     start_page: Option<usize>,
     end_page: Option<usize>,
+    display_header: bool,
+    display_trailer: bool,
+    content_lines_per_page: usize,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -129,29 +135,36 @@ quick_error! {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflagopt(
+    opts.opt(
         "",
         PAGE_RANGE_OPTION,
         "Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]",
         "FIRST_PAGE[:LAST_PAGE]",
+        HasArg::Yes,
+        Occur::Optional,
     );
 
-    opts.optopt(
+    opts.opt(
         STRING_HEADER_OPTION,
         "header",
         "Use the string header to replace the file name \
      in the header line.",
         "STRING",
+        HasArg::Yes,
+        Occur::Optional,
     );
 
-    opts.optflag(
+    opts.opt(
         DOUBLE_SPACE_OPTION,
         "double-space",
         "Produce output that is double spaced. An extra <newline> character is output following every <newline>
            found in the input.",
+        "",
+        HasArg::No,
+        Occur::Optional,
     );
 
-    opts.optflagopt(
+    opts.opt(
         NUMBERING_MODE_OPTION,
         "",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
@@ -159,6 +172,29 @@ pub fn uumain(args: Vec<String>) -> i32 {
            character) is given, it is appended to the line number to separate it from whatever follows.  The default
            for char is a <tab>.  Line numbers longer than width columns are truncated.",
         "[char][width]",
+        HasArg::Yes,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        NO_HEADER_TRAILER_OPTION,
+        "omit-header",
+        "Write neither the five-line identifying header nor the five-line trailer usually supplied for  each  page.  Quit
+              writing after the last line of each file without spacing to the end of the page.",
+        "",
+        HasArg::No,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        PAGE_LENGTH_OPTION,
+        "length",
+        "Override the 66-line default and reset the page length to lines.  If lines is not greater than the sum  of  both
+              the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the
+              -t option were in effect.",
+        "lines",
+        HasArg::Yes,
+        Occur::Optional,
     );
 
     opts.optflag("", "help", "display this help and exit");
@@ -262,8 +298,6 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         "\n".to_string()
     };
 
-
-
     let last_modified_time = if path.eq(FILE_STDIN) {
         current_time()
     } else {
@@ -292,6 +326,19 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         return Err(PrError::EncounteredErrors(format!("invalid page range ‘{}:{}’", start_page.unwrap(), end_page.unwrap())));
     }
 
+    let page_length = match matches.opt_str(PAGE_LENGTH_OPTION).map(|i| {
+        i.parse::<usize>()
+    }) {
+        Some(res) => res?,
+        _ => LINES_PER_PAGE
+    };
+
+    let content_lines_per_page = page_length - (HEADER_LINES_PER_PAGE - TRAILER_LINES_PER_PAGE);
+
+    let display_header_and_trailer = !(page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE))
+        && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
+
+
     Ok(OutputOptions {
         number: numbering_options,
         header: header.to_string(),
@@ -300,6 +347,9 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         last_modified_time,
         start_page,
         end_page,
+        display_header: display_header_and_trailer,
+        display_trailer: display_header_and_trailer,
+        content_lines_per_page,
     })
 }
 
@@ -323,10 +373,11 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut i = 0;
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
+    let content_lines_per_page = options.as_ref().content_lines_per_page;
     let lines_per_page = if options.as_ref().double_space {
-        CONTENT_LINES_PER_PAGE / 2
+        content_lines_per_page / 2
     } else {
-        CONTENT_LINES_PER_PAGE
+        content_lines_per_page
     };
     for line in BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines() {
         if i == lines_per_page {
@@ -349,16 +400,24 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
     let start_page = options.as_ref().start_page.as_ref();
     let last_page = options.as_ref().end_page.as_ref();
+    let content_lines_per_page = options.as_ref().content_lines_per_page;
     let is_within_print_range = (start_page.is_none() || page >= start_page.unwrap()) &&
         (last_page.is_none() || page <= last_page.unwrap());
     if !is_within_print_range {
         return Ok(0);
     }
-    let header: Vec<String> = header_content(options, page);
-    let trailer_content: Vec<String> = trailer_content();
-    assert_eq!(lines.len() <= CONTENT_LINES_PER_PAGE, true, "Only {} lines of content allowed in a pr output page", CONTENT_LINES_PER_PAGE);
-    assert_eq!(header.len(), HEADER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr header", HEADER_LINES_PER_PAGE);
-    assert_eq!(trailer_content.len(), TRAILER_LINES_PER_PAGE, "Only {} lines of content allowed in a pr trailer", TRAILER_LINES_PER_PAGE);
+    let header: Vec<String> = if options.as_ref().display_header {
+        header_content(options, page)
+    } else {
+        Vec::new()
+    };
+
+    let trailer_content: Vec<String> = if options.as_ref().display_trailer {
+        trailer_content()
+    } else {
+        Vec::new()
+    };
+
     let out: &mut Stdout = &mut stdout();
     let line_separator = options.as_ref().line_separator.as_bytes();
     let mut lines_written = 0;
@@ -379,7 +438,7 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Res
         .map(|i| i.separator.to_string())
         .unwrap_or(NumberingMode::default().separator);
 
-    let prev_lines = CONTENT_LINES_PER_PAGE * (page - 1);
+    let prev_lines = content_lines_per_page * (page - 1);
     let mut i = 1;
     for x in lines {
         if options.number.is_none() {
