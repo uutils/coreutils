@@ -162,7 +162,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "header",
         "Use the string header to replace the file name \
      in the header line.",
-        "STRING"
+        "STRING",
     );
 
     opts.opt(
@@ -182,7 +182,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
            the first width column positions of each text column or each line of -m output.  If char (any nondigit
            character) is given, it is appended to the line number to separate it from whatever follows.  The default
            for char is a <tab>.  Line numbers longer than width columns are truncated.",
-        "[char][width]"
+        "[char][width]",
     );
 
     opts.opt(
@@ -386,7 +386,7 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         _ => LINES_PER_PAGE
     };
 
-    let content_lines_per_page = page_length - (HEADER_LINES_PER_PAGE - TRAILER_LINES_PER_PAGE);
+    let content_lines_per_page = page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !(page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE))
         && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
@@ -453,7 +453,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
     let content_lines_per_page = options.as_ref().content_lines_per_page;
-    let columns = options.as_ref().column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1);
+    let columns = _get_columns(options);
     let lines_per_page = if options.as_ref().double_space {
         (content_lines_per_page / 2) * columns
     } else {
@@ -464,7 +464,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
             page = page + 1;
             i = 0;
             if !_is_within_page_range(options, &page) {
-                return Ok(0)
+                return Ok(0);
             }
             print_page(&buffered_content, options, &page)?;
             buffered_content = Vec::new();
@@ -474,14 +474,18 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     }
 
     if i != 0 {
-        if !_is_within_page_range(options, &page) {
-            return Ok(0)
-        }
         page = page + 1;
+        if !_is_within_page_range(options, &page) {
+            return Ok(0);
+        }
         print_page(&buffered_content, options, &page)?;
     }
 
     return Ok(0);
+}
+
+fn _get_columns(options: &OutputOptions) -> usize {
+    options.as_ref().column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1)
 }
 
 fn _is_within_page_range(options: &OutputOptions, page: &usize) -> bool {
