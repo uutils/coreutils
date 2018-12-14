@@ -37,13 +37,17 @@ static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
 static STRING_HEADER_OPTION: &str = "h";
 static DOUBLE_SPACE_OPTION: &str = "d";
 static NUMBERING_MODE_OPTION: &str = "n";
-static PAGE_RANGE_OPTION: &str = "page";
+static PAGE_RANGE_OPTION: &str = "pages";
 static NO_HEADER_TRAILER_OPTION: &str = "t";
 static PAGE_LENGTH_OPTION: &str = "l";
 static SUPPRESS_PRINTING_ERROR: &str = "r";
 static FORM_FEED_OPTION: &str = "F";
+static COLUMN_WIDTH_OPTION: &str = "w";
+static COLUMN_OPTION: &str = "column";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
+static DEFAULT_COLUMN_WIDTH: usize = 72;
+static DEFAULT_COLUMN_SEPARATOR: &str = "\t";
 
 struct OutputOptions {
     /// Line numbering mode
@@ -59,6 +63,13 @@ struct OutputOptions {
     content_lines_per_page: usize,
     suppress_errors: bool,
     page_separator_char: String,
+    column_mode_options: Option<ColumnModeOptions>,
+}
+
+struct ColumnModeOptions {
+    width: usize,
+    columns: usize,
+    column_separator: String,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -139,23 +150,19 @@ quick_error! {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.opt(
+    opts.optflagopt(
         "",
         PAGE_RANGE_OPTION,
         "Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]",
         "FIRST_PAGE[:LAST_PAGE]",
-        HasArg::Yes,
-        Occur::Optional,
     );
 
-    opts.opt(
+    opts.optopt(
         STRING_HEADER_OPTION,
         "header",
         "Use the string header to replace the file name \
      in the header line.",
-        "STRING",
-        HasArg::Yes,
-        Occur::Optional,
+        "STRING"
     );
 
     opts.opt(
@@ -168,16 +175,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Occur::Optional,
     );
 
-    opts.opt(
+    opts.optflagopt(
         NUMBERING_MODE_OPTION,
         "",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
            the first width column positions of each text column or each line of -m output.  If char (any nondigit
            character) is given, it is appended to the line number to separate it from whatever follows.  The default
            for char is a <tab>.  Line numbers longer than width columns are truncated.",
-        "[char][width]",
-        HasArg::Yes,
-        Occur::Optional,
+        "[char][width]"
     );
 
     opts.opt(
@@ -216,6 +221,30 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.",
         "",
         HasArg::No,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        "",
+        COLUMN_OPTION,
+        "Produce multi-column output that is arranged in column columns (the default shall be 1) and is written down each
+              column  in  the order in which the text is received from the input file. This option should not be used with -m.
+              The options -e and -i shall be assumed for multiple text-column output.  Whether or not text  columns  are  pro‐
+              duced  with  identical  vertical  lengths is unspecified, but a text column shall never exceed the length of the
+              page (see the -l option). When used with -t, use the minimum number of lines to write the output.",
+        "[column]",
+        HasArg::Yes,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        COLUMN_WIDTH_OPTION,
+        "width",
+        "Set  the  width  of the line to width column positions for multiple text-column output only. If the -w option is
+              not specified and the -s option is not specified, the default width shall be 72. If the -w option is not  speci‐
+              fied and the -s option is specified, the default width shall be 512.",
+        "[width]",
+        HasArg::Yes,
         Occur::Optional,
     );
 
@@ -368,6 +397,24 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         '\u{000A}'.to_string()
     }).unwrap_or("\n".to_string());
 
+    let column_width = match matches.opt_str(COLUMN_WIDTH_OPTION).map(|i| i.parse::<usize>()) {
+        Some(res) => res?,
+        _ => DEFAULT_COLUMN_WIDTH
+    };
+
+    let column_mode_options = match matches.opt_str(COLUMN_OPTION).map(|i| {
+        i.parse::<usize>()
+    }) {
+        Some(res) => {
+            Some(ColumnModeOptions {
+                columns: res?,
+                width: column_width,
+                column_separator: DEFAULT_COLUMN_SEPARATOR.to_string(),
+            })
+        }
+        _ => None
+    };
+
     Ok(OutputOptions {
         number: numbering_options,
         header: header.to_string(),
@@ -381,6 +428,7 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
         content_lines_per_page,
         suppress_errors,
         page_separator_char,
+        column_mode_options,
     })
 }
 
@@ -405,15 +453,19 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
     let content_lines_per_page = options.as_ref().content_lines_per_page;
+    let columns = options.as_ref().column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1);
     let lines_per_page = if options.as_ref().double_space {
-        content_lines_per_page / 2
+        (content_lines_per_page / 2) * columns
     } else {
-        content_lines_per_page
+        content_lines_per_page * columns
     };
     for line in BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines() {
         if i == lines_per_page {
             page = page + 1;
             i = 0;
+            if !_is_within_page_range(options, &page) {
+                return Ok(0)
+            }
             print_page(&buffered_content, options, &page)?;
             buffered_content = Vec::new();
         }
@@ -422,33 +474,26 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     }
 
     if i != 0 {
+        if !_is_within_page_range(options, &page) {
+            return Ok(0)
+        }
         page = page + 1;
         print_page(&buffered_content, options, &page)?;
     }
+
     return Ok(0);
 }
 
-fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
+fn _is_within_page_range(options: &OutputOptions, page: &usize) -> bool {
     let start_page = options.as_ref().start_page.as_ref();
     let last_page = options.as_ref().end_page.as_ref();
-    let content_lines_per_page = options.as_ref().content_lines_per_page;
-    let is_within_print_range = (start_page.is_none() || page >= start_page.unwrap()) &&
-        (last_page.is_none() || page <= last_page.unwrap());
-    let page_separator = options.as_ref().page_separator_char.as_bytes();
-    if !is_within_print_range {
-        return Ok(0);
-    }
-    let header: Vec<String> = if options.as_ref().display_header {
-        header_content(options, page)
-    } else {
-        Vec::new()
-    };
+    (start_page.is_none() || page >= start_page.unwrap()) && (last_page.is_none() || page <= last_page.unwrap())
+}
 
-    let trailer_content: Vec<String> = if options.as_ref().display_trailer {
-        trailer_content()
-    } else {
-        Vec::new()
-    };
+fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
+    let page_separator = options.as_ref().page_separator_char.as_bytes();
+    let header: Vec<String> = header_content(options, page);
+    let trailer_content: Vec<String> = trailer_content(options);
 
     let out: &mut Stdout = &mut stdout();
     let line_separator = options.as_ref().line_separator.as_bytes();
@@ -461,34 +506,8 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Res
         lines_written += 1;
     }
 
-    let width: usize = options.as_ref()
-        .number.as_ref()
-        .map(|i| i.width)
-        .unwrap_or(0);
-    let separator: String = options.as_ref()
-        .number.as_ref()
-        .map(|i| i.separator.to_string())
-        .unwrap_or(NumberingMode::default().separator);
+    lines_written += write_columns(lines, options, page_separator, out, line_separator, page)?;
 
-    let prev_lines = content_lines_per_page * (page - 1);
-    let mut i = 1;
-    for x in lines {
-        if options.number.is_none() {
-            out.write(x.as_bytes())?;
-        } else {
-            let fmtd_line_number: String = get_fmtd_line_number(&width, prev_lines + i, &separator);
-            out.write(format!("{}{}", fmtd_line_number, x).as_bytes())?;
-        }
-
-        if i == trailer_content.len() {
-            out.write(page_separator)?;
-        } else {
-            out.write(line_separator)?;
-        }
-
-        i = i + 1;
-    }
-    lines_written += i - 1;
     for index in 0..trailer_content.len() {
         let x: &String = trailer_content.get(index).unwrap();
         out.write(x.as_bytes())?;
@@ -503,6 +522,37 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize) -> Res
     Ok(lines_written)
 }
 
+fn write_columns(lines: &Vec<String>, options: &OutputOptions, page_separator: &[u8], out: &mut Stdout, line_separator: &[u8], page: &usize) -> Result<usize, Error> {
+    let content_lines_per_page = options.as_ref().content_lines_per_page;
+    let prev_lines = content_lines_per_page * (page - 1);
+    let width: usize = options.as_ref()
+        .number.as_ref()
+        .map(|i| i.width)
+        .unwrap_or(0);
+    let separator: String = options.as_ref()
+        .number.as_ref()
+        .map(|i| i.separator.to_string())
+        .unwrap_or(NumberingMode::default().separator);
+
+    let mut i = 0;
+    for x in lines {
+        if options.number.is_none() {
+            out.write(x.as_bytes())?;
+        } else {
+            let fmtd_line_number: String = get_fmtd_line_number(&width, prev_lines + i, &separator);
+            out.write(format!("{}{}", fmtd_line_number, x).as_bytes())?;
+        }
+
+        if i == lines.len() {
+            out.write(page_separator)?;
+        } else {
+            out.write(line_separator)?;
+        }
+        i += 1;
+    }
+    Ok(i)
+}
+
 fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -> String {
     let line_str = line_number.to_string();
     if line_str.len() >= *width {
@@ -514,8 +564,12 @@ fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -
 
 
 fn header_content(options: &OutputOptions, page: &usize) -> Vec<String> {
-    let first_line: String = format!("{} {} Page {}", options.last_modified_time, options.header, page);
-    vec!["".to_string(), "".to_string(), first_line, "".to_string(), "".to_string()]
+    if options.as_ref().display_header {
+        let first_line: String = format!("{} {} Page {}", options.last_modified_time, options.header, page);
+        vec!["".to_string(), "".to_string(), first_line, "".to_string(), "".to_string()]
+    } else {
+        Vec::new()
+    }
 }
 
 fn file_last_modified_time(path: &str) -> String {
@@ -533,8 +587,12 @@ fn current_time() -> String {
     datetime.format("%b %d %H:%M %Y").to_string()
 }
 
-fn trailer_content() -> Vec<String> {
-    vec!["".to_string(), "".to_string(), "".to_string(), "".to_string(), "".to_string()]
+fn trailer_content(options: &OutputOptions) -> Vec<String> {
+    if options.as_ref().display_trailer {
+        vec!["".to_string(), "".to_string(), "".to_string(), "".to_string(), "".to_string()]
+    } else {
+        Vec::new()
+    }
 }
 
 fn get_input_type(path: &str) -> Option<InputType> {
