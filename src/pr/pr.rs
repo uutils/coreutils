@@ -112,21 +112,6 @@ impl Default for NumberingMode {
     }
 }
 
-enum InputType {
-    Directory,
-    File,
-    StdIn,
-    SymLink,
-    #[cfg(unix)]
-    BlockDevice,
-    #[cfg(unix)]
-    CharacterDevice,
-    #[cfg(unix)]
-    Fifo,
-    #[cfg(unix)]
-    Socket,
-}
-
 impl From<Error> for PrError {
     fn from(err: Error) -> Self {
         PrError::EncounteredErrors(err.to_string())
@@ -162,6 +147,10 @@ quick_error! {
 
         IsSocket(path: String) {
             display("pr: cannot open {}, Operation not supported on socket", path)
+        }
+
+        NotExists(path: String) {
+            display("pr: cannot open {}, No such file or directory", path)
         }
     }
 }
@@ -291,8 +280,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     for f in files {
-        let header: &String = &matches.opt_str(STRING_HEADER_OPTION).unwrap_or(f.to_string());
-        let result_options = build_options(&matches, header, &f);
+        let result_options = build_options(&matches, &f);
         if result_options.is_err() {
             writeln!(&mut stderr(), "{}", result_options.err().unwrap());
             return 1;
@@ -349,7 +337,8 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     return 0;
 }
 
-fn build_options(matches: &Matches, header: &String, path: &String) -> Result<OutputOptions, PrError> {
+fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrError> {
+    let header: String = matches.opt_str(STRING_HEADER_OPTION).unwrap_or(path.to_string());
     let numbering_options: Option<NumberingMode> = matches.opt_str(NUMBERING_MODE_OPTION).map(|i| {
         NumberingMode {
             width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
@@ -439,7 +428,7 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
 
     Ok(OutputOptions {
         number: numbering_options,
-        header: header.to_string(),
+        header,
         double_space,
         line_separator,
         last_modified_time,
@@ -455,19 +444,39 @@ fn build_options(matches: &Matches, header: &String, path: &String) -> Result<Ou
 }
 
 fn open(path: &str) -> Result<Box<Read>, PrError> {
-    match get_input_type(path) {
-        Some(InputType::Directory) => Err(PrError::IsDirectory(path.to_string())),
-        #[cfg(unix)]
-        Some(InputType::Socket) => {
-            Err(PrError::IsSocket(path.to_string()))
-        }
-        Some(InputType::StdIn) => {
-            let stdin = stdin();
-            Ok(Box::new(stdin) as Box<Read>)
-        }
-        Some(_) => Ok(Box::new(File::open(path).context(path)?) as Box<Read>),
-        None => Err(PrError::UnknownFiletype(path.to_string()))
+    if path == FILE_STDIN {
+        let stdin = stdin();
+        return Ok(Box::new(stdin) as Box<Read>);
     }
+
+    metadata(path).map(|i| {
+        let path_string = path.to_string();
+        match i.file_type() {
+            #[cfg(unix)]
+            ft if ft.is_block_device() =>
+                {
+                    Err(PrError::UnknownFiletype(path_string))
+                }
+            #[cfg(unix)]
+            ft if ft.is_char_device() =>
+                {
+                    Err(PrError::UnknownFiletype(path_string))
+                }
+            #[cfg(unix)]
+            ft if ft.is_fifo() =>
+                {
+                    Err(PrError::UnknownFiletype(path_string))
+                }
+            #[cfg(unix)]
+            ft if ft.is_socket() =>
+                {
+                    Err(PrError::IsSocket(path_string))
+                }
+            ft if ft.is_dir() => Err(PrError::IsDirectory(path_string)),
+            ft if ft.is_file() || ft.is_symlink() => Ok(Box::new(File::open(path).context(path)?) as Box<Read>),
+            _ => Err(PrError::UnknownFiletype(path_string))
+        }
+    }).unwrap_or(Err(PrError::NotExists(path.to_string())))
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
@@ -653,39 +662,4 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
     } else {
         Vec::new()
     }
-}
-
-fn get_input_type(path: &str) -> Option<InputType> {
-    if path == FILE_STDIN {
-        return Some(InputType::StdIn);
-    }
-
-    metadata(path).map(|i| {
-        match i.file_type() {
-            #[cfg(unix)]
-            ft if ft.is_block_device() =>
-                {
-                    Some(InputType::BlockDevice)
-                }
-            #[cfg(unix)]
-            ft if ft.is_char_device() =>
-                {
-                    Some(InputType::CharacterDevice)
-                }
-            #[cfg(unix)]
-            ft if ft.is_fifo() =>
-                {
-                    Some(InputType::Fifo)
-                }
-            #[cfg(unix)]
-            ft if ft.is_socket() =>
-                {
-                    Some(InputType::Socket)
-                }
-            ft if ft.is_dir() => Some(InputType::Directory),
-            ft if ft.is_file() => Some(InputType::File),
-            ft if ft.is_symlink() => Some(InputType::SymLink),
-            _ => None
-        }
-    }).unwrap_or(None)
 }
