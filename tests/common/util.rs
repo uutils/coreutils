@@ -104,6 +104,15 @@ impl CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(contents)
     }
+    /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
+    /// command output
+    pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T, template_vars: Vec<(String, String)>) -> Box<&CmdResult> {
+        let mut contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        for kv in template_vars {
+            contents = contents.replace(&kv.0, &kv.1);
+        }
+        self.stdout_is(contents)
+    }
 
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
@@ -603,6 +612,11 @@ impl UCommand {
         let cmd_result = self.run();
         cmd_result.failure();
         cmd_result
+    }
+
+    pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String{
+        let tmpdir_path = self.tmpd.as_ref().unwrap().path();
+        format!("{}/{}", tmpdir_path.to_str().unwrap(), file_rel_path)
     }
 }
 

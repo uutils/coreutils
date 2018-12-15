@@ -1874,6 +1874,7 @@ dependencies = [
  "chgrp 0.0.1",
  "chmod 0.0.1",
  "chown 0.0.1",
+ "chrono 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "chroot 0.0.1",
  "cksum 0.0.1",
  "comm 0.0.1",

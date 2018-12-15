@@ -71,6 +71,7 @@ generic! {
     "nl", test_nl;
     "od", test_od;
     "paste", test_paste;
+    "pr", test_pr;
     "printf", test_printf;
     "ptx", test_ptx;
     "pwd", test_pwd;

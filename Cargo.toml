@@ -208,6 +208,7 @@ od       = { optional=true, path="src/od" }
 paste    = { optional=true, path="src/paste" }
 pathchk  = { optional=true, path="src/pathchk" }
 pinky    = { optional=true, path="src/pinky" }
+pr       = { optional=true, path="src/pr" }
 printenv = { optional=true, path="src/printenv" }
 printf   = { optional=true, path="src/printf" }
 ptx      = { optional=true, path="src/ptx" }
@@ -248,7 +249,6 @@ wc       = { optional=true, path="src/wc" }
 who      = { optional=true, path="src/who" }
 whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
-pr      = { optional=true, path="src/pr" }
 
 [dev-dependencies]
 time = "0.1.40"
@@ -259,6 +259,7 @@ rand = "0.4.2"
 tempdir = "0.3.7"
 unindent = "0.1.3"
 lazy_static = "1.0.1"
+chrono = "0.4.6"
 
 [target.'cfg(unix)'.dev-dependencies]
 rust-users = { git = "https://github.com/uutils/rust-users" }
