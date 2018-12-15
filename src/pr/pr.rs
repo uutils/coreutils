@@ -158,19 +158,23 @@ quick_error! {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflagopt(
+    opts.opt(
         "",
         PAGE_RANGE_OPTION,
         "Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]",
         "FIRST_PAGE[:LAST_PAGE]",
+        HasArg::Yes,
+        Occur::Optional,
     );
 
-    opts.optopt(
+    opts.opt(
         STRING_HEADER_OPTION,
         "header",
         "Use the string header to replace the file name \
      in the header line.",
         "STRING",
+        HasArg::Yes,
+        Occur::Optional,
     );
 
     opts.opt(
@@ -183,14 +187,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Occur::Optional,
     );
 
-    opts.optflagopt(
+    opts.opt(
         NUMBERING_MODE_OPTION,
-        "",
+        "--number-lines",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
            the first width column positions of each text column or each line of -m output.  If char (any nondigit
            character) is given, it is appended to the line number to separate it from whatever follows.  The default
            for char is a <tab>.  Line numbers longer than width columns are truncated.",
         "[char][width]",
+        HasArg::Maybe,
+        Occur::Optional,
     );
 
     opts.opt(
@@ -271,9 +277,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut files: Vec<String> = matches.free.clone();
     if files.is_empty() {
-        //For stdin
-        files.push(FILE_STDIN.to_owned());
+        // -n value is optional if -n <path> is given the opts gets confused
+        if matches.opt_present(NUMBERING_MODE_OPTION) {
+            let is_afile = is_a_file(&matches, &mut files);
+            if is_afile.is_err() {
+                writeln!(&mut stderr(), "{}", is_afile.err().unwrap());
+                return 1;
+            } else {
+                files.push(is_afile.unwrap());
+            }
+        } else {
+            //For stdin
+            files.push(FILE_STDIN.to_owned());
+        }
     }
+
 
     if matches.opt_present("help") {
         return print_usage(&mut opts, &matches);
@@ -300,6 +318,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
     return 0;
+}
+
+fn is_a_file(matches: &Matches, files: &mut Vec<String>) -> Result<String, PrError> {
+    let could_be_file = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
+    match File::open(&could_be_file) {
+        Ok(f) => Ok(could_be_file),
+        Err(e) => Err(PrError::NotExists(could_be_file))
+    }
 }
 
 fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
@@ -573,11 +599,15 @@ fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout,
 
     let mut i = 0;
     let is_number_mode = options.number.is_some();
+
     for start in 0..content_lines_per_page {
         let indexes: Vec<usize> = get_indexes(start, content_lines_per_page, columns);
         let mut line = String::new();
         for index in indexes {
-            let read_line: &String = lines.get(index).unwrap_or(&blank_line);
+            if lines.get(index).is_none() {
+                break;
+            }
+            let read_line = lines.get(index).unwrap();
             let next_line_number = line_number + index + 1;
             let trimmed_line = get_line_for_printing(
                 next_line_number, &width,
