@@ -18,7 +18,7 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
 
 
 #[test]
-fn test_output_multi_files_print_all_chars() {
+fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let mut scenario = new_ucmd!();
     let value = file_last_modified_time(&scenario, test_file_path);
