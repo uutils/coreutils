@@ -37,6 +37,7 @@ static NUMBERING_MODE_DEFAULT_WIDTH: usize = 5;
 static STRING_HEADER_OPTION: &str = "h";
 static DOUBLE_SPACE_OPTION: &str = "d";
 static NUMBERING_MODE_OPTION: &str = "n";
+static FIRST_LINE_NUMBER_OPTION: &str = "N";
 static PAGE_RANGE_OPTION: &str = "pages";
 static NO_HEADER_TRAILER_OPTION: &str = "t";
 static PAGE_LENGTH_OPTION: &str = "l";
@@ -101,6 +102,7 @@ struct NumberingMode {
     /// Line numbering mode
     width: usize,
     separator: String,
+    first_number: usize,
 }
 
 impl Default for NumberingMode {
@@ -108,6 +110,7 @@ impl Default for NumberingMode {
         NumberingMode {
             width: NUMBERING_MODE_DEFAULT_WIDTH,
             separator: NUMBERING_MODE_DEFAULT_SEPARATOR.to_string(),
+            first_number: 1,
         }
     }
 }
@@ -189,13 +192,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     opts.opt(
         NUMBERING_MODE_OPTION,
-        "--number-lines",
+        "number-lines",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
            the first width column positions of each text column or each line of -m output.  If char (any nondigit
            character) is given, it is appended to the line number to separate it from whatever follows.  The default
            for char is a <tab>.  Line numbers longer than width columns are truncated.",
         "[char][width]",
         HasArg::Maybe,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        FIRST_LINE_NUMBER_OPTION,
+        "first-line-number",
+        "start counting with NUMBER at 1st line of first page printed",
+        "NUMBER",
+        HasArg::Yes,
         Occur::Optional,
     );
 
@@ -279,12 +291,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if files.is_empty() {
         // -n value is optional if -n <path> is given the opts gets confused
         if matches.opt_present(NUMBERING_MODE_OPTION) {
-            let is_afile = is_a_file(&matches, &mut files);
-            if is_afile.is_err() {
-                writeln!(&mut stderr(), "{}", is_afile.err().unwrap());
+            let maybe_file = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
+            let is_afile = is_a_file(&maybe_file);
+            if !is_afile {
+                writeln!(&mut stderr(), "{}", PrError::NotExists(maybe_file));
                 return 1;
             } else {
-                files.push(is_afile.unwrap());
+                files.push(maybe_file);
             }
         } else {
             //For stdin
@@ -320,12 +333,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     return 0;
 }
 
-fn is_a_file(matches: &Matches, files: &mut Vec<String>) -> Result<String, PrError> {
-    let could_be_file = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
-    match File::open(&could_be_file) {
-        Ok(f) => Ok(could_be_file),
-        Err(e) => Err(PrError::NotExists(could_be_file))
-    }
+fn is_a_file(could_be_file: &String) -> bool {
+    File::open(could_be_file).is_ok()
 }
 
 fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
@@ -365,10 +374,39 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
 
 fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrError> {
     let header: String = matches.opt_str(STRING_HEADER_OPTION).unwrap_or(path.to_string());
+
+    let default_first_number = NumberingMode::default().first_number;
+    let first_number = matches.opt_str(FIRST_LINE_NUMBER_OPTION).map(|n| {
+        n.parse::<usize>().unwrap_or(default_first_number)
+    }).unwrap_or(default_first_number);
+
     let numbering_options: Option<NumberingMode> = matches.opt_str(NUMBERING_MODE_OPTION).map(|i| {
+        let parse_result = i.parse::<usize>();
+
+        let separator = if parse_result.is_err() {
+            if is_a_file(&i) {
+                NumberingMode::default().separator
+            } else {
+                i[0..1].to_string()
+            }
+        } else {
+            NumberingMode::default().separator
+        };
+
+        let width = if parse_result.is_err() {
+            if is_a_file(&i) {
+                NumberingMode::default().width
+            } else {
+                i[1..].parse::<usize>().unwrap_or(NumberingMode::default().width)
+            }
+        } else {
+            parse_result.unwrap()
+        };
+
         NumberingMode {
-            width: i.parse::<usize>().unwrap_or(NumberingMode::default().width),
-            separator: NumberingMode::default().separator,
+            width,
+            separator,
+            first_number,
         }
     }).or_else(|| {
         if matches.opt_present(NUMBERING_MODE_OPTION) {
@@ -510,7 +548,11 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
     let read_lines_per_page = options.lines_to_read_for_page();
-    let mut line_number = 0;
+    let mut line_number = options.as_ref()
+        .number
+        .as_ref()
+        .map(|i| i.first_number)
+        .unwrap_or(1) - 1;
     for line in BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines() {
         if i == read_lines_per_page {
             page = page + 1;
