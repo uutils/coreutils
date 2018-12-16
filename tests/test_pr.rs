@@ -182,7 +182,7 @@ fn test_with_number_option_with_custom_separator_char_and_width() {
 }
 
 #[test]
-fn test_valid_page_ranges() {
+fn test_with_valid_page_ranges() {
     let test_file_path = "test_num_page.log";
     let mut scenario = new_ucmd!();
     scenario
@@ -211,11 +211,10 @@ fn test_valid_page_ranges() {
         .fails()
         .stderr_is("pr: invalid --pages argument '5:1'")
         .stdout_is("");
-
 }
 
 #[test]
-fn test_page_range() {
+fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
@@ -233,4 +232,46 @@ fn test_page_range() {
         .stdout_is_templated_fixture(expected_test_file_path1, vec![
             (&"{last_modified_time}".to_string(), &value),
         ]);
+}
+
+#[test]
+fn test_with_no_header_trailer_option() {
+    let test_file_path = "test_one_page.log";
+    let expected_test_file_path = "test_one_page_no_ht.log.expected";
+    let mut scenario = new_ucmd!();
+    scenario
+        .args(&["-t", test_file_path])
+        .succeeds()
+        .stdout_is_fixture(expected_test_file_path);
+}
+
+#[test]
+fn test_with_page_length_option() {
+    let test_file_path = "test.log";
+    let expected_test_file_path = "test_page_length.log.expected";
+    let expected_test_file_path1 = "test_page_length1.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time(&scenario, test_file_path);
+    scenario
+        .args(&["--pages=2:3", "-l", "100", "-n", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, vec![
+            (&"{last_modified_time}".to_string(), &value),
+        ]);
+
+    new_ucmd!()
+        .args(&["--pages=2:3", "-l", "5", "-n", test_file_path])
+        .succeeds()
+        .stdout_is_fixture(expected_test_file_path1);
+}
+
+#[test]
+fn test_with_suppress_error_option() {
+    let test_file_path = "test_num_page.log";
+    let mut scenario = new_ucmd!();
+    scenario
+        .args(&["--pages=20:5", "-r", test_file_path])
+        .fails()
+        .stderr_is("")
+        .stdout_is("");
 }
