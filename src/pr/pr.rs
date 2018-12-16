@@ -26,6 +26,7 @@ use quick_error::ResultExt;
 use std::convert::From;
 use getopts::HasArg;
 use getopts::Occur;
+use std::num::ParseIntError;
 
 static NAME: &str = "pr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -71,6 +72,13 @@ struct ColumnModeOptions {
     width: Option<usize>,
     columns: usize,
     column_separator: String,
+}
+
+#[derive(PartialEq, Eq)]
+enum PrintPageCommand {
+    Skip,
+    Abort,
+    Print,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -429,26 +437,37 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         file_last_modified_time(path)
     };
 
+    let invalid_pages_map = |i: Result<usize, ParseIntError>| {
+        let unparsed_value = matches.opt_str(PAGE_RANGE_OPTION).unwrap();
+        match i {
+            Ok(val) => Ok(val),
+            Err(_e) => Err(PrError::EncounteredErrors(format!("invalid --pages argument '{}'", unparsed_value)))
+        }
+    };
+
     let start_page = match matches.opt_str(PAGE_RANGE_OPTION).map(|i| {
         let x: Vec<&str> = i.split(":").collect();
         x[0].parse::<usize>()
-    }) {
-        Some(res) => Some(res?),
-        _ => None
-    };
+    }).map(invalid_pages_map)
+        {
+            Some(res) => Some(res?),
+            _ => None
+        };
 
     let end_page = match matches.opt_str(PAGE_RANGE_OPTION)
         .filter(|i| i.contains(":"))
         .map(|i| {
             let x: Vec<&str> = i.split(":").collect();
             x[1].parse::<usize>()
-        }) {
-        Some(res) => Some(res?),
-        _ => None
-    };
+        })
+        .map(invalid_pages_map)
+        {
+            Some(res) => Some(res?),
+            _ => None
+        };
 
     if start_page.is_some() && end_page.is_some() && start_page.unwrap() > end_page.unwrap() {
-        return Err(PrError::EncounteredErrors(format!("invalid page range ‘{}:{}’", start_page.unwrap(), end_page.unwrap())));
+        return Err(PrError::EncounteredErrors(format!("invalid --pages argument '{}:{}'", start_page.unwrap(), end_page.unwrap())));
     }
 
     let page_length = match matches.opt_str(PAGE_LENGTH_OPTION).map(|i| {
@@ -548,6 +567,8 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut page: usize = 0;
     let mut buffered_content: Vec<String> = Vec::new();
     let read_lines_per_page = options.lines_to_read_for_page();
+    let start_page = options.as_ref().start_page.as_ref();
+    let last_page = options.as_ref().end_page.as_ref();
     let mut line_number = options.as_ref()
         .number
         .as_ref()
@@ -557,11 +578,14 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
         if i == read_lines_per_page {
             page = page + 1;
             i = 0;
-            if !_is_within_page_range(options, &page) {
+
+            let cmd = _get_print_command(start_page, last_page, &page);
+            if cmd == PrintPageCommand::Print {
+                line_number += print_page(&buffered_content, options, &page, &line_number)?;
+                buffered_content = Vec::new();
+            } else if cmd == PrintPageCommand::Abort {
                 return Ok(0);
             }
-            line_number += print_page(&buffered_content, options, &page, &line_number)?;
-            buffered_content = Vec::new();
         }
         buffered_content.push(line?);
         i = i + 1;
@@ -569,19 +593,27 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 
     if i != 0 {
         page = page + 1;
-        if !_is_within_page_range(options, &page) {
+        let cmd = _get_print_command(start_page, last_page, &page);
+        if cmd == PrintPageCommand::Print {
+            print_page(&buffered_content, options, &page, &line_number)?;
+        } else if cmd == PrintPageCommand::Abort {
             return Ok(0);
         }
-        print_page(&buffered_content, options, &page, &line_number)?;
     }
 
     return Ok(0);
 }
 
-fn _is_within_page_range(options: &OutputOptions, page: &usize) -> bool {
-    let start_page = options.as_ref().start_page.as_ref();
-    let last_page = options.as_ref().end_page.as_ref();
-    (start_page.is_none() || page >= start_page.unwrap()) && (last_page.is_none() || page <= last_page.unwrap())
+fn _get_print_command(start_page: Option<&usize>, last_page: Option<&usize>, page: &usize) -> PrintPageCommand {
+    let below_page_range = start_page.is_some() && page < start_page.unwrap();
+    let is_within_page_range = (start_page.is_none() || page >= start_page.unwrap())
+        && (last_page.is_none() || page <= last_page.unwrap());
+    if below_page_range {
+        return PrintPageCommand::Skip;
+    } else if is_within_page_range {
+        return PrintPageCommand::Print;
+    }
+    return PrintPageCommand::Abort;
 }
 
 fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize, line_number: &usize) -> Result<usize, Error> {

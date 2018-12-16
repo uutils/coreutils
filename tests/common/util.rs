@@ -106,10 +106,10 @@ impl CmdResult {
     }
     /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
     /// command output
-    pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T, template_vars: Vec<(String, String)>) -> Box<&CmdResult> {
+    pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T, template_vars: Vec<(&String, &String)>) -> Box<&CmdResult> {
         let mut contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         for kv in template_vars {
-            contents = contents.replace(&kv.0, &kv.1);
+            contents = contents.replace(kv.0, kv.1);
         }
         self.stdout_is(contents)
     }

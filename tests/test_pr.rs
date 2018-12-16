@@ -26,7 +26,7 @@ fn test_without_any_options() {
     scenario
         .args(&[test_file_path])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, vec![("{last_modified_time}".to_string(), value)]);
+        .stdout_is_templated_fixture(expected_test_file_path, vec![(&"{last_modified_time}".to_string(), &value)]);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn test_with_numbering_option() {
     scenario
         .args(&["-n", test_file_path])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, vec![("{last_modified_time}".to_string(), value)]);
+        .stdout_is_templated_fixture(expected_test_file_path, vec![(&"{last_modified_time}".to_string(), &value)]);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn test_with_numbering_option_when_content_is_less_than_page() {
     scenario
         .args(&["-n", test_file_path])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, vec![("{last_modified_time}".to_string(), value)]);
+        .stdout_is_templated_fixture(expected_test_file_path, vec![(&"{last_modified_time}".to_string(), &value)]);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn test_with_numbering_option_with_number_width() {
     scenario
         .args(&["-n", "2", test_file_path])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, vec![("{last_modified_time}".to_string(), value)]);
+        .stdout_is_templated_fixture(expected_test_file_path, vec![(&"{last_modified_time}".to_string(), &value)]);
 }
 
 #[test]
@@ -76,8 +76,8 @@ fn test_with_header_option() {
         .args(&["-h", header, test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
-            ("{header}".to_string(), header.to_string())
+            (&"{last_modified_time}".to_string(), &value),
+            (&"{header}".to_string(), &header.to_string())
         ]);
 }
 
@@ -92,8 +92,8 @@ fn test_with_long_header_option() {
         .args(&["--header=new file", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
-            ("{header}".to_string(), header.to_string())
+            (&"{last_modified_time}".to_string(), &value),
+            (&"{header}".to_string(), &header.to_string())
         ]);
 }
 
@@ -107,7 +107,7 @@ fn test_with_double_space_option() {
         .args(&["-d", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
+            (&"{last_modified_time}".to_string(), &value),
         ]);
 }
 
@@ -121,7 +121,7 @@ fn test_with_long_double_space_option() {
         .args(&["--double-space", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
+            (&"{last_modified_time}".to_string(), &value),
         ]);
 }
 
@@ -135,7 +135,7 @@ fn test_with_first_line_number_option() {
         .args(&["-N", "5", "-n", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
+            (&"{last_modified_time}".to_string(), &value),
         ]);
 }
 
@@ -149,7 +149,7 @@ fn test_with_first_line_number_long_option() {
         .args(&["--first-line-number=5", "-n", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
+            (&"{last_modified_time}".to_string(), &value),
         ]);
 }
 
@@ -163,7 +163,7 @@ fn test_with_number_option_with_custom_separator_char() {
         .args(&["-nc", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
+            (&"{last_modified_time}".to_string(), &value),
         ]);
 }
 
@@ -177,6 +177,60 @@ fn test_with_number_option_with_custom_separator_char_and_width() {
         .args(&["-nc1", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, vec![
-            ("{last_modified_time}".to_string(), value),
+            (&"{last_modified_time}".to_string(), &value),
+        ]);
+}
+
+#[test]
+fn test_valid_page_ranges() {
+    let test_file_path = "test_num_page.log";
+    let mut scenario = new_ucmd!();
+    scenario
+        .args(&["--pages=20:5", test_file_path])
+        .fails()
+        .stderr_is("pr: invalid --pages argument '20:5'")
+        .stdout_is("");
+    new_ucmd!()
+        .args(&["--pages=1:5", test_file_path])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--pages=1", test_file_path])
+        .succeeds();
+    new_ucmd!()
+        .args(&["--pages=-1:5", test_file_path])
+        .fails()
+        .stderr_is("pr: invalid --pages argument '-1:5'")
+        .stdout_is("");
+    new_ucmd!()
+        .args(&["--pages=1:-5", test_file_path])
+        .fails()
+        .stderr_is("pr: invalid --pages argument '1:-5'")
+        .stdout_is("");
+    new_ucmd!()
+        .args(&["--pages=5:1", test_file_path])
+        .fails()
+        .stderr_is("pr: invalid --pages argument '5:1'")
+        .stdout_is("");
+
+}
+
+#[test]
+fn test_page_range() {
+    let test_file_path = "test.log";
+    let expected_test_file_path = "test_page_range_1.log.expected";
+    let expected_test_file_path1 = "test_page_range_2.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time(&scenario, test_file_path);
+    scenario
+        .args(&["--pages=15", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, vec![
+            (&"{last_modified_time}".to_string(), &value),
+        ]);
+    new_ucmd!()
+        .args(&["--pages=15:17", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path1, vec![
+            (&"{last_modified_time}".to_string(), &value),
         ]);
 }
