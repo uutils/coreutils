@@ -302,7 +302,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let maybe_file = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
             let is_afile = is_a_file(&maybe_file);
             if !is_afile {
-                writeln!(&mut stderr(), "{}", PrError::NotExists(maybe_file));
+                print_error(&matches, PrError::NotExists(maybe_file));
                 return 1;
             } else {
                 files.push(maybe_file);
@@ -321,15 +321,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     for f in files {
         let result_options = build_options(&matches, &f);
         if result_options.is_err() {
-            writeln!(&mut stderr(), "{}", result_options.err().unwrap());
+            print_error(&matches, result_options.err().unwrap());
             return 1;
         }
         let options = &result_options.unwrap();
         let status: i32 = match pr(&f, options) {
             Err(error) => {
-                if !options.suppress_errors {
-                    writeln!(&mut stderr(), "{}", error);
-                }
+                print_error(&matches, error);
                 1
             }
             _ => 0
@@ -343,6 +341,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn is_a_file(could_be_file: &String) -> bool {
     File::open(could_be_file).is_ok()
+}
+
+fn print_error(matches: &Matches, err: PrError) {
+    if !matches.opt_present(SUPPRESS_PRINTING_ERROR) {
+        writeln!(&mut stderr(), "{}", err);
+    }
 }
 
 fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
@@ -476,11 +480,15 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         Some(res) => res?,
         _ => LINES_PER_PAGE
     };
+    let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
-    let content_lines_per_page = page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
+    let display_header_and_trailer = !(page_length_le_ht) && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
 
-    let display_header_and_trailer = !(page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE))
-        && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
+    let content_lines_per_page = if page_length_le_ht {
+        page_length
+    } else {
+        page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
+    };
 
     let suppress_errors = matches.opt_present(SUPPRESS_PRINTING_ERROR);
 
