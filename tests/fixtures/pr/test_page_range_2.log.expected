@@ -3,62 +3,62 @@
 {last_modified_time} test.log Page 15
 
 
-ntation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:56.558 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:56.705 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:56.706 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:56.706 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:56.854 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:56.855 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:56.856 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.002 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.152 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.302 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.304 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.304 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.449 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.451 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.451 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.600 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.601 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.602 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.624 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.624 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.749 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.750 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.751 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:57.896 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:57.897 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:57.897 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.045 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.047 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.047 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.193 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.195 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.195 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.342 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.343 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.344 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.491 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.493 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.494 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.640 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.642 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.642 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.805 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.806 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.806 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:58.958 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:58.959 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:58.960 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:59.155 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-Mon Dec 10 11:42:59.157 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
-Mon Dec 10 11:42:59.159 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
-Mon Dec 10 11:42:59.352 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+Mon Dec 10 12:05:48.183     <CWChannel: 0x7fc3ff50d600> [channelNumber=12(2GHz), channelWidth={20MHz}, active]
+Mon Dec 10 12:05:48.183 )} took 0.0007 seconds, returned 4 results
+Mon Dec 10 12:05:48.183 Scan: <airportd[160]> Cache-assisted scan request on channel 13 does not require a live scan
+Mon Dec 10 12:05:48.183 Scan: <airportd[160]> Cache-assisted scan request on channel 36 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 40 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.184 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.184     <CWChannel: 0x7fc3ff55aa40> [channelNumber=13(2GHz), channelWidth={20MHz}, active],
+Mon Dec 10 12:05:48.184     <CWChannel: 0x7fc3ff504b10> [channelNumber=36(5GHz), channelWidth={40MHz(+1)}, active],
+Mon Dec 10 12:05:48.184     <CWChannel: 0x7fc3ff55b310> [channelNumber=40(5GHz), channelWidth={40MHz(-1)}, active]
+Mon Dec 10 12:05:48.184 )} took 0.0007 seconds, returned 5 results
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 44 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 48 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 149 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.185 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.185     <CWChannel: 0x7fc3ff50cca0> [channelNumber=44(5GHz), channelWidth={40MHz(+1)}, active],
+Mon Dec 10 12:05:48.185     <CWChannel: 0x7fc3ff55ac00> [channelNumber=48(5GHz), channelWidth={40MHz(-1)}, active],
+Mon Dec 10 12:05:48.185     <CWChannel: 0x7fc3ff532a50> [channelNumber=149(5GHz), channelWidth={20MHz}, active]
+Mon Dec 10 12:05:48.185 )} took 0.0006 seconds, returned 4 results
+Mon Dec 10 12:05:48.185 Scan: <airportd[160]> Cache-assisted scan request on channel 153 does not require a live scan
+Mon Dec 10 12:05:48.185 Scan: <airportd[160]> Cache-assisted scan request on channel 157 does not require a live scan
+Mon Dec 10 12:05:48.185 Scan: <airportd[160]> Cache-assisted scan request on channel 161 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.186 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.186     <CWChannel: 0x7fc3ff5571c0> [channelNumber=153(5GHz), channelWidth={40MHz(-1)}, active],
+Mon Dec 10 12:05:48.186     <CWChannel: 0x7fc3ff5503a0> [channelNumber=157(5GHz), channelWidth={20MHz}, active],
+Mon Dec 10 12:05:48.186     <CWChannel: 0x7fc3ff55fe50> [channelNumber=161(5GHz), channelWidth={40MHz(-1)}, active]
+Mon Dec 10 12:05:48.186 )} took 0.0010 seconds, returned 7 results
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request on channel 165 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request on channel 52 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request on channel 56 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.187 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.187     <CWChannel: 0x7fc3ff513800> [channelNumber=165(5GHz), channelWidth={20MHz}, active],
+Mon Dec 10 12:05:48.187     <CWChannel: 0x7fc3ff524d50> [channelNumber=52(5GHz), channelWidth={40MHz(+1)}, DFS],
+Mon Dec 10 12:05:48.187     <CWChannel: 0x7fc3ff550d80> [channelNumber=56(5GHz), channelWidth={40MHz(-1)}, DFS]
+Mon Dec 10 12:05:48.187 )} took 0.0008 seconds, returned 5 results
+Mon Dec 10 12:05:48.187 Scan: <airportd[160]> Cache-assisted scan request on channel 60 does not require a live scan
+Mon Dec 10 12:05:48.187 Scan: <airportd[160]> Cache-assisted scan request on channel 64 does not require a live scan
+Mon Dec 10 12:05:48.188 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.188 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.188     <CWChannel: 0x7fc3ff54cf50> [channelNumber=60(5GHz), channelWidth={40MHz(+1)}, DFS],
+Mon Dec 10 12:05:48.188     <CWChannel: 0x7fc3ff538220> [channelNumber=64(5GHz), channelWidth={40MHz(-1)}, DFS]
+Mon Dec 10 12:05:48.188 )} took 0.0013 seconds, returned 8 results
+Mon Dec 10 12:05:50.375 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:05:50.375 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=216 Mbps
+Mon Dec 10 12:05:50.376 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:05:55.378 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:05:55.378 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-56 dBm TxRate=243 Mbps
+Mon Dec 10 12:05:55.379 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:06:28.759 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_SYNC_STATE_CHANGED (awdl0)
+Mon Dec 10 12:06:28.763 Info: <airportd[160]> AWDL started
+Mon Dec 10 12:06:28.763 Driver Event: <airportd[160]> _bsd_80211_event_callback: CHANNEL_SWITCH (en0)
+Mon Dec 10 12:06:28.765 Roam: <airportd[160]> ROAMING PROFILES updated to SINGLE-BAND, SINGLE-AP for 2.4GHz on en0
+Mon Dec 10 12:06:28.765 Roam: <airportd[160]> ROAMING PROFILES updated to SINGLE-BAND, SINGLE-AP for 5GHz on en0
 
 
 
@@ -191,8 +191,6 @@ Mon Dec 10 12:13:06.628 Info: <Wi-Fi Menu Extra[335]> link quality changed
 Mon Dec 10 12:13:27.639 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
 Mon Dec 10 12:13:27.639 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=243 Mbps
 Mon Dec 10 12:13:27.640 Info: <Wi-Fi Menu Extra[335]> link quality changed
-
-
 
 
 

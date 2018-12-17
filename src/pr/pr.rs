@@ -27,9 +27,11 @@ use std::convert::From;
 use getopts::HasArg;
 use getopts::Occur;
 use std::num::ParseIntError;
+use std::str::Chars;
 
 static NAME: &str = "pr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static TAB: char = '\t';
 static LINES_PER_PAGE: usize = 66;
 static HEADER_LINES_PER_PAGE: usize = 5;
 static TRAILER_LINES_PER_PAGE: usize = 5;
@@ -684,7 +686,7 @@ fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout,
 
     for start in 0..content_lines_per_page {
         let indexes: Vec<usize> = get_indexes(start, content_lines_per_page, columns);
-        let mut line = String::new();
+        let mut line: Vec<String> = Vec::new();
         for index in indexes {
             if lines.get(index).is_none() {
                 break;
@@ -693,13 +695,13 @@ fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout,
             let next_line_number = line_number + index + 1;
             let trimmed_line = get_line_for_printing(
                 next_line_number, &width,
-                &number_separator, columns,
-                col_sep, col_width,
+                &number_separator, columns, col_width,
                 read_line, is_number_mode);
-            line.push_str(&trimmed_line);
+            line.push(trimmed_line);
             i += 1;
         }
-        out.write(line.as_bytes())?;
+
+        out.write(line.join(col_sep).as_bytes())?;
         if i == lines.len() {
             out.write(page_separator)?;
         } else {
@@ -710,17 +712,37 @@ fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout,
 }
 
 fn get_line_for_printing(line_number: usize, width: &usize,
-                         separator: &String, columns: usize, col_sep: &String, col_width: Option<usize>,
+                         separator: &String, columns: usize,
+                         col_width: Option<usize>,
                          read_line: &String, is_number_mode: bool) -> String {
     let fmtd_line_number: String = if is_number_mode {
         get_fmtd_line_number(&width, line_number, &separator)
     } else {
         "".to_string()
     };
-    let complete_line = format!("{}{}{}", fmtd_line_number, read_line, col_sep);
+    let mut complete_line = format!("{}{}", fmtd_line_number, read_line);
+
+    let tab_count: usize = complete_line
+        .chars()
+        .filter(|i| i == &TAB)
+        .count();
+
+    let display_length = complete_line.len() + (tab_count * 7);
     // TODO Adjust the width according to -n option
-    // TODO Line has less content than the column width
-    col_width.map(|i| complete_line.chars().take(i / columns).collect()).unwrap_or(complete_line)
+    // TODO actual len of the string vs display len of string because of tabs
+    col_width.map(|i| {
+        let min_width = (i - (columns - 1)) / columns;
+        if display_length < min_width {
+            for _i in 0..(min_width - display_length) {
+                complete_line.push(' ');
+            }
+        }
+
+        complete_line
+            .chars()
+            .take(min_width)
+            .collect()
+    }).unwrap_or(complete_line)
 }
 
 fn get_indexes(start: usize, content_lines_per_page: usize, columns: usize) -> Vec<usize> {
