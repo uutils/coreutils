@@ -10,11 +10,12 @@
 extern crate unix_socket;
 #[macro_use]
 extern crate quick_error;
+extern crate itertools;
 extern crate chrono;
 extern crate getopts;
 extern crate uucore;
 
-use std::io::{BufRead, BufReader, stdin, stdout, stderr, Error, Read, Write, Stdout};
+use std::io::{BufRead, BufReader, stdin, stdout, stderr, Error, Read, Write, Stdout, Lines};
 use std::vec::Vec;
 use chrono::offset::Local;
 use chrono::DateTime;
@@ -24,10 +25,10 @@ use std::fs::{metadata, File};
 use std::os::unix::fs::FileTypeExt;
 use quick_error::ResultExt;
 use std::convert::From;
-use getopts::HasArg;
-use getopts::Occur;
+use getopts::{HasArg, Occur};
 use std::num::ParseIntError;
-use std::str::Chars;
+use itertools::{Itertools, GroupBy};
+use std::iter::{Enumerate, Map, TakeWhile, SkipWhile};
 
 static NAME: &str = "pr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -65,7 +66,6 @@ struct OutputOptions {
     display_header: bool,
     display_trailer: bool,
     content_lines_per_page: usize,
-    suppress_errors: bool,
     page_separator_char: String,
     column_mode_options: Option<ColumnModeOptions>,
 }
@@ -76,35 +76,9 @@ struct ColumnModeOptions {
     column_separator: String,
 }
 
-#[derive(PartialEq, Eq)]
-enum PrintPageCommand {
-    Skip,
-    Abort,
-    Print,
-}
-
 impl AsRef<OutputOptions> for OutputOptions {
     fn as_ref(&self) -> &OutputOptions {
         self
-    }
-}
-
-impl OutputOptions {
-    fn get_columns(&self) -> usize {
-        self.as_ref()
-            .column_mode_options.as_ref()
-            .map(|i| i.columns)
-            .unwrap_or(1)
-    }
-
-    fn lines_to_read_for_page(&self) -> usize {
-        let content_lines_per_page = &self.as_ref().content_lines_per_page;
-        let columns = self.get_columns();
-        if self.as_ref().double_space {
-            (content_lines_per_page / 2) * columns
-        } else {
-            content_lines_per_page * columns
-        }
     }
 }
 
@@ -492,8 +466,6 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
     };
 
-    let suppress_errors = matches.opt_present(SUPPRESS_PRINTING_ERROR);
-
     let page_separator_char = matches.opt_str(FORM_FEED_OPTION).map(|_i| {
         '\u{000A}'.to_string()
     }).unwrap_or("\n".to_string());
@@ -530,7 +502,6 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         display_header: display_header_and_trailer,
         display_trailer: display_header_and_trailer,
         content_lines_per_page,
-        suppress_errors,
         page_separator_char,
         column_mode_options,
     })
@@ -573,60 +544,51 @@ fn open(path: &str) -> Result<Box<Read>, PrError> {
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
-    let mut i = 0;
-    let mut page: usize = 0;
-    let mut buffered_content: Vec<String> = Vec::new();
-    let read_lines_per_page = options.lines_to_read_for_page();
-    let start_page = options.as_ref().start_page.as_ref();
-    let last_page = options.as_ref().end_page.as_ref();
-    let mut line_number = options.as_ref()
-        .number
-        .as_ref()
-        .map(|i| i.first_number)
-        .unwrap_or(1) - 1;
-    for line in BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines() {
-        if i == read_lines_per_page {
-            page = page + 1;
-            i = 0;
+    let start_page: &usize = options.start_page.as_ref().unwrap_or(&1);
+    let last_page: Option<&usize> = options.end_page.as_ref();
+    let lines_needed_per_page: usize = lines_to_read_for_page(options);
+    let start_line_number: usize = get_start_line_number(options);
 
-            let cmd = _get_print_command(start_page, last_page, &page);
-            if cmd == PrintPageCommand::Print {
-                line_number += print_page(&buffered_content, options, &page, &line_number)?;
-                buffered_content = Vec::new();
-            } else if cmd == PrintPageCommand::Abort {
-                return Ok(0);
-            }
+    let pages: GroupBy<usize, Map<Enumerate<Map<TakeWhile<SkipWhile<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>>, _>, _> =
+        BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?)
+            .lines()
+            .enumerate()
+            .skip_while(|line_index: &(usize, Result<String, Error>)| {
+                // Skip the initial lines if not in page range
+                let start_line_index_of_start_page = (*start_page - 1) * lines_needed_per_page;
+                line_index.0 < (start_line_index_of_start_page)
+            })
+            .take_while(|i: &(usize, Result<String, Error>)| {
+                // Only read the file until provided last page reached
+                last_page
+                    .map(|lp| i.0 < ((*lp) * lines_needed_per_page))
+                    .unwrap_or(true)
+            })
+            .map(|i: (usize, Result<String, Error>)| i.1) // just get lines remove real line number
+            .enumerate()
+            .map(|i: (usize, Result<String, Error>)| (i.0 + start_line_number, i.1)) // get display line number with line content
+            .group_by(|i: &(usize, Result<String, Error>)| {
+                ((i.0 - start_line_number + 1) as f64 / lines_needed_per_page as f64).ceil() as usize + (start_page - 1)
+            }); // group them by page number
+
+
+    for (page_number, content_with_line_number) in pages.into_iter() {
+        let mut lines: Vec<(usize, String)> = Vec::new();
+        for line_number_and_line in content_with_line_number {
+            let line_number: usize = line_number_and_line.0;
+            let line: Result<String, Error> = line_number_and_line.1;
+            let x = line?;
+            lines.push((line_number, x));
         }
-        buffered_content.push(line?);
-        i = i + 1;
+
+        print_page(&lines, options, &page_number);
     }
 
-    if i != 0 {
-        page = page + 1;
-        let cmd = _get_print_command(start_page, last_page, &page);
-        if cmd == PrintPageCommand::Print {
-            print_page(&buffered_content, options, &page, &line_number)?;
-        } else if cmd == PrintPageCommand::Abort {
-            return Ok(0);
-        }
-    }
 
     return Ok(0);
 }
 
-fn _get_print_command(start_page: Option<&usize>, last_page: Option<&usize>, page: &usize) -> PrintPageCommand {
-    let below_page_range = start_page.is_some() && page < start_page.unwrap();
-    let is_within_page_range = (start_page.is_none() || page >= start_page.unwrap())
-        && (last_page.is_none() || page <= last_page.unwrap());
-    if below_page_range {
-        return PrintPageCommand::Skip;
-    } else if is_within_page_range {
-        return PrintPageCommand::Print;
-    }
-    return PrintPageCommand::Abort;
-}
-
-fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize, line_number: &usize) -> Result<usize, Error> {
+fn print_page(lines: &Vec<(usize, String)>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
     let page_separator = options.as_ref().page_separator_char.as_bytes();
     let header: Vec<String> = header_content(options, page);
     let trailer_content: Vec<String> = trailer_content(options);
@@ -640,7 +602,7 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize, line_n
         out.write(line_separator)?;
     }
 
-    let lines_written = write_columns(lines, options, out, line_number)?;
+    let lines_written = write_columns(lines, options, out)?;
 
     for index in 0..trailer_content.len() {
         let x: &String = trailer_content.get(index).unwrap();
@@ -655,7 +617,7 @@ fn print_page(lines: &Vec<String>, options: &OutputOptions, page: &usize, line_n
     Ok(lines_written)
 }
 
-fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout, line_number: &usize) -> Result<usize, Error> {
+fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mut Stdout) -> Result<usize, Error> {
     let line_separator = options.as_ref().line_separator.as_bytes();
     let page_separator = options.as_ref().page_separator_char.as_bytes();
     let content_lines_per_page = options.as_ref().content_lines_per_page;
@@ -669,7 +631,7 @@ fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout,
         .unwrap_or(NumberingMode::default().separator);
 
     let blank_line = "".to_string();
-    let columns = options.get_columns();
+    let columns = get_columns(options);
 
     let col_sep: &String = options.as_ref()
         .column_mode_options.as_ref()
@@ -691,8 +653,8 @@ fn write_columns(lines: &Vec<String>, options: &OutputOptions, out: &mut Stdout,
             if lines.get(index).is_none() {
                 break;
             }
-            let read_line = lines.get(index).unwrap();
-            let next_line_number = line_number + index + 1;
+            let read_line: &String = &lines.get(index).unwrap().1;
+            let next_line_number: usize = lines.get(index).unwrap().0;
             let trimmed_line = get_line_for_printing(
                 next_line_number, &width,
                 &number_separator, columns, col_width,
@@ -728,8 +690,8 @@ fn get_line_for_printing(line_number: usize, width: &usize,
         .count();
 
     let display_length = complete_line.len() + (tab_count * 7);
-    // TODO Adjust the width according to -n option
-    // TODO actual len of the string vs display len of string because of tabs
+// TODO Adjust the width according to -n option
+// TODO actual len of the string vs display len of string because of tabs
     col_width.map(|i| {
         let min_width = (i - (columns - 1)) / columns;
         if display_length < min_width {
@@ -796,4 +758,41 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
     } else {
         Vec::new()
     }
+}
+
+/// Returns starting line number for the file to be printed.
+/// If -N is specified the first line number changes otherwise
+/// default is 1.
+/// # Arguments
+/// * `opts` - A reference to OutputOptions
+fn get_start_line_number(opts: &OutputOptions) -> usize {
+    opts.number
+        .as_ref()
+        .map(|i| i.first_number)
+        .unwrap_or(1)
+}
+
+/// Returns number of lines to read from input for constructing one page of pr output.
+/// If double space -d is used lines are halved.
+/// If columns --columns is used the lines are multiplied by the value.
+/// # Arguments
+/// * `opts` - A reference to OutputOptions
+fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
+    let content_lines_per_page = opts.content_lines_per_page;
+    let columns = get_columns(opts);
+    if opts.double_space {
+        (content_lines_per_page / 2) * columns
+    } else {
+        content_lines_per_page * columns
+    }
+}
+
+/// Returns number of columns to output
+/// # Arguments
+/// * `opts` - A reference to OutputOptions
+fn get_columns(opts: &OutputOptions) -> usize {
+    opts.column_mode_options
+        .as_ref()
+        .map(|i| i.columns)
+        .unwrap_or(1)
 }
