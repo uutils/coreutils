@@ -1,11 +1,6 @@
 
 
-
-
 {last_modified_time} test_one_page.log Page 1
-
-
-
 
 
 ntation processAirPortStateChanges]: pppConnectionState 0
@@ -71,43 +66,7 @@ Mon Dec 10 11:42:57.751 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementati
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 {last_modified_time} test_one_page.log Page 2
-
-
-
 
 
 Mon Dec 10 11:42:57.896 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
@@ -165,37 +124,6 @@ Mon Dec 10 11:42:59.157 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementati
 Mon Dec 10 11:42:59.159 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
 
 Mon Dec 10 11:42:59.352 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
