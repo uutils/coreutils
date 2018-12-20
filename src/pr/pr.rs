@@ -48,6 +48,7 @@ static PAGE_LENGTH_OPTION: &str = "l";
 static SUPPRESS_PRINTING_ERROR: &str = "r";
 static FORM_FEED_OPTION: &str = "F";
 static COLUMN_WIDTH_OPTION: &str = "w";
+static ACROSS_OPTION: &str = "a";
 static COLUMN_OPTION: &str = "column";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
@@ -60,6 +61,7 @@ struct OutputOptions {
     header: String,
     double_space: bool,
     line_separator: String,
+    content_line_separator: String,
     last_modified_time: String,
     start_page: Option<usize>,
     end_page: Option<usize>,
@@ -74,6 +76,7 @@ struct ColumnModeOptions {
     width: Option<usize>,
     columns: usize,
     column_separator: String,
+    across_mode: bool,
 }
 
 impl AsRef<OutputOptions> for OutputOptions {
@@ -258,6 +261,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Occur::Optional,
     );
 
+    opts.opt(
+        ACROSS_OPTION,
+        "across",
+        "Modify the effect of the - column option so that the columns are filled across the page in a  round-robin  order
+              (for example, when column is 2, the first input line heads column 1, the second heads column 2, the third is the
+              second line in column 1, and so on).",
+        "",
+        HasArg::No,
+        Occur::Optional,
+    );
+
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -405,11 +419,13 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
 
     let double_space = matches.opt_present(DOUBLE_SPACE_OPTION);
 
-    let line_separator: String = if double_space {
+    let content_line_separator: String = if double_space {
         "\n\n".to_string()
     } else {
         "\n".to_string()
     };
+
+    let line_separator: String = "\n".to_string();
 
     let last_modified_time = if path.eq(FILE_STDIN) {
         current_time()
@@ -475,6 +491,8 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         _ => None
     };
 
+    let across_mode = matches.opt_present(ACROSS_OPTION);
+
     let column_mode_options = match matches.opt_str(COLUMN_OPTION).map(|i| {
         i.parse::<usize>()
     }) {
@@ -486,6 +504,7 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
                     None => Some(DEFAULT_COLUMN_WIDTH)
                 },
                 column_separator: DEFAULT_COLUMN_SEPARATOR.to_string(),
+                across_mode,
             })
         }
         _ => None
@@ -496,6 +515,7 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         header,
         double_space,
         line_separator,
+        content_line_separator,
         last_modified_time,
         start_page,
         end_page,
@@ -549,7 +569,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let lines_needed_per_page: usize = lines_to_read_for_page(options);
     let start_line_number: usize = get_start_line_number(options);
 
-    let pages: GroupBy<usize, Map<Enumerate<Map<TakeWhile<SkipWhile<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>>, _>, _> =
+    let pages: GroupBy<usize, Map<TakeWhile<SkipWhile<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>, _> =
         BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?)
             .lines()
             .enumerate()
@@ -564,11 +584,9 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                     .map(|lp| i.0 < ((*lp) * lines_needed_per_page))
                     .unwrap_or(true)
             })
-            .map(|i: (usize, Result<String, Error>)| i.1) // just get lines remove real line number
-            .enumerate()
             .map(|i: (usize, Result<String, Error>)| (i.0 + start_line_number, i.1)) // get display line number with line content
             .group_by(|i: &(usize, Result<String, Error>)| {
-                ((i.0 - start_line_number + 1) as f64 / lines_needed_per_page as f64).ceil() as usize + (start_page - 1)
+                ((i.0 - start_line_number + 1) as f64 / lines_needed_per_page as f64).ceil() as usize
             }); // group them by page number
 
 
@@ -589,12 +607,12 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 }
 
 fn print_page(lines: &Vec<(usize, String)>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
-    let page_separator = options.as_ref().page_separator_char.as_bytes();
+    let page_separator = options.page_separator_char.as_bytes();
     let header: Vec<String> = header_content(options, page);
     let trailer_content: Vec<String> = trailer_content(options);
 
     let out: &mut Stdout = &mut stdout();
-    let line_separator = options.as_ref().line_separator.as_bytes();
+    let line_separator = options.line_separator.as_bytes();
 
     out.lock();
     for x in header {
@@ -607,25 +625,28 @@ fn print_page(lines: &Vec<(usize, String)>, options: &OutputOptions, page: &usiz
     for index in 0..trailer_content.len() {
         let x: &String = trailer_content.get(index).unwrap();
         out.write(x.as_bytes())?;
-        if index + 1 == trailer_content.len() {
-            out.write(page_separator)?;
-        } else {
+        if index + 1 != trailer_content.len() {
             out.write(line_separator)?;
         }
     }
+    out.write(page_separator)?;
     out.flush()?;
     Ok(lines_written)
 }
 
 fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mut Stdout) -> Result<usize, Error> {
-    let line_separator = options.as_ref().line_separator.as_bytes();
-    let page_separator = options.as_ref().page_separator_char.as_bytes();
-    let content_lines_per_page = options.as_ref().content_lines_per_page;
-    let width: usize = options.as_ref()
+    let line_separator = options.content_line_separator.as_bytes();
+    let content_lines_per_page = if options.double_space {
+        options.content_lines_per_page / 2
+    } else {
+        options.content_lines_per_page
+    };
+
+    let width: usize = options
         .number.as_ref()
         .map(|i| i.width)
         .unwrap_or(0);
-    let number_separator: String = options.as_ref()
+    let number_separator: String = options
         .number.as_ref()
         .map(|i| i.separator.to_string())
         .unwrap_or(NumberingMode::default().separator);
@@ -633,23 +654,44 @@ fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mu
     let blank_line = "".to_string();
     let columns = get_columns(options);
 
-    let col_sep: &String = options.as_ref()
+    let col_sep: &String = options
         .column_mode_options.as_ref()
         .map(|i| &i.column_separator)
         .unwrap_or(&blank_line);
 
-    let col_width: Option<usize> = options.as_ref()
+    let col_width: Option<usize> = options
         .column_mode_options.as_ref()
         .map(|i| i.width)
         .unwrap_or(None);
 
-    let mut i = 0;
+    let across_mode = options
+        .column_mode_options.as_ref()
+        .map(|i| i.across_mode)
+        .unwrap_or(false);
+
+    let mut lines_printed = 0;
     let is_number_mode = options.number.is_some();
 
-    for start in 0..content_lines_per_page {
-        let indexes: Vec<usize> = get_indexes(start, content_lines_per_page, columns);
-        let mut line: Vec<String> = Vec::new();
-        for index in indexes {
+    let fetch_indexes: Vec<Vec<usize>> = if across_mode {
+        (0..content_lines_per_page)
+            .map(|a|
+                (0..columns)
+                    .map(|i| a * columns + i)
+                    .collect()
+            ).collect()
+    } else {
+        (0..content_lines_per_page)
+            .map(|start|
+                (0..columns)
+                    .map(|i| start + content_lines_per_page * i)
+                    .collect()
+            ).collect()
+    };
+
+    for fetch_index in fetch_indexes {
+        let indexes = fetch_index.len();
+        for i in 0..indexes {
+            let index = fetch_index[i];
             if lines.get(index).is_none() {
                 break;
             }
@@ -659,18 +701,15 @@ fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mu
                 next_line_number, &width,
                 &number_separator, columns, col_width,
                 read_line, is_number_mode);
-            line.push(trimmed_line);
-            i += 1;
+            out.write(trimmed_line.as_bytes())?;
+            if (i + 1) != indexes {
+                out.write(col_sep.as_bytes())?;
+            }
+            lines_printed += 1;
         }
-
-        out.write(line.join(col_sep).as_bytes())?;
-        if i == lines.len() {
-            out.write(page_separator)?;
-        } else {
-            out.write(line_separator)?;
-        }
+        out.write(line_separator)?;
     }
-    Ok(i)
+    Ok(lines_printed)
 }
 
 fn get_line_for_printing(line_number: usize, width: &usize,
@@ -707,17 +746,6 @@ fn get_line_for_printing(line_number: usize, width: &usize,
     }).unwrap_or(complete_line)
 }
 
-fn get_indexes(start: usize, content_lines_per_page: usize, columns: usize) -> Vec<usize> {
-    let mut indexes: Vec<usize> = Vec::new();
-    let mut offset = start;
-    indexes.push(offset);
-    for _col in 1..columns {
-        offset += content_lines_per_page;
-        indexes.push(offset);
-    }
-    indexes
-}
-
 fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -> String {
     let line_str = line_number.to_string();
     if line_str.len() >= *width {
@@ -729,7 +757,7 @@ fn get_fmtd_line_number(width: &usize, line_number: usize, separator: &String) -
 
 
 fn header_content(options: &OutputOptions, page: &usize) -> Vec<String> {
-    if options.as_ref().display_header {
+    if options.display_header {
         let first_line: String = format!("{} {} Page {}", options.last_modified_time, options.header, page);
         vec!["".to_string(), "".to_string(), first_line, "".to_string(), "".to_string()]
     } else {
