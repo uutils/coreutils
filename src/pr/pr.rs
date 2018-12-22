@@ -50,6 +50,7 @@ static FORM_FEED_OPTION: &str = "F";
 static COLUMN_WIDTH_OPTION: &str = "w";
 static ACROSS_OPTION: &str = "a";
 static COLUMN_OPTION: &str = "column";
+static COLUMN_SEPARATOR_OPTION: &str = "s";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
@@ -269,6 +270,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
               second line in column 1, and so on).",
         "",
         HasArg::No,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        COLUMN_SEPARATOR_OPTION,
+        "",
+        "Separate text columns by the single character char instead of by the appropriate number of <space>s
+           (default for char is the <tab> character).",
+        "char",
+        HasArg::Yes,
         Occur::Optional,
     );
 
@@ -497,6 +508,10 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
 
     let across_mode = matches.opt_present(ACROSS_OPTION);
 
+    let column_separator = matches.opt_str(COLUMN_SEPARATOR_OPTION)
+        .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
+
+
     let column_mode_options = match matches.opt_str(COLUMN_OPTION).map(|i| {
         i.parse::<usize>()
     }) {
@@ -507,7 +522,7 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
                     Some(x) => Some(x),
                     None => Some(DEFAULT_COLUMN_WIDTH)
                 },
-                column_separator: DEFAULT_COLUMN_SEPARATOR.to_string(),
+                column_separator,
                 across_mode,
             })
         }
