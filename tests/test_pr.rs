@@ -293,3 +293,34 @@ fn test_with_stdin() {
             (&"{last_modified_time}".to_string(), &now_time()),
         ]);
 }
+
+#[test]
+fn test_with_column() {
+    let test_file_path = "column.log";
+    let expected_test_file_path = "column.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time(&scenario, test_file_path);
+    scenario
+        .args(&["--pages=3:5", "--column=3", "-n", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, vec![
+            (&"{last_modified_time}".to_string(), &value),
+        ]);
+
+}
+
+#[test]
+fn test_with_column_across_option() {
+    let test_file_path = "column.log";
+    let expected_test_file_path = "column_across.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time(&scenario, test_file_path);
+    scenario
+        .args(&["--pages=3:5", "--column=3", "-a", "-n", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, vec![
+            (&"{last_modified_time}".to_string(), &value),
+        ]);
+
+}
+
