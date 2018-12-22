@@ -330,7 +330,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn is_a_file(could_be_file: &String) -> bool {
-    File::open(could_be_file).is_ok()
+    could_be_file == FILE_STDIN || File::open(could_be_file).is_ok()
 }
 
 fn print_error(matches: &Matches, err: PrError) {
@@ -375,7 +375,11 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
 }
 
 fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrError> {
-    let header: String = matches.opt_str(STRING_HEADER_OPTION).unwrap_or(path.to_string());
+    let header: String = matches.opt_str(STRING_HEADER_OPTION).unwrap_or(if path == FILE_STDIN {
+        "".to_string()
+    } else {
+        path.to_string()
+    });
 
     let default_first_number = NumberingMode::default().first_number;
     let first_number = matches.opt_str(FIRST_LINE_NUMBER_OPTION).map(|n| {

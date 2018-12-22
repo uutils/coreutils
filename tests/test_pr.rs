@@ -16,6 +16,10 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     }).unwrap_or(String::new());
 }
 
+fn now_time() -> String {
+    Local::now().format("%b %d %H:%M %Y").to_string()
+}
+
 
 #[test]
 fn test_without_any_options() {
@@ -274,4 +278,18 @@ fn test_with_suppress_error_option() {
         .fails()
         .stderr_is("")
         .stdout_is("");
+}
+
+#[test]
+fn test_with_stdin() {
+    let test_file_path = "stdin.log";
+    let expected_file_path = "stdin.log.expected";
+    let mut scenario = new_ucmd!();
+    scenario
+        .pipe_in_fixture("stdin.log")
+        .args(&["--pages=1:2", "-n", "-"])
+        .run()
+        .stdout_is_templated_fixture(expected_file_path, vec![
+            (&"{last_modified_time}".to_string(), &now_time()),
+        ]);
 }

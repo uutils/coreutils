@@ -1,0 +1,132 @@
+
+
+{last_modified_time}  Page 1
+
+
+    1	ntation processAirPortStateChanges]: pppConnectionState 0
+    2	Mon Dec 10 11:42:56.558 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+    3	Mon Dec 10 11:42:56.705 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+    4	Mon Dec 10 11:42:56.706 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+    5	Mon Dec 10 11:42:56.706 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+    6	Mon Dec 10 11:42:56.854 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+    7	Mon Dec 10 11:42:56.855 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+    8	Mon Dec 10 11:42:56.856 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+    9	Mon Dec 10 11:42:57.002 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   10	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   11	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   12	Mon Dec 10 11:42:57.152 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   13	Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   14	Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   15	Mon Dec 10 11:42:57.302 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   16	Mon Dec 10 11:42:57.304 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   17	Mon Dec 10 11:42:57.304 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   18	Mon Dec 10 11:42:57.449 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   19	Mon Dec 10 11:42:57.451 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   20	Mon Dec 10 11:42:57.451 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   21	Mon Dec 10 11:42:57.600 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   22	Mon Dec 10 11:42:57.601 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   23	Mon Dec 10 11:42:57.602 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   24	Mon Dec 10 11:42:57.624 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   25	Mon Dec 10 11:42:57.624 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   26	Mon Dec 10 11:42:57.749 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   27	Mon Dec 10 11:42:57.750 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   28	Mon Dec 10 11:42:57.751 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   29	Mon Dec 10 11:42:57.896 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   30	Mon Dec 10 11:42:57.897 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   31	Mon Dec 10 11:42:57.897 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   32	Mon Dec 10 11:42:58.045 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   33	Mon Dec 10 11:42:58.047 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   34	Mon Dec 10 11:42:58.047 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   35	Mon Dec 10 11:42:58.193 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   36	Mon Dec 10 11:42:58.195 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   37	Mon Dec 10 11:42:58.195 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   38	Mon Dec 10 11:42:58.342 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   39	Mon Dec 10 11:42:58.343 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   40	Mon Dec 10 11:42:58.344 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   41	Mon Dec 10 11:42:58.491 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   42	Mon Dec 10 11:42:58.493 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   43	Mon Dec 10 11:42:58.494 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   44	Mon Dec 10 11:42:58.640 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   45	Mon Dec 10 11:42:58.642 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   46	Mon Dec 10 11:42:58.642 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   47	Mon Dec 10 11:42:58.805 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   48	Mon Dec 10 11:42:58.806 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   49	Mon Dec 10 11:42:58.806 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   50	Mon Dec 10 11:42:58.958 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   51	Mon Dec 10 11:42:58.959 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   52	Mon Dec 10 11:42:58.960 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   53	Mon Dec 10 11:42:59.155 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   54	Mon Dec 10 11:42:59.157 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   55	Mon Dec 10 11:42:59.159 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   56	Mon Dec 10 11:42:59.352 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+
+
+
+
+
+
+
+{last_modified_time}  Page 2
+
+
+   57	Mon Dec 10 11:42:59.354 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   58	Mon Dec 10 11:42:59.354 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   59	Mon Dec 10 11:42:59.372 Driver Event: <airportd[160]> _bsd_80211_event_callback: APPLE80211_M_ROAM_END (en0)
+   60	Mon Dec 10 11:42:59.372 Info: <airportd[160]> Roaming ended on interface en0
+   61	Mon Dec 10 11:42:59.372 Driver Event: <airportd[160]> _bsd_80211_event_callback: RSN_HANDSHAKE_DONE (en0)
+   62	Mon Dec 10 11:42:59.373 Info: <airportd[160]> -[CWXPCInterfaceContext setRoamInProgress:reason:]_block_invoke: roam status metric data: CWAWDMetricRoamStatus: status:0 security: 4 profile:5 origin:<34fcb9>(-69) target:<6cf37f>(-56) latency:6.083439s
+   63	Mon Dec 10 11:42:59.373 Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x90046
+   64	Mon Dec 10 11:42:59.373 Info: <airportd[160]> RESUME AWDL for interface en0, reason=Roam token=2685
+   65	Mon Dec 10 11:42:59.373 Info: <airportd[160]> PRIORITY LOCK REMOVED [client=airportd, type=4, interface=en0, priority=5]
+   66	Mon Dec 10 11:42:59.374 Info: <airportd[160]> -[CWXPCInterfaceContext __setAWDLOperatingMode:interface:error:]: attempting to set AWDL mode to 0
+   67	Mon Dec 10 11:43:01.072 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Service/18E14EA7-4641-4104-B315-A9315814912A/DHCP'
+   68	Mon Dec 10 11:43:01.072 SC: <airportd[160]> _processDHCPChanges: State:/Network/Service/18E14EA7-4641-4104-B315-A9315814912A/DHCP
+   69	Mon Dec 10 11:43:01.072 SC: <airportd[160]> _processDHCPChanges: DHCP airport_changed = 1
+   70	Mon Dec 10 11:43:01.073 Info: <airportd[160]> -[CWXPCSubsystem internal_submitIPConfigLatencyMetric:leaseDuration:]: IPConfig Latency metric data: CWAWDMetricIPConfigLatencyData: DHCP latency: 29010 msecs, duration: 480 mins, security: 4
+   71	Mon Dec 10 11:43:01.073 Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x90007
+   72	Mon Dec 10 11:43:01.073 SC: <airportd[160]> _setDHCPMessage: dhcpInfoKey "State:/Network/Interface/en0/AirPort/DHCP Message" = (null)
+   73	Mon Dec 10 11:43:10.369 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+   74	Mon Dec 10 11:43:10.369 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=162 Mbps
+   75	Mon Dec 10 11:43:10.369 Info: <Wi-Fi Menu Extra[335]> link quality changed
+   76	Mon Dec 10 11:43:23.376 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+   77	Mon Dec 10 11:43:23.377 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-58 dBm TxRate=243 Mbps
+   78	Mon Dec 10 11:43:23.377 Info: <Wi-Fi Menu Extra[335]> link quality changed
+   79	Mon Dec 10 11:43:28.380 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+   80	Mon Dec 10 11:43:28.380 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-58 dBm TxRate=216 Mbps
+   81	Mon Dec 10 11:43:28.380 Info: <Wi-Fi Menu Extra[335]> link quality changed
+   82	Mon Dec 10 11:43:31.744 AutoJoin: <airportd[160]> BACKGROUND SCAN request on interface en0 with SSID list (null)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
