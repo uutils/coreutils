@@ -15,12 +15,12 @@ extern crate chrono;
 extern crate getopts;
 extern crate uucore;
 
-use std::io::{BufRead, BufReader, stdin, stdout, stderr, Error, Read, Write, Stdout, Lines};
+use std::io::{BufRead, BufReader, stdin, stdout, stderr, Error, Read, Write, Stdout, Lines, Stdin};
 use std::vec::Vec;
 use chrono::offset::Local;
 use chrono::DateTime;
 use getopts::{Matches, Options};
-use std::fs::{metadata, File};
+use std::fs::{metadata, File, Metadata};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use quick_error::ResultExt;
@@ -29,6 +29,7 @@ use getopts::{HasArg, Occur};
 use std::num::ParseIntError;
 use itertools::{Itertools, GroupBy};
 use std::iter::{Enumerate, Map, TakeWhile, SkipWhile};
+use itertools::structs::KMergeBy;
 
 static NAME: &str = "pr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,6 +52,8 @@ static COLUMN_WIDTH_OPTION: &str = "w";
 static ACROSS_OPTION: &str = "a";
 static COLUMN_OPTION: &str = "column";
 static COLUMN_SEPARATOR_OPTION: &str = "s";
+static MERGE_FILES_PRINT: &str = "m";
+static OFFSET_SPACES_OPTION: &str = "o";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
@@ -71,6 +74,22 @@ struct OutputOptions {
     content_lines_per_page: usize,
     page_separator_char: String,
     column_mode_options: Option<ColumnModeOptions>,
+    merge_files_print: Option<usize>,
+    offset_spaces: usize
+}
+
+struct FileLine {
+    file_id: usize,
+    line_number: usize,
+    page_number: usize,
+    key: usize,
+    line_content: Result<String, Error>,
+}
+
+impl AsRef<FileLine> for FileLine {
+    fn as_ref(&self) -> &FileLine {
+        self
+    }
 }
 
 struct ColumnModeOptions {
@@ -283,6 +302,27 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Occur::Optional,
     );
 
+    opts.opt(
+        MERGE_FILES_PRINT,
+        "merge",
+        "Merge files. Standard output shall be formatted so the pr utility writes one line from each file specified by  a
+              file  operand, side by side into text columns of equal fixed widths, in terms of the number of column positions.
+              Implementations shall support merging of at least nine file operands.",
+        "",
+        HasArg::No,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        OFFSET_SPACES_OPTION,
+        "indent",
+        "Each  line of output shall be preceded by offset <space>s. If the -o option is not specified, the default offset
+              shall be zero. The space taken is in addition to the output line width (see the -w option below).",
+        "offset",
+        HasArg::Yes,
+        Occur::Optional,
+    );
+
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -297,21 +337,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let mut files: Vec<String> = matches.free.clone();
-    if files.is_empty() {
-        // -n value is optional if -n <path> is given the opts gets confused
-        if matches.opt_present(NUMBERING_MODE_OPTION) {
-            let maybe_file = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
-            let is_afile = is_a_file(&maybe_file);
-            if !is_afile {
-                print_error(&matches, PrError::NotExists(maybe_file));
-                return 1;
-            } else {
-                files.push(maybe_file);
-            }
-        } else {
-            //For stdin
-            files.push(FILE_STDIN.to_owned());
+    // -n value is optional if -n <path> is given the opts gets confused
+    // if -n is used just before file path it might be captured as value of -n
+    if matches.opt_str(NUMBERING_MODE_OPTION).is_some() {
+        let maybe_a_file_path: String = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
+        let is_file: bool = is_a_file(&maybe_a_file_path);
+        if !is_file && files.is_empty() {
+            print_error(&matches, PrError::NotExists(maybe_a_file_path));
+            return 1;
+        } else if is_file {
+            files.insert(0, maybe_a_file_path);
         }
+    } else if files.is_empty() {
+        //For stdin
+        files.insert(0, FILE_STDIN.to_owned());
     }
 
 
@@ -319,14 +358,25 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return print_usage(&mut opts, &matches);
     }
 
-    for f in files {
-        let result_options = build_options(&matches, &f);
+    let file_groups: Vec<Vec<String>> = if matches.opt_present(MERGE_FILES_PRINT) {
+        vec![files]
+    } else {
+        files.into_iter().map(|i| vec![i]).collect()
+    };
+
+    for file_group in file_groups {
+        let result_options: Result<OutputOptions, PrError> = build_options(&matches, &file_group);
         if result_options.is_err() {
             print_error(&matches, result_options.err().unwrap());
             return 1;
         }
-        let options = &result_options.unwrap();
-        let status: i32 = match pr(&f, options) {
+        let options: &OutputOptions = &result_options.unwrap();
+        let cmd_result: Result<i32, PrError> = if file_group.len() == 1 {
+            pr(&file_group.get(0).unwrap(), options)
+        } else {
+            mpr(&file_group, options)
+        };
+        let status: i32 = match cmd_result {
             Err(error) => {
                 print_error(&matches, error);
                 1
@@ -385,22 +435,44 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     return 0;
 }
 
-fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrError> {
-    let header: String = matches.opt_str(STRING_HEADER_OPTION).unwrap_or(if path == FILE_STDIN {
+fn build_options(matches: &Matches, paths: &Vec<String>) -> Result<OutputOptions, PrError> {
+    let is_merge_mode: bool = matches.opt_present(MERGE_FILES_PRINT);
+
+    if is_merge_mode && matches.opt_present(COLUMN_OPTION) {
+        let err_msg: String = "cannot specify number of columns when printing in parallel".to_string();
+        return Err(PrError::EncounteredErrors(err_msg));
+    }
+
+    if is_merge_mode && matches.opt_present(ACROSS_OPTION) {
+        let err_msg: String = "cannot specify both printing across and printing in parallel".to_string();
+        return Err(PrError::EncounteredErrors(err_msg));
+    }
+
+    let merge_files_print: Option<usize> = if matches.opt_present(MERGE_FILES_PRINT) {
+        Some(paths.len())
+    } else {
+        None
+    };
+
+    let header: String = matches.opt_str(STRING_HEADER_OPTION).unwrap_or(if is_merge_mode {
         "".to_string()
     } else {
-        path.to_string()
+        if paths[0].to_string() == FILE_STDIN {
+            "".to_string()
+        } else {
+            paths[0].to_string()
+        }
     });
 
-    let default_first_number = NumberingMode::default().first_number;
-    let first_number = matches.opt_str(FIRST_LINE_NUMBER_OPTION).map(|n| {
+    let default_first_number: usize = NumberingMode::default().first_number;
+    let first_number: usize = matches.opt_str(FIRST_LINE_NUMBER_OPTION).map(|n| {
         n.parse::<usize>().unwrap_or(default_first_number)
     }).unwrap_or(default_first_number);
 
     let numbering_options: Option<NumberingMode> = matches.opt_str(NUMBERING_MODE_OPTION).map(|i| {
-        let parse_result = i.parse::<usize>();
+        let parse_result: Result<usize, ParseIntError> = i.parse::<usize>();
 
-        let separator = if parse_result.is_err() {
+        let separator: String = if parse_result.is_err() {
             if is_a_file(&i) {
                 NumberingMode::default().separator
             } else {
@@ -410,7 +482,7 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
             NumberingMode::default().separator
         };
 
-        let width = if parse_result.is_err() {
+        let width: usize = if parse_result.is_err() {
             if is_a_file(&i) {
                 NumberingMode::default().width
             } else {
@@ -432,7 +504,7 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         return None;
     });
 
-    let double_space = matches.opt_present(DOUBLE_SPACE_OPTION);
+    let double_space: bool = matches.opt_present(DOUBLE_SPACE_OPTION);
 
     let content_line_separator: String = if double_space {
         "\n\n".to_string()
@@ -442,21 +514,21 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
 
     let line_separator: String = "\n".to_string();
 
-    let last_modified_time = if path.eq(FILE_STDIN) {
+    let last_modified_time: String = if is_merge_mode || paths[0].eq(FILE_STDIN) {
         current_time()
     } else {
-        file_last_modified_time(path)
+        file_last_modified_time(paths.get(0).unwrap())
     };
 
     let invalid_pages_map = |i: Result<usize, ParseIntError>| {
-        let unparsed_value = matches.opt_str(PAGE_RANGE_OPTION).unwrap();
+        let unparsed_value: String = matches.opt_str(PAGE_RANGE_OPTION).unwrap();
         match i {
             Ok(val) => Ok(val),
             Err(_e) => Err(PrError::EncounteredErrors(format!("invalid --pages argument '{}'", unparsed_value)))
         }
     };
 
-    let start_page = match matches.opt_str(PAGE_RANGE_OPTION).map(|i| {
+    let start_page: Option<usize> = match matches.opt_str(PAGE_RANGE_OPTION).map(|i| {
         let x: Vec<&str> = i.split(":").collect();
         x[0].parse::<usize>()
     }).map(invalid_pages_map)
@@ -465,9 +537,9 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
             _ => None
         };
 
-    let end_page = match matches.opt_str(PAGE_RANGE_OPTION)
-        .filter(|i| i.contains(":"))
-        .map(|i| {
+    let end_page: Option<usize> = match matches.opt_str(PAGE_RANGE_OPTION)
+        .filter(|i: &String| i.contains(":"))
+        .map(|i: String| {
             let x: Vec<&str> = i.split(":").collect();
             x[1].parse::<usize>()
         })
@@ -481,38 +553,38 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         return Err(PrError::EncounteredErrors(format!("invalid --pages argument '{}:{}'", start_page.unwrap(), end_page.unwrap())));
     }
 
-    let page_length = match matches.opt_str(PAGE_LENGTH_OPTION).map(|i| {
+    let page_length: usize = match matches.opt_str(PAGE_LENGTH_OPTION).map(|i| {
         i.parse::<usize>()
     }) {
         Some(res) => res?,
         _ => LINES_PER_PAGE
     };
-    let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
+    let page_length_le_ht: bool = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
-    let display_header_and_trailer = !(page_length_le_ht) && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
+    let display_header_and_trailer: bool = !(page_length_le_ht) && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
 
-    let content_lines_per_page = if page_length_le_ht {
+    let content_lines_per_page: usize = if page_length_le_ht {
         page_length
     } else {
         page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
     };
 
-    let page_separator_char = matches.opt_str(FORM_FEED_OPTION).map(|_i| {
+    let page_separator_char: String = matches.opt_str(FORM_FEED_OPTION).map(|_i| {
         '\u{000A}'.to_string()
     }).unwrap_or("\n".to_string());
 
-    let column_width = match matches.opt_str(COLUMN_WIDTH_OPTION).map(|i| i.parse::<usize>()) {
+    let column_width: Option<usize> = match matches.opt_str(COLUMN_WIDTH_OPTION).map(|i| i.parse::<usize>()) {
         Some(res) => Some(res?),
         _ => None
     };
 
-    let across_mode = matches.opt_present(ACROSS_OPTION);
+    let across_mode: bool = matches.opt_present(ACROSS_OPTION);
 
-    let column_separator = matches.opt_str(COLUMN_SEPARATOR_OPTION)
+    let column_separator: String = matches.opt_str(COLUMN_SEPARATOR_OPTION)
         .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
 
 
-    let column_mode_options = match matches.opt_str(COLUMN_OPTION).map(|i| {
+    let column_mode_options: Option<ColumnModeOptions> = match matches.opt_str(COLUMN_OPTION).map(|i| {
         i.parse::<usize>()
     }) {
         Some(res) => {
@@ -528,6 +600,14 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         }
         _ => None
     };
+    
+    let offset_spaces: usize = matches.opt_str(OFFSET_SPACES_OPTION)
+        .map(|i| {
+            match i.parse::<usize>() {
+                Ok(val)=> Ok(val),
+                Err(e)=> Err(PrError::EncounteredErrors("".to_string()))
+            }
+        }).unwrap_or(Ok(0))?;
 
     Ok(OutputOptions {
         number: numbering_options,
@@ -543,16 +623,18 @@ fn build_options(matches: &Matches, path: &String) -> Result<OutputOptions, PrEr
         content_lines_per_page,
         page_separator_char,
         column_mode_options,
+        merge_files_print,
+        offset_spaces,
     })
 }
 
 fn open(path: &str) -> Result<Box<Read>, PrError> {
     if path == FILE_STDIN {
-        let stdin = stdin();
+        let stdin: Stdin = stdin();
         return Ok(Box::new(stdin) as Box<Read>);
     }
 
-    metadata(path).map(|i| {
+    metadata(path).map(|i: Metadata| {
         let path_string = path.to_string();
         match i.file_type() {
             #[cfg(unix)]
@@ -582,50 +664,217 @@ fn open(path: &str) -> Result<Box<Read>, PrError> {
     }).unwrap_or(Err(PrError::NotExists(path.to_string())))
 }
 
-fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
     let start_page: &usize = options.start_page.as_ref().unwrap_or(&1);
+    let start_line_number: usize = get_start_line_number(options);
     let last_page: Option<&usize> = options.end_page.as_ref();
     let lines_needed_per_page: usize = lines_to_read_for_page(options);
-    let start_line_number: usize = get_start_line_number(options);
-
-    let pages: GroupBy<usize, Map<TakeWhile<SkipWhile<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>, _> =
-        BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?)
+    let file_line_groups: GroupBy<usize, Map<TakeWhile<SkipWhile<Map<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>, _>, _> =
+        BufReader::with_capacity(READ_BUFFER_SIZE, open(path).unwrap())
             .lines()
             .enumerate()
-            .skip_while(|line_index: &(usize, Result<String, Error>)| {
-                // Skip the initial lines if not in page range
-                let start_line_index_of_start_page = (*start_page - 1) * lines_needed_per_page;
-                line_index.0 < (start_line_index_of_start_page)
+            .map(move |i: (usize, Result<String, Error>)| {
+                FileLine {
+                    file_id: 0,
+                    line_number: i.0,
+                    line_content: i.1,
+                    page_number: 0,
+                    key: 0,
+                }
             })
-            .take_while(|i: &(usize, Result<String, Error>)| {
+            .skip_while(move |file_line: &FileLine| {
+                // Skip the initial lines if not in page range
+                let start_line_index_of_start_page = (start_page - 1) * lines_needed_per_page;
+                file_line.line_number < (start_line_index_of_start_page)
+            })
+            .take_while(move |file_line: &FileLine| {
                 // Only read the file until provided last page reached
                 last_page
-                    .map(|lp| i.0 < ((*lp) * lines_needed_per_page))
+                    .map(|lp| file_line.line_number < ((*lp) * lines_needed_per_page))
                     .unwrap_or(true)
             })
-            .map(|i: (usize, Result<String, Error>)| (i.0 + start_line_number, i.1)) // get display line number with line content
-            .group_by(|i: &(usize, Result<String, Error>)| {
-                ((i.0 - start_line_number + 1) as f64 / lines_needed_per_page as f64).ceil() as usize
-            }); // group them by page number
+            .map(move |file_line: FileLine| {
+                let page_number = ((file_line.line_number + 1) as f64 / lines_needed_per_page as f64).ceil() as usize;
+                FileLine {
+                    line_number: file_line.line_number + start_line_number,
+                    page_number,
+                    key: page_number,
+                    ..file_line
+                }
+            }) // get display line number with line content
+            .group_by(|file_line: &FileLine| {
+                file_line.page_number
+            });
 
 
-    for (page_number, content_with_line_number) in pages.into_iter() {
-        let mut lines: Vec<(usize, String)> = Vec::new();
-        for line_number_and_line in content_with_line_number {
-            let line_number: usize = line_number_and_line.0;
-            let line: Result<String, Error> = line_number_and_line.1;
-            let x = line?;
-            lines.push((line_number, x));
+    for (page_number, file_line_group) in file_line_groups.into_iter() {
+        let mut lines: Vec<FileLine> = Vec::new();
+        for file_line in file_line_group {
+            if file_line.line_content.is_err() {
+                return Err(PrError::from(file_line.line_content.unwrap_err()));
+            }
+            lines.push(file_line);
         }
-
-        print_page(&lines, options, &page_number);
+        let print_status: Result<usize, Error> = print_page(&lines, options, &page_number);
+        if print_status.is_err() {
+            return Err(PrError::from(print_status.unwrap_err()));
+        }
     }
 
 
     return Ok(0);
 }
 
-fn print_page(lines: &Vec<(usize, String)>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
+fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
+    let nfiles = paths.len();
+
+    let lines_needed_per_page: usize = lines_to_read_for_page(options);
+    let lines_needed_per_page_f64: f64 = lines_needed_per_page as f64;
+    let start_page: &usize = options.start_page.as_ref().unwrap_or(&1);
+    let last_page: Option<&usize> = options.end_page.as_ref();
+
+    let file_line_groups: GroupBy<usize, KMergeBy<Map<TakeWhile<SkipWhile<Map<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>, _>, _>, _> = paths
+        .into_iter()
+        .enumerate()
+        .map(|indexed_path: (usize, &String)| {
+            let start_line_number: usize = get_start_line_number(options);
+            BufReader::with_capacity(READ_BUFFER_SIZE, open(indexed_path.1).unwrap())
+                .lines()
+                .enumerate()
+                .map(move |i: (usize, Result<String, Error>)| {
+                    FileLine {
+                        file_id: indexed_path.0,
+                        line_number: i.0,
+                        line_content: i.1,
+                        page_number: 0,
+                        key: 0,
+                    }
+                })
+                .skip_while(move |file_line: &FileLine| {
+                    // Skip the initial lines if not in page range
+                    let start_line_index_of_start_page = (start_page - 1) * lines_needed_per_page;
+                    file_line.line_number < (start_line_index_of_start_page)
+                })
+                .take_while(move |file_line: &FileLine| {
+                    // Only read the file until provided last page reached  
+
+                    last_page
+                        .map(|lp| file_line.line_number < ((*lp) * lines_needed_per_page))
+                        .unwrap_or(true)
+                })
+                .map(move |file_line: FileLine| {
+                    let page_number = ((file_line.line_number + 2 - start_line_number) as f64 / (lines_needed_per_page_f64)).ceil() as usize;
+                    FileLine {
+                        line_number: file_line.line_number + start_line_number,
+                        page_number,
+                        key: page_number * nfiles + file_line.file_id,
+                        ..file_line
+                    }
+                }) // get display line number with line content
+        })
+        .kmerge_by(|a: &FileLine, b: &FileLine| {
+            if a.key == b.key {
+                a.line_number < b.line_number
+            } else {
+                a.key < b.key
+            }
+        })
+        .group_by(|file_line: &FileLine| {
+            file_line.key
+        });
+
+    let mut lines: Vec<FileLine> = Vec::new();
+    let start_page: &usize = options.start_page.as_ref().unwrap_or(&1);
+    let mut page_counter: usize = *start_page;
+    for (_key, file_line_group) in file_line_groups.into_iter() {
+        for file_line in file_line_group {
+            if file_line.line_content.is_err() {
+                return Err(PrError::from(file_line.line_content.unwrap_err()));
+            }
+            let new_page_number = file_line.page_number;
+            if page_counter != new_page_number {
+                fill_missing_files(&mut lines, lines_needed_per_page, &nfiles, page_counter);
+                let print_status: Result<usize, Error> = print_page(&lines, options, &page_counter);
+                if print_status.is_err() {
+                    return Err(PrError::from(print_status.unwrap_err()));
+                }
+                lines = Vec::new();
+            }
+            lines.push(file_line);
+            page_counter = new_page_number;
+        }
+    }
+
+    fill_missing_files(&mut lines, lines_needed_per_page, &nfiles, page_counter);
+    let print_status: Result<usize, Error> = print_page(&lines, options, &page_counter);
+    if print_status.is_err() {
+        return Err(PrError::from(print_status.unwrap_err()));
+    }
+
+
+    return Ok(0);
+}
+
+fn fill_missing_files(lines: &mut Vec<FileLine>, lines_per_file: usize, nfiles: &usize, page_number: usize) {
+    let init_line_number = (page_number - 1) * lines_per_file + 1;
+    let final_line_number = page_number * lines_per_file;
+    let mut file_id_counter: usize = 0;
+    let mut line_number_counter: usize = init_line_number;
+    let mut lines_processed: usize = 0;
+    let mut file_id_missing: bool = false;
+    for mut i in 0..lines_per_file * nfiles {
+        let file_id = lines.get(i).map(|i: &FileLine| i.file_id).unwrap_or(file_id_counter);
+        let line_number = lines.get(i).map(|i: &FileLine| i.line_number).unwrap_or(1);
+        if lines_processed == lines_per_file {
+            line_number_counter = init_line_number;
+            file_id_counter += 1;
+            lines_processed = 0;
+            file_id_missing = false;
+        }
+
+        if file_id_counter >= *nfiles {
+            file_id_counter = 0;
+            file_id_missing = false;
+        }
+
+        if file_id != file_id_counter {
+            file_id_missing = true;
+        }
+
+        if file_id_missing {
+            // Insert missing file_ids
+            lines.insert(i, FileLine {
+                file_id: file_id_counter,
+                line_number: line_number_counter,
+                line_content: Ok("".to_string()),
+                page_number,
+                key: 0,
+            });
+            line_number_counter += 1;
+        } else {
+            // Insert missing lines for a file_id
+            if line_number < line_number_counter {
+                line_number_counter += 1;
+                lines.insert(i, FileLine {
+                    file_id,
+                    line_number: line_number_counter,
+                    line_content: Ok("".to_string()),
+                    page_number,
+                    key: 0,
+                });
+            } else {
+                line_number_counter = line_number;
+                if line_number_counter == final_line_number {
+                    line_number_counter = init_line_number;
+                }
+            }
+        }
+
+        lines_processed += 1;
+    }
+}
+
+fn print_page(lines: &Vec<FileLine>, options: &OutputOptions, page: &usize) -> Result<usize, Error> {
     let page_separator = options.page_separator_char.as_bytes();
     let header: Vec<String> = header_content(options, page);
     let trailer_content: Vec<String> = trailer_content(options);
@@ -653,7 +902,7 @@ fn print_page(lines: &Vec<(usize, String)>, options: &OutputOptions, page: &usiz
     Ok(lines_written)
 }
 
-fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mut Stdout) -> Result<usize, Error> {
+fn write_columns(lines: &Vec<FileLine>, options: &OutputOptions, out: &mut Stdout) -> Result<usize, Error> {
     let line_separator = options.content_line_separator.as_bytes();
     let content_lines_per_page = if options.double_space {
         options.content_lines_per_page / 2
@@ -671,26 +920,35 @@ fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mu
         .unwrap_or(NumberingMode::default().separator);
 
     let blank_line = "".to_string();
-    let columns = get_columns(options);
-
+    let columns = options.merge_files_print.unwrap_or(get_columns(options));
+    let def_sep = DEFAULT_COLUMN_SEPARATOR.to_string();
     let col_sep: &String = options
         .column_mode_options.as_ref()
         .map(|i| &i.column_separator)
-        .unwrap_or(&blank_line);
+        .unwrap_or(options
+            .merge_files_print
+            .map(|_k| &def_sep)
+            .unwrap_or(&blank_line)
+        );
 
     let col_width: Option<usize> = options
         .column_mode_options.as_ref()
         .map(|i| i.width)
-        .unwrap_or(None);
+        .unwrap_or(options
+            .merge_files_print
+            .map(|_k| Some(DEFAULT_COLUMN_WIDTH))
+            .unwrap_or(None)
+        );
 
     let across_mode = options
         .column_mode_options.as_ref()
         .map(|i| i.across_mode)
         .unwrap_or(false);
+    
+    let offset_spaces: &usize = &options.offset_spaces;
 
     let mut lines_printed = 0;
     let is_number_mode = options.number.is_some();
-
     let fetch_indexes: Vec<Vec<usize>> = if across_mode {
         (0..content_lines_per_page)
             .map(|a|
@@ -707,19 +965,20 @@ fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mu
             ).collect()
     };
 
+    let spaces = " ".repeat(*offset_spaces);
+
     for fetch_index in fetch_indexes {
         let indexes = fetch_index.len();
         for i in 0..indexes {
-            let index = fetch_index[i];
+            let index: usize = fetch_index[i];
             if lines.get(index).is_none() {
                 break;
             }
-            let read_line: &String = &lines.get(index).unwrap().1;
-            let next_line_number: usize = lines.get(index).unwrap().0;
-            let trimmed_line = get_line_for_printing(
-                next_line_number, &width,
-                &number_separator, columns, col_width,
-                read_line, is_number_mode);
+            let file_line: &FileLine = lines.get(index).unwrap();
+            let trimmed_line: String = format!("{}{}", spaces, get_line_for_printing(
+                file_line, &width, &number_separator, columns, col_width,
+                is_number_mode, &options.merge_files_print, &i,
+            ));
             out.write(trimmed_line.as_bytes())?;
             if (i + 1) != indexes {
                 out.write(col_sep.as_bytes())?;
@@ -731,16 +990,20 @@ fn write_columns(lines: &Vec<(usize, String)>, options: &OutputOptions, out: &mu
     Ok(lines_printed)
 }
 
-fn get_line_for_printing(line_number: usize, width: &usize,
+fn get_line_for_printing(file_line: &FileLine, width: &usize,
                          separator: &String, columns: usize,
                          col_width: Option<usize>,
-                         read_line: &String, is_number_mode: bool) -> String {
-    let fmtd_line_number: String = if is_number_mode {
-        get_fmtd_line_number(&width, line_number, &separator)
+                         is_number_mode: bool, merge_files_print: &Option<usize>,
+                         index: &usize,
+) -> String {
+    let should_show_line_number_merge_file = merge_files_print.is_none() || index == &usize::min_value();
+    let should_show_line_number = is_number_mode && should_show_line_number_merge_file;
+    let fmtd_line_number: String = if should_show_line_number {
+        get_fmtd_line_number(&width, file_line.line_number, &separator)
     } else {
         "".to_string()
     };
-    let mut complete_line = format!("{}{}", fmtd_line_number, read_line);
+    let mut complete_line = format!("{}{}", fmtd_line_number, file_line.line_content.as_ref().unwrap());
 
     let tab_count: usize = complete_line
         .chars()

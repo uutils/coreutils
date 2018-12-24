@@ -282,7 +282,6 @@ fn test_with_suppress_error_option() {
 
 #[test]
 fn test_with_stdin() {
-    let test_file_path = "stdin.log";
     let expected_file_path = "stdin.log.expected";
     let mut scenario = new_ucmd!();
     scenario
@@ -306,7 +305,6 @@ fn test_with_column() {
         .stdout_is_templated_fixture(expected_test_file_path, vec![
             (&"{last_modified_time}".to_string(), &value),
         ]);
-
 }
 
 #[test]
@@ -321,7 +319,6 @@ fn test_with_column_across_option() {
         .stdout_is_templated_fixture(expected_test_file_path, vec![
             (&"{last_modified_time}".to_string(), &value),
         ]);
-
 }
 
 #[test]
@@ -336,6 +333,64 @@ fn test_with_column_across_option_and_column_separator() {
         .stdout_is_templated_fixture(expected_test_file_path, vec![
             (&"{last_modified_time}".to_string(), &value),
         ]);
-
 }
 
+#[test]
+fn test_with_mpr() {
+    let test_file_path = "column.log";
+    let test_file_path1 = "hosts.log";
+    let expected_test_file_path = "mpr.log.expected";
+    let expected_test_file_path1 = "mpr1.log.expected";
+    let expected_test_file_path2 = "mpr2.log.expected";
+    new_ucmd!()
+        .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, vec![
+            (&"{last_modified_time}".to_string(), &now_time()),
+        ]);
+
+    new_ucmd!()
+        .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path1, vec![
+            (&"{last_modified_time}".to_string(), &now_time()),
+        ]);
+
+    new_ucmd!()
+        .args(&["--pages=1:2", "-l", "100", "-n", "-m", test_file_path, test_file_path1, test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path2, vec![
+            (&"{last_modified_time}".to_string(), &now_time()),
+        ]);
+}
+
+#[test]
+fn test_with_mpr_and_column_options() {
+    let test_file_path = "column.log";
+    new_ucmd!()
+        .args(&["--column=2", "-m", "-n", test_file_path])
+        .fails()
+        .stderr_is("pr: cannot specify number of columns when printing in parallel")
+        .stdout_is("");
+
+    new_ucmd!()
+        .args(&["-a", "-m", "-n", test_file_path])
+        .fails()
+        .stderr_is("pr: cannot specify both printing across and printing in parallel")
+        .stdout_is("");
+}
+
+
+#[test]
+fn test_with_offset_space_option() {
+    let test_file_path = "column.log";
+    let expected_test_file_path = "column_spaces_across.log.expected";
+    let mut scenario = new_ucmd!();
+    let value = file_last_modified_time(&scenario, test_file_path);
+    scenario
+        .args(&["-o", "5", "--pages=3:5", "--column=3", "-a", "-n", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(expected_test_file_path, vec![
+            (&"{last_modified_time}".to_string(), &value),
+        ]);
+}
