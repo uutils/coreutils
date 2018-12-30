@@ -13,6 +13,7 @@ extern crate quick_error;
 extern crate chrono;
 extern crate getopts;
 extern crate itertools;
+extern crate regex;
 extern crate uucore;
 
 use chrono::offset::Local;
@@ -22,6 +23,7 @@ use getopts::{Matches, Options};
 use itertools::structs::KMergeBy;
 use itertools::{GroupBy, Itertools};
 use quick_error::ResultExt;
+use regex::Regex;
 use std::convert::From;
 use std::fs::{metadata, File, Metadata};
 use std::io::{stderr, stdin, stdout, BufRead, BufReader, Lines, Read, Stdin, Stdout, Write};
@@ -322,7 +324,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
-    let matches = match opts.parse(&args[1..]) {
+    // Remove -column option as getopts cannot parse things like -3 etc
+    let re = Regex::new(r"^-\d+").unwrap();
+    let opt_args: Vec<&String> = args.iter().filter(|i| !re.is_match(i)).collect();
+
+    let matches = match opts.parse(&opt_args[1..]) {
         Ok(m) => m,
         Err(e) => panic!("Invalid options\n{}", e),
     };
@@ -332,7 +338,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let mut files: Vec<String> = matches.free.clone();
+    let mut files: Vec<String> = matches
+        .free
+        .clone()
+        .iter()
+        .filter(|i| !i.starts_with('+') && !i.starts_with('-'))
+        .map(|i| i.to_string())
+        .collect();
+
     // -n value is optional if -n <path> is given the opts gets confused
     // if -n is used just before file path it might be captured as value of -n
     if matches.opt_str(NUMBERING_MODE_OPTION).is_some() {
@@ -360,7 +373,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     for file_group in file_groups {
-        let result_options: Result<OutputOptions, PrError> = build_options(&matches, &file_group);
+        let result_options: Result<OutputOptions, PrError> =
+            build_options(&matches, &file_group, args.join(" "));
         if result_options.is_err() {
             print_error(&matches, result_options.err().unwrap());
             return 1;
@@ -427,6 +441,11 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
      that do not fit into a text column are truncated.
      Lines are not truncated under single column output.";
     println!("{}", opts.usage(usage));
+    println!("    +page \t\tBegin output at page number page of the formatted input.");
+    println!(
+        "    -column \t\tProduce multi-column output. Refer --{}",
+        COLUMN_OPTION
+    );
     if matches.free.is_empty() {
         return 1;
     }
@@ -447,7 +466,11 @@ fn parse_usize(matches: &Matches, opt: &str) -> Option<Result<usize, PrError>> {
         .map(from_parse_error_to_pr_error)
 }
 
-fn build_options(matches: &Matches, paths: &Vec<String>) -> Result<OutputOptions, PrError> {
+fn build_options(
+    matches: &Matches,
+    paths: &Vec<String>,
+    free_args: String,
+) -> Result<OutputOptions, PrError> {
     let invalid_pages_map = |i: String| {
         let unparsed_value: String = matches.opt_str(PAGE_RANGE_OPTION).unwrap();
         i.parse::<usize>().map_err(|_e| {
@@ -547,6 +570,19 @@ fn build_options(matches: &Matches, paths: &Vec<String>) -> Result<OutputOptions
         file_last_modified_time(paths.get(0).unwrap())
     };
 
+    // +page option is less priority than --pages
+    let flags = &matches.free.join(" ");
+    let re = Regex::new(r"\s*\+(\d+)\s*").unwrap();
+    let start_page_in_plus_option: usize = match re.captures(&free_args).map(|i| {
+        let unparsed_num = i.get(1).unwrap().as_str().trim();
+        unparsed_num.parse::<usize>().map_err(|_e| {
+            PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
+        })
+    }) {
+        Some(res) => res?,
+        _ => 1,
+    };
+
     let start_page: usize = match matches
         .opt_str(PAGE_RANGE_OPTION)
         .map(|i| {
@@ -556,7 +592,7 @@ fn build_options(matches: &Matches, paths: &Vec<String>) -> Result<OutputOptions
         .map(invalid_pages_map)
     {
         Some(res) => res?,
-        _ => 1,
+        _ => start_page_in_plus_option,
     };
 
     let end_page: Option<usize> = match matches
@@ -608,9 +644,28 @@ fn build_options(matches: &Matches, paths: &Vec<String>) -> Result<OutputOptions
         .opt_str(COLUMN_SEPARATOR_OPTION)
         .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
 
-    let column_mode_options: Option<ColumnModeOptions> = match parse_usize(matches, COLUMN_OPTION) {
-        Some(res) => Some(ColumnModeOptions {
-            columns: res?,
+    let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
+
+    let start_column_option: Option<usize> = match re_col.captures(&free_args).map(|i| {
+        let unparsed_num = i.get(1).unwrap().as_str().trim();
+        unparsed_num.parse::<usize>().map_err(|_e| {
+            PrError::EncounteredErrors(format!("invalid {} argument '{}'", "-", unparsed_num))
+        })
+    }) {
+        Some(res) => Some(res?),
+        _ => None,
+    };
+
+    // --column has more priority than -column
+
+    let column_option_value: Option<usize> = match parse_usize(matches, COLUMN_OPTION) {
+        Some(res) => Some(res?),
+        _ => start_column_option,
+    };
+
+    let column_mode_options: Option<ColumnModeOptions> = match column_option_value {
+        Some(columns) => Some(ColumnModeOptions {
+            columns,
             width: column_width,
             column_separator,
             across_mode,
