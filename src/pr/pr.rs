@@ -735,7 +735,7 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
         usize,
         Map<TakeWhile<SkipWhile<Map<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>, _>,
         _,
-    > = BufReader::with_capacity(READ_BUFFER_SIZE, open(path).unwrap())
+    > = BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?)
         .lines()
         .enumerate()
         .map(|i: (usize, Result<String, IOError>)| FileLine {
@@ -789,6 +789,11 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
     let start_page: &usize = &options.start_page;
     let last_page: Option<&usize> = options.end_page.as_ref();
     let start_line_index_of_start_page = (start_page - 1) * lines_needed_per_page;
+
+    // Check if files exists
+    for path in paths {
+        open(path)?;
+    }
 
     let file_line_groups: GroupBy<
         usize,
