@@ -62,6 +62,7 @@ static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
 static DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 static BLANK_STRING: &str = "";
+static FF: u8 = 0x0C as u8;
 
 struct OutputOptions {
     /// Line numbering mode
@@ -630,10 +631,12 @@ fn build_options(
         page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
     };
 
-    let page_separator_char: String = matches
-        .opt_str(FORM_FEED_OPTION)
-        .map(|_i| '\u{000A}'.to_string())
-        .unwrap_or(NEW_LINE.to_string());
+    let page_separator_char: String = if matches.opt_present(FORM_FEED_OPTION) {
+        let bytes = vec![FF];
+        String::from_utf8(bytes).unwrap()
+    } else {
+        NEW_LINE.to_string()
+    };
 
     let column_width: usize =
         parse_usize(matches, COLUMN_WIDTH_OPTION).unwrap_or(Ok(DEFAULT_COLUMN_WIDTH))?;
