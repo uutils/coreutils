@@ -19,6 +19,11 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_file_operand_default() {
+    new_ucmd!().arg("-").pipe_in_fixture(FOOBAR_TXT).run().stdout_is_fixture("foobar_stdin_default.expected");
+}
+
+#[test]
 fn test_single_default() {
     new_ucmd!().arg(FOOBAR_TXT).run().stdout_is_fixture("foobar_single_default.expected");
 }

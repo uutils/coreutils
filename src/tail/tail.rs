@@ -187,7 +187,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let files = given_options.free;
 
-    if files.is_empty() {
+    if files.is_empty() || &files[0] == "-" {
         let mut buffer = BufReader::new(stdin());
         unbounded_tail(&mut buffer, &settings);
     } else {
