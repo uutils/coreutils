@@ -273,6 +273,14 @@ fn test_with_page_range() {
             expected_test_file_path1,
             vec![(&"{last_modified_time}".to_string(), &value)],
         );
+
+    new_ucmd!()
+        .args(&["+15:17", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path1,
+            vec![(&"{last_modified_time}".to_string(), &value)],
+        );
 }
 
 #[test]
