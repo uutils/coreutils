@@ -139,3 +139,8 @@ macro_rules! new_coreopts {
         })
     );
 }
+
+#[inline]
+pub fn is_stdin(files: &Vec<String>) -> bool {
+    files.is_empty() || &files[0] == "-"
+}
