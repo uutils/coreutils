@@ -144,3 +144,30 @@ macro_rules! new_coreopts {
 pub fn is_stdin(files: &Vec<String>) -> bool {
     files.is_empty() || &files[0] == "-"
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_stdin;
+
+    macro_rules! vec_of_strings {
+        ($($x:expr),*) => (vec![$($x.to_string()),*]);
+    }
+
+    #[test]
+    fn test_is_stdin_with_files() {
+        let files = vec_of_strings!["foo/bar", "baz"];
+        assert!(!is_stdin(&files));
+    }
+
+    #[test]
+    fn test_is_stdin_without_files() {
+        let files = Vec::new();
+        assert!(is_stdin(&files));
+    }
+
+    #[test]
+    fn test_is_stdin_with_operand() {
+        let files = vec_of_strings!["-"];
+        assert!(is_stdin(&files));
+    }
+}
