@@ -598,15 +598,30 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let re = Regex::new(r"\s*\+(\d+)\s*").unwrap();
+    let re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
     let start_page_in_plus_option: usize = match re.captures(&free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
-        unparsed_num.parse::<usize>().map_err(|_e| {
+        let x: Vec<&str> = unparsed_num.split(":").collect();
+        x[0].to_string().parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
         })
     }) {
         Some(res) => res?,
         _ => 1,
+    };
+
+    let end_page_in_plus_option: Option<usize> = match re
+        .captures(&free_args)
+        .map(|i| i.get(1).unwrap().as_str().trim())
+        .filter(|i| i.contains(":"))
+        .map(|unparsed_num| {
+            let x: Vec<&str> = unparsed_num.split(":").collect();
+            x[1].to_string().parse::<usize>().map_err(|_e| {
+                PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
+            })
+        }) {
+        Some(res) => Some(res?),
+        _ => None,
     };
 
     let start_page: usize = match matches
@@ -631,7 +646,7 @@ fn build_options(
         .map(invalid_pages_map)
     {
         Some(res) => Some(res?),
-        _ => None,
+        _ => end_page_in_plus_option,
     };
 
     if end_page.is_some() && start_page > end_page.unwrap() {
