@@ -27,6 +27,7 @@ use regex::Regex;
 use std::convert::From;
 use std::fs::{metadata, File, Metadata};
 use std::io::{stderr, stdin, stdout, BufRead, BufReader, Lines, Read, Stdin, Stdout, Write};
+use std::iter::FlatMap;
 use std::iter::{Enumerate, Map, SkipWhile, TakeWhile};
 use std::num::ParseIntError;
 #[cfg(unix)]
@@ -51,6 +52,7 @@ static NO_HEADER_TRAILER_OPTION: &str = "t";
 static PAGE_LENGTH_OPTION: &str = "l";
 static SUPPRESS_PRINTING_ERROR: &str = "r";
 static FORM_FEED_OPTION: &str = "F";
+static FORM_FEED_OPTION_SMALL: &str = "f";
 static COLUMN_WIDTH_OPTION: &str = "w";
 static ACROSS_OPTION: &str = "a";
 static COLUMN_OPTION: &str = "column";
@@ -81,6 +83,7 @@ struct OutputOptions {
     column_mode_options: Option<ColumnModeOptions>,
     merge_files_print: Option<usize>,
     offset_spaces: usize,
+    form_feed_used: bool,
 }
 
 struct FileLine {
@@ -89,6 +92,7 @@ struct FileLine {
     page_number: usize,
     group_key: usize,
     line_content: Result<String, IOError>,
+    form_feeds_after: usize,
 }
 
 impl AsRef<FileLine> for FileLine {
@@ -123,6 +127,19 @@ impl Default for NumberingMode {
             width: 5,
             separator: TAB.to_string(),
             first_number: 1,
+        }
+    }
+}
+
+impl Default for FileLine {
+    fn default() -> FileLine {
+        FileLine {
+            file_id: 0,
+            line_number: 0,
+            page_number: 0,
+            group_key: 0,
+            line_content: Ok(BLANK_STRING.to_string()),
+            form_feeds_after: 0,
         }
     }
 }
@@ -251,6 +268,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
         FORM_FEED_OPTION,
         "form-feed",
         "Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.",
+        "",
+        HasArg::No,
+        Occur::Optional,
+    );
+    opts.opt(
+        FORM_FEED_OPTION_SMALL,
+        "form-feed",
+        "Same as -F but pause before beginning the first page if standard output is a
+           terminal.",
         "",
         HasArg::No,
         Occur::Optional,
@@ -572,7 +598,6 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let flags = &matches.free.join(" ");
     let re = Regex::new(r"\s*\+(\d+)\s*").unwrap();
     let start_page_in_plus_option: usize = match re.captures(&free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
@@ -677,7 +702,8 @@ fn build_options(
     };
 
     let offset_spaces: usize = parse_usize(matches, OFFSET_SPACES_OPTION).unwrap_or(Ok(0))?;
-
+    let form_feed_used =
+        matches.opt_present(FORM_FEED_OPTION) || matches.opt_present(FORM_FEED_OPTION_SMALL);
     Ok(OutputOptions {
         number: numbering_options,
         header,
@@ -694,6 +720,7 @@ fn build_options(
         column_mode_options,
         merge_files_print,
         offset_spaces,
+        form_feed_used,
     })
 }
 
@@ -730,53 +757,117 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
     let start_line_number: usize = get_start_line_number(options);
     let last_page: Option<&usize> = options.end_page.as_ref();
     let lines_needed_per_page: usize = lines_to_read_for_page(options);
-    let start_line_index_of_start_page = (start_page - 1) * lines_needed_per_page;
-    let file_line_groups: GroupBy<
-        usize,
-        Map<TakeWhile<SkipWhile<Map<Enumerate<Lines<BufReader<Box<Read>>>>, _>, _>, _>, _>,
-        _,
-    > = BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?)
-        .lines()
-        .enumerate()
-        .map(|i: (usize, Result<String, IOError>)| FileLine {
-            file_id: 0,
-            line_number: i.0,
-            line_content: i.1,
-            page_number: 0,
-            group_key: 0,
-        })
-        .skip_while(|file_line: &FileLine| {
-            // Skip the initial lines if not in page range
-            file_line.line_number < (start_line_index_of_start_page)
-        })
-        .take_while(|file_line: &FileLine| {
-            // Only read the file until provided last page reached
-            last_page
-                .map(|lp| file_line.line_number < ((*lp) * lines_needed_per_page))
-                .unwrap_or(true)
-        })
-        .map(|file_line: FileLine| {
-            let page_number =
-                ((file_line.line_number + 1) as f64 / lines_needed_per_page as f64).ceil() as usize;
-            FileLine {
-                line_number: file_line.line_number + start_line_number,
-                page_number,
-                group_key: page_number,
-                ..file_line
-            }
-        }) // get display line number with line content
-        .group_by(|file_line: &FileLine| file_line.group_key);
+    let is_form_feed_used = options.form_feed_used;
+    let lines: Map<Map<Enumerate<FlatMap<Map<Lines<BufReader<Box<Read>>>, _>, _, _>>, _>, _> =
+        BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?)
+            .lines()
+            .map(|file_content: Result<String, IOError>| {
+                file_content
+                    .map(|content| {
+                        let mut lines: Vec<FileLine> = Vec::new();
+                        let mut f_occurred: usize = 0;
+                        let mut chunk: Vec<u8> = Vec::new();
+                        for byte in content.as_bytes() {
+                            if byte == &FF {
+                                f_occurred += 1;
+                            } else {
+                                if f_occurred != 0 {
+                                    // First time byte occurred in the scan
+                                    lines.push(FileLine {
+                                        line_content: Ok(String::from_utf8(chunk.clone()).unwrap()),
+                                        form_feeds_after: f_occurred,
+                                        ..FileLine::default()
+                                    });
+                                    chunk.clear();
+                                }
+                                chunk.push(*byte);
+                                f_occurred = 0;
+                            }
+                        }
 
-    for (page_number, file_line_group) in file_line_groups.into_iter() {
-        let mut lines: Vec<FileLine> = Vec::new();
-        for file_line in file_line_group {
-            if file_line.line_content.is_err() {
-                return Err(file_line.line_content.unwrap_err().into());
-            }
-            lines.push(file_line);
+                        // First time byte occurred in the scan
+                        lines.push(FileLine {
+                            line_content: Ok(String::from_utf8(chunk.clone()).unwrap()),
+                            form_feeds_after: f_occurred,
+                            ..FileLine::default()
+                        });
+
+                        lines
+                    })
+                    .unwrap_or_else(|e| {
+                        vec![FileLine {
+                            line_content: Err(e),
+                            ..FileLine::default()
+                        }]
+                    })
+            })
+            .flat_map(|i| i)
+            .enumerate()
+            .map(|i: (usize, FileLine)| FileLine {
+                line_number: i.0,
+                ..i.1
+            })
+            .map(|file_line: FileLine| FileLine {
+                line_number: file_line.line_number + start_line_number,
+                ..file_line
+            }); // get display line number with line content
+
+    let mut page_number = 1;
+    let mut page_lines: Vec<FileLine> = Vec::new();
+    let mut feed_line_present = false;
+    for file_line in lines {
+        if file_line.line_content.is_err() {
+            return Err(file_line.line_content.unwrap_err().into());
         }
-        print_page(&lines, options, &page_number)?;
+
+        feed_line_present = is_form_feed_used;
+
+        if page_lines.len() == lines_needed_per_page || file_line.form_feeds_after > 0 {
+            if file_line.form_feeds_after > 1 {
+                print_page(
+                    &page_lines,
+                    options,
+                    &page_number,
+                    &start_page,
+                    &last_page,
+                    feed_line_present,
+                )?;
+                page_lines.clear();
+                page_number += 1;
+                print_page(
+                    &page_lines,
+                    options,
+                    &page_number,
+                    &start_page,
+                    &last_page,
+                    feed_line_present,
+                )?;
+                page_number += 1;
+            } else {
+                print_page(
+                    &page_lines,
+                    options,
+                    &page_number,
+                    &start_page,
+                    &last_page,
+                    feed_line_present,
+                )?;
+                page_number += 1;
+            }
+            page_lines.clear();
+        }
+        if file_line.form_feeds_after == 0 {
+            page_lines.push(file_line);
+        }
     }
+    print_page(
+        &page_lines,
+        options,
+        &page_number,
+        &start_page,
+        &last_page,
+        feed_line_present,
+    )?;
 
     return Ok(0);
 }
@@ -814,8 +905,7 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
                     file_id: indexed_path.0,
                     line_number: i.0,
                     line_content: i.1,
-                    page_number: 0,
-                    group_key: 0,
+                    ..FileLine::default()
                 })
                 .skip_while(move |file_line: &FileLine| {
                     // Skip the initial lines if not in page range
@@ -859,7 +949,14 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
             let new_page_number = file_line.page_number;
             if page_counter != new_page_number {
                 fill_missing_lines(&mut lines, lines_needed_per_page, &nfiles, page_counter);
-                print_page(&lines, options, &page_counter)?;
+                print_page(
+                    &lines,
+                    options,
+                    &page_counter,
+                    &start_page,
+                    &last_page,
+                    false,
+                )?;
                 lines = Vec::new();
             }
             lines.push(file_line);
@@ -868,7 +965,14 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
     }
 
     fill_missing_lines(&mut lines, lines_needed_per_page, &nfiles, page_counter);
-    print_page(&lines, options, &page_counter)?;
+    print_page(
+        &lines,
+        options,
+        &page_counter,
+        &start_page,
+        &last_page,
+        false,
+    )?;
 
     return Ok(0);
 }
@@ -904,7 +1008,7 @@ fn fill_missing_lines(
                     line_number: line_number_counter,
                     line_content: Ok("".to_string()),
                     page_number,
-                    group_key: 0,
+                    ..FileLine::default()
                 },
             );
             line_number_counter += 1;
@@ -918,7 +1022,7 @@ fn fill_missing_lines(
                     line_number: line_number_counter,
                     line_content: Ok("".to_string()),
                     page_number,
-                    group_key: 0,
+                    ..FileLine::default()
                 },
             );
         } else {
@@ -933,7 +1037,13 @@ fn print_page(
     lines: &Vec<FileLine>,
     options: &OutputOptions,
     page: &usize,
+    start_page: &usize,
+    last_page: &Option<&usize>,
+    feed_line_present: bool,
 ) -> Result<usize, IOError> {
+    if (last_page.is_some() && page > last_page.unwrap()) || page < start_page {
+        return Ok(0);
+    }
     let page_separator = options.page_separator_char.as_bytes();
     let header: Vec<String> = header_content(options, page);
     let trailer_content: Vec<String> = trailer_content(options);
@@ -946,8 +1056,7 @@ fn print_page(
         out.write(x.as_bytes())?;
         out.write(line_separator)?;
     }
-
-    let lines_written = write_columns(lines, options, out)?;
+    let lines_written = write_columns(lines, options, out, feed_line_present)?;
 
     for index in 0..trailer_content.len() {
         let x: &String = trailer_content.get(index).unwrap();
@@ -965,6 +1074,7 @@ fn write_columns(
     lines: &Vec<FileLine>,
     options: &OutputOptions,
     out: &mut Stdout,
+    feed_line_present: bool,
 ) -> Result<usize, IOError> {
     let line_separator = options.content_line_separator.as_bytes();
     let content_lines_per_page = if options.double_space {
@@ -1031,12 +1141,13 @@ fn write_columns(
     };
 
     let spaces = " ".repeat(*offset_spaces);
-
+    let mut not_found_break = false;
     for fetch_index in fetch_indexes {
         let indexes = fetch_index.len();
         for i in 0..indexes {
             let index: usize = fetch_index[i];
             if lines.get(index).is_none() {
+                not_found_break = true;
                 break;
             }
             let file_line: &FileLine = lines.get(index).unwrap();
@@ -1060,7 +1171,11 @@ fn write_columns(
             }
             lines_printed += 1;
         }
-        out.write(line_separator)?;
+        if not_found_break && feed_line_present {
+            break;
+        } else {
+            out.write(line_separator)?;
+        }
     }
     Ok(lines_printed)
 }
@@ -1161,7 +1276,7 @@ fn current_time() -> String {
 }
 
 fn trailer_content(options: &OutputOptions) -> Vec<String> {
-    if options.as_ref().display_trailer {
+    if options.as_ref().display_trailer && !options.form_feed_used {
         vec![
             BLANK_STRING.to_string(),
             BLANK_STRING.to_string(),

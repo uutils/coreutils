@@ -471,3 +471,49 @@ fn test_with_offset_space_option() {
             vec![(&"{last_modified_time}".to_string(), &value)],
         );
 }
+
+#[test]
+fn test_with_pr_core_utils_tests() {
+    let test_cases = vec![
+        ("", vec!["0Ft"], vec!["0F"], 0),
+        ("", vec!["0Fnt"], vec!["0F"], 0),
+        ("+3", vec!["0Ft"], vec!["3-0F"], 0),
+        ("+3 -f", vec!["0Ft"], vec!["3f-0F"], 0),
+        ("-a -3", vec!["0Ft"], vec!["a3-0F"], 0),
+        ("-a -3 -f", vec!["0Ft"], vec!["a3f-0F"], 0),
+        ("-a -3 -f", vec!["0Fnt"], vec!["a3f-0F"], 0),
+        ("+3 -a -3 -f", vec!["0Ft"], vec!["3a3f-0F"], 0),
+        ("-l 24", vec!["FnFn"], vec!["l24-FF"], 0),
+    ];
+
+    for test_case in test_cases {
+        let (flags, input_file, expected_file, return_code) = test_case;
+        let mut scenario = new_ucmd!();
+        let input_file_path = input_file.get(0).unwrap();
+        let test_file_path = expected_file.get(0).unwrap();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        let mut arguments: Vec<&str> = flags
+            .split(' ')
+            .into_iter()
+            .filter(|i| i.trim() != "")
+            .collect::<Vec<&str>>();
+
+        arguments.extend(input_file.clone());
+
+        let mut scenario_with_args = scenario.args(&arguments);
+
+        let scenario_with_expected_status = if return_code == 0 {
+            scenario_with_args.succeeds()
+        } else {
+            scenario_with_args.fails()
+        };
+
+        scenario_with_expected_status.stdout_is_templated_fixture(
+            test_file_path,
+            vec![
+                (&"{last_modified_time}".to_string(), &value),
+                (&"{file_name}".to_string(), &input_file_path.to_string()),
+            ],
+        );
+    }
+}
