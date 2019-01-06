@@ -382,6 +382,7 @@ fn test_with_column_across_option() {
 fn test_with_column_across_option_and_column_separator() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column_across_sep.log.expected";
+    let expected_test_file_path1 = "column_across_sep1.log.expected";
     let mut scenario = new_ucmd!();
     let value = file_last_modified_time(&scenario, test_file_path);
     scenario
@@ -396,6 +397,21 @@ fn test_with_column_across_option_and_column_separator() {
         .succeeds()
         .stdout_is_templated_fixture(
             expected_test_file_path,
+            vec![(&"{last_modified_time}".to_string(), &value)],
+        );
+
+    new_ucmd!()
+        .args(&[
+            "--pages=3:5",
+            "--column=3",
+            "-Sdivide",
+            "-a",
+            "-n",
+            test_file_path,
+        ])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path1,
             vec![(&"{last_modified_time}".to_string(), &value)],
         );
 }
@@ -525,4 +541,19 @@ fn test_with_pr_core_utils_tests() {
             ],
         );
     }
+}
+
+#[test]
+fn test_with_join_lines_option() {
+    let test_file_1 = "hosts.log";
+    let test_file_2 = "test.log";
+    let expected_file_path = "joined.log.expected";
+    let mut scenario = new_ucmd!();
+    scenario
+        .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
+        .run()
+        .stdout_is_templated_fixture(
+            expected_file_path,
+            vec![(&"{last_modified_time}".to_string(), &now_time())],
+        );
 }

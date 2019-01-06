@@ -57,9 +57,11 @@ static COLUMN_WIDTH_OPTION: &str = "w";
 static PAGE_WIDTH_OPTION: &str = "W";
 static ACROSS_OPTION: &str = "a";
 static COLUMN_OPTION: &str = "column";
-static COLUMN_SEPARATOR_OPTION: &str = "s";
+static COLUMN_CHAR_SEPARATOR_OPTION: &str = "s";
+static COLUMN_STRING_SEPARATOR_OPTION: &str = "S";
 static MERGE_FILES_PRINT: &str = "m";
 static OFFSET_SPACES_OPTION: &str = "o";
+static JOIN_LINES_OPTION: &str = "J";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
@@ -87,6 +89,7 @@ struct OutputOptions {
     offset_spaces: usize,
     form_feed_used: bool,
     page_width: Option<usize>,
+    join_lines: bool,
 }
 
 struct FileLine {
@@ -332,13 +335,24 @@ pub fn uumain(args: Vec<String>) -> i32 {
     );
 
     opts.opt(
-        COLUMN_SEPARATOR_OPTION,
-        "",
+        COLUMN_CHAR_SEPARATOR_OPTION,
+        "separator",
         "Separate text columns by the single character char instead of by the appropriate number of <space>s
            (default for char is the <tab> character).",
         "char",
         HasArg::Yes,
         Occur::Optional,
+    );
+
+    opts.opt(
+        COLUMN_STRING_SEPARATOR_OPTION,
+        "sep-string",
+        "separate columns by STRING,
+        without -S: Default separator <TAB> with -J and <space>
+        otherwise (same as -S\" \"), no effect on column options",
+    "string",
+    HasArg::Yes,
+    Occur::Optional,
     );
 
     opts.opt(
@@ -359,6 +373,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
               shall be zero. The space taken is in addition to the output line width (see the -w option below).",
         "offset",
         HasArg::Yes,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        JOIN_LINES_OPTION,
+        "join-lines",
+        "merge full lines, turns off -W line truncation, no column
+    alignment, --sep-string[=STRING] sets separators",
+        "offset",
+        HasArg::No,
         Occur::Optional,
     );
 
@@ -648,10 +672,10 @@ fn build_options(
             x[0].to_string()
         })
         .map(invalid_pages_map)
-    {
-        Some(res) => res?,
-        _ => start_page_in_plus_option,
-    };
+        {
+            Some(res) => res?,
+            _ => start_page_in_plus_option,
+        };
 
     let end_page: Option<usize> = match matches
         .opt_str(PAGE_RANGE_OPTION)
@@ -661,10 +685,10 @@ fn build_options(
             x[1].to_string()
         })
         .map(invalid_pages_map)
-    {
-        Some(res) => Some(res?),
-        _ => end_page_in_plus_option,
-    };
+        {
+            Some(res) => Some(res?),
+            _ => end_page_in_plus_option,
+        };
 
     if end_page.is_some() && start_page > end_page.unwrap() {
         return Err(PrError::EncounteredErrors(format!(
@@ -699,12 +723,15 @@ fn build_options(
 
     let across_mode: bool = matches.opt_present(ACROSS_OPTION);
 
-    let column_separator: String = matches
-        .opt_str(COLUMN_SEPARATOR_OPTION)
+    let column_separator: String = match matches.opt_str(COLUMN_STRING_SEPARATOR_OPTION)
+        {
+            Some(x) => Some(x),
+            None => matches.opt_str(COLUMN_CHAR_SEPARATOR_OPTION),
+        }
         .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
 
     let default_column_width = if matches.opt_present(COLUMN_WIDTH_OPTION)
-        && matches.opt_present(COLUMN_SEPARATOR_OPTION)
+        && matches.opt_present(COLUMN_CHAR_SEPARATOR_OPTION)
     {
         DEFAULT_COLUMN_WIDTH_WITH_S_OPTION
     } else {
@@ -713,9 +740,14 @@ fn build_options(
 
     let column_width: usize =
         parse_usize(matches, COLUMN_WIDTH_OPTION).unwrap_or(Ok(default_column_width))?;
-    let page_width: Option<usize> = match parse_usize(matches, PAGE_WIDTH_OPTION) {
-        Some(res) => Some(res?),
-        None => None,
+
+    let page_width: Option<usize> = if matches.opt_present(JOIN_LINES_OPTION) {
+        None
+    } else {
+        match parse_usize(matches, PAGE_WIDTH_OPTION) {
+            Some(res) => Some(res?),
+            None => None,
+        }
     };
 
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
@@ -748,6 +780,8 @@ fn build_options(
     };
 
     let offset_spaces: usize = parse_usize(matches, OFFSET_SPACES_OPTION).unwrap_or(Ok(0))?;
+    let join_lines: bool = matches.opt_present(JOIN_LINES_OPTION);
+
     Ok(OutputOptions {
         number: numbering_options,
         header,
@@ -766,6 +800,7 @@ fn build_options(
         offset_spaces,
         form_feed_used,
         page_width,
+        join_lines,
     })
 }
 
@@ -1133,7 +1168,7 @@ fn write_columns(
         options.content_lines_per_page
     };
 
-    let width: usize = options.number.as_ref().map(|i| i.width).unwrap_or(0);
+    let number_width: usize = options.number.as_ref().map(|i| i.width).unwrap_or(0);
     let number_separator: String = options
         .number
         .as_ref()
@@ -1167,6 +1202,18 @@ fn write_columns(
         );
 
     let page_width: Option<usize> = options.page_width;
+
+    let line_width: Option<usize> = if options.join_lines {
+        None
+    } else if columns > 1 {
+        options
+            .column_mode_options
+            .as_ref()
+            .map(|i| Some(i.width))
+            .unwrap_or(Some(DEFAULT_COLUMN_WIDTH))
+    } else {
+        options.page_width
+    };
 
     let across_mode = options
         .column_mode_options
@@ -1208,18 +1255,17 @@ fn write_columns(
                 spaces,
                 get_line_for_printing(
                     file_line,
-                    &width,
+                    &number_width,
                     &number_separator,
                     columns,
-                    col_width,
                     is_number_mode,
                     &options.merge_files_print,
                     &i,
-                    page_width
+                    line_width,
                 )
             );
             out.write(trimmed_line.as_bytes())?;
-            if (i + 1) != indexes {
+            if (i + 1) != indexes && !options.join_lines {
                 out.write(col_sep.as_bytes())?;
             }
             lines_printed += 1;
@@ -1235,20 +1281,19 @@ fn write_columns(
 
 fn get_line_for_printing(
     file_line: &FileLine,
-    width: &usize,
+    number_width: &usize,
     separator: &String,
     columns: usize,
-    col_width: Option<usize>,
     is_number_mode: bool,
     merge_files_print: &Option<usize>,
     index: &usize,
-    page_width: Option<usize>,
+    line_width: Option<usize>,
 ) -> String {
     let should_show_line_number_merge_file =
         merge_files_print.is_none() || index == &usize::min_value();
     let should_show_line_number = is_number_mode && should_show_line_number_merge_file;
     let fmtd_line_number: String = if should_show_line_number {
-        get_fmtd_line_number(&width, file_line.line_number, &separator)
+        get_fmtd_line_number(&number_width, file_line.line_number, &separator)
     } else {
         "".to_string()
     };
@@ -1263,13 +1308,7 @@ fn get_line_for_printing(
     let display_length = complete_line.len() + (tab_count * 7);
     // TODO Adjust the width according to -n option
     // TODO actual len of the string vs display len of string because of tabs
-
-    let width: Option<usize> = match col_width {
-        Some(x) => Some(x),
-        None => page_width,
-    };
-
-    width
+    line_width
         .map(|i| {
             let min_width = (i - (columns - 1)) / columns;
             if display_length < min_width {
