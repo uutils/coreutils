@@ -3,7 +3,7 @@
 {last_modified_time} {file_name} Page 1
 
 
-
+                       	
 
 
 
@@ -73,7 +73,7 @@
 4 3456789 123456789 123	5   3 Columns downwards	6   FF-Arangements: Emp
 7   \ftext; \f\ntext;  	8   \f\ftext; \f\f\ntex	9 3456789 123456789 123
 10  zzzzzzzzzzzzzzzzzzz	1                      	2                      
-3 line truncation befor	14 456789 123456789 123	
+3 line truncation befor	14 456789 123456789 123	                       
 
 
 
@@ -205,7 +205,7 @@
 8                      	9 3456789 ab           	20 DEFGHI 123          
 1                      	2                      	3                      
 4                      	5                      	6                      
-27 no truncation before	28 no trunc            	
+27 no truncation before	28 no trunc            	                       
 
 
 
