@@ -492,6 +492,7 @@ fn test_with_pr_core_utils_tests() {
         ("-a -3 -f", vec!["0Fnt"], vec!["a3f-0F"], 0),
         ("+3 -a -3 -f", vec!["0Ft"], vec!["3a3f-0F"], 0),
         ("-l 24", vec!["FnFn"], vec!["l24-FF"], 0),
+        ("-W 20 -l24 -f", vec!["tFFt-ll"], vec!["W20l24f-ll"], 0),
     ];
 
     for test_case in test_cases {

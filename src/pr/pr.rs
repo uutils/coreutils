@@ -54,6 +54,7 @@ static SUPPRESS_PRINTING_ERROR: &str = "r";
 static FORM_FEED_OPTION: &str = "F";
 static FORM_FEED_OPTION_SMALL: &str = "f";
 static COLUMN_WIDTH_OPTION: &str = "w";
+static PAGE_WIDTH_OPTION: &str = "W";
 static ACROSS_OPTION: &str = "a";
 static COLUMN_OPTION: &str = "column";
 static COLUMN_SEPARATOR_OPTION: &str = "s";
@@ -62,6 +63,7 @@ static OFFSET_SPACES_OPTION: &str = "o";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
+static DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 static DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 static BLANK_STRING: &str = "";
 static FF: u8 = 0x0C as u8;
@@ -84,6 +86,7 @@ struct OutputOptions {
     merge_files_print: Option<usize>,
     offset_spaces: usize,
     form_feed_used: bool,
+    page_width: Option<usize>,
 }
 
 struct FileLine {
@@ -247,9 +250,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.opt(
         PAGE_LENGTH_OPTION,
         "length",
-        "Override the 66-line default and reset the page length to lines.  If lines is not greater than the sum  of  both
+        "Override the 66-line default (default number of lines of text 56, and with -F 63) and reset the page length to lines.  If lines is not greater than the sum  of  both
               the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the
-              -t option were in effect.",
+              -t option were in effect. ",
         "lines",
         HasArg::Yes,
         Occur::Optional,
@@ -301,6 +304,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "Set  the  width  of the line to width column positions for multiple text-column output only. If the -w option is
               not specified and the -s option is not specified, the default width shall be 72. If the -w option is not  speci‐
               fied and the -s option is specified, the default width shall be 512.",
+        "[width]",
+        HasArg::Yes,
+        Occur::Optional,
+    );
+
+    opts.opt(
+        PAGE_WIDTH_OPTION,
+        "page-width",
+        "set page width to PAGE_WIDTH (72) characters always,
+        truncate lines, except -J option is set, no interference
+        with -S or -s",
         "[width]",
         HasArg::Yes,
         Occur::Optional,
@@ -498,6 +512,9 @@ fn build_options(
     paths: &Vec<String>,
     free_args: String,
 ) -> Result<OutputOptions, PrError> {
+    let form_feed_used =
+        matches.opt_present(FORM_FEED_OPTION) || matches.opt_present(FORM_FEED_OPTION_SMALL);
+
     let invalid_pages_map = |i: String| {
         let unparsed_value: String = matches.opt_str(PAGE_RANGE_OPTION).unwrap();
         i.parse::<usize>().map_err(|_e| {
@@ -657,8 +674,10 @@ fn build_options(
         )));
     }
 
+    let default_lines_per_page = if form_feed_used { 63 } else { LINES_PER_PAGE };
+
     let page_length: usize =
-        parse_usize(matches, PAGE_LENGTH_OPTION).unwrap_or(Ok(LINES_PER_PAGE))?;
+        parse_usize(matches, PAGE_LENGTH_OPTION).unwrap_or(Ok(default_lines_per_page))?;
 
     let page_length_le_ht: bool = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
@@ -678,14 +697,26 @@ fn build_options(
         NEW_LINE.to_string()
     };
 
-    let column_width: usize =
-        parse_usize(matches, COLUMN_WIDTH_OPTION).unwrap_or(Ok(DEFAULT_COLUMN_WIDTH))?;
-
     let across_mode: bool = matches.opt_present(ACROSS_OPTION);
 
     let column_separator: String = matches
         .opt_str(COLUMN_SEPARATOR_OPTION)
         .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
+
+    let default_column_width = if matches.opt_present(COLUMN_WIDTH_OPTION)
+        && matches.opt_present(COLUMN_SEPARATOR_OPTION)
+    {
+        DEFAULT_COLUMN_WIDTH_WITH_S_OPTION
+    } else {
+        DEFAULT_COLUMN_WIDTH
+    };
+
+    let column_width: usize =
+        parse_usize(matches, COLUMN_WIDTH_OPTION).unwrap_or(Ok(default_column_width))?;
+    let page_width: Option<usize> = match parse_usize(matches, PAGE_WIDTH_OPTION) {
+        Some(res) => Some(res?),
+        None => None,
+    };
 
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
 
@@ -717,8 +748,6 @@ fn build_options(
     };
 
     let offset_spaces: usize = parse_usize(matches, OFFSET_SPACES_OPTION).unwrap_or(Ok(0))?;
-    let form_feed_used =
-        matches.opt_present(FORM_FEED_OPTION) || matches.opt_present(FORM_FEED_OPTION_SMALL);
     Ok(OutputOptions {
         number: numbering_options,
         header,
@@ -736,6 +765,7 @@ fn build_options(
         merge_files_print,
         offset_spaces,
         form_feed_used,
+        page_width,
     })
 }
 
@@ -834,11 +864,12 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
         if file_line.line_content.is_err() {
             return Err(file_line.line_content.unwrap_err().into());
         }
-
         feed_line_present = is_form_feed_used;
+        let form_feeds_after: usize = file_line.form_feeds_after;
+        page_lines.push(file_line);
 
-        if page_lines.len() == lines_needed_per_page || file_line.form_feeds_after > 0 {
-            if file_line.form_feeds_after > 1 {
+        if page_lines.len() == lines_needed_per_page || form_feeds_after > 0 {
+            if form_feeds_after > 1 {
                 print_page(
                     &page_lines,
                     options,
@@ -849,15 +880,20 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
                 )?;
                 page_lines.clear();
                 page_number += 1;
-                print_page(
-                    &page_lines,
-                    options,
-                    &page_number,
-                    &start_page,
-                    &last_page,
-                    feed_line_present,
-                )?;
-                page_number += 1;
+
+                // insert empty pages
+                let empty_pages_required = form_feeds_after - 1;
+                for _i in 0..empty_pages_required {
+                    print_page(
+                        &page_lines,
+                        options,
+                        &page_number,
+                        &start_page,
+                        &last_page,
+                        feed_line_present,
+                    )?;
+                    page_number += 1;
+                }
             } else {
                 print_page(
                     &page_lines,
@@ -871,18 +907,17 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
             }
             page_lines.clear();
         }
-        if file_line.form_feeds_after == 0 {
-            page_lines.push(file_line);
-        }
     }
-    print_page(
-        &page_lines,
-        options,
-        &page_number,
-        &start_page,
-        &last_page,
-        feed_line_present,
-    )?;
+    if page_lines.len() != 0 {
+        print_page(
+            &page_lines,
+            options,
+            &page_number,
+            &start_page,
+            &last_page,
+            feed_line_present,
+        )?;
+    }
 
     return Ok(0);
 }
@@ -1131,6 +1166,8 @@ fn write_columns(
                 .unwrap_or(None),
         );
 
+    let page_width: Option<usize> = options.page_width;
+
     let across_mode = options
         .column_mode_options
         .as_ref()
@@ -1178,6 +1215,7 @@ fn write_columns(
                     is_number_mode,
                     &options.merge_files_print,
                     &i,
+                    page_width
                 )
             );
             out.write(trimmed_line.as_bytes())?;
@@ -1204,6 +1242,7 @@ fn get_line_for_printing(
     is_number_mode: bool,
     merge_files_print: &Option<usize>,
     index: &usize,
+    page_width: Option<usize>,
 ) -> String {
     let should_show_line_number_merge_file =
         merge_files_print.is_none() || index == &usize::min_value();
@@ -1224,7 +1263,13 @@ fn get_line_for_printing(
     let display_length = complete_line.len() + (tab_count * 7);
     // TODO Adjust the width according to -n option
     // TODO actual len of the string vs display len of string because of tabs
-    col_width
+
+    let width: Option<usize> = match col_width {
+        Some(x) => Some(x),
+        None => page_width,
+    };
+
+    width
         .map(|i| {
             let min_width = (i - (columns - 1)) / columns;
             if display_length < min_width {
