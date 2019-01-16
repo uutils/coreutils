@@ -388,9 +388,34 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
-    // Remove -column option as getopts cannot parse things like -3 etc
-    let re = Regex::new(r"^-\d+").unwrap();
-    let opt_args: Vec<&String> = args.iter().filter(|i| !re.is_match(i)).collect();
+    // Remove -column and +page option as getopts cannot parse things like -3 etc
+    let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
+    let num_regex: Regex = Regex::new(r"(.\d+)|(\d+)|^[^-]$").unwrap();
+    let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
+    let n_regex: Regex = Regex::new(r"^-n\s*$").unwrap();
+    let mut arguments = args.clone();
+    let num_option: Option<(usize, &String)> =
+        args.iter().find_position(|x| n_regex.is_match(x.trim()));
+    if num_option.is_some() {
+        let (pos, _value) = num_option.unwrap();
+        let num_val_opt = args.get(pos + 1);
+        if num_val_opt.is_some() {
+            if !num_regex.is_match(num_val_opt.unwrap()) {
+                let could_be_file = arguments.remove(pos + 1);
+                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+                if a_file.is_match(could_be_file.trim().as_ref()) {
+                    arguments.insert(pos + 2, could_be_file);
+                } else {
+                    arguments.insert(pos + 2, could_be_file);
+                }
+            }
+        }
+    }
+
+    let opt_args: Vec<&String> = arguments
+        .iter()
+        .filter(|i| !column_page_option.is_match(i))
+        .collect();
 
     let matches = match opts.parse(&opt_args[1..]) {
         Ok(m) => m,
@@ -402,26 +427,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
 
-    let mut files: Vec<String> = matches
-        .free
-        .clone()
-        .iter()
-        .filter(|i| !i.starts_with('+') && !i.starts_with('-'))
-        .map(|i| i.to_string())
-        .collect();
-
-    // -n value is optional if -n <path> is given the opts gets confused
-    // if -n is used just before file path it might be captured as value of -n
-    if matches.opt_str(NUMBERING_MODE_OPTION).is_some() {
-        let maybe_a_file_path: String = matches.opt_str(NUMBERING_MODE_OPTION).unwrap();
-        let is_file: bool = is_a_file(&maybe_a_file_path);
-        if !is_file && files.is_empty() {
-            print_error(&matches, PrError::NotExists(maybe_a_file_path));
-            return 1;
-        } else if is_file {
-            files.insert(0, maybe_a_file_path);
-        }
-    } else if files.is_empty() {
+    let mut files: Vec<String> = matches.free.clone();
+    if files.is_empty() {
         //For stdin
         files.insert(0, FILE_STDIN.to_owned());
     }
@@ -439,16 +446,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
     for file_group in file_groups {
         let result_options: Result<OutputOptions, PrError> =
             build_options(&matches, &file_group, args.join(" "));
+
         if result_options.is_err() {
             print_error(&matches, result_options.err().unwrap());
             return 1;
         }
+
         let options: &OutputOptions = &result_options.unwrap();
+
         let cmd_result: Result<i32, PrError> = if file_group.len() == 1 {
             pr(&file_group.get(0).unwrap(), options)
         } else {
             mpr(&file_group, options)
         };
+
         let status: i32 = match cmd_result {
             Err(error) => {
                 print_error(&matches, error);
@@ -461,10 +472,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
     return 0;
-}
-
-fn is_a_file(could_be_file: &String) -> bool {
-    could_be_file == FILE_STDIN || File::open(could_be_file).is_ok()
 }
 
 fn print_error(matches: &Matches, err: PrError) {
@@ -587,23 +594,15 @@ fn build_options(
             let parse_result: Result<usize, ParseIntError> = i.parse::<usize>();
 
             let separator: String = if parse_result.is_err() {
-                if is_a_file(&i) {
-                    NumberingMode::default().separator
-                } else {
-                    i[0..1].to_string()
-                }
+                i[0..1].to_string()
             } else {
                 NumberingMode::default().separator
             };
 
             let width: usize = if parse_result.is_err() {
-                if is_a_file(&i) {
-                    NumberingMode::default().width
-                } else {
-                    i[1..]
-                        .parse::<usize>()
-                        .unwrap_or(NumberingMode::default().width)
-                }
+                i[1..]
+                    .parse::<usize>()
+                    .unwrap_or(NumberingMode::default().width)
             } else {
                 parse_result.unwrap()
             };
@@ -1258,8 +1257,6 @@ fn get_line_for_printing(
     let tab_count: usize = complete_line.chars().filter(|i| i == &TAB).count();
 
     let display_length = complete_line.len() + (tab_count * 7);
-    // TODO Adjust the width according to -n option
-    // TODO actual len of the string vs display len of string because of tabs
     line_width
         .map(|i| {
             let min_width = (i - (columns - 1)) / columns;
