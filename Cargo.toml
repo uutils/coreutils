@@ -24,6 +24,7 @@ unix = [
   "nohup",
   "pathchk",
   "pinky",
+  "pr",
   "stat",
   "stdbuf",
   "timeout",
@@ -34,7 +35,6 @@ unix = [
   "uptime",
   "users",
   "who",
-  "pr",
 ]
 # Feature "fuchsia" contains the exclusive list of utilities
 # that can be compiled and run on Fuchsia. Should be built

@@ -269,9 +269,9 @@ Utilities
 | base64    | install   | dd     |
 | basename  | ls        | df     |
 | cat       | more      | numfmt |
-| chgrp     | od (`--strings` and 128-bit data types missing) | pr |
-| chmod     | printf    | runcon |
-| chown     | sort      | stty   |
+| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
+| chmod     | printf    | stty   |
+| chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
 | comm      | test      |        |
