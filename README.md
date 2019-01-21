@@ -23,7 +23,7 @@ Why?
 Many GNU, Linux and other utilities are useful, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to Windows. However, those projects
-are written in platform-specific C, a language considered unsafe compared to Rust, and 
+are written in platform-specific C, a language considered unsafe compared to Rust, and
 have other issues.
 
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
@@ -287,12 +287,12 @@ Utilities
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | dd     |
-| base64    | install   | numfmt |
-| basename  | ls        | pr     |
-| cat       | more      | runcon |
-| chgrp     | od (`--strings` and 128-bit data types missing) | stty |
-| chmod     | printf    |        |
+| base32    | expr      | csplit |
+| base64    | install   | dd     |
+| basename  | ls        | df     |
+| cat       | more      | numfmt |
+| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
+| chmod     | printf    | stty   |
 | chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
