@@ -106,10 +106,15 @@ impl<'a> Repr<'a> {
     }
 
     /// Print each field except the one at the index.
-    fn print_fields(&self, line: &Line, index: usize, max_fields: usize) {
-        for i in 0..min(max_fields, line.fields.len()) {
+    fn print_fields(&self, line: &Line, index: usize, max_fields: Option<usize>) {
+        for i in 0..min(max_fields.unwrap_or(usize::max_value()), line.fields.len()) {
             if i != index {
                 print!("{}{}", self.separator, line.fields[i]);
+            }
+        }
+        if let Some(n) = max_fields {
+            for _ in line.fields.len()..n {
+                print!("{}", self.separator)
             }
         }
     }
@@ -232,7 +237,7 @@ struct State<'a> {
     print_unpaired: bool,
     lines: Lines<Box<BufRead + 'a>>,
     seq: Vec<Line>,
-    max_fields: usize,
+    max_fields: Option<usize>,
     line_num: usize,
     has_failed: bool,
 }
@@ -261,7 +266,7 @@ impl<'a> State<'a> {
             print_unpaired: print_unpaired == file_num,
             lines: f.lines(),
             seq: Vec::new(),
-            max_fields: usize::max_value(),
+            max_fields: None,
             line_num: 0,
             has_failed: false,
         }
@@ -363,7 +368,7 @@ impl<'a> State<'a> {
     fn initialize(&mut self, read_sep: Sep, autoformat: bool) {
         if let Some(line) = self.read_line(read_sep) {
             if autoformat {
-                self.max_fields = line.fields.len();
+                self.max_fields = Some(line.fields.len());
             }
 
             self.seq.push(line);
