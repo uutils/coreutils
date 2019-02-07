@@ -9,12 +9,12 @@
 //
 
 extern crate getopts;
-extern crate pretty_bytes;
 extern crate term_grid;
 extern crate termsize;
 extern crate time;
 extern crate unicode_width;
-use pretty_bytes::converter::convert;
+extern crate number_prefix;
+use number_prefix::{Standalone, Prefixed, decimal_prefix};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 
@@ -507,7 +507,10 @@ fn display_date(metadata: &Metadata, options: &getopts::Matches) -> String {
 
 fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("human-readable") {
-        convert(metadata.len() as f64)
+        match decimal_prefix(metadata.len() as f64) {
+            Standalone(bytes) => bytes.to_string(),
+            Prefixed(prefix, bytes) => format!("{:.2}{}", bytes, prefix).to_uppercase()
+        }
     } else {
         metadata.len().to_string()
     }
