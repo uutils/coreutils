@@ -1,3 +1,9 @@
+extern crate wild;
+
+pub fn args() -> impl Iterator<Item=String> {
+    wild::args()
+}
+
 #[cfg(feature = "libc")]
 pub extern crate libc;
 #[cfg(feature = "winapi")]

@@ -18,6 +18,7 @@ use pretty_bytes::converter::convert;
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 
+#[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
 
@@ -587,11 +588,13 @@ fn color_name(name: String, typ: &str) -> String {
     }
 }
 
+#[cfg(unix)]
 macro_rules! has {
     ($mode:expr, $perm:expr) => (
         $mode & ($perm as mode_t) != 0
     )
 }
+
 #[cfg(unix)]
 fn display_file_name(
     path: &Path,
@@ -698,4 +701,3 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
 }
-

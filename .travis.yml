@@ -1,29 +1,35 @@
 language: rust
+
+rust:
+    - stable
+    - beta
+
+os:
+    - linux
+    - osx
+
+env:
+  # sphinx v1.8.0 is bugged & fails for linux builds; so, force specfic `sphinx` version
+  global: FEATURES='' TEST_INSTALL='' SPHINX_VERSIONED='sphinx==1.7.8'
+
 matrix:
+  allow_failures:
+    - rust: nightly
   fast_finish: true
   include:
+    - rust: 1.27.0
     - rust: stable
       os: linux
-      env: FEATURES=''
+      env: TEST_INSTALL=true
     - rust: stable
       os: osx
-      env: FEATURES=''
-    - rust: beta
-      os: linux
-      env: FEATURES=''
-    - rust: beta
-      os: osx
-      env: FEATURES=''
+      env: TEST_INSTALL=true
     - rust: nightly
       os: linux
       env: FEATURES=nightly
     - rust: nightly
       os: osx
       env: FEATURES=nightly
-    - rust: nightly
-      os: linux
-      env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
-  allow_failures:
     - rust: nightly
       os: linux
       env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
@@ -38,20 +44,18 @@ before_install:
   - if [ $REDOX ]; then ./.travis/redox-toolchain.sh; fi
 
 install:
-  - if [ $TRAVIS_OS_NAME = linux ]; then sudo apt-get install python-pip && sudo pip install sphinx; fi
+  - if [ $TRAVIS_OS_NAME = linux ]; then sudo apt-get install python-pip && sudo pip install $SPHINX_VERSIONED; fi
   - |
     if [ $TRAVIS_OS_NAME = osx ]; then
       brew update
       brew upgrade python
-      pip3 install sphinx
+      pip3 install $SPHINX_VERSIONED
     fi
 
 script:
   - cargo build $CARGO_ARGS --features "$FEATURES"
   - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
-  - mkdir installdir_test
-  - DESTDIR=installdir_test make install
-  - "[ `ls installdir_test/usr/local/bin | wc -l` -gt 0 ]"
+  - if [ -n "$TEST_INSTALL" ]; then mkdir installdir_test; DESTDIR=installdir_test make install; [ `ls installdir_test/usr/local/bin | wc -l` -gt 0 ]; fi
 
 addons:
   apt:
@@ -64,4 +68,3 @@ after_success: |
     cargo tarpaulin --out Xml
     bash <(curl -s https://codecov.io/bash)
   fi
-

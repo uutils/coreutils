@@ -1,4 +1,5 @@
 use common::util::*;
+#[cfg(not(windows))]
 use std::fs::set_permissions;
 
 static TEST_EXISTING_FILE:           &str = "existing_file.txt";

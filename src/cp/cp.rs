@@ -25,9 +25,6 @@ extern crate walkdir;
 extern crate xattr;
 
 #[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
-
-#[cfg(windows)]
 extern crate kernel32;
 #[cfg(windows)]
 use kernel32::GetFileInformationByHandle;
@@ -733,7 +730,7 @@ fn preserve_hardlinks(
                 }
                 #[cfg(windows)]
                 {
-                    let mut stat = mem::uninitialized();
+                    let stat = mem::uninitialized();
                     let handle = CreateFile2(
                         src_path.as_ptr() as *const u16,
                         winapi::um::winnt::GENERIC_READ,
@@ -748,7 +745,7 @@ fn preserve_hardlinks(
                             std::io::Error::last_os_error()
                         ).into());
                     }
-                    inode = (((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64);
+                    inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
                     nlinks = (*stat).nNumberOfLinks as u64;
                 }
 

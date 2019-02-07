@@ -13,7 +13,7 @@ use uu_@UTIL_CRATE@::uumain;
 fn main() {
     uucore::panic::install_sigpipe_hook();
 
-    let code = uumain(std::env::args().collect());
+    let code = uumain(uucore::args().collect());
     // Since stdout is line-buffered by default, we need to ensure any pending
     // writes are flushed before exiting. Ideally, this should be enforced by
     // each utility.
