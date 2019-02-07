@@ -25,6 +25,7 @@ use std::io::Result as IOResult;
 use std::path::{Component, Path, PathBuf};
 use std::borrow::Cow;
 
+#[cfg(unix)]
 macro_rules! has {
     ($mode:expr, $perm:expr) => (
         $mode & ($perm as u32) != 0
