@@ -253,7 +253,7 @@ yes      = { optional=true, path="src/yes" }
 time = "0.1.42"
 filetime = "0.2.4"
 libc = "0.2.42"
-regex = "1.0.3"
+regex = "1.1.0"
 rand = "0.5.5"
 tempdir = "0.3.7"
 unindent = "0.1.3"
