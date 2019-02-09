@@ -358,11 +358,11 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
         };
         if let Some(ref p) = backup_path {
-            try!(fs::rename(to, p));
+            fs::rename(to, p)?;
         }
 
         if b.update {
-            if try!(try!(fs::metadata(from)).modified()) <= try!(try!(fs::metadata(to)).modified())
+            if fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
             {
                 return Ok(());
             }
@@ -374,14 +374,14 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
-                try!(fs::remove_dir(to))
+                fs::remove_dir(to)?
             } else {
                 return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
             }
         }
     }
 
-    try!(fs::rename(from, to));
+    fs::rename(from, to)?;
 
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
