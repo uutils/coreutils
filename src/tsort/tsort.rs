@@ -149,7 +149,7 @@ impl Graph {
             self.init_node(from);
         }
 
-        if !self.has_edge(from, to) {
+        if from != to && !self.has_edge(from, to) {
             self.in_edges.get_mut(to).unwrap().insert(from.clone());
             self.out_edges.get_mut(from).unwrap().push(to.clone());
         }
