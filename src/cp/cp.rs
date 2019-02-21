@@ -39,7 +39,7 @@ use clap::{App, Arg, ArgMatches};
 use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{stdin, stdout, BufRead, BufReader, Write};
+use std::io::{stdin, stdout, Write};
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
@@ -120,7 +120,7 @@ macro_rules! prompt_yes(
         print!(" [y/N]: ");
         crash_if_err!(1, stdout().flush());
         let mut s = String::new();
-        match BufReader::new(stdin()).read_line(&mut s) {
+        match stdin().read_line(&mut s) {
             Ok(_) => match s.char_indices().nth(0) {
                 Some((_, x)) => x == 'y' || x == 'Y',
                 _ => false
