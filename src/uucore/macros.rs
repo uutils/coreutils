@@ -11,6 +11,7 @@
 macro_rules! executable(
     () => ({
         let module = module_path!();
+        let module = module.split("::").next().unwrap_or(module);
         if &module[0..3] == "uu_" {
             &module[3..]
         } else {
