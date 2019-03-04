@@ -4,6 +4,7 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Jordi Boggiano <j.boggiano@seld.be>
+ * (c) Árni Dagur <arni@dagur.eu>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -15,6 +16,10 @@
 extern crate clap;
 #[macro_use]
 extern crate uucore;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+extern crate libc;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+extern crate nix;
 
 use clap::Arg;
 use std::borrow::Cow;
@@ -82,10 +87,77 @@ fn prepare_buffer<'a>(input: &'a str, _buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u
     input.as_bytes()
 }
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn exec(bytes: &[u8]) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
     loop {
         stdout.write_all(bytes).unwrap();
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn exec(bytes: &[u8]) {
+    use libc::{O_APPEND, S_IFIFO};
+    use nix::errno::EPIPE;
+    use nix::fcntl::{fcntl, splice, vmsplice, FcntlArg, SpliceFFlags};
+    use nix::sys::stat::fstat;
+    use nix::sys::uio::IoVec;
+    use nix::unistd::pipe;
+    use nix::Error::Sys;
+    use std::os::unix::io::AsRawFd;
+
+    let stdout = io::stdout();
+    let stdout_stat = fstat(stdout.as_raw_fd()).unwrap();
+    let stdout_is_pipe = (stdout_stat.st_mode & S_IFIFO) != 0;
+    let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL).unwrap();
+    let stdout_is_append = (stdout_access_mode & O_APPEND) != 0;
+
+    if stdout_is_append {
+        // If the splice system calls are given a file descriptor opened in
+        // append mode, they return Sys(EINVAL) error. Thus we fall back to
+        // slow writing.
+        let mut stdout = stdout.lock();
+        loop {
+            stdout.write_all(bytes).unwrap();
+        }
+    } else {
+        let bytes = &[IoVec::from_slice(&bytes[..])];
+        if stdout_is_pipe {
+            loop {
+                let res = vmsplice(stdout.as_raw_fd(), bytes, SpliceFFlags::empty());
+                match res {
+                    Err(err) => {
+                        if err == Sys(EPIPE) {
+                            // This means that our pipe was interrupted, e.g.
+                            // `yes | head` is run. Like GNU yes, we make a
+                            // graceful exit.
+                            break;
+                        } else {
+                            panic!("{:?}", err);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        } else {
+            // If stdout is not a pipe, e.g. if you make `yes` print right to
+            // the terminal, we have to use an intermediate pipe; vmsplice
+            // only works on pipes.
+            let (pipe_rd, pipe_wr) = pipe().unwrap();
+            loop {
+                vmsplice(pipe_wr, bytes, SpliceFFlags::empty()).unwrap();
+
+                splice(
+                    pipe_rd,
+                    None,
+                    stdout.as_raw_fd(),
+                    None,
+                    BUF_SIZE,
+                    SpliceFFlags::empty(),
+                )
+                .unwrap();
+            }
+        }
     }
 }
