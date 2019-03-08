@@ -436,7 +436,7 @@ impl<'a> ParaWords<'a> {
     fn create_words(&mut self) {
         if self.para.mail_header {
             // no extra spacing for mail headers; always exactly 1 space
-            // safe to trim_left on every line of a mail header, since the
+            // safe to trim_start on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
             self.words.extend(
                 self.para
@@ -520,7 +520,7 @@ impl<'a> WordSplit<'a> {
 impl<'a> WordSplit<'a> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
-        let trim_string = string.trim_left();
+        let trim_string = string.trim_start();
         WordSplit {
             opts,
             string: trim_string,

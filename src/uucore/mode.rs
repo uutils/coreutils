@@ -10,7 +10,7 @@ use std::error::Error;
 
 pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
     let (op, pos) = parse_op(mode, Some('='))?;
-    mode = mode[pos..].trim_left_matches('0');
+    mode = mode[pos..].trim_start_matches('0');
     if mode.len() > 4 {
         Err(format!("mode is too large ({} > 7777)", mode))
     } else {

@@ -281,7 +281,7 @@ fn current_tty() -> String {
         if !res.is_null() {
             CStr::from_ptr(res as *const _)
                 .to_string_lossy()
-                .trim_left_matches("/dev/")
+                .trim_start_matches("/dev/")
                 .to_owned()
         } else {
             "".to_owned()
@@ -510,7 +510,7 @@ impl Who {
         if self.include_exit {
             buf.push_str(&format!(" {:<12}", exit));
         }
-        println!("{}", buf.trim_right());
+        println!("{}", buf.trim_end());
     }
 
     #[inline]

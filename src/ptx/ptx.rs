@@ -416,7 +416,7 @@ fn format_tex_line(config: &Config, word_ref: &WordRef, line: &str, reference: &
     output.push_str(&format!("\\{} ", config.macro_name));
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
-        adjust_tex_str(before.trim().trim_left_matches(reference))
+        adjust_tex_str(before.trim().trim_start_matches(reference))
     } else {
         adjust_tex_str(&line[0..word_ref.position])
     };
@@ -447,7 +447,7 @@ fn format_roff_line(config: &Config, word_ref: &WordRef, line: &str, reference: 
     output.push_str(&format!(".{}", config.macro_name));
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
-        adjust_roff_str(before.trim().trim_left_matches(reference))
+        adjust_roff_str(before.trim().trim_start_matches(reference))
     } else {
         adjust_roff_str(&line[0..word_ref.position])
     };

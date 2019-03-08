@@ -94,7 +94,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                 match file.read_line(&mut line) {
                     Ok(0) => break,
                     Ok(_) => {
-                        output.push_str(line.trim_right());
+                        output.push_str(line.trim_end());
                         output.push_str(&delimiters[delim_count % delimiters.len()]);
                     }
                     Err(e) => crash!(1, "{}", e.to_string()),
@@ -118,7 +118,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        Ok(_) => output.push_str(line.trim_right()),
+                        Ok(_) => output.push_str(line.trim_end()),
                         Err(e) => crash!(1, "{}", e.to_string()),
                     }
                 }
