@@ -98,9 +98,9 @@ pub fn exec(bytes: &[u8]) {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn exec(bytes: &[u8]) {
-    use libc::{O_APPEND, S_IFIFO};
+    use libc::{O_APPEND, S_IFIFO, S_IFREG};
     use nix::errno::EPIPE;
-    use nix::fcntl::{fcntl, splice, vmsplice, FcntlArg, SpliceFFlags};
+    use nix::fcntl::{fcntl, splice, vmsplice, FcntlArg, OFlag, SpliceFFlags};
     use nix::sys::stat::fstat;
     use nix::sys::uio::IoVec;
     use nix::unistd::pipe;
@@ -109,23 +109,58 @@ pub fn exec(bytes: &[u8]) {
 
     let stdout = io::stdout();
     let stdout_stat = fstat(stdout.as_raw_fd()).unwrap();
-    let stdout_is_pipe = (stdout_stat.st_mode & S_IFIFO) != 0;
-    let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL).unwrap();
-    let stdout_is_append = (stdout_access_mode & O_APPEND) != 0;
+    let stdout_is_regular = (stdout_stat.st_mode & S_IFREG) != 0;
 
-    if stdout_is_append {
-        // If the splice system calls are given a file descriptor opened in
-        // append mode, they return Sys(EINVAL) error. Thus we fall back to
-        // slow writing.
-        let mut stdout = stdout.lock();
-        loop {
-            stdout.write_all(bytes).unwrap();
+    if stdout_is_regular {
+        let byte_iovec = &[IoVec::from_slice(&bytes[..])];
+        let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL).unwrap();
+        let stdout_is_append = (stdout_access_mode & O_APPEND) != 0;
+        let (pipe_rd, pipe_wr) = pipe().unwrap();
+
+        if stdout_is_append {
+            // First we disable append mode, else splice() will return
+            // Sys(EINVAL) error.
+            let new_access_mode = OFlag::from_bits(stdout_access_mode & (!O_APPEND)).unwrap();
+            let _ = fcntl(stdout.as_raw_fd(), FcntlArg::F_SETFL(new_access_mode)).unwrap();
+            // Here we splice with an output offset that equals the length of
+            // the file. This has effect of appending to the file. Note that
+            // the offset is incremented automatically by the splice()
+            // function.
+            let mut length_offset = stdout_stat.st_size;
+            loop {
+                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty()).unwrap();
+                splice(
+                    pipe_rd,
+                    None,
+                    stdout.as_raw_fd(),
+                    Some(&mut length_offset),
+                    BUF_SIZE,
+                    SpliceFFlags::empty(),
+                )
+                .unwrap();
+            }
+        } else {
+            loop {
+                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty()).unwrap();
+                splice(
+                    pipe_rd,
+                    None,
+                    stdout.as_raw_fd(),
+                    None,
+                    BUF_SIZE,
+                    SpliceFFlags::empty(),
+                )
+                .unwrap();
+            }
         }
     } else {
-        let bytes = &[IoVec::from_slice(&bytes[..])];
-        if stdout_is_pipe {
+        let byte_iovec = &[IoVec::from_slice(&bytes[..])];
+        let stdout_is_fifo = (stdout_stat.st_mode & S_IFIFO) != 0;
+
+        if stdout_is_fifo {
+            // Stdout is a pipe; we do not have to use an intermediate pipe.
             loop {
-                let res = vmsplice(stdout.as_raw_fd(), bytes, SpliceFFlags::empty());
+                let res = vmsplice(stdout.as_raw_fd(), byte_iovec, SpliceFFlags::empty());
                 match res {
                     Err(err) => {
                         if err == Sys(EPIPE) {
@@ -141,22 +176,10 @@ pub fn exec(bytes: &[u8]) {
                 }
             }
         } else {
-            // If stdout is not a pipe, e.g. if you make `yes` print right to
-            // the terminal, we have to use an intermediate pipe; vmsplice
-            // only works on pipes.
-            let (pipe_rd, pipe_wr) = pipe().unwrap();
+            // Here we fall back on slow writing.
+            let mut stdout = stdout.lock();
             loop {
-                vmsplice(pipe_wr, bytes, SpliceFFlags::empty()).unwrap();
-
-                splice(
-                    pipe_rd,
-                    None,
-                    stdout.as_raw_fd(),
-                    None,
-                    BUF_SIZE,
-                    SpliceFFlags::empty(),
-                )
-                .unwrap();
+                stdout.write_all(bytes).unwrap();
             }
         }
     }
