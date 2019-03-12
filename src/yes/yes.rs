@@ -22,6 +22,8 @@ extern crate libc;
 extern crate nix;
 
 use clap::Arg;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::Error::Sys;
 use std::borrow::Cow;
 use std::io::{self, Write};
 
@@ -98,37 +100,70 @@ pub fn exec(bytes: &[u8]) {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn exec(bytes: &[u8]) {
-    use libc::{O_APPEND, S_IFIFO, S_IFREG};
-    use nix::errno::EPIPE;
+    use nix::errno::Errno::{ENOSPC, EPIPE};
+    use std::process::exit;
+
+    match try_splice(bytes) {
+        Err(Sys(err)) => match err {
+            EPIPE => {
+                // Our pipe was interrupted, this happens, for example, when
+                // the shell command `yes | head` is run.
+                exit(0);
+            }
+            ENOSPC => {
+                eprintln!("No space left on disk.");
+                exit(1);
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+
+    // If we reach this point, we should fall back to slow writing.
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    loop {
+        stdout.write_all(bytes).unwrap();
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn try_splice(bytes: &[u8]) -> nix::Result<nix::Error> {
+    use libc::{S_IFIFO, S_IFREG};
+    use nix::errno::Errno::UnknownErrno;
     use nix::fcntl::{fcntl, splice, vmsplice, FcntlArg, OFlag, SpliceFFlags};
+    // use nix::fcntl::OFlag;
     use nix::sys::stat::fstat;
     use nix::sys::uio::IoVec;
     use nix::unistd::pipe;
-    use nix::Error::Sys;
     use std::os::unix::io::AsRawFd;
 
     let stdout = io::stdout();
-    let stdout_stat = fstat(stdout.as_raw_fd()).unwrap();
+    let stdout_stat = fstat(stdout.as_raw_fd())?;
     let stdout_is_regular = (stdout_stat.st_mode & S_IFREG) != 0;
 
     if stdout_is_regular {
         let byte_iovec = &[IoVec::from_slice(&bytes[..])];
-        let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL).unwrap();
-        let stdout_is_append = (stdout_access_mode & O_APPEND) != 0;
-        let (pipe_rd, pipe_wr) = pipe().unwrap();
+        let (pipe_rd, pipe_wr) = pipe()?;
+
+        let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL)?;
+        // Here I'm using OFlag::from_bits_truncate(), instead of OFlag::from_bits(),
+        // because the latter panics for some reason.
+        let mut stdout_oflags = OFlag::from_bits_truncate(stdout_access_mode);
+        let stdout_is_append = stdout_oflags.contains(OFlag::O_APPEND);
 
         if stdout_is_append {
             // First we disable append mode, else splice() will return
             // Sys(EINVAL) error.
-            let new_access_mode = OFlag::from_bits(stdout_access_mode & (!O_APPEND)).unwrap();
-            let _ = fcntl(stdout.as_raw_fd(), FcntlArg::F_SETFL(new_access_mode)).unwrap();
+            stdout_oflags.remove(OFlag::O_APPEND);
+            fcntl(stdout.as_raw_fd(), FcntlArg::F_SETFL(stdout_oflags))?;
             // Here we splice with an output offset that equals the length of
             // the file. This has effect of appending to the file. Note that
             // the offset is incremented automatically by the splice()
             // function.
             let mut length_offset = stdout_stat.st_size;
             loop {
-                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty()).unwrap();
+                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty())?;
                 splice(
                     pipe_rd,
                     None,
@@ -136,12 +171,11 @@ pub fn exec(bytes: &[u8]) {
                     Some(&mut length_offset),
                     BUF_SIZE,
                     SpliceFFlags::empty(),
-                )
-                .unwrap();
+                )?;
             }
         } else {
             loop {
-                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty()).unwrap();
+                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty())?;
                 splice(
                     pipe_rd,
                     None,
@@ -149,8 +183,7 @@ pub fn exec(bytes: &[u8]) {
                     None,
                     BUF_SIZE,
                     SpliceFFlags::empty(),
-                )
-                .unwrap();
+                )?;
             }
         }
     } else {
@@ -158,29 +191,13 @@ pub fn exec(bytes: &[u8]) {
         let stdout_is_fifo = (stdout_stat.st_mode & S_IFIFO) != 0;
 
         if stdout_is_fifo {
-            // Stdout is a pipe; we do not have to use an intermediate pipe.
+            // Stdout is already a pipe; we do not have to use an intermediate
+            // pipe.
             loop {
-                let res = vmsplice(stdout.as_raw_fd(), byte_iovec, SpliceFFlags::empty());
-                match res {
-                    Err(err) => {
-                        if err == Sys(EPIPE) {
-                            // This means that our pipe was interrupted, e.g.
-                            // `yes | head` is run. Like GNU yes, we make a
-                            // graceful exit.
-                            break;
-                        } else {
-                            panic!("{:?}", err);
-                        }
-                    }
-                    _ => {}
-                }
+                vmsplice(stdout.as_raw_fd(), byte_iovec, SpliceFFlags::empty())?;
             }
         } else {
-            // Here we fall back on slow writing.
-            let mut stdout = stdout.lock();
-            loop {
-                stdout.write_all(bytes).unwrap();
-            }
+            Err(Sys(UnknownErrno))
         }
     }
 }
