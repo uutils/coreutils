@@ -129,75 +129,44 @@ pub fn exec(bytes: &[u8]) {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn try_splice(bytes: &[u8]) -> nix::Result<nix::Error> {
-    use libc::{S_IFIFO, S_IFREG};
+    use libc::{O_APPEND, S_IFIFO, S_IFREG};
     use nix::errno::Errno::UnknownErrno;
-    use nix::fcntl::{fcntl, splice, vmsplice, FcntlArg, OFlag, SpliceFFlags};
-    // use nix::fcntl::OFlag;
+    use nix::fcntl::{fcntl, splice, vmsplice, FcntlArg, SpliceFFlags};
     use nix::sys::stat::fstat;
     use nix::sys::uio::IoVec;
     use nix::unistd::pipe;
     use std::os::unix::io::AsRawFd;
 
     let stdout = io::stdout();
+    let byte_iovec = &[IoVec::from_slice(&bytes[..])];
+    let (pipe_rd, pipe_wr) = pipe()?;
+
     let stdout_stat = fstat(stdout.as_raw_fd())?;
     let stdout_is_regular = (stdout_stat.st_mode & S_IFREG) != 0;
 
-    if stdout_is_regular {
-        let byte_iovec = &[IoVec::from_slice(&bytes[..])];
-        let (pipe_rd, pipe_wr) = pipe()?;
+    let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL)?;
+    let stdout_is_append = (stdout_access_mode & O_APPEND) != 0;
+    let stdout_is_fifo = (stdout_stat.st_mode & S_IFIFO) != 0;
 
-        let stdout_access_mode = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL)?;
-        // Here I'm using OFlag::from_bits_truncate(), instead of OFlag::from_bits(),
-        // because the latter panics for some reason.
-        let mut stdout_oflags = OFlag::from_bits_truncate(stdout_access_mode);
-        let stdout_is_append = stdout_oflags.contains(OFlag::O_APPEND);
-
-        if stdout_is_append {
-            // First we disable append mode, else splice() will return
-            // Sys(EINVAL) error.
-            stdout_oflags.remove(OFlag::O_APPEND);
-            fcntl(stdout.as_raw_fd(), FcntlArg::F_SETFL(stdout_oflags))?;
-            // Here we splice with an output offset that equals the length of
-            // the file. This has effect of appending to the file. Note that
-            // the offset is incremented automatically by the splice()
-            // function.
-            let mut length_offset = stdout_stat.st_size;
-            loop {
-                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty())?;
-                splice(
-                    pipe_rd,
-                    None,
-                    stdout.as_raw_fd(),
-                    Some(&mut length_offset),
-                    BUF_SIZE,
-                    SpliceFFlags::empty(),
-                )?;
-            }
-        } else {
-            loop {
-                vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty())?;
-                splice(
-                    pipe_rd,
-                    None,
-                    stdout.as_raw_fd(),
-                    None,
-                    BUF_SIZE,
-                    SpliceFFlags::empty(),
-                )?;
-            }
+    if stdout_is_regular && !stdout_is_append {
+        loop {
+            vmsplice(pipe_wr, byte_iovec, SpliceFFlags::empty())?;
+            splice(
+                pipe_rd,
+                None,
+                stdout.as_raw_fd(),
+                None,
+                BUF_SIZE,
+                SpliceFFlags::empty(),
+            )?;
         }
-    } else {
-        let byte_iovec = &[IoVec::from_slice(&bytes[..])];
-        let stdout_is_fifo = (stdout_stat.st_mode & S_IFIFO) != 0;
-
-        if stdout_is_fifo {
-            // Stdout is already a pipe; we do not have to use an intermediate
-            // pipe.
-            loop {
-                vmsplice(stdout.as_raw_fd(), byte_iovec, SpliceFFlags::empty())?;
-            }
-        } else {
-            Err(Sys(UnknownErrno))
+    } else if stdout_is_fifo {
+        // Stdout is already a pipe; we do not have to use an intermediate
+        // pipe.
+        loop {
+            vmsplice(stdout.as_raw_fd(), byte_iovec, SpliceFFlags::empty())?;
         }
     }
+
+    Err(Sys(UnknownErrno))
 }
