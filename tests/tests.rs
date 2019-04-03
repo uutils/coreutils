@@ -23,7 +23,6 @@ unix_only! {
     "chown", test_chown;
     "chgrp", test_chgrp;
     "install", test_install;
-    "mv", test_mv;
     "pathchk", test_pathchk;
     "pinky", test_pinky;
     "stdbuf", test_stdbuf;
@@ -68,6 +67,7 @@ generic! {
     "ls", test_ls;
     "mkdir", test_mkdir;
     "mktemp", test_mktemp;
+    "mv", test_mv;
     "numfmt", test_numfmt;
     "nl", test_nl;
     "od", test_od;
