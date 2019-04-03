@@ -5,9 +5,9 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
-use std::os::unix::fs::symlink as symlink_file;
+use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 #[cfg(windows)]
-use std::os::windows::fs::symlink_file;
+use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::str::from_utf8;
@@ -279,12 +279,20 @@ impl AtPath {
         File::create(&self.plus(file)).unwrap();
     }
 
-    pub fn symlink(&self, src: &str, dst: &str) {
+    pub fn symlink_file(&self, src: &str, dst: &str) {
         log_info(
             "symlink",
             &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
         );
         symlink_file(&self.plus(src), &self.plus(dst)).unwrap();
+    }
+
+    pub fn symlink_dir(&self, src: &str, dst: &str) {
+        log_info(
+            "symlink",
+            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+        );
+        symlink_dir(&self.plus(src), &self.plus(dst)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {

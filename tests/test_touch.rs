@@ -231,7 +231,7 @@ fn test_touch_no_dereference() {
 
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
-    at.symlink(file_a, file_b);
+    at.symlink_file(file_a, file_b);
     assert!(at.file_exists(file_a));
     assert!(at.is_symlink(file_b));
 

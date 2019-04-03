@@ -67,7 +67,7 @@ fn test_preserve_root_symlink() {
                "..//../../..//../..//../../../../../../../../",
                ".//../../../../../../..//../../../../../../../"] {
         let (at, mut ucmd) = at_and_ucmd!();
-        at.symlink(d, file);
+        at.symlink_file(d, file);
         ucmd.arg("--preserve-root")
             .arg("-HR")
             .arg("bin").arg(file)
@@ -76,7 +76,7 @@ fn test_preserve_root_symlink() {
     }
 
     let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink("///usr", file);
+    at.symlink_file("///usr", file);
     ucmd.arg("--preserve-root")
         .arg("-HR")
         .arg("bin").arg(format!(".//{}/..//..//../../", file))
@@ -84,7 +84,7 @@ fn test_preserve_root_symlink() {
         .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
 
     let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink("/", "/tmp/__root__");
+    at.symlink_file("/", "/tmp/__root__");
     ucmd.arg("--preserve-root")
         .arg("-R")
         .arg("bin").arg("/tmp/__root__/.")
