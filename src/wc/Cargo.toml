@@ -3,13 +3,14 @@ name = "wc"
 version = "0.0.1"
 authors = []
 build = "../../mkmain.rs"
+edition = "2018"
 
 [lib]
 name = "uu_wc"
 path = "wc.rs"
 
 [dependencies]
-getopts = "0.2.18"
+structopt = "0.2.15"
 uucore = { path="../uucore" }
 
 [[bin]]

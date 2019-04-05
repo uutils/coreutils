@@ -9,12 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
-
-#[macro_use]
-extern crate uucore;
-
-use getopts::{Matches, Options};
+use structopt::*;
+use uucore::{show_error, show_info, show_warning, executable};
 
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
@@ -22,38 +18,19 @@ use std::path::Path;
 use std::result::Result as StdResult;
 use std::str::from_utf8;
 
+#[derive(StructOpt)]
 struct Settings {
-    show_bytes: bool,
-    show_chars: bool,
-    show_lines: bool,
-    show_words: bool,
-    show_max_line_length: bool,
-}
-
-impl Settings {
-    fn new(matches: &Matches) -> Settings {
-        let settings = Settings {
-            show_bytes: matches.opt_present("bytes"),
-            show_chars: matches.opt_present("chars"),
-            show_lines: matches.opt_present("lines"),
-            show_words: matches.opt_present("words"),
-            show_max_line_length: matches.opt_present("L"),
-        };
-
-        if settings.show_bytes || settings.show_chars || settings.show_lines || settings.show_words
-            || settings.show_max_line_length
-        {
-            return settings;
-        }
-
-        Settings {
-            show_bytes: true,
-            show_chars: false,
-            show_lines: true,
-            show_words: true,
-            show_max_line_length: false,
-        }
-    }
+    #[structopt(short = "c", long)]
+    bytes: bool,
+    #[structopt(short = "m", long)]
+    chars: bool,
+    #[structopt(short = "l", long)]
+    lines: bool,
+    #[structopt(short = "w", long)]
+    words: bool,
+    #[structopt(short = "L")]
+    max_line_length: bool,
+    files: Vec<String>,
 }
 
 struct Result {
@@ -69,56 +46,16 @@ static NAME: &str = "wc";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
+    let mut settings = Settings::from_iter(args.into_iter());
 
-    opts.optflag("c", "bytes", "print the byte counts");
-    opts.optflag("m", "chars", "print the character counts");
-    opts.optflag("l", "lines", "print the newline counts");
-    opts.optflag(
-        "L",
-        "max-line-length",
-        "print the length of the longest line",
-    );
-    opts.optflag("w", "words", "print the word counts");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let mut matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
-        println!(
-            "{}",
-            opts.usage("Print newline, word and byte counts for each FILE")
-        );
-        println!("With no FILE, or when FILE is -, read standard input.");
-        return 0;
+    // If no options are passed, we need to set bytes, lines, and words.
+    if !(settings.bytes || settings.chars || settings.lines || settings.words || settings.max_line_length) {
+        settings.bytes = true;
+        settings.lines = true;
+        settings.words = true;
     }
 
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    if matches.free.is_empty() {
-        matches.free.push("-".to_owned());
-    }
-
-    let settings = Settings::new(&matches);
-
-    match wc(matches.free, &settings) {
-        Ok(()) => ( /* pass */ ),
-        Err(e) => return e,
-    }
-
-    0
+    wc(settings).err().unwrap_or(0)
 }
 
 const CR: u8 = '\r' as u8;
@@ -133,7 +70,7 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
-fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
+fn wc(settings: Settings) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
     let mut total_char_count: usize = 0;
@@ -143,8 +80,8 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut results = vec![];
     let mut max_width: usize = 0;
 
-    for path in &files {
-        let mut reader = try!(open(&path[..]));
+    for path in &settings.files {
+        let mut reader = open(&path[..])?;
 
         let mut line_count: usize = 0;
         let mut word_count: usize = 0;
@@ -216,10 +153,10 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     }
 
     for result in &results {
-        print_stats(settings, &result, max_width);
+        print_stats(&settings, &result, max_width);
     }
 
-    if files.len() > 1 {
+    if settings.files.len() > 1 {
         let result = Result {
             title: "total".to_owned(),
             bytes: total_byte_count,
@@ -228,26 +165,26 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             words: total_word_count,
             max_line_length: total_longest_line_length,
         };
-        print_stats(settings, &result, max_width);
+        print_stats(&settings, &result, max_width);
     }
 
     Ok(())
 }
 
 fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
-    if settings.show_lines {
+    if settings.lines {
         print!("{:1$}", result.lines, max_width);
     }
-    if settings.show_words {
+    if settings.words {
         print!("{:1$}", result.words, max_width);
     }
-    if settings.show_bytes {
+    if settings.bytes {
         print!("{:1$}", result.bytes, max_width);
     }
-    if settings.show_chars {
+    if settings.chars {
         print!("{:1$}", result.chars, max_width);
     }
-    if settings.show_max_line_length {
+    if settings.max_line_length {
         print!("{:1$}", result.max_line_length, max_width);
     }
 
