@@ -104,9 +104,9 @@ impl<R: Read> Data<R> {
 }
 
 // NOTE: this will likely be phased out at some point
-pub fn wrap_print(line_wrap: usize, res: String) {
+pub fn wrap_print<R: Read>(data: &Data<R>, res: String) {
     let stdout = io::stdout();
-    wrap_write(stdout.lock(), line_wrap, res).unwrap();
+    wrap_write(stdout.lock(), data.line_wrap, res).unwrap();
 }
 
 pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: String) -> io::Result<()> {
