@@ -50,22 +50,22 @@ fn test_escape_hex() {
 
 #[test]
 fn test_escape_short_hex() {
-    new_ucmd!().args(&["-e", "foo\\xa bar"]).succeeds().stdout_only("foo\n bar");
+    new_ucmd!().args(&["-e", "foo\\xa bar"]).succeeds().stdout_only("foo\n bar\n");
 }
 
 #[test]
 fn test_escape_no_hex() {
-    new_ucmd!().args(&["-e", "foo\\x bar"]).succeeds().stdout_only("foo\\x bar");
+    new_ucmd!().args(&["-e", "foo\\x bar"]).succeeds().stdout_only("foo\\x bar\n");
 }
 
 #[test]
 fn test_escape_one_slash() {
-    new_ucmd!().args(&["-e", "foo\\ bar"]).succeeds().stdout_only("foo\\ bar");
+    new_ucmd!().args(&["-e", "foo\\ bar"]).succeeds().stdout_only("foo\\ bar\n");
 }
 
 #[test]
 fn test_escape_one_slash_multi() {
-    new_ucmd!().args(&["-e", "foo\\", "bar"]).succeeds().stdout_only("foo\\ bar");
+    new_ucmd!().args(&["-e", "foo\\", "bar"]).succeeds().stdout_only("foo\\ bar\n");
 }
 
 #[test]
@@ -85,12 +85,12 @@ fn test_escape_octal() {
 
 #[test]
 fn test_escape_short_octal() {
-    new_ucmd!().args(&["-e", "foo\\040bar"]).succeeds().stdout_only("foo bar");
+    new_ucmd!().args(&["-e", "foo\\040bar"]).succeeds().stdout_only("foo bar\n");
 }
 
 #[test]
 fn test_escape_no_octal() {
-    new_ucmd!().args(&["-e", "foo\\0 bar"]).succeeds().stdout_only("foo\\0 bar");
+    new_ucmd!().args(&["-e", "foo\\0 bar"]).succeeds().stdout_only("foo\\0 bar\n");
 }
 
 #[test]
