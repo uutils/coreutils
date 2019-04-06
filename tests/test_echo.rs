@@ -64,6 +64,11 @@ fn test_escape_one_slash() {
 }
 
 #[test]
+fn test_escape_one_slash_multi() {
+    new_ucmd!().args(&["-e", "foo\\", "bar"]).succeeds().stdout_only("foo\\ bar");
+}
+
+#[test]
 fn test_escape_newline() {
     new_ucmd!().args(&["-e", "\\na"]).succeeds().stdout_only("\na\n");
 }
