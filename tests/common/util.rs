@@ -89,12 +89,12 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in stdout stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
+    /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()).trim_right(),
-            self.stdout.trim_right()
+            String::from(msg.as_ref()),
+            self.stdout
         );
         Box::new(self)
     }

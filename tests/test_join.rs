@@ -124,7 +124,7 @@ fn new_line_separated() {
         .arg("-t")
         .arg("")
         .pipe_in("1 a\n1 b\n8 h\n")
-        .succeeds().stdout_only("1 a\n8 h");
+        .succeeds().stdout_only("1 a\n8 h\n");
 }
 
 #[test]
@@ -174,6 +174,14 @@ fn autoformat() {
         .arg("-o")
         .arg("auto")
         .succeeds().stdout_only_fixture("autoformat.expected");
+
+    new_ucmd!()
+        .arg("-")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .pipe_in("1 x y z\n2 p")
+        .succeeds().stdout_only("1 x y z a\n2 p   b\n");
 }
 
 #[test]
@@ -246,11 +254,11 @@ fn single_file_with_header() {
         .arg("capitalized.txt")
         .arg("empty.txt")
         .arg("--header")
-        .succeeds().stdout_is("A 1");
+        .succeeds().stdout_is("A 1\n");
 
     new_ucmd!()
         .arg("empty.txt")
         .arg("capitalized.txt")
         .arg("--header")
-        .succeeds().stdout_is("A 1");
+        .succeeds().stdout_is("A 1\n");
 }

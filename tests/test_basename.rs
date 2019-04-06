@@ -4,23 +4,23 @@ use common::util::*;
 #[test]
 fn test_directory() {
     new_ucmd!().args(&["/root/alpha/beta/gamma/delta/epsilon/omega/"])
-        .succeeds().stdout_only("omega");
+        .succeeds().stdout_only("omega\n");
 }
 
 #[test]
 fn test_file() {
-    new_ucmd!().args(&["/etc/passwd"]).succeeds().stdout_only("passwd");
+    new_ucmd!().args(&["/etc/passwd"]).succeeds().stdout_only("passwd\n");
 }
 
 #[test]
 fn test_remove_suffix() {
     new_ucmd!().args(&["/usr/local/bin/reallylongexecutable.exe", ".exe"])
-        .succeeds().stdout_only("reallylongexecutable");
+        .succeeds().stdout_only("reallylongexecutable\n");
 }
 
 #[test]
 fn test_dont_remove_suffix() {
-    new_ucmd!().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only( "baz");
+    new_ucmd!().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only( "baz\n");
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn test_multiple_param() {
     for multiple_param in vec!["-a", "--multiple"] {
         let path = "/foo/bar/baz";
         new_ucmd!().args(&[multiple_param, path, path])
-            .succeeds().stdout_only("baz\nbaz");
+            .succeeds().stdout_only("baz\nbaz\n");
     }
 }
 
@@ -38,7 +38,7 @@ fn test_suffix_param() {
         let path = "/foo/bar/baz.exe";
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
-            .succeeds().stdout_only("baz\nbaz");
+            .succeeds().stdout_only("baz\nbaz\n");
     }
 }
 

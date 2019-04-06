@@ -45,7 +45,7 @@ fn test_escape_form_feed() {
 
 #[test]
 fn test_escape_hex() {
-    new_ucmd!().args(&["-e", "\\x41"]).succeeds().stdout_only("A");
+    new_ucmd!().args(&["-e", "\\x41"]).succeeds().stdout_only("A\n");
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn test_escape_one_slash() {
 
 #[test]
 fn test_escape_newline() {
-    new_ucmd!().args(&["-e", "\\na"]).succeeds().stdout_only("\na");
+    new_ucmd!().args(&["-e", "\\na"]).succeeds().stdout_only("\na\n");
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn test_escape_no_further_output() {
 
 #[test]
 fn test_escape_octal() {
-    new_ucmd!().args(&["-e", "\\0100"]).succeeds().stdout_only("@");
+    new_ucmd!().args(&["-e", "\\0100"]).succeeds().stdout_only("@\n");
 }
 
 #[test]
