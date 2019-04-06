@@ -4,6 +4,7 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Boden Garman <bpgarman@gmail.com>
+ * (c) Geordon Worley <vadixidav@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -134,45 +135,49 @@ fn wc_reader<'a>(path: &'a str, mut reader: impl BufRead) -> Outcome<'a> {
 }
 
 fn wc(settings: Settings) -> StdResult<(), i32> {
-    let (outcomes, total) = settings
-        .files
-        .iter()
-        .map(|path| {
-            if path == "-" {
-                Ok(wc_reader(path, stdin().lock()))
-            } else {
-                open(&path).map(|reader| wc_reader(path, reader))
-            }
-        })
-        .fold_results(
-            (
-                vec![],
-                Outcome {
-                    title: "total",
-                    bytes: 0,
-                    chars: 0,
-                    lines: 0,
-                    words: 0,
-                    max_line_length: 0,
-                },
-            ),
-            |(mut outcomes, mut total), item| {
-                total.bytes += item.bytes;
-                total.chars += item.chars;
-                total.lines += item.lines;
-                total.words += item.words;
-                total.max_line_length = std::cmp::max(total.max_line_length, item.max_line_length);
-                outcomes.push(item);
-                (outcomes, total)
-            },
-        )?;
+    // This is an iterator over the outcomes of running wc on each file.
+    let mut outcome_iter = settings.files.iter().map(|path| {
+        if path == "-" {
+            Ok(wc_reader(path, stdin().lock()))
+        } else {
+            open(&path).map(|reader| wc_reader(path, reader))
+        }
+    });
 
+    // Fold the outcomes to get the total and collect them to a vector.
+    // We also use fold_results to exit on an error condition.
+    let (outcomes, total) = outcome_iter.fold_results(
+        (
+            vec![],
+            Outcome {
+                title: "total",
+                bytes: 0,
+                chars: 0,
+                lines: 0,
+                words: 0,
+                max_line_length: 0,
+            },
+        ),
+        |(mut outcomes, mut total), item| {
+            total.bytes += item.bytes;
+            total.chars += item.chars;
+            total.lines += item.lines;
+            total.words += item.words;
+            total.max_line_length = std::cmp::max(total.max_line_length, item.max_line_length);
+            outcomes.push(item);
+            (outcomes, total)
+        },
+    )?;
+
+    // The max width of the output table's number section.
     let max_width = total.bytes.to_string().len() + 1;
 
+    // Print the outcomes for each file.
     for outcome in &outcomes {
         print_stats(&settings, &outcome, max_width);
     }
 
+    // Print the total outcome if we had multiple inputs.
     if settings.files.len() > 1 {
         print_stats(&settings, &total, max_width);
     }
@@ -200,7 +205,7 @@ fn print_stats(settings: &Settings, outcome: &Outcome, max_width: usize) {
     if outcome.title != "-" {
         println!(" {}", outcome.title);
     } else {
-        println!("");
+        println!();
     }
 }
 
