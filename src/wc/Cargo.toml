@@ -11,6 +11,7 @@ path = "wc.rs"
 
 [dependencies]
 structopt = "0.2.15"
+itertools = "0.8.0"
 uucore = { path="../uucore" }
 
 [[bin]]
