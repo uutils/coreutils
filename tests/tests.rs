@@ -26,7 +26,6 @@ unix_only! {
     "pathchk", test_pathchk;
     "pinky", test_pinky;
     "stdbuf", test_stdbuf;
-    "touch", test_touch;
     "unlink", test_unlink;
     "who", test_who;
     // Be aware of the trailing semicolon after the last item
@@ -86,6 +85,7 @@ generic! {
     "tac", test_tac;
     "tail", test_tail;
     "test", test_test;
+    "touch", test_touch;
     "tr", test_tr;
     "true", test_true;
     "truncate", test_truncate;
