@@ -144,6 +144,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     }
 
+    let mut files;
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
     if let Some(file) = matches.opt_str("reference") {
@@ -157,6 +158,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
         }
+        files = matches.free;
     } else {
         match parse_spec(&matches.free[0]) {
             Ok((u, g)) => {
@@ -168,9 +170,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
         }
+        files = matches.free;
+        files.remove(0);
     }
-    let mut files = matches.free;
-    files.remove(0);
     let executor = Chowner {
         bit_flag,
         dest_uid,
