@@ -14,8 +14,8 @@ mod sieve;
 use self::sieve::Sieve;
 
 extern crate rand;
-use self::rand::{weak_rng, Rng};
-use self::rand::distributions::{IndependentSample, Range};
+use self::rand::{rngs::SmallRng, Rng, FromEntropy};
+use self::rand::distributions::{Distribution, Uniform};
 
 const NUM_PRIMES: usize = 10000;
 const LOG_PRIMES: f64 = 14.0;   // ceil(log2(NUM_PRIMES))
@@ -27,7 +27,7 @@ const NUM_TESTS: usize = 100;
 fn test_random() {
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
-    let mut rng = weak_rng();
+    let mut rng = SmallRng::from_entropy();
     let mut rand_gt = move |min: u64| {
         let mut product = 1u64;
         let mut factors = Vec::new();
@@ -75,29 +75,29 @@ fn test_random() {
 
 #[test]
 fn test_random_big() {
-    let mut rng = weak_rng();
-    let bitrange_1 = Range::new(14usize, 51);
+    let mut rng = SmallRng::from_entropy();
+    let bitrange_1 = Uniform::new(14usize, 51);
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
-        let f_bit_1 = bitrange_1.ind_sample(&mut rng);
+        let f_bit_1 = bitrange_1.sample(&mut rng);
         // how many more bits do we need?
         let rem = 64 - f_bit_1;
 
         // we will have a number of additional factors equal to nfacts + 1
         // where nfacts is in [0, floor(rem/14) )  NOTE half-open interval
         // Each prime factor is at least 14 bits, hence floor(rem/14)
-        let nfacts = Range::new(0usize, rem / 14).ind_sample(&mut rng);
+        let nfacts = Uniform::new(0usize, rem / 14).sample(&mut rng);
         // we have to distribute extrabits among the (nfacts + 1) values
         let extrabits = rem - (nfacts + 1) * 14;
         // (remember, a Range is a half-open interval)
-        let extrarange = Range::new(0usize, extrabits + 1);
+        let extrarange = Uniform::new(0usize, extrabits + 1);
 
         // to generate an even split of this range, generate n-1 random elements
         // in the range, add the desired total value to the end, sort this list,
         // and then compute the sequential differences.
         let mut f_bits = Vec::new();
         for _ in 0..nfacts {
-            f_bits.push(extrarange.ind_sample(&mut rng));
+            f_bits.push(extrarange.sample(&mut rng));
         }
         f_bits.push(extrabits);
         f_bits.sort();
@@ -121,7 +121,7 @@ fn test_random_big() {
         for bit in f_bits {
             assert!(bit < 37);
             nbits += 14 + bit;
-            let elm = Range::new(0, PRIMES_BY_BITS[bit].len()).ind_sample(&mut rng);
+            let elm = Uniform::new(0, PRIMES_BY_BITS[bit].len()).sample(&mut rng);
             let factor = PRIMES_BY_BITS[bit][elm];
             factors.push(factor);
             product *= factor;

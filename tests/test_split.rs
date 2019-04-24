@@ -10,7 +10,7 @@ use common::util::*;
 
 
 fn random_chars(n: usize) -> String {
-    thread_rng().gen_ascii_chars().take(n).collect::<String>()
+    thread_rng().sample_iter(&rand::distributions::Alphanumeric).take(n).collect::<String>()
 }
 
 struct Glob {
