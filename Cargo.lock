@@ -294,7 +294,7 @@ name = "cp"
 version = "0.0.1"
 dependencies = [
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "filetime 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "ioctl-sys 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "filetime"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1456,7 +1456,7 @@ dependencies = [
 name = "shred"
 version = "0.0.1"
 dependencies = [
- "filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "filetime 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.51 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1716,7 +1716,7 @@ dependencies = [
 name = "touch"
 version = "0.0.1"
 dependencies = [
- "filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "filetime 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1",
@@ -1924,7 +1924,7 @@ dependencies = [
  "expr 0.0.1",
  "factor 0.0.1",
  "false 0.0.1",
- "filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "filetime 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "fmt 0.0.1",
  "fold 0.0.1",
  "groups 0.0.1",
@@ -2149,7 +2149,7 @@ dependencies = [
 "checksum failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "934799b6c1de475a012a02dab0ace1ace43789ee4b99bcfbf1a2e3e8ced5de82"
 "checksum failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c7cdda555bb90c9bb67a3b670a0f42de8e73f5981524123ad8578aafec8ddb8b"
 "checksum fake-simd 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
-"checksum filetime 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "a2df5c1a8c4be27e7707789dc42ae65976e60b394afd293d1419ab915833e646"
+"checksum filetime 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)" = "2f8c63033fcba1f51ef744505b3cad42510432b904c062afa67ad7ece008429d"
 "checksum fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "2fad85553e09a6f881f739c29f0b00b0f01357c743266d478b68951ce23285f3"
 "checksum fuchsia-cprng 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 "checksum fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
