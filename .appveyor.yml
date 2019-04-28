@@ -26,7 +26,7 @@ environment:
 
   matrix:
   # minimum version
-  - CHANNEL: 1.27.0
+  - CHANNEL: 1.31.0
     ARCH: i686
     ABI: msvc
   # "msvc" ABI
