@@ -81,3 +81,9 @@ fn test_unset_variable() {
 
     assert_eq!(out.lines().any(|line| line.starts_with("HOME=")), false);
 }
+
+#[test]
+fn test_fail_null_with_program() {
+    let out = new_ucmd!().arg("--null").arg("cd").fails().stderr;
+    assert!(out.contains("cannot specify --null (-0) with command"));
+}

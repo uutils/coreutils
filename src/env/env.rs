@@ -103,14 +103,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     let var = iter.next();
 
                     match var {
-                        None => println!("{}: this option requires an argument: {}", NAME, opt),
+                        None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
                         Some(s) => opts.unsets.push(s.to_owned()),
                     }
                 }
 
                 _ => {
-                    println!("{}: invalid option \"{}\"", NAME, *opt);
-                    println!("Type \"{} --help\" for detailed informations", NAME);
+                    eprintln!("{}: invalid option \"{}\"", NAME, *opt);
+                    eprintln!("Type \"{} --help\" for detailed information", NAME);
                     return 1;
                 }
             }
@@ -134,13 +134,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         let var = iter.next();
 
                         match var {
-                            None => println!("{}: this option requires an argument: {}", NAME, opt),
+                            None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
                             Some(s) => opts.unsets.push(s.to_owned()),
                         }
                     }
                     _ => {
-                        println!("{}: illegal option -- {}", NAME, c);
-                        println!("Type \"{} --help\" for detailed informations", NAME);
+                        eprintln!("{}: illegal option -- {}", NAME, c);
+                        eprintln!("Type \"{} --help\" for detailed information", NAME);
                         return 1;
                     }
                 }
@@ -159,6 +159,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
                 // no, its a program-like opt
                 _ => {
+                    if opts.null {
+                        eprintln!("{}: cannot specify --null (-0) with command", NAME);
+                        eprintln!("Type \"{} --help\" for detailed information", NAME);
+                        return 1;
+                    }
                     opts.program.push(opt.clone());
                     break;
                 }
@@ -170,6 +175,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // read program arguments
     for opt in iter {
+        if opts.null {
+            eprintln!("{}: cannot specify --null (-0) with command", NAME);
+            eprintln!("Type \"{} --help\" for detailed information", NAME);
+            return 1;
+        }
         opts.program.push(opt.clone())
     }
 

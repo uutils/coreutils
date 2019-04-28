@@ -606,7 +606,7 @@ impl UCommand {
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
-    /// asserts success, and returns a command result.
+    /// asserts failure, and returns a command result.
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
