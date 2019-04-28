@@ -33,8 +33,6 @@ Requirements
 
 * Rust (`cargo`, `rustc`)
 * GNU Make (required to build documentation)
-* CMake (Unix; used by Oniguruma, which is required for `expr`)
-* NMake (Windows; used by Oniguruma, which is required for `expr`)
 * [Sphinx](http://www.sphinx-doc.org/) (for documentation)
 * gzip (for installing documentation)
 
@@ -72,7 +70,7 @@ Unix-like platforms at the moment, to build on Windows, you must do the
 following:
 ```bash
 # to keep debug information, compile without --release
-$ cargo build --release --no-default-features --features generic
+$ cargo build --release --no-default-features --features windows
 ```
 
 If you don't want to build every utility available on your platform into the
