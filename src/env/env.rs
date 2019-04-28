@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .optflag(
             "0",
             "null",
-            "end each output line with a 0 byte rather than newline",
+            "end each output line with a 0 byte rather than newline (only valid when printing the environment)",
         )
         .optopt("u", "unset", "remove variable from the environment", "NAME");
 
