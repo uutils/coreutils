@@ -41,36 +41,6 @@ fn test_without_any_options() {
 }
 
 #[test]
-fn test_with_numbering_option() {
-    let test_file_path = "test_num_page.log";
-    let expected_test_file_path = "test_num_page.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&["-n", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            vec![(&"{last_modified_time}".to_string(), &value)],
-        );
-}
-
-#[test]
-fn test_with_numbering_option_when_content_is_less_than_page() {
-    let test_file_path = "test_num_page_less_content.log";
-    let expected_test_file_path = "test_num_page_less_content.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&["-n", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            vec![(&"{last_modified_time}".to_string(), &value)],
-        );
-}
-
-#[test]
 fn test_with_numbering_option_with_number_width() {
     let test_file_path = "test_num_page.log";
     let expected_test_file_path = "test_num_page_2.log.expected";
@@ -86,25 +56,6 @@ fn test_with_numbering_option_with_number_width() {
 }
 
 #[test]
-fn test_with_header_option() {
-    let test_file_path = "test_one_page.log";
-    let expected_test_file_path = "test_one_page_header.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    let header = "new file";
-    scenario
-        .args(&["-h", header, test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            vec![
-                (&"{last_modified_time}".to_string(), &value),
-                (&"{header}".to_string(), &header.to_string()),
-            ],
-        );
-}
-
-#[test]
 fn test_with_long_header_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_header.log.expected";
@@ -113,6 +64,17 @@ fn test_with_long_header_option() {
     let header = "new file";
     scenario
         .args(&["--header=new file", test_file_path])
+        .succeeds()
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            vec![
+                (&"{last_modified_time}".to_string(), &value),
+                (&"{header}".to_string(), &header.to_string()),
+            ],
+        );
+
+    new_ucmd!()
+        .args(&["-h", header, test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(
             expected_test_file_path,
@@ -136,15 +98,8 @@ fn test_with_double_space_option() {
             expected_test_file_path,
             vec![(&"{last_modified_time}".to_string(), &value)],
         );
-}
 
-#[test]
-fn test_with_long_double_space_option() {
-    let test_file_path = "test_one_page.log";
-    let expected_test_file_path = "test_one_page_double_line.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
+    new_ucmd!()
         .args(&["--double-space", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(
