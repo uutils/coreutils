@@ -29,6 +29,36 @@ fn test_echo() {
 }
 
 #[test]
+fn test_file_option() {
+    let out = new_ucmd!()
+        .arg("-f").arg("vars.conf.txt")
+        .run().stdout;
+
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar" || line == "BAR=bamf this").count(), 2);
+}
+
+#[test]
+fn test_combined_file_set() {
+    let out = new_ucmd!()
+        .arg("-f").arg("vars.conf.txt")
+        .arg("FOO=bar.alt")
+        .run().stdout;
+
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt").count(), 1);
+}
+
+#[test]
+fn test_combined_file_set_unset() {
+    let out = new_ucmd!()
+        .arg("-u").arg("BAR")
+        .arg("-f").arg("vars.conf.txt")
+        .arg("FOO=bar.alt")
+        .run().stdout;
+
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt" || line.starts_with("BAR=")).count(), 1);
+}
+
+#[test]
 fn test_single_name_value_pair() {
     let out = new_ucmd!()
         .arg("FOO=bar").run().stdout;

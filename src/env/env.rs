@@ -13,8 +13,11 @@
 #[macro_use]
 extern crate uucore;
 
+extern crate ini;
+
+use ini::Ini;
 use std::env;
-use std::io::{stdout, Write};
+use std::io::{stdin, stdout, Write};
 use std::process::Command;
 
 static NAME: &str = "env";
@@ -27,6 +30,7 @@ static LONG_HELP: &str = "
 struct Options {
     ignore_env: bool,
     null: bool,
+    files: Vec<String>,
     unsets: Vec<String>,
     sets: Vec<(String, String)>,
     program: Vec<String>,
@@ -60,12 +64,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
             "null",
             "end each output line with a 0 byte rather than newline (only valid when printing the environment)",
         )
+        .optopt("f", "file", "read and sets variables from the file (prior to sets/unsets)", "FILE")
         .optopt("u", "unset", "remove variable from the environment", "NAME");
 
     let mut opts = Box::new(Options {
         ignore_env: false,
         null: false,
         unsets: vec![],
+        files: vec![],
         sets: vec![],
         program: vec![],
     });
@@ -110,6 +116,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
                 "--ignore-environment" => opts.ignore_env = true,
                 "--null" => opts.null = true,
+                "--file" => {
+                    let var = iter.next();
+
+                    match var {
+                        None => println!("{}: this option requires an argument: {}", NAME, opt),
+                        Some(s) => opts.files.push(s.to_owned()),
+                    }
+                }
                 "--unset" => {
                     let var = iter.next();
 
@@ -141,6 +155,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 match c {
                     'i' => opts.ignore_env = true,
                     '0' => opts.null = true,
+                    'f' => {
+                        let var = iter.next();
+
+                        match var {
+                            None => println!("{}: this option requires an argument: {}", NAME, opt),
+                            Some(s) => opts.files.push(s.to_owned()),
+                        }
+                    }
                     'u' => {
                         let var = iter.next();
 
@@ -197,6 +219,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if opts.ignore_env {
         for (ref name, _) in env::vars() {
             env::remove_var(name);
+        }
+    }
+
+    for file in &opts.files {
+        let conf = if file == "-" {
+            let stdin = stdin();
+            let mut stdin_locked = stdin.lock();
+            Ini::read_from(&mut stdin_locked)
+        } else {
+            Ini::load_from_file(file)
+        };
+        let conf = match conf {
+            Ok(config) => config,
+            Err(error) => {
+                eprintln!("env: error: \"{}\": {}", file, error);
+                return 1;
+            }
+        };
+        for (_, prop) in &conf {
+            for (key, value) in prop {
+                env::set_var(key, value);
+            }
         }
     }
 
