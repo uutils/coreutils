@@ -110,8 +110,8 @@ impl CmdResult {
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()).trim_right(),
-            self.stderr.trim_right()
+            String::from(msg.as_ref()).trim_end(),
+            self.stderr.trim_end()
         );
         Box::new(self)
     }

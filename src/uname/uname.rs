@@ -122,7 +122,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         output.push_str(HOST_OS);
         output.push_str(" ");
     }
-    println!("{}", output.trim_right());
+    println!("{}", output.trim_end());
 
     0
 }

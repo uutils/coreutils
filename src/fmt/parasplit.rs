@@ -520,7 +520,7 @@ impl<'a> WordSplit<'a> {
 impl<'a> WordSplit<'a> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
-        let trim_string = string.trim_left();
+        let trim_string = string.trim_start();
         WordSplit {
             opts,
             string: trim_string,

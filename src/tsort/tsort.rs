@@ -79,7 +79,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line.trim_right()
+                let tokens: Vec<String> = line.trim_end()
                     .split_whitespace()
                     .map(|s| s.to_owned())
                     .collect();
