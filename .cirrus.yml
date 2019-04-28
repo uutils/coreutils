@@ -4,7 +4,7 @@ freebsd_instance:
 task:
   name: stable x86_64-unknown-freebsd
   setup_script:
-    - pkg install -y curl gmake py36-sphinx
+    - pkg install -y curl gmake
     - curl https://sh.rustup.rs -sSf --output rustup.sh
     - sh rustup.sh -y
   build_script:
@@ -13,7 +13,3 @@ task:
   test_script:
     - . $HOME/.cargo/env
     - cargo test
-    - |
-      mkdir installdir_test
-      make install DESTDIR=installdir_test SPHINXBUILD='sphinx-build-3.6'
-      [ `ls installdir_test/usr/local/bin | wc -l` -gt 0 ]
