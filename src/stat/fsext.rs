@@ -21,27 +21,20 @@ pub trait BirthTime {
 
 use std::fs::Metadata;
 impl BirthTime for Metadata {
-    #[cfg(feature = "nightly")]
     fn pretty_birth(&self) -> String {
         self.created()
-            .map(|t| t.elapsed().unwrap())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
             .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
             .unwrap_or("-".to_owned())
     }
-    #[cfg(not(feature = "nightly"))]
-    fn pretty_birth(&self) -> String {
-        "-".to_owned()
-    }
-    #[cfg(feature = "nightly")]
+
     fn birth(&self) -> String {
         self.created()
-            .map(|t| t.elapsed().unwrap())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
             .map(|e| format!("{}", e.as_secs()))
             .unwrap_or("0".to_owned())
-    }
-    #[cfg(not(feature = "nightly"))]
-    fn birth(&self) -> String {
-        "0".to_owned()
     }
 }
 
@@ -94,7 +87,6 @@ pub fn pretty_access(mode: mode_t) -> String {
         S_IFLNK => 'l',
         S_IFSOCK => 's',
         // TODO: Other file types
-        // See coreutils/gnulib/lib/filemode.c
         _ => '?',
     });
 
@@ -151,19 +143,19 @@ use std::convert::{AsRef, From};
 use std::error::Error;
 use std::io::Error as IOError;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android", target_os = "freebsd"))]
 use libc::statfs as Sstatfs;
-// #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
-// use self::libc::statvfs as Sstatfs;
+#[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
+use libc::statvfs as Sstatfs;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android", target_os = "freebsd"))]
 use libc::statfs as statfs_fn;
-// #[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
-// use self::libc::statvfs as statfs_fn;
+#[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
+use libc::statvfs as statfs_fn;
 
 pub trait FsMeta {
     fn fs_type(&self) -> i64;
-    fn iosize(&self) -> i64;
+    fn iosize(&self) -> u64;
     fn blksize(&self) -> i64;
     fn total_blocks(&self) -> u64;
     fn free_blocks(&self) -> u64;
@@ -171,7 +163,7 @@ pub trait FsMeta {
     fn total_fnodes(&self) -> u64;
     fn free_fnodes(&self) -> u64;
     fn fsid(&self) -> u64;
-    fn namelen(&self) -> i64;
+    fn namelen(&self) -> u64;
 }
 
 impl FsMeta for Sstatfs {
@@ -193,22 +185,28 @@ impl FsMeta for Sstatfs {
     fn free_fnodes(&self) -> u64 {
         self.f_ffree as u64
     }
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn fs_type(&self) -> i64 {
         self.f_type as i64
     }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+    fn fs_type(&self) -> i64 {
+        // FIXME: statvfs doesn't have an equivalent, so we need to do something else
+        unimplemented!()
+    }
 
     #[cfg(target_os = "linux")]
-    fn iosize(&self) -> i64 {
-        self.f_frsize as i64
+    fn iosize(&self) -> u64 {
+        self.f_frsize as u64
     }
-    #[cfg(target_os = "macos")]
-    fn iosize(&self) -> i64 {
-        self.f_iosize as i64
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    fn iosize(&self) -> u64 {
+        self.f_iosize as u64
     }
-    // FIXME:
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    fn iosize(&self) -> i64 {
-        0
+    // XXX: dunno if this is right
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
+    fn iosize(&self) -> u64 {
+        self.f_bsize as u64
     }
 
     // Linux, SunOS, HP-UX, 4.4BSD, FreeBSD have a system call statfs() that returns
@@ -217,29 +215,32 @@ impl FsMeta for Sstatfs {
     //
     // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
     // struct statvfs, containing an  unsigned  long  f_fsid
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "linux"))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] = unsafe { transmute(&self.f_fsid) };
         (f_fsid[0] as u64) << 32 | f_fsid[1] as u64
     }
-    // FIXME:
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
     fn fsid(&self) -> u64 {
-        0
+        self.f_fsid as u64
     }
 
     #[cfg(target_os = "linux")]
-    fn namelen(&self) -> i64 {
-        self.f_namelen as i64
+    fn namelen(&self) -> u64 {
+        self.f_namelen as u64
     }
     #[cfg(target_os = "macos")]
-    fn namelen(&self) -> i64 {
+    fn namelen(&self) -> u64 {
         1024
     }
-    // FIXME:
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "freebsd")]
     fn namelen(&self) -> u64 {
-        0
+        self.f_namemax as u64
+    }
+    // XXX: should everything just use statvfs?
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
+    fn namelen(&self) -> u64 {
+        self.f_namemax as u64
     }
 }
 

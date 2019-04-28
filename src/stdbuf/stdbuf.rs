@@ -51,7 +51,7 @@ enum OkMsg {
     Version,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd"))]
 fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "so")
 }
@@ -61,7 +61,7 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd", target_os = "macos")))]
 fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
