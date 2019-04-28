@@ -172,9 +172,9 @@ fn parse_options(
         return Ok(OkMsg::Version);
     }
     let mut modified = false;
-    options.stdin = try!(check_option(&matches, "input", &mut modified).ok_or(ErrMsg::Fatal));
-    options.stdout = try!(check_option(&matches, "output", &mut modified).ok_or(ErrMsg::Fatal));
-    options.stderr = try!(check_option(&matches, "error", &mut modified).ok_or(ErrMsg::Fatal));
+    options.stdin = check_option(&matches, "input", &mut modified).ok_or(ErrMsg::Fatal)?;
+    options.stdout = check_option(&matches, "output", &mut modified).ok_or(ErrMsg::Fatal)?;
+    options.stderr = check_option(&matches, "error", &mut modified).ok_or(ErrMsg::Fatal)?;
 
     if matches.free.len() != 1 {
         return Err(ErrMsg::Retry);

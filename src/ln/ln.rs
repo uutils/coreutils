@@ -269,9 +269,9 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
                 if !read_yes() {
                     return Ok(());
                 }
-                try!(fs::remove_file(dst))
+                fs::remove_file(dst)?
             }
-            OverwriteMode::Force => try!(fs::remove_file(dst)),
+            OverwriteMode::Force => fs::remove_file(dst)?,
         };
 
         backup_path = match settings.backup {
@@ -281,14 +281,14 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
             BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
         };
         if let Some(ref p) = backup_path {
-            try!(fs::rename(dst, p));
+            fs::rename(dst, p)?;
         }
     }
 
     if settings.symbolic {
-        try!(symlink(src, dst));
+        symlink(src, dst)?;
     } else {
-        try!(fs::hard_link(src, dst));
+        fs::hard_link(src, dst)?;
     }
 
     if settings.verbose {

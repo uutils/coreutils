@@ -144,7 +144,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut max_width: usize = 0;
 
     for path in &files {
-        let mut reader = try!(open(&path[..]));
+        let mut reader = open(&path[..])?;
 
         let mut line_count: usize = 0;
         let mut word_count: usize = 0;

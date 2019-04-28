@@ -33,15 +33,15 @@ impl fmt::Debug for FormatWriter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &FormatWriter::IntWriter(ref p) => {
-                try!(f.write_str("IntWriter:"));
+                f.write_str("IntWriter:")?;
                 fmt::Pointer::fmt(p, f)
             }
             &FormatWriter::FloatWriter(ref p) => {
-                try!(f.write_str("FloatWriter:"));
+                f.write_str("FloatWriter:")?;
                 fmt::Pointer::fmt(p, f)
             }
             &FormatWriter::MultibyteWriter(ref p) => {
-                try!(f.write_str("MultibyteWriter:"));
+                f.write_str("MultibyteWriter:")?;
                 fmt::Pointer::fmt(&(*p as *const ()), f)
             }
         }

@@ -196,7 +196,7 @@ impl Chmoder {
             }
         };
         match self.fmode {
-            Some(mode) => try!(self.change_file(fperm, mode, file, name)),
+            Some(mode) => self.change_file(fperm, mode, file, name)?,
             None => {
                 let cmode_unwrapped = self.cmode.clone().unwrap();
                 for mode in cmode_unwrapped.split(',') {
@@ -209,7 +209,7 @@ impl Chmoder {
                     };
                     match result {
                         Ok(mode) => {
-                            try!(self.change_file(fperm, mode, file, name));
+                            self.change_file(fperm, mode, file, name)?;
                             fperm = mode;
                         }
                         Err(f) => {

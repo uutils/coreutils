@@ -162,16 +162,16 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
-    if try!(fs::metadata(src)).is_dir() {
+    if fs::metadata(src)?.is_dir() {
         for entry in try!(fs::read_dir(src)) {
-            let entry = try!(entry);
+            let entry = entry?;
             let mut new_dest = PathBuf::from(dest);
             new_dest.push(entry.file_name());
-            if try!(fs::metadata(entry.path())).is_dir() {
-                try!(fs::create_dir(&new_dest));
-                try!(recursive_copy(&entry.path(), &new_dest));
+            if fs::metadata(entry.path())?.is_dir() {
+                fs::create_dir(&new_dest)?;
+                recursive_copy(&entry.path(), &new_dest)?;
             } else {
-                try!(fs::copy(&entry.path(), new_dest));
+                fs::copy(&entry.path(), new_dest)?;
             }
         }
     }

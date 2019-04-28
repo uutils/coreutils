@@ -58,7 +58,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut rd: Box<Read> = match fname {
         "-" => Box::new(stdin()),
         _ => {
-            file = try!(File::open(&Path::new(fname)));
+            file = File::open(&Path::new(fname))?;
             Box::new(BufReader::new(file))
         }
     };
