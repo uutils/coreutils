@@ -282,7 +282,7 @@ fn current_tty() -> String {
         if !res.is_null() {
             CStr::from_ptr(res as *const _)
                 .to_string_lossy()
-                .trim_left_matches("/dev/")
+                .trim_start_matches("/dev/")
                 .to_owned()
         } else {
             "".to_owned()
@@ -293,7 +293,9 @@ fn current_tty() -> String {
 impl Who {
     fn exec(&mut self) {
         let run_level_chk = |record: i16| {
+            #[allow(unused_assignments)]
             let mut res = false;
+
             #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
             {
                 res = record == utmpx::RUN_LVL;
@@ -520,7 +522,7 @@ impl Who {
         if self.include_exit {
             buf.push_str(&format!(" {:<12}", exit));
         }
-        println!("{}", buf.trim_right());
+        println!("{}", buf.trim_end());
     }
 
     #[inline]
