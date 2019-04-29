@@ -11,6 +11,7 @@ path = "env.rs"
 [dependencies]
 libc = "0.2.42"
 uucore = { path="../uucore" }
+rust-ini = "0.13.0"
 
 [[bin]]
 name = "env"
