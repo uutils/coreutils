@@ -20,7 +20,7 @@ matrix:
 
 environment:
   global:
-    FEATURES: "generic"
+    FEATURES: "windows"
     BUILD_OPTIONS: "--no-default-features"
     TEST_OPTIONS: "--no-default-features --no-fail-fast"
 
@@ -45,11 +45,11 @@ environment:
   - CHANNEL: nightly
     ARCH: i686
     ABI: msvc
-    FEATURES: "generic nightly"
+    FEATURES: "windows nightly"
   - CHANNEL: nightly
     ARCH: x86_64
     ABI: msvc
-    FEATURES: "generic nightly"
+    FEATURES: "windows nightly"
   # "gnu" ABI
   - CHANNEL: stable
     ARCH: i686
