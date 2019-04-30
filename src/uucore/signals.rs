@@ -325,18 +325,23 @@ pub static ALL_SIGNALS: [Signal<'static>; 31] = [
 ];
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
-    if signal_name_or_value == "0" {
-        return Some(0);
-    }
-    for signal in &ALL_SIGNALS {
-        let long_name = format!("SIG{}", signal.name);
-        if signal.name == signal_name_or_value || (signal_name_or_value == signal.value.to_string())
-            || (long_name == signal_name_or_value)
-        {
-            return Some(signal.value);
+    if let Ok(value) = signal_name_or_value.parse() {
+        if is_signal(value) {
+            return Some(value);
+        } else {
+            return None;
         }
     }
-    None
+    let signal_name = if signal_name_or_value.starts_with("SIG") {
+        &signal_name_or_value[3..]
+    } else {
+        &signal_name_or_value[..]
+    };
+
+    ALL_SIGNALS
+        .iter()
+        .find(|s| s.name == signal_name)
+        .map(|s| s.value)
 }
 
 #[inline(always)]
@@ -363,7 +368,10 @@ fn signals_all_are_signal() {
 fn signal_by_value() {
     assert_eq!(signal_by_name_or_value("0"), Some(0));
     for signal in &ALL_SIGNALS {
-        assert_eq!(signal_by_name_or_value(&signal.value.to_string()), Some(signal.value));
+        assert_eq!(
+            signal_by_name_or_value(&signal.value.to_string()),
+            Some(signal.value)
+        );
     }
 }
 
@@ -377,6 +385,9 @@ fn signal_by_short_name() {
 #[test]
 fn signal_by_long_name() {
     for signal in &ALL_SIGNALS {
-        assert_eq!(signal_by_name_or_value(&format!("SIG{}", signal.name)), Some(signal.value));
+        assert_eq!(
+            signal_by_name_or_value(&format!("SIG{}", signal.name)),
+            Some(signal.value)
+        );
     }
 }
