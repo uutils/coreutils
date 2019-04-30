@@ -341,7 +341,8 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
 
 #[inline(always)]
 pub fn is_signal(num: usize) -> bool {
-    num < ALL_SIGNALS.len()
+    // Named signals start at 1
+    num <= ALL_SIGNALS.len()
 }
 
 #[test]
