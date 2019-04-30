@@ -343,3 +343,39 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
 pub fn is_signal(num: usize) -> bool {
     num < ALL_SIGNALS.len()
 }
+
+#[test]
+fn signals_all_contiguous() {
+    for (i, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal.value, i + 1);
+    }
+}
+
+#[test]
+fn signals_all_are_signal() {
+    for signal in &ALL_SIGNALS {
+        assert!(is_signal(signal.value));
+    }
+}
+
+#[test]
+fn signal_by_value() {
+    assert_eq!(signal_by_name_or_value("0"), Some(0));
+    for signal in &ALL_SIGNALS {
+        assert_eq!(signal_by_name_or_value(&signal.value.to_string()), Some(signal.value));
+    }
+}
+
+#[test]
+fn signal_by_short_name() {
+    for signal in &ALL_SIGNALS {
+        assert_eq!(signal_by_name_or_value(signal.name), Some(signal.value));
+    }
+}
+
+#[test]
+fn signal_by_long_name() {
+    for signal in &ALL_SIGNALS {
+        assert_eq!(signal_by_name_or_value(&format!("SIG{}", signal.name)), Some(signal.value));
+    }
+}
