@@ -2,10 +2,6 @@ use crate::zero_copy::RawObject;
 
 use std::io::{self, Write};
 
-/// A "zero-copy" writer used on platforms for which we have no actual zero-copy implementation (or
-/// which use standard read/write operations for zero-copy I/O).  This writer just delegates to the
-/// inner writer used to create it.  Using this struct avoids going through the machinery used to
-/// handle the case where a given writer does not support zero-copy on a platform.
 pub struct PlatformZeroCopyWriter;
 
 impl PlatformZeroCopyWriter {
