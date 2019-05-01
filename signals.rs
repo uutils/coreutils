@@ -332,11 +332,7 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
             return None;
         }
     }
-    let signal_name = if signal_name_or_value.starts_with("SIG") {
-        &signal_name_or_value[3..]
-    } else {
-        &signal_name_or_value[..]
-    };
+    let signal_name = signal_name_or_value.trim_left_matches("SIG");
 
     ALL_SIGNALS
         .iter()
