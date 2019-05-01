@@ -13,6 +13,13 @@ extern crate failure;
 #[cfg(feature = "failure_derive")]
 #[macro_use]
 extern crate failure_derive;
+#[cfg(feature = "nix")]
+extern crate nix;
+#[cfg(all(feature = "lazy_static", target_os = "linux"))]
+#[macro_use]
+extern crate lazy_static;
+#[cfg(feature = "platform-info")]
+extern crate platform_info;
 
 #[macro_use]
 mod macros;
@@ -39,6 +46,9 @@ pub mod entries;
 pub mod process;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
+
+#[cfg(feature = "zero-copy")]
+pub mod zero_copy;
 
 #[cfg(all(windows, feature = "wide"))]
 pub mod wide;
