@@ -110,8 +110,8 @@ impl CmdResult {
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()).trim_right(),
-            self.stderr.trim_right()
+            String::from(msg.as_ref()).trim_end(),
+            self.stderr.trim_end()
         );
         Box::new(self)
     }
@@ -162,16 +162,16 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
-    if try!(fs::metadata(src)).is_dir() {
+    if fs::metadata(src)?.is_dir() {
         for entry in try!(fs::read_dir(src)) {
-            let entry = try!(entry);
+            let entry = entry?;
             let mut new_dest = PathBuf::from(dest);
             new_dest.push(entry.file_name());
-            if try!(fs::metadata(entry.path())).is_dir() {
-                try!(fs::create_dir(&new_dest));
-                try!(recursive_copy(&entry.path(), &new_dest));
+            if fs::metadata(entry.path())?.is_dir() {
+                fs::create_dir(&new_dest)?;
+                recursive_copy(&entry.path(), &new_dest)?;
             } else {
-                try!(fs::copy(&entry.path(), new_dest));
+                fs::copy(&entry.path(), new_dest)?;
             }
         }
     }

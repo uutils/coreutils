@@ -9,7 +9,7 @@ name = "uu_arch"
 path = "arch.rs"
 
 [dependencies]
-platform-info = { git = "https://github.com/uutils/platform-info" }
+platform-info = "0.0.1"
 uucore = { path = "../uucore" }
 
 [[bin]]

@@ -11,6 +11,9 @@ time = { version = "0.1.40", optional = true }
 data-encoding = { version = "^2.1", optional = true }
 libc = { version = "0.2.42", optional = true }
 wild = "2.0.1"
+nix = { version = "0.13", optional = true }
+lazy_static = { version = "1.3", optional = true }
+platform-info = { version = "0.0.1", optional = true }
 
 [target.'cfg(target_os = "redox")'.dependencies]
 termion = "1.5"
@@ -25,6 +28,7 @@ utmpx = ["time", "libc"]
 process = ["libc"]
 signals = []
 entries = ["libc"]
+zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
 wide = []
 default = []
 

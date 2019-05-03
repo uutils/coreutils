@@ -31,7 +31,7 @@ static LONG_HELP: &str = "
   -m                only hostname and user associated with stdin
   -p, --process     print active processes spawned by init
   -q, --count       all login names and number of users logged on
-  -r, --runlevel    print current runlevel
+  -r, --runlevel    print current runlevel (not available on BSDs)
   -s, --short       print only name, line, and time (default)
   -t, --time        print last system clock change
   -T, -w, --mesg    add user's message status as +, - or ?
@@ -60,6 +60,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "count",
         "all login names and number of users logged on",
     );
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
     opts.optflag("r", "runlevel", "print current runlevel");
     opts.optflag("s", "short", "print only name, line, and time (default)");
     opts.optflag("t", "time", "print last system clock change");
@@ -281,7 +282,7 @@ fn current_tty() -> String {
         if !res.is_null() {
             CStr::from_ptr(res as *const _)
                 .to_string_lossy()
-                .trim_left_matches("/dev/")
+                .trim_start_matches("/dev/")
                 .to_owned()
         } else {
             "".to_owned()
@@ -291,6 +292,17 @@ fn current_tty() -> String {
 
 impl Who {
     fn exec(&mut self) {
+        let run_level_chk = |record: i16| {
+            #[allow(unused_assignments)]
+            let mut res = false;
+
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
+            {
+                res = record == utmpx::RUN_LVL;
+            }
+            res
+        };
+
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()
         } else {
@@ -321,7 +333,7 @@ impl Who {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut);
-                    } else if self.need_runlevel && ut.record_type() == utmpx::RUN_LVL {
+                    } else if self.need_runlevel && run_level_chk(ut.record_type()) {
                         self.print_runlevel(&ut);
                     } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
                         self.print_boottime(&ut);
@@ -510,7 +522,7 @@ impl Who {
         if self.include_exit {
             buf.push_str(&format!(" {:<12}", exit));
         }
-        println!("{}", buf.trim_right());
+        println!("{}", buf.trim_end());
     }
 
     #[inline]
