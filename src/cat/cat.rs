@@ -34,12 +34,17 @@ use std::os::unix::fs::FileTypeExt;
 use unix_socket::UnixStream;
 
 /// Linux splice support
+use nix::errno::Errno::EPIPE;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::{splice, SpliceFFlags};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::unistd::pipe;
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::Error::Sys;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::{AsRawFd, RawFd};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::process::exit;
 
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
@@ -180,7 +185,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         files.push("-".to_owned());
     }
 
-    let can_write_fast = !(show_tabs || show_nonprint || show_ends || squeeze_blank
+    let can_write_fast = !(show_tabs
+        || show_nonprint
+        || show_ends
+        || squeeze_blank
         || number_mode != NumberingMode::NumberNone);
 
     let success = if can_write_fast {
@@ -202,7 +210,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         write_lines(files, &options).is_ok()
     };
 
-    if success { 0 } else { 1 }
+    if success {
+        0
+    } else {
+        1
+    }
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -217,25 +229,13 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
 
     match metadata(path).context(path)?.file_type() {
         #[cfg(unix)]
-        ft if ft.is_block_device() =>
-        {
-            Ok(InputType::BlockDevice)
-        }
+        ft if ft.is_block_device() => Ok(InputType::BlockDevice),
         #[cfg(unix)]
-        ft if ft.is_char_device() =>
-        {
-            Ok(InputType::CharacterDevice)
-        }
+        ft if ft.is_char_device() => Ok(InputType::CharacterDevice),
         #[cfg(unix)]
-        ft if ft.is_fifo() =>
-        {
-            Ok(InputType::Fifo)
-        }
+        ft if ft.is_fifo() => Ok(InputType::Fifo),
         #[cfg(unix)]
-        ft if ft.is_socket() =>
-        {
-            Ok(InputType::Socket)
-        }
+        ft if ft.is_socket() => Ok(InputType::Socket),
         ft if ft.is_dir() => Ok(InputType::Directory),
         ft if ft.is_file() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
@@ -293,20 +293,38 @@ fn open(path: &str) -> CatResult<InputHandle> {
 ///
 /// * `files` - There is no short circuit when encountiner an error
 /// reading a file in this vector
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn write_fast(files: Vec<String>) -> CatResult<()> {
-    let mut writer = stdout();
     let mut in_buf = [0; 1024 * 64];
     let mut error_count = 0;
 
     for file in files {
         match open(&file[..]) {
-            Ok(mut handle) => while let Ok(n) = handle.reader.read(&mut in_buf) {
-                if n == 0 {
-                    break;
+            Ok(mut handle) => {
+                // If we're on Linux or Android, try to use the splice()
+                // system call for faster writing.
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                {
+                    match write_fast_with_splice(&mut handle) {
+                        Err(Sys(err)) => match err {
+                            EPIPE => {
+                                // Our pipe was interrupted, this happens, for example, when
+                                // the shell command `cat my_file.txt | head` is run. We exit
+                                // gracefully.
+                                exit(0);
+                            }
+                            _ => {}
+                        },
+                        _ => {
+                            // Writing fast with splice worked! We don't need
+                            // to fall back on slower writing.
+                            continue;
+                        }
+                    }
                 }
-                writer.write_all(&in_buf[..n]).context(&file[..])?;
-            },
+                // If we're not on Linux or Android, or the splice() call failed,
+                // fall back on slower writing.
+                write_fast_without_splice(&mut handle, &mut in_buf)?
+            }
             Err(error) => {
                 writeln!(&mut stderr(), "{}", error)?;
                 error_count += 1;
@@ -319,52 +337,51 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
         _ => Err(CatError::EncounteredErrors(error_count)),
     }
 }
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn write_fast(files: Vec<String>) -> CatResult<()> {
+
+#[inline]
+fn write_fast_without_splice(handle: &mut InputHandle, in_buf: &mut [u8]) -> Result<(), io::Error> {
+    let mut writer = stdout();
+    while let Ok(n) = handle.reader.read(in_buf) {
+        if n == 0 {
+            break;
+        }
+        writer.write_all(&in_buf[..n])?;
+    }
+    Ok(())
+}
+
+fn write_fast_with_splice(handle: &mut InputHandle) -> Result<(), nix::Error> {
     const BUF_SIZE: usize = 1024 * 16;
+
     let writer = stdout();
-    // let _handle = writer.lock();
     let (pipe_rd, pipe_wr) = pipe().unwrap();
-    let mut error_count = 0;
 
-    for file in files {
-        match open(&file[..]) {
-            Ok(handle) => loop {
-                let res = splice(
-                    handle.file_descriptor,
-                    None,
-                    pipe_wr,
-                    None,
-                    BUF_SIZE,
-                    SpliceFFlags::empty(),
-                ).unwrap();
-                if res == 0 {
-                    // We read 0 bytes from the input,
-                    // which means we're done copying.
-                    break;
-                }
-                let _res = splice (
-                    pipe_rd,
-                    None,
-                    writer.as_raw_fd(),
-                    None,
-                    BUF_SIZE,
-                    SpliceFFlags::empty(),
-                ).unwrap();
-            },
-            Err(error) => {
-                writeln!(&mut stderr(), "{}", error)?;
-                error_count += 1;
-            }
-
+    loop {
+        let res = splice(
+            handle.file_descriptor,
+            None,
+            pipe_wr,
+            None,
+            BUF_SIZE,
+            SpliceFFlags::empty(),
+        )?;
+        if res == 0 {
+            // We read 0 bytes from the input,
+            // which means we're done copying.
+            break;
         }
+        let _res = splice(
+            pipe_rd,
+            None,
+            writer.as_raw_fd(),
+            None,
+            BUF_SIZE,
+            SpliceFFlags::empty(),
+        )?;
     }
-    match error_count {
-        0 => Ok(()),
-        _ => Err(CatError::EncounteredErrors(error_count)),
-    }
-}
 
+    Ok(())
+}
 
 /// State that persists between output of each file
 struct OutputState {
@@ -485,10 +502,7 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     loop {
-        match in_buf
-            .iter()
-            .position(|c| *c == b'\n' || *c == b'\t')
-        {
+        match in_buf.iter().position(|c| *c == b'\n' || *c == b'\t') {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
                 if in_buf[p] == b'\n' {
@@ -521,7 +535,8 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             128...159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160...254 => writer.write_all(&[b'M', b'-', byte - 128]),
             _ => writer.write_all(&[b'M', b'-', b'^', 63]),
-        }.unwrap();
+        }
+        .unwrap();
         count += 1;
     }
     if count != in_buf.len() {
