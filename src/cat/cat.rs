@@ -350,6 +350,7 @@ fn write_fast_without_splice(handle: &mut InputHandle, in_buf: &mut [u8]) -> Res
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn write_fast_with_splice(handle: &mut InputHandle) -> Result<(), nix::Error> {
     const BUF_SIZE: usize = 1024 * 16;
 
