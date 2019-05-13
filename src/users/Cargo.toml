@@ -13,7 +13,7 @@ getopts = "0.2.18"
 
 [dependencies.uucore]
 features = ["utmpx"]
-path = "../uucore"
+version = "0.0.1"
 
 [[bin]]
 name = "users"

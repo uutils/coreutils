@@ -9,7 +9,7 @@ name = "uu_base64"
 path = "base64.rs"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["encoding"]
 
 [[bin]]

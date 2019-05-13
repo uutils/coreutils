@@ -9,7 +9,7 @@ name = "uu_mktemp"
 path = "mktemp.rs"
 
 [dependencies]
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 getopts = "0.2.18"
 rand = "0.5"
 tempfile = "2.1.5"

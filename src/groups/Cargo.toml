@@ -9,7 +9,7 @@ name = "uu_groups"
 path = "groups.rs"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["entries"]
 
 [[bin]]

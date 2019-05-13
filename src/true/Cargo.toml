@@ -9,7 +9,7 @@ name = "uu_true"
 path = "true.rs"
 
 [dependencies]
-uucore = { path = "../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "true"

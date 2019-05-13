@@ -157,7 +157,7 @@ default = ["unix"]
 [workspace]
 
 [dependencies]
-uucore   = { path="src/uucore" }
+uucore   = "0.0.1"
 arch     = { optional=true, path="src/arch" }
 base32   = { optional=true, path="src/base32" }
 base64   = { optional=true, path="src/base64" }

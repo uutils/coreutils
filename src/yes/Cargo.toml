@@ -11,7 +11,7 @@ path = "yes.rs"
 
 [dependencies]
 clap = "2.32"
-uucore = { path = "../uucore", features = ["zero-copy"] }
+uucore = { version = "0.0.1", features = ["zero-copy"] }
 
 [features]
 latency = []

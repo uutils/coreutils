@@ -11,7 +11,7 @@ path = "stdbuf.rs"
 [dependencies]
 getopts = "0.2.18"
 tempdir = "0.3.7"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [build-dependencies]
 libstdbuf = { path="libstdbuf" }

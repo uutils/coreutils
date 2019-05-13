@@ -13,7 +13,7 @@ getopts = "0.2.18"
 libc = "0.2.42"
 byteorder = "1.1.0"
 half = "1.1.1"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "od"

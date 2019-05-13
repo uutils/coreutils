@@ -14,7 +14,7 @@ libc = "0.2.42"
 time = "0.1.40"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["parse_time", "process"]
 
 [[bin]]

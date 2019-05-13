@@ -10,7 +10,7 @@ path = "arch.rs"
 
 [dependencies]
 platform-info = "0.0.1"
-uucore = { path = "../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "arch"

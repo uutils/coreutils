@@ -10,7 +10,7 @@ path = "dircolors.rs"
 
 [dependencies]
 glob = "0.2.11"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "dircolors"

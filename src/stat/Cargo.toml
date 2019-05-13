@@ -13,7 +13,7 @@ getopts = "0.2.18"
 time = "0.1.40"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["entries"]
 
 [[bin]]

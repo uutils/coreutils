@@ -10,7 +10,7 @@ path = "test.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"

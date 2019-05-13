@@ -10,7 +10,7 @@ path = "dirname.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "dirname"

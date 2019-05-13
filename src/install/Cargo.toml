@@ -11,7 +11,7 @@ path = "install.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = ">= 0.2"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [dev-dependencies]
 time = "0.1.40"

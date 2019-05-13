@@ -12,7 +12,7 @@ path = "sleep.rs"
 getopts = "0.2.18"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["parse_time"]
 
 [[bin]]
