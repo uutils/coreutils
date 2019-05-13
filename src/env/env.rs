@@ -110,7 +110,7 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     args.insert(0, "/d/c");
     let progname = env::var("ComSpec")
         .map(Cow::from)
-        .unwrap_or_else(|| Cow::from("cmd"));
+        .unwrap_or_else(|_| Cow::from("cmd"));
 
     (progname, &args[..])
 }
