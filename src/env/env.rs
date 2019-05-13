@@ -11,234 +11,84 @@
 /* last synced with: env (GNU coreutils) 8.13 */
 
 #[macro_use]
-extern crate uucore;
+extern crate clap;
 
-extern crate ini;
-
+use clap::{App, AppSettings, Arg};
 use ini::Ini;
+use std::borrow::Cow;
 use std::env;
-use std::io::{stdin, stdout, Write};
+use std::io::{self, Write};
 use std::process::Command;
 
-static NAME: &str = "env";
-static SYNTAX: &str = "[OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
-static SUMMARY: &str = "Set each NAME to VALUE in the environment and run COMMAND";
-static LONG_HELP: &str = "
- A mere - implies -i. If no COMMAND, print the resulting environment
+const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
+const AFTER_HELP: &str = "\
+A mere - implies -i. If no COMMAND, print the resulting environment.
 ";
 
-struct Options {
+struct Options<'a> {
     ignore_env: bool,
     null: bool,
-    files: Vec<String>,
-    unsets: Vec<String>,
-    sets: Vec<(String, String)>,
-    program: Vec<String>,
+    files: Vec<&'a str>,
+    unsets: Vec<&'a str>,
+    sets: Vec<(&'a str, &'a str)>,
+    program: Vec<&'a str>,
 }
 
 // print name=value env pairs on screen
 // if null is true, separate pairs with a \0, \n otherwise
 fn print_env(null: bool) {
+    let stdout_raw = io::stdout();
+    let mut stdout = stdout_raw.lock();
     for (n, v) in env::vars() {
-        print!("{}={}{}", n, v, if null { '\0' } else { '\n' });
+        write!(stdout, "{}={}{}", n, v, if null { '\0' } else { '\n' }).unwrap();
     }
 }
 
-#[cfg(not(windows))]
-fn build_command(mut args: Vec<String>) -> (String, Vec<String>) {
-    (args.remove(0), args)
+fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool, i32> {
+    // is it a NAME=VALUE like opt ?
+    if let Some(idx) = opt.find('=') {
+        // yes, so push name, value pair
+        let (name, value) = opt.split_at(idx);
+        opts.sets.push((name, &value['='.len_utf8()..]));
+
+        Ok(false)
+    } else {
+        // no, it's a program-like opt
+        parse_program_opt(opts, opt).map(|_| true)
+    }
 }
 
-#[cfg(windows)]
-fn build_command(mut args: Vec<String>) -> (String, Vec<String>) {
-    args.insert(0, "/d/c".to_string());
-    (env::var("ComSpec").unwrap_or("cmd".to_string()), args)
+fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32> {
+    if opts.null {
+        eprintln!("{}: cannot specify --null (-0) with command", crate_name!());
+        eprintln!("Type \"{} --help\" for detailed information", crate_name!());
+        Err(1)
+    } else {
+        opts.program.push(opt);
+        Ok(())
+    }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    let mut core_opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
-    core_opts
-        .optflag("i", "ignore-environment", "start with an empty environment")
-        .optflag(
-            "0",
-            "null",
-            "end each output line with a 0 byte rather than newline (only valid when printing the environment)",
-        )
-        .optopt("f", "file", "read and set variables from an \".env\"-style configuration file (prior to any unset and/or set)", "PATH")
-        .optopt("u", "unset", "remove variable from the environment", "NAME");
-
-    let mut opts = Box::new(Options {
-        ignore_env: false,
-        null: false,
-        unsets: vec![],
-        files: vec![],
-        sets: vec![],
-        program: vec![],
-    });
-
-    let mut wait_cmd = false;
-    let mut iter = args.iter();
-    iter.next(); // skip program
-    let mut item = iter.next();
-
-    // the for loop doesn't work here,
-    // because we need sometimes to read 2 items forward,
-    // and the iter can't be borrowed twice
-    while item != None {
-        let opt = item.unwrap();
-
-        if wait_cmd {
-            // we still accept NAME=VAL here but not other options
-            let mut sp = opt.splitn(2, '=');
-            let name = sp.next();
-            let value = sp.next();
-
-            match (name, value) {
-                (Some(n), Some(v)) => {
-                    opts.sets.push((n.to_owned(), v.to_owned()));
-                }
-                _ => {
-                    // read the program now
-                    opts.program.push(opt.to_owned());
-                    break;
-                }
-            }
-        } else if opt.starts_with("--") {
-            match opt.as_ref() {
-                "--help" => {
-                    core_opts.parse(vec![String::new(), String::from("--help")]);
-                    return 0;
-                }
-                "--version" => {
-                    core_opts.parse(vec![String::new(), String::from("--version")]);
-                    return 0;
-                }
-
-                "--ignore-environment" => opts.ignore_env = true,
-                "--null" => opts.null = true,
-                "--file" => {
-                    let var = iter.next();
-
-                    match var {
-                        None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
-                        Some(s) => opts.files.push(s.to_owned()),
-                    }
-                }
-                "--unset" => {
-                    let var = iter.next();
-
-                    match var {
-                        None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
-                        Some(s) => opts.unsets.push(s.to_owned()),
-                    }
-                }
-
-                _ => {
-                    eprintln!("{}: invalid option \"{}\"", NAME, *opt);
-                    eprintln!("Type \"{} --help\" for detailed information", NAME);
-                    return 1;
-                }
-            }
-        } else if opt.starts_with("-") {
-            if opt.len() == 1 {
-                // implies -i and stop parsing opts
-                wait_cmd = true;
-                opts.ignore_env = true;
-                continue;
-            }
-
-            let mut chars = opt.chars();
-            chars.next();
-
-            for c in chars {
-                // short versions of options
-                match c {
-                    'i' => opts.ignore_env = true,
-                    '0' => opts.null = true,
-                    'f' => {
-                        let var = iter.next();
-
-                        match var {
-                            None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
-                            Some(s) => opts.files.push(s.to_owned()),
-                        }
-                    }
-                    'u' => {
-                        let var = iter.next();
-
-                        match var {
-                            None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
-                            Some(s) => opts.unsets.push(s.to_owned()),
-                        }
-                    }
-                    _ => {
-                        eprintln!("{}: illegal option -- {}", NAME, c);
-                        eprintln!("Type \"{} --help\" for detailed information", NAME);
-                        return 1;
-                    }
-                }
-            }
-        } else {
-            // is it a NAME=VALUE like opt ?
-            let mut sp = opt.splitn(2, '=');
-            let name = sp.next();
-            let value = sp.next();
-
-            match (name, value) {
-                (Some(n), Some(v)) => {
-                    // yes
-                    opts.sets.push((n.to_owned(), v.to_owned()));
-                    wait_cmd = true;
-                }
-                // no, its a program-like opt
-                _ => {
-                    if opts.null {
-                        eprintln!("{}: cannot specify --null (-0) with command", NAME);
-                        eprintln!("Type \"{} --help\" for detailed information", NAME);
-                        return 1;
-                    }
-                    opts.program.push(opt.clone());
-                    break;
-                }
-            }
-        }
-
-        item = iter.next();
-    }
-
-    // read program arguments
-    for opt in iter {
-        if opts.null {
-            eprintln!("{}: cannot specify --null (-0) with command", NAME);
-            eprintln!("Type \"{} --help\" for detailed information", NAME);
-            return 1;
-        }
-        opts.program.push(opt.clone())
-    }
-
-    if opts.ignore_env {
-        for (ref name, _) in env::vars() {
-            env::remove_var(name);
-        }
-    }
-
+fn load_config_file(opts: &mut Options) -> Result<(), i32> {
     // NOTE: config files are parsed using an INI parser b/c it's available and compatible with ".env"-style files
     //   ... * but support for actual INI files, although working, is not intended, nor claimed
-    for file in &opts.files {
+    for &file in &opts.files {
         let conf = if file == "-" {
-            let stdin = stdin();
+            let stdin = io::stdin();
             let mut stdin_locked = stdin.lock();
             Ini::read_from(&mut stdin_locked)
         } else {
             Ini::load_from_file(file)
         };
+
         let conf = match conf {
             Ok(config) => config,
             Err(error) => {
                 eprintln!("env: error: \"{}\": {}", file, error);
-                return 1;
+                return Err(1);
             }
         };
+
         for (_, prop) in &conf { // ignore all INI section lines (treat them as comments)
             for (key, value) in prop {
                 env::set_var(key, value);
@@ -246,31 +96,163 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
 
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
+    let progname = Cow::from(args[0]);
+    (progname, &args[1..])
+}
+
+#[cfg(windows)]
+fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
+    args.insert(0, "/d/c");
+    let progname = env::var("ComSpec")
+        .map(Cow::from)
+        .unwrap_or_else(|| Cow::from("cmd"));
+
+    (progname, &args[..])
+}
+
+fn create_app() -> App<'static, 'static> {
+    App::new(crate_name!())
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
+        .usage(USAGE)
+        .after_help(AFTER_HELP)
+        .setting(AppSettings::AllowExternalSubcommands)
+        .arg(Arg::with_name("ignore-environment")
+            .short("i")
+            .long("ignore-environment")
+            .help("start with an empty environment"))
+        .arg(Arg::with_name("null")
+            .short("0")
+            .long("null")
+            .help("end each output line with a 0 byte rather than a newline (only valid when \
+                    printing the environment)"))
+        .arg(Arg::with_name("file")
+            .short("f")
+            .long("file")
+            .takes_value(true)
+            .number_of_values(1)
+            .value_name("PATH")
+            .multiple(true)
+            .help("read and set variables from a \".env\"-style configuration file (prior to any \
+                    unset and/or set)"))
+        .arg(Arg::with_name("unset")
+            .short("u")
+            .long("unset")
+            .takes_value(true)
+            .number_of_values(1)
+            .value_name("NAME")
+            .multiple(true)
+            .help("remove variable from the environment"))
+}
+
+fn run_env(args: Vec<String>) -> Result<(), i32> {
+    let app = create_app();
+    let matches = app.get_matches_from(args);
+
+    let ignore_env = matches.is_present("ignore-environment");
+    let null = matches.is_present("null");
+    let files = matches
+        .values_of("file")
+        .map(|v| v.collect())
+        .unwrap_or_else(|| Vec::with_capacity(0));
+    let unsets = matches
+        .values_of("unset")
+        .map(|v| v.collect())
+        .unwrap_or_else(|| Vec::with_capacity(0));
+
+    let mut opts = Options {
+        ignore_env,
+        null,
+        files,
+        unsets,
+        sets: vec![],
+        program: vec![],
+    };
+
+    // we handle the name, value pairs and the program to be executed by treating them as external
+    // subcommands in clap
+    if let (external, Some(matches)) = matches.subcommand() {
+        let mut begin_prog_opts = false;
+
+        if external == "-" {
+            // "-" implies -i and stop parsing opts
+            opts.ignore_env = true;
+        } else {
+            begin_prog_opts = parse_name_value_opt(&mut opts, external)?;
+        }
+
+        if let Some(mut iter) = matches.values_of("") {
+            // read NAME=VALUE arguments (and up to a single program argument)
+            while !begin_prog_opts {
+                if let Some(opt) = iter.next() {
+                    begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
+                } else {
+                    break;
+                }
+            }
+
+            // read any leftover program arguments
+            for opt in iter {
+                parse_program_opt(&mut opts, opt)?;
+            }
+        }
+    }
+
+    // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
+    //       easily handle the case where no command is given
+
+    // remove all env vars if told to ignore presets
+    if opts.ignore_env {
+        for (ref name, _) in env::vars() {
+            env::remove_var(name);
+        }
+    }
+
+    // load .env-style config file prior to those given on the command-line
+    load_config_file(&mut opts)?;
+
+    // unset specified env vars
     for name in &opts.unsets {
         env::remove_var(name);
     }
 
+    // set specified env vars
     for &(ref name, ref val) in &opts.sets {
+        // FIXME: set_var() panics if name is an empty string
         env::set_var(name, val);
     }
 
     if !opts.program.is_empty() {
-        let (prog, args) = build_command(opts.program);
-        match Command::new(prog).args(args).status() {
+        // we need to execute a command
+        let (prog, args) = build_command(&mut opts.program);
+
+        // FIXME: this should just use execvp() (no fork()) on Unix-like systems
+        match Command::new(&*prog).args(args).status() {
             Ok(exit) => {
-                return if exit.success() {
-                    0
-                } else {
-                    exit.code().unwrap()
+                if !exit.success() {
+                    return Err(exit.code().unwrap());
                 }
             }
-            Err(_) => return 1,
+            Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127),
+            Err(_) => return Err(126),
         }
     } else {
-        // no program provided
+        // no program provided, so just dump all env vars to stdout
         print_env(opts.null);
-        return_if_err!(1, stdout().flush());
     }
 
-    0
+    Ok(())
+}
+
+pub fn uumain(args: Vec<String>) -> i32 {
+    match run_env(args) {
+        Ok(()) => 0,
+        Err(code) => code,
+    }
 }

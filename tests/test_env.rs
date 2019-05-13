@@ -2,7 +2,7 @@ use common::util::*;
 
 #[test]
 fn test_env_help() {
-    assert!(new_ucmd!().arg("--help").succeeds().no_stderr().stdout.contains("Options:"));
+    assert!(new_ucmd!().arg("--help").succeeds().no_stderr().stdout.contains("OPTIONS:"));
 }
 
 #[test]
