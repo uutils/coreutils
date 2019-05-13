@@ -1,7 +1,7 @@
 [package]
 name = "uucore"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 
 [dependencies]
 getopts = "0.2.18"
@@ -32,6 +32,3 @@ zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
 wide = []
 default = []
 
-[lib]
-path = "lib.rs"
-name = "uucore"

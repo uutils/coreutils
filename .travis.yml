@@ -1,0 +1,47 @@
+language: rust
+
+rust:
+    - stable
+    - beta
+
+os:
+    - linux
+    - osx
+
+env:
+  global: FEATURES='' CARGO_ARGS='--all-features'
+
+matrix:
+  allow_failures:
+    - rust: nightly
+  fast_finish: true
+  include:
+    - rust: 1.31.0
+    - rust: stable
+      os: linux
+    - rust: stable
+      os: osx
+    - rust: nightly
+      os: linux
+    - rust: nightly
+      os: osx
+
+cache:
+  directories:
+    - $HOME/.cargo
+
+script:
+  - cargo build $CARGO_ARGS --features "$FEATURES"
+  - cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast
+
+addons:
+  apt:
+    packages:
+      - libssl-dev
+
+after_success: |
+  if [ "$TRAVIS_OS_NAME" = linux -a "$TRAVIS_RUST_VERSION" = stable ]; then
+    bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
+    cargo tarpaulin --out Xml
+    bash <(curl -s https://codecov.io/bash)
+  fi
