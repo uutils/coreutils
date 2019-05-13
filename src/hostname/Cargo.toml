@@ -12,7 +12,7 @@ path = "hostname.rs"
 libc = "0.2.42"
 winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
 getopts = "0.2"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "hostname"

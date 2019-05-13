@@ -15,7 +15,7 @@ winapi = { version = "0.3", features = ["lmcons"] }
 advapi32-sys = "0.2.0"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["entries", "wide"]
 
 [[bin]]

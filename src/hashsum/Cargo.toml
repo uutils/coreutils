@@ -19,7 +19,7 @@ regex-syntax = "0.6.1"
 sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "hashsum"

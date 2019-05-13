@@ -9,7 +9,7 @@ name = "uu_basename"
 path = "basename.rs"
 
 [dependencies]
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "basename"

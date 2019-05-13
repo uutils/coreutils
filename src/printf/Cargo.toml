@@ -10,7 +10,7 @@ path = "printf.rs"
 
 [dependencies]
 itertools = "0.7.8"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "printf"

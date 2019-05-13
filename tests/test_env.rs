@@ -23,7 +23,7 @@ fn test_echo() {
     println!("stderr={:?}", result.stderr);
     assert!(result.success);
 
-    let out = result.stdout.trim_right();
+    let out = result.stdout.trim_end();
 
     assert_eq!(out, "FOO-bar");
 }

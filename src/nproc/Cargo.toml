@@ -12,7 +12,7 @@ path = "nproc.rs"
 getopts = "0.2.18"
 libc = "0.2.42"
 num_cpus = "1.5"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "nproc"

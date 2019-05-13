@@ -15,7 +15,7 @@ winapi = { version = "0.3", features = ["handleapi", "winerror"] }
 kernel32-sys = "0.2.2"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["wide"]
 
 [[bin]]
