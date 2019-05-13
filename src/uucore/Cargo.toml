@@ -2,6 +2,18 @@
 name = "uucore"
 version = "0.0.1"
 authors = ["uutils developers"]
+description = "Common cross-platform code used by various uutils projects"
+
+homepage = "https://github.com/uutils/uucore"
+repository = "https://github.com/uutils/uucore"
+readme = "README.md"
+keywords = ["cross-platform", "uutils", "coreutils"]
+categories = ["os"]
+license = "MIT"
+
+[badges]
+travis-ci = { repository = "uutils/uucore" }
+appveyor = { repository = "uutils/uucore" }
 
 [dependencies]
 getopts = "0.2.18"
