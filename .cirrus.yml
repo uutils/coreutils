@@ -9,7 +9,7 @@ task:
     - sh rustup.sh -y
   build_script:
     - . $HOME/.cargo/env
-    - cargo build
+    - cargo build --all-features
   test_script:
     - . $HOME/.cargo/env
-    - cargo test
+    - cargo test --all-features
