@@ -64,7 +64,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             "null",
             "end each output line with a 0 byte rather than newline (only valid when printing the environment)",
         )
-        .optopt("f", "file", "read and sets variables from the file (prior to sets/unsets)", "FILE")
+        .optopt("f", "file", "read and set variables from an \".env\"-style configuration file (prior to any unset and/or set)", "PATH")
         .optopt("u", "unset", "remove variable from the environment", "NAME");
 
     let mut opts = Box::new(Options {
@@ -120,7 +120,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     let var = iter.next();
 
                     match var {
-                        None => println!("{}: this option requires an argument: {}", NAME, opt),
+                        None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
                         Some(s) => opts.files.push(s.to_owned()),
                     }
                 }
@@ -159,7 +159,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         let var = iter.next();
 
                         match var {
-                            None => println!("{}: this option requires an argument: {}", NAME, opt),
+                            None => eprintln!("{}: this option requires an argument: {}", NAME, opt),
                             Some(s) => opts.files.push(s.to_owned()),
                         }
                     }
@@ -222,6 +222,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
     }
 
+    // NOTE: config files are parsed using an INI parser b/c it's available and compatible with ".env"-style files
+    //   ... * but support for actual INI files, although working, is not intended, nor claimed
     for file in &opts.files {
         let conf = if file == "-" {
             let stdin = stdin();
@@ -237,7 +239,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
         };
-        for (_, prop) in &conf {
+        for (_, prop) in &conf { // ignore all INI section lines (treat them as comments)
             for (key, value) in prop {
                 env::set_var(key, value);
             }
