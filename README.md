@@ -23,7 +23,7 @@ focused repositories/crates.
 uucore follows Rust's release channels and is tested against stable, beta and nightly.
 The current oldest supported version of the Rust compiler is `1.31.0`.
 
-On both Windows and Redox, only the nightly version is tested currently.
+On Windows, only the nightly version is tested currently.
 
 License
 -------
