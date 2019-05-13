@@ -11,10 +11,17 @@
 //!
 //! ```
 //! use uucore::entries::{self, Locate};
+//!
+//! let root_group = if cfg!(any(target_os = "linux", target_os = "android")) {
+//!     "root"
+//! } else {
+//!     "wheel"
+//! };
+//!
 //! assert_eq!("root", entries::uid2usr(0).unwrap());
 //! assert_eq!(0, entries::usr2uid("root").unwrap());
 //! assert!(entries::gid2grp(0).is_ok());
-//! assert!(entries::grp2gid("root").is_ok());
+//! assert!(entries::grp2gid(root_group).is_ok());
 //!
 //! assert!(entries::Passwd::locate(0).is_ok());
 //! assert!(entries::Passwd::locate("0").is_ok());
@@ -22,7 +29,7 @@
 //!
 //! assert!(entries::Group::locate(0).is_ok());
 //! assert!(entries::Group::locate("0").is_ok());
-//! assert!(entries::Group::locate("root").is_ok());
+//! assert!(entries::Group::locate(root_group).is_ok());
 //! ```
 
 #[cfg(any(target_os = "freebsd", target_os = "macos"))]
