@@ -1,14 +1,17 @@
 [package]
 name = "env"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
+description = "Set each NAME to VALUE in the environment and run COMMAND"
 build = "../../mkmain.rs"
+edition = "2018"
 
 [lib]
 name = "uu_env"
 path = "env.rs"
 
 [dependencies]
+clap = "2.33"
 libc = "0.2.42"
 uucore = "0.0.1"
 rust-ini = "0.13.0"

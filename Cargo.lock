@@ -458,6 +458,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "env"
 version = "0.0.1"
 dependencies = [
+ "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-ini 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
