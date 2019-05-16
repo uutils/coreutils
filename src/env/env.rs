@@ -3,6 +3,7 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Jordi Boggiano <j.boggiano@seld.be>
+ * (c) Alex Lyon <arcterus@mail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -123,6 +124,7 @@ fn create_app() -> App<'static, 'static> {
         .usage(USAGE)
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
+        .setting(AppSettings::AllArgsOverrideSelf)
         .arg(Arg::with_name("ignore-environment")
             .short("i")
             .long("ignore-environment")
@@ -223,7 +225,7 @@ fn run_env(args: Vec<String>) -> Result<(), i32> {
     }
 
     // set specified env vars
-    for &(ref name, ref val) in &opts.sets {
+    for &(name, val) in &opts.sets {
         // FIXME: set_var() panics if name is an empty string
         env::set_var(name, val);
     }

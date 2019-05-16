@@ -3,12 +3,17 @@ name = "du"
 version = "0.0.1"
 authors = []
 build = "../../mkmain.rs"
+edition = "2018"
 
 [lib]
 name = "uu_du"
 path = "du.rs"
 
 [dependencies]
+crossbeam = "0.7"
+evmap = "5.0"
+num_cpus = "1.10"
+structopt = "0.2"
 time = "0.1.40"
 uucore = "0.0.1"
 
