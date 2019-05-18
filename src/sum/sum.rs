@@ -68,7 +68,7 @@ fn open(name: &str) -> Result<Box<Read>> {
     match name {
         "-" => Ok(Box::new(stdin()) as Box<Read>),
         _ => {
-            let f = try!(File::open(&Path::new(name)));
+            let f = File::open(&Path::new(name))?;
             Ok(Box::new(f) as Box<Read>)
         }
     }

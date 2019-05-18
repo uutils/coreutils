@@ -1,12 +1,17 @@
 uutils coreutils
 ================
 
+[![Discord](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/wQVJbvJ)
 [![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
-[![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
-[![Build status](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils?ref=badge_shield)
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils?ref=badge_shield)
+
+[![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
+[![Build Status (Windows)](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
+[![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
+
+-----------------------------------------------
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utils in [Rust](http://www.rust-lang.org). This repo is to aggregate the GNU
@@ -28,15 +33,13 @@ Requirements
 
 * Rust (`cargo`, `rustc`)
 * GNU Make (required to build documentation)
-* CMake (Unix; used by Oniguruma, which is required for `expr`)
-* NMake (Windows; used by Oniguruma, which is required for `expr`)
 * [Sphinx](http://www.sphinx-doc.org/) (for documentation)
 * gzip (for installing documentation)
 
 ### Rust Version ###
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.27.0`.
+The current oldest supported version of the Rust compiler is `1.31.0`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -67,7 +70,7 @@ Unix-like platforms at the moment, to build on Windows, you must do the
 following:
 ```bash
 # to keep debug information, compile without --release
-$ cargo build --release --no-default-features --features generic
+$ cargo build --release --no-default-features --features windows
 ```
 
 If you don't want to build every utility available on your platform into the

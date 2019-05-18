@@ -12,7 +12,7 @@ path = "rm.rs"
 getopts = "0.2.18"
 walkdir = "2.1.4"
 remove_dir_all = "0.5.1"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "rm"

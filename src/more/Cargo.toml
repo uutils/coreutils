@@ -10,7 +10,7 @@ path = "more.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_termios = "0.1"

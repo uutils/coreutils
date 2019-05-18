@@ -13,7 +13,7 @@ glob = "0.2.11"
 walkdir = "2.1"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["entries", "fs"]
 
 [dependencies.clippy]

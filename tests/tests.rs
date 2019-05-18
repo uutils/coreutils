@@ -23,11 +23,9 @@ unix_only! {
     "chown", test_chown;
     "chgrp", test_chgrp;
     "install", test_install;
-    "mv", test_mv;
     "pathchk", test_pathchk;
     "pinky", test_pinky;
     "stdbuf", test_stdbuf;
-    "touch", test_touch;
     "unlink", test_unlink;
     "who", test_who;
     // Be aware of the trailing semicolon after the last item
@@ -68,6 +66,7 @@ generic! {
     "ls", test_ls;
     "mkdir", test_mkdir;
     "mktemp", test_mktemp;
+    "mv", test_mv;
     "numfmt", test_numfmt;
     "nl", test_nl;
     "od", test_od;
@@ -86,6 +85,7 @@ generic! {
     "tac", test_tac;
     "tail", test_tail;
     "test", test_test;
+    "touch", test_touch;
     "tr", test_tr;
     "true", test_true;
     "truncate", test_truncate;

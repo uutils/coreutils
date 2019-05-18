@@ -12,7 +12,7 @@ path = "kill.rs"
 libc = "0.2.42"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["signals"]
 
 [[bin]]

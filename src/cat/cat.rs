@@ -419,6 +419,7 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
 }
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
+    let mut count = 0;
     loop {
         match in_buf
             .iter()
@@ -427,10 +428,11 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
                 if in_buf[p] == b'\n' {
-                    return p + 1;
+                    return count + p + 1;
                 } else {
                     writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
+                    count += p + 1;
                 }
             }
             None => {

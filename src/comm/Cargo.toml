@@ -11,7 +11,7 @@ path = "comm.rs"
 [dependencies]
 libc = "0.2.42"
 getopts = "0.2.18"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "comm"

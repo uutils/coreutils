@@ -9,7 +9,7 @@ path = "factor.rs"
 
 [dependencies]
 rand = "0.5"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "factor"

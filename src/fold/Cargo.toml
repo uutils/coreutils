@@ -9,7 +9,7 @@ name = "uu_fold"
 path = "fold.rs"
 
 [dependencies]
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "fold"

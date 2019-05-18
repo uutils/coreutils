@@ -12,13 +12,13 @@ path = "ls.rs"
 getopts = "0.2.18"
 number_prefix = "0.2.8"
 term_grid = "0.1.5"
-termsize = "0.1.4"
+termsize = "0.1.6"
 time = "0.1.40"
 lazy_static = "1.0.1"
 unicode-width = "0.1.5"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["entries", "fs"]
 
 [[bin]]

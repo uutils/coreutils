@@ -45,6 +45,25 @@ fn test_mv_move_file_into_dir() {
 }
 
 #[test]
+fn test_mv_move_file_between_dirs() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir1 = "test_mv_move_file_between_dirs_dir1";
+    let dir2 = "test_mv_move_file_between_dirs_dir2";
+    let file = "test_mv_move_file_between_dirs_file";
+
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    at.touch(&format!("{}/{}", dir1, file));
+
+    assert!(at.file_exists(&format!("{}/{}", dir1, file)));
+
+    ucmd.arg(&format!("{}/{}", dir1, file)).arg(dir2).succeeds().no_stderr();
+
+    assert!(!at.file_exists(&format!("{}/{}", dir1, file)));
+    assert!(at.file_exists(&format!("{}/{}", dir2, file)));
+}
+
+#[test]
 fn test_mv_strip_slashes() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -368,8 +387,7 @@ fn test_mv_errors() {
     // $ mv -T -t a b
     // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
     scene.ucmd().arg("-T").arg("-t").arg(dir).arg(file_a).arg(file_b).fails()
-    .stderr_is("mv: error: cannot combine --target-directory (-t) and --no-target-directory \
-                (-T)\n");
+    .stderr_is("mv: error: cannot combine --target-directory (-t) and --no-target-directory (-T)\n");
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir

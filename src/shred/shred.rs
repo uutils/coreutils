@@ -491,24 +491,24 @@ fn do_pass(
     given_file_size: Option<u64>,
     exact: bool,
 ) -> Result<(), io::Error> {
-    try!(file.seek(SeekFrom::Start(0)));
+    file.seek(SeekFrom::Start(0))?;
 
     // Use the given size or the whole file if not specified
-    let size: u64 = given_file_size.unwrap_or(try!(get_file_size(path)));
+    let size: u64 = given_file_size.unwrap_or(get_file_size(path)?);
 
     let generator = BytesGenerator::new(size, generator_type, exact);
 
     for block in generator {
-        try!(file.write_all(&*block));
+        file.write_all(&*block)?;
     }
 
-    try!(file.sync_data());
+    file.sync_data()?;
 
     Ok(())
 }
 
 fn get_file_size(path: &Path) -> Result<u64, io::Error> {
-    let size: u64 = try!(fs::metadata(path)).len();
+    let size: u64 = fs::metadata(path)?.len();
 
     Ok(size)
 }
@@ -574,7 +574,7 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
     let renamed_path: Option<PathBuf> = wipe_name(&path, verbose);
     match renamed_path {
         Some(rp) => {
-            try!(fs::remove_file(rp));
+            fs::remove_file(rp)?;
         }
         None => (),
     }

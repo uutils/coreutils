@@ -17,6 +17,7 @@ extern crate clap;
 extern crate uucore;
 
 use clap::Arg;
+use uucore::zero_copy::ZeroCopyWriter;
 use std::borrow::Cow;
 use std::io::{self, Write};
 
@@ -83,9 +84,10 @@ fn prepare_buffer<'a>(input: &'a str, _buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u
 }
 
 pub fn exec(bytes: &[u8]) {
-    let stdout_raw = io::stdout();
-    let mut stdout = stdout_raw.lock();
+    let mut stdin_raw = io::stdout();
+    let mut writer = ZeroCopyWriter::with_default(&mut stdin_raw, |stdin| stdin.lock());
     loop {
-        stdout.write_all(bytes).unwrap();
+        // TODO: needs to check if pipe fails
+        writer.write_all(bytes).unwrap();
     }
 }

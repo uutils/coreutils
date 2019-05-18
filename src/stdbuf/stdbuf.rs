@@ -51,7 +51,7 @@ enum OkMsg {
     Version,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd"))]
 fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "so")
 }
@@ -61,7 +61,7 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd", target_os = "macos")))]
 fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
@@ -172,9 +172,9 @@ fn parse_options(
         return Ok(OkMsg::Version);
     }
     let mut modified = false;
-    options.stdin = try!(check_option(&matches, "input", &mut modified).ok_or(ErrMsg::Fatal));
-    options.stdout = try!(check_option(&matches, "output", &mut modified).ok_or(ErrMsg::Fatal));
-    options.stderr = try!(check_option(&matches, "error", &mut modified).ok_or(ErrMsg::Fatal));
+    options.stdin = check_option(&matches, "input", &mut modified).ok_or(ErrMsg::Fatal)?;
+    options.stdout = check_option(&matches, "output", &mut modified).ok_or(ErrMsg::Fatal)?;
+    options.stderr = check_option(&matches, "error", &mut modified).ok_or(ErrMsg::Fatal)?;
 
     if matches.free.len() != 1 {
         return Err(ErrMsg::Retry);

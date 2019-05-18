@@ -468,7 +468,7 @@ impl Stater {
         let default_tokens = if fmtstr.is_empty() {
             Stater::generate_tokens(&Stater::default_fmt(showfs, terse, false), use_printf).unwrap()
         } else {
-            try!(Stater::generate_tokens(&fmtstr, use_printf))
+            Stater::generate_tokens(&fmtstr, use_printf)?
         };
         let default_dev_tokens =
             Stater::generate_tokens(&Stater::default_fmt(showfs, terse, true), use_printf).unwrap();

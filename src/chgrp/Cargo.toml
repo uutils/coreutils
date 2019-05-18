@@ -12,7 +12,7 @@ path = "chgrp.rs"
 walkdir = "2.1.4"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["entries", "fs"]
 
 [[bin]]

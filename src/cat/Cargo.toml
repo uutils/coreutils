@@ -12,7 +12,7 @@ path = "cat.rs"
 quick-error = "1.2.2"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["fs"]
 
 [target.'cfg(unix)'.dependencies]

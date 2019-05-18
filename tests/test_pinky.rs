@@ -23,7 +23,7 @@ fn test_long_format() {
     new_ucmd!()
         .arg("-l").arg(ulogin)
         .run()
-        .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n",
+        .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
                            ulogin, real_name, pw.user_dir(), pw.user_shell()));
 
     new_ucmd!()

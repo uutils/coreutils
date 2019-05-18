@@ -12,7 +12,7 @@ path = "tr.rs"
 getopts = "0.2.18"
 bit-set = "0.5.0"
 fnv = "1.0.5"
-uucore = { path = "../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "tr"

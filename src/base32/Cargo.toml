@@ -9,7 +9,7 @@ name = "uu_base32"
 path = "base32.rs"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["encoding"]
 
 [dependencies.clippy]

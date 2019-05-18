@@ -131,14 +131,14 @@ struct MultiWriter {
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         for writer in &mut self.writers {
-            try!(writer.write_all(buf));
+            writer.write_all(buf)?;
         }
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> Result<()> {
         for writer in &mut self.writers {
-            try!(writer.flush());
+            writer.flush()?;
         }
         Ok(())
     }

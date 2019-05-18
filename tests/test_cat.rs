@@ -38,7 +38,7 @@ fn test_stdin_show_nonprinting() {
             .args(&[same_param])
             .pipe_in("\t\0\n")
             .succeeds()
-            .stdout_only("\t^@");
+            .stdout_only("\t^@\n");
     }
 }
 
@@ -49,7 +49,7 @@ fn test_stdin_show_tabs() {
             .args(&[same_param])
             .pipe_in("\t\0\n")
             .succeeds()
-            .stdout_only("^I\0");
+            .stdout_only("^I\0\n");
     }
 }
 
@@ -59,9 +59,9 @@ fn test_stdin_show_ends() {
     for same_param in vec!["-E", "--show-ends"] {
         new_ucmd!()
             .args(&[same_param,"-"])
-            .pipe_in("\t\0\n")
+            .pipe_in("\t\0\n\t")
             .succeeds()
-            .stdout_only("\t\0$");
+            .stdout_only("\t\0$\n\t");
     }
 }
 
@@ -72,7 +72,7 @@ fn test_stdin_show_all() {
             .args(&[same_param])
             .pipe_in("\t\0\n")
             .succeeds()
-            .stdout_only("^I^@$");
+            .stdout_only("^I^@$\n");
     }
 }
 

@@ -579,7 +579,7 @@ impl Options {
         let recursive = matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_ALIAS)
             || matches.is_present(OPT_ARCHIVE);
 
-        let backup = matches.is_present(OPT_BACKUP) || matches.is_present(OPT_SUFFIX);
+        let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
 
         // Parse target directory options
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
@@ -1179,8 +1179,8 @@ pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResu
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = try!(canonicalize(p1, CanonicalizeMode::Normal));
-    let pathbuf2 = try!(canonicalize(p2, CanonicalizeMode::Normal));
+    let pathbuf1 = canonicalize(p1, CanonicalizeMode::Normal)?;
+    let pathbuf2 = canonicalize(p2, CanonicalizeMode::Normal)?;
 
     Ok(pathbuf1 == pathbuf2)
 }

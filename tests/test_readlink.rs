@@ -9,7 +9,7 @@ fn test_canonicalize() {
     ucmd.arg("-f")
         .arg(".")
         .run()
-        .stdout_is(at.root_dir_resolved());
+        .stdout_is(at.root_dir_resolved() + "\n");
 }
 
 #[test]
@@ -18,7 +18,7 @@ fn test_canonicalize_existing() {
     ucmd.arg("-e")
         .arg(".")
         .run()
-        .stdout_is(at.root_dir_resolved());
+        .stdout_is(at.root_dir_resolved() + "\n");
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn test_canonicalize_missing() {
     ucmd.arg("-m")
         .arg(GIBBERISH)
         .run()
-        .stdout_is(expected);
+        .stdout_is(expected + "\n");
 }
 
 #[test]

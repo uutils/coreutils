@@ -10,7 +10,7 @@ path = "libstdbuf.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-uucore = { path="../../uucore" }
+uucore = "0.0.1"
 libc = "0.2"
 cpp = "0.4"
 

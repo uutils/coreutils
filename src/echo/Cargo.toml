@@ -9,7 +9,7 @@ name = "uu_echo"
 path = "echo.rs"
 
 [dependencies]
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "echo"

@@ -144,7 +144,7 @@ fn test_rm_dir_symlink() {
     let link = "test_rm_dir_symlink_link";
 
     at.mkdir(dir);
-    at.symlink(dir, link);
+    at.symlink_dir(dir, link);
 
     ucmd.arg(link).succeeds();
 }
@@ -154,7 +154,7 @@ fn test_rm_invalid_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let link = "test_rm_invalid_symlink";
 
-    at.symlink(link, link);
+    at.symlink_file(link, link);
 
     ucmd.arg(link).succeeds();
 }

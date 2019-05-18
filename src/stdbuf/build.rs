@@ -5,14 +5,19 @@ use std::path::Path;
 #[path = "../../mkmain.rs"]
 mod mkmain;
 
-#[cfg(target_os = "linux")]
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
 mod platform {
     pub const DYLIB_EXT: &str = ".so";
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod platform {
     pub const DYLIB_EXT: &str = ".dylib";
+}
+
+#[cfg(target_os = "windows")]
+mod platform {
+    pub const DYLIB_EXT: &str = ".dll";
 }
 
 fn main() {

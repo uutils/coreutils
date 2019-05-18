@@ -13,7 +13,7 @@ libc = "0.2.42"
 walker = "1.0.0"
 
 [dependencies.uucore]
-path = "../uucore"
+version = "0.0.1"
 features = ["mode"]
 
 [[bin]]

@@ -1,0 +1,15 @@
+freebsd_instance:
+  image: freebsd-12-0-release-amd64
+
+task:
+  name: stable x86_64-unknown-freebsd
+  setup_script:
+    - pkg install -y curl gmake
+    - curl https://sh.rustup.rs -sSf --output rustup.sh
+    - sh rustup.sh -y
+  build_script:
+    - . $HOME/.cargo/env
+    - cargo build
+  test_script:
+    - . $HOME/.cargo/env
+    - cargo test

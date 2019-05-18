@@ -1,14 +1,61 @@
 use common::util::*;
 
-
 #[test]
 fn test_env_help() {
-    assert!(new_ucmd!().arg("--help").succeeds().no_stderr().stdout.contains("Options:"));
+    assert!(new_ucmd!().arg("--help").succeeds().no_stderr().stdout.contains("OPTIONS:"));
 }
 
 #[test]
 fn test_env_version() {
     assert!(new_ucmd!().arg("--version").succeeds().no_stderr().stdout.contains(util_name!()));
+}
+
+#[test]
+fn test_echo() {
+    // assert!(new_ucmd!().arg("printf").arg("FOO-bar").succeeds().no_stderr().stdout.contains("FOO-bar"));
+    let mut cmd = new_ucmd!();
+    cmd.arg("echo").arg("FOO-bar");
+    println!("cmd={:?}", cmd);
+
+    let result = cmd.run();
+    println!("success={:?}", result.success);
+    println!("stdout={:?}", result.stdout);
+    println!("stderr={:?}", result.stderr);
+    assert!(result.success);
+
+    let out = result.stdout.trim_end();
+
+    assert_eq!(out, "FOO-bar");
+}
+
+#[test]
+fn test_file_option() {
+    let out = new_ucmd!()
+        .arg("-f").arg("vars.conf.txt")
+        .run().stdout;
+
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar" || line == "BAR=bamf this").count(), 2);
+}
+
+#[test]
+fn test_combined_file_set() {
+    let out = new_ucmd!()
+        .arg("-f").arg("vars.conf.txt")
+        .arg("FOO=bar.alt")
+        .run().stdout;
+
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt").count(), 1);
+}
+
+#[test]
+fn test_combined_file_set_unset() {
+    let out = new_ucmd!()
+        .arg("-u").arg("BAR")
+        .arg("-f").arg("vars.conf.txt")
+        .arg("FOO=bar.alt")
+        .run().stdout;
+
+    assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt" || line.starts_with("BAR=")).count(), 1);
 }
 
 #[test]
@@ -80,4 +127,10 @@ fn test_unset_variable() {
                   .stdout;
 
     assert_eq!(out.lines().any(|line| line.starts_with("HOME=")), false);
+}
+
+#[test]
+fn test_fail_null_with_program() {
+    let out = new_ucmd!().arg("--null").arg("cd").fails().stderr;
+    assert!(out.contains("cannot specify --null (-0) with command"));
 }

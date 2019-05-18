@@ -10,11 +10,10 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::encoding::{wrap_print, Data, Format};
+use uucore::encoding::Format;
 
-use std::fs::File;
-use std::io::{stdin, BufReader, Read};
-use std::path::Path;
+#[path = "../base64/base_common.rs"]
+mod base_common;
 
 static SYNTAX: &str = "[OPTION]... [FILE]";
 static SUMMARY: &str =
@@ -30,56 +29,5 @@ static LONG_HELP: &str = "
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("d", "decode", "decode data")
-        .optflag(
-            "i",
-            "ignore-garbage",
-            "when decoding, ignore non-alphabetic characters",
-        )
-        .optopt(
-            "w",
-            "wrap",
-            "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-            "COLS",
-        )
-        .parse(args);
-
-    let line_wrap = match matches.opt_str("wrap") {
-        Some(s) => match s.parse() {
-            Ok(n) => n,
-            Err(e) => {
-                crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
-            }
-        },
-        None => 76,
-    };
-
-    if matches.free.len() > 1 {
-        disp_err!("extra operand ‘{}’", matches.free[0]);
-        return 1;
-    }
-
-    let input = if matches.free.is_empty() || &matches.free[0][..] == "-" {
-        BufReader::new(Box::new(stdin()) as Box<Read>)
-    } else {
-        let path = Path::new(matches.free[0].as_str());
-        let file_buf = safe_unwrap!(File::open(&path));
-        BufReader::new(Box::new(file_buf) as Box<Read>)
-    };
-
-    let mut data = Data::new(input, Format::Base32)
-        .line_wrap(line_wrap)
-        .ignore_garbage(matches.opt_present("ignore-garbage"));
-
-    if !matches.opt_present("decode") {
-        wrap_print(line_wrap, data.encode());
-    } else {
-        match data.decode() {
-            Ok(s) => print!("{}", String::from_utf8(s).unwrap()),
-            Err(_) => crash!(1, "invalid input"),
-        }
-    }
-
-    0
+    base_common::execute(args, SYNTAX, SUMMARY, LONG_HELP, Format::Base32)
 }

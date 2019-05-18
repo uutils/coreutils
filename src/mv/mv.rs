@@ -257,7 +257,10 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
 
                     return match rename(source, target, &b) {
                         Err(e) => {
-                            show_error!("{}", e);
+                            show_error!(
+                                "cannot move ‘{}’ to ‘{}’: {}",
+                                source.display(), target.display(), e
+                            );
                             1
                         }
                         _ => 0,
@@ -265,6 +268,12 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 }
 
                 return move_files_into_dir(&[source.clone()], target, &b);
+            } else if target.exists() && source.is_dir() {
+                show_error!(
+                    "cannot overwrite non-directory ‘{}’ with directory ‘{}’",
+                    target.display(), source.display()
+                );
+                return 1;
             }
 
             if let Err(e) = rename(source, target, &b) {
@@ -297,7 +306,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.as_os_str().to_str() {
+        let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
             None => {
                 show_error!(
@@ -349,18 +358,30 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
         };
         if let Some(ref p) = backup_path {
-            try!(fs::rename(to, p));
+            fs::rename(to, p)?;
         }
 
         if b.update {
-            if try!(try!(fs::metadata(from)).modified()) <= try!(try!(fs::metadata(to)).modified())
+            if fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
             {
                 return Ok(());
             }
         }
     }
 
-    try!(fs::rename(from, to));
+    // "to" may no longer exist if it was backed up
+    if to.exists() && to.is_dir() {
+        // normalize behavior between *nix and windows
+        if from.is_dir() {
+            if is_empty_dir(to) {
+                fs::remove_dir(to)?
+            } else {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
+            }
+        }
+    }
+
+    fs::rename(from, to)?;
 
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
@@ -403,5 +424,14 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
         numbered_backup_path(path)
     } else {
         simple_backup_path(path, suffix)
+    }
+}
+
+fn is_empty_dir(path: &PathBuf) -> bool {
+    match fs::read_dir(path) {
+        Ok(contents) => {
+            return contents.peekable().peek().is_none();
+        },
+        Err(_e) => { return false; }
     }
 }
