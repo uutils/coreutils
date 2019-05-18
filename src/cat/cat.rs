@@ -304,7 +304,7 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
                 // system call for faster writing.
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 {
-                    match write_fast_with_splice(&mut handle) {
+                    match write_fast_using_splice(&mut handle) {
                         Err(Sys(err)) => match err {
                             EPIPE => {
                                 // Our pipe was interrupted, this happens, for example, when
@@ -323,7 +323,7 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
                 }
                 // If we're not on Linux or Android, or the splice() call failed,
                 // fall back on slower writing.
-                write_fast_without_splice(&mut handle, &mut in_buf)?
+                write_fast_using_read_and_write(&mut handle, &mut in_buf)?
             }
             Err(error) => {
                 writeln!(&mut stderr(), "{}", error)?;
@@ -339,7 +339,10 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
 }
 
 #[inline]
-fn write_fast_without_splice(handle: &mut InputHandle, in_buf: &mut [u8]) -> Result<(), io::Error> {
+fn write_fast_using_read_and_write(
+    handle: &mut InputHandle,
+    in_buf: &mut [u8],
+) -> Result<(), io::Error> {
     let mut writer = stdout();
     while let Ok(n) = handle.reader.read(in_buf) {
         if n == 0 {
@@ -351,11 +354,11 @@ fn write_fast_without_splice(handle: &mut InputHandle, in_buf: &mut [u8]) -> Res
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn write_fast_with_splice(handle: &mut InputHandle) -> Result<(), nix::Error> {
+fn write_fast_using_splice(handle: &mut InputHandle) -> Result<(), nix::Error> {
     const BUF_SIZE: usize = 1024 * 16;
 
     let writer = stdout();
-    let (pipe_rd, pipe_wr) = pipe().unwrap();
+    let (pipe_rd, pipe_wr) = pipe()?;
 
     loop {
         let res = splice(
