@@ -34,17 +34,12 @@ use std::os::unix::fs::FileTypeExt;
 use unix_socket::UnixStream;
 
 /// Linux splice support
-use nix::errno::Errno::EPIPE;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::{splice, SpliceFFlags};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::unistd::pipe;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::Error::Sys;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::process::exit;
 
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
@@ -294,8 +289,9 @@ fn open(path: &str) -> CatResult<InputHandle> {
 /// * `files` - There is no short circuit when encountiner an error
 /// reading a file in this vector
 fn write_fast(files: Vec<String>) -> CatResult<()> {
-    let mut in_buf = [0; 1024 * 64];
     let mut error_count = 0;
+    let writer = stdout();
+    let mut writer_handle = writer.lock();
 
     for file in files {
         match open(&file[..]) {
@@ -304,26 +300,21 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
                 // system call for faster writing.
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 {
-                    match write_fast_using_splice(&mut handle) {
-                        Err(Sys(err)) => match err {
-                            EPIPE => {
-                                // Our pipe was interrupted, this happens, for example, when
-                                // the shell command `cat my_file.txt | head` is run. We exit
-                                // gracefully.
-                                exit(0);
-                            }
-                            _ => {}
-                        },
-                        _ => {
+                    match write_fast_using_splice(&mut handle, writer.as_raw_fd()) {
+                        Ok(_) => {
                             // Writing fast with splice worked! We don't need
                             // to fall back on slower writing.
                             continue;
+                        }
+                        Err(_) => {
+                            // Ignore any error and fall back to slower
+                            // writing below.
                         }
                     }
                 }
                 // If we're not on Linux or Android, or the splice() call failed,
                 // fall back on slower writing.
-                write_fast_using_read_and_write(&mut handle, &mut in_buf)?
+                io::copy(&mut handle.reader, &mut writer_handle).unwrap();
             }
             Err(error) => {
                 writeln!(&mut stderr(), "{}", error)?;
@@ -338,26 +329,15 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
     }
 }
 
-#[inline]
-fn write_fast_using_read_and_write(
-    handle: &mut InputHandle,
-    in_buf: &mut [u8],
-) -> Result<(), io::Error> {
-    let mut writer = stdout();
-    while let Ok(n) = handle.reader.read(in_buf) {
-        if n == 0 {
-            break;
-        }
-        writer.write_all(&in_buf[..n])?;
-    }
-    Ok(())
-}
-
+/// This function is called from `write_fast()` on Linux and Android. The
+/// function `splice()` is used to move data between two file descriptors
+/// without copying between kernel- and userspace. This results in a large
+/// speedup.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn write_fast_using_splice(handle: &mut InputHandle) -> Result<(), nix::Error> {
+#[inline]
+fn write_fast_using_splice(handle: &mut InputHandle, writer: RawFd) -> Result<(), nix::Error> {
     const BUF_SIZE: usize = 1024 * 16;
 
-    let writer = stdout();
     let (pipe_rd, pipe_wr) = pipe()?;
 
     loop {
@@ -374,14 +354,7 @@ fn write_fast_using_splice(handle: &mut InputHandle) -> Result<(), nix::Error> {
             // which means we're done copying.
             break;
         }
-        let _res = splice(
-            pipe_rd,
-            None,
-            writer.as_raw_fd(),
-            None,
-            BUF_SIZE,
-            SpliceFFlags::empty(),
-        )?;
+        let _ = splice(pipe_rd, None, writer, None, BUF_SIZE, SpliceFFlags::empty())?;
     }
 
     Ok(())
