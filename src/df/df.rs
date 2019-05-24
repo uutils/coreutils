@@ -537,6 +537,13 @@ fn human_readable(value: u64, base: i64) -> String {
     }
 }
 
+fn use_size(free_size: u64, total_size: u64) -> String {
+    if total_size == 0 {
+        return String::from("-");
+    }
+    return format!("{:.0}%", 100f64 - 100f64 * (free_size as f64 / total_size as f64));
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
@@ -706,7 +713,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             print!("{0: >12} ", human_readable(total_size, opt.human_readable_base));
             print!("{0: >12} ", human_readable(total_size - free_size, opt.human_readable_base));
             print!("{0: >12} ", human_readable(free_size, opt.human_readable_base));
-            print!("{0: >5} ", format!("{0:.1}%", 100f64 - 100f64 * (free_size as f64 / total_size as f64)));
+            print!("{0: >5} ", use_size(free_size, total_size));
         }
         print!("{0: <16}", fs.mountinfo.mount_dir);
         println!();
