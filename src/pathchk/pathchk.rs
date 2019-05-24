@@ -18,7 +18,7 @@ extern crate uucore;
 
 use getopts::Options;
 use std::fs;
-use std::io::{Write, ErrorKind};
+use std::io::{ErrorKind, Write};
 
 // operating mode
 enum Mode {
@@ -27,29 +27,35 @@ enum Mode {
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
     Help,    // show help
-    Version  // show version information
+    Version, // show version information
 }
 
-static NAME: &'static str = "pathchk";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "pathchk";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // a few global constants as used in the GNU implementation
-static POSIX_PATH_MAX: usize = 256;
-static POSIX_NAME_MAX: usize = 14;
+const POSIX_PATH_MAX: usize = 256;
+const POSIX_NAME_MAX: usize = 14;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // add options
     let mut opts = Options::new();
     opts.optflag("p", "posix", "check for (most) POSIX systems");
-    opts.optflag("P",
-        "posix-special", "check for empty names and leading \"-\"");
-    opts.optflag("",
-        "portability", "check for all POSIX systems (equivalent to -p -P)");
+    opts.optflag(
+        "P",
+        "posix-special",
+        "check for empty names and leading \"-\"",
+    );
+    opts.optflag(
+        "",
+        "portability",
+        "check for all POSIX systems (equivalent to -p -P)",
+    );
     opts.optflag("h", "help", "display this help text and exit");
     opts.optflag("V", "version", "output version information and exit");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => { crash!(1, "{}", e) }
+        Err(e) => crash!(1, "{}", e),
     };
 
     // set working mode
@@ -57,9 +63,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Mode::Version
     } else if matches.opt_present("help") {
         Mode::Help
-    } else if (matches.opt_present("posix") &&
-               matches.opt_present("posix-special")) ||
-              matches.opt_present("portability") {
+    } else if (matches.opt_present("posix") && matches.opt_present("posix-special"))
+        || matches.opt_present("portability")
+    {
         Mode::Both
     } else if matches.opt_present("posix") {
         Mode::Basic
@@ -71,14 +77,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // take necessary actions
     match mode {
-        Mode::Help => { help(opts); 0 }
-        Mode::Version => { version(); 0 }
+        Mode::Help => {
+            help(opts);
+            0
+        }
+        Mode::Version => {
+            version();
+            0
+        }
         _ => {
             let mut res = true;
             if matches.free.len() == 0 {
-                show_error!(
-                    "missing operand\nTry {} --help for more information", NAME
-                );
+                show_error!("missing operand\nTry {} --help for more information", NAME);
                 res = false;
             }
             // free strings are path operands
@@ -91,15 +101,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 res &= check_path(&mode, &path);
             }
             // determine error code
-            if res { 0 } else { 1 }
+            if res {
+                0
+            } else {
+                1
+            }
         }
     }
 }
 
 // print help
 fn help(opts: Options) {
-    let msg = format!("Usage: {} [OPTION]... NAME...\n\n\
-    Diagnose invalid or unportable file names.", NAME);
+    let msg = format!(
+        "Usage: {} [OPTION]... NAME...\n\n\
+         Diagnose invalid or unportable file names.",
+        NAME
+    );
 
     print!("{}", opts.usage(&msg));
 }
@@ -115,7 +132,7 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
         Mode::Basic => check_basic(&path),
         Mode::Extra => check_default(&path) && check_extra(&path),
         Mode::Both => check_basic(&path) && check_extra(&path),
-        _ => check_default(&path)
+        _ => check_default(&path),
     }
 }
 
@@ -125,9 +142,13 @@ fn check_basic(path: &[String]) -> bool {
     let total_len = joined_path.len();
     // path length
     if total_len > POSIX_PATH_MAX {
-        writeln!(&mut std::io::stderr(),
+        writeln!(
+            &mut std::io::stderr(),
             "limit {} exceeded by length {} of file name {}",
-            POSIX_PATH_MAX, total_len, joined_path);
+            POSIX_PATH_MAX,
+            total_len,
+            joined_path
+        );
         return false;
     } else if total_len == 0 {
         writeln!(&mut std::io::stderr(), "empty file name");
@@ -137,9 +158,13 @@ fn check_basic(path: &[String]) -> bool {
     for p in path {
         let component_len = p.len();
         if component_len > POSIX_NAME_MAX {
-            writeln!(&mut std::io::stderr(),
+            writeln!(
+                &mut std::io::stderr(),
                 "limit {} exceeded by length {} of file name component '{}'",
-                POSIX_NAME_MAX, component_len, p);
+                POSIX_NAME_MAX,
+                component_len,
+                p
+            );
             return false;
         }
         if !check_portable_chars(&p) {
@@ -155,8 +180,11 @@ fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
         if !no_leading_hyphen(&p) {
-            writeln!(&mut std::io::stderr(),
-                "leading hyphen in file name component '{}'", p);
+            writeln!(
+                &mut std::io::stderr(),
+                "leading hyphen in file name component '{}'",
+                p
+            );
             return false;
         }
     }
@@ -174,18 +202,26 @@ fn check_default(path: &[String]) -> bool {
     let total_len = joined_path.len();
     // path length
     if total_len > libc::PATH_MAX as usize {
-        writeln!(&mut std::io::stderr(),
+        writeln!(
+            &mut std::io::stderr(),
             "limit {} exceeded by length {} of file name '{}'",
-            libc::PATH_MAX, total_len, joined_path);
+            libc::PATH_MAX,
+            total_len,
+            joined_path
+        );
         return false;
     }
     // components: length
     for p in path {
         let component_len = p.len();
         if component_len > libc::FILENAME_MAX as usize {
-            writeln!(&mut std::io::stderr(),
+            writeln!(
+                &mut std::io::stderr(),
                 "limit {} exceeded by length {} of file name component '{}'",
-                libc::FILENAME_MAX, component_len, p);
+                libc::FILENAME_MAX,
+                component_len,
+                p
+            );
             return false;
         }
     }
@@ -203,7 +239,7 @@ fn check_searchable(path: &String) -> bool {
         } else {
             writeln!(&mut std::io::stderr(), "{}", e);
             false
-        }
+        },
     }
 }
 
@@ -214,14 +250,15 @@ fn no_leading_hyphen(path_segment: &String) -> bool {
 
 // check whether a path segment contains only valid (read: portable) characters
 fn check_portable_chars(path_segment: &String) -> bool {
-    let valid_str =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
-        .to_string();
+    let valid_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-".to_string();
     for ch in path_segment.chars() {
         if !valid_str.contains(ch) {
-            writeln!(&mut std::io::stderr(),
+            writeln!(
+                &mut std::io::stderr(),
                 "nonportable character '{}' in file name component '{}'",
-                ch, path_segment);
+                ch,
+                path_segment
+            );
             return false;
         }
     }

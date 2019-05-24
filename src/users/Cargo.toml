@@ -2,19 +2,19 @@
 name = "users"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_users"
 path = "users.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 
 [dependencies.uucore]
-default-features = false
 features = ["utmpx"]
-path = "../uucore"
+version = "0.0.1"
 
 [[bin]]
 name = "users"
-path = "main.rs"
+path = "../../uumain.rs"

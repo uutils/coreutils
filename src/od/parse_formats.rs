@@ -5,12 +5,15 @@ use prn_float::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ParsedFormatterItemInfo {
-    pub formatter_item_info:  FormatterItemInfo,
+    pub formatter_item_info: FormatterItemInfo,
     pub add_ascii_dump: bool,
 }
 
 impl ParsedFormatterItemInfo {
-    pub fn new(formatter_item_info: FormatterItemInfo, add_ascii_dump: bool) -> ParsedFormatterItemInfo {
+    pub fn new(
+        formatter_item_info: FormatterItemInfo,
+        add_ascii_dump: bool,
+    ) -> ParsedFormatterItemInfo {
         ParsedFormatterItemInfo {
             formatter_item_info: formatter_item_info,
             add_ascii_dump: add_ascii_dump,
@@ -51,44 +54,40 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 
         (FormatType::DecimalInt, 1) => Some(FORMAT_ITEM_DEC8S),
         (FormatType::DecimalInt, 2) => Some(FORMAT_ITEM_DEC16S),
-        (FormatType::DecimalInt, 0) |
-        (FormatType::DecimalInt, 4) => Some(FORMAT_ITEM_DEC32S),
+        (FormatType::DecimalInt, 0) | (FormatType::DecimalInt, 4) => Some(FORMAT_ITEM_DEC32S),
         (FormatType::DecimalInt, 8) => Some(FORMAT_ITEM_DEC64S),
 
         (FormatType::OctalInt, 1) => Some(FORMAT_ITEM_OCT8),
         (FormatType::OctalInt, 2) => Some(FORMAT_ITEM_OCT16),
-        (FormatType::OctalInt, 0) |
-        (FormatType::OctalInt, 4) => Some(FORMAT_ITEM_OCT32),
+        (FormatType::OctalInt, 0) | (FormatType::OctalInt, 4) => Some(FORMAT_ITEM_OCT32),
         (FormatType::OctalInt, 8) => Some(FORMAT_ITEM_OCT64),
 
         (FormatType::UnsignedInt, 1) => Some(FORMAT_ITEM_DEC8U),
         (FormatType::UnsignedInt, 2) => Some(FORMAT_ITEM_DEC16U),
-        (FormatType::UnsignedInt, 0) |
-        (FormatType::UnsignedInt, 4) => Some(FORMAT_ITEM_DEC32U),
+        (FormatType::UnsignedInt, 0) | (FormatType::UnsignedInt, 4) => Some(FORMAT_ITEM_DEC32U),
         (FormatType::UnsignedInt, 8) => Some(FORMAT_ITEM_DEC64U),
 
         (FormatType::HexadecimalInt, 1) => Some(FORMAT_ITEM_HEX8),
         (FormatType::HexadecimalInt, 2) => Some(FORMAT_ITEM_HEX16),
-        (FormatType::HexadecimalInt, 0) |
-        (FormatType::HexadecimalInt, 4) => Some(FORMAT_ITEM_HEX32),
+        (FormatType::HexadecimalInt, 0) | (FormatType::HexadecimalInt, 4) => {
+            Some(FORMAT_ITEM_HEX32)
+        }
         (FormatType::HexadecimalInt, 8) => Some(FORMAT_ITEM_HEX64),
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
-        (FormatType::Float, 0) |
-        (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 0) | (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
         (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
 
         _ => None,
     }
 }
 
-fn od_argument_with_option(ch:char) -> bool {
+fn od_argument_with_option(ch: char) -> bool {
     match ch {
         'A' | 'j' | 'N' | 'S' | 'w' => true,
         _ => false,
     }
 }
-
 
 /// Parses format flags from commandline
 ///
@@ -156,7 +155,9 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
         }
     }
     if expect_type_string {
-        return Err(format!("missing format specification after '--format' / '-t'"));
+        return Err(format!(
+            "missing format specification after '--format' / '-t'"
+        ));
     }
 
     if formats.is_empty() {
@@ -197,53 +198,61 @@ fn format_type(ch: char) -> Option<FormatType> {
     }
 }
 
-
 fn format_type_category(t: FormatType) -> FormatTypeCategory {
     match t {
-        FormatType::Ascii | FormatType::Char
-            => FormatTypeCategory::Char,
-        FormatType::DecimalInt | FormatType::OctalInt | FormatType::UnsignedInt | FormatType::HexadecimalInt
-            => FormatTypeCategory::Integer,
-        FormatType::Float
-            => FormatTypeCategory::Float,
+        FormatType::Ascii | FormatType::Char => FormatTypeCategory::Char,
+        FormatType::DecimalInt
+        | FormatType::OctalInt
+        | FormatType::UnsignedInt
+        | FormatType::HexadecimalInt => FormatTypeCategory::Integer,
+        FormatType::Float => FormatTypeCategory::Float,
     }
 }
 
-fn is_format_size_char(ch: Option<char>, format_type: FormatTypeCategory, byte_size: &mut u8) -> bool {
+fn is_format_size_char(
+    ch: Option<char>,
+    format_type: FormatTypeCategory,
+    byte_size: &mut u8,
+) -> bool {
     match (format_type, ch) {
         (FormatTypeCategory::Integer, Some('C')) => {
             *byte_size = 1;
             true
-        },
+        }
         (FormatTypeCategory::Integer, Some('S')) => {
             *byte_size = 2;
             true
-        },
+        }
         (FormatTypeCategory::Integer, Some('I')) => {
             *byte_size = 4;
             true
-        },
+        }
         (FormatTypeCategory::Integer, Some('L')) => {
             *byte_size = 8;
             true
-        },
+        }
 
         (FormatTypeCategory::Float, Some('F')) => {
             *byte_size = 4;
             true
-        },
+        }
         (FormatTypeCategory::Float, Some('D')) => {
             *byte_size = 8;
             true
-        },
+        }
         // FormatTypeCategory::Float, 'L' => *byte_size = 16, // TODO support f128
-
         _ => false,
     }
 }
 
-fn is_format_size_decimal(ch: Option<char>, format_type: FormatTypeCategory, decimal_size: &mut String) -> bool {
-    if format_type == FormatTypeCategory::Char { return false; }
+fn is_format_size_decimal(
+    ch: Option<char>,
+    format_type: FormatTypeCategory,
+    decimal_size: &mut String,
+) -> bool {
+    if format_type == FormatTypeCategory::Char {
+        return false;
+    }
     match ch {
         Some(d) if d.is_digit(10) => {
             decimal_size.push(d);
@@ -274,7 +283,10 @@ fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, St
         let type_char = match format_type(type_char) {
             Some(t) => t,
             None => {
-                return Err(format!("unexpected char '{}' in format specification '{}'", type_char, params));
+                return Err(format!(
+                    "unexpected char '{}' in format specification '{}'",
+                    type_char, params
+                ));
             }
         };
 
@@ -293,7 +305,12 @@ fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, St
             }
             if !decimal_size.is_empty() {
                 byte_size = match decimal_size.parse() {
-                    Err(_) => return Err(format!("invalid number '{}' in format specification '{}'", decimal_size, params)),
+                    Err(_) => {
+                        return Err(format!(
+                            "invalid number '{}' in format specification '{}'",
+                            decimal_size, params
+                        ))
+                    }
                     Ok(n) => n,
                 }
             }
@@ -304,7 +321,12 @@ fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, St
 
         match od_format_type(type_char, byte_size) {
             Some(ft) => formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump)),
-            None => return Err(format!("invalid size '{}' in format specification '{}'", byte_size, params)),
+            None => {
+                return Err(format!(
+                    "invalid size '{}' in format specification '{}'",
+                    byte_size, params
+                ))
+            }
         }
     }
 
@@ -312,7 +334,9 @@ fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, St
 }
 
 #[cfg(test)]
-pub fn parse_format_flags_str(args_str: &Vec<&'static str>) -> Result<Vec<FormatterItemInfo>, String> {
+pub fn parse_format_flags_str(
+    args_str: &Vec<&'static str>,
+) -> Result<Vec<FormatterItemInfo>, String> {
     let args = args_str.iter().map(|s| s.to_string()).collect();
     match parse_format_flags(&args) {
         Err(e) => Err(e),
@@ -322,195 +346,214 @@ pub fn parse_format_flags_str(args_str: &Vec<&'static str>) -> Result<Vec<Format
                 .inspect(|f| assert!(!f.add_ascii_dump))
                 .map(|f| f.formatter_item_info)
                 .collect())
-        },
+        }
     }
 }
 
-
 #[test]
 fn test_no_options() {
-    assert_eq!(parse_format_flags_str(
-        &vec!("od")).unwrap(),
-        vec!(FORMAT_ITEM_OCT16));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od"]).unwrap(),
+        vec![FORMAT_ITEM_OCT16]
+    );
 }
 
 #[test]
 fn test_one_option() {
-    assert_eq!(parse_format_flags_str(
-        &vec!("od", "-F")).unwrap(),
-        vec!(FORMAT_ITEM_F64));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-F"]).unwrap(),
+        vec![FORMAT_ITEM_F64]
+    );
 }
 
 #[test]
 fn test_two_separate_options() {
-    assert_eq!(parse_format_flags_str(
-        &vec!("od", "-F", "-x")).unwrap(),
-        vec!(FORMAT_ITEM_F64, FORMAT_ITEM_HEX16));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-F", "-x"]).unwrap(),
+        vec![FORMAT_ITEM_F64, FORMAT_ITEM_HEX16]
+    );
 }
 
 #[test]
 fn test_two_combined_options() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "-Fx")).unwrap(),
-       vec!(FORMAT_ITEM_F64, FORMAT_ITEM_HEX16));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-Fx"]).unwrap(),
+        vec![FORMAT_ITEM_F64, FORMAT_ITEM_HEX16]
+    );
 }
 
 #[test]
 fn test_ignore_non_format_parameters() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "-d", "-Ax")).unwrap(),
-       vec!(FORMAT_ITEM_DEC16U));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-d", "-Ax"]).unwrap(),
+        vec![FORMAT_ITEM_DEC16U]
+    );
 }
 
 #[test]
 fn test_ignore_separate_parameters() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "-I", "-A", "x")).unwrap(),
-       vec!(FORMAT_ITEM_DEC64S));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-I", "-A", "x"]).unwrap(),
+        vec![FORMAT_ITEM_DEC64S]
+    );
 }
 
 #[test]
 fn test_ignore_trailing_vals() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "-D", "--", "-x")).unwrap(),
-       vec!(FORMAT_ITEM_DEC32U));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-D", "--", "-x"]).unwrap(),
+        vec![FORMAT_ITEM_DEC32U]
+    );
 }
 
 #[test]
 fn test_invalid_long_format() {
-    parse_format_flags_str(&vec!("od", "--format=X")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=xX")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=aC")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=fI")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=xD")).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=X"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xX"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=aC"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=fI"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xD"]).unwrap_err();
 
-    parse_format_flags_str(&vec!("od", "--format=xC1")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=x1C")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=xz1")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=xzC")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=xzz")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=xCC")).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xC1"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=x1C"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xz1"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xzC"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xzz"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=xCC"]).unwrap_err();
 
-    parse_format_flags_str(&vec!("od", "--format=c1")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=x256")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=d5")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format=f1")).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=c1"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=x256"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=d5"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format=f1"]).unwrap_err();
 }
 
 #[test]
 fn test_long_format_a() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=a")).unwrap(),
-       vec!(FORMAT_ITEM_A));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=a"]).unwrap(),
+        vec![FORMAT_ITEM_A]
+    );
 }
 
 #[test]
 fn test_long_format_cz() {
-   assert_eq!(parse_format_flags(
-       &vec!("od".to_string(), "--format=cz".to_string())).unwrap(),
-       vec!(ParsedFormatterItemInfo::new(FORMAT_ITEM_C, true)));
+    assert_eq!(
+        parse_format_flags(&vec!["od".to_string(), "--format=cz".to_string()]).unwrap(),
+        vec![ParsedFormatterItemInfo::new(FORMAT_ITEM_C, true)]
+    );
 }
 
 #[test]
 fn test_long_format_d() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=d8")).unwrap(),
-       vec!(FORMAT_ITEM_DEC64S));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=d8"]).unwrap(),
+        vec![FORMAT_ITEM_DEC64S]
+    );
 }
 
 #[test]
 fn test_long_format_d_default() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=d")).unwrap(),
-       vec!(FORMAT_ITEM_DEC32S));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=d"]).unwrap(),
+        vec![FORMAT_ITEM_DEC32S]
+    );
 }
 
 #[test]
 fn test_long_format_o_default() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=o")).unwrap(),
-       vec!(FORMAT_ITEM_OCT32));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=o"]).unwrap(),
+        vec![FORMAT_ITEM_OCT32]
+    );
 }
 
 #[test]
 fn test_long_format_u_default() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=u")).unwrap(),
-       vec!(FORMAT_ITEM_DEC32U));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=u"]).unwrap(),
+        vec![FORMAT_ITEM_DEC32U]
+    );
 }
 
 #[test]
 fn test_long_format_x_default() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=x")).unwrap(),
-       vec!(FORMAT_ITEM_HEX32));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=x"]).unwrap(),
+        vec![FORMAT_ITEM_HEX32]
+    );
 }
 
 #[test]
 fn test_long_format_f_default() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format=f")).unwrap(),
-       vec!(FORMAT_ITEM_F32));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format=f"]).unwrap(),
+        vec![FORMAT_ITEM_F32]
+    );
 }
 
 #[test]
 fn test_long_format_next_arg() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "--format", "f8")).unwrap(),
-       vec!(FORMAT_ITEM_F64));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "--format", "f8"]).unwrap(),
+        vec![FORMAT_ITEM_F64]
+    );
 }
 
 #[test]
 fn test_short_format_next_arg() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "-t", "x8")).unwrap(),
-       vec!(FORMAT_ITEM_HEX64));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-t", "x8"]).unwrap(),
+        vec![FORMAT_ITEM_HEX64]
+    );
 }
 
 #[test]
 fn test_short_format_combined_arg() {
-   assert_eq!(parse_format_flags_str(
-       &vec!("od", "-tu8")).unwrap(),
-       vec!(FORMAT_ITEM_DEC64U));
+    assert_eq!(
+        parse_format_flags_str(&vec!["od", "-tu8"]).unwrap(),
+        vec![FORMAT_ITEM_DEC64U]
+    );
 }
 
 #[test]
 fn test_format_next_arg_invalid() {
-    parse_format_flags_str(&vec!("od", "--format", "-v")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "--format")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "-t", "-v")).unwrap_err();
-    parse_format_flags_str(&vec!("od", "-t")).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format", "-v"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "--format"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "-t", "-v"]).unwrap_err();
+    parse_format_flags_str(&vec!["od", "-t"]).unwrap_err();
 }
 
 #[test]
 fn test_mixed_formats() {
-   assert_eq!(parse_format_flags(
-       &vec!(
-           "od".to_string(),
-           "--skip-bytes=2".to_string(),
-           "-vItu1z".to_string(),
-           "-N".to_string(),
-           "1000".to_string(),
-           "-xt".to_string(),
-           "acdx1".to_string(),
-           "--format=u2c".to_string(),
-           "--format".to_string(),
-           "f".to_string(),
-           "-xAx".to_string(),
-           "--".to_string(),
-           "-h".to_string(),
-           "--format=f8".to_string())).unwrap(),
-       vec!(
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC64S, false),  // I
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC8U, true),    // tu1z
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),   // x
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_A, false),       // ta
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),       // tc
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC32S, false),  // td
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false),    // tx1
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC16U, false),  // tu2
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),       // tc
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_F32, false),     // tf
-           ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),   // x
-       ));
+    assert_eq!(
+        parse_format_flags(&vec![
+            "od".to_string(),
+            "--skip-bytes=2".to_string(),
+            "-vItu1z".to_string(),
+            "-N".to_string(),
+            "1000".to_string(),
+            "-xt".to_string(),
+            "acdx1".to_string(),
+            "--format=u2c".to_string(),
+            "--format".to_string(),
+            "f".to_string(),
+            "-xAx".to_string(),
+            "--".to_string(),
+            "-h".to_string(),
+            "--format=f8".to_string(),
+        ]).unwrap(),
+        vec![
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC64S, false), // I
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC8U, true),   // tu1z
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),  // x
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_A, false),      // ta
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),      // tc
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC32S, false), // td
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false),   // tx1
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC16U, false), // tu2
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),      // tc
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_F32, false),    // tf
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),  // x
+        ]
+    );
 }

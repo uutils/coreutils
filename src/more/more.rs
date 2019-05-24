@@ -15,13 +15,18 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::{stdout, Write, Read};
+use std::io::{stdout, Read, Write};
 use std::fs::File;
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::termios;
+
+#[cfg(target_os = "redox")]
+extern crate redox_termios;
+#[cfg(target_os = "redox")]
+extern crate syscall;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
@@ -30,8 +35,8 @@ pub enum Mode {
     Version,
 }
 
-static NAME: &'static str = "more";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "more";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
@@ -44,7 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(e) => {
             show_error!("{}", e);
             panic!()
-        },
+        }
     };
     let usage = opts.usage("more TARGET.");
     let mode = if matches.opt_present("version") {
@@ -56,8 +61,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::More    => more(matches),
-        Mode::Help    => help(&usage),
+        Mode::More => more(matches),
+        Mode::Help => help(&usage),
         Mode::Version => version(),
     }
 
@@ -69,10 +74,13 @@ fn version() {
 }
 
 fn help(usage: &str) {
-    let msg = format!("{0} {1}\n\n\
-                       Usage: {0} TARGET\n  \
-                       \n\
-                       {2}", NAME, VERSION, usage);
+    let msg = format!(
+        "{0} {1}\n\n\
+         Usage: {0} TARGET\n  \
+         \n\
+         {2}",
+        NAME, VERSION, usage
+    );
     println!("{}", msg);
 }
 
@@ -93,6 +101,18 @@ fn setup_term() -> usize {
     0
 }
 
+#[cfg(target_os = "redox")]
+fn setup_term() -> redox_termios::Termios {
+    let mut term = redox_termios::Termios::default();
+    let fd = syscall::dup(0, b"termios").unwrap();
+    syscall::read(fd, &mut term).unwrap();
+    term.c_lflag &= !redox_termios::ICANON;
+    term.c_lflag &= !redox_termios::ECHO;
+    syscall::write(fd, &term).unwrap();
+    let _ = syscall::close(fd);
+    term
+}
+
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn reset_term(term: &mut termios::Termios) {
     term.c_lflag.insert(termios::ICANON);
@@ -102,7 +122,16 @@ fn reset_term(term: &mut termios::Termios) {
 
 #[cfg(any(windows, target_os = "fuchsia"))]
 #[inline(always)]
-fn reset_term(_: &mut usize) {
+fn reset_term(_: &mut usize) {}
+
+#[cfg(any(target_os = "redox"))]
+fn reset_term(term: &mut redox_termios::Termios) {
+    let fd = syscall::dup(0, b"termios").unwrap();
+    syscall::read(fd, term).unwrap();
+    term.c_lflag |= redox_termios::ICANON;
+    term.c_lflag |= redox_termios::ECHO;
+    syscall::write(fd, &term).unwrap();
+    let _ = syscall::close(fd);
 }
 
 fn more(matches: getopts::Matches) {
@@ -114,7 +143,9 @@ fn more(matches: getopts::Matches) {
 
     let mut end = false;
     while let Ok(sz) = f.read(&mut buffer) {
-        if sz == 0 { break }
+        if sz == 0 {
+            break;
+        }
         stdout().write(&buffer[0..sz]).unwrap();
         for byte in std::io::stdin().bytes() {
             match byte.unwrap() {
@@ -122,12 +153,14 @@ fn more(matches: getopts::Matches) {
                 b'q' | 27 => {
                     end = true;
                     break;
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
 
-        if end { break }
+        if end {
+            break;
+        }
     }
 
     reset_term(&mut term);

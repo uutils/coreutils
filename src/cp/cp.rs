@@ -10,19 +10,19 @@
  * that was distributed with this source code.
  */
 
-extern crate libc;
 extern crate clap;
-extern crate walkdir;
 extern crate filetime;
 #[cfg(target_os = "linux")]
-#[macro_use] extern crate ioctl_sys;
-#[macro_use] extern crate uucore;
-#[macro_use] extern crate quick_error;
+#[macro_use]
+extern crate ioctl_sys;
+extern crate libc;
+#[macro_use]
+extern crate quick_error;
+#[macro_use]
+extern crate uucore;
+extern crate walkdir;
 #[cfg(unix)]
 extern crate xattr;
-
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
 
 #[cfg(windows)]
 extern crate kernel32;
@@ -35,24 +35,28 @@ extern crate winapi;
 
 use std::mem;
 use std::ffi::CString;
-use clap::{Arg, App, ArgMatches};
+use clap::{App, Arg, ArgMatches};
 use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::fs;
-use std::io::{BufReader, BufRead, stdin, Write};
+use std::io::{stdin, stdout, Write};
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
-#[cfg(target_os = "linux")] use std::os::unix::io::IntoRawFd;
+#[cfg(target_os = "linux")]
+use std::os::unix::io::IntoRawFd;
+#[cfg(target_os = "linux")]
 use std::fs::File;
 use std::fs::OpenOptions;
 use filetime::FileTime;
 
-#[cfg(unix)] use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
-#[cfg(target_os = "linux")] ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
+#[cfg(target_os = "linux")]
+ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
     #[derive(Debug)]
@@ -97,7 +101,6 @@ quick_error! {
     }
 }
 
-
 /// Continue next iteration of loop if result of expression is error
 macro_rules! or_continue(
     ($expr:expr) => (match $expr {
@@ -109,16 +112,15 @@ macro_rules! or_continue(
     })
 );
 
-
 /// Prompts the user yes/no and returns `true` they if successfully
 /// answered yes.
 macro_rules! prompt_yes(
     ($($args:tt)+) => ({
-        pipe_write!(&mut ::std::io::stdout(), $($args)+);
-        pipe_write!(&mut ::std::io::stdout(), " [y/N]: ");
-        pipe_flush!();
+        print!($($args)+);
+        print!(" [y/N]: ");
+        crash_if_err!(1, stdout().flush());
         let mut s = String::new();
-        match BufReader::new(stdin()).read_line(&mut s) {
+        match stdin().read_line(&mut s) {
             Ok(_) => match s.char_indices().nth(0) {
                 Some((_, x)) => x == 'y' || x == 'Y',
                 _ => false
@@ -133,7 +135,7 @@ pub type Source = PathBuf;
 pub type Target = PathBuf;
 
 /// Specifies whether when overwrite files
-#[derive (Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum ClobberMode {
     Force,
     RemoveDestination,
@@ -141,7 +143,7 @@ pub enum ClobberMode {
 }
 
 /// Specifies whether when overwrite files
-#[derive (Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum OverwriteMode {
     /// [Default] Always overwrite existing files
     Clobber(ClobberMode),
@@ -151,9 +153,11 @@ pub enum OverwriteMode {
     NoClobber,
 }
 
-#[derive (Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum ReflinkMode {
-    Always, Auto, Never
+    Always,
+    Auto,
+    Never,
 }
 
 /// Specifies the expected file type of copy target
@@ -176,12 +180,13 @@ pub enum CopyMode {
     Sparse,
     Copy,
     Update,
-    AttrOnly
+    AttrOnly,
 }
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum Attribute {
-    #[cfg(unix)] Mode,
+    #[cfg(unix)]
+    Mode,
     Ownership,
     Timestamps,
     Context,
@@ -222,58 +227,75 @@ fn print_version() {
 }
 
 fn get_usage() -> String {
-    format!("{0} [OPTION]... [-T] SOURCE DEST
+    format!(
+        "{0} [OPTION]... [-T] SOURCE DEST
     {0} [OPTION]... SOURCE... DIRECTORY
-    {0} [OPTION]... -t DIRECTORY SOURCE...", executable!())
+    {0} [OPTION]... -t DIRECTORY SOURCE...",
+        executable!()
+    )
 }
 
-
 // Argument constants
-static OPT_ARCHIVE:                       &str = "archive";
-static OPT_ATTRIBUTES_ONLY:               &str = "attributes-only";
-static OPT_BACKUP:                        &str = "backup";
-static OPT_CLI_SYMBOLIC_LINKS:            &str = "cli-symbolic-links";
-static OPT_CONTEXT:                       &str = "context";
-static OPT_COPY_CONTENTS:                 &str = "copy-contents";
-static OPT_DEREFERENCE:                   &str = "dereference";
-static OPT_FORCE:                         &str = "force";
-static OPT_INTERACTIVE:                   &str = "interactive";
-static OPT_LINK:                          &str = "link";
-static OPT_NO_CLOBBER:                    &str = "no-clobber";
-static OPT_NO_DEREFERENCE:                &str = "no-dereference";
+static OPT_ARCHIVE: &str = "archive";
+static OPT_ATTRIBUTES_ONLY: &str = "attributes-only";
+static OPT_BACKUP: &str = "backup";
+static OPT_CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
+static OPT_CONTEXT: &str = "context";
+static OPT_COPY_CONTENTS: &str = "copy-contents";
+static OPT_DEREFERENCE: &str = "dereference";
+static OPT_FORCE: &str = "force";
+static OPT_INTERACTIVE: &str = "interactive";
+static OPT_LINK: &str = "link";
+static OPT_NO_CLOBBER: &str = "no-clobber";
+static OPT_NO_DEREFERENCE: &str = "no-dereference";
 static OPT_NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs";
-static OPT_NO_PRESERVE:                   &str = "no-preserve";
-static OPT_NO_TARGET_DIRECTORY:           &str = "no-target-directory";
-static OPT_ONE_FILE_SYSTEM:               &str = "one-file-system";
-static OPT_PARENTS:                       &str = "parents";
-static OPT_PATHS:                         &str = "paths";
-static OPT_PRESERVE:                      &str = "preserve";
-static OPT_PRESERVE_DEFAULT_ATTRIBUTES:   &str = "preserve-default-attributes";
-static OPT_RECURSIVE:                     &str = "recursive";
-static OPT_RECURSIVE_ALIAS:               &str = "recursive_alias";
-static OPT_REFLINK:                       &str = "reflink";
-static OPT_REMOVE_DESTINATION:            &str = "remove-destination";
-static OPT_SPARSE:                        &str = "sparse";
-static OPT_STRIP_TRAILING_SLASHES:        &str = "strip-trailing-slashes";
-static OPT_SUFFIX:                        &str = "suffix";
-static OPT_SYMBOLIC_LINK:                 &str = "symbolic-link";
-static OPT_TARGET_DIRECTORY:              &str = "target-directory";
-static OPT_UPDATE:                        &str = "update";
-static OPT_VERBOSE:                       &str = "verbose";
-static OPT_VERSION:                       &str = "version";
+static OPT_NO_PRESERVE: &str = "no-preserve";
+static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
+static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
+static OPT_PARENTS: &str = "parents";
+static OPT_PATHS: &str = "paths";
+static OPT_PRESERVE: &str = "preserve";
+static OPT_PRESERVE_DEFAULT_ATTRIBUTES: &str = "preserve-default-attributes";
+static OPT_RECURSIVE: &str = "recursive";
+static OPT_RECURSIVE_ALIAS: &str = "recursive_alias";
+static OPT_REFLINK: &str = "reflink";
+static OPT_REMOVE_DESTINATION: &str = "remove-destination";
+static OPT_SPARSE: &str = "sparse";
+static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
+static OPT_SUFFIX: &str = "suffix";
+static OPT_SYMBOLIC_LINK: &str = "symbolic-link";
+static OPT_TARGET_DIRECTORY: &str = "target-directory";
+static OPT_UPDATE: &str = "update";
+static OPT_VERBOSE: &str = "verbose";
+static OPT_VERSION: &str = "version";
 
 #[cfg(unix)]
-static PRESERVABLE_ATTRIBUTES: &[&str] = &["mode", "ownership", "timestamps", "context", "links", "xattr", "all"];
+static PRESERVABLE_ATTRIBUTES: &[&str] = &[
+    "mode",
+    "ownership",
+    "timestamps",
+    "context",
+    "links",
+    "xattr",
+    "all",
+];
 
 #[cfg(not(unix))]
-static PRESERVABLE_ATTRIBUTES: &[&str] = &["ownership", "timestamps", "context", "links", "xattr", "all"];
+static PRESERVABLE_ATTRIBUTES: &[&str] = &[
+    "ownership",
+    "timestamps",
+    "context",
+    "links",
+    "xattr",
+    "all",
+];
 
 static DEFAULT_ATTRIBUTES: &[Attribute] = &[
-    #[cfg(unix)] Attribute::Mode,
+    #[cfg(unix)]
+    Attribute::Mode,
     Attribute::Ownership,
     Attribute::Timestamps,
 ];
-
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let usage = get_usage();
@@ -446,7 +468,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
-    let paths: Vec<String> = matches.values_of("paths")
+    let paths: Vec<String> = matches
+        .values_of("paths")
         .map(|v| v.map(|p| p.to_string()).collect())
         .unwrap_or_default();
 
@@ -513,20 +536,26 @@ impl FromStr for Attribute {
 
     fn from_str(value: &str) -> CopyResult<Attribute> {
         Ok(match &*value.to_lowercase() {
-            #[cfg(unix)] "mode" => Attribute::Mode,
+            #[cfg(unix)]
+            "mode" => Attribute::Mode,
             "ownership" => Attribute::Ownership,
             "timestamps" => Attribute::Timestamps,
             "context" => Attribute::Context,
             "links" => Attribute::Links,
             "xattr" => Attribute::Xattr,
-            _ => return Err(Error::InvalidArgument(format!("invalid attribute '{}'", value)))
+            _ => {
+                return Err(Error::InvalidArgument(format!(
+                    "invalid attribute '{}'",
+                    value
+                )))
+            }
         })
     }
 }
 
 impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
-        let not_implemented_opts =  vec![
+        let not_implemented_opts = vec![
             OPT_ARCHIVE,
             OPT_COPY_CONTENTS,
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
@@ -537,25 +566,26 @@ impl Options {
             OPT_STRIP_TRAILING_SLASHES,
             OPT_ONE_FILE_SYSTEM,
             OPT_CONTEXT,
-            #[cfg(windows)] OPT_FORCE,
+            #[cfg(windows)]
+            OPT_FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {
             if matches.is_present(not_implemented_opt) {
-                return Err(Error::NotImplemented(not_implemented_opt.to_string()))
+                return Err(Error::NotImplemented(not_implemented_opt.to_string()));
             }
         }
 
-        let recursive = matches.is_present(OPT_RECURSIVE)
-            || matches.is_present(OPT_RECURSIVE_ALIAS)
+        let recursive = matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_ALIAS)
             || matches.is_present(OPT_ARCHIVE);
 
-        let backup = matches.is_present(OPT_BACKUP)
-            || matches.is_present(OPT_SUFFIX);
+        let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
 
         // Parse target directory options
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
-        let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|v| v.to_string());
+        let target_dir = matches
+            .value_of(OPT_TARGET_DIRECTORY)
+            .map(|v| v.to_string());
 
         // Parse attributes to preserve
         let preserve_attributes: Vec<Attribute> = if matches.is_present(OPT_PRESERVE) {
@@ -565,15 +595,15 @@ impl Options {
                     let mut attributes = Vec::new();
                     for attribute_str in attribute_strs {
                         if attribute_str == "all" {
-                           #[cfg(unix)]
-                           attributes.push(Attribute::Mode);
-                           attributes.push(Attribute::Ownership);
-                           attributes.push(Attribute::Timestamps);
-                           attributes.push(Attribute::Context);
-                           attributes.push(Attribute::Xattr);
-                           attributes.push(Attribute::Links);
-                           break;
-                        } else { 
+                            #[cfg(unix)]
+                            attributes.push(Attribute::Mode);
+                            attributes.push(Attribute::Ownership);
+                            attributes.push(Attribute::Timestamps);
+                            attributes.push(Attribute::Context);
+                            attributes.push(Attribute::Xattr);
+                            attributes.push(Attribute::Links);
+                            break;
+                        } else {
                             attributes.push(Attribute::from_str(attribute_str)?);
                         }
                     }
@@ -601,14 +631,13 @@ impl Options {
             reflink_mode: {
                 if let Some(reflink) = matches.value_of(OPT_REFLINK) {
                     match reflink {
-                        "always" => {
-                            ReflinkMode::Always
-                        },
-                        "auto" => {
-                            ReflinkMode::Auto
-                        },
+                        "always" => ReflinkMode::Always,
+                        "auto" => ReflinkMode::Auto,
                         value => {
-                            return Err(Error::InvalidArgument(format!("invalid argument '{}' for \'reflink\'", value)))
+                            return Err(Error::InvalidArgument(format!(
+                                "invalid argument '{}' for \'reflink\'",
+                                value
+                            )))
                         }
                     }
                 } else {
@@ -640,19 +669,18 @@ impl TargetType {
     }
 }
 
-
 /// Returns tuple of (Source paths, Target)
 fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<Source>, Target)> {
     let mut paths = path_args.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    if paths.len() < 1 {
+    if paths.is_empty() {
         // No files specified
         return Err("missing file operand".into());
     }
 
     // Return an error if the user requested to copy more than one
     // file source to a file target
-    if options.no_target_dir && !options.target_dir.is_some() && paths.len() > 2 {
+    if options.no_target_dir && options.target_dir.is_none() && paths.len() > 2 {
         return Err(format!("extra operand {:?}", paths[2]).into());
     }
 
@@ -673,44 +701,63 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
     Ok((sources, target))
 }
 
-fn preserve_hardlinks(hard_links: &mut Vec<(String, u64)>, source: &std::path::PathBuf, dest: std::path::PathBuf, found_hard_link: &mut bool) -> CopyResult<()> {
-    if !source.is_dir() {
-        unsafe {
-            let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
-            let inode: u64;
-            let nlinks: u64;
-            #[cfg(unix)]
-            {
-                let mut stat = mem::zeroed();
-                if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
-                    return Err(format!("cannot stat {:?}: {}", src_path, std::io::Error::last_os_error()).into());
+fn preserve_hardlinks(
+    hard_links: &mut Vec<(String, u64)>,
+    source: &std::path::PathBuf,
+    dest: std::path::PathBuf,
+    found_hard_link: &mut bool,
+) -> CopyResult<()> {
+    // Redox does not currently support hard links
+    #[cfg(not(target_os = "redox"))]
+    {
+        if !source.is_dir() {
+            unsafe {
+                let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
+                let inode: u64;
+                let nlinks: u64;
+                #[cfg(unix)]
+                {
+                    let mut stat = mem::zeroed();
+                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
+                        return Err(format!(
+                            "cannot stat {:?}: {}",
+                            src_path,
+                            std::io::Error::last_os_error()
+                        ).into());
+                    }
+                    inode = stat.st_ino as u64;
+                    nlinks = stat.st_nlink as u64;
                 }
-                inode = stat.st_ino as u64;
-                nlinks = stat.st_nlink as u64;
-            }
-            #[cfg(windows)]
-            {
-                let mut stat = mem::uninitialized();
-                let handle = CreateFile2(src_path.as_ptr() as *const u16,
-                                                        winapi::winnt::GENERIC_READ,
-                                                        winapi::winnt::FILE_SHARE_READ,
-                                                        0,
-                                                        std::ptr::null_mut());
-                if GetFileInformationByHandle(handle, stat) != 0 {
-                    return Err(format!("cannot get file information {:?}: {}", source, std::io::Error::last_os_error()).into());
+                #[cfg(windows)]
+                {
+                    let stat = mem::uninitialized();
+                    let handle = CreateFile2(
+                        src_path.as_ptr() as *const u16,
+                        winapi::um::winnt::GENERIC_READ,
+                        winapi::um::winnt::FILE_SHARE_READ,
+                        0,
+                        std::ptr::null_mut(),
+                    );
+                    if GetFileInformationByHandle(handle, stat) != 0 {
+                        return Err(format!(
+                            "cannot get file information {:?}: {}",
+                            source,
+                            std::io::Error::last_os_error()
+                        ).into());
+                    }
+                    inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
+                    nlinks = (*stat).nNumberOfLinks as u64;
                 }
-                inode = (((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64);
-                nlinks = (*stat).nNumberOfLinks as u64;
-            }
 
-            for hard_link in hard_links.iter() {
-                if hard_link.1 == inode {
-                    std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
-                    *found_hard_link = true;
+                for hard_link in hard_links.iter() {
+                    if hard_link.1 == inode {
+                        std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
+                        *found_hard_link = true;
+                    }
                 }
-            }
-            if !(*found_hard_link) && nlinks > 1 {
-                hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+                if !(*found_hard_link) && nlinks > 1 {
+                    hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+                }
             }
         }
     }
@@ -745,9 +792,9 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
         } else {
             let mut found_hard_link = false;
             if preserve_hard_links {
-                    let dest = construct_dest_path(source, target, &target_type, options)?;
-                    preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
-               }
+                let dest = construct_dest_path(source, target, &target_type, options)?;
+                preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
+            }
             if !found_hard_link {
                 if let Err(error) = copy_source(source, target, &target_type, options) {
                     show_error!("{}", error);
@@ -763,30 +810,38 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
     if non_fatal_errors {
         Err(Error::NotAllFilesCopied)
     } else {
-       Ok(())
+        Ok(())
     }
 }
 
-
-fn construct_dest_path(source_path: &Path, target: &Target, target_type: &TargetType, options: &Options)
-                       -> CopyResult<PathBuf>
-{
+fn construct_dest_path(
+    source_path: &Path,
+    target: &Target,
+    target_type: &TargetType,
+    options: &Options,
+) -> CopyResult<PathBuf> {
     if options.no_target_dir && target.is_dir() {
-        return Err(format!("cannot overwrite directory '{}' with non-directory", target.display()).into())
+        return Err(format!(
+            "cannot overwrite directory '{}' with non-directory",
+            target.display()
+        ).into());
     }
 
     Ok(match *target_type {
         TargetType::Directory => {
             let root = source_path.parent().unwrap_or(source_path);
             localize_to_target(root, source_path, target)?
-        },
+        }
         TargetType::File => target.to_path_buf(),
     })
 }
 
-fn copy_source(source: &Source, target: &Target, target_type: &TargetType, options: &Options)
-               -> CopyResult<()>
-{
+fn copy_source(
+    source: &Source,
+    target: &Target,
+    target_type: &TargetType,
+    options: &Options,
+) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
@@ -797,7 +852,6 @@ fn copy_source(source: &Source, target: &Target, target_type: &TargetType, optio
         copy_file(source_path, dest.as_path(), options)
     }
 }
-
 
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
@@ -819,21 +873,22 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
 
     #[cfg(unix)]
     let mut hard_links: Vec<(String, u64)> = vec![];
-     let mut preserve_hard_links = false;
-        for attribute in &options.preserve_attributes {
-            if *attribute == Attribute::Links {
-                preserve_hard_links = true;
-            }
+    let mut preserve_hard_links = false;
+    for attribute in &options.preserve_attributes {
+        if *attribute == Attribute::Links {
+            preserve_hard_links = true;
         }
+    }
 
-    #[cfg(windows)]
+    // This should be changed once Redox supports hardlinks
+    #[cfg(any(windows, target_os = "redox"))]
     let mut hard_links: Vec<(String, u64)> = vec![];
 
     for path in WalkDir::new(root) {
         let path = or_continue!(or_continue!(path).path().canonicalize());
         let local_to_root_parent = match root_parent {
             Some(parent) => or_continue!(path.strip_prefix(&parent)).to_path_buf(),
-            None         => path.clone(),
+            None => path.clone(),
         };
 
         let local_to_target = target.join(&local_to_root_parent);
@@ -847,7 +902,7 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
                 let dest = local_to_target.as_path().to_path_buf();
                 preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link).unwrap();
                 if !found_hard_link {
-                        copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                    copy_file(path.as_path(), local_to_target.as_path(), options)?;
                 }
             } else {
                 copy_file(path.as_path(), local_to_target.as_path(), options)?;
@@ -861,21 +916,25 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
-            OverwriteMode::NoClobber => {
-                Err(Error::Skipped(format!("Not overwriting {} because of option '{}'", path.display(), OPT_NO_CLOBBER)))
-            },
+            OverwriteMode::NoClobber => Err(Error::Skipped(format!(
+                "Not overwriting {} because of option '{}'",
+                path.display(),
+                OPT_NO_CLOBBER
+            ))),
             OverwriteMode::Interactive(_) => {
                 if prompt_yes!("{}: overwrite {}? ", executable!(), path.display()) {
                     Ok(())
                 } else {
-                    Err(Error::Skipped(format!("Not overwriting {} at user request", path.display())))
+                    Err(Error::Skipped(format!(
+                        "Not overwriting {} at user request",
+                        path.display()
+                    )))
                 }
-            },
+            }
             OverwriteMode::Clobber(_) => Ok(()),
         }
     }
 }
-
 
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("'{}' -> '{}'", source.display().to_string(), dest.display());
@@ -885,32 +944,36 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             let mode = fs::metadata(source).context(context)?.permissions().mode();
             let mut dest_metadata = fs::metadata(source).context(context)?.permissions();
             dest_metadata.set_mode(mode);
-        },
+        }
         Attribute::Ownership => {
             let metadata = fs::metadata(source).context(context)?;
             fs::set_permissions(dest, metadata.permissions()).context(context)?;
-        },
+        }
         Attribute::Timestamps => {
             let metadata = fs::metadata(source)?;
-            filetime::set_file_times(Path::new(dest), FileTime::from_last_access_time(&metadata), FileTime::from_last_modification_time(&metadata))?;
-        },
-        Attribute::Context    => {},
-        Attribute::Links      => {},
-        Attribute::Xattr      => {
+            filetime::set_file_times(
+                Path::new(dest),
+                FileTime::from_last_access_time(&metadata),
+                FileTime::from_last_modification_time(&metadata),
+            )?;
+        }
+        Attribute::Context => {}
+        Attribute::Links => {}
+        Attribute::Xattr => {
             #[cfg(unix)]
             {
-               let xattrs = xattr::list(source)?;
-               for attr in xattrs {
+                let xattrs = xattr::list(source)?;
+                for attr in xattrs {
                     if let Some(attr_value) = xattr::get(source, attr.clone())? {
                         crash_if_err!(EXIT_ERR, xattr::set(dest, attr, &attr_value[..]));
                     }
-               }
+                }
             }
             #[cfg(not(unix))]
             {
                 return Err(format!("XAttrs are only supported on unix.").into());
             }
-        },
+        }
     })
 }
 
@@ -955,10 +1018,10 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
             if fs::metadata(dest)?.permissions().readonly() {
                 fs::remove_file(dest)?;
             }
-        },
+        }
         OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
             fs::remove_file(dest)?;
-        },
+        }
         _ => (),
     };
 
@@ -1020,7 +1083,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             } else {
                 copy_helper(source, dest, options)?;
             }
-        },
+        }
         CopyMode::AttrOnly => {
             OpenOptions::new()
                 .write(true)
@@ -1059,9 +1122,14 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
                 ReflinkMode::Always => unsafe {
                     let result = ficlone(dst_file, src_file as *const i32);
                     if result != 0 {
-                        return Err(format!("failed to clone {:?} from {:?}: {}", source, dest, std::io::Error::last_os_error()).into());
+                        return Err(format!(
+                            "failed to clone {:?} from {:?}: {}",
+                            source,
+                            dest,
+                            std::io::Error::last_os_error()
+                        ).into());
                     } else {
-                        return Ok(())
+                        return Ok(());
                     }
                 },
                 ReflinkMode::Auto => unsafe {
@@ -1085,13 +1153,13 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
         (&TargetType::Directory, false) => {
             Err(format!("target: '{}' is not a directory", target.display()).into())
         }
-        (&TargetType::File, true) => {
-            Err(format!("cannot overwrite directory '{}' with non-directory", target.display()).into())
-        }
+        (&TargetType::File, true) => Err(format!(
+            "cannot overwrite directory '{}' with non-directory",
+            target.display()
+        ).into()),
         _ => Ok(()),
     }
 }
-
 
 /// Remove the `root` prefix from `source` and prefix it with `target`
 /// to create a file that is local to `target`
@@ -1109,21 +1177,21 @@ pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResu
     Ok(target.join(&local_to_root))
 }
 
-
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = try!(canonicalize(p1, CanonicalizeMode::Normal));
-    let pathbuf2 = try!(canonicalize(p2, CanonicalizeMode::Normal));
+    let pathbuf1 = canonicalize(p1, CanonicalizeMode::Normal)?;
+    let pathbuf2 = canonicalize(p2, CanonicalizeMode::Normal)?;
 
     Ok(pathbuf1 == pathbuf2)
 }
 
-
 #[test]
 fn test_cp_localize_to_target() {
-    assert!(localize_to_target(
-        &Path::new("a/source/"),
-        &Path::new("a/source/c.txt"),
-        &Path::new("target/")
-    ).unwrap() == Path::new("target/c.txt"))
+    assert!(
+        localize_to_target(
+            &Path::new("a/source/"),
+            &Path::new("a/source/c.txt"),
+            &Path::new("target/")
+        ).unwrap() == Path::new("target/c.txt")
+    )
 }

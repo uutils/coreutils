@@ -2,18 +2,20 @@
 name = "base32"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_base32"
 path = "base32.rs"
 
-[dependencies]
-uucore = { path="../uucore" }
+[dependencies.uucore]
+version = "0.0.1"
+features = ["encoding"]
 
 [dependencies.clippy]
-version = "0.0.143"
+version = "0.0.212"
 optional = true
 
 [[bin]]
 name = "base32"
-path = "main.rs"
+path = "../../uumain.rs"

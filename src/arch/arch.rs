@@ -9,17 +9,19 @@
 // file that was distributed with this source code.
 //
 
+extern crate platform_info;
 #[macro_use]
 extern crate uucore;
-use uucore::utsname::Uname;
 
-static SYNTAX: &'static str = "";
-static SUMMARY: &'static str = "Determine architecture name for current machine.";
-static LONG_HELP: &'static str = "";
+use platform_info::*;
+
+static SYNTAX: &str = "";
+static SUMMARY: &str = "Determine architecture name for current machine.";
+static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
-    let uts = Uname::new();
+    let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
     0
 }

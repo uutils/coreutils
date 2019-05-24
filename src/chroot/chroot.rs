@@ -14,37 +14,52 @@ extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
-use uucore::libc::{self, setgid, setuid, chroot, setgroups};
+use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::entries;
 
 use std::ffi::CString;
-use std::io::{Error, Write};
+use std::io::Error;
 use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 
-static NAME: &'static str = "chroot";
-static SYNTAX: &'static str = "[OPTION]... NEWROOT [COMMAND [ARG]...]"; 
-static SUMMARY: &'static str = "Run COMMAND with root directory set to NEWROOT."; 
-static LONG_HELP: &'static str = "
+static NAME: &str = "chroot";
+static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
+static SUMMARY: &str = "Run COMMAND with root directory set to NEWROOT.";
+static LONG_HELP: &str = "
  If COMMAND is not specified, it defaults to '$(SHELL) -i'.
  If $(SHELL) is not set, /bin/sh is used.
-"; 
+";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt("u", "user", "User (ID or name) to switch before running the program", "USER")
+        .optopt(
+            "u",
+            "user",
+            "User (ID or name) to switch before running the program",
+            "USER",
+        )
         .optopt("g", "group", "Group (ID or name) to switch to", "GROUP")
-        .optopt("G", "groups", "Comma-separated list of groups to switch to", "GROUP1,GROUP2...")
-        .optopt("", "userspec", "Colon-separated user and group to switch to. \
-        Same as -u USER -g GROUP. \
-        Userspec has higher preference than -u and/or -g", "USER:GROUP")
+        .optopt(
+            "G",
+            "groups",
+            "Comma-separated list of groups to switch to",
+            "GROUP1,GROUP2...",
+        )
+        .optopt(
+            "",
+            "userspec",
+            "Colon-separated user and group to switch to. \
+             Same as -u USER -g GROUP. \
+             Userspec has higher preference than -u and/or -g",
+            "USER:GROUP",
+        )
         .parse(args);
 
     if matches.free.is_empty() {
         println!("Missing operand: NEWROOT");
         println!("Try `{} --help` for more information.", NAME);
-        return 1
+        return 1;
     }
 
     let default_shell: &'static str = "/bin/sh";
@@ -53,7 +68,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let newroot = Path::new(&matches.free[0][..]);
     if !newroot.is_dir() {
-        crash!(1, "cannot change root directory to `{}`: no such directory", newroot.display());
+        crash!(
+            1,
+            "cannot change root directory to `{}`: no such directory",
+            newroot.display()
+        );
     }
 
     let command: Vec<&str> = match matches.free.len() {
@@ -62,9 +81,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 Err(_) => default_shell,
                 Ok(ref s) => s.as_ref(),
             };
-            vec!(shell, default_option)
-        },
-        _ => matches.free[1..].iter().map(|x| &x[..]).collect()
+            vec![shell, default_option]
+        }
+        _ => matches.free[1..].iter().map(|x| &x[..]).collect(),
     };
 
     set_context(&newroot, &matches);
@@ -97,10 +116,18 @@ fn set_context(root: &Path, options: &getopts::Matches) {
             };
             s
         }
-        None => Vec::new()
+        None => Vec::new(),
     };
-    let user = if userspec.is_empty() { &user_str[..] } else { &userspec[0][..] };
-    let group = if userspec.is_empty() { &group_str[..] } else { &userspec[1][..] };
+    let user = if userspec.is_empty() {
+        &user_str[..]
+    } else {
+        &userspec[0][..]
+    };
+    let group = if userspec.is_empty() {
+        &group_str[..]
+    } else {
+        &userspec[1][..]
+    };
 
     enter_chroot(root);
 
@@ -113,10 +140,18 @@ fn enter_chroot(root: &Path) {
     let root_str = root.display();
     std::env::set_current_dir(root).unwrap();
     let err = unsafe {
-        chroot(CString::new(".".as_bytes()).unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
+        chroot(CString::new(".")
+            .unwrap()
+            .as_bytes_with_nul()
+            .as_ptr() as *const libc::c_char)
     };
     if err != 0 {
-        crash!(1, "cannot chroot to {}: {}", root_str, Error::last_os_error())
+        crash!(
+            1,
+            "cannot chroot to {}: {}",
+            root_str,
+            Error::last_os_error()
+        )
     };
 }
 
@@ -128,36 +163,33 @@ fn set_main_group(group: &str) {
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
-            crash!(1, "cannot set gid to {}: {}", group_id, Error::last_os_error())
+            crash!(
+                1,
+                "cannot set gid to {}: {}",
+                group_id,
+                Error::last_os_error()
+            )
         }
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
-    unsafe {
-        setgroups(groups.len() as libc::c_int,
-                  groups.as_ptr())
-    }
+    unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
 #[cfg(target_os = "linux")]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
-    unsafe {
-        setgroups(groups.len() as libc::size_t,
-                  groups.as_ptr())
-    }
+    unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }
 
 fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
-        let groups_vec: Vec<libc::gid_t> = FromIterator::from_iter(
-            groups.split(',').map(
-                |x| match entries::grp2gid(x) {
-                    Ok(g) => g,
-                    _ => crash!(1, "no such group: {}", x),
-                })
-            );
+        let groups_vec: Vec<libc::gid_t> =
+            FromIterator::from_iter(groups.split(',').map(|x| match entries::grp2gid(x) {
+                Ok(g) => g,
+                _ => crash!(1, "no such group: {}", x),
+            }));
         let err = set_groups(groups_vec);
         if err != 0 {
             crash!(1, "cannot set groups: {}", Error::last_os_error())

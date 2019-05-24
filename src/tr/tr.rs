@@ -13,8 +13,8 @@
  */
 
 extern crate bit_set;
-extern crate getopts;
 extern crate fnv;
+extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
@@ -28,8 +28,8 @@ use expand::ExpandSet;
 
 mod expand;
 
-static NAME: &'static str = "tr";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tr";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUFFER_LEN: usize = 1024;
 
 trait SymbolTranslator {
@@ -45,7 +45,7 @@ impl DeleteOperation {
     fn new(set: ExpandSet, complement: bool) -> DeleteOperation {
         DeleteOperation {
             bset: set.map(|c| c as usize).collect(),
-            complement: complement
+            complement: complement,
         }
     }
 }
@@ -70,7 +70,7 @@ impl SqueezeOperation {
     fn new(squeeze_set: ExpandSet, complement: bool) -> SqueezeOperation {
         SqueezeOperation {
             squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement: complement
+            complement: complement,
         }
     }
 }
@@ -92,18 +92,24 @@ struct DeleteAndSqueezeOperation {
 }
 
 impl DeleteAndSqueezeOperation {
-    fn new(delete_set: ExpandSet, squeeze_set: ExpandSet, complement: bool) -> DeleteAndSqueezeOperation {
+    fn new(
+        delete_set: ExpandSet,
+        squeeze_set: ExpandSet,
+        complement: bool,
+    ) -> DeleteAndSqueezeOperation {
         DeleteAndSqueezeOperation {
             delete_set: delete_set.map(|c| c as usize).collect(),
             squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement: complement
+            complement: complement,
         }
     }
 }
 
 impl SymbolTranslator for DeleteAndSqueezeOperation {
     fn translate(&self, c: &char, prev_c: &char) -> Option<char> {
-        if self.complement != self.delete_set.contains(*c as usize) || *prev_c == *c && self.squeeze_set.contains(*c as usize) {
+        if self.complement != self.delete_set.contains(*c as usize)
+            || *prev_c == *c && self.squeeze_set.contains(*c as usize)
+        {
             None
         } else {
             Some(*c)
@@ -129,9 +135,7 @@ impl TranslateOperation {
                 map.insert(i as usize, s2_prev);
             }
         }
-        TranslateOperation {
-            translate_map: map,
-        }
+        TranslateOperation { translate_map: map }
     }
 }
 
@@ -147,8 +151,11 @@ fn translate_input<T: SymbolTranslator>(input: &mut BufRead, output: &mut Write,
 
     while let Ok(length) = input.read_line(&mut buf) {
         let mut prev_c = 0 as char;
-        if length == 0 { break }
-        { // isolation to make borrow checker happy
+        if length == 0 {
+            break;
+        }
+        {
+            // isolation to make borrow checker happy
             let filtered = buf.chars().filter_map(|c| {
                 let res = translator.translate(&c, &prev_c);
                 if res.is_some() {
@@ -182,7 +189,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("d", "delete", "delete characters in SET1");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("s", "squeeze", "replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character");
-    opts.optflag("t", "truncate-set1", "first truncate SET1 to length of SET2");
+    opts.optflag(
+        "t",
+        "truncate-set1",
+        "first truncate SET1 to length of SET2",
+    );
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {

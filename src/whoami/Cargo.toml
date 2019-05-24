@@ -2,21 +2,22 @@
 name = "whoami"
 version = "0.0.1"
 authors = []
+description = "Print effective user ID."
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_whoami"
 path = "whoami.rs"
 
 [dependencies]
-getopts = "0.2.14"
-winapi = "0.2.8"
+clap = "2.32"
+winapi = { version = "0.3", features = ["lmcons"] }
 advapi32-sys = "0.2.0"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
-features = ["entries"]
+version = "0.0.1"
+features = ["entries", "wide"]
 
 [[bin]]
 name = "whoami"
-path = "main.rs"
+path = "../../uumain.rs"

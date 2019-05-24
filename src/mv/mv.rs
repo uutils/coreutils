@@ -16,11 +16,11 @@ extern crate uucore;
 
 use std::fs;
 use std::env;
-use std::io::{BufRead, BufReader, Result, stdin, Write};
+use std::io::{stdin, Result};
 use std::path::{Path, PathBuf};
 
-static NAME: &'static str = "mv";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "mv";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct Behaviour {
     overwrite: OverwriteMode,
@@ -50,29 +50,37 @@ pub enum BackupMode {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflagopt("",
-                    "backup",
-                    "make a backup of each existing destination file",
-                    "CONTROL");
+    opts.optflagopt(
+        "",
+        "backup",
+        "make a backup of each existing destination file",
+        "CONTROL",
+    );
     opts.optflag("b", "", "like --backup but does not accept an argument");
     opts.optflag("f", "force", "do not prompt before overwriting");
     opts.optflag("i", "interactive", "prompt before override");
     opts.optflag("n", "no-clobber", "do not overwrite an existing file");
-    opts.optflag("",
-                 "strip-trailing-slashes",
-                 "remove any trailing slashes from each SOURCE\n \
-                                                 argument");
+    opts.optflag(
+        "",
+        "strip-trailing-slashes",
+        "remove any trailing slashes from each SOURCE\n \
+         argument",
+    );
     opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
-    opts.optopt("t",
-                "target-directory",
-                "move all SOURCE arguments into DIRECTORY",
-                "DIRECTORY");
+    opts.optopt(
+        "t",
+        "target-directory",
+        "move all SOURCE arguments into DIRECTORY",
+        "DIRECTORY",
+    );
     opts.optflag("T", "no-target-directory", "treat DEST as a normal file");
-    opts.optflag("u",
-                 "update",
-                 "move only when the SOURCE file is newer\n \
-                                than the destination file or when the\n \
-                                destination file is missing");
+    opts.optflag(
+        "u",
+        "update",
+        "move only when the SOURCE file is newer\n \
+         than the destination file or when the\n \
+         destination file is missing",
+    );
     opts.optflag("v", "verbose", "explain what is being done");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
@@ -90,9 +98,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let backup_mode = determine_backup_mode(&matches);
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
-        show_error!("options --backup and --no-clobber are mutually exclusive\n\
-                    Try '{} --help' for more information.",
-                    NAME);
+        show_error!(
+            "options --backup and --no-clobber are mutually exclusive\n\
+             Try '{} --help' for more information.",
+            NAME
+        );
         return 1;
     }
 
@@ -158,20 +168,21 @@ fn determine_backup_mode(matches: &getopts::Matches) -> BackupMode {
     } else if matches.opt_present("backup") {
         match matches.opt_str("backup") {
             None => BackupMode::SimpleBackup,
-            Some(mode) => {
-                match &mode[..] {
-                    "simple" | "never" => BackupMode::SimpleBackup,
-                    "numbered" | "t" => BackupMode::NumberedBackup,
-                    "existing" | "nil" => BackupMode::ExistingBackup,
-                    "none" | "off" => BackupMode::NoBackup,
-                    x => {
-                        crash!(1, "invalid argument ‘{}’ for ‘backup type’\n\
-                                Try '{} --help' for more information.",
-                                    x,
-                                    NAME);
-                    }
+            Some(mode) => match &mode[..] {
+                "simple" | "never" => BackupMode::SimpleBackup,
+                "numbered" | "t" => BackupMode::NumberedBackup,
+                "existing" | "nil" => BackupMode::ExistingBackup,
+                "none" | "off" => BackupMode::NoBackup,
+                x => {
+                    crash!(
+                        1,
+                        "invalid argument ‘{}’ for ‘backup type’\n\
+                         Try '{} --help' for more information.",
+                        x,
+                        NAME
+                    );
                 }
-            }
+            },
         }
     } else {
         BackupMode::NoBackup
@@ -183,9 +194,12 @@ fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) 
         match matches.opt_str("suffix") {
             Some(x) => x,
             None => {
-                crash!(1, "option '--suffix' requires an argument\n\
-                            Try '{} --help' for more information.",
-                            NAME);
+                crash!(
+                    1,
+                    "option '--suffix' requires an argument\n\
+                     Try '{} --help' for more information.",
+                    NAME
+                );
             }
         }
     } else {
@@ -198,13 +212,13 @@ fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) 
 }
 
 fn help(usage: &str) {
-    println!("{0} {1}\n\n\
-    Usage: {0} SOURCE DEST\n   \
-       or: {0} SOURCE... DIRECTORY\n\n\
-    {2}",
-             NAME,
-             VERSION,
-             usage);
+    println!(
+        "{0} {1}\n\n\
+         Usage: {0} SOURCE DEST\n   \
+         or: {0} SOURCE... DIRECTORY\n\n\
+         {2}",
+        NAME, VERSION, usage
+    );
 }
 
 fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
@@ -213,31 +227,40 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
     }
     match files.len() {
         0 | 1 => {
-            show_error!("missing file operand\n\
-                        Try '{} --help' for more information.",
-                        NAME);
+            show_error!(
+                "missing file operand\n\
+                 Try '{} --help' for more information.",
+                NAME
+            );
             return 1;
         }
         2 => {
             let source = &files[0];
             let target = &files[1];
             if !source.exists() {
-                show_error!("cannot stat ‘{}’: No such file or directory",
-                            source.display());
+                show_error!(
+                    "cannot stat ‘{}’: No such file or directory",
+                    source.display()
+                );
                 return 1;
             }
 
             if target.is_dir() {
                 if b.no_target_dir {
                     if !source.is_dir() {
-                        show_error!("cannot overwrite directory ‘{}’ with non-directory",
-                                    target.display());
+                        show_error!(
+                            "cannot overwrite directory ‘{}’ with non-directory",
+                            target.display()
+                        );
                         return 1;
                     }
 
                     return match rename(source, target, &b) {
                         Err(e) => {
-                            show_error!("{}", e);
+                            show_error!(
+                                "cannot move ‘{}’ to ‘{}’: {}",
+                                source.display(), target.display(), e
+                            );
                             1
                         }
                         _ => 0,
@@ -245,6 +268,12 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                 }
 
                 return move_files_into_dir(&[source.clone()], target, &b);
+            } else if target.exists() && source.is_dir() {
+                show_error!(
+                    "cannot overwrite non-directory ‘{}’ with directory ‘{}’",
+                    target.display(), source.display()
+                );
+                return 1;
             }
 
             if let Err(e) = rename(source, target, &b) {
@@ -254,10 +283,12 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
         }
         _ => {
             if b.no_target_dir {
-                show_error!("mv: extra operand ‘{}’\n\
-                            Try '{} --help' for more information.",
-                            files[2].display(),
-                            NAME);
+                show_error!(
+                    "mv: extra operand ‘{}’\n\
+                     Try '{} --help' for more information.",
+                    files[2].display(),
+                    NAME
+                );
                 return 1;
             }
             let target_dir = files.last().unwrap();
@@ -275,11 +306,13 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.as_os_str().to_str() {
+        let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
             None => {
-                show_error!("cannot stat ‘{}’: No such file or directory",
-                            sourcepath.display());
+                show_error!(
+                    "cannot stat ‘{}’: No such file or directory",
+                    sourcepath.display()
+                );
 
                 all_successful = false;
                 continue;
@@ -287,10 +320,12 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
         };
 
         if let Err(e) = rename(sourcepath, &targetpath, b) {
-            show_error!("mv: cannot move ‘{}’ to ‘{}’: {}",
-                        sourcepath.display(),
-                        targetpath.display(),
-                        e);
+            show_error!(
+                "mv: cannot move ‘{}’ to ‘{}’: {}",
+                sourcepath.display(),
+                targetpath.display(),
+                e
+            );
             all_successful = false;
         }
     }
@@ -323,17 +358,30 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
         };
         if let Some(ref p) = backup_path {
-            try!(fs::rename(to, p));
+            fs::rename(to, p)?;
         }
 
         if b.update {
-            if try!(try!(fs::metadata(from)).modified()) <= try!(try!(fs::metadata(to)).modified()) {
+            if fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
+            {
                 return Ok(());
             }
         }
     }
 
-    try!(fs::rename(from, to));
+    // "to" may no longer exist if it was backed up
+    if to.exists() && to.is_dir() {
+        // normalize behavior between *nix and windows
+        if from.is_dir() {
+            if is_empty_dir(to) {
+                fs::remove_dir(to)?
+            } else {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
+            }
+        }
+    }
+
+    fs::rename(from, to)?;
 
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
@@ -347,13 +395,11 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
 
 fn read_yes() -> bool {
     let mut s = String::new();
-    match BufReader::new(stdin()).read_line(&mut s) {
-        Ok(_) => {
-            match s.chars().nth(0) {
-                Some(x) => x == 'y' || x == 'Y',
-                _ => false,
-            }
-        }
+    match stdin().read_line(&mut s) {
+        Ok(_) => match s.chars().nth(0) {
+            Some(x) => x == 'y' || x == 'Y',
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -378,5 +424,14 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
         numbered_backup_path(path)
     } else {
         simple_backup_path(path, suffix)
+    }
+}
+
+fn is_empty_dir(path: &PathBuf) -> bool {
+    match fs::read_dir(path) {
+        Ok(contents) => {
+            return contents.peekable().peek().is_none();
+        },
+        Err(_e) => { return false; }
     }
 }

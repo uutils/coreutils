@@ -2,6 +2,7 @@
 name = "chown"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_chown"
@@ -9,17 +10,16 @@ path = "chown.rs"
 
 [dependencies]
 glob = "0.2.11"
-walkdir = "0.1"
+walkdir = "2.1"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["entries", "fs"]
 
 [dependencies.clippy]
-version = "0.0.143"
+version = "0.0.212"
 optional = true
 
 [[bin]]
 name = "chown"
-path = "main.rs"
+path = "../../uumain.rs"

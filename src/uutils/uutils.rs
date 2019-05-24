@@ -13,10 +13,12 @@ include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 
 use std::collections::hash_map::HashMap;
 use std::path::Path;
-use std::env;
+use std::io::Write;
 
-static NAME: &'static str = "uutils";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+extern crate uucore;
+
+static NAME: &str = "uutils";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
@@ -34,20 +36,23 @@ fn usage(cmap: &UtilityMap) {
 }
 
 fn main() {
+    uucore::panic::install_sigpipe_hook();
+
     let umap = util_map();
-    let mut args : Vec<String> = env::args().collect();
+    let mut args: Vec<String> = uucore::args().collect();
 
     // try binary name as util name.
     let args0 = args[0].clone();
     let binary = Path::new(&args0[..]);
-    let binary_as_util = binary.file_name().unwrap().to_str().unwrap();
+    let binary_as_util = binary.file_stem().unwrap().to_str().unwrap();
 
     if let Some(&uumain) = umap.get(binary_as_util) {
         std::process::exit(uumain(args));
     }
 
-    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils") ||
-     binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox") {
+    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils")
+        || binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox")
+    {
         args.remove(0);
     } else {
         let mut found = false;
@@ -58,7 +63,7 @@ fn main() {
                 break;
             }
         }
-        if ! found {
+        if !found {
             println!("{}: applet not found", binary_as_util);
             std::process::exit(1);
         }
@@ -66,7 +71,6 @@ fn main() {
 
     // try first arg as util name.
     if args.len() >= 1 {
-
         let util = &args[0][..];
 
         match umap.get(util) {
@@ -74,13 +78,15 @@ fn main() {
                 std::process::exit(uumain(args.clone()));
             }
             None => {
-                if &args[0][..] == "--help" {
+                if &args[0][..] == "--help" || &args[0][..] == "-h" {
                     // see if they want help on a specific util
                     if args.len() >= 2 {
                         let util = &args[1][..];
                         match umap.get(util) {
                             Some(&uumain) => {
-                                std::process::exit(uumain(vec![util.to_owned(), "--help".to_owned()]));
+                                let code = uumain(vec![util.to_owned(), "--help".to_owned()]);
+                                std::io::stdout().flush().expect("could not flush stdout");
+                                std::process::exit(code);
                             }
                             None => {
                                 println!("{}: applet not found", util);

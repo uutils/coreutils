@@ -1,17 +1,35 @@
+#[macro_use]
+extern crate cpp;
 extern crate libc;
 
 #[macro_use]
 extern crate uucore;
 
-use libc::{c_int, size_t, c_char, FILE, _IOFBF, _IONBF, _IOLBF};
+use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
-use std::io::Write;
 use std::ptr;
 
-extern {
-    static stdin: *mut FILE;
-    static stdout: *mut FILE;
-    static stderr: *mut FILE;
+cpp!{{
+    #include <cstdio>
+
+    extern "C" {
+        void __stdbuf(void);
+
+        void __attribute((constructor))
+        __stdbuf_init(void) {
+            __stdbuf();
+        }
+
+        FILE *__stdbuf_get_stdin() { return stdin; }
+        FILE *__stdbuf_get_stdout() { return stdout; }
+        FILE *__stdbuf_get_stderr() { return stderr; }
+    }
+}}
+
+extern "C" {
+    fn __stdbuf_get_stdin() -> *mut FILE;
+    fn __stdbuf_get_stdout() -> *mut FILE;
+    fn __stdbuf_get_stderr() -> *mut FILE;
 }
 
 fn set_buffer(stream: *mut FILE, value: &str) {
@@ -21,7 +39,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         input => {
             let buff_size: usize = match input.parse() {
                 Ok(num) => num,
-                Err(e) => crash!(1, "incorrect size of buffer!: {}", e)
+                Err(e) => crash!(1, "incorrect size of buffer!: {}", e),
             };
             (_IOFBF, buff_size as size_t)
         }
@@ -38,14 +56,14 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 }
 
 #[no_mangle]
-pub unsafe extern fn stdbuf() {
+pub unsafe extern "C" fn __stdbuf() {
     if let Ok(val) = env::var("_STDBUF_E") {
-        set_buffer(stderr, &val);
+        set_buffer(__stdbuf_get_stderr(), &val);
     }
     if let Ok(val) = env::var("_STDBUF_I") {
-        set_buffer(stdin, &val);
+        set_buffer(__stdbuf_get_stdin(), &val);
     }
     if let Ok(val) = env::var("_STDBUF_O") {
-        set_buffer(stdout, &val);
+        set_buffer(__stdbuf_get_stdout(), &val);
     }
 }

@@ -2,15 +2,19 @@
 name = "sleep"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_sleep"
 path = "sleep.rs"
 
 [dependencies]
-getopts = "0.2.14"
-uucore = { path="../uucore" }
+getopts = "0.2.18"
+
+[dependencies.uucore]
+version = "0.0.1"
+features = ["parse_time"]
 
 [[bin]]
 name = "sleep"
-path = "main.rs"
+path = "../../uumain.rs"

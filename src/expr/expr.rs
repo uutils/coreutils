@@ -9,67 +9,79 @@
  * file that was distributed with this source code.
  */
 
+extern crate onig;
 #[macro_use]
 extern crate uucore;
-extern crate onig;
 
 mod tokens;
 mod syntax_tree;
 
-use std::io::{Write};
-
-static NAME: &'static str = "expr";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "expr";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
-	// For expr utility we do not want getopts.
-	// The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
+    // For expr utility we do not want getopts.
+    // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
 
-	if maybe_handle_help_or_version( &args ) { 0 }
-	else {
-		let token_strings = args[1..].to_vec();
+    if maybe_handle_help_or_version(&args) {
+        0
+    } else {
+        let token_strings = args[1..].to_vec();
 
-		match process_expr( &token_strings ) {
-			Ok( expr_result ) => print_expr_ok( &expr_result ),
-			Err( expr_error ) => print_expr_error( &expr_error )
-		}
-	}
+        match process_expr(&token_strings) {
+            Ok(expr_result) => print_expr_ok(&expr_result),
+            Err(expr_error) => print_expr_error(&expr_error),
+        }
+    }
 }
 
-fn process_expr( token_strings: &Vec<String> ) -> Result< String, String > {
-	let maybe_tokens = tokens::strings_to_tokens( &token_strings );
-	let maybe_ast = syntax_tree::tokens_to_ast( maybe_tokens );
-	evaluate_ast( maybe_ast )
+fn process_expr(token_strings: &[String]) -> Result<String, String> {
+    let maybe_tokens = tokens::strings_to_tokens(&token_strings);
+    let maybe_ast = syntax_tree::tokens_to_ast(maybe_tokens);
+    evaluate_ast(maybe_ast)
 }
 
-fn print_expr_ok( expr_result: &String ) -> i32 {
-	println!("{}", expr_result);
-	if expr_result == "0" || expr_result == "" { 1 }
-	else { 0 }
+fn print_expr_ok(expr_result: &str) -> i32 {
+    println!("{}", expr_result);
+    if expr_result == "0" || expr_result == "" {
+        1
+    } else {
+        0
+    }
 }
 
-fn print_expr_error( expr_error: &String ) -> ! {
-	crash!(2, "{}", expr_error)
+fn print_expr_error(expr_error: &str) -> ! {
+    crash!(2, "{}", expr_error)
 }
 
-fn evaluate_ast( maybe_ast: Result<Box<syntax_tree::ASTNode>, String> ) -> Result<String, String> {
-	if maybe_ast.is_err() { Err( maybe_ast.err().unwrap() ) }
-	else { maybe_ast.ok().unwrap().evaluate() }
+fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::ASTNode>, String>) -> Result<String, String> {
+    if maybe_ast.is_err() {
+        Err(maybe_ast.err().unwrap())
+    } else {
+        maybe_ast.ok().unwrap().evaluate()
+    }
 }
 
-fn maybe_handle_help_or_version( args: &Vec<String> ) -> bool {
-	if args.len() == 2 {
-		if args[1] == "--help" { print_help(); true }
-		else if args[1] == "--version" { print_version(); true }
-		else { false }
-	}
-	else { false }
+fn maybe_handle_help_or_version(args: &[String]) -> bool {
+    if args.len() == 2 {
+        if args[1] == "--help" {
+            print_help();
+            true
+        } else if args[1] == "--version" {
+            print_version();
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    }
 }
 
 fn print_help() {
-	//! The following is taken from GNU coreutils' "expr --help" output.
-	print!(
-r#"Usage: expr EXPRESSION
+    //! The following is taken from GNU coreutils' "expr --help" output.
+    print!(
+        r#"Usage: expr EXPRESSION
   or:  expr OPTION
 
       --help       display this help and exit
@@ -121,9 +133,9 @@ Environment variables:
 	* EXPR_DEBUG_SYA_STEP=1 dump each parser step
 	* EXPR_DEBUG_AST=1      dump expression represented abstract syntax tree
 "#
-	);
+    );
 }
 
 fn print_version() {
-	println!("{} {}", NAME, VERSION);
+    println!("{} {}", NAME, VERSION);
 }

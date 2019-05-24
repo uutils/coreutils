@@ -2,16 +2,16 @@
 name = "pinky"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_pinky"
 path = "pinky.rs"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["utmpx", "entries"]
 
 [[bin]]
 name = "pinky"
-path = "main.rs"
+path = "../../uumain.rs"

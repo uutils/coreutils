@@ -45,22 +45,52 @@ fn test_escape_form_feed() {
 
 #[test]
 fn test_escape_hex() {
-    new_ucmd!().args(&["-e", "\\x41"]).succeeds().stdout_only("A");
+    new_ucmd!().args(&["-e", "\\x41"]).succeeds().stdout_only("A\n");
+}
+
+#[test]
+fn test_escape_short_hex() {
+    new_ucmd!().args(&["-e", "foo\\xa bar"]).succeeds().stdout_only("foo\n bar\n");
+}
+
+#[test]
+fn test_escape_no_hex() {
+    new_ucmd!().args(&["-e", "foo\\x bar"]).succeeds().stdout_only("foo\\x bar\n");
+}
+
+#[test]
+fn test_escape_one_slash() {
+    new_ucmd!().args(&["-e", "foo\\ bar"]).succeeds().stdout_only("foo\\ bar\n");
+}
+
+#[test]
+fn test_escape_one_slash_multi() {
+    new_ucmd!().args(&["-e", "foo\\", "bar"]).succeeds().stdout_only("foo\\ bar\n");
 }
 
 #[test]
 fn test_escape_newline() {
-    new_ucmd!().args(&["-e", "\\na"]).succeeds().stdout_only("\na");
+    new_ucmd!().args(&["-e", "\\na"]).succeeds().stdout_only("\na\n");
 }
 
 #[test]
 fn test_escape_no_further_output() {
-    new_ucmd!().args(&["-e", "a\\cb"]).succeeds().stdout_only("a\n");
+    new_ucmd!().args(&["-e", "a\\cb", "c"]).succeeds().stdout_only("a\n");
 }
 
 #[test]
 fn test_escape_octal() {
-    new_ucmd!().args(&["-e", "\\0100"]).succeeds().stdout_only("@");
+    new_ucmd!().args(&["-e", "\\0100"]).succeeds().stdout_only("@\n");
+}
+
+#[test]
+fn test_escape_short_octal() {
+    new_ucmd!().args(&["-e", "foo\\040bar"]).succeeds().stdout_only("foo bar\n");
+}
+
+#[test]
+fn test_escape_no_octal() {
+    new_ucmd!().args(&["-e", "foo\\0 bar"]).succeeds().stdout_only("foo\\0 bar\n");
 }
 
 #[test]

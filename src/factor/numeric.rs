@@ -92,7 +92,7 @@ fn witness(mut a: u64, exponent: u64, m: u64) -> bool {
         big_mul as fn(u64, u64, u64) -> u64
     };
 
-    if pow(a, m-1, m, mul) != 1 {
+    if pow(a, m - 1, m, mul) != 1 {
         return true;
     }
     a = pow(a, exponent, m, mul);
@@ -103,7 +103,7 @@ fn witness(mut a: u64, exponent: u64, m: u64) -> bool {
         if a == 1 {
             return true;
         }
-        if a == m-1 {
+        if a == m - 1 {
             return false;
         }
         a = mul(a, a, m);
@@ -126,5 +126,7 @@ pub fn is_prime(num: u64) -> bool {
     // These witnesses detect all composites up to at least 2^64.
     // Discovered by Jim Sinclair, according to http://miller-rabin.appspot.com
     let witnesses = [2, 325, 9375, 28178, 450775, 9780504, 1795265022];
-    ! witnesses.iter().any(|&wit| witness(wit % num, exponent, num))
+    !witnesses
+        .iter()
+        .any(|&wit| witness(wit % num, exponent, num))
 }

@@ -10,29 +10,32 @@
  */
 
 extern crate libc;
+#[cfg(target_os = "redox")]
+extern crate syscall;
 
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::env::{args_os};
-use std::str::{from_utf8};
+use std::env::args_os;
+use std::str::from_utf8;
 
-static NAME: &'static str = "test";
+static NAME: &str = "test";
 
 // TODO: decide how to handle non-UTF8 input for all the utils
 // Definitely don't use [u8], try keeping it as OsStr or OsString instead
 pub fn uumain(_: Vec<String>) -> i32 {
     let args = args_os().collect::<Vec<OsString>>();
     // This is completely disregarding valid windows paths that aren't valid unicode
-    let args = args.iter().map(|a| a.to_str().unwrap().as_bytes()).collect::<Vec<&[u8]>>();
+    let args = args.iter()
+        .map(|a| a.to_str().unwrap().as_bytes())
+        .collect::<Vec<&[u8]>>();
     if args.is_empty() {
         return 2;
     }
-    let args =
-        if !args[0].ends_with(NAME.as_bytes()) {
-            &args[1..]
-        } else {
-            &args[..]
-        };
+    let args = if !args[0].ends_with(NAME.as_bytes()) {
+        &args[1..]
+    } else {
+        &args[..]
+    };
     let args = match args[0] {
         b"[" => match args[args.len() - 1] {
             b"]" => &args[1..args.len() - 1],
@@ -98,15 +101,13 @@ fn three(args: &[&[u8]], error: &mut bool) -> bool {
                 *error = true;
                 false
             }
-        }
+        },
     }
 }
 
 fn four(args: &[&[u8]], error: &mut bool) -> bool {
     match args[0] {
-        b"!" => {
-            !three(&args[1..], error)
-        }
+        b"!" => !three(&args[1..], error),
         _ => {
             *error = true;
             false
@@ -133,19 +134,25 @@ fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
         _ => return false,
     };
     match cond {
-        IntegerCondition::Equal        => a == b,
-        IntegerCondition::Unequal      => a != b,
-        IntegerCondition::Greater      => a >  b,
+        IntegerCondition::Equal => a == b,
+        IntegerCondition::Unequal => a != b,
+        IntegerCondition::Greater => a > b,
         IntegerCondition::GreaterEqual => a >= b,
-        IntegerCondition::Less         => a <  b,
-        IntegerCondition::LessEqual    => a <= b,
+        IntegerCondition::Less => a < b,
+        IntegerCondition::LessEqual => a <= b,
     }
 }
 
 fn isatty(fd: &[u8]) -> bool {
-    use libc::{isatty};
-    from_utf8(fd).ok().and_then(|s| s.parse().ok())
-            .map_or(false, |i| unsafe { isatty(i) == 1 })
+    from_utf8(fd)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .map_or(false, |i| {
+            #[cfg(not(target_os = "redox"))]
+            unsafe { libc::isatty(i) == 1 }
+            #[cfg(target_os = "redox")]
+            syscall::dup(i, b"termios").map(syscall::close).is_ok()
+        })
 }
 
 fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
@@ -157,7 +164,7 @@ fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
         1 => (one(*args), 1),
         2 => dispatch_two(args, error),
         3 => dispatch_three(args, error),
-        _ => dispatch_four(args, error)
+        _ => dispatch_four(args, error),
     };
     *args = &(*args)[idx..];
     val
@@ -196,12 +203,12 @@ fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
 #[derive(Clone, Copy)]
 enum Precedence {
     Unknown = 0,
-    Paren,     // FIXME: this is useless (parentheses have not been implemented)
+    Paren, // FIXME: this is useless (parentheses have not been implemented)
     Or,
     And,
     BUnOp,
     BinOp,
-    UnOp
+    UnOp,
 }
 
 fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
@@ -219,11 +226,13 @@ fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
     }
 }
 
-fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
-                         args: &mut &[&'a [u8]],
-                         mut lhs: bool,
-                         min_prec: Precedence,
-                         error: &mut bool) -> bool {
+fn parse_expr_helper<'a>(
+    hashmap: &HashMap<&'a [u8], Precedence>,
+    args: &mut &[&'a [u8]],
+    mut lhs: bool,
+    min_prec: Precedence,
+    error: &mut bool,
+) -> bool {
     let mut prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
         *error = true;
         &min_prec
@@ -249,9 +258,16 @@ fn parse_expr_helper<'a>(hashmap: &HashMap<&'a [u8], Precedence>,
             }
             Precedence::And => lhs && rhs,
             Precedence::Or => lhs || rhs,
-            Precedence::BinOp => three(&[if lhs { b" " } else { b"" }, op, if rhs { b" " } else { b"" }], error),
-            Precedence::Paren => unimplemented!(),  // TODO: implement parentheses
-            _ => unreachable!()
+            Precedence::BinOp => three(
+                &[
+                    if lhs { b" " } else { b"" },
+                    op,
+                    if rhs { b" " } else { b"" },
+                ],
+                error,
+            ),
+            Precedence::Paren => unimplemented!(), // TODO: implement parentheses
+            _ => unreachable!(),
         };
         if args.len() > 0 {
             prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
@@ -326,60 +342,66 @@ enum PathCondition {
 
 #[cfg(not(windows))]
 fn path(path: &[u8], cond: PathCondition) -> bool {
-    use libc::{stat, lstat, S_IFMT, S_IFLNK, S_IFBLK, S_IFCHR, S_IFDIR, S_IFREG};
-    use libc::{S_IFIFO, mode_t};
-    use std::ffi::CString;
+    use std::os::unix::fs::{MetadataExt, FileTypeExt};
+    use std::os::unix::ffi::OsStrExt;
+    use std::fs::{self, Metadata};
+    use std::ffi::OsStr;
 
-    static S_ISUID: mode_t = 0o4000;
-    static S_ISGID: mode_t = 0o2000;
-    static S_IFSOCK: mode_t = 0o140000;
+    let path = OsStr::from_bytes(path);
+
+    const S_ISUID: u32 = 0o4000;
+    const S_ISGID: u32 = 0o2000;
 
     enum Permission {
-        Read    = 0o4,
-        Write   = 0o2,
+        Read = 0o4,
+        Write = 0o2,
         Execute = 0o1,
     }
-    let perm = |stat: stat, p: Permission| {
-        use libc::{getgid, getuid};
-        let (uid, gid) = unsafe { (getuid(), getgid()) };
-        if uid == stat.st_uid {
-            stat.st_mode & ((p as mode_t) << 6) != 0
-        } else if gid == stat.st_gid {
-            stat.st_mode & ((p as mode_t) << 3) != 0
+
+    let perm = |metadata: Metadata, p: Permission| {
+        #[cfg(not(target_os = "redox"))]
+        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        #[cfg(target_os = "redox")]
+        let (uid, gid) = (syscall::getuid().unwrap() as u32,
+                          syscall::getgid().unwrap() as u32);
+
+        if uid == metadata.uid() {
+            metadata.mode() & ((p as u32) << 6) != 0
+        } else if gid == metadata.gid() {
+            metadata.mode() & ((p as u32) << 3) != 0
         } else {
-            stat.st_mode & ((p as mode_t)) != 0
+            metadata.mode() & ((p as u32)) != 0
         }
     };
 
-    let path = CString::new(path).unwrap();
-    let mut stat = unsafe { std::mem::zeroed() };
-    if cond == PathCondition::SymLink {
-        if unsafe { lstat(path.as_ptr(), &mut stat) } == 0 {
-            if stat.st_mode & S_IFMT == S_IFLNK {
-                return true;
-            }
-        }
-        return false;
-    }
-    if unsafe { libc::stat(path.as_ptr(), &mut stat) } != 0 {
-        return false;
-    }
-    let file_type = stat.st_mode & S_IFMT;
+    let metadata = if cond == PathCondition::SymLink {
+        fs::symlink_metadata(path)
+    } else {
+        fs::metadata(path)
+    };
+
+    let metadata = match metadata {
+        Ok(metadata) => metadata,
+        Err(_) => { return false; }
+    };
+
+    let file_type = metadata.file_type();
+
     match cond {
-        PathCondition::BlockSpecial     => file_type == S_IFBLK,
-        PathCondition::CharacterSpecial => file_type == S_IFCHR,
-        PathCondition::Directory        => file_type == S_IFDIR,
-        PathCondition::Exists           => true,
-        PathCondition::Regular          => file_type == S_IFREG,
-        PathCondition::GroupIDFlag      => stat.st_mode & S_ISGID != 0,
-        PathCondition::SymLink          => true,
-        PathCondition::FIFO             => file_type == S_IFIFO,
-        PathCondition::Readable         => perm(stat, Permission::Read),
-        PathCondition::Socket           => file_type == S_IFSOCK,
-        PathCondition::NonEmpty         => stat.st_size > 0,
-        PathCondition::UserIDFlag       => stat.st_mode & S_ISUID != 0,
-        PathCondition::Writable         => perm(stat, Permission::Write),
-        PathCondition::Executable       => perm(stat, Permission::Execute),
+        PathCondition::BlockSpecial => file_type.is_block_device(),
+        PathCondition::CharacterSpecial => file_type.is_char_device(),
+        PathCondition::Directory => file_type.is_dir(),
+        PathCondition::Exists => true,
+        PathCondition::Regular => file_type.is_file(),
+        PathCondition::GroupIDFlag => metadata.mode() & S_ISGID != 0,
+        PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::FIFO => file_type.is_fifo(),
+        PathCondition::Readable => perm(metadata, Permission::Read),
+        PathCondition::Socket => file_type.is_socket(),
+        PathCondition::NonEmpty => metadata.size() > 0,
+        PathCondition::UserIDFlag => metadata.mode() & S_ISUID != 0,
+        PathCondition::Writable => perm(metadata, Permission::Write),
+        PathCondition::Executable => perm(metadata, Permission::Execute),
     }
 }
 
@@ -392,19 +414,19 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         _ => return false,
     };
     match cond {
-        PathCondition::BlockSpecial     => false,
+        PathCondition::BlockSpecial => false,
         PathCondition::CharacterSpecial => false,
-        PathCondition::Directory        => stat.is_dir(),
-        PathCondition::Exists           => true,
-        PathCondition::Regular          => stat.is_file(),
-        PathCondition::GroupIDFlag      => false,
-        PathCondition::SymLink          => false,
-        PathCondition::FIFO             => false,
-        PathCondition::Readable         => false, // TODO
-        PathCondition::Socket           => false,
-        PathCondition::NonEmpty         => stat.len() > 0,
-        PathCondition::UserIDFlag       => false,
-        PathCondition::Writable         => false, // TODO
-        PathCondition::Executable       => false, // TODO
+        PathCondition::Directory => stat.is_dir(),
+        PathCondition::Exists => true,
+        PathCondition::Regular => stat.is_file(),
+        PathCondition::GroupIDFlag => false,
+        PathCondition::SymLink => false,
+        PathCondition::FIFO => false,
+        PathCondition::Readable => false, // TODO
+        PathCondition::Socket => false,
+        PathCondition::NonEmpty => stat.len() > 0,
+        PathCondition::UserIDFlag => false,
+        PathCondition::Writable => false,   // TODO
+        PathCondition::Executable => false, // TODO
     }
 }

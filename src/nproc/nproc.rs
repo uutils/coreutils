@@ -18,7 +18,6 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
 use std::env;
 
 #[cfg(target_os = "linux")]
@@ -30,14 +29,17 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
 #[cfg(target_os = "netbsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 
-
-static NAME: &'static str = "nproc";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "nproc";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optflag("", "all", "print the number of cores available to the system");
+    opts.optflag(
+        "",
+        "all",
+        "print the number of cores available to the system",
+    );
     opts.optopt("", "ignore", "ignore up to N cores", "N");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
@@ -56,12 +58,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.opt_present("help") {
-        let msg = format!("{0} {1}
+        let msg = format!(
+            "{0} {1}
 
 Usage:
   {0} [OPTIONS]...
 
-Print the number of cores available to the current process.", NAME, VERSION);
+Print the number of cores available to the current process.",
+            NAME, VERSION
+        );
 
         print!("{}", opts.usage(&msg));
         return 0;
@@ -75,16 +80,16 @@ Print the number of cores available to the current process.", NAME, VERSION);
                 return 1;
             }
         },
-        None => 0
+        None => 0,
     };
 
     if !matches.opt_present("all") {
         ignore += match env::var("OMP_NUM_THREADS") {
             Ok(threadstr) => match threadstr.parse() {
                 Ok(num) => num,
-                Err(_)=> 0
+                Err(_) => 0,
             },
-            Err(_) => 0
+            Err(_) => 0,
         };
     }
 
@@ -103,10 +108,7 @@ Print the number of cores available to the current process.", NAME, VERSION);
     0
 }
 
-#[cfg(any(target_os = "linux",
-          target_os = "macos",
-          target_os = "freebsd",
-          target_os = "netbsd"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "netbsd"))]
 fn num_cpus_all() -> usize {
     let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
     if nprocs == 1 {
@@ -114,14 +116,16 @@ fn num_cpus_all() -> usize {
         // However, we want to guarantee that `nproc --all` >= `nproc`.
         num_cpus::get()
     } else {
-        if nprocs > 0 { nprocs as usize } else { 1 }
+        if nprocs > 0 {
+            nprocs as usize
+        } else {
+            1
+        }
     }
 }
 
 // Other platform(e.g., windows), num_cpus::get() directly.
-#[cfg(not(any(target_os = "linux",
-              target_os = "macos",
-              target_os = "freebsd",
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd",
               target_os = "netbsd")))]
 fn num_cpus_all() -> usize {
     num_cpus::get()

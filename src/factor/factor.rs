@@ -19,20 +19,22 @@ extern crate rand;
 extern crate uucore;
 
 use numeric::*;
-use prime_table::P_INVS_U64;
-use rand::distributions::{Range, IndependentSample};
+use rand::distributions::{Distribution, Uniform};
+use rand::{SeedableRng, thread_rng};
+use rand::rngs::SmallRng;
 use std::cmp::{max, min};
-use std::io::{stdin, BufRead, BufReader, Write};
+use std::io::{stdin, BufRead};
 use std::num::Wrapping;
 use std::mem::swap;
 
 mod numeric;
-mod prime_table;
 
-static SYNTAX: &'static str = "[OPTION] [NUMBER]..."; 
-static SUMMARY: &'static str = "Print the prime factors of the given number(s).
- If none are specified, read from standard input."; 
-static LONG_HELP: &'static str = ""; 
+include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
+
+static SYNTAX: &str = "[OPTION] [NUMBER]...";
+static SUMMARY: &str = "Print the prime factors of the given number(s).
+ If none are specified, read from standard input.";
+static LONG_HELP: &str = "";
 
 fn rho_pollard_pseudorandom_function(x: u64, a: u64, b: u64, num: u64) -> u64 {
     if num < 1 << 63 {
@@ -51,12 +53,12 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 fn rho_pollard_find_divisor(num: u64) -> u64 {
-    let range = Range::new(1, num);
-    let mut rng = rand::weak_rng();
-    let mut x = range.ind_sample(&mut rng);
+    let range = Uniform::new(1, num);
+    let mut rng = SmallRng::from_rng(&mut thread_rng()).unwrap();
+    let mut x = range.sample(&mut rng);
     let mut y = x;
-    let mut a = range.ind_sample(&mut rng);
-    let mut b = range.ind_sample(&mut rng);
+    let mut a = range.sample(&mut rng);
+    let mut b = range.sample(&mut rng);
 
     loop {
         x = rho_pollard_pseudorandom_function(x, a, b, num);
@@ -65,10 +67,10 @@ fn rho_pollard_find_divisor(num: u64) -> u64 {
         let d = gcd(num, max(x, y) - min(x, y));
         if d == num {
             // Failure, retry with different function
-            x = range.ind_sample(&mut rng);
+            x = range.sample(&mut rng);
             y = x;
-            a = range.ind_sample(&mut rng);
-            b = range.ind_sample(&mut rng);
+            a = range.sample(&mut rng);
+            b = range.sample(&mut rng);
         } else if d > 1 {
             return d;
         }
@@ -111,7 +113,7 @@ fn table_division(mut num: u64, factors: &mut Vec<u64>) {
         // See http://math.stackexchange.com/questions/1251327/
         // for a nice explanation.
         loop {
-            let Wrapping(x) = Wrapping(num) * Wrapping(inv);    // x = num * inv mod 2^64
+            let Wrapping(x) = Wrapping(num) * Wrapping(inv); // x = num * inv mod 2^64
             if x <= ceil {
                 num = x;
                 factors.push(prime);
@@ -129,11 +131,11 @@ fn table_division(mut num: u64, factors: &mut Vec<u64>) {
     // Decide whether to use Pollard Rho or slow divisibility based on
     // number's size:
     //if num >= 1 << 63 {
-        // number is too big to use rho pollard without overflowing
-        //trial_division_slow(num, factors);
+    // number is too big to use rho pollard without overflowing
+    //trial_division_slow(num, factors);
     //} else if num > 1 {
-        // number is still greater than 1, but not so big that we have to worry
-        rho_pollard_factor(num, factors);
+    // number is still greater than 1, but not so big that we have to worry
+    rho_pollard_factor(num, factors);
     //}
 }
 
@@ -148,7 +150,7 @@ fn print_factors(num: u64) {
     for fac in &factors {
         print!(" {}", fac);
     }
-    println!("");
+    println!();
 }
 
 fn print_factors_str(num_str: &str) {
@@ -158,11 +160,11 @@ fn print_factors_str(num_str: &str) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .parse(args);
+    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     if matches.free.is_empty() {
-        for line in BufReader::new(stdin()).lines() {
+        let stdin = stdin();
+        for line in stdin.lock().lines() {
             for number in line.unwrap().split_whitespace() {
                 print_factors_str(number);
             }

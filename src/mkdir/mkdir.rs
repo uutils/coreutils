@@ -16,11 +16,10 @@ extern crate libc;
 extern crate uucore;
 
 use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-static NAME: &'static str = "mkdir";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "mkdir";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /**
  * Handles option parsing
@@ -39,7 +38,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
 
     if args.len() == 1 || matches.opt_present("help") {
@@ -79,7 +78,10 @@ fn print_help(opts: &getopts::Options) {
     println!("{} {}", NAME, VERSION);
     println!("");
     println!("Usage:");
-    print!("{}", opts.usage("Create the given DIRECTORY(ies) if they do not exist"));
+    print!(
+        "{}",
+        opts.usage("Create the given DIRECTORY(ies) if they do not exist")
+    );
 }
 
 /**
@@ -90,29 +92,19 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
     let empty = Path::new("");
     for dir in &dirs {
         let path = Path::new(dir);
-        if recursive {
-            let mut pathbuf = PathBuf::new();
-            for component in path.components() {
-                pathbuf.push(component.as_os_str());
-                if !path.is_dir() {
-                    status |= mkdir(pathbuf.as_path(), mode, verbose);
-                }
-            }
-        } else {
-            match path.parent() {
-                Some(parent) => {
-                    if parent != empty && !parent.exists() {
-                        show_info!("cannot create directory '{}': No such file or directory", path.display());
-                        status = 1;
-                    } else {
-                        status |= mkdir(path, mode, verbose);
-                    }
-                },
-                None => {
-                    status |= mkdir(path, mode, verbose);
+        if !recursive {
+            if let Some(parent) = path.parent() {
+                if parent != empty && !parent.exists() {
+                    show_info!(
+                        "cannot create directory '{}': No such file or directory",
+                        path.display()
+                    );
+                    status = 1;
+                    continue;
                 }
             }
         }
+        status |= mkdir(path, recursive, mode, verbose);
     }
     status
 }
@@ -120,8 +112,9 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
 /**
  * Wrapper to catch errors, return 1 if failed
  */
-fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
-    if let Err(e) = fs::create_dir(path) {
+fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
+    let create_dir = if recursive { fs::create_dir_all } else { fs::create_dir };
+    if let Err(e) = create_dir(path) {
         show_info!("{}: {}", path.display(), e.to_string());
         return 1;
     }
@@ -130,16 +123,19 @@ fn mkdir(path: &Path, mode: u16, verbose: bool) -> i32 {
         show_info!("created directory '{}'", path.display());
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "redox"))]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        use std::ffi::CString;
-        use std::io::Error;
+        use fs::{Permissions, set_permissions};
+        use std::os::unix::fs::{PermissionsExt};
 
-        let directory = CString::new(path.as_os_str().to_str().unwrap()).unwrap_or_else(|e| crash!(1, "{}", e));
-        let mode = mode as libc::mode_t;
+        let mode = Permissions::from_mode(mode as u32);
 
-        if unsafe { libc::chmod(directory.as_ptr(), mode) } != 0 {
-            show_info!("{}: errno {}", path.display(), Error::last_os_error().raw_os_error().unwrap());
+        if let Err(err) = set_permissions(path, mode) {
+            show_error!(
+                "{}: {}",
+                path.display(),
+                err
+            );
             return 1;
         }
         0

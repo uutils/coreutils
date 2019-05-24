@@ -5,30 +5,34 @@ authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
 ]
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_cp"
 path = "cp.rs"
 
 [dependencies]
-getopts = "0.2.14"
-libc = "0.2.26"
-walkdir = "1.0.7"
-clap = "2.20.0"
-quick-error = "1.1.0"
-uucore = { path="../uucore" }
-filetime = "0.1"
+getopts = "0.2.18"
+libc = "0.2.42"
+walkdir = "2.1.4"
+clap = "2.32.0"
+quick-error = "1.2.2"
+filetime = "0.2"
+
+[dependencies.uucore]
+version = "0.0.1"
+features = ["fs"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-kernel32-sys = "*"
-winapi = "*"
+kernel32-sys = "0.2.2"
+winapi = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 xattr="0.2.1"
 
 [[bin]]
 name = "cp"
-path = "main.rs"
+path = "../../uumain.rs"

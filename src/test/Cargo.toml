@@ -2,15 +2,19 @@
 name = "test"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_test"
 path = "test.rs"
 
 [dependencies]
-libc = "0.2.26"
-uucore = { path="../uucore" }
+libc = "0.2.42"
+uucore = "0.0.1"
+
+[target.'cfg(target_os = "redox")'.dependencies]
+redox_syscall = "0.1"
 
 [[bin]]
 name = "test"
-path = "main.rs"
+path = "../../uumain.rs"

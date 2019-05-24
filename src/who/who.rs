@@ -6,23 +6,22 @@
 // file that was distributed with this source code.
 //
 #![crate_name = "uu_who"]
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
 use uucore::utmpx::{self, time, Utmpx};
-use uucore::libc::{STDIN_FILENO, ttyname, S_IWGRP};
+use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 
 use std::borrow::Cow;
-use std::io::prelude::*;
 use std::ffi::CStr;
 use std::path::PathBuf;
 use std::os::unix::fs::MetadataExt;
 
-static SYNTAX: &'static str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
-static SUMMARY: &'static str = "Print information about users who are currently logged in.";
-static LONG_HELP: &'static str = "
+static SYNTAX: &str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
+static SUMMARY: &str = "Print information about users who are currently logged in.";
+static LONG_HELP: &str = "
   -a, --all         same as -b -d --login -p -r -t -T -u
   -b, --boot        time of last system boot
   -d, --dead        print dead processes
@@ -32,7 +31,7 @@ static LONG_HELP: &'static str = "
   -m                only hostname and user associated with stdin
   -p, --process     print active processes spawned by init
   -q, --count       all login names and number of users logged on
-  -r, --runlevel    print current runlevel
+  -r, --runlevel    print current runlevel (not available on BSDs)
   -s, --short       print only name, line, and time (default)
   -t, --time        print last system clock change
   -T, -w, --mesg    add user's message status as +, - or ?
@@ -47,7 +46,6 @@ If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
     opts.optflag("b", "boot", "time of last system boot");
@@ -57,9 +55,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("", "lookup", "attempt to canonicalize hostnames via DNS");
     opts.optflag("m", "", "only hostname and user associated with stdin");
     opts.optflag("p", "process", "print active processes spawned by init");
-    opts.optflag("q",
-                 "count",
-                 "all login names and number of users logged on");
+    opts.optflag(
+        "q",
+        "count",
+        "all login names and number of users logged on",
+    );
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
     opts.optflag("r", "runlevel", "print current runlevel");
     opts.optflag("s", "short", "print only name, line, and time (default)");
     opts.optflag("t", "time", "print last system clock change");
@@ -95,7 +96,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // If true, display a '+' for each user if mesg y, a '-' if mesg n,
     // or a '?' if their tty cannot be statted.
-    let include_mesg = matches.opt_present("a") || matches.opt_present("T") || matches.opt_present("w");
+    let include_mesg =
+        matches.opt_present("a") || matches.opt_present("T") || matches.opt_present("w");
 
     // If true, display process termination & exit status.
     let mut include_exit = false;
@@ -201,7 +203,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         exit!(1);
     }
 
-    let who = Who {
+    let mut who = Who {
         do_lookup: do_lookup,
         short_list: short_list,
         short_output: short_output,
@@ -217,6 +219,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         need_runlevel: need_runlevel,
         need_users: need_users,
         my_line_only: my_line_only,
+        has_records: false,
         args: matches.free,
     };
 
@@ -241,6 +244,7 @@ struct Who {
     need_runlevel: bool,
     need_users: bool,
     my_line_only: bool,
+    has_records: bool,
     args: Vec<String>,
 }
 
@@ -255,10 +259,11 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
             if seconds_idle < 60 {
                 "  .  ".into()
             } else {
-                format!("{:02}:{:02}",
-                        seconds_idle / 3600,
-                        (seconds_idle % 3600) / 60)
-                        .into()
+                format!(
+                    "{:02}:{:02}",
+                    seconds_idle / 3600,
+                    (seconds_idle % 3600) / 60
+                ).into()
             }
         } else {
             " old ".into()
@@ -275,7 +280,10 @@ fn current_tty() -> String {
     unsafe {
         let res = ttyname(STDIN_FILENO);
         if !res.is_null() {
-            CStr::from_ptr(res as *const _).to_string_lossy().trim_left_matches("/dev/").to_owned()
+            CStr::from_ptr(res as *const _)
+                .to_string_lossy()
+                .trim_start_matches("/dev/")
+                .to_owned()
         } else {
             "".to_owned()
         }
@@ -283,7 +291,18 @@ fn current_tty() -> String {
 }
 
 impl Who {
-    fn exec(&self) {
+    fn exec(&mut self) {
+        let run_level_chk = |record: i16| {
+            #[allow(unused_assignments)]
+            let mut res = false;
+
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
+            {
+                res = record == utmpx::RUN_LVL;
+            }
+            res
+        };
+
         let f = if self.args.len() == 1 {
             self.args[0].as_ref()
         } else {
@@ -298,6 +317,9 @@ impl Who {
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
+            let mut records = Utmpx::iter_all_records().read_from(f).peekable();
+            self.has_records = records.peek().is_some();
+
             if self.include_heading {
                 self.print_heading()
             }
@@ -307,11 +329,11 @@ impl Who {
                 "".to_owned()
             };
 
-            for ut in Utmpx::iter_all_records().read_from(f) {
+            for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut);
-                    } else if self.need_runlevel && ut.record_type() == utmpx::RUN_LVL {
+                    } else if self.need_runlevel && run_level_chk(ut.record_type()) {
                         self.print_runlevel(&ut);
                     } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
                         self.print_boottime(&ut);
@@ -326,9 +348,7 @@ impl Who {
                     }
                 }
 
-                if ut.record_type() == utmpx::BOOT_TIME {
-
-                }
+                if ut.record_type() == utmpx::BOOT_TIME {}
             }
         }
     }
@@ -338,25 +358,18 @@ impl Who {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
         let runlvline = format!("run-level {}", curr);
-        let comment = format!("last={}",
-                              if last == 'N' {
-                                  'S'
-                              } else {
-                                  'N'
-                              });
+        let comment = format!("last={}", if last == 'N' { 'S' } else { 'N' });
 
-        self.print_line("",
-                        ' ',
-                        &runlvline,
-                        &time_string(ut),
-                        "",
-                        "",
-                        if !last.is_control() {
-                            &comment
-                        } else {
-                            ""
-                        },
-                        "");
+        self.print_line(
+            "",
+            ' ',
+            &runlvline,
+            &time_string(ut),
+            "",
+            "",
+            if !last.is_control() { &comment } else { "" },
+            "",
+        );
     }
 
     #[inline]
@@ -368,14 +381,16 @@ impl Who {
     fn print_login(&self, ut: &Utmpx) {
         let comment = format!("id={}", ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
-        self.print_line("LOGIN",
-                        ' ',
-                        &ut.tty_device(),
-                        &time_string(ut),
-                        "",
-                        &pidstr,
-                        &comment,
-                        "");
+        self.print_line(
+            "LOGIN",
+            ' ',
+            &ut.tty_device(),
+            &time_string(ut),
+            "",
+            &pidstr,
+            &comment,
+            "",
+        );
     }
 
     #[inline]
@@ -384,28 +399,32 @@ impl Who {
         let pidstr = format!("{}", ut.pid());
         let e = ut.exit_status();
         let exitstr = format!("term={} exit={}", e.0, e.1);
-        self.print_line("",
-                        ' ',
-                        &ut.tty_device(),
-                        &time_string(ut),
-                        "",
-                        &pidstr,
-                        &comment,
-                        &exitstr);
+        self.print_line(
+            "",
+            ' ',
+            &ut.tty_device(),
+            &time_string(ut),
+            "",
+            &pidstr,
+            &comment,
+            &exitstr,
+        );
     }
 
     #[inline]
     fn print_initspawn(&self, ut: &Utmpx) {
         let comment = format!("id={}", ut.terminal_suffix());
         let pidstr = format!("{}", ut.pid());
-        self.print_line("",
-                        ' ',
-                        &ut.tty_device(),
-                        &time_string(ut),
-                        "",
-                        &pidstr,
-                        &comment,
-                        "");
+        self.print_line(
+            "",
+            ' ',
+            &ut.tty_device(),
+            &time_string(ut),
+            "",
+            &pidstr,
+            &comment,
+            "",
+        );
     }
 
     #[inline]
@@ -453,31 +472,31 @@ impl Who {
             buf.push(h.to_owned());
         }
         let s = buf.join(":");
-        let hoststr = if s.is_empty() {
-            s
-        } else {
-            format!("({})", s)
-        };
+        let hoststr = if s.is_empty() { s } else { format!("({})", s) };
 
-        self.print_line(ut.user().as_ref(),
-                        mesg,
-                        ut.tty_device().as_ref(),
-                        time_string(ut).as_str(),
-                        idle.as_ref(),
-                        format!("{}", ut.pid()).as_str(),
-                        hoststr.as_str(),
-                        "");
+        self.print_line(
+            ut.user().as_ref(),
+            mesg,
+            ut.tty_device().as_ref(),
+            time_string(ut).as_str(),
+            idle.as_ref(),
+            format!("{}", ut.pid()).as_str(),
+            hoststr.as_str(),
+            "",
+        );
     }
 
-    fn print_line(&self,
-                  user: &str,
-                  state: char,
-                  line: &str,
-                  time: &str,
-                  idle: &str,
-                  pid: &str,
-                  comment: &str,
-                  exit: &str) {
+    fn print_line(
+        &self,
+        user: &str,
+        state: char,
+        line: &str,
+        time: &str,
+        idle: &str,
+        pid: &str,
+        comment: &str,
+        exit: &str,
+    ) {
         let mut buf = String::with_capacity(64);
         let msg = vec![' ', state].into_iter().collect::<String>();
 
@@ -487,7 +506,11 @@ impl Who {
         }
         buf.push_str(&format!(" {:<12}", line));
         // "%Y-%m-%d %H:%M"
-        buf.push_str(&format!(" {:<1$}", time, 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2));
+        let mut time_size = 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2;
+        if !self.has_records {
+            time_size -= 4;
+        }
+        buf.push_str(&format!(" {:<1$}", time, time_size));
 
         if !self.short_output {
             if self.include_idle {
@@ -499,18 +522,20 @@ impl Who {
         if self.include_exit {
             buf.push_str(&format!(" {:<12}", exit));
         }
-        println!("{}", buf.trim_right());
+        println!("{}", buf.trim_end());
     }
 
     #[inline]
     fn print_heading(&self) {
-        self.print_line("NAME",
-                        ' ',
-                        "LINE",
-                        "TIME",
-                        "IDLE",
-                        "PID",
-                        "COMMENT",
-                        "EXIT");
+        self.print_line(
+            "NAME",
+            ' ',
+            "LINE",
+            "TIME",
+            "IDLE",
+            "PID",
+            "COMMENT",
+            "EXIT",
+        );
     }
 }

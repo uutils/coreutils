@@ -2,20 +2,20 @@
 name = "who"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_who"
 path = "who.rs"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["utmpx"]
 
 [dependencies.clippy]
-version = "0.0.143"
+version = "0.0.212"
 optional = true
 
 [[bin]]
 name = "who"
-path = "main.rs"
+path = "../../uumain.rs"

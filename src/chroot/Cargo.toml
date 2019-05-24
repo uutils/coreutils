@@ -2,19 +2,19 @@
 name = "chroot"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_chroot"
 path = "chroot.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["entries"]
 
 [[bin]]
 name = "chroot"
-path = "main.rs"
+path = "../../uumain.rs"

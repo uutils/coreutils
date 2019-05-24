@@ -18,14 +18,13 @@ mod mode;
 extern crate uucore;
 
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
-static NAME: &'static str = "install";
-static SUMMARY: &'static str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+static NAME: &str = "install";
+static SUMMARY: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
-static LONG_HELP: &'static str = "";
+static LONG_HELP: &str = "";
 
 const DEFAULT_MODE: u32 = 755;
 
@@ -34,7 +33,7 @@ pub struct Behaviour {
     main_function: MainFunction,
     specified_mode: Option<u32>,
     suffix: String,
-    verbose: bool
+    verbose: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -42,7 +41,7 @@ pub enum MainFunction {
     /// Create directories
     Directory,
     /// Install files to locations (primary functionality)
-    Standard
+    Standard,
 }
 
 impl Behaviour {
@@ -50,7 +49,7 @@ impl Behaviour {
     pub fn mode(&self) -> u32 {
         match self.specified_mode {
             Some(x) => x,
-            None => DEFAULT_MODE
+            None => DEFAULT_MODE,
         }
     }
 }
@@ -85,12 +84,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match behaviour.main_function {
-        MainFunction::Directory => {
-            directory(&paths[..], behaviour)
-        },
-        MainFunction::Standard => {
-            standard(&paths[..], behaviour)
-        }
+        MainFunction::Directory => directory(&paths[..], behaviour),
+        MainFunction::Standard => standard(&paths[..], behaviour),
     }
 }
 
@@ -99,18 +94,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
 /// Returns a getopts::Options struct.
 ///
 fn parse_opts(args: Vec<String>) -> getopts::Matches {
-    let syntax = format!("SOURCE DEST
- {} SOURCE... DIRECTORY", NAME);
-     new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let syntax = format!(
+        "SOURCE DEST
+ {} SOURCE... DIRECTORY",
+        NAME
+    );
+    new_coreopts!(&syntax, SUMMARY, LONG_HELP)
     // TODO implement flag
         .optflagopt("",  "backup", "(unimplemented) make a backup of each existing destination\n \
                                     file", "CONTROL")
     // TODO implement flag
         .optflag("b", "", "(unimplemented) like --backup but does not accept an argument")
+        .optflag("c", "", "ignored")
     // TODO implement flag
         .optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
                                   files, and in some cases, do not modify the destination at all")
-        .optflag("d", "directory", "treat all arguments as directory names\n \
+        .optflag("d", "directory", "treat all arguments as directory names.\n \
                                     create all components of the specified directories")
     // TODO implement flag
         .optflag("D", "", "(unimplemented) create all leading components of DEST except the\n \
@@ -208,18 +207,19 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 
     let specified_mode: Option<u32> = if matches.opt_present("mode") {
         match matches.opt_str("mode") {
-            Some(x) => {
-                match mode::parse(&x[..], considering_dir) {
-                    Ok(y) => Some(y),
-                    Err(err) => {
-                        show_error!("Invalid mode string: {}", err);
-                        return Err(1);
-                    }
+            Some(x) => match mode::parse(&x[..], considering_dir) {
+                Ok(y) => Some(y),
+                Err(err) => {
+                    show_error!("Invalid mode string: {}", err);
+                    return Err(1);
                 }
             },
             None => {
-                show_error!("option '--mode' requires an argument\n \
-                            Try '{} --help' for more information.", NAME);
+                show_error!(
+                    "option '--mode' requires an argument\n \
+                     Try '{} --help' for more information.",
+                    NAME
+                );
                 return Err(1);
             }
         }
@@ -231,8 +231,11 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
         match matches.opt_str("suffix") {
             Some(x) => x,
             None => {
-                show_error!("option '--suffix' requires an argument\n\
-                            Try '{} --help' for more information.", NAME);
+                show_error!(
+                    "option '--suffix' requires an argument\n\
+                     Try '{} --help' for more information.",
+                    NAME
+                );
                 return Err(1);
             }
         }
@@ -283,8 +286,18 @@ fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
                 show_info!("created directory '{}'", path.display());
             }
         }
-        if all_successful { 0 } else { 1 }
+        if all_successful {
+            0
+        } else {
+            1
+        }
     }
+}
+
+/// Test if the path is a a new file path that can be
+/// created immediately
+fn is_new_file_path(path: &Path) -> bool {
+    path.is_file() || !path.exists() && path.parent().map(|p| p.is_dir()).unwrap_or(true)
 }
 
 /// Perform an install, given a list of paths and behaviour.
@@ -297,9 +310,13 @@ fn standard(paths: &[PathBuf], b: Behaviour) -> i32 {
         1
     } else {
         let sources = &paths[0..paths.len() - 1];
-        let target_directory = &paths[paths.len() - 1];
+        let target = &paths[paths.len() - 1];
 
-        copy_files_into_dir(sources, target_directory, &b)
+        if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
+            copy_file_to_file(&sources[0], target, &b)
+        } else {
+            copy_files_into_dir(sources, target, &b)
+        }
     }
 }
 
@@ -324,8 +341,10 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
         let targetpath = match sourcepath.as_os_str().to_str() {
             Some(name) => target_dir.join(name),
             None => {
-                show_error!("cannot stat ‘{}’: No such file or directory",
-                            sourcepath.display());
+                show_error!(
+                    "cannot stat ‘{}’: No such file or directory",
+                    sourcepath.display()
+                );
 
                 all_successful = false;
                 continue;
@@ -335,8 +354,30 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
         if copy(sourcepath, &targetpath, b).is_err() {
             all_successful = false;
         }
-    };
-    if all_successful { 0 } else { 1 }
+    }
+    if all_successful {
+        0
+    } else {
+        1
+    }
+}
+
+/// Copy a file to another file.
+///
+/// Prints verbose information and error messages.
+/// Returns an integer intended as a program return code.
+///
+/// # Parameters
+///
+/// _file_ must exist as a non-directory.
+/// _target_ must be a non-directory
+///
+fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behaviour) -> i32 {
+    if copy(file, &target, b).is_err() {
+        1
+    } else {
+        0
+    }
 }
 
 /// Copy one file to a new location, changing metadata.
@@ -354,8 +395,12 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<(), ()> {
     let io_result = fs::copy(from, to);
 
     if let Err(err) = io_result {
-        show_error!("install: cannot install ‘{}’ to ‘{}’: {}",
-                    from.display(), to.display(), err);
+        show_error!(
+            "install: cannot install ‘{}’ to ‘{}’: {}",
+            from.display(),
+            to.display(),
+            err
+        );
         return Err(());
     }
 

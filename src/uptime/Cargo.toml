@@ -2,19 +2,20 @@
 name = "uptime"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_uptime"
 path = "uptime.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
+time = "0.1.40"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["utmpx"]
 
 [[bin]]
 name = "uptime"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -2,15 +2,16 @@
 name = "printf"
 version = "0.0.1"
 authors = ["Nathan Ross"]
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_printf"
 path = "printf.rs"
 
 [dependencies]
-"itertools" = "0.6.0"
-uucore = { path="../uucore" }
+itertools = "0.7.8"
+uucore = "0.0.1"
 
 [[bin]]
 name = "printf"
-path = "main.rs"
+path = "../../uumain.rs"

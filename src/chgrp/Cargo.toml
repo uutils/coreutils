@@ -2,19 +2,19 @@
 name = "chgrp"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_chgrp"
 path = "chgrp.rs"
 
 [dependencies]
-walkdir = "1.0.7"
+walkdir = "2.1.4"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["entries", "fs"]
 
 [[bin]]
 name = "chgrp"
-path = "main.rs"
+path = "../../uumain.rs"

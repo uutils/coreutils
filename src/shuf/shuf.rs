@@ -3,7 +3,7 @@
 /*
  * This file is part of the uutils coreutils package.
  *
- * (c) Arcterus <arcterus@mail.com>
+ * (c) Alex Lyon <arcterus@mail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -23,18 +23,28 @@ use std::usize::MAX as MAX_USIZE;
 enum Mode {
     Default,
     Echo,
-    InputRange((usize, usize))
+    InputRange((usize, usize)),
 }
 
-static NAME: &'static str = "shuf";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "shuf";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
     opts.optflag("e", "echo", "treat each ARG as an input line");
-    opts.optopt("i", "input-range", "treat each number LO through HI as an input line", "LO-HI");
+    opts.optopt(
+        "i",
+        "input-range",
+        "treat each number LO through HI as an input line",
+        "LO-HI",
+    );
     opts.optopt("n", "head-count", "output at most COUNT lines", "COUNT");
-    opts.optopt("o", "output", "write result to FILE instead of standard output", "FILE");
+    opts.optopt(
+        "o",
+        "output",
+        "write result to FILE instead of standard output",
+        "FILE",
+    );
     opts.optopt("", "random-source", "get random bytes from FILE", "FILE");
     opts.optflag("r", "repeat", "output lines can be repeated");
     opts.optflag("z", "zero-terminated", "end lines with 0 byte, not newline");
@@ -42,12 +52,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("V", "version", "output version information and exit");
     let mut matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => {
-            crash!(1, "{}", f)
-        }
+        Err(f) => crash!(1, "{}", f),
     };
     if matches.opt_present("help") {
-        let msg = format!("{0} {1}
+        let msg = format!(
+            "{0} {1}
 
 Usage:
   {0} [OPTION]... [FILE]
@@ -55,7 +64,9 @@ Usage:
   {0} -i LO-HI [OPTION]...
 
 Write a random permutation of the input lines to standard output.
-With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+With no FILE, or when FILE is -, read standard input.",
+            NAME, VERSION
+        );
         print!("{}", opts.usage(&msg));
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -71,7 +82,7 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
                     Ok(m) => Mode::InputRange(m),
                     Err(msg) => {
                         crash!(1, "{}", msg);
-                    },
+                    }
                 }
             }
             None => {
@@ -109,18 +120,22 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         match mode {
             Mode::Echo => {
                 // XXX: this doesn't correctly handle non-UTF-8 cmdline args
-                let mut evec = matches.free.iter().map(|a| a.as_bytes()).collect::<Vec<&[u8]>>();
+                let mut evec = matches
+                    .free
+                    .iter()
+                    .map(|a| a.as_bytes())
+                    .collect::<Vec<&[u8]>>();
                 find_seps(&mut evec, sep);
                 shuf_bytes(&mut evec, repeat, count, sep, output, random);
-            },
+            }
             Mode::InputRange((b, e)) => {
                 let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
                 let mut rvec = rvec.iter().map(|a| a.as_bytes()).collect::<Vec<&[u8]>>();
                 shuf_bytes(&mut rvec, repeat, count, sep, output, random);
-            },
+            }
             Mode::Default => {
                 let fdata = read_input_file(&matches.free[0][..]);
-                let mut fdata = vec!(&fdata[..]);
+                let mut fdata = vec![&fdata[..]];
                 find_seps(&mut fdata, sep);
                 shuf_bytes(&mut fdata, repeat, count, sep, output, random);
             }
@@ -131,15 +146,14 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
 }
 
 fn read_input_file(filename: &str) -> Vec<u8> {
-    let mut file = BufReader::new(
-        if filename == "-" {
-            Box::new(stdin()) as Box<Read>
-        } else {
-            match File::open(filename) {
-                Ok(f) => Box::new(f) as Box<Read>,
-                Err(e) => crash!(1, "failed to open '{}': {}", filename, e),
-            }
-        });
+    let mut file = BufReader::new(if filename == "-" {
+        Box::new(stdin()) as Box<Read>
+    } else {
+        match File::open(filename) {
+            Ok(f) => Box::new(f) as Box<Read>,
+            Err(e) => crash!(1, "failed to open '{}': {}", filename, e),
+        }
+    });
 
     let mut data = Vec::new();
     match file.read_to_end(&mut data) {
@@ -183,15 +197,21 @@ fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
     }
 }
 
-fn shuf_bytes(input: &mut Vec<&[u8]>, repeat: bool, count: usize, sep: u8, output: Option<String>, random: Option<String>) {
-    let mut output = BufWriter::new(
-        match output {
-            None => Box::new(stdout()) as Box<Write>,
-            Some(s) => match File::create(&s[..]) {
-                Ok(f) => Box::new(f) as Box<Write>,
-                Err(e) => crash!(1, "failed to open '{}' for writing: {}", &s[..], e),
-            },
-        });
+fn shuf_bytes(
+    input: &mut Vec<&[u8]>,
+    repeat: bool,
+    count: usize,
+    sep: u8,
+    output: Option<String>,
+    random: Option<String>,
+) {
+    let mut output = BufWriter::new(match output {
+        None => Box::new(stdout()) as Box<Write>,
+        Some(s) => match File::create(&s[..]) {
+            Ok(f) => Box::new(f) as Box<Write>,
+            Err(e) => crash!(1, "failed to open '{}' for writing: {}", &s[..], e),
+        },
+    });
 
     let mut rng = match random {
         Some(r) => WrappedRng::RngFile(rand::read::ReadRng::new(match File::open(&r[..]) {
@@ -218,8 +238,12 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, repeat: bool, count: usize, sep: u8, outpu
         }
 
         // write the randomly chosen value and the separator
-        output.write_all(input[r]).unwrap_or_else(|e| crash!(1, "write failed: {}", e));
-        output.write_all(&[sep]).unwrap_or_else(|e| crash!(1, "write failed: {}", e));
+        output
+            .write_all(input[r])
+            .unwrap_or_else(|e| crash!(1, "write failed: {}", e));
+        output
+            .write_all(&[sep])
+            .unwrap_or_else(|e| crash!(1, "write failed: {}", e));
 
         // if we do not allow repeats, remove the chosen value from the input vector
         if !repeat {
@@ -241,11 +265,11 @@ fn parse_range(input_range: String) -> Result<(usize, usize), String> {
     } else {
         let begin = match split[0].parse::<usize>() {
             Ok(m) => m,
-            Err(e)=> return Err(format!("{} is not a valid number: {}", split[0], e)),
+            Err(e) => return Err(format!("{} is not a valid number: {}", split[0], e)),
         };
         let end = match split[1].parse::<usize>() {
             Ok(m) => m,
-            Err(e)=> return Err(format!("{} is not a valid number: {}", split[1], e)),
+            Err(e) => return Err(format!("{} is not a valid number: {}", split[1], e)),
         };
         Ok((begin, end + 1))
     }
@@ -259,8 +283,8 @@ enum WrappedRng {
 impl WrappedRng {
     fn next_usize(&mut self) -> usize {
         match *self {
-            WrappedRng::RngFile(ref mut r) => r.next_u32() as usize,
-            WrappedRng::RngDefault(ref mut r) => r.next_u32() as usize,
+            WrappedRng::RngFile(ref mut r) => r.gen(),
+            WrappedRng::RngDefault(ref mut r) => r.gen(),
         }
     }
 }

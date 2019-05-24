@@ -17,10 +17,10 @@ mod test_passgrp {
 
     #[test]
     fn test_grp2gid() {
-        if cfg!(target_os = "macos") {
-            assert_eq!(0, grp2gid("wheel").unwrap());
+        if cfg!(target_os = "linux") || cfg!(target_os = "android") || cfg!(target_os = "windows") {
+            assert_eq!(0, grp2gid("root").unwrap())
         } else {
-            assert_eq!(0, grp2gid("root").unwrap());
+            assert_eq!(0, grp2gid("wheel").unwrap());
         }
         assert!(grp2gid("88888888").is_err());
         assert!(grp2gid("agroupthatdoesntexist").is_err());
@@ -34,10 +34,10 @@ mod test_passgrp {
 
     #[test]
     fn test_gid2grp() {
-        if cfg!(target_os = "macos") {
-            assert_eq!("wheel", gid2grp(0).unwrap());
-        } else {
+        if cfg!(target_os = "linux") || cfg!(target_os = "android") || cfg!(target_os = "windows") {
             assert_eq!("root", gid2grp(0).unwrap());
+        } else {
+            assert_eq!("wheel", gid2grp(0).unwrap());
         }
         assert!(gid2grp(88888888).is_err());
     }

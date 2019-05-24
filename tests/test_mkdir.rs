@@ -53,6 +53,7 @@ fn test_mkdir_dup_file() {
     let scene = TestScenario::new(util_name!());
     scene.fixtures.touch(TEST_FILE7);
     scene.ucmd().arg(TEST_FILE7).fails();
+
     // mkdir should fail for a file even if -p is specified.
     scene.ucmd().arg("-p").arg(TEST_FILE7).fails();
 }

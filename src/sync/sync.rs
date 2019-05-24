@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
- /* Last synced with: sync (GNU coreutils) 8.13 */
+/* Last synced with: sync (GNU coreutils) 8.13 */
 
 extern crate getopts;
 extern crate libc;
@@ -21,14 +21,14 @@ extern crate uucore;
 #[cfg(not(windows))]
 extern crate uucore;
 
-static NAME: &'static str = "sync";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "sync";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
 mod platform {
     use super::libc;
 
-    extern {
+    extern "C" {
         fn sync() -> libc::c_void;
     }
 
@@ -40,32 +40,45 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    extern crate winapi;
     extern crate kernel32;
-    use std::{mem};
+    extern crate winapi;
+    use std::mem;
     use std::fs::OpenOptions;
-    use std::io::{Write};
     use std::os::windows::prelude::*;
     use uucore::wide::{FromWide, ToWide};
+    use self::winapi::um::winbase;
+    use self::winapi::um::winnt;
+    use self::winapi::shared::minwindef;
+    use self::winapi::um::handleapi;
+    use self::winapi::shared::winerror;
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
-        if kernel32::GetDriveTypeW(name_wide.as_ptr()) == winapi::DRIVE_FIXED {
+        if kernel32::GetDriveTypeW(name_wide.as_ptr()) == winbase::DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => if kernel32::FlushFileBuffers(file.as_raw_handle()) == 0 {
-                    crash!(kernel32::GetLastError() as i32, "failed to flush file buffer");
+                    crash!(
+                        kernel32::GetLastError() as i32,
+                        "failed to flush file buffer"
+                    );
                 },
-                Err(e) => crash!(e.raw_os_error().unwrap_or(1), "failed to create volume handle")
+                Err(e) => crash!(
+                    e.raw_os_error().unwrap_or(1),
+                    "failed to create volume handle"
+                ),
             }
         }
     }
 
-    unsafe fn find_first_volume() -> (String, winapi::HANDLE) {
-        let mut name: [winapi::WCHAR; winapi::MAX_PATH] = mem::uninitialized();
-        let handle = kernel32::FindFirstVolumeW(name.as_mut_ptr(), name.len() as winapi::DWORD);
-        if handle == winapi::INVALID_HANDLE_VALUE {
-            crash!(kernel32::GetLastError() as i32, "failed to find first volume");
+    unsafe fn find_first_volume() -> (String, winnt::HANDLE) {
+        let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
+        let handle = kernel32::FindFirstVolumeW(name.as_mut_ptr(), name.len() as minwindef::DWORD);
+        if handle == handleapi::INVALID_HANDLE_VALUE {
+            crash!(
+                kernel32::GetLastError() as i32,
+                "failed to find first volume"
+            );
         }
         (String::from_wide_null(&name), handle)
     }
@@ -74,15 +87,18 @@ mod platform {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
         loop {
-            let mut name: [winapi::WCHAR; winapi::MAX_PATH] = mem::uninitialized();
+            let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
             if kernel32::FindNextVolumeW(
-                next_volume_handle, name.as_mut_ptr(), name.len() as winapi::DWORD
-            ) == 0 {
+                next_volume_handle,
+                name.as_mut_ptr(),
+                name.len() as minwindef::DWORD,
+            ) == 0
+            {
                 match kernel32::GetLastError() {
-                    winapi::ERROR_NO_MORE_FILES => {
+                    winerror::ERROR_NO_MORE_FILES => {
                         kernel32::FindVolumeClose(next_volume_handle);
-                        return volumes
-                    },
+                        return volumes;
+                    }
                     err => crash!(err as i32, "failed to find next volume"),
                 }
             } else {
@@ -107,18 +123,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("V", "version", "output version information and exit");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        _ => { help(&opts); return 1 }
+        Ok(m) => m,
+        _ => {
+            help(&opts);
+            return 1;
+        }
     };
 
     if matches.opt_present("h") {
         help(&opts);
-        return 0
+        return 0;
     }
 
     if matches.opt_present("V") {
         version();
-        return 0
+        return 0;
     }
 
     sync();
@@ -133,18 +152,19 @@ fn version() {
 }
 
 fn help(opts: &getopts::Options) {
-    let msg = format!("{0} {1}
+    let msg = format!(
+        "{0} {1}
 
 Usage:
   {0} [OPTION]
 
-Force changed blocks to disk, update the super block.", NAME, VERSION);
+Force changed blocks to disk, update the super block.",
+        NAME, VERSION
+    );
 
     print!("{}", opts.usage(&msg));
 }
 
 fn sync() -> isize {
-    unsafe {
-        platform::do_sync()
-    }
+    unsafe { platform::do_sync() }
 }

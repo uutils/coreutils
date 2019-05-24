@@ -3,10 +3,10 @@ name = "uutils"
 version = "0.0.1"
 authors = []
 build = "build.rs"
+autotests = false
 
 [features]
 unix = [
-  "arch",
   "chgrp",
   "chmod",
   "chown",
@@ -15,7 +15,6 @@ unix = [
   "du",
   "groups",
   "hostid",
-  "hostname",
   "id",
   "install",
   "kill",
@@ -37,7 +36,10 @@ unix = [
   "uptime",
   "users",
   "who",
+
+  "generic"
 ]
+windows = ["generic"]
 # Feature "fuchsia" contains the exclusive list of utilities
 # that can be compiled and run on Fuchsia. Should be built
 # with --no-default-features when selecting this feature.
@@ -45,7 +47,6 @@ unix = [
 # all utilities in that feature.
 fuchsia = [
   # unix utilities
-  "arch",
   "chgrp",
   "chmod",
   "chown",
@@ -59,7 +60,6 @@ fuchsia = [
   "nice",
   "pathchk",
   "stdbuf",
-  "touch",
   "tty",
   "uname",
   "unlink",
@@ -68,35 +68,26 @@ fuchsia = [
   "generic"
 ]
 generic = [
-  "cat",
-  "hashsum",
-  "more",
-  "ln",
-  "ls",
-  "mkdir",
-  "mktemp",
-  "nl",
+  "arch",
+  "hostname",
   "nproc",
-  "ptx",
-  "shred",
-  "sort",
   "sync",
-  "tail",
-  "test",
+  "touch",
   "whoami",
-  "redox"
+  "redox_generic"
 ]
-# Feature "redox" contains the exclusive list of utilities
+# Feature "redox"/"redox_generic" contains the exclusive list of utilities
 # that can be compiled and run on redox. Should be built
 # with --no-default-features when selecting this feature.
 # TODO: merge with "generic" to avoid duplication once we support
 # all utilities in that feature.
-redox = [
+redox_generic = [
 
   # And maybe all generic utilities
   "base32",
   "base64",
   "basename",
+  "cat",
   "cksum",
   "comm",
   "cp",
@@ -112,13 +103,22 @@ redox = [
   "false",
   "fmt",
   "fold",
+  "hashsum",
   "head",
+  "join",
   "link",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "more",
   "mv",
+  "nl",
   "od",
   "paste",
   "printenv",
   "printf",
+  "ptx",
   "pwd",
   "readlink",
   "realpath",
@@ -126,12 +126,16 @@ redox = [
   "rm",
   "rmdir",
   "seq",
+  "shred",
   "shuf",
   "sleep",
+  "sort",
   "split",
   "sum",
   "tac",
+  "tail",
   "tee",
+  "test",
   "tr",
   "true",
   "truncate",
@@ -141,12 +145,20 @@ redox = [
   "wc",
   "yes",
 ]
+redox = [
+  "uname",
+  "chmod",
+  "install",
+  "redox_generic"
+]
 test_unimplemented = []
 nightly = []
-default = ["generic", "unix"]
+default = ["unix"]
+
+[workspace]
 
 [dependencies]
-uucore   = { path="src/uucore" }
+uucore   = "0.0.1"
 arch     = { optional=true, path="src/arch" }
 base32   = { optional=true, path="src/base32" }
 base64   = { optional=true, path="src/base64" }
@@ -180,6 +192,7 @@ hostid   = { optional=true, path="src/hostid" }
 hostname = { optional=true, path="src/hostname" }
 id       = { optional=true, path="src/id" }
 install  = { optional=true, path="src/install" }
+join     = { optional=true, path="src/join" }
 kill     = { optional=true, path="src/kill" }
 link     = { optional=true, path="src/link" }
 ln       = { optional=true, path="src/ln" }
@@ -242,16 +255,18 @@ whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
 
 [dev-dependencies]
-time = "0.1.38"
-filetime = "0.1.10"
-libc = "0.2.26"
-regex = "0.2.2"
-rand = "0.3.15"
-tempdir = "0.3.5"
-unindent = "0.1.0"
-lazy_static = "0.2.2"
+time = "0.1.42"
+filetime = "0.2.5"
+libc = "0.2.53"
+regex = "1.0.3"
+rand = "0.6.5"
+tempdir = "0.3.7"
+unindent = "0.1.3"
+lazy_static = "1.3.0"
 
 [target.'cfg(unix)'.dev-dependencies]
+# FIXME: this should use the normal users crate, but it conflicts with the users utility
+rust-users = { git = "https://github.com/uutils/rust-users" }
 unix_socket = "0.5.0"
 
 [[bin]]

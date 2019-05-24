@@ -18,15 +18,14 @@ extern crate libc;
 extern crate uucore;
 
 use std::ffi::CStr;
-use std::io::Write;
 use uucore::fs::is_stdin_interactive;
 
-extern {
+extern "C" {
     fn ttyname(filedesc: libc::c_int) -> *const libc::c_char;
 }
 
-static NAME: &'static str = "tty";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "tty";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
@@ -37,7 +36,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => { crash!(2, "{}", f) }
+        Err(f) => crash!(2, "{}", f),
     };
 
     if matches.opt_present("help") {
@@ -46,7 +45,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {} [OPTION]...", NAME);
         println!("");
-        print!("{}", opts.usage("Print the file name of the terminal connected to standard input."));
+        print!(
+            "{}",
+            opts.usage("Print the file name of the terminal connected to standard input.")
+        );
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
     } else {

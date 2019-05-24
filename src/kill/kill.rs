@@ -15,14 +15,14 @@ extern crate libc;
 extern crate uucore;
 
 use libc::{c_int, pid_t};
-use std::io::{Error, Write};
+use std::io::Error;
 use uucore::signals::ALL_SIGNALS;
 
-static SYNTAX: &'static str = "[options] <pid> [...]"; 
-static SUMMARY: &'static str = ""; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &str = "[options] <pid> [...]";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "";
 
-static EXIT_OK:  i32 = 0;
+static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
 #[derive(Clone, Copy)]
@@ -36,7 +36,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_signal) = handle_obsolete(args);
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL")
-        .optflagopt("l", "list", "list all signal names, or convert one to a name", "LIST")
+        .optflagopt(
+            "l",
+            "list",
+            "list all signal names, or convert one to a name",
+            "LIST",
+        )
         .optflag("L", "table", "list all signal names in a nice table")
         .parse(args);
 
@@ -49,9 +54,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     match mode {
-        Mode::Kill    => return kill(&matches.opt_str("signal").unwrap_or(obs_signal.unwrap_or("9".to_owned())), matches.free),
-        Mode::Table   => table(),
-        Mode::List    => list(matches.opt_str("list")),
+        Mode::Kill => {
+            return kill(
+                &matches
+                    .opt_str("signal")
+                    .unwrap_or(obs_signal.unwrap_or("9".to_owned())),
+                matches.free,
+            )
+        }
+        Mode::Table => table(),
+        Mode::List => list(matches.opt_str("list")),
     }
 
     0
@@ -62,7 +74,9 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
         let slice = &args[i].clone();
-        if slice.chars().next().unwrap() == '-' && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
+        if slice.chars().next().unwrap() == '-' && slice.len() > 1
+            && slice.chars().nth(1).unwrap().is_digit(10)
+        {
             let val = &slice[1..];
             match val.parse() {
                 Ok(num) => {
@@ -71,7 +85,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
                         return (args, Some(val.to_owned()));
                     }
                 }
-                Err(_)=> break  /* getopts will error out for us */
+                Err(_) => break, /* getopts will error out for us */
             }
         }
         i += 1;
@@ -89,10 +103,10 @@ fn table() {
     }
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#8}", idx+1, signal.name);
+        print!("{0: >#2} {1: <#8}", idx + 1, signal.name);
         //TODO: obtain max signal width here
 
-        if (idx+1) % 7 == 0 {
+        if (idx + 1) % 7 == 0 {
             println!("");
         }
     }
@@ -100,7 +114,9 @@ fn table() {
 
 fn print_signal(signal_name_or_value: &str) {
     for signal in &ALL_SIGNALS {
-        if signal.name == signal_name_or_value  || (format!("SIG{}", signal.name)) == signal_name_or_value {
+        if signal.name == signal_name_or_value
+            || (format!("SIG{}", signal.name)) == signal_name_or_value
+        {
             println!("{}", signal.value);
             exit!(EXIT_OK as i32)
         } else if signal_name_or_value == signal.value.to_string() {
@@ -128,8 +144,8 @@ fn print_signals() {
 
 fn list(arg: Option<String>) {
     match arg {
-      Some(ref x) => print_signal(x),
-      None => print_signals(),
+        Some(ref x) => print_signal(x),
+        None => print_signals(),
     };
 }
 
@@ -138,7 +154,7 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
     let optional_signal_value = uucore::signals::signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,
-        None => crash!(EXIT_ERR, "unknown signal name {}", signalname)
+        None => crash!(EXIT_ERR, "unknown signal name {}", signalname),
     };
     for pid in &pids {
         match pid.parse::<usize>() {
@@ -147,8 +163,8 @@ fn kill(signalname: &str, pids: std::vec::Vec<String>) -> i32 {
                     show_error!("{}", Error::last_os_error());
                     status = 1;
                 }
-            },
-            Err(e) => crash!(EXIT_ERR, "failed to parse argument {}: {}", pid, e)
+            }
+            Err(e) => crash!(EXIT_ERR, "failed to parse argument {}: {}", pid, e),
         };
     }
     status

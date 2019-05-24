@@ -2,19 +2,20 @@
 name = "install"
 version = "0.0.1"
 authors = ["Ben Eills <ben@beneills.com>"]
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_install"
 path = "install.rs"
 
 [dependencies]
-getopts = "0.2.14"
+getopts = "0.2.18"
 libc = ">= 0.2"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [dev-dependencies]
-time = "0.1.38"
+time = "0.1.40"
 
 [[bin]]
 name = "install"
-path = "main.rs"
+path = "../../uumain.rs"

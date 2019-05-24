@@ -16,12 +16,12 @@ extern crate uucore;
 
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, stdin, Stdin};
+use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 
-static SYNTAX: &'static str = "[OPTIONS] FILE1 FILE2"; 
-static SUMMARY: &'static str = "Compare sorted files line by line"; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
+static SUMMARY: &str = "Compare sorted files line by line";
+static LONG_HELP: &str = "";
 
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
@@ -43,27 +43,26 @@ fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
 fn ensure_nl(line: &mut String) {
     match line.chars().last() {
         Some('\n') => (),
-        _ => line.push_str("\n")
+        _ => line.push_str("\n"),
     }
 }
 
 enum LineReader {
     Stdin(Stdin),
-    FileIn(BufReader<File>)
+    FileIn(BufReader<File>),
 }
 
 impl LineReader {
     fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
         match *self {
-            LineReader::Stdin(ref mut r)  => r.read_line(buf),
+            LineReader::Stdin(ref mut r) => r.read_line(buf),
             LineReader::FileIn(ref mut r) => r.read_line(buf),
         }
     }
 }
 
 fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
-
-    let delim : Vec<String> = (0 .. 4).map(|col| mkdelim(col, opts)).collect();
+    let delim: Vec<String> = (0..4).map(|col| mkdelim(col, opts)).collect();
 
     let ra = &mut String::new();
     let mut na = a.read_line(ra);
@@ -72,13 +71,13 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 
     while na.is_ok() || nb.is_ok() {
         let ord = match (na.is_ok(), nb.is_ok()) {
-            (false, true)  => Ordering::Greater,
-            (true , false) => Ordering::Less,
-            (true , true) => match(&na, &nb) {
+            (false, true) => Ordering::Greater,
+            (true, false) => Ordering::Less,
+            (true, true) => match (&na, &nb) {
                 (&Ok(0), &Ok(0)) => break,
                 (&Ok(0), _) => Ordering::Greater,
                 (_, &Ok(0)) => Ordering::Less,
-                _ =>  ra.cmp(&rb),
+                _ => ra.cmp(&rb),
             },
             _ => unreachable!(),
         };
@@ -91,7 +90,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                 }
                 ra.clear();
                 na = a.read_line(ra);
-            },
+            }
             Ordering::Greater => {
                 if !opts.opt_present("2") {
                     ensure_nl(rb);
@@ -99,7 +98,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                 }
                 rb.clear();
                 nb = b.read_line(rb);
-            },
+            }
             Ordering::Equal => {
                 if !opts.opt_present("3") {
                     ensure_nl(ra);
@@ -117,8 +116,8 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 fn open_file(name: &str) -> io::Result<LineReader> {
     match name {
         "-" => Ok(LineReader::Stdin(stdin())),
-        _  => {
-            let f = try!(File::open(&Path::new(name)));
+        _ => {
+            let f = File::open(&Path::new(name))?;
             Ok(LineReader::FileIn(BufReader::new(f)))
         }
     }
@@ -128,7 +127,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("1", "", "suppress column 1 (lines uniq to FILE1)")
         .optflag("2", "", "suppress column 2 (lines uniq to FILE2)")
-        .optflag("3", "", "suppress column 3 (lines that appear in both files)")
+        .optflag(
+            "3",
+            "",
+            "suppress column 3 (lines that appear in both files)",
+        )
         .optopt("", "output-delimiter", "separate columns with STR", "STR")
         .parse(args);
 

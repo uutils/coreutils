@@ -16,40 +16,33 @@ extern crate uucore;
 
 use libc::c_long;
 
-static SYNTAX: &'static str = "[options]"; 
-static SUMMARY: &'static str = ""; 
-static LONG_HELP: &'static str = ""; 
-
-pub enum Mode {
-    HostId,
-    Help,
-    Version,
-}
+static SYNTAX: &str = "[options]";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "";
 
 // currently rust libc interface doesn't include gethostid
-extern {
+extern "C" {
     pub fn gethostid() -> c_long;
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .parse(args);
+    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
     hostid();
     0
 }
 
 fn hostid() {
-  /*
-   * POSIX says gethostid returns a "32-bit identifier" but is silent
-   * whether it's sign-extended.  Turn off any sign-extension.  This
-   * is a no-op unless unsigned int is wider than 32 bits.
-   */
+    /*
+     * POSIX says gethostid returns a "32-bit identifier" but is silent
+     * whether it's sign-extended.  Turn off any sign-extension.  This
+     * is a no-op unless unsigned int is wider than 32 bits.
+     */
 
-    let mut result:c_long;
+    let mut result: c_long;
     unsafe {
         result = gethostid();
     }
 
-    result &= 0xffffffff; 
+    result &= 0xffff_ffff;
     println!("{:0>8x}", result);
 }

@@ -2,16 +2,17 @@
 name = "mkfifo"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_mkfifo"
 path = "mkfifo.rs"
 
 [dependencies]
-getopts = "0.2.14"
-libc = "0.2.26"
-uucore = { path="../uucore" }
+getopts = "0.2.18"
+libc = "0.2.42"
+uucore = "0.0.1"
 
 [[bin]]
 name = "mkfifo"
-path = "main.rs"
+path = "../../uumain.rs"

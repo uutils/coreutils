@@ -11,15 +11,15 @@
 pub struct Searcher<'a> {
     haystack: &'a [u8],
     needle: &'a [u8],
-    position: usize 
+    position: usize,
 }
 
 impl<'a> Searcher<'a> {
     pub fn new(haystack: &'a [u8], needle: &'a [u8]) -> Searcher<'a> {
         Searcher {
-            haystack: haystack,
-            needle: needle,
-            position: 0
+            haystack,
+            needle,
+            position: 0,
         }
     }
 }

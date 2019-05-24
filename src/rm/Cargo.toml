@@ -2,17 +2,18 @@
 name = "rm"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_rm"
 path = "rm.rs"
 
 [dependencies]
-getopts = "0.2.14"
-walkdir = "1.0.7"
-remove_dir_all = "0.2"
-uucore = { path="../uucore" }
+getopts = "0.2.18"
+walkdir = "2.1.4"
+remove_dir_all = "0.5.1"
+uucore = "0.0.1"
 
 [[bin]]
 name = "rm"
-path = "main.rs"
+path = "../../uumain.rs"

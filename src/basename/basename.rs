@@ -12,27 +12,39 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::Write;
 use std::path::{is_separator, PathBuf};
 
-static NAME: &'static str = "basename";
-static SYNTAX: &'static str = "NAME [SUFFIX]"; 
-static SUMMARY: &'static str = "Print NAME with any leading directory components removed
- If specified, also remove a trailing SUFFIX"; 
-static LONG_HELP: &'static str = "";
+static NAME: &str = "basename";
+static SYNTAX: &str = "NAME [SUFFIX]";
+static SUMMARY: &str = "Print NAME with any leading directory components removed
+ If specified, also remove a trailing SUFFIX";
+static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     //
     // Argument parsing
     //
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("a", "multiple", "Support more than one argument. Treat every argument as a name.")
-        .optopt("s", "suffix", "Remove a trailing suffix. This option implies the -a option.", "SUFFIX")
-        .optflag("z", "zero", "Output a zero byte (ASCII NUL) at the end of each line, rather than a newline.")
+        .optflag(
+            "a",
+            "multiple",
+            "Support more than one argument. Treat every argument as a name.",
+        )
+        .optopt(
+            "s",
+            "suffix",
+            "Remove a trailing suffix. This option implies the -a option.",
+            "SUFFIX",
+        )
+        .optflag(
+            "z",
+            "zero",
+            "Output a zero byte (ASCII NUL) at the end of each line, rather than a newline.",
+        )
         .parse(args);
 
     // too few arguments
-    if matches.free.len() < 1 {
+    if matches.free.is_empty() {
         crash!(
             1,
             "{0}: {1}\nTry '{0} --help' for more information.",
@@ -82,7 +94,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn basename(fullname: &str, suffix: &str) -> String {
     // Remove all platform-specific path separators from the end
-    let mut path: String = fullname.chars().rev().skip_while(|&ch| is_separator(ch)).collect();
+    let mut path: String = fullname
+        .chars()
+        .rev()
+        .skip_while(|&ch| is_separator(ch))
+        .collect();
 
     // Undo reverse
     path = path.chars().rev().collect();
@@ -91,7 +107,7 @@ fn basename(fullname: &str, suffix: &str) -> String {
     let pb = PathBuf::from(path);
     match pb.components().last() {
         Some(c) => strip_suffix(c.as_os_str().to_str().unwrap(), suffix),
-        None => "".to_owned()
+        None => "".to_owned(),
     }
 }
 

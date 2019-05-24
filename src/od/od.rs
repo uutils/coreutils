@@ -9,8 +9,8 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
 extern crate byteorder;
+extern crate getopts;
 extern crate half;
 
 #[macro_use]
@@ -34,7 +34,6 @@ mod output_info;
 mod mockstream;
 
 use std::cmp;
-use std::io::Write;
 use byteorder_io::*;
 use multifilereader::*;
 use partialreader::*;
@@ -45,14 +44,13 @@ use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
 use parse_inputs::{parse_inputs, CommandLineInputs};
 use inputoffset::{InputOffset, Radix};
-use inputdecoder::{InputDecoder,MemoryDecoder};
+use inputdecoder::{InputDecoder, MemoryDecoder};
 use output_info::OutputInfo;
 
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
-static USAGE: &'static str =
-r#"Usage:
+static USAGE: &str = r#"Usage:
     od [OPTION]... [--] [FILENAME]...
     od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
     od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]
@@ -98,17 +96,37 @@ exitcode will be non-zero."#;
 fn create_getopts_options() -> getopts::Options {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("A", "address-radix",
-                "Select the base in which file offsets are printed.", "RADIX");
-    opts.optopt("j", "skip-bytes",
-                "Skip bytes input bytes before formatting and writing.", "BYTES");
-    opts.optopt("N", "read-bytes",
-                "limit dump to BYTES input bytes", "BYTES");
-    opts.optopt("", "endian", "byte order to use for multi-byte formats", "big|little");
-    opts.optopt("S", "strings",
-                ("output strings of at least BYTES graphic chars. 3 is assumed when \
-                 BYTES is not specified."),
-                "BYTES");
+    opts.optopt(
+        "A",
+        "address-radix",
+        "Select the base in which file offsets are printed.",
+        "RADIX",
+    );
+    opts.optopt(
+        "j",
+        "skip-bytes",
+        "Skip bytes input bytes before formatting and writing.",
+        "BYTES",
+    );
+    opts.optopt(
+        "N",
+        "read-bytes",
+        "limit dump to BYTES input bytes",
+        "BYTES",
+    );
+    opts.optopt(
+        "",
+        "endian",
+        "byte order to use for multi-byte formats",
+        "big|little",
+    );
+    opts.optopt(
+        "S",
+        "strings",
+        "output strings of at least BYTES graphic chars. 3 is assumed when \
+         BYTES is not specified.",
+        "BYTES",
+    );
     opts.optflagmulti("a", "", "named characters, ignoring high-order bit");
     opts.optflagmulti("b", "", "octal bytes");
     opts.optflagmulti("c", "", "ASCII characters or backslash escapes");
@@ -133,14 +151,25 @@ fn create_getopts_options() -> getopts::Options {
     opts.optflagmulti("F", "", "floating point double precision (64-bit) units");
 
     opts.optmulti("t", "format", "select output format or formats", "TYPE");
-    opts.optflag("v", "output-duplicates", "do not use * to mark line suppression");
-    opts.optflagopt("w", "width",
-                ("output BYTES bytes per output line. 32 is implied when BYTES is not \
-                 specified."),
-                "BYTES");
+    opts.optflag(
+        "v",
+        "output-duplicates",
+        "do not use * to mark line suppression",
+    );
+    opts.optflagopt(
+        "w",
+        "width",
+        "output BYTES bytes per output line. 32 is implied when BYTES is not \
+         specified.",
+        "BYTES",
+    );
     opts.optflag("", "help", "display this help and exit.");
     opts.optflag("", "version", "output version information and exit.");
-    opts.optflag("", "traditional", "compatibility mode with one input, offset and label.");
+    opts.optflag(
+        "",
+        "traditional",
+        "compatibility mode with one input, offset and label.",
+    );
 
     opts
 }
@@ -160,9 +189,9 @@ struct OdOptions {
 impl OdOptions {
     fn new(matches: getopts::Matches, args: Vec<String>) -> Result<OdOptions, String> {
         let byte_order = match matches.opt_str("endian").as_ref().map(String::as_ref) {
-            None => { ByteOrder::Native },
-            Some("little") => { ByteOrder::Little },
-            Some("big") => { ByteOrder::Big },
+            None => ByteOrder::Native,
+            Some("little") => ByteOrder::Little,
+            Some("big") => ByteOrder::Big,
             Some(s) => {
                 return Err(format!("Invalid argument --endian={}", s));
             }
@@ -170,14 +199,12 @@ impl OdOptions {
 
         let mut skip_bytes = match matches.opt_default("skip-bytes", "0") {
             None => 0,
-            Some(s) => {
-                match parse_number_of_bytes(&s) {
-                    Ok(i) => { i }
-                    Err(_) => {
-                        return Err(format!("Invalid argument --skip-bytes={}", s));
-                    }
+            Some(s) => match parse_number_of_bytes(&s) {
+                Ok(i) => i,
+                Err(_) => {
+                    return Err(format!("Invalid argument --skip-bytes={}", s));
                 }
-            }
+            },
         };
 
         let mut label: Option<usize> = None;
@@ -188,7 +215,7 @@ impl OdOptions {
                 skip_bytes = s;
                 label = l;
                 vec![f]
-            },
+            }
             Err(e) => {
                 return Err(format!("Invalid inputs: {}", e));
             }
@@ -203,14 +230,14 @@ impl OdOptions {
 
         let mut line_bytes = match matches.opt_default("w", "32") {
             None => 16,
-            Some(s) => {
-                match s.parse::<usize>() {
-                    Ok(i) => { i }
-                    Err(_) => { 0 }
-                }
-            }
+            Some(s) => match s.parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => 0,
+            },
         };
-        let min_bytes = formats.iter().fold(1, |max, next| cmp::max(max, next.formatter_item_info.byte_size));
+        let min_bytes = formats.iter().fold(1, |max, next| {
+            cmp::max(max, next.formatter_item_info.byte_size)
+        });
         if line_bytes == 0 || line_bytes % min_bytes != 0 {
             show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
             line_bytes = min_bytes;
@@ -220,14 +247,12 @@ impl OdOptions {
 
         let read_bytes = match matches.opt_str("read-bytes") {
             None => None,
-            Some(s) => {
-                match  parse_number_of_bytes(&s) {
-                    Ok(i) => { Some(i) }
-                    Err(_) => {
-                        return Err(format!("Invalid argument --read-bytes={}", s));
-                    }
+            Some(s) => match parse_number_of_bytes(&s) {
+                Ok(i) => Some(i),
+                Err(_) => {
+                    return Err(format!("Invalid argument --read-bytes={}", s));
                 }
-            }
+            },
         };
 
         let radix = match matches.opt_str("A") {
@@ -235,16 +260,16 @@ impl OdOptions {
             Some(s) => {
                 let st = s.into_bytes();
                 if st.len() != 1 {
-                    return Err(format!("Radix must be one of [d, o, n, x]"))
+                    return Err(format!("Radix must be one of [d, o, n, x]"));
                 } else {
-                    let radix: char = *(st.get(0)
-                                          .expect("byte string of length 1 lacks a 0th elem")) as char;
+                    let radix: char =
+                        *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
                     match radix {
                         'd' => Radix::Decimal,
                         'x' => Radix::Hexadecimal,
                         'o' => Radix::Octal,
                         'n' => Radix::NoPrefix,
-                        _ => return Err(format!("Radix must be one of [d, o, n, x]"))
+                        _ => return Err(format!("Radix must be one of [d, o, n, x]")),
                     }
                 }
             }
@@ -290,28 +315,43 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Err(s) => {
             disp_err!("{}", s);
             return 1;
-        },
+        }
         Ok(o) => o,
     };
 
-    let mut input_offset = InputOffset::new(od_options.radix, od_options.skip_bytes,
-        od_options.label);
+    let mut input_offset =
+        InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
 
-    let mut input = open_input_peek_reader(&od_options.input_strings,
-        od_options.skip_bytes, od_options.read_bytes);
-    let mut input_decoder = InputDecoder::new(&mut input, od_options.line_bytes,
-        PEEK_BUFFER_SIZE, od_options.byte_order);
+    let mut input = open_input_peek_reader(
+        &od_options.input_strings,
+        od_options.skip_bytes,
+        od_options.read_bytes,
+    );
+    let mut input_decoder = InputDecoder::new(
+        &mut input,
+        od_options.line_bytes,
+        PEEK_BUFFER_SIZE,
+        od_options.byte_order,
+    );
 
-    let output_info = OutputInfo::new(od_options.line_bytes, &od_options.formats[..],
-        od_options.output_duplicates);
+    let output_info = OutputInfo::new(
+        od_options.line_bytes,
+        &od_options.formats[..],
+        od_options.output_duplicates,
+    );
 
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
 /// Loops through the input line by line, calling print_bytes to take care of the output.
-fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>,
-        output_info: &OutputInfo) -> i32
-        where I: PeekRead + HasError {
+fn odfunc<I>(
+    input_offset: &mut InputOffset,
+    input_decoder: &mut InputDecoder<I>,
+    output_info: &OutputInfo,
+) -> i32
+where
+    I: PeekRead + HasError,
+{
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
     let line_bytes = output_info.byte_size_line;
@@ -339,9 +379,9 @@ fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>
                     memory_decoder.zero_out_buffer(length, max_used);
                 }
 
-                if !output_info.output_duplicates
-                        && length == line_bytes
-                        && memory_decoder.get_buffer(0) == &previous_bytes[..] {
+                if !output_info.output_duplicates && length == line_bytes
+                    && memory_decoder.get_buffer(0) == &previous_bytes[..]
+                {
                     if !duplicate_line {
                         duplicate_line = true;
                         println!("*");
@@ -353,8 +393,11 @@ fn odfunc<I>(input_offset: &mut InputOffset, input_decoder: &mut InputDecoder<I>
                         memory_decoder.clone_buffer(&mut previous_bytes);
                     }
 
-                    print_bytes(&input_offset.format_byte_offset(), &memory_decoder,
-                        &output_info);
+                    print_bytes(
+                        &input_offset.format_byte_offset(),
+                        &memory_decoder,
+                        &output_info,
+                    );
                 }
 
                 input_offset.increase_position(length);
@@ -382,9 +425,11 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 
         let mut b = 0;
         while b < input_decoder.length() {
-            output_text.push_str(&format!("{:>width$}",
-                    "",
-                    width = f.spacing[b % output_info.byte_size_block]));
+            output_text.push_str(&format!(
+                "{:>width$}",
+                "",
+                width = f.spacing[b % output_info.byte_size_block]
+            ));
 
             match f.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
@@ -404,21 +449,25 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
         }
 
         if f.add_ascii_dump {
-            let missing_spacing = output_info.print_width_line.saturating_sub(output_text.chars().count());
-            output_text.push_str(&format!("{:>width$}  {}",
-                    "",
-                    format_ascii_dump(input_decoder.get_buffer(0)),
-                    width = missing_spacing));
+            let missing_spacing = output_info
+                .print_width_line
+                .saturating_sub(output_text.chars().count());
+            output_text.push_str(&format!(
+                "{:>width$}  {}",
+                "",
+                format_ascii_dump(input_decoder.get_buffer(0)),
+                width = missing_spacing
+            ));
         }
 
         if first {
             print!("{}", prefix); // print offset
-            // if printing in multiple formats offset is printed only once
+                                  // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
-            print!("{:>width$}", "", width=prefix.chars().count());
+            print!("{:>width$}", "", width = prefix.chars().count());
         }
         print!("{}\n", output_text);
     }
@@ -428,8 +477,11 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 ///
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
-fn open_input_peek_reader<'a>(input_strings: &'a Vec<String>, skip_bytes: usize,
-        read_bytes: Option<usize>) -> PeekReader<PartialReader<MultifileReader<'a>>> {
+fn open_input_peek_reader<'a>(
+    input_strings: &'a Vec<String>,
+    skip_bytes: usize,
+    read_bytes: Option<usize>,
+) -> PeekReader<PartialReader<MultifileReader<'a>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings
         .iter()

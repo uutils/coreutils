@@ -17,9 +17,8 @@ extern crate libc;
 extern crate uucore;
 
 use std::ffi::CStr;
-use std::io::Write;
 
-extern {
+extern "C" {
     // POSIX requires using getlogin (or equivalent code)
     pub fn getlogin() -> *const libc::c_char;
 }
@@ -35,9 +34,9 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-static SYNTAX: &'static str = ""; 
-static SUMMARY: &'static str = "Print user's login name"; 
-static LONG_HELP: &'static str = ""; 
+static SYNTAX: &str = "";
+static SUMMARY: &str = "Print user's login name";
+static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
@@ -50,6 +49,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn exec() {
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
-        None => show_error!("no login name")
+        None => show_error!("no login name"),
     }
 }

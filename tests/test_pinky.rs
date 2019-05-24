@@ -23,7 +23,7 @@ fn test_long_format() {
     new_ucmd!()
         .arg("-l").arg(ulogin)
         .run()
-        .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n",
+        .stdout_is(format!("Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
                            ulogin, real_name, pw.user_dir(), pw.user_shell()));
 
     new_ucmd!()
@@ -48,5 +48,5 @@ fn test_short_format() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
-    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).args(args).run().stdout
+    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).env("LANGUAGE", "C").args(args).run().stdout
 }

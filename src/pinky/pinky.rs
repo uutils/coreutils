@@ -1,5 +1,4 @@
 #![crate_name = "uu_pinky"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
@@ -7,8 +6,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
@@ -25,13 +24,14 @@ use std::os::unix::fs::MetadataExt;
 
 use std::path::PathBuf;
 
-static SYNTAX: &'static str = "[OPTION]... [USER]...";
-static SUMMARY: &'static str = "A lightweight 'finger' program;  print user information.";
+static SYNTAX: &str = "[OPTION]... [USER]...";
+static SUMMARY: &str = "A lightweight 'finger' program;  print user information.";
 
 const BUFSIZE: usize = 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let long_help = &format!("
+    let long_help = &format!(
+        "
   -l              produce long format output for the specified USERs
   -b              omit the user's home directory and shell in long format
   -h              omit the user's project file in long format
@@ -45,25 +45,35 @@ pub fn uumain(args: Vec<String>) -> i32 {
       --help     display this help and exit
       --version  output version information and exit
 
-The utmp file will be {}", utmpx::DEFAULT_FILE);
+The utmp file will be {}",
+        utmpx::DEFAULT_FILE
+    );
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, &long_help);
-    opts.optflag("l",
-                 "",
-                 "produce long format output for the specified USERs");
-    opts.optflag("b",
-                 "",
-                 "omit the user's home directory and shell in long format");
+    opts.optflag(
+        "l",
+        "",
+        "produce long format output for the specified USERs",
+    );
+    opts.optflag(
+        "b",
+        "",
+        "omit the user's home directory and shell in long format",
+    );
     opts.optflag("h", "", "omit the user's project file in long format");
     opts.optflag("p", "", "omit the user's plan file in long format");
     opts.optflag("s", "", "do short format output, this is the default");
     opts.optflag("f", "", "omit the line of column headings in short format");
     opts.optflag("w", "", "omit the user's full name in short format");
-    opts.optflag("i",
-                 "",
-                 "omit the user's full name and remote host in short format");
-    opts.optflag("q",
-                 "",
-                 "omit the user's full name, remote host and idle time in short format");
+    opts.optflag(
+        "i",
+        "",
+        "omit the user's full name and remote host in short format",
+    );
+    opts.optflag(
+        "q",
+        "",
+        "omit the user's full name, remote host and idle time in short format",
+    );
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
 
@@ -135,7 +145,6 @@ The utmp file will be {}", utmpx::DEFAULT_FILE);
     } else {
         pk.long_pinky()
     }
-
 }
 
 struct Pinky {
@@ -155,15 +164,15 @@ pub trait Capitalize {
 
 impl Capitalize for str {
     fn capitalize(&self) -> String {
-        use std::ascii::AsciiExt;
-        self.char_indices().fold(String::with_capacity(self.len()), |mut acc, x| {
-            if x.0 != 0 {
-                acc.push(x.1)
-            } else {
-                acc.push(x.1.to_ascii_uppercase())
-            }
-            acc
-        })
+        self.char_indices()
+            .fold(String::with_capacity(self.len()), |mut acc, x| {
+                if x.0 != 0 {
+                    acc.push(x.1)
+                } else {
+                    acc.push(x.1.to_ascii_uppercase())
+                }
+                acc
+            })
     }
 }
 
@@ -227,7 +236,6 @@ impl Pinky {
             } else {
                 print!(" {:19}", "        ???");
             }
-
         }
 
         print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, ut.tty_device());

@@ -13,27 +13,24 @@
 /* last synced with: cat (GNU coreutils) 8.13 */
 
 extern crate getopts;
+extern crate time;
 
 #[macro_use]
 extern crate uucore;
 // import crate time from utmpx
-use uucore::utmpx::*;
-use uucore::libc::{time_t, c_double};
+use uucore::libc::time_t;
 pub use uucore::libc;
 
 use getopts::Options;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::mem::transmute;
 
-static NAME: &'static str = "uptime";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "uptime";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
 use libc::getloadavg;
 
 #[cfg(windows)]
-extern {
+extern "C" {
     fn GetTickCount() -> libc::uint32_t;
 }
 
@@ -45,7 +42,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -57,40 +54,66 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!("Usage:");
         println!("  {0} [OPTION]", NAME);
         println!("");
-        println!("{}", opts.usage("Print the current time, the length of time the system has been up,\n\
-                              the number of users on the system, and the average number of jobs\n\
-                              in the run queue over the last 1, 5 and 15 minutes."));
+        println!(
+            "{}",
+            opts.usage(
+                "Print the current time, the length of time the system has been up,\n\
+                 the number of users on the system, and the average number of jobs\n\
+                 in the run queue over the last 1, 5 and 15 minutes."
+            )
+        );
         return 0;
     }
 
     print_time();
     let (boot_time, user_count) = process_utmpx();
-    let upsecs = get_uptime(boot_time) / 100;
-    print_uptime(upsecs);
-    print_nusers(user_count);
-    print_loadavg();
+    let uptime = get_uptime(boot_time);
+    if uptime < 0 {
+        show_error!("could not retrieve system uptime");
 
-    0
+        1
+    } else {
+        let upsecs = uptime / 100;
+        print_uptime(upsecs);
+        print_nusers(user_count);
+        print_loadavg();
+
+        0
+    }
 }
 
+#[cfg(unix)]
 fn print_loadavg() {
+    use libc::c_double;
+    use std::mem::transmute;
+
     let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
     if loads == -1 {
         print!("\n");
-    }
-    else {
+    } else {
         print!("load average: ");
         for n in 0..loads {
-            print!("{:.2}{}", avg[n as usize], if n == loads - 1 { "\n" }
-                                   else { ", " } );
+            print!(
+                "{:.2}{}",
+                avg[n as usize],
+                if n == loads - 1 { "\n" } else { ", " }
+            );
         }
     }
 }
 
+#[cfg(windows)]
+fn print_loadavg() {
+    // XXX: currently this is a noop as Windows does not seem to have anything comparable to
+    //      getloadavg()
+}
+
 #[cfg(unix)]
 fn process_utmpx() -> (Option<time_t>, usize) {
+    use uucore::utmpx::*;
+
     let mut nusers = 0;
     let mut boot_time = None;
 
@@ -102,8 +125,8 @@ fn process_utmpx() -> (Option<time_t>, usize) {
                 if t.sec > 0 {
                     boot_time = Some(t.sec as time_t);
                 }
-            },
-            _ => continue
+            }
+            _ => continue,
         }
     }
     (boot_time, nusers)
@@ -125,19 +148,25 @@ fn print_nusers(nusers: usize) {
 fn print_time() {
     let local_time = time::now();
 
-    print!(" {:02}:{:02}:{:02} ", local_time.tm_hour,
-           local_time.tm_min, local_time.tm_sec);
+    print!(
+        " {:02}:{:02}:{:02} ",
+        local_time.tm_hour, local_time.tm_min, local_time.tm_sec
+    );
 }
 
 #[cfg(unix)]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
+    use std::fs::File;
+    use std::io::Read;
+
     let mut proc_uptime = String::new();
 
-    if let Some(n) =
-        File::open("/proc/uptime").ok()
-            .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
-            .and_then(|_| proc_uptime.split_whitespace().next())
-            .and_then(|s| s.replace(".", "").parse().ok()) {
+    if let Some(n) = File::open("/proc/uptime")
+        .ok()
+        .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
+        .and_then(|_| proc_uptime.split_whitespace().next())
+        .and_then(|s| s.replace(".", "").parse().ok())
+    {
         n
     } else {
         match boot_time {
@@ -145,14 +174,14 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
                 let now = time::get_time().sec;
                 let boottime = t as i64;
                 ((now - boottime) * 100)
-            },
+            }
             _ => -1,
         }
     }
 }
 
 #[cfg(windows)]
-fn get_uptime(boot_time: Option<time_t>) -> i64 {
+fn get_uptime(_boot_time: Option<time_t>) -> i64 {
     unsafe { GetTickCount() as i64 }
 }
 
@@ -162,11 +191,9 @@ fn print_uptime(upsecs: i64) {
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
         print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
-    }
-    else if updays > 1 {
+    } else if updays > 1 {
         print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
-    }
-    else {
+    } else {
         print!("up  {:2}:{:02}, ", uphours, upmins);
     }
 }

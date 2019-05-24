@@ -16,24 +16,23 @@ mod parsemode;
 #[macro_use]
 extern crate uucore;
 
-use libc::{mode_t, dev_t};
-use libc::{S_IRUSR, S_IWUSR, S_IRGRP, S_IWGRP, S_IROTH, S_IWOTH, S_IFIFO, S_IFBLK, S_IFCHR};
+use libc::{dev_t, mode_t};
+use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 use getopts::Options;
-use std::io::Write;
 
 use std::ffi::CString;
 
-static NAME: &'static str = "mknod";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "mknod";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
 #[inline(always)]
 fn makedev(maj: u64, min: u64) -> dev_t {
     // pick up from <sys/sysmacros.h>
-    ((min & 0xff) | ((maj & 0xfff) << 8) | (((min & !0xff)) << 12) |
-     (((maj & !0xfff)) << 32)) as dev_t
+    ((min & 0xff) | ((maj & 0xfff) << 8) | (((min & !0xff)) << 12) | (((maj & !0xfff)) << 32))
+        as dev_t
 }
 
 #[cfg(windows)]
@@ -52,10 +51,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
-    opts.optopt("m",
-                "mode",
-                "set file permission bits to MODE, not a=rw - umask",
-                "MODE");
+    opts.optopt(
+        "m",
+        "mode",
+        "set file permission bits to MODE, not a=rw - umask",
+        "MODE",
+    );
 
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
@@ -67,7 +68,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!(
-"Usage: {0} [OPTION]... NAME TYPE [MAJOR MINOR]
+            "Usage: {0} [OPTION]... NAME TYPE [MAJOR MINOR]
 
 Mandatory arguments to long options are mandatory for short options too.
   -m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
@@ -85,7 +86,9 @@ otherwise, as decimal.  TYPE may be:
 
 NOTE: your shell may have its own version of mknod, which usually supersedes
 the version described here.  Please refer to your shell's documentation
-for details about the options it supports.", NAME);
+for details about the options it supports.",
+            NAME
+        );
         return 0;
     }
 
@@ -125,7 +128,10 @@ for details about the options it supports.", NAME);
 
             // Only check the first character, to allow mnemonic usage like
             // 'mknod /dev/rst0 character 18 0'.
-            let ch = args[1].chars().nth(0).expect("Failed to get the first char");
+            let ch = args[1]
+                .chars()
+                .nth(0)
+                .expect("Failed to get the first char");
 
             if ch == 'p' {
                 if args.len() > 2 {
@@ -184,7 +190,7 @@ for details about the options it supports.", NAME);
     }
     if ret == -1 {
         let c_str = CString::new(format!("{}: {}", NAME, matches.free[0]).as_str())
-                        .expect("Failed to convert to CString");
+            .expect("Failed to convert to CString");
         unsafe {
             libc::perror(c_str.as_ptr());
         }

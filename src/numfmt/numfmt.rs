@@ -12,86 +12,99 @@
 extern crate getopts;
 
 use getopts::{Matches, Options};
-use std::io::BufRead;
 use std::fmt;
+use std::io::BufRead;
 
-static NAME: &'static str = "numfmt";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "numfmt";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const IEC_BASES: [f64; 10] = [
+    //premature optimization
+    1.,
+    1024.,
+    1048576.,
+    1073741824.,
+    1099511627776.,
+    1125899906842624.,
+    1152921504606846976.,
+    1180591620717411303424.,
+    1208925819614629174706176.,
+    1237940039285380274899124224.,
+];
 
 type Result<T> = std::result::Result<T, String>;
 
-enum TransformDirection {
-    From,
-    To,
-}
+type WithI = bool;
 
 enum Unit {
     Auto,
     Si,
-    Iec,
-    IecI,
+    Iec(WithI),
+    None,
 }
 
-enum Suffix {
+enum RawSuffix {
     K,
     M,
     G,
     T,
     P,
     E,
-    Ki,
-    Mi,
-    Gi,
-    Ti,
-    Pi,
-    Ei,
+    Z,
+    Y,
 }
 
-impl fmt::Display for Suffix {
+type Suffix = (RawSuffix, WithI);
+
+struct DisplayableSuffix(Suffix);
+
+impl fmt::Display for DisplayableSuffix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Suffix::K => write!(f, "K"),
-            Suffix::M => write!(f, "M"),
-            Suffix::G => write!(f, "G"),
-            Suffix::T => write!(f, "T"),
-            Suffix::P => write!(f, "P"),
-            Suffix::E => write!(f, "E"),
-            Suffix::Ki => write!(f, "Ki"),
-            Suffix::Mi => write!(f, "Mi"),
-            Suffix::Gi => write!(f, "Gi"),
-            Suffix::Ti => write!(f, "Ti"),
-            Suffix::Pi => write!(f, "Pi"),
-            Suffix::Ei => write!(f, "Ei"),
-        }
+        let DisplayableSuffix((ref raw_suffix, ref with_i)) = *self;
+        match raw_suffix {
+            RawSuffix::K => write!(f, "K"),
+            RawSuffix::M => write!(f, "M"),
+            RawSuffix::G => write!(f, "G"),
+            RawSuffix::T => write!(f, "T"),
+            RawSuffix::P => write!(f, "P"),
+            RawSuffix::E => write!(f, "E"),
+            RawSuffix::Z => write!(f, "Z"),
+            RawSuffix::Y => write!(f, "Y"),
+        }.and_then(|()| match with_i {
+            true => write!(f, "i"),
+            false => Ok(()),
+        })
     }
 }
 
 fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
+    let with_i = s.ends_with("i");
     let mut iter = s.chars();
-    let (suffix, suffix_len) = match iter.next_back() {
-        Some('K') => Ok((Some(Suffix::K), 1)),
-        Some('M') => Ok((Some(Suffix::M), 1)),
-        Some('G') => Ok((Some(Suffix::G), 1)),
-        Some('T') => Ok((Some(Suffix::T), 1)),
-        Some('P') => Ok((Some(Suffix::P), 1)),
-        Some('E') => Ok((Some(Suffix::E), 1)),
-        Some('i') => {
-            match iter.next_back() {
-                Some('K') => Ok((Some(Suffix::Ki), 2)),
-                Some('M') => Ok((Some(Suffix::Mi), 2)),
-                Some('G') => Ok((Some(Suffix::Gi), 2)),
-                Some('T') => Ok((Some(Suffix::Ti), 2)),
-                Some('P') => Ok((Some(Suffix::Pi), 2)),
-                Some('E') => Ok((Some(Suffix::Ei), 2)),
-                _ => Err("Failed to parse suffix"),
-            }
-        }
-        _ => Ok((None, 0)),
+    if with_i {
+        iter.next_back();
+    }
+    let suffix: Option<Suffix> = match iter.next_back() {
+        Some('K') => Ok(Some((RawSuffix::K, with_i))),
+        Some('M') => Ok(Some((RawSuffix::M, with_i))),
+        Some('G') => Ok(Some((RawSuffix::G, with_i))),
+        Some('T') => Ok(Some((RawSuffix::T, with_i))),
+        Some('P') => Ok(Some((RawSuffix::P, with_i))),
+        Some('E') => Ok(Some((RawSuffix::E, with_i))),
+        Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
+        Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
+        Some('0'...'9') => Ok(None),
+        _ => Err("Failed to parse suffix"),
     }?;
 
-    let number = s[..s.len() - suffix_len].parse::<f64>().map_err(|err| {
-        err.to_string()
-    })?;
+    let suffix_len = match suffix {
+        None => 0,
+        Some((_, false)) => 1,
+        Some((_, true)) => 2,
+    };
+
+    let number = s[..s.len() - suffix_len]
+        .parse::<f64>()
+        .map_err(|err| err.to_string())?;
 
     Ok((number, suffix))
 }
@@ -100,14 +113,19 @@ fn parse_unit(s: String) -> Result<Unit> {
     match &s[..] {
         "auto" => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
-        "iec" => Ok(Unit::Iec),
-        "iec-i" => Ok(Unit::IecI),
+        "iec" => Ok(Unit::Iec(false)),
+        "iec-i" => Ok(Unit::Iec(true)),
+        "none" => Ok(Unit::None),
         _ => Err("Unsupported unit is specified".to_owned()),
     }
 }
 
 struct TransformOptions {
-    direction: TransformDirection,
+    from: Transform,
+    to: Transform,
+}
+
+struct Transform {
     unit: Unit,
 }
 
@@ -120,110 +138,84 @@ struct NumfmtOptions {
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
         (None, _) => Ok(i),
-        (Some(Suffix::K), &Unit::Auto) |
-        (Some(Suffix::K), &Unit::Si) => Ok(i * 1000.),
-        (Some(Suffix::M), &Unit::Auto) |
-        (Some(Suffix::M), &Unit::Si) => Ok(i * 1000_000.),
-        (Some(Suffix::G), &Unit::Auto) |
-        (Some(Suffix::G), &Unit::Si) => Ok(i * 1000_000_000.),
-        (Some(Suffix::T), &Unit::Auto) |
-        (Some(Suffix::T), &Unit::Si) => Ok(i * 1000_000_000_000.),
-        (Some(Suffix::P), &Unit::Auto) |
-        (Some(Suffix::P), &Unit::Si) => Ok(i * 1000_000_000_000_000.),
-        (Some(Suffix::E), &Unit::Auto) |
-        (Some(Suffix::E), &Unit::Si) => Ok(i * 1000_000_000_000_000_000.),
-
-        (Some(Suffix::Ki), &Unit::Auto) |
-        (Some(Suffix::Ki), &Unit::IecI) |
-        (Some(Suffix::K), &Unit::Iec) => Ok(i * 1024.),
-        (Some(Suffix::Mi), &Unit::Auto) |
-        (Some(Suffix::Mi), &Unit::IecI) |
-        (Some(Suffix::M), &Unit::Iec) => Ok(i * 1048576.),
-        (Some(Suffix::Gi), &Unit::Auto) |
-        (Some(Suffix::Gi), &Unit::IecI) |
-        (Some(Suffix::G), &Unit::Iec) => Ok(i * 1073741824.),
-        (Some(Suffix::Ti), &Unit::Auto) |
-        (Some(Suffix::Ti), &Unit::IecI) |
-        (Some(Suffix::T), &Unit::Iec) => Ok(i * 1099511627776.),
-        (Some(Suffix::Pi), &Unit::Auto) |
-        (Some(Suffix::Pi), &Unit::IecI) |
-        (Some(Suffix::P), &Unit::Iec) => Ok(i * 1125899906842624.),
-        (Some(Suffix::Ei), &Unit::Auto) |
-        (Some(Suffix::Ei), &Unit::IecI) |
-        (Some(Suffix::E), &Unit::Iec) => Ok(i * 1152921504606846976.),
-
+        (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
+            match raw_suffix {
+                RawSuffix::K => Ok(i * 1e3),
+                RawSuffix::M => Ok(i * 1e6),
+                RawSuffix::G => Ok(i * 1e9),
+                RawSuffix::T => Ok(i * 1e12),
+                RawSuffix::P => Ok(i * 1e15),
+                RawSuffix::E => Ok(i * 1e18),
+                RawSuffix::Z => Ok(i * 1e21),
+                RawSuffix::Y => Ok(i * 1e24),
+            }
+        }
+        (Some((raw_suffix, false)), &Unit::Iec(false))
+        | (Some((raw_suffix, true)), &Unit::Auto)
+        | (Some((raw_suffix, true)), &Unit::Iec(true)) => match raw_suffix {
+            RawSuffix::K => Ok(i * IEC_BASES[1]),
+            RawSuffix::M => Ok(i * IEC_BASES[2]),
+            RawSuffix::G => Ok(i * IEC_BASES[3]),
+            RawSuffix::T => Ok(i * IEC_BASES[4]),
+            RawSuffix::P => Ok(i * IEC_BASES[5]),
+            RawSuffix::E => Ok(i * IEC_BASES[6]),
+            RawSuffix::Z => Ok(i * IEC_BASES[7]),
+            RawSuffix::Y => Ok(i * IEC_BASES[8]),
+        },
         (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
     }
 }
 
-fn transform_from(s: String, unit: &Unit) -> Result<String> {
+fn transform_from(s: String, opts: &Transform) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
-    remove_suffix(i, suffix, unit).map(|n| n.round().to_string())
+    remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
 }
 
 fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
+    let j = i.abs();
     match *u {
-        Unit::Si => {
-            match i {
-                _ if i < 1000. => Ok((i, None)),
-                _ if i < 1000_000. => Ok((i / 1000., Some(Suffix::K))),
-                _ if i < 1000_000_000. => Ok((i / 1000_000., Some(Suffix::M))),
-                _ if i < 1000_000_000_000. => Ok((i / 1000_000_000., Some(Suffix::G))),
-                _ if i < 1000_000_000_000_000. => Ok((i / 1000_000_000_000., Some(Suffix::T))),
-                _ if i < 1000_000_000_000_000_000. => Ok(
-                    (i / 1000_000_000_000_000., Some(Suffix::P)),
-                ),
-                _ if i < 1000_000_000_000_000_000_000. => Ok((
-                    i / 1000_000_000_000_000_000.,
-                    Some(Suffix::E),
-                )),
-                _ => Err("Number is too big and unsupported".to_owned()),
-            }
-        }
-        Unit::Iec => {
-            match i {
-                _ if i < 1024. => Ok((i, None)),
-                _ if i < 1048576. => Ok((i / 1024., Some(Suffix::K))),
-                _ if i < 1073741824. => Ok((i / 1048576., Some(Suffix::M))),
-                _ if i < 1099511627776. => Ok((i / 1073741824., Some(Suffix::G))),
-                _ if i < 1125899906842624. => Ok((i / 1099511627776., Some(Suffix::T))),
-                _ if i < 1152921504606846976. => Ok((i / 1125899906842624., Some(Suffix::P))),
-                _ if i < 1180591620717411303424. => Ok((i / 1152921504606846976., Some(Suffix::E))),
-                _ => Err("Number is too big and unsupported".to_owned()),
-            }
-        }
-        Unit::IecI => {
-            match i {
-                _ if i < 1024. => Ok((i, None)),
-                _ if i < 1048576. => Ok((i / 1024., Some(Suffix::Ki))),
-                _ if i < 1073741824. => Ok((i / 1048576., Some(Suffix::Mi))),
-                _ if i < 1099511627776. => Ok((i / 1073741824., Some(Suffix::Gi))),
-                _ if i < 1125899906842624. => Ok((i / 1099511627776., Some(Suffix::Ti))),
-                _ if i < 1152921504606846976. => Ok((i / 1125899906842624., Some(Suffix::Pi))),
-                _ if i < 1180591620717411303424. => Ok(
-                    (i / 1152921504606846976., Some(Suffix::Ei)),
-                ),
-                _ => Err("Number is too big and unsupported".to_owned()),
-            }
-        }
+        Unit::Si => match j {
+            _ if j < 1e3 => Ok((i, None)),
+            _ if j < 1e6 => Ok((i / 1e3, Some((RawSuffix::K, false)))),
+            _ if j < 1e9 => Ok((i / 1e6, Some((RawSuffix::M, false)))),
+            _ if j < 1e12 => Ok((i / 1e9, Some((RawSuffix::G, false)))),
+            _ if j < 1e15 => Ok((i / 1e12, Some((RawSuffix::T, false)))),
+            _ if j < 1e18 => Ok((i / 1e15, Some((RawSuffix::P, false)))),
+            _ if j < 1e21 => Ok((i / 1e18, Some((RawSuffix::E, false)))),
+            _ if j < 1e24 => Ok((i / 1e21, Some((RawSuffix::Z, false)))),
+            _ if j < 1e27 => Ok((i / 1e24, Some((RawSuffix::Y, false)))),
+            _ => Err("Number is too big and unsupported".to_owned()),
+        },
+        Unit::Iec(with_i) => match j {
+            _ if j < IEC_BASES[1] => Ok((i, None)),
+            _ if j < IEC_BASES[2] => Ok((i / IEC_BASES[1], Some((RawSuffix::K, with_i)))),
+            _ if j < IEC_BASES[3] => Ok((i / IEC_BASES[2], Some((RawSuffix::M, with_i)))),
+            _ if j < IEC_BASES[4] => Ok((i / IEC_BASES[3], Some((RawSuffix::G, with_i)))),
+            _ if j < IEC_BASES[5] => Ok((i / IEC_BASES[4], Some((RawSuffix::T, with_i)))),
+            _ if j < IEC_BASES[6] => Ok((i / IEC_BASES[5], Some((RawSuffix::P, with_i)))),
+            _ if j < IEC_BASES[7] => Ok((i / IEC_BASES[6], Some((RawSuffix::E, with_i)))),
+            _ if j < IEC_BASES[8] => Ok((i / IEC_BASES[7], Some((RawSuffix::Z, with_i)))),
+            _ if j < IEC_BASES[9] => Ok((i / IEC_BASES[8], Some((RawSuffix::Y, with_i)))),
+            _ => Err("Number is too big and unsupported".to_owned()),
+        },
         Unit::Auto => Err("Unit 'auto' isn't supported with --to options".to_owned()),
+        Unit::None => Ok((i, None)),
     }
 }
 
-fn transform_to(s: String, unit: &Unit) -> Result<String> {
-    let i = s.parse::<f64>().map_err(|err| err.to_string())?;
-    let (i2, s) = consider_suffix(i, unit)?;
+fn transform_to(s: f64, opts: &Transform) -> Result<String> {
+    let (i2, s) = consider_suffix(s, &opts.unit)?;
     Ok(match s {
         None => format!("{}", i2),
-        Some(s) => format!("{:.1}{}", i2, s),
+        Some(s) => format!("{:.1}{}", i2, DisplayableSuffix(s)),
     })
 }
 
 fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
-    let number = match options.transform.direction {
-        TransformDirection::From => transform_from(source, &options.transform.unit)?,
-        TransformDirection::To => transform_to(source, &options.transform.unit)?,
-    };
+    let number = transform_to(
+        transform_from(source, &options.transform.from)?,
+        &options.transform.to,
+    )?;
 
     Ok(match options.padding {
         p if p == 0 => number,
@@ -233,18 +225,19 @@ fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
 }
 
 fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
-    let transform = if args.opt_present("from") {
-        TransformOptions {
-            direction: TransformDirection::From,
-            unit: parse_unit(args.opt_str("from").ok_or("'--from' should have argument")?)?,
-        }
-    } else if args.opt_present("to") {
-        TransformOptions {
-            direction: TransformDirection::To,
-            unit: parse_unit(args.opt_str("to").ok_or("'--to' should have argument")?)?,
-        }
-    } else {
-        return Err("Either '--from' or '--to' should be specified".to_owned());
+    let transform = TransformOptions {
+        from: Transform {
+            unit: args
+                .opt_str("from")
+                .map(parse_unit)
+                .unwrap_or(Ok(Unit::None))?,
+        },
+        to: Transform {
+            unit: args
+                .opt_str("to")
+                .map(parse_unit)
+                .unwrap_or(Ok(Unit::None))?,
+        },
     };
 
     let padding = match args.opt_str("padding") {
@@ -335,19 +328,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
    none   no auto-scaling is done; suffixes will trigger an error
 
    auto   accept optional single/two letter suffix:
-		  
+
 		  1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
 
    si     accept optional single letter suffix:
-		  
+
 		  1K = 1000, 1M = 1000000, ...
 
    iec    accept optional single letter suffix:
-		  
+
 		  1K = 1024, 1M = 1048576, ...
 
    iec-i  accept optional two-letter suffix:
-		  
+
 		  1Ki = 1024, 1Mi = 1048576, ..."
         );
 

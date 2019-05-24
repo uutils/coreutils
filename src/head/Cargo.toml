@@ -2,15 +2,16 @@
 name = "head"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_head"
 path = "head.rs"
 
 [dependencies]
-libc = "0.2.26"
-uucore = { path="../uucore" }
+libc = "0.2.42"
+uucore = "0.0.1"
 
 [[bin]]
 name = "head"
-path = "main.rs"
+path = "../../uumain.rs"

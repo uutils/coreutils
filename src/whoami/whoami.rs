@@ -11,46 +11,34 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-extern crate getopts;
-
+#[macro_use]
+extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
-use std::io::Write;
-
 mod platform;
 
-static NAME: &'static str = "whoami";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+// force a re-build whenever Cargo.toml changes
+const _CARGO_TOML: &str = include_str!("Cargo.toml");
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
+    let app = app_from_crate!();
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    if let Err(err) = app.get_matches_from_safe(args) {
+        if err.kind == clap::ErrorKind::HelpDisplayed
+            || err.kind == clap::ErrorKind::VersionDisplayed
+        {
+            println!("{}", err);
+            0
+        } else {
+            show_error!("{}", err);
+            1
+        }
+    } else {
+        exec();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {} [OPTIONS]", NAME);
-        println!("");
-        println!("{}", opts.usage("print effective userid"));
-        return 0;
+        0
     }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    exec();
-
-    0
 }
 
 pub fn exec() {
@@ -60,7 +48,7 @@ pub fn exec() {
             Err(err) => match err.raw_os_error() {
                 Some(0) | None => crash!(1, "failed to get username"),
                 Some(_) => crash!(1, "failed to get username: {}", err),
-            }
+            },
         }
     }
 }

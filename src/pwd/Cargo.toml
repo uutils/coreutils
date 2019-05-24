@@ -2,15 +2,16 @@
 name = "pwd"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_pwd"
 path = "pwd.rs"
 
 [dependencies]
-getopts = "0.2.14"
-uucore = { path="../uucore" }
+getopts = "0.2.18"
+uucore = "0.0.1"
 
 [[bin]]
 name = "pwd"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -8,10 +8,10 @@ use std::iter::Peekable;
 use std::str::Chars;
 use std::process::exit;
 use cli;
-use itertools::{PutBackN, put_back_n};
+use itertools::{put_back_n, PutBackN};
 use super::token;
 use super::unescaped_text::UnescapedText;
-use super::num_format::format_field::{FormatField, FieldType};
+use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
 // use std::collections::HashSet;
 
@@ -57,11 +57,12 @@ pub struct Sub {
     orig: String,
 }
 impl Sub {
-    pub fn new(min_width: CanAsterisk<Option<isize>>,
-               second_field: CanAsterisk<Option<u32>>,
-               field_char: char,
-               orig: String)
-               -> Sub {
+    pub fn new(
+        min_width: CanAsterisk<Option<isize>>,
+        second_field: CanAsterisk<Option<u32>>,
+        field_char: char,
+        orig: String,
+    ) -> Sub {
         // for more dry printing, field characters are grouped
         // in initialization of token.
         let field_type = match field_char {
@@ -112,9 +113,10 @@ impl SubParser {
             text_so_far: String::new(),
         }
     }
-    fn from_it(it: &mut PutBackN<Chars>,
-               args: &mut Peekable<Iter<String>>)
-               -> Option<Box<token::Token>> {
+    fn from_it(
+        it: &mut PutBackN<Chars>,
+        args: &mut Peekable<Iter<String>>,
+    ) -> Option<Box<token::Token>> {
         let mut parser = SubParser::new();
         if parser.sub_vals_retrieved(it) {
             let t: Box<token::Token> = SubParser::build_token(parser);
@@ -127,22 +129,23 @@ impl SubParser {
     fn build_token(parser: SubParser) -> Box<token::Token> {
         // not a self method so as to allow move of subparser vals.
         // return new Sub struct as token
-        let t: Box<token::Token> = Box::new(Sub::new(if parser.min_width_is_asterisk {
-                                                         CanAsterisk::Asterisk
-                                                     } else {
-                                                         CanAsterisk::Fixed(parser.min_width_tmp.map(|x| x.parse::<isize>().unwrap()))
-                                                     },
-                                                     if parser.second_field_is_asterisk {
-                                                         CanAsterisk::Asterisk
-                                                     } else {
-                                                         CanAsterisk::Fixed(parser.second_field_tmp.map(|x| x.parse::<u32>().unwrap()))
-                                                     },
-                                                     parser.field_char.unwrap(),
-                                                     parser.text_so_far));
+        let t: Box<token::Token> = Box::new(Sub::new(
+            if parser.min_width_is_asterisk {
+                CanAsterisk::Asterisk
+            } else {
+                CanAsterisk::Fixed(parser.min_width_tmp.map(|x| x.parse::<isize>().unwrap()))
+            },
+            if parser.second_field_is_asterisk {
+                CanAsterisk::Asterisk
+            } else {
+                CanAsterisk::Fixed(parser.second_field_tmp.map(|x| x.parse::<u32>().unwrap()))
+            },
+            parser.field_char.unwrap(),
+            parser.text_so_far,
+        ));
         t
     }
     fn sub_vals_retrieved(&mut self, it: &mut PutBackN<Chars>) -> bool {
-
         if !SubParser::successfully_eat_prefix(it, &mut self.text_so_far) {
             return false;
         }
@@ -197,7 +200,7 @@ impl SubParser {
                             }
                             None => {
                                 panic!("should be unreachable");
-                            } 
+                            }
                         }
                     } else {
                         // second field should never have a
@@ -220,7 +223,7 @@ impl SubParser {
                             }
                             None => {
                                 panic!("should be unreachable");
-                            } 
+                            }
                         }
                     }
                 }
@@ -298,23 +301,23 @@ impl SubParser {
         // check for illegal combinations here when possible vs
         // on each application so we check less per application
         // to do: move these checks to Sub::new
-        if (field_char == 's' && self.min_width_tmp == Some(String::from("0"))) ||
-           (field_char == 'c' &&
-            (self.min_width_tmp == Some(String::from("0")) || self.past_decimal)) ||
-           (field_char == 'b' &&
-            (self.min_width_tmp.is_some() || self.past_decimal ||
-             self.second_field_tmp.is_some())) {
+        if (field_char == 's' && self.min_width_tmp == Some(String::from("0")))
+            || (field_char == 'c'
+                && (self.min_width_tmp == Some(String::from("0")) || self.past_decimal))
+            || (field_char == 'b'
+                && (self.min_width_tmp.is_some() || self.past_decimal
+                    || self.second_field_tmp.is_some()))
+        {
             err_conv(&self.text_so_far);
         }
     }
 }
 
-
-
 impl token::Tokenizer for Sub {
-    fn from_it(it: &mut PutBackN<Chars>,
-               args: &mut Peekable<Iter<String>>)
-               -> Option<Box<token::Token>> {
+    fn from_it(
+        it: &mut PutBackN<Chars>,
+        args: &mut Peekable<Iter<String>>,
+    ) -> Option<Box<token::Token>> {
         SubParser::from_it(it, args)
     }
 }
@@ -346,7 +349,7 @@ impl token::Token for Sub {
                         }
                         None => Some(0),
                     }
-                }                
+                }
             },
             field_char: &self.field_char,
             field_type: &self.field_type,
@@ -361,15 +364,13 @@ impl token::Token for Sub {
             // if %b use UnescapedText module's unescaping-fn
             // if %c return first char of arg
             FieldType::Strf | FieldType::Charf => {
-                match pf_arg { 
+                match pf_arg {
                     Some(arg_string) => {
                         match *field.field_char {
-                            's' => {
-                                Some(match field.second_field {
-                                    Some(max) => String::from(&arg_string[..max as usize]),
-                                    None => arg_string.clone(),
-                                })
-                            }
+                            's' => Some(match field.second_field {
+                                Some(max) => String::from(&arg_string[..max as usize]),
+                                None => arg_string.clone(),
+                            }),
                             'b' => {
                                 let mut a_it = put_back_n(arg_string.chars());
                                 UnescapedText::from_it_core(&mut a_it, true);
@@ -392,32 +393,34 @@ impl token::Token for Sub {
         match pre_min_width_opt {
             // if have a string, print it, ensuring minimum width is met.
             Some(pre_min_width) => {
-                print!("{}",
-                       match field.min_width {
-                           Some(min_width) => {
-                               let diff: isize = min_width.abs() as isize -
-                                                 pre_min_width.len() as isize;
-                               if diff > 0 {
-                                   let mut final_str = String::new();
-                                   // definitely more efficient ways
-                                   //  to do this.
-                                   let pad_before = min_width > 0;
-                                   if !pad_before {
-                                       final_str.push_str(&pre_min_width);
-                                   }
-                                   for _ in 0..diff {
-                                       final_str.push(' ');
-                                   }
-                                   if pad_before {
-                                       final_str.push_str(&pre_min_width);
-                                   }
-                                   final_str
-                               } else {
-                                   pre_min_width
-                               }
-                           }
-                           None => pre_min_width,
-                       });
+                print!(
+                    "{}",
+                    match field.min_width {
+                        Some(min_width) => {
+                            let diff: isize =
+                                min_width.abs() as isize - pre_min_width.len() as isize;
+                            if diff > 0 {
+                                let mut final_str = String::new();
+                                // definitely more efficient ways
+                                //  to do this.
+                                let pad_before = min_width > 0;
+                                if !pad_before {
+                                    final_str.push_str(&pre_min_width);
+                                }
+                                for _ in 0..diff {
+                                    final_str.push(' ');
+                                }
+                                if pad_before {
+                                    final_str.push_str(&pre_min_width);
+                                }
+                                final_str
+                            } else {
+                                pre_min_width
+                            }
+                        }
+                        None => pre_min_width,
+                    }
+                );
             }
             None => {}
         }

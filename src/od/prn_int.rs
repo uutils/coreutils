@@ -51,42 +51,65 @@ macro_rules! int_writer_signed {
 }
 
 /// Extends a signed number in `item` of `itembytes` bytes into a (signed) i64
-fn sign_extend(item: u64, itembytes: usize) -> i64{
+fn sign_extend(item: u64, itembytes: usize) -> i64 {
     let shift = 64 - itembytes * 8;
     (item << shift) as i64 >> shift
 }
 
-
-int_writer_unsigned!(FORMAT_ITEM_OCT8,  1,  4, format_item_oct8,  OCT!()); // max: 377
-int_writer_unsigned!(FORMAT_ITEM_OCT16, 2,  7, format_item_oct16, OCT!()); // max: 177777
+int_writer_unsigned!(FORMAT_ITEM_OCT8, 1, 4, format_item_oct8, OCT!()); // max: 377
+int_writer_unsigned!(FORMAT_ITEM_OCT16, 2, 7, format_item_oct16, OCT!()); // max: 177777
 int_writer_unsigned!(FORMAT_ITEM_OCT32, 4, 12, format_item_oct32, OCT!()); // max: 37777777777
 int_writer_unsigned!(FORMAT_ITEM_OCT64, 8, 23, format_item_oct64, OCT!()); // max: 1777777777777777777777
 
-int_writer_unsigned!(FORMAT_ITEM_HEX8,  1,  3, format_item_hex8,  HEX!()); // max: ff
-int_writer_unsigned!(FORMAT_ITEM_HEX16, 2,  5, format_item_hex16, HEX!()); // max: ffff
-int_writer_unsigned!(FORMAT_ITEM_HEX32, 4,  9, format_item_hex32, HEX!()); // max: ffffffff
+int_writer_unsigned!(FORMAT_ITEM_HEX8, 1, 3, format_item_hex8, HEX!()); // max: ff
+int_writer_unsigned!(FORMAT_ITEM_HEX16, 2, 5, format_item_hex16, HEX!()); // max: ffff
+int_writer_unsigned!(FORMAT_ITEM_HEX32, 4, 9, format_item_hex32, HEX!()); // max: ffffffff
 int_writer_unsigned!(FORMAT_ITEM_HEX64, 8, 17, format_item_hex64, HEX!()); // max: ffffffffffffffff
 
-int_writer_unsigned!(FORMAT_ITEM_DEC8U,  1,  4, format_item_dec_u8,  DEC!()); // max: 255
-int_writer_unsigned!(FORMAT_ITEM_DEC16U, 2,  6, format_item_dec_u16, DEC!()); // max: 65535
+int_writer_unsigned!(FORMAT_ITEM_DEC8U, 1, 4, format_item_dec_u8, DEC!()); // max: 255
+int_writer_unsigned!(FORMAT_ITEM_DEC16U, 2, 6, format_item_dec_u16, DEC!()); // max: 65535
 int_writer_unsigned!(FORMAT_ITEM_DEC32U, 4, 11, format_item_dec_u32, DEC!()); // max: 4294967295
 int_writer_unsigned!(FORMAT_ITEM_DEC64U, 8, 21, format_item_dec_u64, DEC!()); // max: 18446744073709551615
 
-int_writer_signed!(FORMAT_ITEM_DEC8S,  1,  5, format_item_dec_s8,  DEC!()); // max: -128
-int_writer_signed!(FORMAT_ITEM_DEC16S, 2,  7, format_item_dec_s16, DEC!()); // max: -32768
+int_writer_signed!(FORMAT_ITEM_DEC8S, 1, 5, format_item_dec_s8, DEC!()); // max: -128
+int_writer_signed!(FORMAT_ITEM_DEC16S, 2, 7, format_item_dec_s16, DEC!()); // max: -32768
 int_writer_signed!(FORMAT_ITEM_DEC32S, 4, 12, format_item_dec_s32, DEC!()); // max: -2147483648
 int_writer_signed!(FORMAT_ITEM_DEC64S, 8, 21, format_item_dec_s64, DEC!()); // max: -9223372036854775808
 
 #[test]
 fn test_sign_extend() {
-    assert_eq!(0xffffffffffffff80u64 as i64, sign_extend(0x0000000000000080, 1));
-    assert_eq!(0xffffffffffff8000u64 as i64, sign_extend(0x0000000000008000, 2));
-    assert_eq!(0xffffffffff800000u64 as i64, sign_extend(0x0000000000800000, 3));
-    assert_eq!(0xffffffff80000000u64 as i64, sign_extend(0x0000000080000000, 4));
-    assert_eq!(0xffffff8000000000u64 as i64, sign_extend(0x0000008000000000, 5));
-    assert_eq!(0xffff800000000000u64 as i64, sign_extend(0x0000800000000000, 6));
-    assert_eq!(0xff80000000000000u64 as i64, sign_extend(0x0080000000000000, 7));
-    assert_eq!(0x8000000000000000u64 as i64, sign_extend(0x8000000000000000, 8));
+    assert_eq!(
+        0xffffffffffffff80u64 as i64,
+        sign_extend(0x0000000000000080, 1)
+    );
+    assert_eq!(
+        0xffffffffffff8000u64 as i64,
+        sign_extend(0x0000000000008000, 2)
+    );
+    assert_eq!(
+        0xffffffffff800000u64 as i64,
+        sign_extend(0x0000000000800000, 3)
+    );
+    assert_eq!(
+        0xffffffff80000000u64 as i64,
+        sign_extend(0x0000000080000000, 4)
+    );
+    assert_eq!(
+        0xffffff8000000000u64 as i64,
+        sign_extend(0x0000008000000000, 5)
+    );
+    assert_eq!(
+        0xffff800000000000u64 as i64,
+        sign_extend(0x0000800000000000, 6)
+    );
+    assert_eq!(
+        0xff80000000000000u64 as i64,
+        sign_extend(0x0080000000000000, 7)
+    );
+    assert_eq!(
+        0x8000000000000000u64 as i64,
+        sign_extend(0x8000000000000000, 8)
+    );
 
     assert_eq!(0x000000000000007f, sign_extend(0x000000000000007f, 1));
     assert_eq!(0x0000000000007fff, sign_extend(0x0000000000007fff, 2));
@@ -107,7 +130,10 @@ fn test_format_item_oct() {
     assert_eq!(" 00000000000", format_item_oct32(0));
     assert_eq!(" 37777777777", format_item_oct32(0xffffffff));
     assert_eq!(" 0000000000000000000000", format_item_oct64(0));
-    assert_eq!(" 1777777777777777777777", format_item_oct64(0xffffffffffffffff));
+    assert_eq!(
+        " 1777777777777777777777",
+        format_item_oct64(0xffffffffffffffff)
+    );
 }
 
 #[test]
@@ -131,7 +157,10 @@ fn test_format_item_dec_u() {
     assert_eq!("          0", format_item_dec_u32(0));
     assert_eq!(" 4294967295", format_item_dec_u32(0xffffffff));
     assert_eq!("                    0", format_item_dec_u64(0));
-    assert_eq!(" 18446744073709551615", format_item_dec_u64(0xffffffffffffffff));
+    assert_eq!(
+        " 18446744073709551615",
+        format_item_dec_u64(0xffffffffffffffff)
+    );
 }
 
 #[test]
@@ -146,6 +175,12 @@ fn test_format_item_dec_s() {
     assert_eq!("  2147483647", format_item_dec_s32(0x7fffffff));
     assert_eq!(" -2147483648", format_item_dec_s32(0x80000000));
     assert_eq!("                    0", format_item_dec_s64(0));
-    assert_eq!("  9223372036854775807", format_item_dec_s64(0x7fffffffffffffff));
-    assert_eq!(" -9223372036854775808", format_item_dec_s64(0x8000000000000000));
+    assert_eq!(
+        "  9223372036854775807",
+        format_item_dec_s64(0x7fffffffffffffff)
+    );
+    assert_eq!(
+        " -9223372036854775808",
+        format_item_dec_s64(0x8000000000000000)
+    );
 }

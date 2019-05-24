@@ -1,8 +1,12 @@
 #[macro_use]
 mod common;
 
+#[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
+
+#[cfg(unix)]
+extern crate rust_users;
 
 // For conditional compilation
 macro_rules! unix_only {
@@ -19,17 +23,14 @@ unix_only! {
     "chown", test_chown;
     "chgrp", test_chgrp;
     "install", test_install;
-    "mv", test_mv;
     "pathchk", test_pathchk;
     "pinky", test_pinky;
     "stdbuf", test_stdbuf;
-    "touch", test_touch;
     "unlink", test_unlink;
     "who", test_who;
     // Be aware of the trailing semicolon after the last item
     "stat", test_stat
 }
-
 
 macro_rules! generic {
     ($($fea:expr, $m:ident);+) => {
@@ -51,6 +52,7 @@ generic! {
     "dircolors", test_dircolors;
     "dirname", test_dirname;
     "df", test_df;
+    "du", test_du;
     "echo", test_echo;
     "env", test_env;
     "expr", test_expr;
@@ -59,11 +61,13 @@ generic! {
     "fold", test_fold;
     "hashsum", test_hashsum;
     "head", test_head;
+    "join", test_join;
     "link", test_link;
     "ln", test_ln;
     "ls", test_ls;
     "mkdir", test_mkdir;
     "mktemp", test_mktemp;
+    "mv", test_mv;
     "numfmt", test_numfmt;
     "nl", test_nl;
     "od", test_od;
@@ -82,12 +86,14 @@ generic! {
     "tac", test_tac;
     "tail", test_tail;
     "test", test_test;
+    "touch", test_touch;
     "tr", test_tr;
     "true", test_true;
     "truncate", test_truncate;
     "tsort", test_tsort;
     "unexpand", test_unexpand;
     "uniq", test_uniq;
+    "wc", test_wc;
     // Be aware of the trailing semicolon after the last item
-    "wc", test_wc
+    "hostname", test_hostname
 }

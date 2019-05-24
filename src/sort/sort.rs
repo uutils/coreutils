@@ -1,5 +1,4 @@
 #![crate_name = "uu_sort"]
-
 /*
  * This file is part of the uutils coreutils package.
  *
@@ -8,31 +7,30 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
 #![allow(dead_code)]
 
 extern crate getopts;
 extern crate semver;
 
+extern crate itertools;
 #[macro_use]
 extern crate uucore;
-extern crate itertools;
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Lines, Read, stdin, stdout, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
 use uucore::fs::is_stdin_interactive;
 use semver::Version;
 use itertools::Itertools; // for Iterator::dedup()
 
-static NAME: &'static str = "sort";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "sort";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static DECIMAL_PT: char = '.';
-static THOUSANDS_SEP: char = ',';
+const DECIMAL_PT: char = '.';
+const THOUSANDS_SEP: char = ',';
 
 enum SortMode {
     Numeric,
@@ -111,7 +109,7 @@ impl<'a> FileMerger<'a> {
             settings: settings,
         }
     }
-    fn push_file(&mut self, mut lines: Lines<BufReader<Box<Read>>>){
+    fn push_file(&mut self, mut lines: Lines<BufReader<Box<Read>>>) {
         match lines.next() {
             Some(Ok(next_line)) => {
                 let mergeable_file = MergeableFile {
@@ -136,14 +134,14 @@ impl<'a> Iterator for FileMerger<'a> {
                         let ret = replace(&mut current.current_line, next_line);
                         self.heap.push(current);
                         Some(ret)
-                    },
+                    }
                     _ => {
                         // Don't put it back in the heap (it's empty/erroring)
                         // but its first line is still valid.
                         Some(current.current_line)
-                    },
+                    }
                 }
-            },
+            }
             None => None,
         }
     }
@@ -153,26 +151,56 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut settings: Settings = Default::default();
     let mut opts = getopts::Options::new();
 
-    opts.optflag("f", "ignore-case", "fold lower case to upper case characters");
-    opts.optflag("n", "numeric-sort", "compare according to string numerical value");
-    opts.optflag("h", "human-numeric-sort", "compare according to human readable sizes, eg 1M > 100k");
-    opts.optflag("M", "month-sort", "compare according to month name abbreviation");
+    opts.optflag(
+        "f",
+        "ignore-case",
+        "fold lower case to upper case characters",
+    );
+    opts.optflag(
+        "n",
+        "numeric-sort",
+        "compare according to string numerical value",
+    );
+    opts.optflag(
+        "h",
+        "human-numeric-sort",
+        "compare according to human readable sizes, eg 1M > 100k",
+    );
+    opts.optflag(
+        "M",
+        "month-sort",
+        "compare according to month name abbreviation",
+    );
     opts.optflag("r", "reverse", "reverse the output");
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("", "version", "output version information and exit");
     opts.optflag("m", "merge", "merge already sorted files; do not sort");
-    opts.optopt("o", "output", "write output to FILENAME instead of stdout", "FILENAME");
-    opts.optflag("s", "stable", "stabilize sort by disabling last-resort comparison");
+    opts.optopt(
+        "o",
+        "output",
+        "write output to FILENAME instead of stdout",
+        "FILENAME",
+    );
+    opts.optflag(
+        "s",
+        "stable",
+        "stabilize sort by disabling last-resort comparison",
+    );
     opts.optflag("u", "unique", "output only the first of an equal run");
-    opts.optflag("V", "version-sort", "Sort by SemVer version number, eg 1.12.2 > 1.1.2");
+    opts.optflag(
+        "V",
+        "version-sort",
+        "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+    );
     opts.optflag("c", "check", "check for sorted input; do not sort");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f)
+        Err(f) => crash!(1, "Invalid options\n{}", f),
     };
     if matches.opt_present("help") {
-        let msg = format!("{0} {1}
+        let msg = format!(
+            "{0} {1}
 
 Usage:
  {0} [OPTION]... [FILE]...
@@ -181,7 +209,9 @@ Write the sorted concatenation of all FILE(s) to standard output.
 
 Mandatory arguments for long options are mandatory for short options too.
 
-With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
+With no FILE, or when FILE is -, read standard input.",
+            NAME, VERSION
+        );
         print!("{}", opts.usage(&msg));
         return 0;
     }
@@ -215,10 +245,8 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
     if files.is_empty() {
         /* if no file, default to stdin */
         files.push("-".to_owned());
-    }
-    else if settings.check && files.len() != 1 {
+    } else if settings.check && files.len() != 1 {
         crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
-
     }
 
     settings.compare_fns.push(match settings.mode {
@@ -226,13 +254,13 @@ With no FILE, or when FILE is -, read standard input.", NAME, VERSION);
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
-        SortMode::Default => String::cmp
+        SortMode::Default => String::cmp,
     });
 
     if !settings.stable {
         match settings.mode {
             SortMode::Default => {}
-            _ => settings.compare_fns.push(String::cmp)
+            _ => settings.compare_fns.push(String::cmp),
         }
     }
 
@@ -253,16 +281,13 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
 
         if settings.merge {
             file_merger.push_file(buf_reader.lines());
-        }
-        else if settings.check {
-            return exec_check_file(buf_reader.lines(), &settings)
-        }
-        else {
+        } else if settings.check {
+            return exec_check_file(buf_reader.lines(), &settings);
+        } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
-                        lines.push(n);
-                }
-                else {
+                    lines.push(n);
+                } else {
                     break;
                 }
             }
@@ -274,22 +299,18 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings.outfile)
-        }
-        else {
+        } else {
             print_sorted(file_merger, &settings.outfile)
         }
-    }
-    else {
+    } else {
         if settings.unique {
             print_sorted(lines.iter().dedup(), &settings.outfile)
-        }
-        else {
+        } else {
             print_sorted(lines.iter(), &settings.outfile)
         }
     }
 
     0
-
 }
 
 fn exec_check_file(lines: Lines<BufReader<Box<Read>>>, settings: &Settings) -> i32 {
@@ -298,42 +319,37 @@ fn exec_check_file(lines: Lines<BufReader<Box<Read>>>, settings: &Settings) -> i
     let unwrapped_lines = lines.filter_map(|maybe_line| {
         if let Ok(line) = maybe_line {
             Some(line)
-        }
-        else {
+        } else {
             None
         }
     });
-    let mut errors = unwrapped_lines.enumerate().coalesce(
-        |(last_i, last_line), (i, line)| {
+    let mut errors = unwrapped_lines
+        .enumerate()
+        .coalesce(|(last_i, last_line), (i, line)| {
             if compare_by(&last_line, &line, &settings) == Ordering::Greater {
                 Err(((last_i, last_line), (i, line)))
-            }
-            else {
+            } else {
                 Ok((i, line))
             }
-    });
+        });
     if let Some((first_error_index, _line)) = errors.next() {
         // Check for a second "error", as .coalesce() always returns the last
         // line, no matter what our merging function does.
         if let Some(_last_line_or_next_error) = errors.next() {
             println!("sort: disorder in line {}", first_error_index);
             return 1;
-        }
-        else {
-            // first "error" was actually the last line. 
+        } else {
+            // first "error" was actually the last line.
             return 0;
         }
-    }
-    else {
+    } else {
         // unwrapped_lines was empty. Empty files are defined to be sorted.
         return 0;
     }
 }
 
 fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
-    lines.sort_by(|a, b| {
-        compare_by(a, b, &settings)
-    })
+    lines.sort_by(|a, b| compare_by(a, b, &settings))
 }
 
 fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
@@ -352,8 +368,7 @@ fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
         if cmp != Ordering::Equal {
             if settings.reverse {
                 return cmp.reverse();
-            }
-            else {
+            } else {
                 return cmp;
             }
         }
@@ -367,10 +382,16 @@ fn permissive_f64_parse(a: &str) -> f64 {
     // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
     // because there's no way to handle both CSV and thousands separators without a new flag.
     // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
-    let sa: &str = a.split_whitespace().next().unwrap();
-    match sa.parse::<f64>() {
-        Ok(a) => a,
-        Err(_) => std::f64::NEG_INFINITY
+    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
+    match a.split_whitespace().next() {
+        None => std::f64::NEG_INFINITY,
+        Some(sa) => {
+            match sa.parse::<f64>() {
+                Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
+                Ok(a) => a,
+                Err(_) => std::f64::NEG_INFINITY,
+            }
+        }
     }
 }
 
@@ -384,11 +405,9 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     // but we sidestep that with permissive_f64_parse so just fake it
     if fa > fb {
         Ordering::Greater
-    }
-    else if fa < fb {
+    } else if fa < fb {
         Ordering::Less
-    }
-    else {
+    } else {
         Ordering::Equal
     }
 }
@@ -400,7 +419,7 @@ fn human_numeric_convert(a: &String) -> f64 {
     let suffix = suffix_iter.skip_while(|c| c.is_numeric()).next();
     let int_part = match int_str.parse::<f64>() {
         Ok(i) => i,
-        Err(_) => -1f64
+        Err(_) => -1f64,
     } as f64;
     let suffix: f64 = match suffix.unwrap_or('\0') {
         'K' => 1000f64,
@@ -408,7 +427,7 @@ fn human_numeric_convert(a: &String) -> f64 {
         'G' => 1E9,
         'T' => 1E12,
         'P' => 1E15,
-        _ => 1f64
+        _ => 1f64,
     };
     int_part * suffix
 }
@@ -420,11 +439,9 @@ fn human_numeric_size_compare(a: &String, b: &String) -> Ordering {
     let fb = human_numeric_convert(b);
     if fa > fb {
         Ordering::Greater
-    }
-    else if fa < fb {
+    } else if fa < fb {
         Ordering::Less
-    }
-    else {
+    } else {
         Ordering::Equal
     }
 }
@@ -448,7 +465,12 @@ enum Month {
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
 fn month_parse(line: &String) -> Month {
-    match line.split_whitespace().next().unwrap().to_uppercase().as_ref() {
+    match line.split_whitespace()
+        .next()
+        .unwrap()
+        .to_uppercase()
+        .as_ref()
+    {
         "JAN" => Month::January,
         "FEB" => Month::February,
         "MAR" => Month::March,
@@ -461,7 +483,7 @@ fn month_parse(line: &String) -> Month {
         "OCT" => Month::October,
         "NOV" => Month::November,
         "DEC" => Month::December,
-        _     => Month::Unknown,
+        _ => Month::Unknown,
     }
 }
 
@@ -474,29 +496,27 @@ fn version_compare(a: &String, b: &String) -> Ordering {
     let ver_b = Version::parse(b);
     if ver_a > ver_b {
         Ordering::Greater
-    }
-    else if ver_a < ver_b {
+    } else if ver_a < ver_b {
         Ordering::Less
-    }
-    else {
+    } else {
         Ordering::Equal
     }
 }
 
-fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where S: std::fmt::Display {
+fn print_sorted<S, T: Iterator<Item = S>>(iter: T, outfile: &Option<String>)
+where
+    S: std::fmt::Display,
+{
     let mut file: Box<Write> = match *outfile {
-        Some(ref filename) => {
-            match File::create(Path::new(&filename)) {
-                Ok(f) => Box::new(BufWriter::new(f)) as Box<Write>,
-                Err(e) => {
-                    show_error!("sort: {0}: {1}", filename, e.to_string());
-                    panic!("Could not open output file");
-                },
+        Some(ref filename) => match File::create(Path::new(&filename)) {
+            Ok(f) => Box::new(BufWriter::new(f)) as Box<Write>,
+            Err(e) => {
+                show_error!("sort: {0}: {1}", filename, e.to_string());
+                panic!("Could not open output file");
             }
         },
         None => Box::new(stdout()) as Box<Write>,
     };
-
 
     for line in iter {
         let str = format!("{}\n", line);
@@ -504,7 +524,7 @@ fn print_sorted<S, T: Iterator<Item=S>>(iter: T, outfile: &Option<String>) where
             Err(e) => {
                 show_error!("sort: {0}", e.to_string());
                 panic!("Write failed");
-            },
+            }
             Ok(_) => (),
         }
     }
@@ -522,6 +542,6 @@ fn open(path: &str) -> Option<(Box<Read>, bool)> {
         Err(e) => {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
-        },
+        }
     }
 }

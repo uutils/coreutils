@@ -14,31 +14,31 @@ extern crate chrono;
 extern crate clap;
 extern crate uucore;
 
-use chrono::{DateTime, FixedOffset, Offset, Local};
+use chrono::{DateTime, FixedOffset, Local, Offset};
 use chrono::offset::Utc;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
 // Options
-const DATE: &'static str = "date";
-const HOURS: &'static str = "hours";
-const MINUTES: &'static str = "minutes";
-const SECONDS: &'static str = "seconds";
-const NS: &'static str = "ns";
+const DATE: &str = "date";
+const HOURS: &str = "hours";
+const MINUTES: &str = "minutes";
+const SECONDS: &str = "seconds";
+const NS: &str = "ns";
 
 // Help strings
 
-static ISO_8601_HELP_STRING: &'static str = "output date/time in ISO 8601 format.
+static ISO_8601_HELP_STRING: &str = "output date/time in ISO 8601 format.
  FMT='date' for date only (the default),
  'hours', 'minutes', 'seconds', or 'ns'
  for date and time to the indicated precision.
  Example: 2006-08-14T02:34:56-06:00";
 
-static RFC_2822_HELP_STRING: &'static str = "output date and time in RFC 2822 format.
+static RFC_2822_HELP_STRING: &str = "output date and time in RFC 2822 format.
  Example: Mon, 14 Aug 2006 02:34:56 -0600";
 
-static RFC_3339_HELP_STRING: &'static str = "output date/time in RFC 3339 format.
+static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
  FMT='date', 'seconds', or 'ns'
  for date and time to the indicated precision.
  Example: 2006-08-14 02:34:56-06:00";
@@ -108,34 +108,30 @@ impl<'a> From<&'a str> for Rfc3339Format {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-
     let settings = parse_cli(args);
 
     if let Some(_time) = settings.set_to {
         unimplemented!();
-        // Probably need to use this syscall:
-        // https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
-
+    // Probably need to use this syscall:
+    // https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
     } else {
         // Declare a file here because it needs to outlive the `dates` iterator.
         let file: File;
 
         // Get the current time, either in the local time zone or UTC.
-        let now: DateTime<FixedOffset> = match settings.utc {
-            true => {
-                let now = Utc::now();
-                now.with_timezone(&now.offset().fix())
-            }
-            false => {
-                let now = Local::now();
-                now.with_timezone(now.offset())
-            }
+        let now: DateTime<FixedOffset> = if settings.utc {
+            let now = Utc::now();
+            now.with_timezone(&now.offset().fix())
+        } else {
+            let now = Local::now();
+            now.with_timezone(now.offset())
         };
 
         /// Parse a `String` into a `DateTime`.
         /// If it fails, return a tuple of the `String` along with its `ParseError`.
-        fn parse_date(s: String)
-                      -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
+        fn parse_date(
+            s: String,
+        ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
             // TODO: The GNU date command can parse a wide variety of inputs.
             s.parse().map_err(|e| (s, e))
         }
@@ -178,7 +174,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-
 /// Handle command line arguments.
 fn parse_cli(args: Vec<String>) -> Settings {
     let matches = clap_app!(
@@ -200,10 +195,11 @@ fn parse_cli(args: Vec<String>) -> Settings {
               possible_value[date seconds ns]
               RFC_3339_HELP_STRING)
              (@arg custom_format: +takes_value {
-                 |s| match s.starts_with("+") {
-                     true => Ok(()),
-                     false => Err(String::from("Date formats must start with a '+' character"))
-                 }
+                 |s| if s.starts_with('+') {
+                        Ok(())
+                     } else {
+                        Err(String::from("Date formats must start with a '+' character"))
+                     }
              }))
 
             (@arg debug: --debug
@@ -221,15 +217,13 @@ fn parse_cli(args: Vec<String>) -> Settings {
     // (after_help: include_str!("usage.txt")))
         .get_matches_from(args);
 
-
     let format = if let Some(form) = matches.value_of("custom_format") {
         let form = form[1..].into();
         Format::Custom(form)
-    } else if let Some(fmt) = matches.values_of("iso_8601").map(|mut iter| {
-                                                                    iter.next()
-                                                                        .unwrap_or(DATE)
-                                                                        .into()
-                                                                }) {
+    } else if let Some(fmt) = matches
+        .values_of("iso_8601")
+        .map(|mut iter| iter.next().unwrap_or(DATE).into())
+    {
         Format::Iso8601(fmt)
     } else if matches.is_present("rfc_2822") {
         Format::Rfc2822
@@ -249,34 +243,29 @@ fn parse_cli(args: Vec<String>) -> Settings {
 
     Settings {
         utc: matches.is_present("utc"),
-        format: format,
-        date_source: date_source,
+        format,
+        date_source,
         // TODO: Handle this option:
         set_to: None,
     }
 }
 
-
 /// Return the appropriate format string for the given settings.
 fn make_format_string(settings: &Settings) -> &str {
     match settings.format {
-        Format::Iso8601(ref fmt) => {
-            match fmt {
-                &Iso8601Format::Date => "%F",
-                &Iso8601Format::Hours => "%FT%H%:z",
-                &Iso8601Format::Minutes => "%FT%H:%M%:z",
-                &Iso8601Format::Seconds => "%FT%T%:z",
-                &Iso8601Format::Ns => "%FT%T,%f%:z",
-            }
-        }
+        Format::Iso8601(ref fmt) => match *fmt {
+            Iso8601Format::Date => "%F",
+            Iso8601Format::Hours => "%FT%H%:z",
+            Iso8601Format::Minutes => "%FT%H:%M%:z",
+            Iso8601Format::Seconds => "%FT%T%:z",
+            Iso8601Format::Ns => "%FT%T,%f%:z",
+        },
         Format::Rfc2822 => "%a, %d %h %Y %T %z",
-        Format::Rfc3339(ref fmt) => {
-            match fmt {
-                &Rfc3339Format::Date => "%F",
-                &Rfc3339Format::Seconds => "%F %T%:z",
-                &Rfc3339Format::Ns => "%F %T.%f%:z",
-            }
-        }
+        Format::Rfc3339(ref fmt) => match *fmt {
+            Rfc3339Format::Date => "%F",
+            Rfc3339Format::Seconds => "%F %T%:z",
+            Rfc3339Format::Ns => "%F %T.%f%:z",
+        },
         Format::Custom(ref fmt) => fmt,
         Format::Default => "%c",
     }

@@ -2,11 +2,15 @@
 name = "false"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_false"
 path = "false.rs"
 
+[dependencies]
+uucore = "0.0.1"
+
 [[bin]]
 name = "false"
-path = "main.rs"
+path = "../../uumain.rs"

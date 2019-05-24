@@ -2,15 +2,19 @@
 name = "realpath"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_realpath"
 path = "realpath.rs"
 
 [dependencies]
-getopts = "0.2.14"
-uucore = { path="../uucore" }
+getopts = "0.2.18"
+
+[dependencies.uucore]
+version = "0.0.1"
+features = ["fs"]
 
 [[bin]]
 name = "realpath"
-path = "main.rs"
+path = "../../uumain.rs"

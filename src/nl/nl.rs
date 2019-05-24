@@ -13,22 +13,22 @@
 extern crate aho_corasick;
 extern crate getopts;
 extern crate memchr;
-extern crate regex_syntax;
 extern crate regex;
+extern crate regex_syntax;
 
 #[macro_use]
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
 mod helper;
 
-static NAME: &'static str = "nl";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
-static USAGE: &'static str = "nl [OPTION]... [FILE]...";
+static NAME: &str = "nl";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = "nl [OPTION]... [FILE]...";
 // A regular expression matching everything.
 
 // Settings store options used by nl to produce its output.
@@ -49,7 +49,7 @@ pub struct Settings {
     number_format: NumberFormat,
     renumber: bool,
     // The string appended to each line number output.
-    number_separator: String
+    number_separator: String,
 }
 
 // NumberingStyle stores which lines are to be numbered.
@@ -62,7 +62,7 @@ enum NumberingStyle {
     NumberForAll,
     NumberForNonEmpty,
     NumberForNone,
-    NumberForRegularExpression(regex::Regex)
+    NumberForRegularExpression(regex::Regex),
 }
 
 // NumberFormat specifies how line numbers are output within their allocated
@@ -77,17 +77,71 @@ enum NumberFormat {
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
-    opts.optopt("b", "body-numbering", "use STYLE for numbering body lines", "STYLE");
-    opts.optopt("d", "section-delimiter", "use CC for separating logical pages", "CC");
-    opts.optopt("f", "footer-numbering", "use STYLE for numbering footer lines", "STYLE");
-    opts.optopt("h", "header-numbering", "use STYLE for numbering header lines", "STYLE");
-    opts.optopt("i", "line-increment", "line number increment at each line", "");
-    opts.optopt("l", "join-blank-lines", "group of NUMBER empty lines counted as one", "NUMBER");
-    opts.optopt("n", "number-format", "insert line numbers according to FORMAT", "FORMAT");
-    opts.optflag("p", "no-renumber", "do not reset line numbers at logical pages");
-    opts.optopt("s", "number-separator", "add STRING after (possible) line number", "STRING");
-    opts.optopt("v", "starting-line-number", "first line number on each logical page", "NUMBER");
-    opts.optopt("w", "number-width", "use NUMBER columns for line numbers", "NUMBER");
+    opts.optopt(
+        "b",
+        "body-numbering",
+        "use STYLE for numbering body lines",
+        "STYLE",
+    );
+    opts.optopt(
+        "d",
+        "section-delimiter",
+        "use CC for separating logical pages",
+        "CC",
+    );
+    opts.optopt(
+        "f",
+        "footer-numbering",
+        "use STYLE for numbering footer lines",
+        "STYLE",
+    );
+    opts.optopt(
+        "h",
+        "header-numbering",
+        "use STYLE for numbering header lines",
+        "STYLE",
+    );
+    opts.optopt(
+        "i",
+        "line-increment",
+        "line number increment at each line",
+        "",
+    );
+    opts.optopt(
+        "l",
+        "join-blank-lines",
+        "group of NUMBER empty lines counted as one",
+        "NUMBER",
+    );
+    opts.optopt(
+        "n",
+        "number-format",
+        "insert line numbers according to FORMAT",
+        "FORMAT",
+    );
+    opts.optflag(
+        "p",
+        "no-renumber",
+        "do not reset line numbers at logical pages",
+    );
+    opts.optopt(
+        "s",
+        "number-separator",
+        "add STRING after (possible) line number",
+        "STRING",
+    );
+    opts.optopt(
+        "v",
+        "starting-line-number",
+        "first line number on each logical page",
+        "NUMBER",
+    );
+    opts.optopt(
+        "w",
+        "number-width",
+        "use NUMBER columns for line numbers",
+        "NUMBER",
+    );
     opts.optflag("", "help", "display this help and exit");
     opts.optflag("V", "version", "version");
 
@@ -107,11 +161,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let given_options = match opts.parse(&args[1..]) {
-        Ok (m) => { m }
+        Ok(m) => m,
         Err(f) => {
             show_error!("{}", f);
             print_usage(&opts);
-            return 1
+            return 1;
         }
     };
 
@@ -119,7 +173,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         print_usage(&opts);
         return 0;
     }
-    if given_options.opt_present("version") { version(); return 0; }
+    if given_options.opt_present("version") {
+        version();
+        return 0;
+    }
 
     // Update the settings from the command line options, and terminate the
     // program if some options could not successfully be parsed.
@@ -140,7 +197,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             // If both file names and '-' are specified, we choose to treat first all
             // regular files, and then read from stdin last.
             read_stdin = true;
-            continue
+            continue;
         }
         let path = Path::new(file);
         let reader = File::open(path).unwrap();
@@ -156,7 +213,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 // nl implements the main functionality for an individual buffer.
-fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
+fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;
     // The current line number's width as a string. Using to_string is inefficient
@@ -169,14 +226,14 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
         NumberFormat::RightZero => '0',
-        _ => ' '
+        _ => ' ',
     };
     // Initially, we use the body's line counting settings
     let mut regex_filter = match settings.body_numbering {
         NumberingStyle::NumberForRegularExpression(ref re) => re,
         _ => &regexp,
     };
-    let mut line_filter : fn(&str, &regex::Regex) -> bool = pass_regex;
+    let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
         if !l.is_empty() && l.chars().rev().next().unwrap() == '\n' {
@@ -198,8 +255,7 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             // If we have already seen three groups (corresponding to
             // a header) or the current char does not form part of
             // a new group, then this line is not a segment indicator.
-            if matched_groups >= 3
-                || settings.section_delimiter[if odd { 1 } else { 0 }] != c {
+            if matched_groups >= 3 || settings.section_delimiter[if odd { 1 } else { 0 }] != c {
                 matched_groups = 0;
                 break;
             }
@@ -230,22 +286,18 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
                         line_no_threshold = 10u64.pow(line_no_width as u32);
                     }
                     &settings.header_numbering
-                },
-                1 => {
-                    &settings.footer_numbering
-                },
+                }
+                1 => &settings.footer_numbering,
                 // The only option left is 2, but rust wants
                 // a catch-all here.
-                _ => {
-                    &settings.body_numbering
-                }
+                _ => &settings.body_numbering,
             } {
                 NumberingStyle::NumberForAll => {
                     line_filter = pass_all;
-                },
+                }
                 NumberingStyle::NumberForNonEmpty => {
                     line_filter = pass_nonempty;
-                },
+                }
                 NumberingStyle::NumberForNone => {
                     line_filter = pass_none;
                 }
@@ -267,7 +319,8 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             empty_line_count = 0;
         }
         if !line_filter(&line, regex_filter)
-            || ( empty_line_count > 0 && empty_line_count < settings.join_blank_lines) {
+            || (empty_line_count > 0 && empty_line_count < settings.join_blank_lines)
+        {
             // No number is printed for this line. Either we did not
             // want to print one in the first place, or it is a blank
             // line but we are still collecting more blank lines via
@@ -286,12 +339,14 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
         }
         let fill: String = repeat(fill_char).take(w).collect();
         match settings.number_format {
-            NumberFormat::Left => {
-                println!("{1}{0}{2}{3}", fill, line_no, settings.number_separator, line)
-            },
-            _ => {
-                println!("{0}{1}{2}{3}", fill, line_no, settings.number_separator, line)
-            }
+            NumberFormat::Left => println!(
+                "{1}{0}{2}{3}",
+                fill, line_no, settings.number_separator, line
+            ),
+            _ => println!(
+                "{0}{1}{2}{3}",
+                fill, line_no, settings.number_separator, line
+            ),
         }
         // Now update the variables for the (potential) next
         // line.
@@ -301,7 +356,6 @@ fn nl<T: Read> (reader: &mut BufReader<T>, settings: &Settings) {
             line_no_threshold *= 10;
             line_no_width += 1;
         }
-
     }
 }
 

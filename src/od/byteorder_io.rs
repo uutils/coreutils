@@ -1,7 +1,7 @@
 // workaround until https://github.com/BurntSushi/byteorder/issues/41 has been fixed
 // based on: https://github.com/netvl/immeta/blob/4460ee/src/utils.rs#L76
 
-use byteorder::{NativeEndian, LittleEndian, BigEndian};
+use byteorder::{BigEndian, LittleEndian, NativeEndian};
 use byteorder::ByteOrder as ByteOrderTrait;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

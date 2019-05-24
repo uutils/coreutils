@@ -14,14 +14,14 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{stdin, BufRead, BufReader, Read};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
 
-static SYNTAX: &'static str = "";
-static SUMMARY: &'static str = "";
-static LONG_HELP: &'static str = "";
+static SYNTAX: &str = "";
+static SUMMARY: &str = "";
+static LONG_HELP: &str = "";
 
 enum FilterMode {
     Bytes(usize),
@@ -47,13 +47,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     // handle obsolete -number syntax
     let new_args = match obsolete(&args[0..]) {
-        (args, Some(n)) => { settings.mode = FilterMode::Lines(n); args },
-        (args, None) => args
+        (args, Some(n)) => {
+            settings.mode = FilterMode::Lines(n);
+            args
+        }
+        (args, None) => args,
     };
 
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt("c", "bytes", "Print the first K bytes.  With the leading '-', print all but the last K bytes", "[-]K")
-        .optopt("n", "lines", "Print the first K lines.  With the leading '-', print all but the last K lines", "[-]K")
+        .optopt(
+            "c",
+            "bytes",
+            "Print the first K bytes.  With the leading '-', print all but the last K bytes",
+            "[-]K",
+        )
+        .optopt(
+            "n",
+            "lines",
+            "Print the first K lines.  With the leading '-', print all but the last K lines",
+            "[-]K",
+        )
         .optflag("q", "quiet", "never print headers giving file names")
         .optflag("v", "verbose", "always print headers giving file names")
         .optflag("h", "help", "display this help and exit")
@@ -70,22 +83,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
             match n.parse::<usize>() {
-                Ok(m) => { settings.mode = FilterMode::Lines(m) }
+                Ok(m) => settings.mode = FilterMode::Lines(m),
                 Err(e) => {
                     show_error!("invalid line count '{}': {}", n, e);
                     return 1;
                 }
             }
         }
-        None => match matches.opt_str("c") {
-            Some(count) => match count.parse::<usize>() {
+        None => if let Some(count) = matches.opt_str("c") {
+            match count.parse::<usize>() {
                 Ok(m) => settings.mode = FilterMode::Bytes(m),
-                Err(e)=> {
+                Err(e) => {
                     show_error!("invalid byte count '{}': {}", count, e);
                     return 1;
                 }
-            },
-            None => {}
+            }
         }
     };
 
@@ -115,8 +127,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         for file in &files {
             if settings.verbose {
-                if !firstime { pipe_println!(""); }
-                pipe_println!("==> {} <==", file);
+                if !firstime {
+                    println!();
+                }
+                println!("==> {} <==", file);
             }
             firstime = false;
 
@@ -145,23 +159,26 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
         let current = options[a].clone();
         let current = current.as_bytes();
 
-        if current.len() > 1 && current[0] == '-' as u8 {
+        if current.len() > 1 && current[0] == b'-' {
             let len = current.len();
-            for pos in 1 .. len {
+            for pos in 1..len {
                 // Ensure that the argument is only made out of digits
-                if !(current[pos] as char).is_numeric() { break; }
+                if !(current[pos] as char).is_numeric() {
+                    break;
+                }
 
                 // If this is the last number
                 if pos == len - 1 {
                     options.remove(a);
-                    let number: Option<usize> = from_utf8(&current[1..len]).unwrap().parse::<usize>().ok();
+                    let number: Option<usize> =
+                        from_utf8(&current[1..len]).unwrap().parse::<usize>().ok();
                     return (options, Some(number.unwrap()));
                 }
             }
         }
 
         a += 1;
-    };
+    }
 
     (options, None)
 }
@@ -169,20 +186,12 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 // TODO: handle errors on read
 fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
     match settings.mode {
-        FilterMode::Bytes(count) => {
-            for byte in reader.bytes().take(count) {
-                if !pipe_print!("{}", byte.unwrap() as char) {
-                    return false;
-                }
-            }
+        FilterMode::Bytes(count) => for byte in reader.bytes().take(count) {
+            print!("{}", byte.unwrap() as char);
         },
-        FilterMode::Lines(count) => {
-            for line in reader.lines().take(count) {
-                if !pipe_println!("{}", line.unwrap()) {
-                    return false;
-                }
-            }
-        }
+        FilterMode::Lines(count) => for line in reader.lines().take(count) {
+            println!("{}", line.unwrap());
+        },
     }
     true
 }

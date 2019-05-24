@@ -2,6 +2,7 @@
 name = "dircolors"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_dircolors"
@@ -9,8 +10,8 @@ path = "dircolors.rs"
 
 [dependencies]
 glob = "0.2.11"
-uucore = { path="../uucore" }
+uucore = "0.0.1"
 
 [[bin]]
 name = "dircolors"
-path = "main.rs"
+path = "../../uumain.rs"

@@ -3,13 +3,13 @@ extern crate tempdir;
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write, Result};
+use std::io::{Read, Result, Write};
 #[cfg(unix)]
-use std::os::unix::fs::symlink as symlink_file;
+use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 #[cfg(windows)]
-use std::os::windows::fs::symlink_file;
+use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio, Child};
+use std::process::{Child, Command, Stdio};
 use std::str::from_utf8;
 use std::ffi::OsStr;
 use std::rc::Rc;
@@ -25,9 +25,10 @@ static PROGNAME: &'static str = "uutils";
 static TESTS_DIR: &'static str = "tests";
 static FIXTURES_DIR: &'static str = "fixtures";
 
-static ALREADY_RUN: &'static str = " you have already run this UCommand, if you want to run \
-                                    another command in the same test, use TestScenario::new instead of \
-                                    testing();";
+static ALREADY_RUN: &'static str =
+    " you have already run this UCommand, if you want to run \
+     another command in the same test, use TestScenario::new instead of \
+     testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
@@ -88,10 +89,13 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in stdout stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
+    /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
-        assert_eq!(String::from(msg.as_ref()).trim_right(), self.stdout.trim_right());
+        assert_eq!(
+            String::from(msg.as_ref()),
+            self.stdout
+        );
         Box::new(self)
     }
 
@@ -105,7 +109,10 @@ impl CmdResult {
     /// passed in value, when both are trimmed of trailing whitespace
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
-        assert_eq!(String::from(msg.as_ref()).trim_right(), self.stderr.trim_right());
+        assert_eq!(
+            String::from(msg.as_ref()).trim_end(),
+            self.stderr.trim_end()
+        );
         Box::new(self)
     }
 
@@ -155,16 +162,16 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
 }
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
-    if try!(fs::metadata(src)).is_dir() {
+    if fs::metadata(src)?.is_dir() {
         for entry in try!(fs::read_dir(src)) {
-            let entry = try!(entry);
+            let entry = entry?;
             let mut new_dest = PathBuf::from(dest);
             new_dest.push(entry.file_name());
-            if try!(fs::metadata(entry.path())).is_dir() {
-                try!(fs::create_dir(&new_dest));
-                try!(recursive_copy(&entry.path(), &new_dest));
+            if fs::metadata(entry.path())?.is_dir() {
+                fs::create_dir(&new_dest)?;
+                recursive_copy(&entry.path(), &new_dest)?;
             } else {
-                try!(fs::copy(&entry.path(), new_dest));
+                fs::copy(&entry.path(), new_dest)?;
             }
         }
     }
@@ -188,7 +195,9 @@ pub struct AtPath {
 
 impl AtPath {
     pub fn new(subdir: &Path) -> AtPath {
-        AtPath { subdir: PathBuf::from(subdir) }
+        AtPath {
+            subdir: PathBuf::from(subdir),
+        }
     }
 
     pub fn as_string(&self) -> String {
@@ -209,9 +218,8 @@ impl AtPath {
         let prefixed = PathBuf::from(name);
         if prefixed.starts_with(&self.subdir) {
             let mut unprefixed = PathBuf::new();
-            for component in prefixed.components()
-                                     .skip(self.subdir.components().count()) {
-                unprefixed.push(component.as_ref().to_str().unwrap());
+            for component in prefixed.components().skip(self.subdir.components().count()) {
+                unprefixed.push(component.as_os_str().to_str().unwrap());
             }
             unprefixed
         } else {
@@ -242,7 +250,11 @@ impl AtPath {
 
     pub fn append(&self, name: &str, contents: &str) {
         log_info("open(append)", self.plus_as_string(name));
-        let mut f = OpenOptions::new().write(true).append(true).open(self.plus(name)).unwrap();
+        let mut f = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(self.plus(name))
+            .unwrap();
         let _ = f.write(contents.as_bytes());
     }
 
@@ -267,10 +279,20 @@ impl AtPath {
         File::create(&self.plus(file)).unwrap();
     }
 
-    pub fn symlink(&self, src: &str, dst: &str) {
-        log_info("symlink",
-                 &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)));
+    pub fn symlink_file(&self, src: &str, dst: &str) {
+        log_info(
+            "symlink",
+            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+        );
         symlink_file(&self.plus(src), &self.plus(dst)).unwrap();
+    }
+
+    pub fn symlink_dir(&self, src: &str, dst: &str) {
+        log_info(
+            "symlink",
+            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+        );
+        symlink_dir(&self.plus(src), &self.plus(dst)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {
@@ -284,9 +306,7 @@ impl AtPath {
     pub fn resolve_link(&self, path: &str) -> String {
         log_info("resolve_link", self.plus_as_string(path));
         match fs::read_link(&self.plus(path)) {
-            Ok(p) => {
-                self.minus_as_string(p.to_str().unwrap())
-            }
+            Ok(p) => self.minus_as_string(p.to_str().unwrap()),
             Err(_) => "".to_string(),
         }
     }
@@ -337,7 +357,12 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
-        let s = self.subdir.canonicalize().unwrap().to_str().unwrap().to_owned();
+        let s = self.subdir
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
 
         // Due to canonicalize()'s use of GetFinalPathNameByHandleW() on Windows, the resolved path
         // starts with '\\?\' to extend the limit of a given path to 32,767 wide characters.
@@ -422,12 +447,13 @@ impl TestScenario {
 /// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
 ///     the test failure can display the exact call which preceded an assertion failure.
 /// 3. it provides convenience construction arguments to set the Command working directory and/or clear its environment.
+#[derive(Debug)]
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
-    stdin: Option<Vec<u8>>
+    stdin: Option<Vec<u8>>,
 }
 
 impl UCommand {
@@ -456,7 +482,7 @@ impl UCommand {
                 cmd
             },
             comm_string: String::from(arg.as_ref().to_str().unwrap()),
-            stdin: None
+            stdin: None,
         }
     }
 
@@ -511,7 +537,11 @@ impl UCommand {
         self.pipe_in(contents)
     }
 
-    pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand> where K: AsRef<OsStr>, V: AsRef<OsStr> {
+    pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand>
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
@@ -535,11 +565,10 @@ impl UCommand {
             .unwrap();
 
         if let Some(ref input) = self.stdin {
-            result.stdin
+            result
+                .stdin
                 .take()
-                .unwrap_or_else(
-                    || panic!(
-                        "Could not take child process stdin"))
+                .unwrap_or_else(|| panic!("Could not take child process stdin"))
                 .write_all(input)
                 .unwrap_or_else(|e| panic!("{}", e));
         }
@@ -578,7 +607,7 @@ impl UCommand {
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
-    /// asserts success, and returns a command result.
+    /// asserts failure, and returns a command result.
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
@@ -590,6 +619,11 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);
     sleep(Duration::from_secs(1));
-    child.stdout.as_mut().unwrap().read(output.as_mut_slice()).unwrap();
+    child
+        .stdout
+        .as_mut()
+        .unwrap()
+        .read(output.as_mut_slice())
+        .unwrap();
     String::from_utf8(output).unwrap()
 }

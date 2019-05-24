@@ -31,7 +31,10 @@ pub mod Bytes {
 }
 
 #[derive(Debug)]
-pub struct ByteReader<R> where R: Read {
+pub struct ByteReader<R>
+where
+    R: Read,
+{
     inner: BufReader<R>,
     newline_char: u8,
 }
@@ -40,7 +43,7 @@ impl<R: Read> ByteReader<R> {
     pub fn new(read: R, newline_char: u8) -> ByteReader<R> {
         ByteReader {
             inner: BufReader::with_capacity(4096, read),
-            newline_char: newline_char
+            newline_char,
         }
     }
 }
@@ -68,15 +71,16 @@ impl<R: Read> ByteReader<R> {
         let newline_char = self.newline_char;
 
         loop {
-            { // need filled_buf to go out of scope
+            {
+                // need filled_buf to go out of scope
                 let filled_buf = match self.fill_buf() {
                     Ok(b) => {
-                        if b.len() == 0 {
-                            return bytes_consumed
+                        if b.is_empty() {
+                            return bytes_consumed;
                         } else {
                             b
                         }
-                    },
+                    }
                     Err(e) => crash!(1, "read error: {}", e),
                 };
 
@@ -123,21 +127,18 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
                     let buf_slice = &buffer[0..bytes + 1];
 
                     match buf_slice.iter().position(|byte| *byte == newline_char) {
-                        Some(idx) => (SRes::Newl, idx+1),
+                        Some(idx) => (SRes::Newl, idx + 1),
                         None => (SRes::Comp, bytes),
                     }
-                },
-                _ => {
-                    match buffer.iter().position(|byte| *byte == newline_char) {
-                        Some(idx) => (SRes::Newl, idx+1),
-                        None => (SRes::Part, buffer.len()),
-                    }
+                }
+                _ => match buffer.iter().position(|byte| *byte == newline_char) {
+                    Some(idx) => (SRes::Newl, idx + 1),
+                    None => (SRes::Part, buffer.len()),
                 },
             };
 
-            match out {
-                Some(out) => pipe_crash_if_err!(1, out.write_all(&buffer[0..consume_val])),
-                None => (),
+            if let Some(out) = out {
+                crash_if_err!(1, out.write_all(&buffer[0..consume_val]));
             }
             (res, consume_val)
         };

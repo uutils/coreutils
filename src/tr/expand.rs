@@ -54,11 +54,11 @@ impl<'a> Iterator for Unescape<'a> {
                 // we know that \ is 1 byte long so we can index into the string safely
                 let c = self.string[1..].chars().next().unwrap();
                 (Some(unescape_char(c)), 1 + c.len_utf8())
-            },
-            c => (Some(c), c.len_utf8()),   // not an escape char
+            }
+            c => (Some(c), c.len_utf8()), // not an escape char
         };
 
-        self.string = &self.string[idx..];              // advance the pointer to the next char
+        self.string = &self.string[idx..]; // advance the pointer to the next char
         ret
     }
 }
@@ -89,16 +89,16 @@ impl<'a> Iterator for ExpandSet<'a> {
         if let Some(first) = self.unesc.next() {
             // peek ahead
             if self.unesc.peek() == Some(&'-') && match self.unesc.size_hint() {
-                (x, _) if x > 1 => true,    // there's a range here; record it in our internal Range struct
+                (x, _) if x > 1 => true, // there's a range here; record it in our internal Range struct
                 _ => false,
             } {
-                self.unesc.next();                      // this is the '-'
-                let last = self.unesc.next().unwrap();  // this is the end of the range
+                self.unesc.next(); // this is the '-'
+                let last = self.unesc.next().unwrap(); // this is the end of the range
 
-                self.range = first as u32 + 1 .. last as u32 + 1;
+                self.range = first as u32 + 1..last as u32 + 1;
             }
 
-            return Some(first);     // in any case, return the next char
+            return Some(first); // in any case, return the next char
         }
 
         None
@@ -109,7 +109,7 @@ impl<'a> ExpandSet<'a> {
     #[inline]
     pub fn new(s: &'a str) -> ExpandSet<'a> {
         ExpandSet {
-            range: 0 .. 0,
+            range: 0..0,
             unesc: Unescape { string: s }.peekable(),
         }
     }

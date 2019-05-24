@@ -1,7 +1,7 @@
 //! formatter for %g %G decimal subs
 use super::super::format_field::FormatField;
-use super::super::formatter::{InPrefix, FormatPrimitive, Formatter};
-use super::float_common::{FloatAnalysis, get_primitive_dec, primitive_to_str_common};
+use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
+use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
 fn get_len_fprim(fprim: &FormatPrimitive) -> usize {
     let mut len = 0;
@@ -29,24 +29,29 @@ impl Decf {
     }
 }
 impl Formatter for Decf {
-    fn get_primitive(&self,
-                     field: &FormatField,
-                     inprefix: &InPrefix,
-                     str_in: &str)
-                     -> Option<FormatPrimitive> {
+    fn get_primitive(
+        &self,
+        field: &FormatField,
+        inprefix: &InPrefix,
+        str_in: &str,
+    ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
         // default to scif interp. so as to not truncate input vals
         // (that would be displayed in scif) based on relation to decimal place
-        let analysis = FloatAnalysis::analyze(str_in,
-                                              inprefix,
-                                              Some(second_field as usize + 1),
-                                              None,
-                                              false);
-        let mut f_sci = get_primitive_dec(inprefix,
-                                          &str_in[inprefix.offset..],
-                                          &analysis,
-                                          second_field as usize,
-                                          Some(*field.field_char == 'G'));
+        let analysis = FloatAnalysis::analyze(
+            str_in,
+            inprefix,
+            Some(second_field as usize + 1),
+            None,
+            false,
+        );
+        let mut f_sci = get_primitive_dec(
+            inprefix,
+            &str_in[inprefix.offset..],
+            &analysis,
+            second_field as usize,
+            Some(*field.field_char == 'G'),
+        );
         // strip trailing zeroes
         match f_sci.post_decimal.clone() {
             Some(ref post_dec) => {
@@ -66,11 +71,13 @@ impl Formatter for Decf {
             }
             None => {}
         }
-        let f_fl = get_primitive_dec(inprefix,
-                                     &str_in[inprefix.offset..],
-                                     &analysis,
-                                     second_field as usize,
-                                     None);
+        let f_fl = get_primitive_dec(
+            inprefix,
+            &str_in[inprefix.offset..],
+            &analysis,
+            second_field as usize,
+            None,
+        );
         Some(if get_len_fprim(&f_fl) >= get_len_fprim(&f_sci) {
             f_sci
         } else {

@@ -3,8 +3,8 @@
 use std::env;
 use std::vec::Vec;
 use cli;
-use super::format_field::{FormatField, FieldType};
-use super::formatter::{Formatter, FormatPrimitive, InPrefix, Base};
+use super::format_field::{FieldType, FormatField};
+use super::formatter::{Base, FormatPrimitive, Formatter, InPrefix};
 use super::formatters::intf::Intf;
 use super::formatters::floatf::Floatf;
 use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
@@ -21,16 +21,16 @@ pub fn warn_expected_numeric(pf_arg: &String) {
 fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
     match env::var("POSIXLY_CORRECT") {
         Ok(_) => {}
-        Err(e) => {
-            match e {
-                env::VarError::NotPresent => {
-                    cli::err_msg(&format!("warning: {:?}: character(s) following character \
-                                           constant have been ignored",
-                                          &*remaining_bytes));
-                }
-                _ => {}
+        Err(e) => match e {
+            env::VarError::NotPresent => {
+                cli::err_msg(&format!(
+                    "warning: {:?}: character(s) following character \
+                     constant have been ignored",
+                    &*remaining_bytes
+                ));
             }
-        }
+            _ => {}
+        },
     }
 }
 
@@ -68,8 +68,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                     // first byte is not quote
                     _ => {
                         return None;
-                    }
-                    // no first byte
+                    } // no first byte
                 }
             } else {
                 Some(0 as u8)
@@ -150,7 +149,7 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
                         FieldType::Intf => {
                             ret.radix_in = Base::Octal;
                         }
-                        _ => {}                        
+                        _ => {}
                     }
                     if e == '0' {
                         do_clean_lead_zeroes = true;
@@ -181,7 +180,7 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
                         // if decimal, keep last zero if one exists
                         // (it's possible for last zero to
                         // not exist at this branch if we're in hex input)
-                        '.' => break, 
+                        '.' => break,
                         // other digit, etc.
                         _ => {
                             if !(is_hex && first) {
@@ -193,7 +192,6 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
                     if first {
                         first = false;
                     }
-
                 }
             }
         }
@@ -205,8 +203,6 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
 // if it is a numeric field, passing the field details
 // and an iterator to the argument
 pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<String> {
-
-
     let fchar = field.field_char.clone();
 
     // num format mainly operates by further delegating to one of
@@ -247,7 +243,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
                     let inprefix = get_inprefix(
                         &as_str,
                         &field.field_type
-                    );                    
+                    );
                     tmp=fmtr.get_primitive(field, &inprefix, &as_str)
                         .expect("err during default provided num");
                 },

@@ -11,51 +11,83 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-extern crate getopts;
-
+#[macro_use]
+extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
-use std::io::Write;
+use clap::Arg;
+use uucore::zero_copy::ZeroCopyWriter;
+use std::borrow::Cow;
+use std::io::{self, Write};
 
-static NAME: &'static str = "yes";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+// force a re-build whenever Cargo.toml changes
+const _CARGO_TOML: &str = include_str!("Cargo.toml");
+
+// it's possible that using a smaller or larger buffer might provide better performance on some
+// systems, but honestly this is good enough
+const BUF_SIZE: usize = 16 * 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
+    let app = app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true));
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
+    let matches = match app.get_matches_from_safe(args) {
         Ok(m) => m,
-        Err(f) => crash!(1, "invalid options\n{}", f)
-    };
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!("");
-        println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!("");
-        print!("{}", opts.usage("Repeatedly output a line with all specified STRING(s), or 'y'."));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-    let string = if matches.free.is_empty() {
-        "y".to_owned()
-    } else {
-        matches.free.join(" ")
+        Err(ref e)
+            if e.kind == clap::ErrorKind::HelpDisplayed
+                || e.kind == clap::ErrorKind::VersionDisplayed =>
+        {
+            println!("{}", e);
+            return 0;
+        }
+        Err(f) => {
+            show_error!("{}", f);
+            return 1;
+        }
     };
 
-    exec(&string[..]);
+    let string = if let Some(values) = matches.values_of("STRING") {
+        let mut result = values.fold(String::new(), |res, s| res + s + " ");
+        result.pop();
+        result.push('\n');
+        Cow::from(result)
+    } else {
+        Cow::from("y\n")
+    };
+
+    let mut buffer = [0; BUF_SIZE];
+    let bytes = prepare_buffer(&string, &mut buffer);
+
+    exec(bytes);
 
     0
 }
 
-pub fn exec(string: &str) {
-    while pipe_println!("{}", string) { }
+#[cfg(not(feature = "latency"))]
+fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {
+    if input.len() < BUF_SIZE / 2 {
+        let mut size = 0;
+        while size < BUF_SIZE - input.len() {
+            let (_, right) = buffer.split_at_mut(size);
+            right[..input.len()].copy_from_slice(input.as_bytes());
+            size += input.len();
+        }
+        &buffer[..size]
+    } else {
+        input.as_bytes()
+    }
+}
+
+#[cfg(feature = "latency")]
+fn prepare_buffer<'a>(input: &'a str, _buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {
+    input.as_bytes()
+}
+
+pub fn exec(bytes: &[u8]) {
+    let mut stdin_raw = io::stdout();
+    let mut writer = ZeroCopyWriter::with_default(&mut stdin_raw, |stdin| stdin.lock());
+    loop {
+        // TODO: needs to check if pipe fails
+        writer.write_all(bytes).unwrap();
+    }
 }

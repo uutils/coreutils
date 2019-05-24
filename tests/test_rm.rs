@@ -144,7 +144,7 @@ fn test_rm_dir_symlink() {
     let link = "test_rm_dir_symlink_link";
 
     at.mkdir(dir);
-    at.symlink(dir, link);
+    at.symlink_dir(dir, link);
 
     ucmd.arg(link).succeeds();
 }
@@ -154,7 +154,22 @@ fn test_rm_invalid_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let link = "test_rm_invalid_symlink";
 
-    at.symlink(link, link);
+    at.symlink_file(link, link);
 
     ucmd.arg(link).succeeds();
+}
+
+#[test]
+fn test_rm_force_no_operand() {
+    let mut ucmd = new_ucmd!();
+
+    ucmd.arg("-f").succeeds().no_stderr();
+}
+
+#[test]
+fn test_rm_no_operand() {
+    let mut ucmd = new_ucmd!();
+
+    ucmd.fails()
+        .stderr_is("rm: error: missing an argument\nrm: error: for help, try 'rm --help'\n");
 }

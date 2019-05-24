@@ -2,21 +2,21 @@
 name = "touch"
 version = "0.0.1"
 authors = []
+build = "../../mkmain.rs"
 
 [lib]
 name = "uu_touch"
 path = "touch.rs"
 
 [dependencies]
-filetime = "0.1.10"
-getopts = "0.2.14"
-time = "0.1.38"
+filetime = "0.2.1"
+getopts = "0.2.18"
+time = "0.1.40"
 
 [dependencies.uucore]
-path = "../uucore"
-default-features = false
+version = "0.0.1"
 features = ["libc"]
 
 [[bin]]
 name = "touch"
-path = "main.rs"
+path = "../../uumain.rs"
