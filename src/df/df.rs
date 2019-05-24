@@ -389,7 +389,8 @@ impl FsUsage {
             ffree: statvfs.f_ffree as u64
         }
     }
-    // TODO: add windows support
+    #[cfg(not(unix))]
+    unimplemented!();
 }
 
 impl Filesystem {
@@ -414,8 +415,7 @@ impl Filesystem {
             }
         }
         #[cfg(windows)] {
-            // TODO: add windows support
-            None
+            unimplemented!();
         }
     }
 }
@@ -472,8 +472,6 @@ fn read_fs_list() -> Vec<MountInfo> {
         }
         return mounts;
     }
-    // panic for other os
-    unimplemented!();
 }
 
 fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
