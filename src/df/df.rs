@@ -18,7 +18,7 @@ extern crate kernel32;
 #[cfg(windows)]
 extern crate winapi;
 
-use clap::{Arg, App, ArgMatches};
+use clap::{Arg, App};
 #[cfg(unix)]
 use libc::{uid_t, fsid_t};
 #[cfg(target_os = "macos")]
