@@ -1,15 +1,13 @@
 #![crate_name = "uu_unexpand"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Virgile Andreani <virgile.andreani@anbuco.fr>
- * (c) kwantam <kwantam@gmail.com>
- *     20150428 updated to work with both UTF-8 and non-UTF-8 encodings
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Virgile Andreani <virgile.andreani@anbuco.fr>
+// (c) kwantam <kwantam@gmail.com>
+//     20150428 updated to work with both UTF-8 and non-UTF-8 encodings
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate unicode_width;
@@ -42,7 +40,8 @@ fn tabstops_parse(s: String) -> Vec<usize> {
         crash!(1, "{}\n", "tab size cannot be 0");
     }
 
-    if let (false, _) = nums.iter()
+    if let (false, _) = nums
+        .iter()
         .fold((true, 0), |(acc, last), &n| (acc && last <= n, n))
     {
         crash!(1, "{}\n", "tab sizes must be ascending");

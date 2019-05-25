@@ -1,14 +1,12 @@
 #![crate_name = "uu_cp"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordy Dickinson <jordy.dickinson@gmail.com>
- * (c) Joshua S. Miller <jsmiller@uchicago.edu>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jordy Dickinson <jordy.dickinson@gmail.com>
+// (c) Joshua S. Miller <jsmiller@uchicago.edu>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate clap;
 extern crate filetime;
@@ -27,30 +25,30 @@ extern crate xattr;
 #[cfg(windows)]
 extern crate kernel32;
 #[cfg(windows)]
-use kernel32::GetFileInformationByHandle;
-#[cfg(windows)]
 use kernel32::CreateFile2;
+#[cfg(windows)]
+use kernel32::GetFileInformationByHandle;
 #[cfg(windows)]
 extern crate winapi;
 
-use std::mem;
-use std::ffi::CString;
 use clap::{App, Arg, ArgMatches};
+use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
+use std::ffi::CString;
 use std::fs;
-use std::io::{stdin, stdout, Write};
+#[cfg(target_os = "linux")]
+use std::fs::File;
+use std::fs::OpenOptions;
 use std::io;
+use std::io::{stdin, stdout, Write};
+use std::mem;
+#[cfg(target_os = "linux")]
+use std::os::unix::io::IntoRawFd;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
-#[cfg(target_os = "linux")]
-use std::os::unix::io::IntoRawFd;
-#[cfg(target_os = "linux")]
-use std::fs::File;
-use std::fs::OpenOptions;
-use filetime::FileTime;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -576,7 +574,8 @@ impl Options {
             }
         }
 
-        let recursive = matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_ALIAS)
+        let recursive = matches.is_present(OPT_RECURSIVE)
+            || matches.is_present(OPT_RECURSIVE_ALIAS)
             || matches.is_present(OPT_ARCHIVE);
 
         let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
@@ -723,7 +722,8 @@ fn preserve_hardlinks(
                             "cannot stat {:?}: {}",
                             src_path,
                             std::io::Error::last_os_error()
-                        ).into());
+                        )
+                        .into());
                     }
                     inode = stat.st_ino as u64;
                     nlinks = stat.st_nlink as u64;
@@ -743,7 +743,8 @@ fn preserve_hardlinks(
                             "cannot get file information {:?}: {}",
                             source,
                             std::io::Error::last_os_error()
-                        ).into());
+                        )
+                        .into());
                     }
                     inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
                     nlinks = (*stat).nNumberOfLinks as u64;
@@ -824,7 +825,8 @@ fn construct_dest_path(
         return Err(format!(
             "cannot overwrite directory '{}' with non-directory",
             target.display()
-        ).into());
+        )
+        .into());
     }
 
     Ok(match *target_type {
@@ -1101,8 +1103,9 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     Ok(())
 }
 
-///Copy the file from `source` to `dest` either using the normal `fs::copy` or the
-///`FICLONE` ioctl if --reflink is specified and the filesystem supports it.
+/// Copy the file from `source` to `dest` either using the normal `fs::copy` or
+/// the `FICLONE` ioctl if --reflink is specified and the filesystem supports
+/// it.
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     if options.reflink {
         #[cfg(not(target_os = "linux"))]
@@ -1127,7 +1130,8 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
                             source,
                             dest,
                             std::io::Error::last_os_error()
-                        ).into());
+                        )
+                        .into());
                     } else {
                         return Ok(());
                     }
@@ -1156,7 +1160,8 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
         (&TargetType::File, true) => Err(format!(
             "cannot overwrite directory '{}' with non-directory",
             target.display()
-        ).into()),
+        )
+        .into()),
         _ => Ok(()),
     }
 }
@@ -1192,6 +1197,8 @@ fn test_cp_localize_to_target() {
             &Path::new("a/source/"),
             &Path::new("a/source/c.txt"),
             &Path::new("target/")
-        ).unwrap() == Path::new("target/c.txt")
+        )
+        .unwrap()
+            == Path::new("target/c.txt")
     )
 }

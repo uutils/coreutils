@@ -1,13 +1,11 @@
 #![crate_name = "uu_kill"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Maciej Dziardziel <fiedzia@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Maciej Dziardziel <fiedzia@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate libc;
 
@@ -74,7 +72,8 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
         let slice = &args[i].clone();
-        if slice.chars().next().unwrap() == '-' && slice.len() > 1
+        if slice.chars().next().unwrap() == '-'
+            && slice.len() > 1
             && slice.chars().nth(1).unwrap().is_digit(10)
         {
             let val = &slice[1..];
@@ -85,7 +84,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
                         return (args, Some(val.to_owned()));
                     }
                 }
-                Err(_) => break, /* getopts will error out for us */
+                Err(_) => break, // getopts will error out for us
             }
         }
         i += 1;
@@ -95,7 +94,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
 
 fn table() {
     let mut name_width = 0;
-    /* Compute the maximum width of a signal name. */
+    // Compute the maximum width of a signal name.
     for s in &ALL_SIGNALS {
         if s.name.len() > name_width {
             name_width = s.name.len()
@@ -104,7 +103,7 @@ fn table() {
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         print!("{0: >#2} {1: <#8}", idx + 1, signal.name);
-        //TODO: obtain max signal width here
+        // TODO: obtain max signal width here
 
         if (idx + 1) % 7 == 0 {
             println!("");

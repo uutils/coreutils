@@ -10,9 +10,11 @@ pub use super::uucore::libc;
 extern crate time;
 
 use self::time::Timespec;
-pub use libc::{c_int, mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT,
-               S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP,
-               S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR};
+pub use libc::{
+    c_int, mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG,
+    S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
+    S_IXGRP, S_IXOTH, S_IXUSR,
+};
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -40,9 +42,9 @@ impl BirthTime for Metadata {
 
 #[macro_export]
 macro_rules! has {
-    ($mode:expr, $perm:expr) => (
+    ($mode:expr, $perm:expr) => {
         $mode & $perm != 0
-    )
+    };
 }
 
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
@@ -135,22 +137,44 @@ pub fn pretty_access(mode: mode_t) -> String {
     result
 }
 
-use std::mem::{self, transmute};
-use std::path::Path;
 use std::borrow::Cow;
-use std::ffi::CString;
 use std::convert::{AsRef, From};
 use std::error::Error;
+use std::ffi::CString;
 use std::io::Error as IOError;
+use std::mem::{self, transmute};
+use std::path::Path;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android", target_os = "freebsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android",
+    target_os = "freebsd"
+))]
 use libc::statfs as Sstatfs;
-#[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
+#[cfg(any(
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "bitrig",
+    target_os = "dragonfly"
+))]
 use libc::statvfs as Sstatfs;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android", target_os = "freebsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android",
+    target_os = "freebsd"
+))]
 use libc::statfs as statfs_fn;
-#[cfg(any(target_os = "openbsd", target_os = "netbsd", target_os = "openbsd", target_os = "bitrig", target_os = "dragonfly"))]
+#[cfg(any(
+    target_os = "openbsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "bitrig",
+    target_os = "dragonfly"
+))]
 use libc::statvfs as statfs_fn;
 
 pub trait FsMeta {

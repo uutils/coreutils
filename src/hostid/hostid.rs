@@ -1,13 +1,11 @@
 #![crate_name = "uu_hostid"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Maciej Dziardziel <fiedzia@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Maciej Dziardziel <fiedzia@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate libc;
 
@@ -32,11 +30,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn hostid() {
-    /*
-     * POSIX says gethostid returns a "32-bit identifier" but is silent
-     * whether it's sign-extended.  Turn off any sign-extension.  This
-     * is a no-op unless unsigned int is wider than 32 bits.
-     */
+    // POSIX says gethostid returns a "32-bit identifier" but is silent
+    // whether it's sign-extended.  Turn off any sign-extension.  This
+    // is a no-op unless unsigned int is wider than 32 bits.
 
     let mut result: c_long;
     unsafe {

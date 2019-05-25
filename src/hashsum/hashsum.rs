@@ -1,15 +1,13 @@
 #![crate_name = "uu_hashsum"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
- * (c) Gil Cottle <gcottle@redtown.org>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+// (c) Vsevolod Velichko <torkvemada@sorokdva.net>
+// (c) Gil Cottle <gcottle@redtown.org>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate hex;
@@ -318,17 +316,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             matches.free
         };
         match hashsum(
-            name,
-            algo,
-            files,
-            binary,
-            check,
-            tag,
-            status,
-            quiet,
-            strict,
-            warn,
-            bits,
+            name, algo, files, binary, check, tag, status, quiet, strict, warn, bits,
         ) {
             Ok(()) => return 0,
             Err(e) => return e,
@@ -446,7 +434,8 @@ fn hashsum(
                     &mut ckf,
                     binary_check,
                     output_bits
-                )).to_ascii_lowercase();
+                ))
+                .to_ascii_lowercase();
                 if sum == real_sum {
                     if !quiet {
                         println!("{}: OK", ck_filename);

@@ -1,11 +1,9 @@
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) kwantam <kwantam@gmail.com>
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// This file is part of the uutils coreutils package.
+//
+// (c) kwantam <kwantam@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 //! Generate a table of the multiplicative inverses of p_i mod 2^64
 //! for the first 1027 odd primes (all 13 bit and smaller primes).
@@ -78,7 +76,8 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let mut file = File::create(&Path::new(&out_dir).join("prime_table.rs")).unwrap();
 
-    // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
+    // By default, we print the multiplicative inverses mod 2^64 of the first 1k
+    // primes
     let n = args()
         .skip(1)
         .next()
@@ -115,7 +114,8 @@ fn main() {
         file,
         "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n",
         x
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]

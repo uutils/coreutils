@@ -1,11 +1,12 @@
 //! formatter for unsigned and signed int subs
 //! unsigned ints: %X %x (hex u64) %o (octal u64) %u (base ten u64)
 //! signed ints: %i %d (both base ten i64)
-use std::u64;
-use std::i64;
 use super::super::format_field::FormatField;
-use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter,
-                              InPrefix};
+use super::super::formatter::{
+    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter, InPrefix,
+};
+use std::i64;
+use std::u64;
 
 pub struct Intf {
     a: u32,
@@ -136,16 +137,14 @@ impl Intf {
     // - a string that begins with a non-zero digit, and proceeds
     //  with zero or more following digits until the end of the string
     // - a radix to interpret those digits as
-    // - a char that communicates:
-    //     whether to interpret+output the string as an i64 or u64
-    //     what radix to write the parsed number as.
+    // - a char that communicates: whether to interpret+output the string as an i64
+    //   or u64 what radix to write the parsed number as.
     // 2. parses it as a rust integral type
     // 3. outputs FormatPrimitive with:
-    // - if the string falls within bounds:
-    //   number parsed and written in the correct radix
-    // - if the string falls outside bounds:
-    //   for i64 output, the int minimum or int max (depending on sign)
-    //   for u64 output, the u64 max in the output radix
+    // - if the string falls within bounds: number parsed and written in the correct
+    //   radix
+    // - if the string falls outside bounds: for i64 output, the int minimum or int
+    //   max (depending on sign) for u64 output, the u64 max in the output radix
     fn conv_from_segment(segment: &str, radix_in: Base, fchar: char, sign: i8) -> FormatPrimitive {
         match fchar {
             'i' | 'd' => match i64::from_str_radix(segment, radix_in as u32) {

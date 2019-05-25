@@ -5,15 +5,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
-use uucore::utmpx::{self, time, Utmpx};
-use uucore::libc::S_IWGRP;
 use uucore::entries::{Locate, Passwd};
+use uucore::libc::S_IWGRP;
+use uucore::utmpx::{self, time, Utmpx};
 
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -103,7 +102,7 @@ The utmp file will be {}",
     // if true, use the "short" output format.
     let do_short_format = !matches.opt_present("l");
 
-    /* if true, display the ut_host field. */
+    // if true, display the ut_host field.
     let mut include_where = true;
 
     if matches.opt_present("w") {

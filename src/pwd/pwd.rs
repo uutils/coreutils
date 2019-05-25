@@ -1,13 +1,11 @@
 #![crate_name = "uu_pwd"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Derek Chiang <derekchiang93@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Derek Chiang <derekchiang93@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -15,8 +13,8 @@ extern crate getopts;
 extern crate uucore;
 
 use std::env;
-use std::path::{Path, PathBuf};
 use std::io;
+use std::path::{Path, PathBuf};
 
 static NAME: &str = "pwd";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -30,7 +28,8 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
             .as_path()
             .to_string_lossy()
             .trim_left_matches(r"\\?\"),
-    ).to_path_buf();
+    )
+    .to_path_buf();
 
     Ok(path_buf)
 }

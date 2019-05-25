@@ -1,15 +1,13 @@
 #![crate_name = "uu_logname"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Benoit Benedetti <benoit.benedetti@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Benoit Benedetti <benoit.benedetti@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/* last synced with: logname (GNU coreutils) 8.22 */
+// last synced with: logname (GNU coreutils) 8.22
 
 extern crate libc;
 

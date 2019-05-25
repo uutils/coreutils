@@ -1,14 +1,12 @@
 #![crate_name = "uu_env"]
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordi Boggiano <j.boggiano@seld.be>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jordi Boggiano <j.boggiano@seld.be>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/* last synced with: env (GNU coreutils) 8.13 */
+// last synced with: env (GNU coreutils) 8.13
 
 #[macro_use]
 extern crate clap;
@@ -70,8 +68,9 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32
 }
 
 fn load_config_file(opts: &mut Options) -> Result<(), i32> {
-    // NOTE: config files are parsed using an INI parser b/c it's available and compatible with ".env"-style files
-    //   ... * but support for actual INI files, although working, is not intended, nor claimed
+    // NOTE: config files are parsed using an INI parser b/c it's available and
+    // compatible with ".env"-style files   ... * but support for actual INI
+    // files, although working, is not intended, nor claimed
     for &file in &opts.files {
         let conf = if file == "-" {
             let stdin = io::stdin();
@@ -89,7 +88,8 @@ fn load_config_file(opts: &mut Options) -> Result<(), i32> {
             }
         };
 
-        for (_, prop) in &conf { // ignore all INI section lines (treat them as comments)
+        for (_, prop) in &conf {
+            // ignore all INI section lines (treat them as comments)
             for (key, value) in prop {
                 env::set_var(key, value);
             }
@@ -175,8 +175,8 @@ fn run_env(args: Vec<String>) -> Result<(), i32> {
         program: vec![],
     };
 
-    // we handle the name, value pairs and the program to be executed by treating them as external
-    // subcommands in clap
+    // we handle the name, value pairs and the program to be executed by treating
+    // them as external subcommands in clap
     if let (external, Some(matches)) = matches.subcommand() {
         let mut begin_prog_opts = false;
 
@@ -204,8 +204,9 @@ fn run_env(args: Vec<String>) -> Result<(), i32> {
         }
     }
 
-    // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
-    //       easily handle the case where no command is given
+    // NOTE: we manually set and unset the env vars below rather than using
+    // Command::env() to more       easily handle the case where no command is
+    // given
 
     // remove all env vars if told to ignore presets
     if opts.ignore_env {

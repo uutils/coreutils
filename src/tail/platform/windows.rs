@@ -1,18 +1,16 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alexander Batischev <eual.jp@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alexander Batischev <eual.jp@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate kernel32;
 extern crate winapi;
 
 use self::kernel32::{CloseHandle, OpenProcess, WaitForSingleObject};
 use self::winapi::shared::minwindef::DWORD;
-use self::winapi::um::winbase::{WAIT_OBJECT_0, WAIT_FAILED};
+use self::winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
 use self::winapi::um::winnt::{HANDLE, SYNCHRONIZE};
 
 pub type Pid = DWORD;

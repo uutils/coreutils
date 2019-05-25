@@ -1,6 +1,6 @@
 use std::env;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
 static TEMPLATE: &'static str = "\

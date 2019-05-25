@@ -1,13 +1,11 @@
 #![crate_name = "uu_nproc"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Gehring <mg@ebfe.org>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Michael Gehring <mg@ebfe.org>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate num_cpus;
@@ -108,7 +106,12 @@ Print the number of cores available to the current process.",
     0
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
 fn num_cpus_all() -> usize {
     let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
     if nprocs == 1 {
@@ -125,8 +128,12 @@ fn num_cpus_all() -> usize {
 }
 
 // Other platform(e.g., windows), num_cpus::get() directly.
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd",
-              target_os = "netbsd")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+)))]
 fn num_cpus_all() -> usize {
     num_cpus::get()
 }

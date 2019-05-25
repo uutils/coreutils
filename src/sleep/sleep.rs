@@ -1,13 +1,11 @@
 #![crate_name = "uu_sleep"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -63,12 +61,14 @@ specified by the sum of their values.",
 }
 
 fn sleep(args: Vec<String>) {
-    let sleep_dur = args.iter().fold(Duration::new(0, 0), |result, arg| {
-        match uucore::parse_time::from_str(&arg[..]) {
-            Ok(m) => m + result,
-            Err(f) => crash!(1, "{}", f),
-        }
-    });
+    let sleep_dur =
+        args.iter().fold(
+            Duration::new(0, 0),
+            |result, arg| match uucore::parse_time::from_str(&arg[..]) {
+                Ok(m) => m + result,
+                Err(f) => crash!(1, "{}", f),
+            },
+        );
 
     thread::sleep(sleep_dur);
 }

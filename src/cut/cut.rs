@@ -1,13 +1,11 @@
 #![crate_name = "uu_cut"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Rolf Morel <rolfmorel@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Rolf Morel <rolfmorel@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -464,8 +462,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 )
             })
         }
-        (None, None, Some(field_ranges)) => list_to_ranges(&field_ranges[..], complement)
-            .and_then(|ranges| {
+        (None, None, Some(field_ranges)) => {
+            list_to_ranges(&field_ranges[..], complement).and_then(|ranges| {
                 let out_delim = match matches.opt_str("output-delimiter") {
                     Some(s) => {
                         if s.is_empty() {
@@ -488,7 +486,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                 "a value 2 characters or longer",
                                 "--delimiter",
                                 "-d"
-                            ).to_owned())
+                            )
+                            .to_owned())
                         } else {
                             let delim = if delim.is_empty() {
                                 "\0".to_owned()
@@ -517,7 +516,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         },
                     )),
                 }
-            }),
+            })
+        }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
             msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)")
                 .to_owned(),
@@ -537,7 +537,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                     "printing a sequence of fields",
                     "--only-delimited",
                     "-s"
-                ).to_owned())
+                )
+                .to_owned())
             }
             _ => Ok(mode),
         },

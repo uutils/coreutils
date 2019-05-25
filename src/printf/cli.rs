@@ -1,8 +1,7 @@
 //! stdio convenience fns
-#[allow(unused_must_use)]
-
-use std::io::{stderr, stdout, Write};
 use std::env;
+#[allow(unused_must_use)]
+use std::io::{stderr, stdout, Write};
 
 pub const EXIT_OK: i32 = 0;
 pub const EXIT_ERR: i32 = 1;

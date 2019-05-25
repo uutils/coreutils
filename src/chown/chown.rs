@@ -5,15 +5,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
 #[macro_use]
 extern crate uucore;
-use uucore::libc::{self, gid_t, lchown, uid_t};
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
+use uucore::libc::{self, gid_t, lchown, uid_t};
 
 extern crate walkdir;
 use walkdir::WalkDir;
@@ -24,8 +23,8 @@ use std::os::unix::fs::MetadataExt;
 use std::io;
 use std::io::Result as IOResult;
 
-use std::path::Path;
 use std::convert::AsRef;
+use std::path::Path;
 
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
@@ -253,12 +252,12 @@ struct Chowner {
 }
 
 macro_rules! unwrap {
-    ($m:expr, $e:ident, $err:block) => (
+    ($m:expr, $e:ident, $err:block) => {
         match $m {
             Ok(meta) => meta,
             Err($e) => $err,
         }
-    )
+    };
 }
 
 impl Chowner {

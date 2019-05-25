@@ -8,12 +8,15 @@ pub enum Radix {
 
 /// provides the byte offset printed at the left margin
 pub struct InputOffset {
-    /// The radix to print the byte offset. NoPrefix will not print a byte offset.
+    /// The radix to print the byte offset. NoPrefix will not print a byte
+    /// offset.
     radix: Radix,
-    /// The current position. Initialize at `new`, increase using `increase_position`.
+    /// The current position. Initialize at `new`, increase using
+    /// `increase_position`.
     byte_pos: usize,
-    /// An optional label printed in parentheses, typically different from `byte_pos`,
-    /// but will increase with the same value if `byte_pos` in increased.
+    /// An optional label printed in parentheses, typically different from
+    /// `byte_pos`, but will increase with the same value if `byte_pos` in
+    /// increased.
     label: Option<usize>,
 }
 

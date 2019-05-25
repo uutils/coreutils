@@ -164,14 +164,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let st = stat(path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 
-            if !(matches.opt_present("a") || time.contains(&"access".to_owned())
+            if !(matches.opt_present("a")
+                || time.contains(&"access".to_owned())
                 || time.contains(&"atime".to_owned())
                 || time.contains(&"use".to_owned()))
             {
                 atime = st.0;
             }
 
-            if !(matches.opt_present("m") || time.contains(&"modify".to_owned())
+            if !(matches.opt_present("m")
+                || time.contains(&"modify".to_owned())
                 || time.contains(&"mtime".to_owned()))
             {
                 mtime = st.1;

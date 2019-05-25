@@ -1,13 +1,11 @@
 #![crate_name = "uu_shuf"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate rand;
@@ -170,8 +168,8 @@ fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
     // * We don't care about the order of the result. This lets us slice the slices
     //   without making a new vector.
     // * Starting from the end of the vector, we examine each element.
-    // * If that element contains the separator, we remove it from the vector,
-    //   and then sub-slice it into slices that do not contain the separator.
+    // * If that element contains the separator, we remove it from the vector, and
+    //   then sub-slice it into slices that do not contain the separator.
     // * We maintain the invariant throughout that each element in the vector past
     //   the ith element does not have any separators remaining.
     for i in (0..data.len()).rev() {
@@ -221,7 +219,8 @@ fn shuf_bytes(
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
-    // we're generating a random usize. To keep things fair, we take this number mod ceil(log2(length+1))
+    // we're generating a random usize. To keep things fair, we take this number mod
+    // ceil(log2(length+1))
     let mut len_mod = 1;
     let mut len = input.len();
     while len > 0 {

@@ -3,14 +3,14 @@
 //! and escaped character literals (of allowed escapes),
 //! into an unescaped text byte array
 
-use std::iter::Peekable;
-use std::slice::Iter;
-use std::str::Chars;
-use std::char::from_u32;
-use std::process::exit;
+use super::token;
 use cli;
 use itertools::PutBackN;
-use super::token;
+use std::char::from_u32;
+use std::iter::Peekable;
+use std::process::exit;
+use std::slice::Iter;
+use std::str::Chars;
 
 pub struct UnescapedText(Vec<u8>);
 impl UnescapedText {
@@ -48,7 +48,7 @@ impl UnescapedText {
         }
         if found < min_chars {
             // only ever expected for hex
-            println!("missing hexadecimal number in escape"); //todo stderr
+            println!("missing hexadecimal number in escape"); // todo stderr
             exit(cli::EXIT_ERR);
         }
         retval
@@ -70,7 +70,7 @@ impl UnescapedText {
             preface, val, leading_zeros
         );
         if (val < 159 && (val != 36 && val != 64 && val != 96)) || (val > 55296 && val < 57343) {
-            println!("{}", err_msg); //todo stderr
+            println!("{}", err_msg); // todo stderr
             exit(cli::EXIT_ERR);
         }
     }

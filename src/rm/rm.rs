@@ -1,13 +1,11 @@
 #![crate_name = "uu_rm"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate remove_dir_all;
@@ -16,12 +14,12 @@ extern crate walkdir;
 #[macro_use]
 extern crate uucore;
 
+use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::Path;
-use remove_dir_all::remove_dir_all;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -153,7 +151,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-// TODO: implement one-file-system (this may get partially implemented in walkdir)
+// TODO: implement one-file-system (this may get partially implemented in
+// walkdir)
 fn remove(files: Vec<String>, options: Options) -> bool {
     let mut had_err = false;
 
@@ -181,7 +180,8 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                     false
                 }
             }
-        }.bitor(had_err);
+        }
+        .bitor(had_err);
     }
 
     had_err
@@ -193,8 +193,8 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::InteractiveAlways {
-            // we need the extra crate because apparently fs::remove_dir_all() does not function
-            // correctly on Windows
+            // we need the extra crate because apparently fs::remove_dir_all() does not
+            // function correctly on Windows
             if let Err(e) = remove_dir_all(path) {
                 had_err = true;
                 show_error!("could not remove '{}': {}", path.display(), e);
@@ -249,9 +249,11 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     };
     if response {
         match fs::remove_dir(path) {
-            Ok(_) => if options.verbose {
-                println!("removed '{}'", path.display());
-            },
+            Ok(_) => {
+                if options.verbose {
+                    println!("removed '{}'", path.display());
+                }
+            }
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -270,9 +272,11 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     };
     if response {
         match fs::remove_file(path) {
-            Ok(_) => if options.verbose {
-                println!("removed '{}'", path.display());
-            },
+            Ok(_) => {
+                if options.verbose {
+                    println!("removed '{}'", path.display());
+                }
+            }
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -322,5 +326,6 @@ fn is_symlink_dir(metadata: &fs::Metadata) -> bool {
     pub type DWORD = c_ulong;
     pub const FILE_ATTRIBUTE_DIRECTORY: DWORD = 0x10;
 
-    metadata.file_type().is_symlink() && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    metadata.file_type().is_symlink()
+        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
 }

@@ -3,16 +3,16 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
-use std::slice::Iter;
-use std::iter::Peekable;
-use std::str::Chars;
-use std::process::exit;
-use cli;
-use itertools::{put_back_n, PutBackN};
-use super::token;
-use super::unescaped_text::UnescapedText;
 use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
+use super::token;
+use super::unescaped_text::UnescapedText;
+use cli;
+use itertools::{put_back_n, PutBackN};
+use std::iter::Peekable;
+use std::process::exit;
+use std::slice::Iter;
+use std::str::Chars;
 // use std::collections::HashSet;
 
 fn err_conv(sofar: &String) {
@@ -155,22 +155,10 @@ impl SubParser {
         // though, as we want to mimic the original behavior of printing
         // the field as interpreted up until the error in the field.
 
-        let mut legal_fields = vec![// 'a', 'A', //c99 hex float implementation not yet complete
-                                    'b',
-                                    'c',
-                                    'd',
-                                    'e',
-                                    'E',
-                                    'f',
-                                    'F',
-                                    'g',
-                                    'G',
-                                    'i',
-                                    'o',
-                                    's',
-                                    'u',
-                                    'x',
-                                    'X'];
+        let mut legal_fields = vec![
+            // 'a', 'A', //c99 hex float implementation not yet complete
+            'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 's', 'u', 'x', 'X',
+        ];
         let mut specifiers = vec!['h', 'j', 'l', 'L', 't', 'z'];
         legal_fields.sort();
         specifiers.sort();
@@ -305,7 +293,8 @@ impl SubParser {
             || (field_char == 'c'
                 && (self.min_width_tmp == Some(String::from("0")) || self.past_decimal))
             || (field_char == 'b'
-                && (self.min_width_tmp.is_some() || self.past_decimal
+                && (self.min_width_tmp.is_some()
+                    || self.past_decimal
                     || self.second_field_tmp.is_some()))
         {
             err_conv(&self.text_so_far);

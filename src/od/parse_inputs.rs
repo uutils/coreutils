@@ -81,8 +81,9 @@ pub fn parse_inputs(matches: &CommandLineOpts) -> Result<CommandLineInputs, Stri
 
 /// interprets inputs when --traditional is on the commandline
 ///
-/// normally returns CommandLineInputs::FileAndOffset, but if no offset is found,
-/// it returns CommandLineInputs::FileNames (also to differentiate from the offset == 0)
+/// normally returns CommandLineInputs::FileAndOffset, but if no offset is
+/// found, it returns CommandLineInputs::FileNames (also to differentiate from
+/// the offset == 0)
 pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLineInputs, String> {
     match input_strings.len() {
         0 => Ok(CommandLineInputs::FileNames(vec!["-".to_string()])),
@@ -166,8 +167,9 @@ mod tests {
 
     /// A mock for the commandline options type
     ///
-    /// `inputs` are all commandline parameters which do not belong to an option.
-    /// `option_names` are the names of the options on the commandline.
+    /// `inputs` are all commandline parameters which do not belong to an
+    /// option. `option_names` are the names of the options on the
+    /// commandline.
     struct MockOptions<'a> {
         inputs: Vec<String>,
         option_names: Vec<&'a str>,
@@ -292,7 +294,8 @@ mod tests {
 
     #[test]
     fn test_parse_inputs_traditional() {
-        // it should not return FileAndOffset to signal no offset was entered on the commandline.
+        // it should not return FileAndOffset to signal no offset was entered on the
+        // commandline.
         assert_eq!(
             CommandLineInputs::FileNames(vec!["-".to_string()]),
             parse_inputs(&MockOptions::new(vec![], vec!["traditional"])).unwrap()
@@ -328,23 +331,27 @@ mod tests {
             parse_inputs(&MockOptions::new(
                 vec!["file1", "10", "10"],
                 vec!["traditional"]
-            )).unwrap()
+            ))
+            .unwrap()
         );
 
         parse_inputs(&MockOptions::new(
             vec!["10", "file1", "10"],
             vec!["traditional"],
-        )).unwrap_err();
+        ))
+        .unwrap_err();
 
         parse_inputs(&MockOptions::new(
             vec!["10", "10", "file1"],
             vec!["traditional"],
-        )).unwrap_err();
+        ))
+        .unwrap_err();
 
         parse_inputs(&MockOptions::new(
             vec!["10", "10", "10", "10"],
             vec!["traditional"],
-        )).unwrap_err();
+        ))
+        .unwrap_err();
     }
 
     fn parse_offset_operand_str(s: &str) -> Result<usize, &'static str> {

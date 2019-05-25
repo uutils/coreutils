@@ -1,21 +1,19 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-//!
 //! The following tokens are present in the expr grammar:
 //! * integer literal;
 //! * string literal;
 //! * infix binary operators;
 //! * prefix operators.
 //!
-//! According to the man-page of expr we have expression split into tokens (each token -- separate CLI-argument).
-//! Hence all we need is to map the strings into the Token structures, except for some ugly fiddling with +-escaping.
+//! According to the man-page of expr we have expression split into tokens (each
+//! token -- separate CLI-argument). Hence all we need is to map the strings
+//! into the Token structures, except for some ugly fiddling with +-escaping.
 //!
 
 #[derive(Debug, Clone)]
@@ -144,12 +142,7 @@ fn maybe_dump_tokens_acc(tokens_acc: &[(usize, Token)]) {
     }
 }
 
-fn push_token_if_not_escaped(
-    acc: &mut Vec<(usize, Token)>,
-    tok_idx: usize,
-    token: Token,
-    s: &str,
-) {
+fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, token: Token, s: &str) {
     // Smells heuristics... :(
     let prev_is_plus = match acc.last() {
         None => false,

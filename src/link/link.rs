@@ -1,20 +1,18 @@
 #![crate_name = "uu_link"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Gehring <mg@ebfe.org>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Michael Gehring <mg@ebfe.org>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
 
 use std::fs::hard_link;
-use std::path::Path;
 use std::io::Error;
+use std::path::Path;
 
 static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
 static SUMMARY: &str = "Create a link named FILE2 to FILE1";

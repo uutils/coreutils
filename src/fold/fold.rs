@@ -1,13 +1,11 @@
 #![crate_name = "uu_fold"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -70,9 +68,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.starts_with('-') && slice.len() > 1
-            && slice.chars().nth(1).unwrap().is_digit(10)
-        {
+        if slice.starts_with('-') && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
             let mut v = args.to_vec();
             v.remove(i);
             return (v, Some(slice[1..].to_owned()));
@@ -145,11 +141,13 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                                     let ncount = routput.chars().fold(0, |out, ch: char| {
                                         out + match ch {
                                             '\t' => 8,
-                                            '\x08' => if out > 0 {
-                                                !0
-                                            } else {
-                                                0
-                                            },
+                                            '\x08' => {
+                                                if out > 0 {
+                                                    !0
+                                                } else {
+                                                    0
+                                                }
+                                            }
                                             '\r' => return 0,
                                             _ => 1,
                                         }

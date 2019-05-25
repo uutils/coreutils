@@ -1,17 +1,15 @@
 #![crate_name = "uu_factor"]
 
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) T. Jameson Little <t.jameson.little@gmail.com>
-* (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
-*     20150223 added Pollard rho method implementation
-* (c) kwantam <kwantam@gmail.com>
-*     20150429 sped up trial division by adding table of prime inverses
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// This file is part of the uutils coreutils package.
+//
+// (c) T. Jameson Little <t.jameson.little@gmail.com>
+// (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
+//     20150223 added Pollard rho method implementation
+// (c) kwantam <kwantam@gmail.com>
+//     20150429 sped up trial division by adding table of prime inverses
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate rand;
 
@@ -20,12 +18,12 @@ extern crate uucore;
 
 use numeric::*;
 use rand::distributions::{Distribution, Uniform};
-use rand::{SeedableRng, thread_rng};
 use rand::rngs::SmallRng;
+use rand::{thread_rng, SeedableRng};
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead};
-use std::num::Wrapping;
 use std::mem::swap;
+use std::num::Wrapping;
 
 mod numeric;
 
@@ -130,9 +128,9 @@ fn table_division(mut num: u64, factors: &mut Vec<u64>) {
     // do we still have more factoring to do?
     // Decide whether to use Pollard Rho or slow divisibility based on
     // number's size:
-    //if num >= 1 << 63 {
+    // if num >= 1 << 63 {
     // number is too big to use rho pollard without overflowing
-    //trial_division_slow(num, factors);
+    // trial_division_slow(num, factors);
     //} else if num > 1 {
     // number is still greater than 1, but not so big that we have to worry
     rho_pollard_factor(num, factors);

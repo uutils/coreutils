@@ -1,13 +1,11 @@
 #![crate_name = "uu_basename"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jimmy Lu <jimmy.lu.2011@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jimmy Lu <jimmy.lu.2011@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -21,9 +19,7 @@ static SUMMARY: &str = "Print NAME with any leading directory components removed
 static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    //
     // Argument parsing
-    //
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag(
             "a",
@@ -74,9 +70,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "".to_owned()
     };
 
-    //
     // Main Program Processing
-    //
 
     let paths = if multiple_paths {
         &matches.free[..]

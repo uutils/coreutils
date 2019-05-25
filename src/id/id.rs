@@ -10,28 +10,27 @@
 // Synced with:
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
-//
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
 #[macro_use]
 extern crate uucore;
+use std::ffi::CStr;
+use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
-use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::process::{getegid, geteuid, getgid, getuid};
-use std::ffi::CStr;
 
 macro_rules! cstr2cow {
-    ($v:expr) => (
+    ($v:expr) => {
         unsafe { CStr::from_ptr($v).to_string_lossy() }
-    )
+    };
 }
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::mem::uninitialized;
     use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t, uint64_t};
+    pub use std::mem::uninitialized;
 
     pub type au_id_t = uid_t;
     pub type au_asid_t = pid_t;

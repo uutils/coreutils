@@ -1,22 +1,25 @@
+use formatteriteminfo::FormatterItemInfo;
+use parse_formats::ParsedFormatterItemInfo;
 use std::cmp;
 use std::slice::Iter;
-use parse_formats::ParsedFormatterItemInfo;
-use formatteriteminfo::FormatterItemInfo;
 
 /// Size in bytes of the max datatype. ie set to 16 for 128-bit numbers.
 const MAX_BYTES_PER_UNIT: usize = 8;
 
 /// Contains information to output single output line in human readable form
 pub struct SpacedFormatterItemInfo {
-    /// Contains a function pointer to output data, and information about the output format.
+    /// Contains a function pointer to output data, and information about the
+    /// output format.
     pub formatter_item_info: FormatterItemInfo,
-    /// Contains the number of spaces to add to align data with other output formats.
+    /// Contains the number of spaces to add to align data with other output
+    /// formats.
     ///
-    /// If the corresponding data is a single byte, each entry in this array contains
-    /// the number of spaces to insert when outputting each byte. If the corresponding
-    /// data is multi-byte, only the fist byte position is used. For example a 32-bit
-    /// datatype, could use positions 0, 4, 8, 12, ....
-    /// As each block is formatted identically, only the spacing for a single block is set.
+    /// If the corresponding data is a single byte, each entry in this array
+    /// contains the number of spaces to insert when outputting each byte.
+    /// If the corresponding data is multi-byte, only the fist byte position
+    /// is used. For example a 32-bit datatype, could use positions 0, 4, 8,
+    /// 12, .... As each block is formatted identically, only the spacing
+    /// for a single block is set.
     pub spacing: [usize; MAX_BYTES_PER_UNIT],
     /// if set adds a ascii dump at the end of the line
     pub add_ascii_dump: bool,
@@ -29,9 +32,11 @@ pub struct OutputInfo {
     /// The width of a line in human readable format.
     pub print_width_line: usize,
 
-    /// The number of bytes in a block. (This is the size of the largest datatype in `spaced_formatters`.)
+    /// The number of bytes in a block. (This is the size of the largest
+    /// datatype in `spaced_formatters`.)
     pub byte_size_block: usize,
-    /// The width of a block in human readable format. (The size of the largest format.)
+    /// The width of a block in human readable format. (The size of the largest
+    /// format.)
     pub print_width_block: usize,
     /// All formats.
     spaced_formatters: Vec<SpacedFormatterItemInfo>,
@@ -94,49 +99,53 @@ impl OutputInfo {
 
     /// calculates proper alignment for a single line of output
     ///
-    /// Multiple representations of the same data, will be right-aligned for easy reading.
-    /// For example a 64 bit octal and a 32-bit decimal with a 16-bit hexadecimal looks like this:
-    /// ```
+    /// Multiple representations of the same data, will be right-aligned for
+    /// easy reading. For example a 64 bit octal and a 32-bit decimal with a
+    /// 16-bit hexadecimal looks like this: ```
     /// 1777777777777777777777 1777777777777777777777
     ///  4294967295 4294967295  4294967295 4294967295
     ///   ffff ffff  ffff ffff   ffff ffff  ffff ffff
     /// ```
-    /// In this example is additional spacing before the first and third decimal number,
-    /// and there is additional spacing before the 1st, 3rd, 5th and 7th hexadecimal number.
-    /// This way both the octal and decimal, as well as the decimal and hexadecimal numbers
-    /// left align. Note that the alignment below both octal numbers is identical.
+    /// In this example is additional spacing before the first and third decimal
+    /// number, and there is additional spacing before the 1st, 3rd, 5th and
+    /// 7th hexadecimal number. This way both the octal and decimal, as well
+    /// as the decimal and hexadecimal numbers left align. Note that the
+    /// alignment below both octal numbers is identical.
     ///
-    /// This function calculates the required spacing for a single line, given the size
-    /// of a block, and the width of a block. The size of a block is the largest type
-    /// and the width is width of the the type which needs the most space to print that
-    /// number of bytes. So both numbers might refer to different types. All widths
-    /// include a space at the front. For example the width of a 8-bit hexadecimal,
+    /// This function calculates the required spacing for a single line, given
+    /// the size of a block, and the width of a block. The size of a block
+    /// is the largest type and the width is width of the the type which
+    /// needs the most space to print that number of bytes. So both numbers
+    /// might refer to different types. All widths include a space at the
+    /// front. For example the width of a 8-bit hexadecimal,
     /// is 3 characters, for example " FF".
     ///
-    /// This algorithm first calculates how many spaces needs to be added, based the
-    /// block size and the size of the type, and the widths of the block and the type.
-    /// The required spaces are spread across the available positions.
-    /// If the blocksize is 8, and the size of the type is 8 too, there will be just
-    /// one value in a block, so all spacing will be assigned to position 0.
-    /// If the blocksize is 8, and the size of the type is 2, the spacing will be
-    /// spread across position 0, 2, 4, 6. All 4 positions will get an additional
-    /// space as long as there are more then 4 spaces available. If there are 2
-    /// spaces available, they will be assigned to position 0 and 4. If there is
-    /// 1 space available, it will be assigned to position 0. This will be combined,
-    /// For example 7 spaces will be assigned to position 0, 2, 4, 6 like: 3, 1, 2, 1.
-    /// And 7 spaces with 2 positions will be assigned to position 0 and 4 like 4, 3.
+    /// This algorithm first calculates how many spaces needs to be added, based
+    /// the block size and the size of the type, and the widths of the block
+    /// and the type. The required spaces are spread across the available
+    /// positions. If the blocksize is 8, and the size of the type is 8 too,
+    /// there will be just one value in a block, so all spacing will be
+    /// assigned to position 0. If the blocksize is 8, and the size of the
+    /// type is 2, the spacing will be spread across position 0, 2, 4, 6.
+    /// All 4 positions will get an additional space as long as there are
+    /// more then 4 spaces available. If there are 2 spaces available, they
+    /// will be assigned to position 0 and 4. If there is 1 space available,
+    /// it will be assigned to position 0. This will be combined,
+    /// For example 7 spaces will be assigned to position 0, 2, 4, 6 like: 3, 1,
+    /// 2, 1. And 7 spaces with 2 positions will be assigned to position 0
+    /// and 4 like 4, 3.
     ///
-    /// Here is another example showing the alignment of 64-bit unsigned decimal numbers,
-    /// 32-bit hexadecimal number, 16-bit octal numbers and 8-bit hexadecimal numbers:
-    /// ```
+    /// Here is another example showing the alignment of 64-bit unsigned decimal
+    /// numbers, 32-bit hexadecimal number, 16-bit octal numbers and 8-bit
+    /// hexadecimal numbers: ```
     ///        18446744073709551615        18446744073709551615
     ///      ffffffff      ffffffff      ffffffff      ffffffff
     /// 177777 177777 177777 177777 177777 177777 177777 177777
     ///  ff ff  ff ff  ff ff  ff ff  ff ff  ff ff  ff ff  ff ff
     /// ```
     ///
-    /// This algorithm assumes the size of all types is a power of 2 (1, 2, 4, 8, 16, ...)
-    /// Increase MAX_BYTES_PER_UNIT to allow larger types.
+    /// This algorithm assumes the size of all types is a power of 2 (1, 2, 4,
+    /// 8, 16, ...) Increase MAX_BYTES_PER_UNIT to allow larger types.
     fn calculate_alignment(
         sf: &TypeSizeInfo,
         byte_size_block: usize,

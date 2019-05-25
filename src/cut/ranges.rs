@@ -1,11 +1,9 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Rolf Morel <rolfmorel@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Rolf Morel <rolfmorel@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use std::str::FromStr;
 
@@ -42,10 +40,7 @@ impl FromStr for Range {
             (Some(n), Some(m)) if m.is_empty() => {
                 if let Ok(low) = n.parse::<usize>() {
                     if low > 0 {
-                        Ok(Range {
-                            low,
-                            high: MAX - 1,
-                        })
+                        Ok(Range { low, high: MAX - 1 })
                     } else {
                         Err(field)
                     }
@@ -67,10 +62,7 @@ impl FromStr for Range {
             (Some(n), Some(m)) => match (n.parse::<usize>(), m.parse::<usize>()) {
                 (Ok(low), Ok(high)) => {
                     if low > 0 && low <= high {
-                        Ok(Range {
-                            low,
-                            high,
-                        })
+                        Ok(Range { low, high })
                     } else if low == 0 {
                         Err(field)
                     } else {

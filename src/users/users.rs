@@ -1,16 +1,14 @@
 #![crate_name = "uu_users"]
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) KokaKiwi <kokakiwi@kokakiwi.net>
- * (c) Jian Zeng <anonymousknight86@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
-/* last synced with: whoami (GNU coreutils) 8.22 */
-
+// This file is part of the uutils coreutils package.
+//
+// (c) KokaKiwi <kokakiwi@kokakiwi.net>
+// (c) Jian Zeng <anonymousknight86@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// /
+//
+// last synced with: whoami (GNU coreutils) 8.22
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #![allow(dead_code)]
 

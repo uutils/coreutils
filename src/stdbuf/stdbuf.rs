@@ -1,13 +1,11 @@
 #![crate_name = "uu_stdbuf"]
 
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) Dorota Kapturkiewicz <dokaptur@gmail.com>
-*
-* For the full copyright and license information, please view the LICENSE
-* file that was distributed with this source code.
-*/
+// This file is part of the uutils coreutils package.
+//
+// (c) Dorota Kapturkiewicz <dokaptur@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate tempdir;
@@ -16,12 +14,12 @@ extern crate tempdir;
 extern crate uucore;
 
 use getopts::{Matches, Options};
-use tempdir::TempDir;
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
+use tempdir::TempDir;
 
 static NAME: &str = "stdbuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,7 +49,12 @@ enum OkMsg {
     Version,
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonflybsd"
+))]
 fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "so")
 }
@@ -61,7 +64,13 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd", target_os = "macos")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonflybsd",
+    target_os = "macos"
+)))]
 fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }

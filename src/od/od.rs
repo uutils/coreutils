@@ -1,13 +1,11 @@
 #![crate_name = "uu_od"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Ben Hirsch <benhirsch24@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Ben Hirsch <benhirsch24@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate byteorder;
 extern crate getopts;
@@ -16,36 +14,36 @@ extern crate half;
 #[macro_use]
 extern crate uucore;
 
-mod multifilereader;
-mod partialreader;
-mod peekreader;
 mod byteorder_io;
 mod formatteriteminfo;
-mod prn_int;
-mod prn_char;
-mod prn_float;
-mod parse_nrofbytes;
-mod parse_formats;
-mod parse_inputs;
-mod inputoffset;
 mod inputdecoder;
-mod output_info;
+mod inputoffset;
 #[cfg(test)]
 mod mockstream;
+mod multifilereader;
+mod output_info;
+mod parse_formats;
+mod parse_inputs;
+mod parse_nrofbytes;
+mod partialreader;
+mod peekreader;
+mod prn_char;
+mod prn_float;
+mod prn_int;
 
-use std::cmp;
 use byteorder_io::*;
+use formatteriteminfo::*;
+use inputdecoder::{InputDecoder, MemoryDecoder};
+use inputoffset::{InputOffset, Radix};
 use multifilereader::*;
+use output_info::OutputInfo;
+use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
+use parse_inputs::{parse_inputs, CommandLineInputs};
+use parse_nrofbytes::parse_number_of_bytes;
 use partialreader::*;
 use peekreader::*;
-use formatteriteminfo::*;
-use parse_nrofbytes::parse_number_of_bytes;
-use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
-use parse_inputs::{parse_inputs, CommandLineInputs};
-use inputoffset::{InputOffset, Radix};
-use inputdecoder::{InputDecoder, MemoryDecoder};
-use output_info::OutputInfo;
+use std::cmp;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -343,7 +341,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-/// Loops through the input line by line, calling print_bytes to take care of the output.
+/// Loops through the input line by line, calling print_bytes to take care of
+/// the output.
 fn odfunc<I>(
     input_offset: &mut InputOffset,
     input_decoder: &mut InputDecoder<I>,
@@ -357,7 +356,8 @@ where
     let line_bytes = output_info.byte_size_line;
 
     loop {
-        // print each line data (or multi-format raster of several lines describing the same data).
+        // print each line data (or multi-format raster of several lines describing the
+        // same data).
 
         match input_decoder.peek_read() {
             Ok(mut memory_decoder) => {
@@ -368,9 +368,11 @@ where
                     break;
                 }
 
-                // not enough byte for a whole element, this should only happen on the last line.
+                // not enough byte for a whole element, this should only happen on the last
+                // line.
                 if length != line_bytes {
-                    // set zero bytes in the part of the buffer that will be used, but is not filled.
+                    // set zero bytes in the part of the buffer that will be used, but is not
+                    // filled.
                     let mut max_used = length + output_info.byte_size_block;
                     if max_used > line_bytes {
                         max_used = line_bytes;
@@ -379,7 +381,8 @@ where
                     memory_decoder.zero_out_buffer(length, max_used);
                 }
 
-                if !output_info.output_duplicates && length == line_bytes
+                if !output_info.output_duplicates
+                    && length == line_bytes
                     && memory_decoder.get_buffer(0) == &previous_bytes[..]
                 {
                     if !duplicate_line {
@@ -417,7 +420,8 @@ where
     }
 }
 
-/// Outputs a single line of input, into one or more lines human readable output.
+/// Outputs a single line of input, into one or more lines human readable
+/// output.
 fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &OutputInfo) {
     let mut first = true; // First line of a multi-format raster.
     for f in output_info.spaced_formatters_iter() {
@@ -473,7 +477,8 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
     }
 }
 
-/// returns a reader implementing `PeekRead + Read + HasError` providing the combined input
+/// returns a reader implementing `PeekRead + Read + HasError` providing the
+/// combined input
 ///
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
@@ -482,7 +487,8 @@ fn open_input_peek_reader<'a>(
     skip_bytes: usize,
     read_bytes: Option<usize>,
 ) -> PeekReader<PartialReader<MultifileReader<'a>>> {
-    // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
+    // should return  "impl PeekRead + Read + HasError" when supported in (stable)
+    // rust
     let inputs = input_strings
         .iter()
         .map(|w| match w as &str {

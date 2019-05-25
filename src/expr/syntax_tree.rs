@@ -1,19 +1,17 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-//!
-//! Here we employ shunting-yard algorithm for building AST from tokens according to operators' precedence and associativeness.
+//! Here we employ shunting-yard algorithm for building AST from tokens
+//! according to operators' precedence and associativeness.
 //! * https://en.wikipedia.org/wiki/Shunting-yard_algorithm
 //!
 
-use tokens::Token;
 use onig::{Regex, RegexOptions, Syntax};
+use tokens::Token;
 
 type TokenStack = Vec<(usize, Token)>;
 pub type OperandsList = Vec<Box<ASTNode>>;
@@ -85,25 +83,27 @@ impl ASTNode {
             ASTNode::Node { ref op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
-                    "+" => infix_operator_two_ints(|a: i64, b: i64| {
-                            checked_binop(|| a.checked_add(b), "+")
-                        }, &operand_values
+                    "+" => infix_operator_two_ints(
+                        |a: i64, b: i64| checked_binop(|| a.checked_add(b), "+"),
+                        &operand_values,
                     ),
-                    "-" => infix_operator_two_ints(|a: i64, b: i64| {
-                            checked_binop(|| a.checked_sub(b), "-")
-                        }, &operand_values
+                    "-" => infix_operator_two_ints(
+                        |a: i64, b: i64| checked_binop(|| a.checked_sub(b), "-"),
+                        &operand_values,
                     ),
-                    "*" => infix_operator_two_ints(|a: i64, b: i64| {
-                            checked_binop(|| a.checked_mul(b), "*")
-                        }, &operand_values
+                    "*" => infix_operator_two_ints(
+                        |a: i64, b: i64| checked_binop(|| a.checked_mul(b), "*"),
+                        &operand_values,
                     ),
-                    "/" => infix_operator_two_ints(|a: i64, b: i64| {
+                    "/" => infix_operator_two_ints(
+                        |a: i64, b: i64| {
                             if b == 0 {
                                 Err("division by zero".to_owned())
                             } else {
                                 checked_binop(|| a.checked_div(b), "/")
                             }
-                        }, &operand_values
+                        },
+                        &operand_values,
                     ),
                     "%" => infix_operator_two_ints(
                         |a: i64, b: i64| {
@@ -300,11 +300,13 @@ fn push_token_to_either_stack(
     let result = match *token {
         Token::Value { .. } => Ok(out_stack.push((token_idx, token.clone()))),
 
-        Token::InfixOp { .. } => if op_stack.is_empty() {
-            Ok(op_stack.push((token_idx, token.clone())))
-        } else {
-            push_op_to_stack(token_idx, token, out_stack, op_stack)
-        },
+        Token::InfixOp { .. } => {
+            if op_stack.is_empty() {
+                Ok(op_stack.push((token_idx, token.clone())))
+            } else {
+                push_op_to_stack(token_idx, token, out_stack, op_stack)
+            }
+        }
 
         Token::PrefixOp { .. } => Ok(op_stack.push((token_idx, token.clone()))),
 
@@ -362,12 +364,14 @@ fn push_op_to_stack(
                         precedence: prev_prec,
                         ..
                     },
-                )) => if la && prev_prec >= prec || !la && prev_prec > prec {
-                    out_stack.push(op_stack.pop().unwrap())
-                } else {
-                    op_stack.push((token_idx, token.clone()));
-                    return Ok(());
-                },
+                )) => {
+                    if la && prev_prec >= prec || !la && prev_prec > prec {
+                        out_stack.push(op_stack.pop().unwrap())
+                    } else {
+                        op_stack.push((token_idx, token.clone()));
+                        return Ok(());
+                    }
+                }
 
                 Some(&(_, Token::PrefixOp { .. })) => {
                     op_stack.push((token_idx, token.clone()));

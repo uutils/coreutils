@@ -1,13 +1,11 @@
 #![crate_name = "uu_split"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Akira Hayakawa <ruby.wktk@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Akira Hayakawa <ruby.wktk@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -320,7 +318,8 @@ fn split(settings: &Settings) -> i32 {
                     num_prefix(fileno, settings.suffix_length)
                 } else {
                     str_prefix(fileno, settings.suffix_length)
-                }.as_ref(),
+                }
+                .as_ref(),
             );
 
             if fileno != 0 {

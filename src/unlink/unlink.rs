@@ -1,15 +1,13 @@
 #![crate_name = "uu_unlink"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Colin Warren <me@zv.ms>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Colin Warren <me@zv.ms>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/* last synced with: unlink (GNU coreutils) 8.21 */
+// last synced with: unlink (GNU coreutils) 8.21
 
 extern crate getopts;
 extern crate libc;
@@ -18,11 +16,11 @@ extern crate libc;
 extern crate uucore;
 
 use getopts::Options;
-use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use libc::{lstat, stat, unlink};
+use libc::{S_IFLNK, S_IFMT, S_IFREG};
+use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use std::mem::uninitialized;
-use std::ffi::CString;
 
 static NAME: &str = "unlink";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -72,12 +70,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let st_mode = {
         let mut buf: stat = unsafe { uninitialized() };
-        let result = unsafe {
-            lstat(
-                c_string.as_ptr(),
-                &mut buf as *mut stat,
-            )
-        };
+        let result = unsafe { lstat(c_string.as_ptr(), &mut buf as *mut stat) };
 
         if result < 0 {
             crash!(

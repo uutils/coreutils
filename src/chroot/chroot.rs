@@ -1,21 +1,19 @@
 #![crate_name = "uu_chroot"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
- * (c) Jian Zeng <anonymousknight96 AT gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Vsevolod Velichko <torkvemada@sorokdva.net>
+// (c) Jian Zeng <anonymousknight96 AT gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
-use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::entries;
+use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 
 use std::ffi::CString;
 use std::io::Error;
@@ -140,10 +138,7 @@ fn enter_chroot(root: &Path) {
     let root_str = root.display();
     std::env::set_current_dir(root).unwrap();
     let err = unsafe {
-        chroot(CString::new(".")
-            .unwrap()
-            .as_bytes_with_nul()
-            .as_ptr() as *const libc::c_char)
+        chroot(CString::new(".").unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
     };
     if err != 0 {
         crash!(

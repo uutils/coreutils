@@ -1,16 +1,14 @@
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
-* (c) kwantam <kwantam@gmail.com>
-*     20150507 added big_ routines to prevent overflow when num > 2^63
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// This file is part of the uutils coreutils package.
+//
+// (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
+// (c) kwantam <kwantam@gmail.com>
+//     20150507 added big_ routines to prevent overflow when num > 2^63
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-use std::u64::MAX as MAX_U64;
 use std::num::Wrapping;
+use std::u64::MAX as MAX_U64;
 
 pub fn big_add(a: u64, b: u64, m: u64) -> u64 {
     let Wrapping(msb_mod_m) = Wrapping(MAX_U64) - Wrapping(m) + Wrapping(1);

@@ -1,16 +1,14 @@
 #![crate_name = "uu_uptime"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordi Boggiano <j.boggiano@seld.be>
- * (c) Jian Zeng <anonymousknight86@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jordi Boggiano <j.boggiano@seld.be>
+// (c) Jian Zeng <anonymousknight86@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/* last synced with: cat (GNU coreutils) 8.13 */
+// last synced with: cat (GNU coreutils) 8.13
 
 extern crate getopts;
 extern crate time;
@@ -18,8 +16,8 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 // import crate time from utmpx
-use uucore::libc::time_t;
 pub use uucore::libc;
+use uucore::libc::time_t;
 
 use getopts::Options;
 
@@ -106,8 +104,8 @@ fn print_loadavg() {
 
 #[cfg(windows)]
 fn print_loadavg() {
-    // XXX: currently this is a noop as Windows does not seem to have anything comparable to
-    //      getloadavg()
+    // XXX: currently this is a noop as Windows does not seem to have anything
+    // comparable to getloadavg()
 }
 
 #[cfg(unix)]

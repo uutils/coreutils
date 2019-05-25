@@ -14,8 +14,8 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
-use std::fs;
 use std::env;
+use std::fs;
 use std::io::{stdin, Result};
 use std::path::{Path, PathBuf};
 
@@ -259,7 +259,9 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                         Err(e) => {
                             show_error!(
                                 "cannot move ‘{}’ to ‘{}’: {}",
-                                source.display(), target.display(), e
+                                source.display(),
+                                target.display(),
+                                e
                             );
                             1
                         }
@@ -271,7 +273,8 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
             } else if target.exists() && source.is_dir() {
                 show_error!(
                     "cannot overwrite non-directory ‘{}’ with directory ‘{}’",
-                    target.display(), source.display()
+                    target.display(),
+                    source.display()
                 );
                 return 1;
             }
@@ -362,8 +365,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         }
 
         if b.update {
-            if fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
-            {
+            if fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
                 return Ok(());
             }
         }
@@ -376,7 +378,10 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?
             } else {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Directory not empty",
+                ));
             }
         }
     }
@@ -431,7 +436,9 @@ fn is_empty_dir(path: &PathBuf) -> bool {
     match fs::read_dir(path) {
         Ok(contents) => {
             return contents.peekable().peek().is_none();
-        },
-        Err(_e) => { return false; }
+        }
+        Err(_e) => {
+            return false;
+        }
     }
 }

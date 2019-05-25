@@ -1,14 +1,12 @@
 #![crate_name = "uu_echo"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Derek Chiang <derekchiang93@gmail.com>
- * (c) Christopher Brown <ccbrown112@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Derek Chiang <derekchiang93@gmail.com>
+// (c) Christopher Brown <ccbrown112@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -71,8 +69,8 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                     'b' => '\x08',
                     'c' => {
                         should_stop = true;
-                        break
-                    },
+                        break;
+                    }
                     'e' => '\x1b',
                     'f' => '\x0c',
                     'n' => '\n',
@@ -90,14 +88,15 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                     _ => {
                         start = 0;
                         next
-                    },
+                    }
                 };
             }
         }
 
         buffer[1] = c;
 
-        // because printing char slices is apparently not available in the standard library
+        // because printing char slices is apparently not available in the standard
+        // library
         for ch in &buffer[start..] {
             write!(output, "{}", ch)?;
         }
@@ -110,7 +109,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")
         .optflag("e", "", "enable interpretation of backslash escapes")
-        .optflag("E", "", "disable interpretation of backslash escapes (default)")
+        .optflag(
+            "E",
+            "",
+            "disable interpretation of backslash escapes (default)",
+        )
         .parse(args);
 
     let no_newline = matches.opt_present("n");

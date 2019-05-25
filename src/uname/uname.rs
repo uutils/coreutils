@@ -29,9 +29,9 @@ const OPT_KERNELVERSION: &str = "kernel-version";
 const OPT_KERNELRELEASE: &str = "kernel-release";
 const OPT_MACHINE: &str = "machine";
 
-//FIXME: unimplemented options
-//const OPT_PROCESSOR: &'static str = "processor";
-//const OPT_HWPLATFORM: &'static str = "hardware-platform";
+// FIXME: unimplemented options
+// const OPT_PROCESSOR: &'static str = "processor";
+// const OPT_HWPLATFORM: &'static str = "hardware-platform";
 const OPT_OS: &str = "operating-system";
 
 #[cfg(target_os = "linux")]

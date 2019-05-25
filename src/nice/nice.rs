@@ -1,13 +1,11 @@
 #![crate_name = "uu_nice"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate libc;
@@ -22,7 +20,8 @@ use std::io::Error;
 const NAME: &str = "nice";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
+// XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac
+// OS X.
 const PRIO_PROCESS: c_int = 0;
 
 extern "C" {

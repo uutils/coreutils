@@ -12,7 +12,7 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::entries::{get_groups, Locate, Passwd, gid2grp};
+use uucore::entries::{get_groups, gid2grp, Locate, Passwd};
 
 static SYNTAX: &str = "[user]";
 static SUMMARY: &str = "display current group names";

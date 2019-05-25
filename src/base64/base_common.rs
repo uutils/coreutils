@@ -36,13 +36,11 @@ pub fn execute(
             "COLS",
         )
         .parse(args);
-    
-    let line_wrap = matches.opt_str("wrap").map(|s| {
-        match s.parse() {
-            Ok(n) => n,
-            Err(e) => {
-                crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
-            }
+
+    let line_wrap = matches.opt_str("wrap").map(|s| match s.parse() {
+        Ok(n) => n,
+        Err(e) => {
+            crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
         }
     });
     let ignore_garbage = matches.opt_present("ignore-garbage");
@@ -55,7 +53,13 @@ pub fn execute(
 
     if matches.free.is_empty() || &matches.free[0][..] == "-" {
         let stdin_raw = stdin();
-        handle_input(&mut stdin_raw.lock(), format, line_wrap, ignore_garbage, decode);
+        handle_input(
+            &mut stdin_raw.lock(),
+            format,
+            line_wrap,
+            ignore_garbage,
+            decode,
+        );
     } else {
         let path = Path::new(matches.free[0].as_str());
         let file_buf = safe_unwrap!(File::open(&path));
@@ -73,8 +77,7 @@ fn handle_input<R: Read>(
     ignore_garbage: bool,
     decode: bool,
 ) {
-    let mut data = Data::new(input, format)
-        .ignore_garbage(ignore_garbage);
+    let mut data = Data::new(input, format).ignore_garbage(ignore_garbage);
     if let Some(wrap) = line_wrap {
         data = data.line_wrap(wrap);
     }

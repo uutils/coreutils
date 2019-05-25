@@ -1,15 +1,13 @@
 #![crate_name = "uu_yes"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordi Boggiano <j.boggiano@seld.be>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jordi Boggiano <j.boggiano@seld.be>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/* last synced with: yes (GNU coreutils) 8.13 */
+// last synced with: yes (GNU coreutils) 8.13
 
 #[macro_use]
 extern crate clap;
@@ -17,15 +15,15 @@ extern crate clap;
 extern crate uucore;
 
 use clap::Arg;
-use uucore::zero_copy::ZeroCopyWriter;
 use std::borrow::Cow;
 use std::io::{self, Write};
+use uucore::zero_copy::ZeroCopyWriter;
 
 // force a re-build whenever Cargo.toml changes
 const _CARGO_TOML: &str = include_str!("Cargo.toml");
 
-// it's possible that using a smaller or larger buffer might provide better performance on some
-// systems, but honestly this is good enough
+// it's possible that using a smaller or larger buffer might provide better
+// performance on some systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
 pub fn uumain(args: Vec<String>) -> i32 {

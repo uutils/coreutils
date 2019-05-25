@@ -1,7 +1,7 @@
 // https://github.com/lazy-bitfield/rust-mockstream/pull/2
 
-use std::io::{Cursor, Error, ErrorKind, Read, Result};
 use std::error::Error as errorError;
+use std::io::{Cursor, Error, ErrorKind, Read, Result};
 
 /// `FailingMockStream` mocks a stream which will fail upon read or write
 ///
@@ -21,9 +21,11 @@ use std::error::Error as errorError;
 ///             let mut buffer = [0; 5];
 ///             match r.read(&mut buffer) {
 ///                 Err(_) => {
-///                     if retries == 0 { break; }
+///                     if retries == 0 {
+///                         break;
+///                     }
 ///                     retries -= 1;
-///                 },
+///                 }
 ///                 Ok(0) => break,
 ///                 Ok(n) => count += n,
 ///             }
@@ -35,8 +37,8 @@ use std::error::Error as errorError;
 /// #[test]
 /// fn test_io_retries() {
 ///     let mut c = Cursor::new(&b"1234"[..])
-///             .chain(FailingMockStream::new(ErrorKind::Other, "Failing", 3))
-///             .chain(Cursor::new(&b"5678"[..]));
+///         .chain(FailingMockStream::new(ErrorKind::Other, "Failing", 3))
+///         .chain(Cursor::new(&b"5678"[..]));
 ///
 ///     let sut = CountIo {};
 ///     // this will fail unless read_data performs at least 3 retries on I/O errors
@@ -53,8 +55,9 @@ pub struct FailingMockStream {
 impl FailingMockStream {
     /// Creates a FailingMockStream
     ///
-    /// When `read` or `write` is called, it will return an error `repeat_count` times.
-    /// `kind` and `message` can be specified to define the exact error.
+    /// When `read` or `write` is called, it will return an error `repeat_count`
+    /// times. `kind` and `message` can be specified to define the exact
+    /// error.
     pub fn new(kind: ErrorKind, message: &'static str, repeat_count: i32) -> FailingMockStream {
         FailingMockStream {
             kind: kind,

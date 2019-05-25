@@ -1,14 +1,12 @@
-/*
- * This file is part of `fmt` from the uutils coreutils package.
- *
- * (c) kwantam <kwantam@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of `fmt` from the uutils coreutils package.
+//
+// (c) kwantam <kwantam@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-use std::iter::Peekable;
 use std::io::{BufRead, Lines};
+use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
@@ -16,18 +14,18 @@ use FmtOptions;
 
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {
-        // if it is ASCII, call it exactly 1 wide (including control chars)
+        // If it is ASCII, call it exactly 1 wide (including control chars)
         // calling control chars' widths 1 is consistent with OpenBSD fmt
         1
     } else {
-        // otherwise, get the unicode width
-        // note that we shouldn't actually get None here because only c < 0xA0
+        // Otherwise, get the unicode width:
+        // Note that we shouldn't actually get None here because only c < 0xA0
         // can return None, but for safety and future-proofing we do it this way
         UnicodeWidthChar::width(c).unwrap_or(1)
     }
 }
 
-// lines with PSKIP, lacking PREFIX, or which are entirely blank are
+// Lines with PSKIP, lacking PREFIX, or which are entirely blank are
 // NoFormatLines; otherwise, they are FormatLines
 #[derive(Debug)]
 pub enum Line {
@@ -36,7 +34,7 @@ pub enum Line {
 }
 
 impl Line {
-    // when we know that it's a FormatLine, as in the ParagraphStream iterator
+    // When we know that it's a FormatLine, as in the ParagraphStream iterator
     fn get_formatline(self) -> FileLine {
         match self {
             Line::FormatLine(fl) => fl,
@@ -44,7 +42,7 @@ impl Line {
         }
     }
 
-    // when we know that it's a NoFormatLine, as in the ParagraphStream iterator
+    // When we know that it's a NoFormatLine, as in the ParagraphStream iterator
     fn get_noformatline(self) -> (String, bool) {
         match self {
             Line::NoFormatLine(s, b) => (s, b),
@@ -53,18 +51,22 @@ impl Line {
     }
 }
 
-// each line's prefix has to be considered to know whether to merge it with
+// Each line's prefix has to be considered to know whether to merge it with
 // the next line or not
 #[derive(Debug)]
 pub struct FileLine {
     line: String,
-    indent_end: usize, // the end of the indent, always the start of the text
-    pfxind_end: usize, // the end of the PREFIX's indent, that is, the spaces before the prefix
-    indent_len: usize, // display length of indent taking into account tabs
-    prefix_len: usize, // PREFIX indent length taking into account tabs
+    // The end of the indent, always the start of the text
+    indent_end: usize,
+    // The end of the PREFIX's indent, that is, the spaces before the prefix
+    pfxind_end: usize,
+    // Display length of indent taking into account tabs
+    indent_len: usize,
+    // PREFIX indent length taking into account tabs
+    prefix_len: usize,
 }
 
-// iterator that produces a stream of Lines from a file
+// Iterator that produces a stream of Lines from a file
 pub struct FileLines<'a> {
     opts: &'a FmtOptions,
     lines: Lines<&'a mut FileOrStdReader>,
@@ -72,13 +74,10 @@ pub struct FileLines<'a> {
 
 impl<'a> FileLines<'a> {
     fn new<'b>(opts: &'b FmtOptions, lines: Lines<&'b mut FileOrStdReader>) -> FileLines<'b> {
-        FileLines {
-            opts,
-            lines,
-        }
+        FileLines { opts, lines }
     }
 
-    // returns true if this line should be formatted
+    // Returns true if this line should be formatted
     fn match_prefix(&self, line: &str) -> (bool, usize) {
         if !self.opts.use_prefix {
             return (true, 0);
@@ -87,7 +86,7 @@ impl<'a> FileLines<'a> {
         FileLines::match_prefix_generic(&self.opts.prefix[..], line, self.opts.xprefix)
     }
 
-    // returns true if this line should be formatted
+    // Returns true if this line should be formatted
     fn match_anti_prefix(&self, line: &str) -> bool {
         if !self.opts.use_anti_prefix {
             return true;
@@ -109,7 +108,8 @@ impl<'a> FileLines<'a> {
         }
 
         if !exact {
-            // we do it this way rather than byte indexing to support unicode whitespace chars
+            // We do it this way rather than byte indexing to support unicode
+            // whitespace chars
             for (i, char) in line.char_indices() {
                 if line[i..].starts_with(pfx) {
                     return (true, i);
@@ -128,19 +128,20 @@ impl<'a> FileLines<'a> {
         let mut indent_end = 0;
         for (os, c) in string.char_indices() {
             if os == prefix_end {
-                // we found the end of the prefix, so this is the printed length of the prefix here
+                // We found the end of the prefix, so this is the printed length
+                // of the prefix here
                 prefix_len = indent_len;
             }
 
             if (os >= prefix_end) && !c.is_whitespace() {
-                // found first non-whitespace after prefix, this is indent_end
+                // Found first non-whitespace after prefix, this is indent_end
                 indent_end = os;
                 break;
             } else if c == '\t' {
-                // compute tab length
+                // Compute tab length
                 indent_len = (indent_len / self.opts.tabwidth + 1) * self.opts.tabwidth;
             } else {
-                // non-tab character
+                // Non-tab character
                 indent_len += char_width(c);
             }
         }
@@ -160,7 +161,7 @@ impl<'a> Iterator for FileLines<'a> {
             None => return None,
         };
 
-        // if this line is entirely whitespace,
+        // If this line is entirely whitespace,
         // emit a blank line
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
@@ -168,7 +169,7 @@ impl<'a> Iterator for FileLines<'a> {
             return Some(Line::NoFormatLine("".to_owned(), true));
         }
 
-        // if this line does not match the prefix,
+        // If this line does not match the prefix,
         // emit the line unprocessed and iterate again
         let (pmatch, poffset) = self.match_prefix(&n[..]);
         if !pmatch {
@@ -177,7 +178,7 @@ impl<'a> Iterator for FileLines<'a> {
             .chars()
             .all(|c| c.is_whitespace())
         {
-            // if the line matches the prefix, but is blank after,
+            // If the line matches the prefix, but is blank after,
             // don't allow lines to be combined through it (that is,
             // treat it like a blank line, except that since it's
             // not truly blank we will not allow mail headers on the
@@ -185,13 +186,13 @@ impl<'a> Iterator for FileLines<'a> {
             return Some(Line::NoFormatLine(n, false));
         }
 
-        // skip if this line matches the anti_prefix
+        // Skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(&n[..]) {
             return Some(Line::NoFormatLine(n, false));
         }
 
-        // figure out the indent, prefix, and prefixindent ending points
+        // Figure out the indent, prefix, and prefixindent ending points
         let prefix_end = poffset + self.opts.prefix.len();
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
@@ -205,23 +206,33 @@ impl<'a> Iterator for FileLines<'a> {
     }
 }
 
-// a paragraph : a collection of FileLines that are to be formatted
+// A paragraph is a collection of FileLines that are to be formatted
 // plus info about the paragraph's indentation
 // (but we only retain the String from the FileLine; the other info
 // is only there to help us in deciding how to merge lines into Paragraphs
 #[derive(Debug)]
 pub struct Paragraph {
-    lines: Vec<String>,     // the lines of the file
-    pub init_str: String,   // string representing the init, that is, the first line's indent
-    pub init_len: usize,    // printable length of the init string considering TABWIDTH
-    init_end: usize,        // byte location of end of init in first line String
-    pub indent_str: String, // string representing indent
-    pub indent_len: usize,  // length of above
-    indent_end: usize, // byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
-    pub mail_header: bool, // we need to know if this is a mail header because we do word splitting differently in that case
+    // The lines of the file
+    lines: Vec<String>,
+    // String representing the init, that is, the first line's indent
+    pub init_str: String,
+    // Printable length of the init string considering TABWIDTH
+    pub init_len: usize,
+    // Byte location of end of init in first line String
+    init_end: usize,
+    // String representing indent
+    pub indent_str: String,
+    // Length of above
+    pub indent_len: usize,
+    // Byte location of end of indent (in crown and tagged mode, only applies to
+    // 2nd line and onward)
+    indent_end: usize,
+    // We need to know if this is a mail header because we do word splitting
+    // differently in that case
+    pub mail_header: bool,
 }
 
-// an iterator producing a stream of paragraphs from a stream of lines
+// An iterator producing a stream of paragraphs from a stream of lines
 // given a set of options.
 pub struct ParagraphStream<'a> {
     lines: Peekable<FileLines<'a>>,
@@ -232,7 +243,7 @@ pub struct ParagraphStream<'a> {
 impl<'a> ParagraphStream<'a> {
     pub fn new<'b>(opts: &'b FmtOptions, reader: &'b mut FileOrStdReader) -> ParagraphStream<'b> {
         let lines = FileLines::new(opts, reader.lines()).peekable();
-        // at the beginning of the file, we might find mail headers
+        // At the beginning of the file, we might find mail headers
         ParagraphStream {
             lines,
             next_mail: true,
@@ -242,7 +253,7 @@ impl<'a> ParagraphStream<'a> {
 
     // detect RFC822 mail header
     fn is_mail_header(line: &FileLine) -> bool {
-        // a mail header begins with either "From " (envelope sender line)
+        // A mail header begins with either "From " (envelope sender line)
         // or with a sequence of printable ASCII chars (33 to 126, inclusive,
         // except colon) followed by a colon.
         if line.indent_end > 0 {
@@ -275,7 +286,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
     type Item = Result<Paragraph, String>;
 
     fn next(&mut self) -> Option<Result<Paragraph, String>> {
-        // return a NoFormatLine in an Err; it should immediately be output
+        // Return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek() {
             None => return None,
             Some(l) => match *l {
@@ -284,14 +295,14 @@ impl<'a> Iterator for ParagraphStream<'a> {
             },
         };
 
-        // found a NoFormatLine, immediately dump it out
+        // Found a NoFormatLine, immediately dump it out
         if noformat {
             let (s, nm) = self.lines.next().unwrap().get_noformatline();
             self.next_mail = nm;
             return Some(Err(s));
         }
 
-        // found a FormatLine, now build a paragraph
+        // Found a FormatLine, now build a paragraph
         let mut init_str = String::new();
         let mut init_end = 0;
         let mut init_len = 0;
@@ -303,11 +314,12 @@ impl<'a> Iterator for ParagraphStream<'a> {
         let mut p_lines = Vec::new();
 
         let mut in_mail = false;
-        let mut second_done = false; // for when we use crown or tagged mode
+        // For when we use crown or tagged mode
+        let mut second_done = false;
         loop {
             {
-                // peek ahead
-                // need to explicitly force fl out of scope before we can call self.lines.next()
+                // Peek ahead. We need to explicitly force fl out of scope
+                // before we can call `self.lines.next()`
                 let fl = match self.lines.peek() {
                     None => break,
                     Some(l) => match *l {
@@ -317,13 +329,13 @@ impl<'a> Iterator for ParagraphStream<'a> {
                 };
 
                 if p_lines.is_empty() {
-                    // first time through the loop, get things set up
+                    // First time through the loop, get things set up
                     // detect mail header
                     if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
                         in_mail = true;
-                        // there can't be any indent or pfxind because otherwise is_mail_header
-                        // would fail since there cannot be any whitespace before the colon in a
-                        // valid header field
+                        // There can't be any indent or pfxind because otherwise
+                        // `is_mail_header` would fail since there cannot be any
+                        // whitespace before the colon in a valid header field
                         indent_str.push_str("  ");
                         indent_len = 2;
                     } else {
@@ -335,44 +347,51 @@ impl<'a> Iterator for ParagraphStream<'a> {
                             second_done = true;
                         }
 
-                        // these will be overwritten in the 2nd line of crown or tagged mode, but
-                        // we are not guaranteed to get to the 2nd line, e.g., if the next line
-                        // is a NoFormatLine or None. Thus, we set sane defaults the 1st time around
+                        // These will be overwritten in the 2nd line of crown or
+                        // tagged mode, but we are not guaranteed to get to the
+                        // 2nd line, e.g., if the next line is a NoFormatLine or
+                        // None. Thus, we set sane defaults the 1st time around
                         indent_str.push_str(&fl.line[..fl.indent_end]);
                         indent_len = fl.indent_len;
                         indent_end = fl.indent_end;
 
-                        // save these to check for matching lines
+                        // Save these to check for matching lines
                         prefix_len = fl.prefix_len;
                         pfxind_end = fl.pfxind_end;
 
-                        // in tagged mode, add 4 spaces of additional indenting by default
-                        // (gnu fmt's behavior is different: it seems to find the closest column to
-                        // indent_end that is divisible by 3. But honestly that behavior seems
-                        // pretty arbitrary.
-                        // Perhaps a better default would be 1 TABWIDTH? But ugh that's so big.
+                        // In tagged mode, add 4 spaces of additional indenting
+                        // by default (gnu fmt's behavior is different: it seems
+                        // to find the closest column to indent_end that is
+                        // divisible by 3. But honestly that behavior seems
+                        // pretty arbitrary. Perhaps a better default would be 1
+                        // TABWIDTH? But ugh that's so big.
                         if self.opts.tagged {
                             indent_str.push_str("    ");
                             indent_len += 4;
                         }
                     }
                 } else if in_mail {
-                    // lines following mail headers must begin with spaces
+                    // Lines following mail headers must begin with spaces
                     if fl.indent_end == 0 || (self.opts.use_prefix && fl.pfxind_end == 0) {
                         break; // this line does not begin with spaces
                     }
                 } else if !second_done {
-                    // now we have enough info to handle crown margin and tagged mode
+                    // Now we have enough info to handle crown margin and tagged
+                    // mode
                     if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
-                        // in both crown and tagged modes we require that prefix_len is the same
+                        // In both crown and tagged modes we require that
+                        // prefix_len is the same
                         break;
-                    } else if self.opts.tagged && indent_len - 4 == fl.indent_len
+                    } else if self.opts.tagged
+                        && indent_len - 4 == fl.indent_len
                         && indent_end == fl.indent_end
                     {
-                        // in tagged mode, indent has to be *different* on following lines
+                        // In tagged mode, indent has to be *different* on
+                        // following lines
                         break;
                     } else {
-                        // this is part of the same paragraph, get the indent info from this line
+                        // This is part of the same paragraph, get the indent
+                        // info from this line
                         indent_str.clear();
                         indent_str.push_str(&fl.line[..fl.indent_end]);
                         indent_len = fl.indent_len;
@@ -380,8 +399,9 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     }
                     second_done = true;
                 } else {
-                    // detect mismatch
-                    if indent_end != fl.indent_end || pfxind_end != fl.pfxind_end
+                    // Detect mismatch
+                    if indent_end != fl.indent_end
+                        || pfxind_end != fl.pfxind_end
                         || indent_len != fl.indent_len
                         || prefix_len != fl.prefix_len
                     {
@@ -392,15 +412,15 @@ impl<'a> Iterator for ParagraphStream<'a> {
 
             p_lines.push(self.lines.next().unwrap().get_formatline().line);
 
-            // when we're in split-only mode, we never join lines, so stop here
+            // When we're in split-only mode, we never join lines, so stop here
             if self.opts.split_only {
                 break;
             }
         }
 
-        // if this was a mail header, then the next line can be detected as one. Otherwise, it cannot.
-        // NOTE next_mail is true at ParagraphStream instantiation, and is set to true after a blank
-        // NoFormatLine.
+        // If this was a mail header, then the next line can be detected as one.
+        // Otherwise, it cannot. NOTE next_mail is true at ParagraphStream
+        // instantiation, and is set to true after a blank NoFormatLine.
         self.next_mail = in_mail;
 
         Some(Ok(Paragraph {
@@ -435,9 +455,9 @@ impl<'a> ParaWords<'a> {
 
     fn create_words(&mut self) {
         if self.para.mail_header {
-            // no extra spacing for mail headers; always exactly 1 space
-            // safe to trim_left on every line of a mail header, since the
-            // first line is guaranteed not to have any spaces
+            // No extra spacing for mail headers; always exactly 1 space safe to
+            // trim_left on every line of a mail header, since the first line is
+            // guaranteed not to have any spaces
             self.words.extend(
                 self.para
                     .lines
@@ -446,7 +466,9 @@ impl<'a> ParaWords<'a> {
                     .map(|x| WordInfo {
                         word: x,
                         word_start: 0,
-                        word_nchars: x.len(), // OK for mail headers; only ASCII allowed (unicode is escaped)
+                        // OK for mail headers; only ASCII is allowed (unicode
+                        // is escaped)
+                        word_nchars: x.len(),
                         before_tab: None,
                         after_tab: 0,
                         sentence_start: false,
@@ -455,12 +477,13 @@ impl<'a> ParaWords<'a> {
                     }),
             );
         } else {
-            // first line
+            // First line
             self.words.extend(if self.opts.crown || self.opts.tagged {
-                // crown and tagged mode has the "init" in the first line, so slice from there
+                // Crown and tagged mode has the "init" in the first line, so
+                // slice from there
                 WordSplit::new(self.opts, &self.para.lines[0][self.para.init_end..])
             } else {
-                // otherwise we slice from the indent
+                // Otherwise we slice from the indent
                 WordSplit::new(self.opts, &self.para.lines[0][self.para.indent_end..])
             });
 
@@ -493,8 +516,9 @@ struct WordSplit<'a> {
 
 impl<'a> WordSplit<'a> {
     fn analyze_tabs(&self, string: &str) -> (Option<usize>, usize, Option<usize>) {
-        // given a string, determine (length before tab) and (printed length after first tab)
-        // if there are no tabs, beforetab = -1 and aftertab is the printed length
+        // Given a string, determine (length before tab) and (printed length
+        // after first tab) if there are no tabs, beforetab = -1 and aftertab is
+        // the printed length
         let mut beforetab = None;
         let mut aftertab = 0;
         let mut word_start = None;
@@ -519,7 +543,7 @@ impl<'a> WordSplit<'a> {
 
 impl<'a> WordSplit<'a> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
-        // wordsplits *must* start at a non-whitespace character
+        // Wordsplits *must* start at a non-whitespace character
         let trim_string = string.trim_start();
         WordSplit {
             opts,
@@ -549,7 +573,7 @@ pub struct WordInfo<'a> {
     pub new_line: bool,
 }
 
-// returns (&str, is_start_of_sentence)
+// Returns (&str, is_start_of_sentence)
 impl<'a> Iterator for WordSplit<'a> {
     type Item = WordInfo<'a>;
 
@@ -561,7 +585,8 @@ impl<'a> Iterator for WordSplit<'a> {
         let old_position = self.position;
         let new_line = old_position == 0;
 
-        // find the start of the next word, and record if we find a tab character
+        // Find the start of the next word, and record if we find a tab
+        // character
         let (before_tab, after_tab, word_start) =
             match self.analyze_tabs(&self.string[old_position..]) {
                 (b, a, Some(s)) => (b, a, s + old_position),
@@ -571,7 +596,7 @@ impl<'a> Iterator for WordSplit<'a> {
                 }
             };
 
-        // find the beginning of the next whitespace
+        // Find the beginning of the next whitespace
         // note that this preserves the invariant that self.position
         // points to whitespace character OR end of string
         let mut word_nchars = 0;
@@ -588,11 +613,12 @@ impl<'a> Iterator for WordSplit<'a> {
         };
 
         let word_start_relative = word_start - old_position;
-        // if the previous sentence was punctuation and this sentence has >2 whitespace or one tab, is a new sentence.
+        // Ff the previous sentence was punctuation and this sentence has >2
+        // whitespace or one tab, is a new sentence.
         let is_start_of_sentence =
             self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
 
-        // now record whether this word ends in punctuation
+        // Now record whether this word ends in punctuation
         self.prev_punct = match self.string[..self.position].chars().rev().next() {
             Some(ch) => WordSplit::is_punctuation(ch),
             _ => panic!("fatal: expected word not to be empty"),

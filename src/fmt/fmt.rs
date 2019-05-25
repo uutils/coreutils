@@ -1,25 +1,23 @@
 #![crate_name = "uu_fmt"]
 
-/*
- * This file is part of `fmt` from the uutils coreutils package.
- *
- * (c) kwantam <kwantam@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of `fmt` from the uutils coreutils package.
+//
+// (c) kwantam <kwantam@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate unicode_width;
 
 #[macro_use]
 extern crate uucore;
 
-use std::cmp;
-use std::io::{BufReader, BufWriter, Read};
-use std::fs::File;
-use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
+use std::cmp;
+use std::fs::File;
+use std::io::{stdin, stdout, Write};
+use std::io::{BufReader, BufWriter, Read};
 
 macro_rules! silent_unwrap(
     ($exp:expr) => (

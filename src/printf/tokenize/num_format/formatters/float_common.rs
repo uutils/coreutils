@@ -25,7 +25,7 @@ fn has_enough_digits(
         if hex_input {
             ((string_position - 1) - starting_position >= limit)
         } else {
-            false //undecidable without converting
+            false // undecidable without converting
         }
     } else {
         if hex_input {
@@ -74,7 +74,8 @@ impl FloatAnalysis {
                             }
                         }
                     }
-                    if ret.decimal_pos.is_some() && pos_before_first_nonzero_after_decimal.is_none()
+                    if ret.decimal_pos.is_some()
+                        && pos_before_first_nonzero_after_decimal.is_none()
                         && e != '0'
                     {
                         pos_before_first_nonzero_after_decimal = Some(i - 1);

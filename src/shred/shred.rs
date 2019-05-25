@@ -1,14 +1,12 @@
 #![crate_name = "uu_shred"]
 
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) Michael Rosenberg <42micro@gmail.com>
-* (c) Fort <forticulous@gmail.com>
-*
-* For the full copyright and license information, please view the LICENSE
-* file that was distributed with this source code.
-*/
+// This file is part of the uutils coreutils package.
+//
+// (c) Michael Rosenberg <42micro@gmail.com>
+// (c) Fort <forticulous@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate rand;
@@ -18,8 +16,8 @@ use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::SeekFrom;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 #[macro_use]
@@ -62,10 +60,12 @@ enum PassType<'a> {
     Random,
 }
 
-// Used to generate all possible filenames of a certain length using NAMESET as an alphabet
+// Used to generate all possible filenames of a certain length using NAMESET as
+// an alphabet
 struct FilenameGenerator {
     name_len: usize,
-    nameset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAMESET
+    // Store the indices of the letters of our filename in NAMESET
+    nameset_indices: RefCell<Vec<usize>>,
     exhausted: Cell<bool>,
 }
 
@@ -118,8 +118,8 @@ impl Iterator for FilenameGenerator {
     }
 }
 
-// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
-// or randomness
+// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give
+// pattern or randomness
 struct BytesGenerator<'a> {
     total_bytes: u64,
     bytes_generated: Cell<u64>,
@@ -151,8 +151,8 @@ impl<'a> Iterator for BytesGenerator<'a> {
     type Item = Box<[u8]>;
 
     fn next(&mut self) -> Option<Box<[u8]>> {
-        // We go over the total_bytes limit when !self.exact and total_bytes isn't a multiple
-        // of self.block_size
+        // We go over the total_bytes limit when !self.exact and total_bytes
+        // isn't a multiple of self.block_size
         if self.bytes_generated.get() >= self.total_bytes {
             return None;
         }
@@ -190,7 +190,8 @@ impl<'a> Iterator for BytesGenerator<'a> {
                         (pattern.len() as u64 % self.bytes_generated.get()) as usize
                     }
                 };
-                // Same range as 0..this_block_size but we start with the right index
+                // Same range as 0..this_block_size but we start with the right
+                // index
                 for i in skip..this_block_size + skip {
                     let index = i % pattern.len();
                     bytes.push(pattern[index]);
@@ -269,7 +270,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         };
         let remove = matches.opt_present("remove");
         let size = get_size(matches.opt_str("size"));
-        let exact = matches.opt_present("exact") && size.is_none(); // if -s is given, ignore -x
+        // if -s is given, ignore -x
+        let exact = matches.opt_present("exact") && size.is_none();
         let zero = matches.opt_present("zero");
         let verbose = matches.opt_present("verbose");
         for path_str in matches.free.into_iter() {
@@ -418,27 +420,34 @@ fn wipe_file(
     }
     // First fill it with Patterns, shuffle it, then evenly distribute Random
     else {
-        let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
-        let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
+        // How many times can we go through all the patterns?
+        let n_full_arrays = n_passes / PATTERNS.len();
+        // How many do we get through on our last time through?
+        let remainder = n_passes % PATTERNS.len();
 
         for _ in 0..n_full_arrays {
             for p in &PATTERNS {
                 pass_sequence.push(PassType::Pattern(*p));
             }
         }
+
         for i in 0..remainder {
             pass_sequence.push(PassType::Pattern(PATTERNS[i]));
         }
-        rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
 
-        let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
-                                          // Evenly space random passes; ensures one at the beginning and end
+        // randomize the order of application
+        rand::thread_rng().shuffle(&mut pass_sequence[..]);
+
+        // Minimum 3 random passes; ratio of 10 after
+        // Evenly space random passes; ensures one at the beginning and end
+        let n_random = 3 + n_passes / 10;
         for i in 0..n_random {
             pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
         }
     }
 
-    // --zero specifies whether we want one final pass of 0x00 on our file
+    // The `--zero` flag specifies whether we want one final pass of 0x00 on our
+    // file
     if zero {
         pass_sequence.push(PassType::Pattern(b"\x00"));
     }
@@ -474,8 +483,10 @@ fn wipe_file(
                     );
                 }
             }
-            // size is an optional argument for exactly how many bytes we want to shred
-            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed"); // Ignore failed writes; just keep trying
+            // Size is an optional argument for exactly how many bytes we want
+            // to shred
+            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed");
+            // Ignore failed writes; just keep trying...
         }
     }
 
@@ -513,8 +524,8 @@ fn get_file_size(path: &Path) -> Result<u64, io::Error> {
     Ok(size)
 }
 
-// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
-// Return the path of the file after its last renaming or None if error
+// Repeatedly renames the file with strings of decreasing length (most likely
+// all 0s) Return the path of the file after its last renaming or None if error
 fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
     let file_name_len: usize = orig_path.file_name().unwrap().to_str().unwrap().len();
 
@@ -560,7 +571,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     return None;
                 }
             }
-        } // If every possible filename already exists, just reduce the length and try again
+            // If every possible filename already exists, just reduce the length
+            // and try again...
+        }
     }
 
     Some(last_path)

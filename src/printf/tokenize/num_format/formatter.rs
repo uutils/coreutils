@@ -1,10 +1,10 @@
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
 
-use std::str::Chars;
-use itertools::{put_back_n, PutBackN};
-use cli;
 use super::format_field::FormatField;
+use cli;
+use itertools::{put_back_n, PutBackN};
+use std::str::Chars;
 
 // contains the rough ingredients to final
 // output for a number, organized together

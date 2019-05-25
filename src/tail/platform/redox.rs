@@ -1,6 +1,6 @@
 extern crate syscall;
 
-use self::syscall::{Error, EPERM, ENOSYS};
+use self::syscall::{Error, ENOSYS, EPERM};
 
 pub type Pid = usize;
 

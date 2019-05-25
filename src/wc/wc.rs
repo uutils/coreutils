@@ -1,13 +1,11 @@
 #![crate_name = "uu_wc"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Boden Garman <bpgarman@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Boden Garman <bpgarman@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -40,7 +38,10 @@ impl Settings {
             show_max_line_length: matches.opt_present("L"),
         };
 
-        if settings.show_bytes || settings.show_chars || settings.show_lines || settings.show_words
+        if settings.show_bytes
+            || settings.show_chars
+            || settings.show_lines
+            || settings.show_words
             || settings.show_max_line_length
         {
             return settings;
@@ -153,8 +154,8 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         let mut longest_line_length: usize = 0;
         let mut raw_line = Vec::new();
 
-        // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
-        // hence the option wrapped in a result here
+        // reading from a TTY seems to raise a condition on, rather than return Some(0)
+        // like a file. hence the option wrapped in a result here
         while match reader.read_until(LF, &mut raw_line) {
             Ok(n) if n > 0 => true,
             Err(ref e) if !raw_line.is_empty() => {

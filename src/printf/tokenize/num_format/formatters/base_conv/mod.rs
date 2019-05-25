@@ -247,7 +247,7 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &RadixDef) -> Vec<u8> {
             Some(u) => {
                 intermed_in.push(u);
             }
-            None => {} //todo err msg on incorrect
+            None => {} // todo err msg on incorrect
         }
     }
     intermed_in
@@ -260,7 +260,7 @@ pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &RadixDef) -> String {
             Some(c) => {
                 str_out.push(c);
             }
-            None => {} //todo
+            None => {} // todo
         }
     }
     str_out

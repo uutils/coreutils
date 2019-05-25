@@ -1,14 +1,12 @@
 #![crate_name = "uu_tsort"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Ben Eggers <ben.eggers36@gmail.com>
- * (c) Akira Hayakawa <ruby.wktk@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Ben Eggers <ben.eggers36@gmail.com>
+// (c) Akira Hayakawa <ruby.wktk@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -79,7 +77,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line.trim_end()
+                let tokens: Vec<String> = line
+                    .trim_end()
                     .split_whitespace()
                     .map(|s| s.to_owned())
                     .collect();

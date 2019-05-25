@@ -1,12 +1,10 @@
 #![crate_name = "uu_sort"]
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Yin <mikeyin@mikeyin.org>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Michael Yin <mikeyin@mikeyin.org>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 #![allow(dead_code)]
 
 extern crate getopts;
@@ -16,15 +14,15 @@ extern crate itertools;
 #[macro_use]
 extern crate uucore;
 
+use itertools::Itertools;
+use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use uucore::fs::is_stdin_interactive;
-use semver::Version;
-use itertools::Itertools; // for Iterator::dedup()
+use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -243,7 +241,7 @@ With no FILE, or when FILE is -, read standard input.",
 
     let mut files = matches.free;
     if files.is_empty() {
-        /* if no file, default to stdin */
+        // if no file, default to stdin
         files.push("-".to_owned());
     } else if settings.check && files.len() != 1 {
         crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
@@ -376,22 +374,21 @@ fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
     return Ordering::Equal;
 }
 
-/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
+/// Parse the beginning string into an f64, returning -inf instead of NaN on
+/// errors.
 fn permissive_f64_parse(a: &str) -> f64 {
     // Maybe should be split on non-digit, but then 10e100 won't parse properly.
     // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
-    // because there's no way to handle both CSV and thousands separators without a new flag.
-    // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
+    // because there's no way to handle both CSV and thousands separators without a
+    // new flag. GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.split_whitespace().next() {
         None => std::f64::NEG_INFINITY,
-        Some(sa) => {
-            match sa.parse::<f64>() {
-                Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
-                Ok(a) => a,
-                Err(_) => std::f64::NEG_INFINITY,
-            }
-        }
+        Some(sa) => match sa.parse::<f64>() {
+            Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
+            Ok(a) => a,
+            Err(_) => std::f64::NEG_INFINITY,
+        },
     }
 }
 
@@ -465,7 +462,8 @@ enum Month {
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
 fn month_parse(line: &String) -> Month {
-    match line.split_whitespace()
+    match line
+        .split_whitespace()
         .next()
         .unwrap()
         .to_uppercase()

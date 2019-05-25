@@ -1,21 +1,19 @@
 #![crate_name = "uu_date"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Anthony Deschamps <anthony.j.deschamps@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Anthony Deschamps <anthony.j.deschamps@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate uucore;
 
-use chrono::{DateTime, FixedOffset, Local, Offset};
 use chrono::offset::Utc;
+use chrono::{DateTime, FixedOffset, Local, Offset};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -128,7 +126,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         };
 
         /// Parse a `String` into a `DateTime`.
-        /// If it fails, return a tuple of the `String` along with its `ParseError`.
+        /// If it fails, return a tuple of the `String` along with its
+        /// `ParseError`.
         fn parse_date(
             s: String,
         ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
@@ -210,12 +209,11 @@ fn parse_cli(args: Vec<String>) -> Settings {
              "set time described by STRING")
             (@arg utc: -u --utc --universal
              "print or set Coordinated Universal Time (UTC)"))
-
     // TODO: Decide whether this is appropriate.
     //   The GNU date command has an explanation of all formatting options,
     //   but the `chrono` crate has a few differences (most notably, the %Z option)
     // (after_help: include_str!("usage.txt")))
-        .get_matches_from(args);
+    .get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of("custom_format") {
         let form = form[1..].into();

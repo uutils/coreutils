@@ -1,13 +1,11 @@
 #![crate_name = "uu_numfmt"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Yury Krivopalov <ykrivopalov@yandex.ru>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Yury Krivopalov <ykrivopalov@yandex.ru>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -19,7 +17,7 @@ static NAME: &str = "numfmt";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const IEC_BASES: [f64; 10] = [
-    //premature optimization
+    // premature optimization
     1.,
     1024.,
     1048576.,
@@ -70,7 +68,8 @@ impl fmt::Display for DisplayableSuffix {
             RawSuffix::E => write!(f, "E"),
             RawSuffix::Z => write!(f, "Z"),
             RawSuffix::Y => write!(f, "Y"),
-        }.and_then(|()| match with_i {
+        }
+        .and_then(|()| match with_i {
             true => write!(f, "i"),
             false => Ok(()),
         })

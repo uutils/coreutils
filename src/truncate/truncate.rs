@@ -1,13 +1,11 @@
 #![crate_name = "uu_truncate"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 
@@ -149,16 +147,20 @@ fn truncate(
                     TruncateMode::Reference => refsize,
                     TruncateMode::Extend => fsize + refsize,
                     TruncateMode::Reduce => fsize - refsize,
-                    TruncateMode::AtMost => if fsize > refsize {
-                        refsize
-                    } else {
-                        fsize
-                    },
-                    TruncateMode::AtLeast => if fsize < refsize {
-                        refsize
-                    } else {
-                        fsize
-                    },
+                    TruncateMode::AtMost => {
+                        if fsize > refsize {
+                            refsize
+                        } else {
+                            fsize
+                        }
+                    }
+                    TruncateMode::AtLeast => {
+                        if fsize < refsize {
+                            refsize
+                        } else {
+                            fsize
+                        }
+                    }
                     TruncateMode::RoundDown => fsize - fsize % refsize,
                     TruncateMode::RoundUp => fsize + fsize % refsize,
                 };
@@ -181,7 +183,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         '>' => TruncateMode::AtLeast,
         '/' => TruncateMode::RoundDown,
         '*' => TruncateMode::RoundUp,
-        _ => TruncateMode::Reference, /* assume that the size is just a number */
+        _ => TruncateMode::Reference, // assume that the size is just a number
     };
     let bytes = {
         let mut slice = if mode == TruncateMode::Reference {
@@ -196,14 +198,16 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
             }
         }
         slice
-    }.to_owned();
+    }
+    .to_owned();
     let mut number: u64 = match bytes.parse() {
         Ok(num) => num,
         Err(e) => crash!(1, "'{}' is not a valid number: {}", size, e),
     };
     if size.chars().last().unwrap().is_alphabetic() {
         number *= match size.chars().last().unwrap().to_ascii_uppercase() {
-            'B' => match size.chars()
+            'B' => match size
+                .chars()
                 .nth(size.len() - 2)
                 .unwrap()
                 .to_ascii_uppercase()

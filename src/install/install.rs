@@ -1,13 +1,11 @@
 #![crate_name = "uu_install"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Ben Eills <ben@beneills.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Ben Eills <ben@beneills.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate libc;
@@ -57,7 +55,6 @@ impl Behaviour {
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
-///
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = parse_opts(args);
 
@@ -92,7 +89,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
 /// Build a specification of the command line.
 ///
 /// Returns a getopts::Options struct.
-///
 fn parse_opts(args: Vec<String>) -> getopts::Matches {
     let syntax = format!(
         "SOURCE DEST
@@ -100,49 +96,115 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
         NAME
     );
     new_coreopts!(&syntax, SUMMARY, LONG_HELP)
-    // TODO implement flag
-        .optflagopt("",  "backup", "(unimplemented) make a backup of each existing destination\n \
-                                    file", "CONTROL")
-    // TODO implement flag
-        .optflag("b", "", "(unimplemented) like --backup but does not accept an argument")
+        // TODO implement flag
+        .optflagopt(
+            "",
+            "backup",
+            "(unimplemented) make a backup of each existing destination\n \
+             file",
+            "CONTROL",
+        )
+        // TODO implement flag
+        .optflag(
+            "b",
+            "",
+            "(unimplemented) like --backup but does not accept an argument",
+        )
         .optflag("c", "", "ignored")
-    // TODO implement flag
-        .optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
-                                  files, and in some cases, do not modify the destination at all")
-        .optflag("d", "directory", "treat all arguments as directory names.\n \
-                                    create all components of the specified directories")
-    // TODO implement flag
-        .optflag("D", "", "(unimplemented) create all leading components of DEST except the\n \
-                           last, then copy SOURCE to DEST")
-    // TODO implement flag
-        .optflagopt("g", "group", "(unimplemented) set group ownership, instead of process'\n \
-                                   current group", "GROUP")
-        .optflagopt("m", "mode", "set permission mode (as in chmod), instead\n \
-                                  of rwxr-xr-x", "MODE")
-    // TODO implement flag
-        .optflagopt("o", "owner", "(unimplemented) set ownership (super-user only)",
-                    "OWNER")
-    // TODO implement flag
-        .optflag("p", "preserve-timestamps", "(unimplemented) apply access/modification times\n \
-                                              of SOURCE files to corresponding destination files")
-    // TODO implement flag
+        // TODO implement flag
+        .optflag(
+            "C",
+            "compare",
+            "(unimplemented) compare each pair of source and destination\n \
+             files, and in some cases, do not modify the destination at all",
+        )
+        .optflag(
+            "d",
+            "directory",
+            "treat all arguments as directory names.\n \
+             create all components of the specified directories",
+        )
+        // TODO implement flag
+        .optflag(
+            "D",
+            "",
+            "(unimplemented) create all leading components of DEST except the\n \
+             last, then copy SOURCE to DEST",
+        )
+        // TODO implement flag
+        .optflagopt(
+            "g",
+            "group",
+            "(unimplemented) set group ownership, instead of process'\n \
+             current group",
+            "GROUP",
+        )
+        .optflagopt(
+            "m",
+            "mode",
+            "set permission mode (as in chmod), instead\n \
+             of rwxr-xr-x",
+            "MODE",
+        )
+        // TODO implement flag
+        .optflagopt(
+            "o",
+            "owner",
+            "(unimplemented) set ownership (super-user only)",
+            "OWNER",
+        )
+        // TODO implement flag
+        .optflag(
+            "p",
+            "preserve-timestamps",
+            "(unimplemented) apply access/modification times\n \
+             of SOURCE files to corresponding destination files",
+        )
+        // TODO implement flag
         .optflag("s", "strip", "(unimplemented) strip symbol tables")
-    // TODO implement flag
-        .optflagopt("", "strip-program", "(unimplemented) program used to strip binaries",
-                    "PROGRAM")
-    // TODO implement flag
-        .optopt("S", "suffix", "(unimplemented) override the usual backup suffix", "SUFFIX")
-    // TODO implement flag
-        .optopt("t", "target-directory", "(unimplemented) move all SOURCE arguments into\n \
-                                          DIRECTORY", "DIRECTORY")
-    // TODO implement flag
-        .optflag("T", "no-target-directory", "(unimplemented) treat DEST as a normal file")
+        // TODO implement flag
+        .optflagopt(
+            "",
+            "strip-program",
+            "(unimplemented) program used to strip binaries",
+            "PROGRAM",
+        )
+        // TODO implement flag
+        .optopt(
+            "S",
+            "suffix",
+            "(unimplemented) override the usual backup suffix",
+            "SUFFIX",
+        )
+        // TODO implement flag
+        .optopt(
+            "t",
+            "target-directory",
+            "(unimplemented) move all SOURCE arguments into\n \
+             DIRECTORY",
+            "DIRECTORY",
+        )
+        // TODO implement flag
+        .optflag(
+            "T",
+            "no-target-directory",
+            "(unimplemented) treat DEST as a normal file",
+        )
         .optflag("v", "verbose", "explain what is being done")
-    // TODO implement flag
-        .optflag("P", "preserve-context", "(unimplemented) preserve security context")
-    // TODO implement flag
-        .optflagopt("Z", "context", "(unimplemented) set security context of files and\n \
-                                     directories", "CONTEXT")
+        // TODO implement flag
+        .optflag(
+            "P",
+            "preserve-context",
+            "(unimplemented) preserve security context",
+        )
+        // TODO implement flag
+        .optflagopt(
+            "Z",
+            "context",
+            "(unimplemented) set security context of files and\n \
+             directories",
+            "CONTEXT",
+        )
         .parse(args)
 }
 
@@ -153,7 +215,6 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
 /// # Errors
 ///
 /// Error datum is a string of the unimplemented argument.
-///
 fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
     if matches.opt_present("backup") {
         Err("--backup")
@@ -195,7 +256,6 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
 /// # Errors
 ///
 /// In event of failure, returns an integer intended as a program return code.
-///
 fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
     let main_function = if matches.opt_present("directory") {
         MainFunction::Directory
@@ -257,7 +317,6 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 /// the specified directories'.
 ///
 /// Returns an integer intended as a program return code.
-///
 fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
     if paths.len() < 1 {
         println!("{} with -d requires at least one argument.", NAME);
@@ -303,7 +362,6 @@ fn is_new_file_path(path: &Path) -> bool {
 /// Perform an install, given a list of paths and behaviour.
 ///
 /// Returns an integer intended as a program return code.
-///
 fn standard(paths: &[PathBuf], b: Behaviour) -> i32 {
     if paths.len() < 2 {
         println!("{} requires at least 2 arguments.", NAME);
@@ -329,7 +387,6 @@ fn standard(paths: &[PathBuf], b: Behaviour) -> i32 {
 ///
 /// _files_ must all exist as non-directories.
 /// _target_dir_ must be a directory.
-///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
@@ -371,7 +428,6 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 ///
 /// _file_ must exist as a non-directory.
 /// _target_ must be a non-directory
-///
 fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behaviour) -> i32 {
     if copy(file, &target, b).is_err() {
         1
@@ -389,8 +445,8 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behaviour) -> i32 {
 ///
 /// # Errors
 ///
-/// If the copy system call fails, we print a verbose error and return an empty error value.
-///
+/// If the copy system call fails, we print a verbose error and return an empty
+/// error value.
 fn copy(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<(), ()> {
     let io_result = fs::copy(from, to);
 

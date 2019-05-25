@@ -1,13 +1,11 @@
 #![crate_name = "uu_mkdir"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Nicholas Juszczak <juszczakn@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Nicholas Juszczak <juszczakn@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate libc;
@@ -21,9 +19,7 @@ use std::path::Path;
 static NAME: &str = "mkdir";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/**
- * Handles option parsing
- */
+/// Handles option parsing
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = getopts::Options::new();
 
@@ -84,9 +80,7 @@ fn print_help(opts: &getopts::Options) {
     );
 }
 
-/**
- * Create the list of new directories
- */
+/// Create the list of new directories
 fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
     let mut status = 0;
     let empty = Path::new("");
@@ -109,11 +103,13 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
     status
 }
 
-/**
- * Wrapper to catch errors, return 1 if failed
- */
+/// Wrapper to catch errors, return 1 if failed
 fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
-    let create_dir = if recursive { fs::create_dir_all } else { fs::create_dir };
+    let create_dir = if recursive {
+        fs::create_dir_all
+    } else {
+        fs::create_dir
+    };
     if let Err(e) = create_dir(path) {
         show_info!("{}: {}", path.display(), e.to_string());
         return 1;
@@ -125,17 +121,13 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
 
     #[cfg(any(unix, target_os = "redox"))]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        use fs::{Permissions, set_permissions};
-        use std::os::unix::fs::{PermissionsExt};
+        use fs::{set_permissions, Permissions};
+        use std::os::unix::fs::PermissionsExt;
 
         let mode = Permissions::from_mode(mode as u32);
 
         if let Err(err) = set_permissions(path, mode) {
-            show_error!(
-                "{}: {}",
-                path.display(),
-                err
-            );
+            show_error!("{}: {}", path.display(), err);
             return 1;
         }
         0
@@ -143,7 +135,8 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
     #[cfg(windows)]
     #[allow(unused_variables)]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        // chmod on Windows only sets the readonly flag, which isn't even honored on directories
+        // chmod on Windows only sets the readonly flag, which isn't even honored on
+        // directories
         0
     }
     chmod(path, mode)

@@ -1,8 +1,8 @@
-use std::io;
 use byteorder_io::ByteOrder;
+use half::f16;
 use multifilereader::HasError;
 use peekreader::PeekRead;
-use half::f16;
+use std::io;
 
 /// Processes an input and provides access to the data read in various formats
 ///
@@ -16,7 +16,8 @@ where
 
     /// A memory buffer, it's size is set in `new`.
     data: Vec<u8>,
-    /// The number of bytes in the buffer reserved for the peek data from `PeekRead`.
+    /// The number of bytes in the buffer reserved for the peek data from
+    /// `PeekRead`.
     reserved_peek_length: usize,
 
     /// The number of (valid) bytes in the buffer.
@@ -29,8 +30,9 @@ where
 }
 
 impl<'a, I> InputDecoder<'a, I> {
-    /// Creates a new `InputDecoder` with an allocated buffer of `normal_length` + `peek_length` bytes.
-    /// `byte_order` determines how to read multibyte formats from the buffer.
+    /// Creates a new `InputDecoder` with an allocated buffer of `normal_length`
+    /// + `peek_length` bytes. `byte_order` determines how to read multibyte
+    /// formats from the buffer.
     pub fn new(
         input: &mut I,
         normal_length: usize,
@@ -57,10 +59,12 @@ impl<'a, I> InputDecoder<'a, I>
 where
     I: PeekRead,
 {
-    /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
-    /// MemoryDecoder providing access to the result or returns an i/o error.
+    /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns
+    /// a MemoryDecoder providing access to the result or returns an i/o
+    /// error.
     pub fn peek_read(&mut self) -> io::Result<MemoryDecoder> {
-        match self.input
+        match self
+            .input
             .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)
         {
             Ok((n, p)) => {
@@ -109,12 +113,14 @@ impl<'a> MemoryDecoder<'a> {
         }
     }
 
-    /// Returns the current length of the buffer. (ie. how much valid data it contains.)
+    /// Returns the current length of the buffer. (ie. how much valid data it
+    /// contains.)
     pub fn length(&self) -> usize {
         self.used_normal_length
     }
 
-    /// Creates a clone of the internal buffer. The clone only contain the valid data.
+    /// Creates a clone of the internal buffer. The clone only contain the valid
+    /// data.
     pub fn clone_buffer(&self, other: &mut Vec<u8>) {
         other.clone_from(&self.data);
         other.resize(self.used_normal_length, 0);
@@ -125,7 +131,8 @@ impl<'a> MemoryDecoder<'a> {
         &self.data[start..self.used_normal_length]
     }
 
-    /// Returns a slice to the internal buffer including the peek data starting at `start`.
+    /// Returns a slice to the internal buffer including the peek data starting
+    /// at `start`.
     pub fn get_full_buffer(&self, start: usize) -> &[u8] {
         &self.data[start..self.used_normal_length + self.used_peek_length]
     }
@@ -157,9 +164,9 @@ impl<'a> MemoryDecoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
-    use peekreader::PeekReader;
     use byteorder_io::ByteOrder;
+    use peekreader::PeekReader;
+    use std::io::Cursor;
 
     #[test]
     fn smoke_test() {

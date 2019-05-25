@@ -1,27 +1,26 @@
 #![crate_name = "uu_expr"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate onig;
 #[macro_use]
 extern crate uucore;
 
-mod tokens;
 mod syntax_tree;
+mod tokens;
 
 static NAME: &str = "expr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     // For expr utility we do not want getopts.
-    // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
+    // The following usage should work without escaping hyphens: `expr -15 = 1 +  2
+    // \* \( 3 - -4 \)`
 
     if maybe_handle_help_or_version(&args) {
         0

@@ -52,8 +52,15 @@ install:
       pip3 install $SPHINX_VERSIONED
     fi
 
+before_script:
+  - rustup component add rustfmt
+
 script:
+  # Check style
+  - cargo fmt --all -- --check
+  # Build
   - cargo build $CARGO_ARGS --features "$FEATURES"
+  # Run tests
   - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
   - if [ -n "$TEST_INSTALL" ]; then mkdir installdir_test; DESTDIR=installdir_test make install; [ `ls installdir_test/usr/local/bin | wc -l` -gt 0 ]; fi
 

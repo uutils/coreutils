@@ -17,9 +17,9 @@ extern crate tempfile;
 extern crate uucore;
 
 use std::env;
-use std::path::{is_separator, PathBuf};
-use std::mem::forget;
 use std::iter;
+use std::mem::forget;
+use std::path::{is_separator, PathBuf};
 
 use rand::Rng;
 use tempfile::NamedTempFileOptions;
@@ -55,9 +55,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
          slashes, but mktemp creates only the final component",
         "DIR",
     );
-    // deprecated option of GNU coreutils
-    //    opts.optflag("t", "", "Generate a template (using the supplied prefix and TMPDIR if set) \
-    //                           to create a filename template");
     opts.optflag("", "help", "Print this help and exit");
     opts.optflag("", "version", "print the version and exit");
 

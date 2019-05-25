@@ -1,7 +1,7 @@
 use std;
+use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::fs::File;
 use std::vec::Vec;
 
 pub enum InputSource<'a> {
@@ -80,7 +80,8 @@ impl<'b> io::Read for MultifileReader<'b> {
     // Returns Ok(<number of bytes read>)
     // Handles io errors itself, thus always returns OK
     // Fills the provided buffer completely, unless it has run out of input.
-    // If any call returns short (< buf.len()), all subsequent calls will return Ok<0>
+    // If any call returns short (< buf.len()), all subsequent calls will return
+    // Ok<0>
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut xfrd = 0;
         // while buffer we are filling is not full.. May go thru several files.
@@ -125,8 +126,8 @@ impl<'b> HasError for MultifileReader<'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, ErrorKind, Read};
     use mockstream::*;
+    use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
     fn test_multi_file_reader_one_read() {

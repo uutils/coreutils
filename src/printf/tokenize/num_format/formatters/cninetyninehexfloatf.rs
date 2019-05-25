@@ -1,9 +1,9 @@
 //! formatter for %a %F C99 Hex-floating-point subs
 use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
-use super::float_common::{primitive_to_str_common, FloatAnalysis};
 use super::base_conv;
 use super::base_conv::RadixDef;
+use super::float_common::{primitive_to_str_common, FloatAnalysis};
 
 pub struct CninetyNineHexFloatf {
     as_num: f64,
@@ -38,9 +38,15 @@ impl Formatter for CninetyNineHexFloatf {
     }
 }
 
-// c99 hex has unique requirements of all floating point subs in pretty much every part of building a primitive, from prefix and suffix to need for base conversion (in all other cases if you don't have decimal you must have decimal, here it's the other way around)
+// c99 hex has unique requirements of all floating point subs in pretty much
+// every part of building a primitive, from prefix and suffix to need for base
+// conversion (in all other cases if you don't have decimal you must have
+// decimal, here it's the other way around)
 
-// on the todo list is to have a trait for get_primitive that is implemented by each float formatter and can override a default. when that happens we can take the parts of get_primitive_dec specific to dec and spin them out to their own functions that can be overridden.
+// on the todo list is to have a trait for get_primitive that is implemented by
+// each float formatter and can override a default. when that happens we can
+// take the parts of get_primitive_dec specific to dec and spin them out to
+// their own functions that can be overridden.
 #[allow(unused_variables)]
 #[allow(unused_assignments)]
 fn get_primitive_hex(

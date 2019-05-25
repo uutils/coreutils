@@ -1,14 +1,12 @@
 #![allow(unused_must_use)] // because we of writeln!
 #![crate_name = "uu_pathchk"]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Inokentiy Babushkin <inokentiy.babushkin@googlemail.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Inokentiy Babushkin <inokentiy.babushkin@googlemail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate getopts;
 extern crate libc;
@@ -234,12 +232,14 @@ fn check_searchable(path: &String) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
-        Err(e) => if e.kind() == ErrorKind::NotFound {
-            true
-        } else {
-            writeln!(&mut std::io::stderr(), "{}", e);
-            false
-        },
+        Err(e) => {
+            if e.kind() == ErrorKind::NotFound {
+                true
+            } else {
+                writeln!(&mut std::io::stderr(), "{}", e);
+                false
+            }
+        }
     }
 }
 
