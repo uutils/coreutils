@@ -166,7 +166,6 @@ fn get_usage() -> String {
 }
 
 #[cfg(any(target_os = "freebsd", target_os = "macos"))]
-#[link(name="C")]
 extern "C" {
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"]
