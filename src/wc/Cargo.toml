@@ -12,6 +12,10 @@ path = "wc.rs"
 getopts = "0.2.18"
 uucore = "0.0.1"
 
+[target.'cfg(unix)'.dependencies]
+nix = "0.14.0"
+libc = "0.2"
+
 [[bin]]
 name = "wc"
 path = "../../uumain.rs"

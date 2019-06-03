@@ -4,23 +4,41 @@
  * This file is part of the uutils coreutils package.
  *
  * (c) Boden Garman <bpgarman@gmail.com>
+ * (c) Árni Dagur <arni@dagur.eu>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
+extern crate getopts;
+
+#[cfg(unix)]
+extern crate libc;
+#[cfg(unix)]
+extern crate nix;
 
 use getopts::{Matches, Options};
-
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use std::result::Result as StdResult;
 use std::str::from_utf8;
+
+#[cfg(unix)]
+use libc::S_IFREG;
+#[cfg(unix)]
+use nix::sys::stat::fstat;
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, RawFd};
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use libc::S_IFIFO;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::{splice, SpliceFFlags};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::unistd::pipe;
 
 struct Settings {
     show_bytes: bool,
@@ -40,7 +58,10 @@ impl Settings {
             show_max_line_length: matches.opt_present("L"),
         };
 
-        if settings.show_bytes || settings.show_chars || settings.show_lines || settings.show_words
+        if settings.show_bytes
+            || settings.show_chars
+            || settings.show_lines
+            || settings.show_words
             || settings.show_max_line_length
         {
             return settings;
@@ -63,6 +84,12 @@ struct Result {
     lines: usize,
     words: usize,
     max_line_length: usize,
+}
+
+struct InputHandle {
+    #[cfg(unix)]
+    file_descriptor: RawFd,
+    reader: Box<Read>,
 }
 
 static NAME: &str = "wc";
@@ -133,6 +160,31 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
+    const BUF_SIZE: usize = 16 * 1024;
+
+    let null_file = OpenOptions::new()
+        .write(true)
+        .open("/dev/null")
+        .map_err(|_| nix::Error::last())?;
+    let null = null_file.as_raw_fd();
+    let (pipe_rd, pipe_wr) = pipe()?;
+
+    let mut byte_count = 0;
+    loop {
+        let res = splice(fd, None, pipe_wr, None, BUF_SIZE, SpliceFFlags::empty())?;
+        if res == 0 {
+            break;
+        }
+        let res = splice(pipe_rd, None, null, None, BUF_SIZE, SpliceFFlags::empty())?;
+        byte_count += res;
+    }
+
+    Ok(byte_count)
+}
+
 fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
@@ -143,8 +195,15 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut results = vec![];
     let mut max_width: usize = 0;
 
+    #[cfg(unix)]
+    let only_need_to_count_bytes = settings.show_bytes
+        && (!(settings.show_chars
+            || settings.show_lines
+            || settings.show_max_line_length
+            || settings.show_words));
+
     for path in &files {
-        let mut reader = open(&path[..])?;
+        let handle = open(&path[..])?;
 
         let mut line_count: usize = 0;
         let mut word_count: usize = 0;
@@ -153,44 +212,79 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         let mut longest_line_length: usize = 0;
         let mut raw_line = Vec::new();
 
-        // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
-        // hence the option wrapped in a result here
-        while match reader.read_until(LF, &mut raw_line) {
-            Ok(n) if n > 0 => true,
-            Err(ref e) if !raw_line.is_empty() => {
-                show_warning!("Error while reading {}: {}", path, e);
-                !raw_line.is_empty()
-            }
-            _ => false,
-        } {
-            // GNU 'wc' only counts lines that end in LF as lines
-            if *raw_line.last().unwrap() == LF {
-                line_count += 1;
-            }
-
-            byte_count += raw_line.len();
-
-            // try and convert the bytes to UTF-8 first
-            let current_char_count;
-            match from_utf8(&raw_line[..]) {
-                Ok(line) => {
-                    word_count += line.split_whitespace().count();
-                    current_char_count = line.chars().count();
+        #[cfg(unix)]
+        {
+            // In the special case where we only need to count the number of
+            // bytes. There are several optimizations we can do.
+            if only_need_to_count_bytes {
+                match fstat(handle.file_descriptor) {
+                    Ok(stat) => {
+                        // If the file is regular, then the `st_size` should hold
+                        // the file's size in bytes.
+                        if (stat.st_mode & S_IFREG) != 0 {
+                            byte_count = stat.st_size as usize;
+                        } else {
+                            #[cfg(any(target_os = "linux", target_os = "android"))]
+                            {
+                                // Else, if we're on Linux and our file is a FIFO pipe
+                                // (or stdin), we use splice to count the number of bytes.
+                                if (stat.st_mode & S_IFIFO) != 0 {
+                                    match count_bytes_using_splice(handle.file_descriptor) {
+                                        Ok(res) => {
+                                            byte_count = res;
+                                        }
+                                        _ => { /* Falling back on read()... */ }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => { /* Falling back on read()... */ }
                 }
-                Err(..) => {
-                    word_count += raw_line.split(|&x| is_word_seperator(x)).count();
-                    current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
+            }
+        }
+
+        if byte_count == 0 {
+            let mut buffered_reader = BufReader::new(handle.reader);
+            // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
+            // hence the option wrapped in a result here
+            while match buffered_reader.read_until(LF, &mut raw_line) {
+                Ok(n) if n > 0 => true,
+                Err(ref e) if !raw_line.is_empty() => {
+                    show_warning!("Error while reading {}: {}", path, e);
+                    !raw_line.is_empty()
                 }
-            }
-            char_count += current_char_count;
+                _ => false,
+            } {
+                // GNU 'wc' only counts lines that end in LF as lines
+                if *raw_line.last().unwrap() == LF {
+                    line_count += 1;
+                }
 
-            if current_char_count > longest_line_length {
-                // we subtract one here because `line.len()` includes the LF
-                // matches GNU 'wc' behaviour
-                longest_line_length = current_char_count - 1;
-            }
+                byte_count += raw_line.len();
 
-            raw_line.truncate(0);
+                // try and convert the bytes to UTF-8 first
+                let current_char_count;
+                match from_utf8(&raw_line[..]) {
+                    Ok(line) => {
+                        word_count += line.split_whitespace().count();
+                        current_char_count = line.chars().count();
+                    }
+                    Err(..) => {
+                        word_count += raw_line.split(|&x| is_word_seperator(x)).count();
+                        current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
+                    }
+                }
+                char_count += current_char_count;
+
+                if current_char_count > longest_line_length {
+                    // we subtract one here because `line.len()` includes the LF
+                    // matches GNU 'wc' behaviour
+                    longest_line_length = current_char_count - 1;
+                }
+
+                raw_line.truncate(0);
+            }
         }
 
         results.push(Result {
@@ -258,10 +352,14 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     }
 }
 
-fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
+fn open(path: &str) -> StdResult<InputHandle, i32> {
     if "-" == path {
-        let reader = Box::new(stdin()) as Box<Read>;
-        return Ok(BufReader::new(reader));
+        let stdin = stdin();
+        return Ok(InputHandle {
+            #[cfg(unix)]
+            file_descriptor: stdin.as_raw_fd(),
+            reader: Box::new(stdin) as Box<Read>,
+        });
     }
 
     let fpath = Path::new(path);
@@ -269,10 +367,11 @@ fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
         show_info!("{}: is a directory", path);
     }
     match File::open(&fpath) {
-        Ok(fd) => {
-            let reader = Box::new(fd) as Box<Read>;
-            Ok(BufReader::new(reader))
-        }
+        Ok(file) => Ok(InputHandle {
+            #[cfg(unix)]
+            file_descriptor: file.as_raw_fd(),
+            reader: Box::new(file) as Box<Read>,
+        }),
         Err(e) => {
             show_error!("wc: {}: {}", path, e);
             Err(1)
