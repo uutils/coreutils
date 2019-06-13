@@ -9,7 +9,7 @@ name = "uu_printf"
 path = "printf.rs"
 
 [dependencies]
-itertools = "0.7.8"
+itertools = "0.8.0"
 uucore = "0.0.1"
 
 [[bin]]
