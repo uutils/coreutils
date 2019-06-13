@@ -10,7 +10,7 @@ path = "chown.rs"
 
 [dependencies]
 glob = "0.2.11"
-walkdir = "2.1"
+walkdir = "2.2"
 
 [dependencies.uucore]
 version = "0.0.1"
