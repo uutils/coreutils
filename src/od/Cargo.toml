@@ -11,7 +11,7 @@ path = "od.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-byteorder = "1.1.0"
+byteorder = "1.3.2"
 half = "1.1.1"
 uucore = "0.0.1"
 
