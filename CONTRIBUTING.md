@@ -15,6 +15,10 @@ following these steps:
 The steps above imply that, before starting to work on a utility, you should
 search the issues to make sure no one else is working on it.
 
+## Issue triage [![Open Source Helpers](https://www.codetriage.com/uutils/coreutils/badges/users.svg)](https://www.codetriage.com/uutils/coreutils)
+
+You can contribute by triaging issues which may include reproducing bug reports or asking for vital information, such as version numbers or reproduction instructions. If you would like to start triaging issues, one easy way to get started is to [subscribe to coreutils on CodeTriage](https://www.codetriage.com/uutils/coreutils).
+
 ## Commit messages
 
 To help the project maintainers review pull requests from contributors across
