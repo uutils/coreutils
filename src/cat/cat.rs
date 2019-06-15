@@ -306,7 +306,7 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
                             // to fall back on slower writing.
                             continue;
                         }
-                        Err(_) => {
+                        _ => {
                             // Ignore any error and fall back to slower
                             // writing below.
                         }
@@ -314,10 +314,16 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
                 }
                 // If we're not on Linux or Android, or the splice() call failed,
                 // fall back on slower writing.
-                io::copy(&mut handle.reader, &mut writer_handle).unwrap();
+                match io::copy(&mut handle.reader, &mut writer_handle) {
+                    Err(error) => {
+                        eprintln!("error when copying file: {}", error);
+                        error_count += 1;
+                    }
+                    _ => {}
+                }
             }
             Err(error) => {
-                writeln!(&mut stderr(), "{}", error)?;
+                eprintln!("error when opening file: {}", error);
                 error_count += 1;
             }
         }
