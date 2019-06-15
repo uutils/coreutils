@@ -14,7 +14,7 @@ libc = "0.2.42"
 aho-corasick = "0.6.5"
 memchr = "1.0.1"
 regex = "1.0.1"
-regex-syntax = "0.6.1"
+regex-syntax = "0.6.7"
 uucore = "0.0.1"
 
 [[bin]]
