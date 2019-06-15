@@ -9,7 +9,7 @@ name = "uu_chgrp"
 path = "chgrp.rs"
 
 [dependencies]
-walkdir = "2.1.4"
+walkdir = "2.2.8"
 
 [dependencies.uucore]
 version = "0.0.1"
