@@ -185,6 +185,36 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
     Ok(byte_count)
 }
 
+/// In the special case where we only need to count the number of
+/// bytes. There are several optimizations we can do.
+#[inline]
+#[cfg(unix)]
+fn count_bytes_fast(fd: RawFd) -> Option<usize> {
+    match fstat(fd) {
+        Ok(stat) => {
+            // If the file is regular, then the `st_size` should hold
+            // the file's size in bytes.
+            if (stat.st_mode & S_IFREG) != 0 {
+                return Some(stat.st_size as usize);
+            }
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                // Else, if we're on Linux and our file is a FIFO pipe
+                // (or stdin), we use splice to count the number of bytes.
+                if (stat.st_mode & S_IFIFO) != 0 {
+                    if let Ok(n) = count_bytes_using_splice(fd) {
+                        return Some(n);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    // We couldn't determine the number of bytes using one of our optimizations
+    // fall back on read()...
+    None
+}
+
 fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut total_line_count: usize = 0;
     let mut total_word_count: usize = 0;
@@ -214,32 +244,10 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
 
         #[cfg(unix)]
         {
-            // In the special case where we only need to count the number of
-            // bytes. There are several optimizations we can do.
             if only_need_to_count_bytes {
-                match fstat(handle.file_descriptor) {
-                    Ok(stat) => {
-                        // If the file is regular, then the `st_size` should hold
-                        // the file's size in bytes.
-                        if (stat.st_mode & S_IFREG) != 0 {
-                            byte_count = stat.st_size as usize;
-                        } else {
-                            #[cfg(any(target_os = "linux", target_os = "android"))]
-                            {
-                                // Else, if we're on Linux and our file is a FIFO pipe
-                                // (or stdin), we use splice to count the number of bytes.
-                                if (stat.st_mode & S_IFIFO) != 0 {
-                                    match count_bytes_using_splice(handle.file_descriptor) {
-                                        Ok(res) => {
-                                            byte_count = res;
-                                        }
-                                        _ => { /* Falling back on read()... */ }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => { /* Falling back on read()... */ }
+                match count_bytes_fast(handle.file_descriptor) {
+                    Some(bytes) => { byte_count = bytes; }
+                    _ => {}
                 }
             }
         }
