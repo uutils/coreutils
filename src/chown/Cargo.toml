@@ -9,7 +9,7 @@ name = "uu_chown"
 path = "chown.rs"
 
 [dependencies]
-glob = "0.2.11"
+glob = "0.3.0"
 walkdir = "2.2"
 
 [dependencies.uucore]
