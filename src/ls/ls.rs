@@ -14,6 +14,8 @@ extern crate termsize;
 extern crate time;
 extern crate unicode_width;
 extern crate number_prefix;
+extern crate isatty;
+use isatty::stdout_isatty;
 use number_prefix::{Standalone, Prefixed, decimal_prefix};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -615,7 +617,7 @@ fn display_file_name(
         None => true,
         Some(val) => match val.as_ref() {
             "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => true, /* TODO */
+            "auto" | "tty" | "if-tty" => stdout_isatty(),
             "never" | "no" | "none" | _ => false,
         },
     };
