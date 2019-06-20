@@ -158,7 +158,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
              directory.  This is especially useful when listing very large directories, \
              since not doing any sorting can be noticeably faster.",
         )
-        .optflag("", "color", "Color output based on file type.")
+        .optflagopt("", "color", "Color output based on file type.", "always|auto|never")
         .parse(args);
 
     list(matches);
@@ -611,7 +611,14 @@ fn display_file_name(
     }
     let mut width = UnicodeWidthStr::width(&*name);
 
-    let color = options.opt_present("color");
+    let color = match options.opt_str("color") {
+        None => true,
+        Some(val) => match val.as_ref() {
+            "always" | "yes" | "force" => true,
+            "auto" | "tty" | "if-tty" => true, /* TODO */
+            "never" | "no" | "none" | _ => false,
+        },
+    };
     let classify = options.opt_present("classify");
     let ext;
 
