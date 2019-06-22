@@ -322,10 +322,19 @@ fn word_count_from_path(path: &String, only_count_bytes: bool) -> WordCount {
         let fpath = Path::new(path);
         if fpath.is_dir() {
             show_info!("{}: is a directory", path);
+        } else {
+            match File::open(path) {
+                Ok(mut reader) => {
+                    return word_count_from_reader(&mut reader, only_count_bytes);
+                }
+                Err(err) => {
+                    show_info!("{}: error when opening while: {}", path, err)
+                }
+            }
         }
-        let mut reader = File::open(path).unwrap();
-        return word_count_from_reader(&mut reader, only_count_bytes);
     }
+
+    WordCount::default()
 }
 
 fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
