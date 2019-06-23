@@ -10,6 +10,7 @@ path = "wc.rs"
 
 [dependencies]
 getopts = "0.2.18"
+quick-error = "1.2.2"
 uucore = "0.0.1"
 
 [target.'cfg(unix)'.dependencies]

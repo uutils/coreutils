@@ -13,7 +13,8 @@
 #[macro_use]
 extern crate uucore;
 extern crate getopts;
-
+#[macro_use]
+extern crate quick_error;
 #[cfg(unix)]
 extern crate libc;
 #[cfg(unix)]
@@ -21,11 +22,12 @@ extern crate nix;
 
 use getopts::{Matches, Options};
 use std::cmp::max;
+use std::convert::From;
 use std::fs::{File, OpenOptions};
-use std::io::{stdin, BufRead, BufReader, Read, Stdin};
+use std::io::{self, stdin, BufRead, BufReader, ErrorKind, Read, Stdin};
 use std::ops::{Add, AddAssign};
 use std::path::Path;
-use std::result::Result as StdResult;
+use std::result::Result;
 use std::str::from_utf8;
 
 #[cfg(unix)]
@@ -41,6 +43,30 @@ use libc::S_IFIFO;
 use nix::fcntl::{splice, SpliceFFlags};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::unistd::pipe;
+
+quick_error! {
+    #[derive(Debug)]
+    enum WcError {
+        /// Wrapper for io::Error with no context
+        InputOutput(err: io::Error) {
+            display("cat: {0}", err)
+            from()
+            cause(err)
+        }
+
+        /// At least one error was encountered in reading or writing
+        EncounteredErrors(count: usize) {
+            display("cat: encountered {0} errors", count)
+        }
+
+        /// Denotes an error caused by trying to `wc` a directory
+        IsDirectory(path: String) {
+            display("wc: {}: Is a directory", path)
+        }
+    }
+}
+
+type WcResult<T> = Result<T, WcError>;
 
 #[cfg(unix)]
 trait WordCountable: Read + AsRawFd {}
@@ -115,14 +141,30 @@ impl AddAssign for WordCount {
     }
 }
 
-struct Result {
+impl WordCount {
+    fn with_title(self, title: String) -> TitledWordCount {
+        return TitledWordCount {
+            title: title,
+            count: self,
+        };
+    }
+}
+
+/// This struct supplements the actual word count with a title that is displayed
+/// to the user at the end of the program.
+/// The reason we don't simply include title in the `WordCount` struct is that
+/// it would result in unneccesary copying of `String`.
+#[derive(Debug, Default, Clone)]
+struct TitledWordCount {
     title: String,
     count: WordCount,
 }
 
-
 static NAME: &str = "wc";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// How large the buffer used for io operations is
+const BUF_SIZE: usize = 16384;
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
@@ -169,12 +211,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let settings = Settings::new(&matches);
 
-    match wc(matches.free, &settings) {
-        Ok(()) => ( /* pass */ ),
-        Err(e) => return e,
+    if wc(matches.free, &settings).is_ok() {
+        0
+    } else {
+        1
     }
-
-    0
 }
 
 const CR: u8 = '\r' as u8;
@@ -189,11 +230,11 @@ fn is_word_seperator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
+/// This is a Linux-specific function to count the number of bytes using the
+/// `splice` system call, which is faster than using `read`.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
-    const BUF_SIZE: usize = 16 * 1024;
-
     let null_file = OpenOptions::new()
         .write(true)
         .open("/dev/null")
@@ -219,10 +260,10 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
 ///   1. On Unix,  we can simply `stat` the file if it is regular.
 ///   2. On Linux -- if the above did not work -- we can use splice to count
 ///      the number of bytes if the file is a FIFO.
-///   3. Otherwise, we just read normally, but without everything else, such as
-///      line and word counting, etc.
+///   3. Otherwise, we just read normally, but without the overhead of counting
+///      other things such as lines and words.
 #[inline]
-fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> usize {
+fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usize> {
     #[cfg(unix)]
     {
         let fd = handle.as_raw_fd();
@@ -231,7 +272,7 @@ fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> usize {
                 // If the file is regular, then the `st_size` should hold
                 // the file's size in bytes.
                 if (stat.st_mode & S_IFREG) != 0 {
-                    return stat.st_size as usize;
+                    return Ok(stat.st_size as usize);
                 }
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 {
@@ -239,7 +280,7 @@ fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> usize {
                     // (or stdin), we use splice to count the number of bytes.
                     if (stat.st_mode & S_IFIFO) != 0 {
                         if let Ok(n) = count_bytes_using_splice(fd) {
-                            return n;
+                            return Ok(n);
                         }
                     }
                 }
@@ -247,17 +288,31 @@ fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> usize {
             _ => {}
         }
     }
-    // We couldn't determine the number of bytes using one of our optimizations
-    // fall back on read()
-    handle.bytes().count()
+
+    // Fall back on `read`, but without the overhead of counting words and lines.
+    let mut buf = [0 as u8; BUF_SIZE];
+    let mut byte_count = 0;
+    loop {
+        match handle.read(&mut buf) {
+            Ok(0) => return Ok(byte_count),
+            Ok(n) => {
+                byte_count += n;
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(WcError::from(e)),
+        }
+    }
 }
 
-fn word_count_from_reader<T: WordCountable>(reader: &mut T, only_count_bytes: bool) -> WordCount {
+fn word_count_from_reader<T: WordCountable>(
+    reader: &mut T,
+    only_count_bytes: bool,
+) -> WcResult<WordCount> {
     if only_count_bytes {
-        return WordCount {
-            bytes: count_bytes_fast(reader),
+        return Ok(WordCount {
+            bytes: count_bytes_fast(reader)?,
             ..WordCount::default()
-        };
+        });
     }
 
     let mut line_count: usize = 0;
@@ -305,42 +360,35 @@ fn word_count_from_reader<T: WordCountable>(reader: &mut T, only_count_bytes: bo
         raw_line.truncate(0);
     }
 
-    WordCount {
+    Ok(WordCount {
         bytes: byte_count,
         chars: char_count,
         lines: line_count,
         words: word_count,
         max_line_length: longest_line_length,
-    }
+    })
 }
 
-fn word_count_from_path(path: &String, only_count_bytes: bool) -> WordCount {
+fn word_count_from_path(path: &String, only_count_bytes: bool) -> WcResult<WordCount> {
     if path == "-" {
         let mut reader = stdin();
-        return word_count_from_reader(&mut reader, only_count_bytes);
+        return Ok(word_count_from_reader(&mut reader, only_count_bytes)?);
     } else {
-        let fpath = Path::new(path);
-        if fpath.is_dir() {
-            show_info!("{}: is a directory", path);
+        let path_obj = Path::new(path);
+        if path_obj.is_dir() {
+            return Err(WcError::IsDirectory(path.to_owned()));
         } else {
-            match File::open(path) {
-                Ok(mut reader) => {
-                    return word_count_from_reader(&mut reader, only_count_bytes);
-                }
-                Err(err) => {
-                    show_info!("{}: error when opening while: {}", path, err)
-                }
-            }
+            let mut reader = File::open(path)?;
+            return Ok(word_count_from_reader(&mut reader, only_count_bytes)?);
         }
     }
-
-    WordCount::default()
 }
 
-fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
+fn wc(files: Vec<String>, settings: &Settings) -> WcResult<()> {
     let mut total_word_count = WordCount::default();
     let mut results = vec![];
     let mut max_width: usize = 0;
+    let mut error_count = 0;
 
     let num_files = files.len();
 
@@ -351,13 +399,15 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             || settings.show_words));
 
     for path in files {
-        let word_count = word_count_from_path(&path, only_need_to_count_bytes);
+        let word_count =
+            word_count_from_path(&path, only_need_to_count_bytes).unwrap_or_else(|err| {
+                eprintln!("{}", err);
+                error_count += 1;
+                WordCount::default()
+            });
         max_width = max(max_width, word_count.bytes.to_string().len() + 1);
         total_word_count += word_count;
-        results.push(Result {
-            title: path,
-            count: word_count,
-        });
+        results.push(word_count.with_title(path));
     }
 
     for result in &results {
@@ -365,17 +415,17 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     }
 
     if num_files > 1 {
-        let total_result = Result {
-            title: "total".to_owned(),
-            count: total_word_count,
-        };
+        let total_result = total_word_count.with_title("total".to_owned());
         print_stats(settings, &total_result, max_width);
     }
 
-    Ok(())
+    match error_count {
+        0 => Ok(()),
+        _ => Err(WcError::EncounteredErrors(error_count)),
+    }
 }
 
-fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
+fn print_stats(settings: &Settings, result: &TitledWordCount, max_width: usize) {
     if settings.show_lines {
         print!("{:1$}", result.count.lines, max_width);
     }
