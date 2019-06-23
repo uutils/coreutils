@@ -48,15 +48,15 @@ quick_error! {
     #[derive(Debug)]
     enum WcError {
         /// Wrapper for io::Error with no context
-        InputOutput(err: io::Error) {
-            display("cat: {0}", err)
+        InputOutput(error: io::Error) {
+            display("wc: {}", error)
             from()
-            cause(err)
+            cause(error)
         }
 
         /// At least one error was encountered in reading or writing
         EncounteredErrors(count: usize) {
-            display("cat: encountered {0} errors", count)
+            display("wc: Encountered {} errors", count)
         }
 
         /// Denotes an error caused by trying to `wc` a directory
