@@ -142,7 +142,7 @@ impl AddAssign for WordCount {
 }
 
 impl WordCount {
-    fn with_title(self, title: String) -> TitledWordCount {
+    fn with_title<'a>(self, title: &'a str) -> TitledWordCount<'a> {
         return TitledWordCount {
             title: title,
             count: self,
@@ -155,8 +155,8 @@ impl WordCount {
 /// The reason we don't simply include title in the `WordCount` struct is that
 /// it would result in unneccesary copying of `String`.
 #[derive(Debug, Default, Clone)]
-struct TitledWordCount {
-    title: String,
+struct TitledWordCount<'a> {
+    title: &'a str,
     count: WordCount,
 }
 
@@ -398,7 +398,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> WcResult<()> {
             || settings.show_max_line_length
             || settings.show_words));
 
-    for path in files {
+    for path in &files {
         let word_count =
             word_count_from_path(&path, only_need_to_count_bytes).unwrap_or_else(|err| {
                 eprintln!("{}", err);
@@ -415,7 +415,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> WcResult<()> {
     }
 
     if num_files > 1 {
-        let total_result = total_word_count.with_title("total".to_owned());
+        let total_result = total_word_count.with_title("total");
         print_stats(settings, &total_result, max_width);
     }
 
