@@ -12,7 +12,7 @@ use uucore;
 use uucore::encoding::{wrap_print, Data, Format};
 
 use std::fs::File;
-use std::io::{stdin, BufReader, Read};
+use std::io::{Write, stdout, stdin, BufReader, Read};
 use std::path::Path;
 
 pub fn execute(
@@ -84,7 +84,12 @@ fn handle_input<R: Read>(
         wrap_print(&data, encoded);
     } else {
         match data.decode() {
-            Ok(s) => print!("{}", String::from_utf8(s).unwrap()),
+            Ok(s) => {
+                if stdout().write_all(&s).is_err() {
+                    // on windows console, writing invalid utf8 returns an error
+                    crash!(1, "Cannot write non-utf8 data");
+                }
+            },
             Err(_) => crash!(1, "invalid input"),
         }
     }
