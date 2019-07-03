@@ -18,7 +18,7 @@ regex = "1.0.1"
 regex-syntax = "0.6.7"
 sha1 = "0.6.0"
 sha2 = "0.6.0"
-sha3 = "0.6.0"
+sha3 = "0.8.2"
 uucore = "0.0.1"
 
 [[bin]]
