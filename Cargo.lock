@@ -869,6 +869,7 @@ dependencies = [
 name = "mv"
 version = "0.0.1"
 dependencies = [
+ "cp 0.0.1",
  "getopts 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

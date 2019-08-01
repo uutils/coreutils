@@ -197,23 +197,23 @@ pub enum Attribute {
 /// Re-usable, extensible copy options
 #[allow(dead_code)]
 pub struct Options {
-    attributes_only: bool,
-    backup: bool,
-    copy_contents: bool,
-    copy_mode: CopyMode,
-    dereference: bool,
-    no_target_dir: bool,
-    one_file_system: bool,
-    overwrite: OverwriteMode,
-    parents: bool,
-    reflink: bool,
-    reflink_mode: ReflinkMode,
-    preserve_attributes: Vec<Attribute>,
-    recursive: bool,
-    backup_suffix: String,
-    target_dir: Option<String>,
-    update: bool,
-    verbose: bool,
+    pub attributes_only: bool,
+    pub backup: bool,
+    pub copy_contents: bool,
+    pub copy_mode: CopyMode,
+    pub dereference: bool,
+    pub no_target_dir: bool,
+    pub one_file_system: bool,
+    pub overwrite: OverwriteMode,
+    pub parents: bool,
+    pub reflink: bool,
+    pub reflink_mode: ReflinkMode,
+    pub preserve_attributes: Vec<Attribute>,
+    pub recursive: bool,
+    pub backup_suffix: String,
+    pub target_dir: Option<String>,
+    pub update: bool,
+    pub verbose: bool,
 }
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -290,7 +290,7 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "all",
 ];
 
-static DEFAULT_ATTRIBUTES: &[Attribute] = &[
+pub static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     #[cfg(unix)]
     Attribute::Mode,
     Attribute::Ownership,
@@ -771,7 +771,7 @@ fn preserve_hardlinks(
 /// Behavior depends on `options`, see [`Options`] for details.
 ///
 /// [`Options`]: ./struct.Options.html
-fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()> {
+pub fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 

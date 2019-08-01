@@ -10,13 +10,14 @@
 //
 
 extern crate getopts;
+extern crate uu_cp;
 
 #[macro_use]
 extern crate uucore;
 
 use std::fs;
 use std::env;
-use std::io::{stdin, Result};
+use std::io::{stdin, Result, Error as IoError, ErrorKind};
 use std::path::{Path, PathBuf};
 
 static NAME: &str = "mv";
@@ -336,6 +337,64 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
     }
 }
 
+fn rename_helper(from: &PathBuf, to: &PathBuf) -> Result<()> {
+    match fs::rename(from, to) {
+        Ok(()) => {
+            return Ok(());
+        },
+        Err(_) => {
+            let from = from.to_owned();
+            let remove_file_path = from.to_owned();
+            let copy_options = uu_cp::Options {
+                attributes_only: false,
+                backup: false,
+                copy_contents: false,
+                copy_mode: uu_cp::CopyMode::Copy,
+                dereference: false,
+                no_target_dir: false,
+                one_file_system: false,
+                overwrite: uu_cp::OverwriteMode::Clobber(uu_cp::ClobberMode::Force),
+                parents: false,
+                reflink: false,
+                reflink_mode: uu_cp::ReflinkMode::Never,
+                preserve_attributes: uu_cp::DEFAULT_ATTRIBUTES.to_vec(),
+                recursive: true,
+                backup_suffix: "".to_string(),
+                target_dir: None,
+                update: false,
+                verbose: false,
+            };
+            match uu_cp::copy(&[from], to, &copy_options) {
+                Ok(()) => {
+                    remove(&remove_file_path)?;
+                    Ok(())
+                },
+                Err(e) => {
+                    Err(IoError::new(ErrorKind::Other, e))
+                }
+            }
+        }
+    }
+}
+
+fn remove(path: &PathBuf) -> Result<()> {
+    match path.symlink_metadata() {
+        Ok(metadata) => {
+            if metadata.is_dir() {
+                fs::remove_dir_all(path)?;
+            } else if is_symlink_dir(&metadata) {
+                fs::remove_dir(path)?;
+            } else {
+                fs::remove_file(path)?;
+            }
+            Ok(())
+        },
+        Err(e) => {
+            Err(e)
+        }
+    }
+}
+
 fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
     let mut backup_path = None;
 
@@ -358,7 +417,8 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
         };
         if let Some(ref p) = backup_path {
-            fs::rename(to, p)?;
+              rename_helper(to, p)?;
+//            fs::rename(to, p)?;
         }
 
         if b.update {
@@ -381,7 +441,8 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         }
     }
 
-    fs::rename(from, to)?;
+    rename_helper(from, to)?;
+    //fs::rename(from, to)?;
 
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
@@ -434,4 +495,21 @@ fn is_empty_dir(path: &PathBuf) -> bool {
         },
         Err(_e) => { return false; }
     }
+}
+
+#[cfg(not(windows))]
+fn is_symlink_dir(_metadata: &fs::Metadata) -> bool {
+    false
+}
+
+#[cfg(windows)]
+use std::os::windows::prelude::MetadataExt;
+
+#[cfg(windows)]
+fn is_symlink_dir(metadata: &fs::Metadata) -> bool {
+    use std::os::raw::c_ulong;
+    pub type DWORD = c_ulong;
+    pub const FILE_ATTRIBUTE_DIRECTORY: DWORD = 0x10;
+
+    metadata.file_type().is_symlink() && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
 }

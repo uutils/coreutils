@@ -11,6 +11,7 @@ path = "mv.rs"
 [dependencies]
 getopts = "0.2.18"
 uucore = "0.0.1"
+cp = { version='*', path="../cp/"}
 
 [[bin]]
 name = "mv"
