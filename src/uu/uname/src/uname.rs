@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             .short("s")
             .long(OPT_KERNELNAME)
             .alias("sysname") // Obsolescent option in GNU uname
-            .help("print the operating system name."))
+            .help("print the kernel name."))
         .arg(Arg::with_name(OPT_NODENAME)
             .short("n")
             .long(OPT_NODENAME)
@@ -91,6 +91,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             .short("m")
             .long(OPT_MACHINE)
             .help("print the machine hardware name."))
+        .arg(Arg::with_name(OPT_OS)
+            .short("o")
+            .long(OPT_OS)
+            .help("print the operating system name."))
         .get_matches_from(&args);
 
     let argc = args.len();
