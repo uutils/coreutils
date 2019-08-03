@@ -10,14 +10,17 @@
 //
 
 extern crate getopts;
+extern crate fs_extra;
 
 #[macro_use]
 extern crate uucore;
 
 use std::fs;
 use std::env;
-use std::io::{stdin, Result};
+use std::io::{self, stdin};
 use std::path::{Path, PathBuf};
+
+use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
 static NAME: &str = "mv";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -336,7 +339,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
     }
 }
 
-fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
+fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -357,8 +360,8 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             BackupMode::NumberedBackup => Some(numbered_backup_path(to)),
             BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
         };
-        if let Some(ref p) = backup_path {
-            fs::rename(to, p)?;
+        if let Some(ref backup_path) = backup_path {
+            rename_with_fallback(to, backup_path)?;
         }
 
         if b.update {
@@ -376,18 +379,46 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?
             } else {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
+                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }
         }
     }
 
-    fs::rename(from, to)?;
+    rename_with_fallback(from, to)?;
 
     if b.verbose {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
         match backup_path {
             Some(path) => println!(" (backup: ‘{}’)", path.display()),
             None => println!(""),
+        }
+    }
+    Ok(())
+}
+
+/// A wrapper around `fs::rename`, so that if it fails, we try falling back on
+/// copying and removing.
+fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
+    if fs::rename(from, to).is_err() {
+        if from.is_dir() {
+            // We remove the destination directory if it exists to match the
+            // behaviour of `fs::rename`. As far as I can tell, `fs_extra`'s
+            // `move_dir` would otherwise behave differently.
+            if to.exists() {
+                fs::remove_dir_all(to)?;
+            }
+            let options = DirCopyOptions {
+                // From the `fs_extra` documentation:
+                // "Recursively copy a directory with a new name or place it
+                // inside the destination. (same behaviors like cp -r in Unix)"
+                copy_inside: true,
+                ..DirCopyOptions::new()
+            };
+            if let Err(err) = move_dir(from, to, &options) {
+                return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)));
+            }
+        } else {
+            fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
     }
     Ok(())
