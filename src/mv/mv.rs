@@ -19,6 +19,10 @@ use std::fs;
 use std::env;
 use std::io::{self, stdin};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::os::unix;
+#[cfg(windows)]
+use std::os::windows;
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
@@ -240,7 +244,11 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
         2 => {
             let source = &files[0];
             let target = &files[1];
-            if !source.exists() {
+            // Here we use the `symlink_metadata()` method instead of `exists()`,
+            // since it handles dangling symlinks correctly. The method gives an
+            // `Ok()` results unless the source does not exist, or the user
+            // lacks permission to access metadata.
+            if source.symlink_metadata().is_err() {
                 show_error!(
                     "cannot stat ‘{}’: No such file or directory",
                     source.display()
@@ -400,7 +408,13 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> io::Result<()> {
 /// copying and removing.
 fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
-        if from.is_dir() {
+        // Get metadata without following symlinks
+        let metadata = from.symlink_metadata()?;
+        let file_type = metadata.file_type();
+
+        if file_type.is_symlink() {
+            rename_symlink_fallback(&from, &to)?;
+        } else if file_type.is_dir() {
             // We remove the destination directory if it exists to match the
             // behaviour of `fs::rename`. As far as I can tell, `fs_extra`'s
             // `move_dir` would otherwise behave differently.
@@ -420,6 +434,41 @@ fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
         } else {
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
+    }
+    Ok(())
+}
+
+/// Move the given symlink to the given destination. On Windows, dangling
+/// symlinks return an error.
+#[inline]
+fn rename_symlink_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
+    let path_symlink_points_to = fs::read_link(from)?;
+    #[cfg(unix)]
+    {
+        unix::fs::symlink(&path_symlink_points_to, &to).and_then(|_| fs::remove_file(&from))?;
+    }
+    #[cfg(windows)]
+    {
+        if path_symlink_points_to.exists() {
+            if path_symlink_points_to.is_dir() {
+                windows::fs::symlink_dir(&path_symlink_points_to, &to)?;
+            } else {
+                windows::fs::symlink_file(&path_symlink_points_to, &to)?;
+            }
+            fs::remove_file(&from)?;
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "can't determine symlink type, since it is dangling",
+            ));
+        }
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "your operating system does not support symlinks",
+        ));
     }
     Ok(())
 }
