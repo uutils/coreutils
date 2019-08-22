@@ -173,10 +173,10 @@ static LONGHELP_BODY: &str = "
    %s - string
 
    %b - escaped string - the string will be checked for any escaped literals from
-         the escaped literal list above, and translate them to literal charcters.
+         the escaped literal list above, and translate them to literal characters.
          e.g. \\n will be transformed into a newline character.
 
-        One special rule about %b mode is that octal literals are intepreted differently
+        One special rule about %b mode is that octal literals are interpreted differently
         In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
         instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
         still be interpreted and not throw a warning, you will have problems if you use this for a
