@@ -13,6 +13,7 @@ extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
+extern crate term_size;
 
 use getopts::Options;
 use std::io::{stdout, Read, Write};
@@ -137,30 +138,65 @@ fn reset_term(term: &mut redox_termios::Termios) {
 fn more(matches: getopts::Matches) {
     let files = matches.free;
     let mut f = File::open(files.first().unwrap()).unwrap();
+
     let mut buffer = [0; 1024];
-
     let mut term = setup_term();
+    // TODO get size of actual terminal
+    let term_columns = 80;
+    let term_lines = 30;
 
-    let mut end = false;
-    while let Ok(sz) = f.read(&mut buffer) {
-        if sz == 0 {
+    let mut want_lines = term_lines; // start with a full page; count down
+    let mut columns = term_columns;   // for consistency, count down
+
+    'chunks: while let Ok(size) = f.read(&mut buffer) {
+        if size == 0 {
             break;
         }
-        stdout().write(&buffer[0..sz]).unwrap();
-        for byte in std::io::stdin().bytes() {
-            match byte.unwrap() {
-                b' ' => break,
-                b'q' | 27 => {
-                    end = true;
-                    break;
+        let mut write_start = 0;    // start of next write
+        let mut point = 0;          // next char when counting lines
+
+        loop {
+            // find a subrange with the right number of lines
+            while want_lines > 0 {
+                let c = buffer[point];
+                if c == b'\n' {
+                    want_lines -= 1;
+                    columns = term_columns;
+                    point += 1;
                 }
-                _ => (),
+                else if columns == 0 {
+                    // visual line, wrapped by terminal
+                    want_lines -= 1;
+                    columns = term_columns;
+                    // don't increment point; this char needs to start the next line
+                } else {
+                    point += 1;
+                    columns -= 1;
+                }
+                if point == size {
+                    stdout().write(&buffer[write_start..point]).unwrap();
+                    continue 'chunks
+                }
+            }
+
+            stdout().write(&buffer[write_start..point]).unwrap();
+            stdout().flush().unwrap();
+            write_start = point;
+
+            for byte in std::io::stdin().bytes() {
+                match byte.unwrap() {
+                    b' ' => {
+                        want_lines = term_lines;
+                        break
+                    },
+                    b'q' | 27 => {
+                        break 'chunks;
+                    }
+                    _ => (),
+                }
             }
         }
 
-        if end {
-            break;
-        }
     }
 
     reset_term(&mut term);
