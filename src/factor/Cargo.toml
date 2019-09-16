@@ -8,7 +8,7 @@ name = "uu_factor"
 path = "factor.rs"
 
 [dependencies]
-rand = "0.5"
+rand = "0.7"
 uucore = "0.0.1"
 
 [[bin]]
