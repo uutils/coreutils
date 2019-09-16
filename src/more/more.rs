@@ -141,9 +141,10 @@ fn more(matches: getopts::Matches) {
 
     let mut buffer = [0; 1024];
     let mut term = setup_term();
-    // TODO get size of actual terminal
-    let term_columns = 80;
-    let term_lines = 30;
+    let (term_columns, term_lines) = match term_size::dimensions() {
+        Some((w, h)) => (w, h-1), // -1 to leave space for prompt
+        None => (80, 30)
+    };
 
     let mut want_lines = term_lines; // start with a full page; count down
     let mut columns = term_columns;   // for consistency, count down
