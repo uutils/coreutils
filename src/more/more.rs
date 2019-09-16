@@ -189,6 +189,10 @@ fn more(matches: getopts::Matches) {
                         want_lines = term_lines;
                         break
                     },
+                    b'\n' => {
+                        want_lines = 1;
+                        break
+                    }
                     b'q' | 27 => {
                         break 'chunks;
                     }
