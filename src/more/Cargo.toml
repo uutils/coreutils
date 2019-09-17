@@ -20,6 +20,10 @@ redox_syscall = "0.1"
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = "0.8.1"
 
+[target.'cfg(windows)'.dependencies]
+kernel32-sys = "0.2.2"
+winapi = { version = "0.3.7", features = [ "winbase", "wincon" ] }
+
 [[bin]]
 name = "more"
 path = "../../uumain.rs"

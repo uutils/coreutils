@@ -29,6 +29,13 @@ extern crate redox_termios;
 #[cfg(target_os = "redox")]
 extern crate syscall;
 
+#[cfg(windows)]
+extern crate kernel32;
+extern crate winapi;
+use kernel32::{GetStdHandle, GetConsoleMode, SetConsoleMode};
+use winapi::um::wincon::{ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT};
+use winapi::um::winbase::{STD_INPUT_HANDLE};
+
 #[derive(Clone, Eq, PartialEq)]
 pub enum Mode {
     More,
@@ -96,7 +103,22 @@ fn setup_term() -> termios::Termios {
     term
 }
 
-#[cfg(any(windows, target_os = "fuchsia"))]
+#[cfg(windows)]
+#[inline(always)]
+fn setup_term() { unsafe {
+    let term = GetStdHandle(STD_INPUT_HANDLE); // TODO PIPE case
+    let mut mode = 0;
+    let ok = GetConsoleMode(term, &mut mode);
+    if ok == 0 {
+        panic!("Could not get Console Mode");
+    }
+    let ok = SetConsoleMode(term, mode & !ENABLE_ECHO_INPUT & !ENABLE_LINE_INPUT);
+    if ok == 0 {
+        panic!("Could not set Console Mode");
+    }
+}}
+
+#[cfg(target_os = "fuchsia")]
 #[inline(always)]
 fn setup_term() -> usize {
     0
@@ -121,7 +143,22 @@ fn reset_term(term: &mut termios::Termios) {
     termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
 }
 
-#[cfg(any(windows, target_os = "fuchsia"))]
+#[cfg(windows)]
+#[inline(always)]
+fn reset_term(_: &mut ()) { unsafe {
+    let term = GetStdHandle(STD_INPUT_HANDLE); // TODO PIPE case
+    let mut mode = 0;
+    let ok = GetConsoleMode(term, &mut mode);
+    if ok == 0 {
+        panic!("Could not get Console Mode");
+    }
+    let ok = SetConsoleMode(term, mode | ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
+    if ok == 0 {
+        panic!("Could not set Console Mode");
+    }
+}}
+
+#[cfg(target_os = "fuchsia")]
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
