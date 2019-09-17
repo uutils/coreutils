@@ -231,6 +231,10 @@ fn more(matches: getopts::Matches) {
                         want_lines = 1;
                         break
                     }
+                    b'\r' => { // RETURN on Windows
+                        want_lines = 1;
+                        break
+                    }
                     b'q' | 27 => {
                         break 'chunks;
                     }
