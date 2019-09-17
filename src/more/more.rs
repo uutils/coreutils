@@ -31,9 +31,13 @@ extern crate syscall;
 
 #[cfg(windows)]
 extern crate kernel32;
+#[cfg(windows)]
 extern crate winapi;
+#[cfg(windows)]
 use kernel32::{GetStdHandle, GetConsoleMode, SetConsoleMode};
+#[cfg(windows)]
 use winapi::um::wincon::{ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT};
+#[cfg(windows)]
 use winapi::um::winbase::{STD_INPUT_HANDLE};
 
 #[derive(Clone, Eq, PartialEq)]
