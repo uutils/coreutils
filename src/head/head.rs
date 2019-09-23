@@ -166,15 +166,12 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     let mut a = 1;
     let b = options.len();
 
-    if b > 3 {
-        return (options, None);
-    }
-
     while a < b {
+        let previous = options[a-1].clone();
         let current = options[a].clone();
         let current = current.as_bytes();
 
-        if current.len() > 1 && current[0] == b'-' {
+        if previous != "-n" && current.len() > 1 && current[0] == b'-' {
             let len = current.len();
             for pos in 1..len {
                 // Ensure that the argument is only made out of digits

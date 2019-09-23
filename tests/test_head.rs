@@ -27,6 +27,14 @@ fn test_stdin_1_line() {
 }
 
 #[test]
+fn test_stdin_negative_23_line() {
+    new_ucmd!()
+        .args(&["-n", "-23"])
+        .pipe_in_fixture(INPUT)
+        .run().stdout_is_fixture("lorem_ipsum_1_line.expected");
+}
+
+#[test]
 fn test_stdin_5_chars() {
     new_ucmd!()
         .args(&["-c", "5"])
