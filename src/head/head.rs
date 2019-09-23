@@ -29,7 +29,7 @@ static LONG_HELP: &str = "";
 enum FilterMode {
     Bytes(usize),
     Lines(usize),
-    ILines(isize),
+    NLines(usize),
 }
 
 struct Settings {
@@ -88,7 +88,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
             match n.parse::<isize>() {
                 Ok(m) => settings.mode = if  m < 0 {
-                    FilterMode::ILines(m)
+                    FilterMode::NLines(m.abs().try_into().unwrap())
                 }
                 else {
                     FilterMode::Lines(m.try_into().unwrap())
@@ -207,13 +207,12 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
         FilterMode::Lines(count) => for line in reader.lines().take(count) {
             println!("{}", line.unwrap());
         },
-        FilterMode::ILines(count) => {
-            let old_count :usize = count.abs().try_into().unwrap();
+        FilterMode::NLines(count) => {
             let mut vector: VecDeque<String> = VecDeque::new();
 
             for line in reader.lines() {
                 vector.push_back(line.unwrap());
-                if vector.len() <= old_count {
+                if vector.len() <= count {
                     continue;
                 }
                 println!("{}", vector.pop_front().unwrap());
