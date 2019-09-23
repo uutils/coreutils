@@ -18,6 +18,9 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
+use std::convert::TryInto;
+use std::collections::VecDeque;
+
 
 static SYNTAX: &str = "";
 static SUMMARY: &str = "";
@@ -26,6 +29,7 @@ static LONG_HELP: &str = "";
 enum FilterMode {
     Bytes(usize),
     Lines(usize),
+    ILines(isize),
 }
 
 struct Settings {
@@ -74,7 +78,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(new_args);
 
     let use_bytes = matches.opt_present("c");
-
     // TODO: suffixes (e.g. b, kB, etc.)
     match matches.opt_str("n") {
         Some(n) => {
@@ -82,13 +85,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 show_error!("cannot specify both --bytes and --lines.");
                 return 1;
             }
-            match n.parse::<usize>() {
-                Ok(m) => settings.mode = FilterMode::Lines(m),
+
+            match n.parse::<isize>() {
+                Ok(m) => settings.mode = if  m < 0 {
+                    FilterMode::ILines(m)
+                }
+                else {
+                    FilterMode::Lines(m.try_into().unwrap())
+                },
                 Err(e) => {
                     show_error!("invalid line count '{}': {}", n, e);
                     return 1;
                 }
+
             }
+
         }
         None => if let Some(count) = matches.opt_str("c") {
             match count.parse::<usize>() {
@@ -155,6 +166,10 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     let mut a = 1;
     let b = options.len();
 
+    if b > 3 {
+        return (options, None);
+    }
+
     while a < b {
         let current = options[a].clone();
         let current = current.as_bytes();
@@ -191,6 +206,18 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
         },
         FilterMode::Lines(count) => for line in reader.lines().take(count) {
             println!("{}", line.unwrap());
+        },
+        FilterMode::ILines(count) => {
+            let old_count :usize = count.abs().try_into().unwrap();
+            let mut vector: VecDeque<String> = VecDeque::new();
+
+            for line in reader.lines() {
+                vector.push_back(line.unwrap());
+                if vector.len() <= old_count {
+                    continue;
+                }
+                println!("{}", vector.pop_front().unwrap());
+            }
         },
     }
     true
