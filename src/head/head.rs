@@ -18,7 +18,6 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8;
-use std::convert::TryInto;
 use std::collections::VecDeque;
 
 
@@ -88,10 +87,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
             match n.parse::<isize>() {
                 Ok(m) => settings.mode = if  m < 0 {
-                    FilterMode::NLines(m.abs().try_into().unwrap())
+                    let m : usize = m.abs() as usize;
+                    FilterMode::NLines(m)
                 }
                 else {
-                    FilterMode::Lines(m.try_into().unwrap())
+                    let m : usize = m.abs() as usize;
+                    FilterMode::Lines(m)
                 },
                 Err(e) => {
                     show_error!("invalid line count '{}': {}", n, e);
