@@ -17,7 +17,7 @@ redox_termios = "0.1"
 redox_syscall = "0.1"
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
-nix = "0.8.1"
+nix = "0.13.0"
 
 [[bin]]
 name = "more"
