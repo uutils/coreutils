@@ -10,7 +10,7 @@ path = "shred.rs"
 
 [dependencies]
 rand = "0.5"
-filetime = "0.2.1"
+filetime = "0.2.7"
 getopts = "0.2.18"
 libc = "0.2.42"
 time = "0.1.40"
