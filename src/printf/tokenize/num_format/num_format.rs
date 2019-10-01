@@ -143,7 +143,7 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
                     ret.radix_in = Base::Hex;
                     do_clean_lead_zeroes = true;
                 }
-                e @ '0'...'9' => {
+                e @ '0'..='9' => {
                     ret.offset += 1;
                     match *field_type {
                         FieldType::Intf => {

@@ -126,7 +126,7 @@ impl Uniq {
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
                 return closure(&mut fields_to_check.chars().map(|c| match c {
-                    'a'...'z' => ((c as u8) - 32) as char,
+                    'a'..='z' => ((c as u8) - 32) as char,
                     _ => c,
                 }));
             }
@@ -142,7 +142,7 @@ impl Uniq {
                     .skip(slice_start)
                     .take(slice_stop)
                     .map(|c| match c {
-                        'a'...'z' => ((c as u8) - 32) as char,
+                        'a'..='z' => ((c as u8) - 32) as char,
                         _ => c,
                     }),
             )

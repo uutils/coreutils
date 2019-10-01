@@ -133,12 +133,12 @@ impl ScanUtil for str {
         let mut chars = self.chars();
         let mut i = 0;
         match chars.next() {
-            Some('-') | Some('+') | Some('0'...'9') => i += 1,
+            Some('-') | Some('+') | Some('0'..='9') => i += 1,
             _ => return None,
         }
         while let Some(c) = chars.next() {
             match c {
-                '0'...'9' => i += 1,
+                '0'..='9' => i += 1,
                 _ => break,
             }
         }
@@ -422,7 +422,7 @@ impl Stater {
                                     tokens.push(Token::Char('x'));
                                 }
                             }
-                            '0'...'7' => {
+                            '0'..='7' => {
                                 let (c, offset) = fmtstr[i..].scan_char(8).unwrap();
                                 tokens.push(Token::Char(c));
                                 i += offset - 1;

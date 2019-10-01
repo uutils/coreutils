@@ -180,7 +180,7 @@ impl SubParser {
         while let Some(ch) = it.next() {
             self.text_so_far.push(ch);
             match ch as char {
-                '-' | '*' | '0'...'9' => {
+                '-' | '*' | '0'..='9' => {
                     if !self.past_decimal {
                         if self.min_width_is_asterisk || self.specifiers_found {
                             err_conv(&self.text_so_far);

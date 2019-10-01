@@ -294,13 +294,13 @@ impl RadixDef for RadixTen {
     }
     fn from_char(&self, c: char) -> Option<u8> {
         match c {
-            '0'...'9' => Some(c as u8 - ZERO_ASC),
+            '0'..='9' => Some(c as u8 - ZERO_ASC),
             _ => None,
         }
     }
     fn from_u8(&self, u: u8) -> Option<char> {
         match u {
-            0...9 => Some((ZERO_ASC + u) as char),
+            0..=9 => Some((ZERO_ASC + u) as char),
             _ => None,
         }
     }
@@ -312,16 +312,16 @@ impl RadixDef for RadixHex {
     }
     fn from_char(&self, c: char) -> Option<u8> {
         match c {
-            '0'...'9' => Some(c as u8 - ZERO_ASC),
-            'A'...'F' => Some(c as u8 + 10 - UPPER_A_ASC),
-            'a'...'f' => Some(c as u8 + 10 - LOWER_A_ASC),
+            '0'..='9' => Some(c as u8 - ZERO_ASC),
+            'A'..='F' => Some(c as u8 + 10 - UPPER_A_ASC),
+            'a'..='f' => Some(c as u8 + 10 - LOWER_A_ASC),
             _ => None,
         }
     }
     fn from_u8(&self, u: u8) -> Option<char> {
         match u {
-            0...9 => Some((ZERO_ASC + u) as char),
-            10...15 => Some((UPPER_A_ASC + (u - 10)) as char),
+            0..=9 => Some((ZERO_ASC + u) as char),
+            10..=15 => Some((UPPER_A_ASC + (u - 10)) as char),
             _ => None,
         }
     }
