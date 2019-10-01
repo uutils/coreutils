@@ -145,16 +145,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open(path: String) -> BufReader<Box<Read + 'static>> {
+fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     let file_buf;
     if path == "-" {
-        BufReader::new(Box::new(stdin()) as Box<Read>)
+        BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
         file_buf = match File::open(&path[..]) {
             Ok(a) => a,
             Err(e) => crash!(1, "{}: {}", &path[..], e),
         };
-        BufReader::new(Box::new(file_buf) as Box<Read>)
+        BufReader::new(Box::new(file_buf) as Box<dyn Read>)
     }
 }
 

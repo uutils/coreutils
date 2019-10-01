@@ -147,10 +147,10 @@ With no FILE, or when FILE is -, read standard input.",
 
 fn read_input_file(filename: &str) -> Vec<u8> {
     let mut file = BufReader::new(if filename == "-" {
-        Box::new(stdin()) as Box<Read>
+        Box::new(stdin()) as Box<dyn Read>
     } else {
         match File::open(filename) {
-            Ok(f) => Box::new(f) as Box<Read>,
+            Ok(f) => Box::new(f) as Box<dyn Read>,
             Err(e) => crash!(1, "failed to open '{}': {}", filename, e),
         }
     });
@@ -206,9 +206,9 @@ fn shuf_bytes(
     random: Option<String>,
 ) {
     let mut output = BufWriter::new(match output {
-        None => Box::new(stdout()) as Box<Write>,
+        None => Box::new(stdout()) as Box<dyn Write>,
         Some(s) => match File::create(&s[..]) {
-            Ok(f) => Box::new(f) as Box<Write>,
+            Ok(f) => Box::new(f) as Box<dyn Write>,
             Err(e) => crash!(1, "failed to open '{}' for writing: {}", &s[..], e),
         },
     });

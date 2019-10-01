@@ -62,7 +62,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut file_buf;
     let mut reader = BufReader::new(if input == "-" {
         stdin_buf = stdin();
-        &mut stdin_buf as &mut Read
+        &mut stdin_buf as &mut dyn Read
     } else {
         file_buf = match File::open(Path::new(&input)) {
             Ok(a) => a,
@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 return 1;
             }
         };
-        &mut file_buf as &mut Read
+        &mut file_buf as &mut dyn Read
     });
 
     let mut g = Graph::new();

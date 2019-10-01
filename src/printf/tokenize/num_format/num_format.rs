@@ -210,7 +210,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
     // see formatter.rs for more details
 
     // to do switch to static dispatch
-    let fmtr: Box<Formatter> = match *field.field_type {
+    let fmtr: Box<dyn Formatter> = match *field.field_type {
         FieldType::Intf => Box::new(Intf::new()),
         FieldType::Floatf => Box::new(Floatf::new()),
         FieldType::CninetyNineHexFloatf => Box::new(CninetyNineHexFloatf::new()),

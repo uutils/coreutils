@@ -8,13 +8,13 @@ pub enum InputSource<'a> {
     FileName(&'a str),
     Stdin,
     #[allow(dead_code)]
-    Stream(Box<io::Read>),
+    Stream(Box<dyn io::Read>),
 }
 
 // MultifileReader - concatenate all our input, file or stdin.
 pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
-    curr_file: Option<Box<io::Read>>,
+    curr_file: Option<Box<dyn io::Read>>,
     any_err: bool,
 }
 

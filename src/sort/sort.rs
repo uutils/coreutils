@@ -69,7 +69,7 @@ impl Default for Settings {
 }
 
 struct MergeableFile<'a> {
-    lines: Lines<BufReader<Box<Read>>>,
+    lines: Lines<BufReader<Box<dyn Read>>>,
     current_line: String,
     settings: &'a Settings,
 }
@@ -109,7 +109,7 @@ impl<'a> FileMerger<'a> {
             settings: settings,
         }
     }
-    fn push_file(&mut self, mut lines: Lines<BufReader<Box<Read>>>) {
+    fn push_file(&mut self, mut lines: Lines<BufReader<Box<dyn Read>>>) {
         match lines.next() {
             Some(Ok(next_line)) => {
                 let mergeable_file = MergeableFile {
@@ -313,7 +313,7 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     0
 }
 
-fn exec_check_file(lines: Lines<BufReader<Box<Read>>>, settings: &Settings) -> i32 {
+fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) -> i32 {
     // errors yields the line before each disorder,
     // plus the last line (quirk of .coalesce())
     let unwrapped_lines = lines.filter_map(|maybe_line| {
@@ -507,15 +507,15 @@ fn print_sorted<S, T: Iterator<Item = S>>(iter: T, outfile: &Option<String>)
 where
     S: std::fmt::Display,
 {
-    let mut file: Box<Write> = match *outfile {
+    let mut file: Box<dyn Write> = match *outfile {
         Some(ref filename) => match File::create(Path::new(&filename)) {
-            Ok(f) => Box::new(BufWriter::new(f)) as Box<Write>,
+            Ok(f) => Box::new(BufWriter::new(f)) as Box<dyn Write>,
             Err(e) => {
                 show_error!("sort: {0}: {1}", filename, e.to_string());
                 panic!("Could not open output file");
             }
         },
-        None => Box::new(stdout()) as Box<Write>,
+        None => Box::new(stdout()) as Box<dyn Write>,
     };
 
     for line in iter {
@@ -531,14 +531,14 @@ where
 }
 
 // from cat.rs
-fn open(path: &str) -> Option<(Box<Read>, bool)> {
+fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
     if path == "-" {
         let stdin = stdin();
-        return Some((Box::new(stdin) as Box<Read>, is_stdin_interactive()));
+        return Some((Box::new(stdin) as Box<dyn Read>, is_stdin_interactive()));
     }
 
     match File::open(Path::new(path)) {
-        Ok(f) => Some((Box::new(f) as Box<Read>, false)),
+        Ok(f) => Some((Box::new(f) as Box<dyn Read>, false)),
         Err(e) => {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None

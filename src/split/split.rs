@@ -159,7 +159,7 @@ struct LineSplitter {
 }
 
 impl LineSplitter {
-    fn new(settings: &Settings) -> Box<Splitter> {
+    fn new(settings: &Settings) -> Box<dyn Splitter> {
         let n = match settings.strategy_param.parse() {
             Ok(a) => a,
             Err(e) => crash!(1, "invalid number of lines: {}", e),
@@ -167,7 +167,7 @@ impl LineSplitter {
         Box::new(LineSplitter {
             saved_lines_to_write: n,
             lines_to_write: n,
-        }) as Box<Splitter>
+        }) as Box<dyn Splitter>
     }
 }
 
@@ -190,7 +190,7 @@ struct ByteSplitter {
 }
 
 impl ByteSplitter {
-    fn new(settings: &Settings) -> Box<Splitter> {
+    fn new(settings: &Settings) -> Box<dyn Splitter> {
         let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
@@ -221,7 +221,7 @@ impl ByteSplitter {
             bytes_to_write: n * multiplier,
             break_on_line_end: settings.strategy == "b",
             require_whole_line: false,
-        }) as Box<Splitter>
+        }) as Box<dyn Splitter>
     }
 }
 
@@ -279,7 +279,7 @@ fn num_prefix(i: usize, width: usize) -> String {
 
 fn split(settings: &Settings) -> i32 {
     let mut reader = BufReader::new(if settings.input == "-" {
-        Box::new(stdin()) as Box<Read>
+        Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = match File::open(Path::new(&settings.input)) {
             Ok(a) => a,
@@ -289,10 +289,10 @@ fn split(settings: &Settings) -> i32 {
                 settings.input
             ),
         };
-        Box::new(r) as Box<Read>
+        Box::new(r) as Box<dyn Read>
     });
 
-    let mut splitter: Box<Splitter> = match settings.strategy.as_ref() {
+    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_ref() {
         "l" => LineSplitter::new(settings),
         "b" | "C" => ByteSplitter::new(settings),
         a => crash!(1, "strategy {} not supported", a),
@@ -303,7 +303,7 @@ fn split(settings: &Settings) -> i32 {
         request_new_file: true,      // Request new file
     };
 
-    let mut writer = BufWriter::new(Box::new(stdout()) as Box<Write>);
+    let mut writer = BufWriter::new(Box::new(stdout()) as Box<dyn Write>);
     let mut fileno = 0;
     loop {
         if control.current_line.chars().count() == 0 {
@@ -333,7 +333,7 @@ fn split(settings: &Settings) -> i32 {
                     .create(true)
                     .open(Path::new(&filename))
                     .unwrap(),
-            ) as Box<Write>);
+            ) as Box<dyn Write>);
             control.request_new_file = false;
             if settings.verbose {
                 println!("creating file '{}'", filename);

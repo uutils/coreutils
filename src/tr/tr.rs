@@ -20,9 +20,9 @@ extern crate getopts;
 extern crate uucore;
 
 use bit_set::BitSet;
+use fnv::FnvHashMap;
 use getopts::Options;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
-use fnv::FnvHashMap;
 
 use expand::ExpandSet;
 
@@ -145,7 +145,11 @@ impl SymbolTranslator for TranslateOperation {
     }
 }
 
-fn translate_input<T: SymbolTranslator>(input: &mut BufRead, output: &mut Write, translator: T) {
+fn translate_input<T: SymbolTranslator>(
+    input: &mut dyn BufRead,
+    output: &mut dyn Write,
+    translator: T,
+) {
     let mut buf = String::with_capacity(BUFFER_LEN + 4);
     let mut output_buf = String::with_capacity(BUFFER_LEN + 4);
 

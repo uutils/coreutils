@@ -91,10 +91,10 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
 
     for filename in &filenames {
         let mut file = BufReader::new(if filename == "-" {
-            Box::new(stdin()) as Box<Read>
+            Box::new(stdin()) as Box<dyn Read>
         } else {
             match File::open(filename) {
-                Ok(f) => Box::new(f) as Box<Read>,
+                Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
                     show_warning!("failed to open '{}' for reading: {}", filename, e);
                     continue;
