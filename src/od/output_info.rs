@@ -138,7 +138,7 @@ impl OutputInfo {
     /// This algorithm assumes the size of all types is a power of 2 (1, 2, 4, 8, 16, ...)
     /// Increase MAX_BYTES_PER_UNIT to allow larger types.
     fn calculate_alignment(
-        sf: &TypeSizeInfo,
+        sf: &dyn TypeSizeInfo,
         byte_size_block: usize,
         print_width_block: usize,
     ) -> [usize; MAX_BYTES_PER_UNIT] {

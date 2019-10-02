@@ -51,23 +51,23 @@ fn is_custom_binary(program: &str) -> bool {
 fn detect_algo(
     program: &str,
     matches: &getopts::Matches,
-) -> (&'static str, Box<Digest + 'static>, usize) {
-    let mut alg: Option<Box<Digest>> = None;
+) -> (&'static str, Box<dyn Digest + 'static>, usize) {
+    let mut alg: Option<Box<dyn Digest>> = None;
     let mut name: &'static str = "";
     let mut output_bits = 0;
     match program {
-        "md5sum" => ("MD5", Box::new(Md5::new()) as Box<Digest>, 128),
-        "sha1sum" => ("SHA1", Box::new(Sha1::new()) as Box<Digest>, 160),
-        "sha224sum" => ("SHA224", Box::new(Sha224::new()) as Box<Digest>, 224),
-        "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<Digest>, 256),
-        "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<Digest>, 384),
-        "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<Digest>, 512),
+        "md5sum" => ("MD5", Box::new(Md5::new()) as Box<dyn Digest>, 128),
+        "sha1sum" => ("SHA1", Box::new(Sha1::new()) as Box<dyn Digest>, 160),
+        "sha224sum" => ("SHA224", Box::new(Sha224::new()) as Box<dyn Digest>, 224),
+        "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
+        "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
+        "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
         "sha3sum" => match matches.opt_str("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                Ok(224) => ("SHA3-224", Box::new(Sha3_224::new()) as Box<Digest>, 224),
-                Ok(256) => ("SHA3-256", Box::new(Sha3_256::new()) as Box<Digest>, 256),
-                Ok(384) => ("SHA3-384", Box::new(Sha3_384::new()) as Box<Digest>, 384),
-                Ok(512) => ("SHA3-512", Box::new(Sha3_512::new()) as Box<Digest>, 512),
+                Ok(224) => ("SHA3-224", Box::new(Sha3_224::new()) as Box<dyn Digest>, 224),
+                Ok(256) => ("SHA3-256", Box::new(Sha3_256::new()) as Box<dyn Digest>, 256),
+                Ok(384) => ("SHA3-384", Box::new(Sha3_384::new()) as Box<dyn Digest>, 384),
+                Ok(512) => ("SHA3-512", Box::new(Sha3_512::new()) as Box<dyn Digest>, 512),
                 Ok(_) => crash!(
                     1,
                     "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
@@ -76,20 +76,20 @@ fn detect_algo(
             },
             None => crash!(1, "--bits required for SHA3"),
         },
-        "sha3-224sum" => ("SHA3-224", Box::new(Sha3_224::new()) as Box<Digest>, 224),
-        "sha3-256sum" => ("SHA3-256", Box::new(Sha3_256::new()) as Box<Digest>, 256),
-        "sha3-384sum" => ("SHA3-384", Box::new(Sha3_384::new()) as Box<Digest>, 384),
-        "sha3-512sum" => ("SHA3-512", Box::new(Sha3_512::new()) as Box<Digest>, 512),
+        "sha3-224sum" => ("SHA3-224", Box::new(Sha3_224::new()) as Box<dyn Digest>, 224),
+        "sha3-256sum" => ("SHA3-256", Box::new(Sha3_256::new()) as Box<dyn Digest>, 256),
+        "sha3-384sum" => ("SHA3-384", Box::new(Sha3_384::new()) as Box<dyn Digest>, 384),
+        "sha3-512sum" => ("SHA3-512", Box::new(Sha3_512::new()) as Box<dyn Digest>, 512),
         "shake128sum" => match matches.opt_str("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                Ok(bits) => ("SHAKE128", Box::new(Shake128::new()) as Box<Digest>, bits),
+                Ok(bits) => ("SHAKE128", Box::new(Shake128::new()) as Box<dyn Digest>, bits),
                 Err(err) => crash!(1, "{}", err),
             },
             None => crash!(1, "--bits required for SHAKE-128"),
         },
         "shake256sum" => match matches.opt_str("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                Ok(bits) => ("SHAKE256", Box::new(Shake256::new()) as Box<Digest>, bits),
+                Ok(bits) => ("SHAKE256", Box::new(Shake256::new()) as Box<dyn Digest>, bits),
                 Err(err) => crash!(1, "{}", err),
             },
             None => crash!(1, "--bits required for SHAKE-256"),
@@ -127,22 +127,22 @@ fn detect_algo(
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                             Ok(224) => set_or_crash(
                                 "SHA3-224",
-                                Box::new(Sha3_224::new()) as Box<Digest>,
+                                Box::new(Sha3_224::new()) as Box<dyn Digest>,
                                 224,
                             ),
                             Ok(256) => set_or_crash(
                                 "SHA3-256",
-                                Box::new(Sha3_256::new()) as Box<Digest>,
+                                Box::new(Sha3_256::new()) as Box<dyn Digest>,
                                 256,
                             ),
                             Ok(384) => set_or_crash(
                                 "SHA3-384",
-                                Box::new(Sha3_384::new()) as Box<Digest>,
+                                Box::new(Sha3_384::new()) as Box<dyn Digest>,
                                 384,
                             ),
                             Ok(512) => set_or_crash(
                                 "SHA3-512",
-                                Box::new(Sha3_512::new()) as Box<Digest>,
+                                Box::new(Sha3_512::new()) as Box<dyn Digest>,
                                 512,
                             ),
                             Ok(_) => crash!(
@@ -369,7 +369,7 @@ Compute and check message digests.",
 
 fn hashsum(
     algoname: &str,
-    mut digest: Box<Digest>,
+    mut digest: Box<dyn Digest>,
     files: Vec<String>,
     binary: bool,
     check: bool,
@@ -389,10 +389,10 @@ fn hashsum(
         let file_buf;
         let mut file = BufReader::new(if filename == "-" {
             stdin_buf = stdin();
-            Box::new(stdin_buf) as Box<Read>
+            Box::new(stdin_buf) as Box<dyn Read>
         } else {
             file_buf = safe_unwrap!(File::open(filename));
-            Box::new(file_buf) as Box<Read>
+            Box::new(file_buf) as Box<dyn Read>
         });
         if check {
             // Set up Regexes for line validation and parsing
@@ -440,7 +440,7 @@ fn hashsum(
                     },
                 };
                 let f = safe_unwrap!(File::open(ck_filename));
-                let mut ckf = BufReader::new(Box::new(f) as Box<Read>);
+                let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
                 let real_sum = safe_unwrap!(digest_reader(
                     &mut digest,
                     &mut ckf,
@@ -482,7 +482,7 @@ fn hashsum(
 }
 
 fn digest_reader<'a, T: Read>(
-    digest: &mut Box<Digest + 'a>,
+    digest: &mut Box<dyn Digest + 'a>,
     reader: &mut BufReader<T>,
     binary: bool,
     output_bits: usize,

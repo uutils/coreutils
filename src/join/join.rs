@@ -235,7 +235,7 @@ struct State<'a> {
     file_name: &'a str,
     file_num: FileNum,
     print_unpaired: bool,
-    lines: Lines<Box<BufRead + 'a>>,
+    lines: Lines<Box<dyn BufRead + 'a>>,
     seq: Vec<Line>,
     max_fields: Option<usize>,
     line_num: usize,
@@ -251,10 +251,10 @@ impl<'a> State<'a> {
         print_unpaired: FileNum,
     ) -> State<'a> {
         let f = if name == "-" {
-            Box::new(stdin.lock()) as Box<BufRead>
+            Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
             match File::open(name) {
-                Ok(file) => Box::new(BufReader::new(file)) as Box<BufRead>,
+                Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
                 Err(err) => crash!(1, "{}: {}", name, err),
             }
         };

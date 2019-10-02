@@ -38,7 +38,7 @@ pub enum CommandLineInputs {
 /// Offset and label are specified in bytes.
 /// '-' is used as filename if stdin is meant. This is also returned if
 /// there is no input, as stdin is the default input.
-pub fn parse_inputs(matches: &CommandLineOpts) -> Result<CommandLineInputs, String> {
+pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, String> {
     let mut input_strings: Vec<String> = matches.inputs();
 
     if matches.opts_present(&["traditional"]) {

@@ -240,7 +240,7 @@ pub fn base_conv_float(src: &Vec<u8>, radix_src: u8, radix_dest: u8) -> f64 {
     r
 }
 
-pub fn str_to_arrnum(src: &str, radix_def_src: &RadixDef) -> Vec<u8> {
+pub fn str_to_arrnum(src: &str, radix_def_src: &dyn RadixDef) -> Vec<u8> {
     let mut intermed_in: Vec<u8> = Vec::new();
     for c in src.chars() {
         match radix_def_src.from_char(c) {
@@ -253,7 +253,7 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &RadixDef) -> Vec<u8> {
     intermed_in
 }
 
-pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &RadixDef) -> String {
+pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &dyn RadixDef) -> String {
     let mut str_out = String::new();
     for u in src.iter() {
         match radix_def_dest.from_u8(u.clone()) {
@@ -267,7 +267,11 @@ pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &RadixDef) -> String {
 }
 
 #[allow(unused_variables)]
-pub fn base_conv_str(src: &str, radix_def_src: &RadixDef, radix_def_dest: &RadixDef) -> String {
+pub fn base_conv_str(
+    src: &str,
+    radix_def_src: &dyn RadixDef,
+    radix_def_dest: &dyn RadixDef,
+) -> String {
     let intermed_in: Vec<u8> = str_to_arrnum(src, radix_def_src);
     let intermed_out = base_conv_vec(
         &intermed_in,

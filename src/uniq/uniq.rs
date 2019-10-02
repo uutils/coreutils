@@ -111,7 +111,7 @@ impl Uniq {
 
     fn cmp_key<F>(&self, line: &str, mut closure: F) -> bool
     where
-        F: FnMut(&mut Iterator<Item = char>) -> bool,
+        F: FnMut(&mut dyn Iterator<Item = char>) -> bool,
     {
         let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
@@ -307,26 +307,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open_input_file(in_file_name: String) -> BufReader<Box<Read + 'static>> {
+fn open_input_file(in_file_name: String) -> BufReader<Box<dyn Read + 'static>> {
     let in_file = if in_file_name == "-" {
-        Box::new(stdin()) as Box<Read>
+        Box::new(stdin()) as Box<dyn Read>
     } else {
         let path = Path::new(&in_file_name[..]);
         let in_file = File::open(&path);
         let r = crash_if_err!(1, in_file);
-        Box::new(r) as Box<Read>
+        Box::new(r) as Box<dyn Read>
     };
     BufReader::new(in_file)
 }
 
-fn open_output_file(out_file_name: String) -> BufWriter<Box<Write + 'static>> {
+fn open_output_file(out_file_name: String) -> BufWriter<Box<dyn Write + 'static>> {
     let out_file = if out_file_name == "-" {
-        Box::new(stdout()) as Box<Write>
+        Box::new(stdout()) as Box<dyn Write>
     } else {
         let path = Path::new(&out_file_name[..]);
         let in_file = File::create(&path);
         let w = crash_if_err!(1, in_file);
-        Box::new(w) as Box<Write>
+        Box::new(w) as Box<dyn Write>
     };
     BufWriter::new(out_file)
 }

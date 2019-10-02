@@ -137,7 +137,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         // Iterate over all dates - whether it's a single date or a file.
-        let dates: Box<Iterator<Item = _>> = match settings.date_source {
+        let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
             DateSource::Custom(ref input) => {
                 let date = parse_date(input.clone());
                 let iter = std::iter::once(date);

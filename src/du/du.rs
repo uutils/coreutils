@@ -142,7 +142,7 @@ fn du(
     options: &Options,
     depth: usize,
     inodes: &mut HashSet<u64>,
-) -> Box<DoubleEndedIterator<Item = Stat>> {
+) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
 

@@ -100,7 +100,7 @@ struct OutputOptions {
 
 /// Represents an open file handle, stream, or other device
 struct InputHandle {
-    reader: Box<Read>,
+    reader: Box<dyn Read>,
     is_interactive: bool,
 }
 
@@ -241,7 +241,7 @@ fn open(path: &str) -> CatResult<InputHandle> {
     if path == "-" {
         let stdin = stdin();
         return Ok(InputHandle {
-            reader: Box::new(stdin) as Box<Read>,
+            reader: Box::new(stdin) as Box<dyn Read>,
             is_interactive: is_stdin_interactive(),
         });
     }
@@ -253,14 +253,14 @@ fn open(path: &str) -> CatResult<InputHandle> {
             let socket = UnixStream::connect(path).context(path)?;
             socket.shutdown(Shutdown::Write).context(path)?;
             Ok(InputHandle {
-                reader: Box::new(socket) as Box<Read>,
+                reader: Box::new(socket) as Box<dyn Read>,
                 is_interactive: false,
             })
         }
         _ => {
             let file = File::open(path).context(path)?;
             Ok(InputHandle {
-                reader: Box::new(file) as Box<Read>,
+                reader: Box::new(file) as Box<dyn Read>,
                 is_interactive: false,
             })
         }

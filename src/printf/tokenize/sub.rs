@@ -116,20 +116,20 @@ impl SubParser {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<token::Token>> {
+    ) -> Option<Box<dyn token::Token>> {
         let mut parser = SubParser::new();
         if parser.sub_vals_retrieved(it) {
-            let t: Box<token::Token> = SubParser::build_token(parser);
+            let t: Box<dyn token::Token> = SubParser::build_token(parser);
             t.print(args);
             Some(t)
         } else {
             None
         }
     }
-    fn build_token(parser: SubParser) -> Box<token::Token> {
+    fn build_token(parser: SubParser) -> Box<dyn token::Token> {
         // not a self method so as to allow move of subparser vals.
         // return new Sub struct as token
-        let t: Box<token::Token> = Box::new(Sub::new(
+        let t: Box<dyn token::Token> = Box::new(Sub::new(
             if parser.min_width_is_asterisk {
                 CanAsterisk::Asterisk
             } else {
@@ -317,7 +317,7 @@ impl token::Tokenizer for Sub {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<token::Token>> {
+    ) -> Option<Box<dyn token::Token>> {
         SubParser::from_it(it, args)
     }
 }

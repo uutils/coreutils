@@ -89,10 +89,10 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
         let mut file_buf;
         let buffer = BufReader::new(if filename == "-" {
             stdin_buf = stdin();
-            &mut stdin_buf as &mut Read
+            &mut stdin_buf as &mut dyn Read
         } else {
             file_buf = safe_unwrap!(File::open(Path::new(filename)));
-            &mut file_buf as &mut Read
+            &mut file_buf as &mut dyn Read
         });
         fold_file(buffer, bytes, spaces, width);
     }

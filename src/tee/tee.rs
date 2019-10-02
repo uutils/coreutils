@@ -86,7 +86,7 @@ fn exec(options: Options) -> Result<()> {
 }
 
 fn tee(options: Options) -> Result<()> {
-    let mut writers: Vec<Box<Write>> = options
+    let mut writers: Vec<Box<dyn Write>> = options
         .files
         .clone()
         .into_iter()
@@ -95,7 +95,7 @@ fn tee(options: Options) -> Result<()> {
     writers.push(Box::new(stdout()));
     let output = &mut MultiWriter { writers };
     let input = &mut NamedReader {
-        inner: Box::new(stdin()) as Box<Read>,
+        inner: Box::new(stdin()) as Box<dyn Read>,
     };
     if copy(input, output).is_err() || output.flush().is_err() {
         Err(Error::new(ErrorKind::Other, ""))
@@ -104,9 +104,9 @@ fn tee(options: Options) -> Result<()> {
     }
 }
 
-fn open(name: String, append: bool) -> Box<Write> {
+fn open(name: String, append: bool) -> Box<dyn Write> {
     let path = PathBuf::from(name);
-    let inner: Box<Write> = {
+    let inner: Box<dyn Write> = {
         let mut options = OpenOptions::new();
         let mode = if append {
             options.append(true)
@@ -121,11 +121,11 @@ fn open(name: String, append: bool) -> Box<Write> {
     Box::new(NamedWriter {
         inner: inner,
         path: path,
-    }) as Box<Write>
+    }) as Box<dyn Write>
 }
 
 struct MultiWriter {
-    writers: Vec<Box<Write>>,
+    writers: Vec<Box<dyn Write>>,
 }
 
 impl Write for MultiWriter {
@@ -145,7 +145,7 @@ impl Write for MultiWriter {
 }
 
 struct NamedWriter {
-    inner: Box<Write>,
+    inner: Box<dyn Write>,
     path: PathBuf,
 }
 
@@ -153,7 +153,7 @@ impl Write for NamedWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         match self.inner.write(buf) {
             Err(f) => {
-                self.inner = Box::new(sink()) as Box<Write>;
+                self.inner = Box::new(sink()) as Box<dyn Write>;
                 warn(format!("{}: {}", self.path.display(), f.to_string()).as_ref());
                 Err(f)
             }
@@ -164,7 +164,7 @@ impl Write for NamedWriter {
     fn flush(&mut self) -> Result<()> {
         match self.inner.flush() {
             Err(f) => {
-                self.inner = Box::new(sink()) as Box<Write>;
+                self.inner = Box::new(sink()) as Box<dyn Write>;
                 warn(format!("{}: {}", self.path.display(), f.to_string()).as_ref());
                 Err(f)
             }
@@ -174,7 +174,7 @@ impl Write for NamedWriter {
 }
 
 struct NamedReader {
-    inner: Box<Read>,
+    inner: Box<dyn Read>,
 }
 
 impl Read for NamedReader {

@@ -21,7 +21,7 @@ use std::path::Path;
 static NAME: &str = "sum";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
+fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
     let mut blocks_read = 0;
     let mut checksum: u16 = 0;
@@ -41,7 +41,7 @@ fn bsd_sum(mut reader: Box<Read>) -> (usize, u16) {
     (blocks_read, checksum)
 }
 
-fn sysv_sum(mut reader: Box<Read>) -> (usize, u16) {
+fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 512];
     let mut blocks_read = 0;
     let mut ret = 0u32;
@@ -64,12 +64,12 @@ fn sysv_sum(mut reader: Box<Read>) -> (usize, u16) {
     (blocks_read, ret as u16)
 }
 
-fn open(name: &str) -> Result<Box<Read>> {
+fn open(name: &str) -> Result<Box<dyn Read>> {
     match name {
-        "-" => Ok(Box::new(stdin()) as Box<Read>),
+        "-" => Ok(Box::new(stdin()) as Box<dyn Read>),
         _ => {
             let f = File::open(&Path::new(name))?;
-            Ok(Box::new(f) as Box<Read>)
+            Ok(Box::new(f) as Box<dyn Read>)
         }
     }
 }

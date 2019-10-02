@@ -200,7 +200,7 @@ fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<S
     }
     let mut lines_so_far: usize = 0;
     for filename in files {
-        let reader: BufReader<Box<Read>> = BufReader::new(if filename == "-" {
+        let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
             let file = crash_if_err!(1, File::open(filename));
@@ -470,7 +470,7 @@ fn write_traditional_output(
     words: &BTreeSet<WordRef>,
     output_filename: &str,
 ) {
-    let mut writer: BufWriter<Box<Write>> = BufWriter::new(if output_filename == "-" {
+    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
         Box::new(stdout())
     } else {
         let file = crash_if_err!(1, File::create(output_filename));

@@ -68,14 +68,14 @@ FILE, separated by TABs, to standard output.",
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<BufReader<Box<Read>>> = filenames
+    let mut files: Vec<BufReader<Box<dyn Read>>> = filenames
         .into_iter()
         .map(|name| {
             BufReader::new(if name == "-" {
-                Box::new(stdin()) as Box<Read>
+                Box::new(stdin()) as Box<dyn Read>
             } else {
                 let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Box::new(r) as Box<Read>
+                Box::new(r) as Box<dyn Read>
             })
         })
         .collect();

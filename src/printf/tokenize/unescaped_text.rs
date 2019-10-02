@@ -3,14 +3,14 @@
 //! and escaped character literals (of allowed escapes),
 //! into an unescaped text byte array
 
-use std::iter::Peekable;
-use std::slice::Iter;
-use std::str::Chars;
-use std::char::from_u32;
-use std::process::exit;
+use super::token;
 use cli;
 use itertools::PutBackN;
-use super::token;
+use std::char::from_u32;
+use std::iter::Peekable;
+use std::process::exit;
+use std::slice::Iter;
+use std::str::Chars;
 
 pub struct UnescapedText(Vec<u8>);
 impl UnescapedText {
@@ -173,7 +173,10 @@ impl UnescapedText {
     // and return a wrapper around a Vec<u8> of unescaped bytes
     // break on encounter of sub symbol ('%[^%]') unless called
     // through %b subst.
-    pub fn from_it_core(it: &mut PutBackN<Chars>, subs_mode: bool) -> Option<Box<token::Token>> {
+    pub fn from_it_core(
+        it: &mut PutBackN<Chars>,
+        subs_mode: bool,
+    ) -> Option<Box<dyn token::Token>> {
         let mut addchar = false;
         let mut new_text = UnescapedText::new();
         let mut tmp_str = String::new();
@@ -241,7 +244,7 @@ impl token::Tokenizer for UnescapedText {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<token::Token>> {
+    ) -> Option<Box<dyn token::Token>> {
         UnescapedText::from_it_core(it, false)
     }
 }

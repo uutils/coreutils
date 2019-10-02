@@ -258,9 +258,9 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     }
 }
 
-fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
+fn open(path: &str) -> StdResult<BufReader<Box<dyn Read + 'static>>, i32> {
     if "-" == path {
-        let reader = Box::new(stdin()) as Box<Read>;
+        let reader = Box::new(stdin()) as Box<dyn Read>;
         return Ok(BufReader::new(reader));
     }
 
@@ -270,7 +270,7 @@ fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
     }
     match File::open(&fpath) {
         Ok(fd) => {
-            let reader = Box::new(fd) as Box<Read>;
+            let reader = Box::new(fd) as Box<dyn Read>;
             Ok(BufReader::new(reader))
         }
         Err(e) => {

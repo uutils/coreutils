@@ -14,7 +14,7 @@ use tokenize::unescaped_text::UnescapedText;
 use tokenize::sub::Sub;
 
 pub struct Memo {
-    tokens: Vec<Box<Token>>,
+    tokens: Vec<Box<dyn Token>>,
 }
 
 fn warn_excess_args(first_arg: &str) {
@@ -27,7 +27,7 @@ fn warn_excess_args(first_arg: &str) {
 impl Memo {
     pub fn new(pf_string: &String, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
         let mut pm = Memo { tokens: Vec::new() };
-        let mut tmp_token: Option<Box<Token>>;
+        let mut tmp_token: Option<Box<dyn Token>>;
         let mut it = put_back_n(pf_string.chars());
         let mut has_sub = false;
         loop {
