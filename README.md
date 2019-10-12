@@ -124,6 +124,11 @@ To install all available utilities:
 $ make install
 ```
 
+To install using `sudo` switch `-E` must be used:
+```bash
+$ sudo -E make install
+```
+
 To install all but a few of the available utilities:
 ```bash
 $ make SKIP_UTILS='UTILITY_1 UTILITY_2' install
