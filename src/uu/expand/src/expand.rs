@@ -244,6 +244,7 @@ fn expand(options: Options) {
                     }
                 }
 
+                safe_unwrap!(output.flush());
                 byte += nbytes; // advance the pointer
             }
 
