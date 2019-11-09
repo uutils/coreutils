@@ -68,6 +68,11 @@ fn test_ignore_case() {
 }
 
 #[test]
+fn test_dictionary_order() {
+    test_helper("dictionary_order", "-d");
+}
+
+#[test]
 fn test_multiple_files() {
     new_ucmd!()
         .arg("-n")
