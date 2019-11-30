@@ -163,7 +163,7 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
     if fs::metadata(src)?.is_dir() {
-        for entry in try!(fs::read_dir(src)) {
+        for entry in fs::read_dir(src)? {
             let entry = entry?;
             let mut new_dest = PathBuf::from(dest);
             new_dest.push(entry.file_name());
