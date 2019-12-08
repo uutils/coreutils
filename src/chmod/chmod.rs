@@ -106,7 +106,7 @@ fn sanitize_input(args: &mut Vec<String>) -> Option<String> {
         }
         if let Some(second) = args[i].chars().nth(1) {
             match second {
-                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'...'7' => {
+                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
                     return Some(args.remove(i));
                 }
                 _ => {}

@@ -520,7 +520,7 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
 
     let mut last_path: PathBuf = PathBuf::from(orig_path);
 
-    for length in (1..file_name_len + 1).rev() {
+    for length in (1..=file_name_len).rev() {
         for name in FilenameGenerator::new(length) {
             let new_path: PathBuf = orig_path.with_file_name(name);
             // We don't want the filename to already exist (don't overwrite)

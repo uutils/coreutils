@@ -162,7 +162,7 @@ fn xgethostname() -> io::Result<String> {
             name.push(0);
         }
 
-        Ok(CStr::from_bytes_with_nul(&name[..null_pos + 1])
+        Ok(CStr::from_bytes_with_nul(&name[..=null_pos])
             .unwrap()
             .to_string_lossy()
             .into_owned())

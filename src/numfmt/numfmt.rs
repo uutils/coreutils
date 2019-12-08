@@ -92,7 +92,7 @@ fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
         Some('E') => Ok(Some((RawSuffix::E, with_i))),
         Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
         Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
-        Some('0'...'9') => Ok(None),
+        Some('0'..='9') => Ok(None),
         _ => Err("Failed to parse suffix"),
     }?;
 
