@@ -29,7 +29,7 @@ extern crate kernel32;
 #[cfg(windows)]
 use kernel32::GetFileInformationByHandle;
 #[cfg(windows)]
-use kernel32::CreateFile2;
+use kernel32::CreateFileW;
 #[cfg(windows)]
 extern crate winapi;
 
@@ -731,10 +731,12 @@ fn preserve_hardlinks(
                 #[cfg(windows)]
                 {
                     let stat = mem::uninitialized();
-                    let handle = CreateFile2(
+                    let handle = CreateFileW(
                         src_path.as_ptr() as *const u16,
                         winapi::um::winnt::GENERIC_READ,
                         winapi::um::winnt::FILE_SHARE_READ,
+                        std::ptr::null_mut(),
+                        0,
                         0,
                         std::ptr::null_mut(),
                     );
