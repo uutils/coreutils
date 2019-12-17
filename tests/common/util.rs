@@ -73,7 +73,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stdout will be
     /// or 2. you know that stdout will also be empty
     pub fn no_stderr(&self) -> Box<&CmdResult> {
-        assert_eq!("", self.stderr);
+        assert_eq!(self.stderr, "");
         Box::new(self)
     }
 
@@ -84,7 +84,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stderr will be
     /// or 2. you know that stderr will also be empty
     pub fn no_stdout(&self) -> Box<&CmdResult> {
-        assert_eq!("", self.stdout);
+        assert_eq!(self.stdout, "");
         Box::new(self)
     }
 
@@ -93,8 +93,8 @@ impl CmdResult {
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()),
-            self.stdout
+            self.stdout,
+            String::from(msg.as_ref())
         );
         Box::new(self)
     }
@@ -110,8 +110,8 @@ impl CmdResult {
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()).trim_end(),
-            self.stderr.trim_end()
+            self.stderr.trim_end(),
+            String::from(msg.as_ref()).trim_end()
         );
         Box::new(self)
     }
@@ -152,7 +152,7 @@ impl CmdResult {
 
     pub fn fails_silently(&self) -> Box<&CmdResult> {
         assert!(!self.success);
-        assert_eq!("", self.stderr);
+        assert_eq!(self.stderr, "");
         Box::new(self)
     }
 }
