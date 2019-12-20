@@ -1078,8 +1078,8 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         CopyMode::Sparse => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
-                let src_metadata = fs::metadata(source.clone())?;
-                let dest_metadata = fs::metadata(dest.clone())?;
+                let src_metadata = fs::metadata(source)?;
+                let dest_metadata = fs::metadata(dest)?;
 
                 let src_time = src_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
