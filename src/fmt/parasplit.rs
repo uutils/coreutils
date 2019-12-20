@@ -171,17 +171,17 @@ impl<'a> Iterator for FileLines<'a> {
         // if this line does not match the prefix,
         // emit the line unprocessed and iterate again
         let (pmatch, poffset) = self.match_prefix(&n[..]);
-        if !pmatch {
-            return Some(Line::NoFormatLine(n, false));
-        } else if n[poffset + self.opts.prefix.len()..]
-            .chars()
-            .all(|c| c.is_whitespace())
-        {
+        if !pmatch
+            ||
             // if the line matches the prefix, but is blank after,
             // don't allow lines to be combined through it (that is,
             // treat it like a blank line, except that since it's
             // not truly blank we will not allow mail headers on the
             // following line)
+            n[poffset + self.opts.prefix.len()..]
+            .chars()
+            .all(|c| c.is_whitespace())
+        {
             return Some(Line::NoFormatLine(n, false));
         }
 
@@ -363,13 +363,12 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     }
                 } else if !second_done {
                     // now we have enough info to handle crown margin and tagged mode
-                    if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
-                        // in both crown and tagged modes we require that prefix_len is the same
-                        break;
-                    } else if self.opts.tagged && indent_len - 4 == fl.indent_len
-                        && indent_end == fl.indent_end
-                    {
+                    if // in both crown and tagged modes we require that prefix_len is the same
+                        prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end
+                        ||
                         // in tagged mode, indent has to be *different* on following lines
+                        self.opts.tagged && indent_len - 4 == fl.indent_len && indent_end == fl.indent_end
+                    {
                         break;
                     } else {
                         // this is part of the same paragraph, get the indent info from this line
