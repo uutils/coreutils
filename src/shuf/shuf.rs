@@ -228,7 +228,6 @@ fn shuf_bytes(
         len >>= 1;
         len_mod <<= 1;
     }
-    drop(len);
 
     let mut count = count;
     while count > 0 && !input.is_empty() {

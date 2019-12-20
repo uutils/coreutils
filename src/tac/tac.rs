@@ -126,7 +126,6 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
                 i += 1;
             }
         }
-        drop(i);
 
         // if there isn't a separator at the end of the file, fake it
         if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
