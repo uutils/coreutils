@@ -26,9 +26,9 @@ use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
-    InteractiveNone,
-    InteractiveOnce,
-    InteractiveAlways,
+    None,
+    Once,
+    Always,
 }
 
 struct Options {
@@ -112,18 +112,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
             force,
             interactive: {
                 if matches.opt_present("i") {
-                    InteractiveMode::InteractiveAlways
+                    InteractiveMode::Always
                 } else if matches.opt_present("I") {
-                    InteractiveMode::InteractiveOnce
+                    InteractiveMode::Once
                 } else if matches.opt_present("interactive") {
                     match &matches.opt_str("interactive").unwrap()[..] {
-                        "none" => InteractiveMode::InteractiveNone,
-                        "once" => InteractiveMode::InteractiveOnce,
-                        "always" => InteractiveMode::InteractiveAlways,
+                        "none" => InteractiveMode::None,
+                        "once" => InteractiveMode::Once,
+                        "always" => InteractiveMode::Always,
                         val => crash!(1, "Invalid argument to interactive ({})", val),
                     }
                 } else {
-                    InteractiveMode::InteractiveNone
+                    InteractiveMode::None
                 }
             },
             one_fs: matches.opt_present("one-file-system"),
@@ -132,7 +132,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             dir: matches.opt_present("dir"),
             verbose: matches.opt_present("verbose"),
         };
-        if options.interactive == InteractiveMode::InteractiveOnce
+        if options.interactive == InteractiveMode::Once
             && (options.recursive || matches.free.len() > 3)
         {
             let msg = if options.recursive {
@@ -192,7 +192,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::InteractiveAlways {
+        if options.interactive != InteractiveMode::Always {
             // we need the extra crate because apparently fs::remove_dir_all() does not function
             // correctly on Windows
             if let Err(e) = remove_dir_all(path) {
@@ -240,7 +240,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    let response = if options.interactive == InteractiveMode::InteractiveAlways {
+    let response = if options.interactive == InteractiveMode::Always {
         prompt_file(path, true)
     } else {
         true
@@ -261,7 +261,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
-    let response = if options.interactive == InteractiveMode::InteractiveAlways {
+    let response = if options.interactive == InteractiveMode::Always {
         prompt_file(path, false)
     } else {
         true
