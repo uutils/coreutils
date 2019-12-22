@@ -506,10 +506,7 @@ impl Who {
         }
         buf.push_str(&format!(" {:<12}", line));
         // "%Y-%m-%d %H:%M"
-        let mut time_size = 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2;
-        if !self.has_records {
-            time_size -= 4;
-        }
+        let time_size = 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2;
         buf.push_str(&format!(" {:<1$}", time, time_size));
 
         if !self.short_output {
