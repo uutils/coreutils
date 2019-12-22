@@ -150,7 +150,7 @@ const NORMAL_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %
 #[cfg(target_os = "linux")]
 const DEV_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
-const FS_FMTSTR: &'static str = "%a %b %c %d %f %i %l %n %s %S %t %T";
+const FS_FMTSTR: &'static str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
 
 #[test]
 #[cfg(target_os = "linux")]
