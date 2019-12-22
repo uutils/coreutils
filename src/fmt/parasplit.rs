@@ -436,7 +436,7 @@ impl<'a> ParaWords<'a> {
     fn create_words(&mut self) {
         if self.para.mail_header {
             // no extra spacing for mail headers; always exactly 1 space
-            // safe to trim_left on every line of a mail header, since the
+            // safe to trim_start on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
             self.words.extend(
                 self.para
