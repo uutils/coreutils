@@ -1,3 +1,5 @@
+extern crate regex;
+
 use common::util::*;
 
 extern crate uu_stat;
@@ -144,7 +146,7 @@ fn test_invalid_option() {
 }
 
 #[cfg(target_os = "linux")]
-const NORMAL_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %w %W %x %X %y %Y %z %Z";
+const NORMAL_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
 #[cfg(target_os = "linux")]
 const DEV_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
@@ -171,10 +173,49 @@ fn test_fs_format() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_terse_normal_format() {
+    // note: contains birth/creation date which increases test fragility
+    // * results may vary due to built-in `stat` limitations as well as linux kernel and rust version capability variations
     let args = ["-t", "/"];
-    new_ucmd!().args(&args)
-        .run()
-        .stdout_is(expected_result(&args));
+    let actual = new_ucmd!().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    let v_actual: Vec<&str> = actual.split(' ').collect();
+    let v_expect: Vec<&str> = expect.split(' ').collect();
+    // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
+    assert!(v_actual.iter().zip(v_expect.iter()).all(|(a,e)| a == e || *e == "0"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_format_created_time() {
+    let args = ["-c", "%w", "/boot"];
+    let actual = new_ucmd!().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    // note: using a regex instead of `split_whitespace()` in order to detect whitespace differences
+    let re = regex::Regex::new(r"\s").unwrap();
+    let v_actual: Vec<&str> = re.split(&actual).collect();
+    let v_expect: Vec<&str> = re.split(&expect).collect();
+    // * allow for inequality if `stat` (aka, expect) returns "-" (unknown value)
+    assert!(v_actual.iter().zip(v_expect.iter()).all(|(a,e)| a == e || *e == "-"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_format_created_seconds() {
+    let args = ["-c", "%W", "/boot"];
+    let actual = new_ucmd!().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    // note: using a regex instead of `split_whitespace()` in order to detect whitespace differences
+    let re = regex::Regex::new(r"\s").unwrap();
+    let v_actual: Vec<&str> = re.split(&actual).collect();
+    let v_expect: Vec<&str> = re.split(&expect).collect();
+    // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
+    assert!(v_actual.iter().zip(v_expect.iter()).all(|(a,e)| a == e || *e == "0"));
 }
 
 #[test]
