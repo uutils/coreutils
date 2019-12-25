@@ -31,6 +31,22 @@ static ALREADY_RUN: &'static str =
      testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
+/// Test if the program is running under WSL
+// ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
+// ToDO: test on WSL2 which likely doesn't need special handling; plan change to `is_wsl_1()` if WSL2 is less needy
+pub fn is_wsl() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+    if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
+        if let Ok(s) = std::str::from_utf8(&b) {
+            let a = s.to_ascii_lowercase();
+            return a.contains("microsoft") || a.contains("wsl");
+        }
+    }
+    }
+    false
+}
+
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
     AtPath::new(tmpdir_path).read(file_rel_path.as_ref().to_str().unwrap())
