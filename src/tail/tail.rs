@@ -48,7 +48,7 @@ struct Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            mode: FilterMode::Lines(10, '\n' as u8),
+            mode: FilterMode::Lines(10, b'\n'),
             sleep_msec: 1000,
             beginning: false,
             follow: false,
@@ -63,7 +63,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
         (args, Some(n)) => {
-            settings.mode = FilterMode::Lines(n, '\n' as u8);
+            settings.mode = FilterMode::Lines(n, b'\n');
             args
         }
         (args, None) => args,
@@ -146,7 +146,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 slice = &slice[1..];
             }
             match parse_size(slice) {
-                Ok(m) => settings.mode = FilterMode::Lines(m, '\n' as u8),
+                Ok(m) => settings.mode = FilterMode::Lines(m, b'\n'),
                 Err(e) => {
                     show_error!("{}", e.description());
                     return 1;
@@ -326,7 +326,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
         let current = options[a].clone();
         let current = current.as_bytes();
 
-        if current.len() > 1 && current[0] == '-' as u8 {
+        if current.len() > 1 && current[0] == b'-' {
             let len = current.len();
             for pos in 1..len {
                 // Ensure that the argument is only made out of digits

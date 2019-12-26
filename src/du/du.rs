@@ -216,7 +216,7 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
 }
 
 fn convert_size_b(size: u64, _multiplier: u64, _block_size: u64) -> String {
-    format!("{}", ((size as f64) / (1 as f64)).ceil())
+    format!("{}", ((size as f64) / (1_f64)).ceil())
 }
 
 fn convert_size_k(size: u64, multiplier: u64, _block_size: u64) -> String {

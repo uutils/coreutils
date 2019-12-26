@@ -2,8 +2,8 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
     let mut carry: u16 = 0;
     let mut rem: u16;
     let mut new_amount: u16;
-    let fact: u16 = base_ten_int_fact as u16;
-    let base: u16 = basenum as u16;
+    let fact: u16 = u16::from(base_ten_int_fact);
+    let base: u16 = u16::from(basenum);
 
     let mut ret_rev: Vec<u8> = Vec::new();
     let mut it = arr_num.iter().rev();
@@ -11,7 +11,7 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
         let i = it.next();
         match i {
             Some(u) => {
-                new_amount = ((*u as u16) * fact) + carry;
+                new_amount = (u16::from(*u) * fact) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
                 ret_rev.push(rem as u8)
@@ -54,8 +54,8 @@ pub fn arrnum_int_div_step(
     };
 
     let mut bufferval: u16 = 0;
-    let base: u16 = radix_in as u16;
-    let divisor: u16 = base_ten_int_divisor as u16;
+    let base: u16 = u16::from(radix_in);
+    let divisor: u16 = u16::from(base_ten_int_divisor);
     let mut traversed = 0;
 
     let mut quotient = 0;
@@ -64,9 +64,9 @@ pub fn arrnum_int_div_step(
     let mut it_f = refd_vals.iter();
     loop {
         let u = match it_replace.next() {
-            Some(u_rep) => *u_rep as u16,
+            Some(u_rep) => u16::from(*u_rep),
             None => match it_f.next() {
-                Some(u_orig) => *u_orig as u16,
+                Some(u_orig) => u16::from(*u_orig),
                 None => {
                     if !after_decimal {
                         break;
@@ -167,7 +167,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
     let mut carry: u16 = u16::from(base_ten_int_term);
     let mut rem: u16;
     let mut new_amount: u16;
-    let base: u16 = basenum as u16;
+    let base: u16 = u16::from(basenum);
 
     let mut ret_rev: Vec<u8> = Vec::new();
     let mut it = arrnum.iter().rev();
@@ -175,7 +175,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
         let i = it.next();
         match i {
             Some(u) => {
-                new_amount = (*u as u16) + carry;
+                new_amount = u16::from(*u) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
                 ret_rev.push(rem as u8)
@@ -224,17 +224,17 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
     // of how it would work.
     let mut result: Vec<u8> = Vec::new();
     result.push(0);
-    let mut factor: f64 = 1.;
-    let radix_src_float: f64 = radix_src as f64;
+    let mut factor: f64 = 1_f64;
+    let radix_src_float: f64 = f64::from(radix_src);
     let mut i = 0;
-    let mut r: f64 = 0 as f64;
+    let mut r: f64 = 0_f64;
     for u in src {
         if i > 15 {
             break;
         }
         i += 1;
         factor /= radix_src_float;
-        r += factor * (*u as f64)
+        r += factor * f64::from(*u)
     }
     r
 }
@@ -287,9 +287,9 @@ pub trait RadixDef {
 }
 pub struct RadixTen;
 
-const ZERO_ASC: u8 = '0' as u8;
-const UPPER_A_ASC: u8 = 'A' as u8;
-const LOWER_A_ASC: u8 = 'a' as u8;
+const ZERO_ASC: u8 = b'0';
+const UPPER_A_ASC: u8 = b'A';
+const LOWER_A_ASC: u8 = b'a';
 
 impl RadixDef for RadixTen {
     fn get_max(&self) -> u8 {

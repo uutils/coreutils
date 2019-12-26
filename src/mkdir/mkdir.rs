@@ -128,7 +128,7 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
         use fs::{Permissions, set_permissions};
         use std::os::unix::fs::{PermissionsExt};
 
-        let mode = Permissions::from_mode(mode as u32);
+        let mode = Permissions::from_mode(u32::from(mode));
 
         if let Err(err) = set_permissions(path, mode) {
             show_error!(

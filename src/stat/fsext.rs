@@ -25,7 +25,7 @@ impl BirthTime for Metadata {
         self.created()
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
+            .map(|e| pretty_time(e.as_secs() as i64, i64::from(e.subsec_nanos())))
             .unwrap_or_else(|| "-".to_owned())
     }
 
@@ -220,7 +220,7 @@ impl FsMeta for Sstatfs {
     #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "linux"))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] = unsafe { transmute(&self.f_fsid) };
-        (f_fsid[0] as u64) << 32 | f_fsid[1] as u64
+        (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
     #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
     fn fsid(&self) -> u64 {

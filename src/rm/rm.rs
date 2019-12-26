@@ -297,7 +297,7 @@ fn prompt(msg: &str) -> bool {
     let stdin = stdin();
     let mut stdin = stdin.lock();
 
-    match stdin.read_until('\n' as u8, &mut buf) {
+    match stdin.read_until(b'\n', &mut buf) {
         Ok(x) if x > 0 => match buf[0] {
             b'y' | b'Y' => true,
             _ => false,

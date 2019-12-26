@@ -31,7 +31,7 @@ fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
                 blocks_read += 1;
                 for &byte in buf[..n].iter() {
                     checksum = (checksum >> 1) + ((checksum & 1) << 15);
-                    checksum = checksum.wrapping_add(byte as u16);
+                    checksum = checksum.wrapping_add(u16::from(byte));
                 }
             }
             _ => break,
@@ -51,7 +51,7 @@ fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
             Ok(n) if n != 0 => {
                 blocks_read += 1;
                 for &byte in buf[..n].iter() {
-                    ret = ret.wrapping_add(byte as u32);
+                    ret = ret.wrapping_add(u32::from(byte));
                 }
             }
             _ => break,

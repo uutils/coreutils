@@ -48,7 +48,7 @@ fn format_flo32(f: f32) -> String {
         // subnormal numbers will be normal as f64, so will print with a wrong precision
         format!("{:width$e}", f, width = width) // subnormal numbers
     } else {
-        format_float(f as f64, width, precision)
+        format_float(f64::from(f), width, precision)
     }
 }
 

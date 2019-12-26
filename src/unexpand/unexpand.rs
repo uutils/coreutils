@@ -219,7 +219,7 @@ fn unexpand(options: Options) {
     for file in options.files.into_iter() {
         let mut fh = open(file);
 
-        while match fh.read_until(b'\n' as u8, &mut buf) {
+        while match fh.read_until(b'\n', &mut buf) {
             Ok(s) => s > 0,
             Err(_) => !buf.is_empty(),
         } {
