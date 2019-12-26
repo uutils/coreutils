@@ -136,7 +136,7 @@ impl ScanUtil for str {
             Some('-') | Some('+') | Some('0'..='9') => i += 1,
             _ => return None,
         }
-        while let Some(c) = chars.next() {
+        for c in chars {
             match c {
                 '0'..='9' => i += 1,
                 _ => break,
@@ -155,10 +155,10 @@ impl ScanUtil for str {
             16 => 2,
             _ => return None,
         };
-        let mut chars = self.chars().enumerate();
+        let chars = self.chars().enumerate();
         let mut res = 0_u32;
         let mut offset = 0_usize;
-        while let Some((i, c)) = chars.next() {
+        for (i, c) in chars {
             if i >= count {
                 break;
             }

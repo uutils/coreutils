@@ -62,7 +62,7 @@ impl FloatAnalysis {
         };
         let mut i = 0;
         let mut pos_before_first_nonzero_after_decimal: Option<usize> = None;
-        while let Some(c) = str_it.next() {
+        for c in str_it {
             match c {
                 e @ '0'..='9' | e @ 'A'..='F' | e @ 'a'..='f' => {
                     if !hex_input {
@@ -255,7 +255,7 @@ pub fn get_primitive_dec(
                     let mut m: isize = 0;
                     let mut pre = String::from("0");
                     let mut post = String::from("0");
-                    while let Some((i, c)) = it.next() {
+                    for (i, c) in it {
                         match c {
                             '0' => {}
                             _ => {

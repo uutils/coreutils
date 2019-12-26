@@ -49,7 +49,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                         return Some(match byte_it.next() {
                             Some(second_byte) => {
                                 let mut ignored: Vec<u8> = Vec::new();
-                                while let Some(cont) = byte_it.next() {
+                                for cont in byte_it {
                                     ignored.push(cont);
                                 }
                                 if ignored.len() > 0 {
@@ -159,7 +159,7 @@ fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
             }
             if do_clean_lead_zeroes {
                 let mut first = true;
-                while let Some(ch_zero) = str_it.next() {
+                for ch_zero in str_it {
                     // see notes on offset above:
                     // this is why the offset for octals and decimals
                     // that reach this branch is 1 even though

@@ -107,7 +107,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
     let mut arg_iter = args.iter().skip(1);
     let mut expect_type_string = false;
 
-    while let Some(arg) = arg_iter.next() {
+    for arg in arg_iter {
         if expect_type_string {
             match parse_type_string(arg) {
                 Ok(v) => formats.extend(v.into_iter()),
@@ -131,7 +131,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
         } else if arg.starts_with("-") {
             let mut flags = arg.chars().skip(1);
             let mut format_spec = String::new();
-            while let Some(c) = flags.next() {
+            for c in flags {
                 if expect_type_string {
                     format_spec.push(c);
                 } else if od_argument_with_option(c) {

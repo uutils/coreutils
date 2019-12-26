@@ -177,7 +177,7 @@ impl SubParser {
 
         // divide substitution from %([0-9]+)?(.[0-9+])?([a-zA-Z])
         // into min_width, second_field, field_char
-        while let Some(ch) = it.next() {
+        for ch in it {
             self.text_so_far.push(ch);
             match ch as char {
                 '-' | '*' | '0'..='9' => {
