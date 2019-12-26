@@ -131,8 +131,8 @@ fn test_inverter() {
 
 #[test]
 fn test_generator() {
-    let prime_10001 = Sieve::primes().skip(10000).next();
-    assert_eq!(prime_10001, Some(104743));
+    let prime_10001 = Sieve::primes().skip(10_000).next();
+    assert_eq!(prime_10001, Some(104_743));
 }
 
 const MAX_WIDTH: usize = 102;

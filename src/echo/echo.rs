@@ -43,7 +43,7 @@ fn parse_code(
     max_digits: u32,
     bits_per_digit: u32,
 ) -> Option<char> {
-    let mut ret = 0x80000000;
+    let mut ret = 0x8000_0000;
     for _ in 0..max_digits {
         match input.peek().and_then(|c| c.to_digit(base)) {
             Some(n) => ret = (ret << bits_per_digit) | n,
