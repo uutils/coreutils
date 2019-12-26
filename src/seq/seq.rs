@@ -269,6 +269,7 @@ fn done_printing(next: f64, step: f64, last: f64) -> bool {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn print_seq(
     first: f64,
     step: f64,

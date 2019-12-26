@@ -486,6 +486,7 @@ impl Who {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn print_line(
         &self,
         user: &str,
