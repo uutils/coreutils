@@ -45,6 +45,7 @@ fn _makenod(path: CString, mode: mode_t, dev: dev_t) -> i32 {
     unsafe { libc::mknod(path.as_ptr(), mode, dev) }
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 

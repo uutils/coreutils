@@ -599,6 +599,7 @@ macro_rules! has {
 }
 
 #[cfg(unix)]
+#[allow(clippy::cognitive_complexity)]
 fn display_file_name(
     path: &Path,
     strip: Option<&Path>,

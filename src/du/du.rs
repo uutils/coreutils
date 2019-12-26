@@ -227,6 +227,7 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let syntax = format!(
         "[OPTION]... [FILE]...

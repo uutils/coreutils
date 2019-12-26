@@ -209,6 +209,7 @@ pub struct Stater {
     default_dev_tokens: Vec<Token>,
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.

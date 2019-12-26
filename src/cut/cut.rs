@@ -203,6 +203,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
     0
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn cut_fields_delimiter<R: Read>(
     reader: R,
     ranges: &[Range],
@@ -288,6 +289,7 @@ fn cut_fields_delimiter<R: Read>(
     0
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     if let Some(ref o_delim) = opts.out_delimeter {

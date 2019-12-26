@@ -48,6 +48,7 @@ fn is_custom_binary(program: &str) -> bool {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn detect_algo(
     program: &str,
     matches: &getopts::Matches,
@@ -367,6 +368,8 @@ Compute and check message digests.",
     print!("{}", opts.usage(&msg));
 }
 
+#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn hashsum(
     algoname: &str,
     mut digest: Box<dyn Digest>,

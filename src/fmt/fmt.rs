@@ -57,6 +57,7 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")
