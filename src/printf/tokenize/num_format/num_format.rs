@@ -46,7 +46,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
             if let Some(qchar) = byte_it.next() {
                 match qchar {
                     C_S_QUOTE | C_D_QUOTE => {
-                        return Some(match byte_it.next() {
+                        Some(match byte_it.next() {
                             Some(second_byte) => {
                                 let mut ignored: Vec<u8> = Vec::new();
                                 for cont in byte_it {
@@ -63,11 +63,11 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                                 warn_expected_numeric(&so_far);
                                 0 as u8
                             }
-                        });
+                        })
                     }
                     // first byte is not quote
                     _ => {
-                        return None;
+                        None
                     } // no first byte
                 }
             } else {

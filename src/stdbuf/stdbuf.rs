@@ -279,9 +279,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     match process.wait() {
         Ok(status) => match status.code() {
-            Some(i) => return i,
+            Some(i) => i,
             None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
         },
         Err(e) => crash!(1, "{}", e),
-    };
+    }
 }

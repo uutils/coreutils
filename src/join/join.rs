@@ -294,7 +294,7 @@ impl<'a> State<'a> {
             }
         }
 
-        return None;
+        None
     }
 
     /// Print lines in the buffers as headers.

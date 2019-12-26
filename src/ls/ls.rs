@@ -285,7 +285,7 @@ fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     if options.opt_present("B") && name.ends_with('~') {
         return false;
     }
-    return true;
+    true
 }
 
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {

@@ -432,6 +432,6 @@ fn is_empty_dir(path: &PathBuf) -> bool {
         Ok(contents) => {
             return contents.peekable().peek().is_none();
         },
-        Err(_e) => { return false; }
+        Err(_e) => { false }
     }
 }

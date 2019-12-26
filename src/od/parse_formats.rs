@@ -254,7 +254,7 @@ fn is_format_size_decimal(
     match ch {
         Some(d) if d.is_digit(10) => {
             decimal_size.push(d);
-            return true;
+            true
         }
         _ => false,
     }
@@ -264,7 +264,7 @@ fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
     match ch {
         Some('z') => {
             *show_ascii_dump = true;
-            return true;
+            true
         }
         _ => false,
     }

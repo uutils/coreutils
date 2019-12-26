@@ -337,14 +337,14 @@ fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) 
         // line, no matter what our merging function does.
         if let Some(_last_line_or_next_error) = errors.next() {
             println!("sort: disorder in line {}", first_error_index);
-            return 1;
+            1
         } else {
             // first "error" was actually the last line.
-            return 0;
+            0
         }
     } else {
         // unwrapped_lines was empty. Empty files are defined to be sorted.
-        return 0;
+        0
     }
 }
 
@@ -373,7 +373,7 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
             }
         }
     }
-    return Ordering::Equal;
+    Ordering::Equal
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.

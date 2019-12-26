@@ -292,5 +292,5 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let printf_args = &args[2..];
         memo::Memo::run_all(formatstr, printf_args);
     }
-    return 0;
+    0
 }
