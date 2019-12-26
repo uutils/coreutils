@@ -560,8 +560,8 @@ fn is_seekable<T: Seek>(file: &mut T) -> bool {
 }
 
 #[inline]
-fn print_byte<T: Write>(stdout: &mut T, ch: &u8) {
-    if let Err(err) = stdout.write(&[*ch]) {
+fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
+    if let Err(err) = stdout.write(&[ch]) {
         crash!(1, "{}", err);
     }
 }

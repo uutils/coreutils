@@ -17,7 +17,7 @@ pub fn err_msg(msg: &str) {
 // by default stdout only flushes
 // to console when a newline is passed.
 #[allow(unused_must_use)]
-pub fn flush_char(c: &char) {
+pub fn flush_char(c: char) {
     print!("{}", c);
     stdout().flush();
 }

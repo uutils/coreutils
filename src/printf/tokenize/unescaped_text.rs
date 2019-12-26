@@ -190,7 +190,7 @@ impl UnescapedText {
                         // lazy branch eval
                         // remember this fn could be called
                         // many times in a single exec through %b
-                        cli::flush_char(&ch);
+                        cli::flush_char(ch);
                         tmp_str.push(ch);
                     }
                     '\\' => {
@@ -210,7 +210,7 @@ impl UnescapedText {
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {
                             if follow == '%' {
-                                cli::flush_char(&ch);
+                                cli::flush_char(ch);
                                 tmp_str.push(ch);
                             } else {
                                 it.put_back(follow);
@@ -223,7 +223,7 @@ impl UnescapedText {
                         }
                     }
                     _ => {
-                        cli::flush_char(&ch);
+                        cli::flush_char(ch);
                         tmp_str.push(ch);
                     }
                 }
