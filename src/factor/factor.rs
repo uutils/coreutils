@@ -53,6 +53,7 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 fn rho_pollard_find_divisor(num: u64) -> u64 {
+    #![allow(clippy::many_single_char_names)]
     let range = Uniform::new(1, num);
     let mut rng = SmallRng::from_rng(&mut thread_rng()).unwrap();
     let mut x = range.sample(&mut rng);

@@ -245,6 +245,7 @@ impl Splitter for ByteSplitter {
 }
 
 // (1, 3) -> "aab"
+#[allow(clippy::many_single_char_names)]
 fn str_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_owned();
     let mut n = i;
@@ -260,6 +261,7 @@ fn str_prefix(i: usize, width: usize) -> String {
 }
 
 // (1, 3) -> "001"
+#[allow(clippy::many_single_char_names)]
 fn num_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_owned();
     let mut n = i;
