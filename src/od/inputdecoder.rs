@@ -43,12 +43,12 @@ impl<'a, I> InputDecoder<'a, I> {
         } // fast but uninitialized
 
         InputDecoder {
-            input: input,
+            input,
             data: bytes,
             reserved_peek_length: peek_length,
             used_normal_length: 0,
             used_peek_length: 0,
-            byte_order: byte_order,
+            byte_order,
         }
     }
 }

@@ -697,7 +697,7 @@ fn display_file_name(
 
     Cell {
         contents: name,
-        width: width,
+        width,
     }
 }
 

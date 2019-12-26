@@ -177,7 +177,7 @@ mod tests {
         fn new(inputs: Vec<&'a str>, option_names: Vec<&'a str>) -> MockOptions<'a> {
             MockOptions {
                 inputs: inputs.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-                option_names: option_names,
+                option_names,
             }
         }
     }

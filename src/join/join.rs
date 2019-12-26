@@ -260,9 +260,9 @@ impl<'a> State<'a> {
         };
 
         State {
-            key: key,
+            key,
             file_name: name,
-            file_num: file_num,
+            file_num,
             print_unpaired: print_unpaired == file_num,
             lines: f.lines(),
             seq: Vec::new(),

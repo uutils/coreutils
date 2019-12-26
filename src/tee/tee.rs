@@ -119,8 +119,8 @@ fn open(name: String, append: bool) -> Box<dyn Write> {
         }
     };
     Box::new(NamedWriter {
-        inner: inner,
-        path: path,
+        inner,
+        path,
     }) as Box<dyn Write>
 }
 

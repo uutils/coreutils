@@ -76,10 +76,10 @@ impl Options {
         };
 
         Options {
-            files: files,
-            tabstops: tabstops,
-            aflag: aflag,
-            uflag: uflag,
+            files,
+            tabstops,
+            aflag,
+            uflag,
         }
     }
 }

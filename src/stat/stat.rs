@@ -396,9 +396,9 @@ impl Stater {
 
                     i = j;
                     tokens.push(Token::Directive {
-                        width: width,
-                        flag: flag,
-                        precision: precision,
+                        width,
+                        flag,
+                        precision,
                         format: chars[i],
                     })
                 }
@@ -492,12 +492,12 @@ impl Stater {
 
         Ok(Stater {
             follow: matches.opt_present("dereference"),
-            showfs: showfs,
+            showfs,
             from_user: !fmtstr.is_empty(),
             files: matches.free,
-            default_tokens: default_tokens,
-            default_dev_tokens: default_dev_tokens,
-            mount_list: mount_list,
+            default_tokens,
+            default_dev_tokens,
+            mount_list,
         })
     }
 

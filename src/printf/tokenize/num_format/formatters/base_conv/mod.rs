@@ -96,7 +96,7 @@ pub fn arrnum_int_div_step<'a>(
         }
     }
     DivOut {
-        quotient: quotient,
+        quotient,
         remainder: rem_out,
     }
 }

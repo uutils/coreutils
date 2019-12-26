@@ -68,9 +68,9 @@ impl ASTNode {
 
     fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<ASTNode> {
         Box::new(ASTNode::Node {
-            token_idx: token_idx,
+            token_idx,
             op_type: op_type.into(),
-            operands: operands,
+            operands,
         })
     }
     fn new_leaf(token_idx: usize, value: &str) -> Box<ASTNode> {

@@ -106,14 +106,14 @@ impl<'a> FileMerger<'a> {
     fn new(settings: &'a Settings) -> FileMerger<'a> {
         FileMerger {
             heap: BinaryHeap::new(),
-            settings: settings,
+            settings,
         }
     }
     fn push_file(&mut self, mut lines: Lines<BufReader<Box<dyn Read>>>) {
         match lines.next() {
             Some(Ok(next_line)) => {
                 let mergeable_file = MergeableFile {
-                    lines: lines,
+                    lines,
                     current_line: next_line,
                     settings: &self.settings,
                 };

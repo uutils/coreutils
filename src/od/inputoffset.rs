@@ -21,9 +21,9 @@ impl InputOffset {
     /// creates a new `InputOffset` using the provided values.
     pub fn new(radix: Radix, byte_pos: usize, label: Option<usize>) -> InputOffset {
         InputOffset {
-            radix: radix,
-            byte_pos: byte_pos,
-            label: label,
+            radix,
+            byte_pos,
+            label,
         }
     }
 

@@ -80,11 +80,11 @@ impl Sub {
             }
         };
         Sub {
-            min_width: min_width,
-            second_field: second_field,
-            field_char: field_char,
-            field_type: field_type,
-            orig: orig,
+            min_width,
+            second_field,
+            field_char,
+            field_type,
+            orig,
         }
     }
 }

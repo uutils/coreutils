@@ -251,9 +251,9 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
     }?;
 
     Ok(NumfmtOptions {
-        transform: transform,
-        padding: padding,
-        header: header,
+        transform,
+        padding,
+        header,
     })
 }
 

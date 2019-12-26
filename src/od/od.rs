@@ -276,15 +276,15 @@ impl OdOptions {
         };
 
         Ok(OdOptions {
-            byte_order: byte_order,
-            skip_bytes: skip_bytes,
-            read_bytes: read_bytes,
-            label: label,
-            input_strings: input_strings,
-            formats: formats,
-            line_bytes: line_bytes,
-            output_duplicates: output_duplicates,
-            radix: radix,
+            byte_order,
+            skip_bytes,
+            read_bytes,
+            label,
+            input_strings,
+            formats,
+            line_bytes,
+            output_duplicates,
+            radix,
         })
     }
 }

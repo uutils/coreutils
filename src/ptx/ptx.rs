@@ -248,7 +248,7 @@ fn create_word_set(
                     word = word.to_lowercase();
                 }
                 word_set.insert(WordRef {
-                    word: word,
+                    word,
                     filename: file.clone(),
                     global_line_nr: offs + count,
                     local_line_nr: count,

@@ -76,7 +76,7 @@ impl FilenameGenerator {
             indices.push(0);
         }
         FilenameGenerator {
-            name_len: name_len,
+            name_len,
             nameset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),
         }
@@ -137,12 +137,12 @@ impl<'a> BytesGenerator<'a> {
         };
 
         BytesGenerator {
-            total_bytes: total_bytes,
+            total_bytes,
             bytes_generated: Cell::new(0u64),
             block_size: BLOCK_SIZE,
-            exact: exact,
-            gen_type: gen_type,
-            rng: rng,
+            exact,
+            gen_type,
+            rng,
         }
     }
 }

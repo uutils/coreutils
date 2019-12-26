@@ -15,8 +15,8 @@ impl ParsedFormatterItemInfo {
         add_ascii_dump: bool,
     ) -> ParsedFormatterItemInfo {
         ParsedFormatterItemInfo {
-            formatter_item_info: formatter_item_info,
-            add_ascii_dump: add_ascii_dump,
+            formatter_item_info,
+            add_ascii_dump,
         }
     }
 }

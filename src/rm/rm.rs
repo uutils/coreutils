@@ -109,7 +109,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     } else {
         let options = Options {
-            force: force,
+            force,
             interactive: {
                 if matches.opt_present("i") {
                     InteractiveMode::InteractiveAlways

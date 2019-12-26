@@ -125,13 +125,13 @@ The utmp file will be {}",
     }
 
     let pk = Pinky {
-        include_idle: include_idle,
-        include_heading: include_heading,
-        include_fullname: include_fullname,
-        include_project: include_project,
-        include_plan: include_plan,
-        include_home_and_shell: include_home_and_shell,
-        include_where: include_where,
+        include_idle,
+        include_heading,
+        include_fullname,
+        include_project,
+        include_plan,
+        include_home_and_shell,
+        include_where,
         names: matches.free,
     };
 

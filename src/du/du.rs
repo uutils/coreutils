@@ -339,7 +339,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     let convert_size_fn = {
         if matches.opt_present("human-readable") || matches.opt_present("si") {
-            convert_size_human        
+            convert_size_human
         } else if matches.opt_present("b") {
             convert_size_b
         } else if matches.opt_present("k") {
