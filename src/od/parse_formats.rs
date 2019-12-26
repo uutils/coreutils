@@ -100,7 +100,7 @@ fn od_argument_with_option(ch: char) -> bool {
 /// arguments with parameters like -w16 can only appear at the end: -fvoxw16
 /// parameters of -t/--format specify 1 or more formats.
 /// if -- appears on the commandline, parsing should stop.
-pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemInfo>, String> {
+pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
     // args[0] is the name of the binary

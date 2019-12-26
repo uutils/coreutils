@@ -1,4 +1,4 @@
-pub fn arrnum_int_mult(arr_num: &Vec<u8>, basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
+pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
     let mut carry: u16 = 0;
     let mut rem: u16;
     let mut new_amount: u16;
@@ -164,8 +164,8 @@ pub fn arrnum_int_div_step<'a>(
 // ArrFloatDivOut { quotient: quotient, remainder: remainder }
 // }
 //
-pub fn arrnum_int_add(arrnum: &Vec<u8>, basenum: u8, base_ten_int_term: u8) -> Vec<u8> {
-    let mut carry: u16 = base_ten_int_term as u16;
+pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<u8> {
+    let mut carry: u16 = u16::from(base_ten_int_term);
     let mut rem: u16;
     let mut new_amount: u16;
     let base: u16 = basenum as u16;
@@ -218,7 +218,7 @@ pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
 
 // temporary needs-improvement-function
 #[allow(unused_variables)]
-pub fn base_conv_float(src: &Vec<u8>, radix_src: u8, radix_dest: u8) -> f64 {
+pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
     // it would require a lot of addl code
     // to implement this for arbitrary string input.
     // until then, the below operates as an outline
@@ -253,7 +253,7 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &dyn RadixDef) -> Vec<u8> {
     intermed_in
 }
 
-pub fn arrnum_to_str(src: &Vec<u8>, radix_def_dest: &dyn RadixDef) -> String {
+pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     let mut str_out = String::new();
     for u in src.iter() {
         match radix_def_dest.from_u8(u.clone()) {

@@ -257,7 +257,7 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
     })
 }
 
-fn handle_args(args: &Vec<String>, options: NumfmtOptions) -> Result<()> {
+fn handle_args(args: &[String], options: NumfmtOptions) -> Result<()> {
     for l in args {
         println!("{}", format_string(l.clone(), &options)?)
     }
