@@ -302,12 +302,10 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
+    } else if settings.unique {
+        print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
-        if settings.unique {
-            print_sorted(lines.iter().dedup(), &settings.outfile)
-        } else {
-            print_sorted(lines.iter(), &settings.outfile)
-        }
+        print_sorted(lines.iter(), &settings.outfile)
     }
 
     0

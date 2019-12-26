@@ -189,14 +189,12 @@ fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<S
     let mut files = Vec::new();
     if input_files.is_empty() {
         files.push("-");
-    } else {
-        if config.gnu_ext {
-            for file in input_files {
-                files.push(&file);
-            }
-        } else {
-            files.push(&input_files[0]);
+    } else if config.gnu_ext {
+        for file in input_files {
+            files.push(&file);
         }
+    } else {
+        files.push(&input_files[0]);
     }
     let mut lines_so_far: usize = 0;
     for filename in files {

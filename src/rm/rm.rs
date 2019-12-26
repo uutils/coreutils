@@ -225,17 +225,15 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         }
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
+    } else if options.recursive {
+        show_error!("could not remove directory '{}'", path.display());
+        had_err = true;
     } else {
-        if options.recursive {
-            show_error!("could not remove directory '{}'", path.display());
-            had_err = true;
-        } else {
-            show_error!(
-                "could not remove directory '{}' (did you mean to pass '-r'?)",
-                path.display()
-            );
-            had_err = true;
-        }
+        show_error!(
+            "could not remove directory '{}' (did you mean to pass '-r'?)",
+            path.display()
+        );
+        had_err = true;
     }
 
     had_err

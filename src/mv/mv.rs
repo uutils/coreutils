@@ -202,12 +202,10 @@ fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) 
                 );
             }
         }
+    } else if let (Ok(s), BackupMode::SimpleBackup) = (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode) {
+        s
     } else {
-        if let (Ok(s), BackupMode::SimpleBackup) = (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode) {
-            s
-        } else {
-            "~".to_owned()
-        }
+        "~".to_owned()
     }
 }
 

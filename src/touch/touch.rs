@@ -182,10 +182,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if let Err(e) = set_symlink_file_times(path, atime, mtime) {
                 show_warning!("cannot touch '{}': {}", path, e);
             }
-        } else {
-            if let Err(e) = filetime::set_file_times(path, atime, mtime) {
+        } else if let Err(e) = filetime::set_file_times(path, atime, mtime) {
                 show_warning!("cannot touch '{}': {}", path, e);
-            }
         }
     }
 

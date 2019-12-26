@@ -290,10 +290,8 @@ impl Pinky {
             if ut.is_user_process() {
                 if self.names.is_empty() {
                     self.print_entry(&ut)
-                } else {
-                    if self.names.iter().any(|n| n.as_str() == ut.user()) {
+                } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
                         self.print_entry(&ut);
-                    }
                 }
             }
         }

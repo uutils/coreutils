@@ -27,12 +27,10 @@ fn has_enough_digits(
         } else {
             false //undecidable without converting
         }
-    } else {
-        if hex_input {
+    } else if hex_input {
             ((((string_position - 1) - starting_position) * 9) / 8 >= limit)
-        } else {
+    } else {
             ((string_position - 1) - starting_position >= limit)
-        }
     }
 }
 
