@@ -85,10 +85,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 #[cfg(unix)]
 fn print_loadavg() {
     use libc::c_double;
-    use std::mem::transmute;
 
     let mut avg: [c_double; 3] = [0.0; 3];
-    let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
+    let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };
 
     if loads == -1 {
         println!();
