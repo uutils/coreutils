@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     unsafe { signal(SIGHUP, SIG_IGN) };
 
-    if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() {
+    if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         crash!(2, "Cannot detach from console")
     };
 
