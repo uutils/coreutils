@@ -504,7 +504,7 @@ impl Stater {
             Err(_) => return None,
         };
         if let Some(ref mount_list) = self.mount_list {
-            for root in mount_list.into_iter() {
+            for root in mount_list.iter() {
                 if path.starts_with(root) {
                     return Some(root.clone());
                 }
@@ -538,7 +538,7 @@ impl Stater {
                             &self.default_dev_tokens
                         };
 
-                    for t in tokens.into_iter() {
+                    for t in tokens.iter() {
                         match *t {
                             Token::Char(c) => print!("{}", c),
                             Token::Directive {
@@ -747,7 +747,7 @@ impl Stater {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
-                    for t in tokens.into_iter() {
+                    for t in tokens.iter() {
                         match *t {
                             Token::Char(c) => print!("{}", c),
                             Token::Directive {
