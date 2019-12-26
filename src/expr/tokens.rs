@@ -58,10 +58,7 @@ impl Token {
     }
     fn is_a_number(&self) -> bool {
         match *self {
-            Token::Value { ref value, .. } => match value.parse::<i64>() {
-                Ok(_) => true,
-                Err(_) => false,
-            },
+            Token::Value { ref value, .. } => value.parse::<i64>().is_ok(),
             _ => false,
         }
     }
