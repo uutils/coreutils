@@ -149,5 +149,6 @@ const PREAMBLE: &'static str = r##"/*
 // Please do not edit by hand. Instead, modify and
 // re-run src/factor/gen_tables.rs.
 
+#[allow(clippy::unreadable_literal)]
 pub const P_INVS_U64: &[(u64, u64, u64)] = &[
    "##;

@@ -30,7 +30,7 @@ fn main() {
     let file = File::create(&Path::new(&out_dir).join("crc_table.rs")).unwrap();
     write!(
         &file,
-        "const CRC_TABLE: [u32; {}] = {:?};",
+        "#[allow(clippy::unreadable_literal)]\nconst CRC_TABLE: [u32; {}] = {:?};",
         CRC_TABLE_LEN, table
     ).unwrap();
 }
