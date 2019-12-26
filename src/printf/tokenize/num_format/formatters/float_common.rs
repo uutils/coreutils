@@ -223,7 +223,7 @@ pub fn get_primitive_dec(
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
         None => (&str_in[..], "0"),
     };
-    if first_segment_raw.len() == 0 {
+    if first_segment_raw.is_empty() {
         first_segment_raw = "0";
     }
     // convert to string, de_hexifying if input is in hex.
@@ -317,7 +317,7 @@ pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> S
     let decimal_places = field.second_field.unwrap_or(6);
     match prim.post_decimal {
         Some(ref post_decimal) => {
-            if post_decimal.len() > 0 && decimal_places > 0 {
+            if !post_decimal.is_empty() && decimal_places > 0 {
                 final_str.push('.');
                 let len_avail = post_decimal.len() as u32;
 

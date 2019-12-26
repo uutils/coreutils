@@ -190,7 +190,7 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         };
         if slice.chars().last().unwrap().is_alphabetic() {
             slice = &slice[..slice.len() - 1];
-            if slice.len() > 0 && slice.chars().last().unwrap().is_alphabetic() {
+            if !slice.is_empty() && slice.chars().last().unwrap().is_alphabetic() {
                 slice = &slice[..slice.len() - 1];
             }
         }

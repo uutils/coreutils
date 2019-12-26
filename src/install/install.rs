@@ -259,7 +259,7 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 /// Returns an integer intended as a program return code.
 ///
 fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
-    if paths.len() < 1 {
+    if paths.is_empty() {
         println!("{} with -d requires at least one argument.", NAME);
         1
     } else {

@@ -353,7 +353,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let options = parse_options(&matches).unwrap();
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         handle_stdin(options).unwrap()
     } else {
         handle_args(&matches.free, options).unwrap()

@@ -53,7 +53,7 @@ impl FromStr for Range {
                     Err(inval)
                 }
             }
-            (Some(n), Some(m)) if n.len() == 0 => {
+            (Some(n), Some(m)) if n.is_empty() => {
                 if let Ok(high) = m.parse::<usize>() {
                     if high > 0 {
                         Ok(Range { low: 1, high })

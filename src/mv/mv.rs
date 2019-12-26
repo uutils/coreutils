@@ -426,7 +426,7 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
 fn is_empty_dir(path: &PathBuf) -> bool {
     match fs::read_dir(path) {
         Ok(contents) => {
-            return contents.peekable().peek().is_none();
+            contents.peekable().peek().is_none()
         },
         Err(_e) => { false }
     }

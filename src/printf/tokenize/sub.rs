@@ -190,7 +190,7 @@ impl SubParser {
                         }
                         match self.min_width_tmp.as_mut() {
                             Some(x) => {
-                                if (ch == '-' || ch == '*') && x.len() > 0 {
+                                if (ch == '-' || ch == '*') && !x.is_empty() {
                                     err_conv(&self.text_so_far);
                                 }
                                 if ch == '*' {
@@ -213,7 +213,7 @@ impl SubParser {
                         }
                         match self.second_field_tmp.as_mut() {
                             Some(x) => {
-                                if ch == '*' && x.len() > 0 {
+                                if ch == '*' && !x.is_empty() {
                                     err_conv(&self.text_so_far);
                                 }
                                 if ch == '*' {
@@ -252,7 +252,7 @@ impl SubParser {
                 }
             }
         }
-        if !self.field_char.is_some() {
+        if self.field_char.is_none() {
             err_conv(&self.text_so_far);
         }
         let field_char_retrieved = self.field_char.unwrap();

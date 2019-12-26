@@ -70,7 +70,7 @@ fn main() {
     }
 
     // try first arg as util name.
-    if args.len() >= 1 {
+    if !args.is_empty() {
         let util = &args[0][..];
 
         match umap.get(util) {

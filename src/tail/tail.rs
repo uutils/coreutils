@@ -276,7 +276,7 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         1024u64
     };
 
-    let exponent = if size_slice.len() > 0 {
+    let exponent = if !size_slice.is_empty() {
         let mut has_suffix = true;
         let exp = match size_slice.chars().last().unwrap_or('_') {
             'K' | 'k' => 1u64,

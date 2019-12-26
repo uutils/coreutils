@@ -52,7 +52,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                                 for cont in byte_it {
                                     ignored.push(cont);
                                 }
-                                if ignored.len() > 0 {
+                                if !ignored.is_empty() {
                                     warn_char_constant_ign(ignored);
                                 }
                                 second_byte as u8

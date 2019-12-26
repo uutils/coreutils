@@ -531,7 +531,7 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
         Some(prefix) => name.strip_prefix(prefix).unwrap_or(name),
         None => name,
     };
-    if name.as_os_str().len() == 0 {
+    if name.as_os_str().is_empty() {
         name = Path::new(".");
     }
     name.to_string_lossy().into_owned()

@@ -201,7 +201,7 @@ impl UnescapedText {
                         // on non hex or octal escapes is costly
                         // then we can make it faster/more complex
                         // with as-necessary draining.
-                        if tmp_str.len() > 0 {
+                        if !tmp_str.is_empty() {
                             new_vec.extend(tmp_str.bytes());
                             tmp_str = String::new();
                         }
@@ -228,7 +228,7 @@ impl UnescapedText {
                     }
                 }
             }
-            if tmp_str.len() > 0 {
+            if !tmp_str.is_empty() {
                 new_vec.extend(tmp_str.bytes());
             }
         }

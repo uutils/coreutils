@@ -186,7 +186,7 @@ impl Spec {
         let file_num = match chars.next() {
             Some('0') => {
                 // Must be all alone without a field specifier.
-                if let None = chars.next() {
+                if chars.next().is_none() {
                     return Spec::Key;
                 }
 

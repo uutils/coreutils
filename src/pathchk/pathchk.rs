@@ -188,7 +188,7 @@ fn check_extra(path: &[String]) -> bool {
         }
     }
     // path length
-    if path.join("/").len() == 0 {
+    if path.join("/").is_empty() {
         writeln!(&mut std::io::stderr(), "empty file name");
         return false;
     }

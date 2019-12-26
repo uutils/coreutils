@@ -73,7 +73,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
         }
     }
 
-    if input_strings.len() == 0 {
+    if input_strings.is_empty() {
         input_strings.push("-".to_string());
     }
     Ok(CommandLineInputs::FileNames(input_strings))

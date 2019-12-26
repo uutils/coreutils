@@ -53,7 +53,7 @@ pub fn uumain(_: Vec<String>) -> i32 {
 }
 
 fn one(args: &[&[u8]]) -> bool {
-    args[0].len() > 0
+    !args[0].is_empty()
 }
 
 fn two(args: &[&[u8]], error: &mut bool) -> bool {
@@ -212,13 +212,13 @@ enum Precedence {
 }
 
 fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
-    if args.len() == 0 {
+    if args.is_empty() {
         false
     } else {
         let hashmap = setup_hashmap();
         let lhs = dispatch(&mut args, error);
 
-        if args.len() > 0 {
+        if !args.is_empty() {
             parse_expr_helper(&hashmap, &mut args, lhs, Precedence::Unknown, error)
         } else {
             lhs
@@ -237,11 +237,11 @@ fn parse_expr_helper<'a>(
         *error = true;
         &min_prec
     });
-    while !*error && args.len() > 0 && prec as usize >= min_prec as usize {
+    while !*error && !args.is_empty() && prec as usize >= min_prec as usize {
         let op = args[0];
         *args = &(*args)[1..];
         let mut rhs = dispatch(args, error);
-        while args.len() > 0 {
+        while !args.is_empty() {
             let subprec = *hashmap.get(&args[0]).unwrap_or_else(|| {
                 *error = true;
                 &min_prec
@@ -269,7 +269,7 @@ fn parse_expr_helper<'a>(
             Precedence::Paren => unimplemented!(), // TODO: implement parentheses
             _ => unreachable!(),
         };
-        if args.len() > 0 {
+        if !args.is_empty() {
             prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
                 *error = true;
                 &min_prec

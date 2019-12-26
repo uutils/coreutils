@@ -363,7 +363,7 @@ fn pass_regex(line: &str, re: &regex::Regex) -> bool {
 }
 
 fn pass_nonempty(line: &str, _: &regex::Regex) -> bool {
-    line.len() > 0
+    !line.is_empty()
 }
 
 fn pass_none(_: &str, _: &regex::Regex) -> bool {

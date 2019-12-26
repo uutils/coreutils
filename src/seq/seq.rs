@@ -189,11 +189,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(m) => m,
         Err(f) => return f,
     };
-    if free.len() < 1 || free.len() > 3 {
+    if free.is_empty() || free.len() > 3 {
         crash!(
             1,
             "too {} operands.\nTry '{} --help' for more information.",
-            if free.len() < 1 { "few" } else { "many" },
+            if free.is_empty() { "few" } else { "many" },
             NAME
         );
     }
