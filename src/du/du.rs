@@ -188,17 +188,13 @@ fn du(
         }
     }
 
-    stats.extend(futures.into_iter().flat_map(|val| val).rev().filter_map(
+    stats.extend(futures.into_iter().flat_map(|val| val).rev().filter(
         |stat| {
             if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
                 my_stat.size += stat.size;
                 my_stat.blocks += stat.blocks;
             }
-            if options.max_depth == None || depth < options.max_depth.unwrap() {
-                Some(stat)
-            } else {
-                None
-            }
+            options.max_depth == None || depth < options.max_depth.unwrap()
         },
     ));
     stats.push(my_stat);
