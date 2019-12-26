@@ -96,7 +96,7 @@ fn detect_algo(
         },
         _ => {
             {
-                let mut set_or_crash = |n, val, bits| -> () {
+                let mut set_or_crash = |n, val, bits| {
                     if alg.is_some() {
                         crash!(1, "You cannot combine multiple hash algorithms!")
                     };
