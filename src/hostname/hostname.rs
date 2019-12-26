@@ -43,6 +43,7 @@ const SUMMARY: &str = "Print or set the system's host name.";
 const LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
+    #![allow(clippy::let_and_return)]
     #[cfg(windows)]
     unsafe {
         let mut data = std::mem::uninitialized();
