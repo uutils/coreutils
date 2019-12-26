@@ -74,7 +74,7 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
         let slice = &args[i].clone();
-        if slice.chars().next().unwrap() == '-' && slice.len() > 1
+        if slice.starts_with('-') && slice.len() > 1
             && slice.chars().nth(1).unwrap().is_digit(10)
         {
             let val = &slice[1..];

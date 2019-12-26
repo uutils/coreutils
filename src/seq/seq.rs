@@ -72,7 +72,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                     break;
                 }
                 _ => {
-                    if arg.len() > 1 && arg.chars().next().unwrap() == '-' {
+                    if arg.len() > 1 && arg.starts_with('-') {
                         let argptr: *const String = &arg; // escape from the borrow checker
                         let mut chiter = unsafe { &(*argptr)[..] }.chars().skip(1);
                         let mut ch = ' ';
