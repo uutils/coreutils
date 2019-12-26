@@ -297,7 +297,7 @@ fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
 /// Test if the path is a a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
-    path.is_file() || !path.exists() && path.parent().map(|p| p.is_dir()).unwrap_or(true)
+    path.is_file() || !path.exists() && path.parent().map(std::path::Path::is_dir).unwrap_or(true)
 }
 
 /// Perform an install, given a list of paths and behaviour.

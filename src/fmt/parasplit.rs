@@ -164,7 +164,7 @@ impl<'a> Iterator for FileLines<'a> {
         // emit a blank line
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
-        if n.chars().all(|c| c.is_whitespace()) {
+        if n.chars().all(char::is_whitespace) {
             return Some(Line::NoFormatLine("".to_owned(), true));
         }
 
@@ -180,7 +180,7 @@ impl<'a> Iterator for FileLines<'a> {
             // following line)
             n[poffset + self.opts.prefix.len()..]
             .chars()
-            .all(|c| c.is_whitespace())
+            .all(char::is_whitespace)
         {
             return Some(Line::NoFormatLine(n, false));
         }

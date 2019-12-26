@@ -110,7 +110,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                 let slice = {
                     let slice = &line[i..i + width];
                     if spaces && i + width < len {
-                        match slice.rfind(|ch: char| ch.is_whitespace()) {
+                        match slice.rfind(char::is_whitespace) {
                             Some(m) => &slice[..=m],
                             None => slice,
                         }

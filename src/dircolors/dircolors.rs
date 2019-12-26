@@ -120,7 +120,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Ok(f) => {
                 let fin = BufReader::new(f);
                 result = parse(
-                    fin.lines().filter_map(|l| l.ok()),
+                    fin.lines().filter_map(std::result::Result::ok),
                     out_format,
                     matches.free[0].as_str(),
                 )

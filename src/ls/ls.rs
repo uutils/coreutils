@@ -289,8 +289,8 @@ fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
 }
 
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
-    let mut entries =
-        safe_unwrap!(fs::read_dir(dir).and_then(|e| e.collect::<Result<Vec<_>, _>>()));
+    let mut entries: Vec<_> =
+        safe_unwrap!(fs::read_dir(dir).and_then(std::iter::Iterator::collect));
 
     entries.retain(|e| should_display(e, options));
 

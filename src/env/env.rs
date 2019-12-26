@@ -159,11 +159,11 @@ fn run_env(args: Vec<String>) -> Result<(), i32> {
     let null = matches.is_present("null");
     let files = matches
         .values_of("file")
-        .map(|v| v.collect())
+        .map(std::iter::Iterator::collect)
         .unwrap_or_else(|| Vec::with_capacity(0));
     let unsets = matches
         .values_of("unset")
-        .map(|v| v.collect())
+        .map(std::iter::Iterator::collect)
         .unwrap_or_else(|| Vec::with_capacity(0));
 
     let mut opts = Options {

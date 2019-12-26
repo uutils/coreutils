@@ -311,7 +311,7 @@ impl Who {
         if self.short_list {
             let users = Utmpx::iter_all_records()
                 .read_from(f)
-                .filter(|ut| ut.is_user_process())
+                .filter(uucore::utmpx::Utmpx::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));

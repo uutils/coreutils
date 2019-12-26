@@ -94,7 +94,7 @@ fn print_usage(opts: &Options) {
 
 fn parse_size(size: &str) -> Option<u64> {
     let ext = size.trim_start_matches(|c: char| c.is_digit(10));
-    let num = size.trim_end_matches(|c: char| c.is_alphabetic());
+    let num = size.trim_end_matches(char::is_alphabetic);
     let mut recovered = num.to_owned();
     recovered.push_str(ext);
     if recovered != size {

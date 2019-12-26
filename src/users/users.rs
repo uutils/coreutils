@@ -67,7 +67,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn exec(filename: &str) {
     let mut users = Utmpx::iter_all_records()
         .read_from(filename)
-        .filter(|ut| ut.is_user_process())
+        .filter(uucore::utmpx::Utmpx::is_user_process)
         .map(|ut| ut.user())
         .collect::<Vec<_>>();
 

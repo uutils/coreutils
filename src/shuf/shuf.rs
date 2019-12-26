@@ -123,14 +123,14 @@ With no FILE, or when FILE is -, read standard input.",
                 let mut evec = matches
                     .free
                     .iter()
-                    .map(|a| a.as_bytes())
+                    .map(std::string::String::as_bytes)
                     .collect::<Vec<&[u8]>>();
                 find_seps(&mut evec, sep);
                 shuf_bytes(&mut evec, repeat, count, sep, output, random);
             }
             Mode::InputRange((b, e)) => {
                 let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
-                let mut rvec = rvec.iter().map(|a| a.as_bytes()).collect::<Vec<&[u8]>>();
+                let mut rvec = rvec.iter().map(std::string::String::as_bytes).collect::<Vec<&[u8]>>();
                 shuf_bytes(&mut rvec, repeat, count, sep, output, random);
             }
             Mode::Default => {
