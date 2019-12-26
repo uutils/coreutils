@@ -242,6 +242,7 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
 pub fn str_to_arrnum(src: &str, radix_def_src: &dyn RadixDef) -> Vec<u8> {
     let mut intermed_in: Vec<u8> = Vec::new();
     for c in src.chars() {
+        #[allow(clippy::single_match)]
         match radix_def_src.from_char(c) {
             Some(u) => {
                 intermed_in.push(u);
@@ -255,6 +256,7 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &dyn RadixDef) -> Vec<u8> {
 pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     let mut str_out = String::new();
     for u in src.iter() {
+        #[allow(clippy::single_match)]
         match radix_def_dest.from_u8(u.clone()) {
             Some(c) => {
                 str_out.push(c);
