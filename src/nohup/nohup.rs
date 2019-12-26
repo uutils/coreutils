@@ -105,10 +105,8 @@ fn replace_fds() {
         }
     }
 
-    if is_stderr_interactive() {
-        if unsafe { dup2(1, 2) } != 2 {
-            crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
-        }
+    if is_stderr_interactive() && unsafe { dup2(1, 2) } != 2 {
+        crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
     }
 }
 

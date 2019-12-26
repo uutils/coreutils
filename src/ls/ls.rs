@@ -277,10 +277,8 @@ fn max(lhs: usize, rhs: usize) -> usize {
 fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
-    if !options.opt_present("a") && !options.opt_present("A") {
-        if name.starts_with('.') {
-            return false;
-        }
+    if !options.opt_present("a") && !options.opt_present("A") && name.starts_with('.') {
+        return false;
     }
     if options.opt_present("B") && name.ends_with('~') {
         return false;
