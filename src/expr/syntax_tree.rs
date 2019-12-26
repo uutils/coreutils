@@ -487,10 +487,7 @@ fn prefix_operator_index(values: &[String]) -> Result<String, String> {
     let haystack = &values[0];
     let needles = &values[1];
 
-    let mut current_idx = 0;
-    for ch_h in haystack.chars() {
-        current_idx += 1;
-
+    for (current_idx, ch_h) in haystack.chars().enumerate() {
         for ch_n in needles.chars() {
             if ch_n == ch_h {
                 return Ok(current_idx.to_string());

@@ -226,13 +226,11 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
     result.push(0);
     let mut factor: f64 = 1_f64;
     let radix_src_float: f64 = f64::from(radix_src);
-    let mut i = 0;
     let mut r: f64 = 0_f64;
-    for u in src {
+    for (i, u) in src.iter().enumerate() {
         if i > 15 {
             break;
         }
-        i += 1;
         factor /= radix_src_float;
         r += factor * f64::from(*u)
     }
