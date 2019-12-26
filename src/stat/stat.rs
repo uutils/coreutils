@@ -542,9 +542,9 @@ impl Stater {
                         };
 
                     for t in tokens.into_iter() {
-                        match t {
-                            &Token::Char(c) => print!("{}", c),
-                            &Token::Directive {
+                        match *t {
+                            Token::Char(c) => print!("{}", c),
+                            Token::Directive {
                                 flag,
                                 width,
                                 precision,
@@ -751,9 +751,9 @@ impl Stater {
                     let tokens = &self.default_tokens;
 
                     for t in tokens.into_iter() {
-                        match t {
-                            &Token::Char(c) => print!("{}", c),
-                            &Token::Directive {
+                        match *t {
+                            Token::Char(c) => print!("{}", c),
+                            Token::Directive {
                                 flag,
                                 width,
                                 precision,

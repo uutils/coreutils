@@ -158,7 +158,7 @@ impl ASTNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let &ASTNode::Node { ref operands, .. } = self {
+        if let ASTNode::Node { ref operands, .. } = *self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
                 match operand.evaluate() {
@@ -341,11 +341,11 @@ fn push_op_to_stack(
     out_stack: &mut TokenStack,
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
-    if let &Token::InfixOp {
+    if let Token::InfixOp {
         precedence: prec,
         left_assoc: la,
         ..
-    } = token
+    } = *token
     {
         loop {
             match op_stack.last() {

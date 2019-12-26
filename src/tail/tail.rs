@@ -476,7 +476,7 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
 
         let mut stdout = stdout();
         for b in &buf[0..bytes_read] {
-            print_byte(&mut stdout, b);
+            print_byte(&mut stdout, *b);
         }
 
         if bytes_read == 0 {
@@ -549,7 +549,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
             }
             let mut stdout = stdout();
             for datum in &ringbuf {
-                print_byte(&mut stdout, datum);
+                print_byte(&mut stdout, *datum);
             }
         }
     }
