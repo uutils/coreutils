@@ -86,11 +86,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             0
         }
         _ => {
-            let mut res = true;
-            if matches.free.len() == 0 {
+            let mut res = if matches.free.is_empty() {
                 show_error!("missing operand\nTry {} --help for more information", NAME);
-                res = false;
-            }
+                false
+            } else { true };
             // free strings are path operands
             // FIXME: TCS, seems inefficient and overly verbose (?)
             for p in matches.free {

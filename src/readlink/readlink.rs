@@ -70,18 +70,13 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let silent = matches.opt_present("silent") || matches.opt_present("quiet");
     let verbose = matches.opt_present("verbose");
 
-    let mut can_mode = CanonicalizeMode::None;
-    if matches.opt_present("canonicalize") {
-        can_mode = CanonicalizeMode::Normal;
-    }
-
-    if matches.opt_present("canonicalize-existing") {
-        can_mode = CanonicalizeMode::Existing;
-    }
-
-    if matches.opt_present("canonicalize-missing") {
-        can_mode = CanonicalizeMode::Missing;
-    }
+    let can_mode = if matches.opt_present("canonicalize") {
+        CanonicalizeMode::Normal
+    } else if matches.opt_present("canonicalize-existing") {
+        CanonicalizeMode::Existing
+    } else if matches.opt_present("canonicalize-missing") {
+        CanonicalizeMode::Missing
+    } else { CanonicalizeMode::None };
 
     let files = matches.free;
     if files.is_empty() {

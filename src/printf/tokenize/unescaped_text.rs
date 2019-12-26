@@ -60,11 +60,10 @@ impl UnescapedText {
     // dropped-in as a replacement.
     fn validate_iec(val: u32, eight_word: bool) {
         let mut preface = 'u';
-        let mut leading_zeros = 4;
-        if eight_word {
+        let leading_zeros = if eight_word {
             preface = 'U';
-            leading_zeros = 8;
-        }
+            8
+        } else { 4 };
         let err_msg = format!(
             "invalid universal character name {0}{1:02$x}",
             preface, val, leading_zeros
