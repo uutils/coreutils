@@ -55,7 +55,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
             match offset {
                 Ok(n) => {
                     // if there is just 1 input (stdin), an offset must start with '+'
-                    if input_strings.len() == 1 && input_strings[0].starts_with("+") {
+                    if input_strings.len() == 1 && input_strings[0].starts_with('+') {
                         return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
                     }
                     if input_strings.len() == 2 {
@@ -137,7 +137,7 @@ pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
     let mut radix = 8;
     let mut multiply = 1;
 
-    if s.starts_with("+") {
+    if s.starts_with('+') {
         start += 1;
     }
 
@@ -145,11 +145,11 @@ pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
         start += 2;
         radix = 16;
     } else {
-        if s[start..len].ends_with("b") {
+        if s[start..len].ends_with('b') {
             len -= 1;
             multiply = 512;
         }
-        if s[start..len].ends_with(".") {
+        if s[start..len].ends_with('.') {
             len -= 1;
             radix = 10;
         }

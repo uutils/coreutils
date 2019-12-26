@@ -78,7 +78,7 @@ impl fmt::Display for DisplayableSuffix {
 }
 
 fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
-    let with_i = s.ends_with("i");
+    let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
         iter.next_back();

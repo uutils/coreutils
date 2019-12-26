@@ -7,7 +7,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<usize, &'static str> {
     if s.starts_with("0x") || s.starts_with("0X") {
         start = 2;
         radix = 16;
-    } else if s.starts_with("0") {
+    } else if s.starts_with('0') {
         radix = 8;
     }
 

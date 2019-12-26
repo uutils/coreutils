@@ -22,7 +22,7 @@ struct SeqOptions {
 }
 
 fn parse_float(mut s: &str) -> Result<f64, String> {
-    if s.starts_with("+") {
+    if s.starts_with('+') {
         s = &s[1..];
     }
     match s.parse() {

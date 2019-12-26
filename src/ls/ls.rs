@@ -62,10 +62,10 @@ static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do
 lazy_static! {
     static ref LS_COLORS: String = std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
     static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
-        let codes = LS_COLORS.split(":");
+        let codes = LS_COLORS.split(':');
         let mut map = HashMap::new();
         for c in codes {
-            let p: Vec<_> = c.split("=").collect();
+            let p: Vec<_> = c.split('=').collect();
             if p.len() == 2 {
                 map.insert(p[0], p[1]);
             }

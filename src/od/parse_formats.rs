@@ -128,7 +128,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
             if arg == "--format" {
                 expect_type_string = true;
             }
-        } else if arg.starts_with("-") {
+        } else if arg.starts_with('-') {
             let flags = arg.chars().skip(1);
             let mut format_spec = String::new();
             for c in flags {
