@@ -90,16 +90,9 @@ fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
     let mut topchar = str_it.next();
     // skip spaces and ensure topchar is the first non-space char
     // (or None if none exists)
-    loop {
-        match topchar {
-            Some(' ') => {
-                ret.offset += 1;
-                topchar = str_it.next();
-            }
-            _ => {
-                break;
-            }
-        }
+    while let Some(' ') = topchar {
+        ret.offset += 1;
+        topchar = str_it.next();
     }
     // parse sign
     match topchar {
