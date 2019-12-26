@@ -104,7 +104,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
     let mut formats = Vec::new();
 
     // args[0] is the name of the binary
-    let mut arg_iter = args.iter().skip(1);
+    let arg_iter = args.iter().skip(1);
     let mut expect_type_string = false;
 
     for arg in arg_iter {
@@ -129,7 +129,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
                 expect_type_string = true;
             }
         } else if arg.starts_with("-") {
-            let mut flags = arg.chars().skip(1);
+            let flags = arg.chars().skip(1);
             let mut format_spec = String::new();
             for c in flags {
                 if expect_type_string {

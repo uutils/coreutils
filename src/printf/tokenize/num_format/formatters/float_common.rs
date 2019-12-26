@@ -47,7 +47,7 @@ impl FloatAnalysis {
         // this fn assumes
         // the input string
         // has no leading spaces or 0s
-        let mut str_it = get_it_at(inprefix.offset, str_in);
+        let str_it = get_it_at(inprefix.offset, str_in);
         let mut ret = FloatAnalysis {
             len_important: 0,
             decimal_pos: None,
@@ -251,7 +251,7 @@ pub fn get_primitive_dec(
         } else {
             match first_segment.chars().next() {
                 Some('0') => {
-                    let mut it = second_segment.chars().enumerate();
+                    let it = second_segment.chars().enumerate();
                     let mut m: isize = 0;
                     let mut pre = String::from("0");
                     let mut post = String::from("0");

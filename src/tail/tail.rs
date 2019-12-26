@@ -456,7 +456,7 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
     // Find the position in the file to start printing from.
     match settings.mode {
         FilterMode::Lines(mut count, delimiter) => {
-            backwards_thru_file(&mut file, size, &mut buf, delimiter, &mut |byte| {
+            backwards_thru_file(&file, size, &mut buf, delimiter, &mut |byte| {
                 if byte == delimiter {
                     count -= 1;
                     count == 0
