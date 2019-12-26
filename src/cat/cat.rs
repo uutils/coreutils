@@ -38,9 +38,9 @@ static LONG_HELP: &str = "";
 
 #[derive(PartialEq)]
 enum NumberingMode {
-    NumberNone,
-    NumberNonEmpty,
-    NumberAll,
+    None,
+    NonEmpty,
+    All,
 }
 
 quick_error! {
@@ -147,11 +147,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(args);
 
     let number_mode = if matches.opt_present("b") {
-        NumberingMode::NumberNonEmpty
+        NumberingMode::NonEmpty
     } else if matches.opt_present("n") {
-        NumberingMode::NumberAll
+        NumberingMode::All
     } else {
-        NumberingMode::NumberNone
+        NumberingMode::None
     };
 
     let show_nonprint = matches.opts_present(&[
@@ -169,7 +169,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     let can_write_fast = !(show_tabs || show_nonprint || show_ends || squeeze_blank
-        || number_mode != NumberingMode::NumberNone);
+        || number_mode != NumberingMode::None);
 
     let success = if can_write_fast {
         write_fast(files).is_ok()
@@ -357,7 +357,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
             if in_buf[pos] == b'\n' {
                 if !state.at_line_start || !options.squeeze_blank || !one_blank_kept {
                     one_blank_kept = true;
-                    if state.at_line_start && options.number == NumberingMode::NumberAll {
+                    if state.at_line_start && options.number == NumberingMode::All {
                         write!(&mut writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
                     }
@@ -371,7 +371,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
                 continue;
             }
             one_blank_kept = false;
-            if state.at_line_start && options.number != NumberingMode::NumberNone {
+            if state.at_line_start && options.number != NumberingMode::None {
                 write!(&mut writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
             }
