@@ -58,6 +58,7 @@ pub struct Settings {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
+#[allow(clippy::enum_variant_names)]
 enum NumberingStyle {
     NumberForAll,
     NumberForNonEmpty,
