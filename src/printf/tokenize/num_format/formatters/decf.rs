@@ -53,23 +53,20 @@ impl Formatter for Decf {
             Some(*field.field_char == 'G'),
         );
         // strip trailing zeroes
-        match f_sci.post_decimal.clone() {
-            Some(ref post_dec) => {
-                let mut i = post_dec.len();
-                {
-                    let mut it = post_dec.chars();
-                    while let Some(c) = it.next_back() {
-                        if c != '0' {
-                            break;
-                        }
-                        i -= 1;
+        if let Some(ref post_dec) = f_sci.post_decimal.clone() {
+            let mut i = post_dec.len();
+            {
+                let mut it = post_dec.chars();
+                while let Some(c) = it.next_back() {
+                    if c != '0' {
+                        break;
                     }
-                }
-                if i != post_dec.len() {
-                    f_sci.post_decimal = Some(String::from(&post_dec[0..i]));
+                    i -= 1;
                 }
             }
-            None => {}
+            if i != post_dec.len() {
+                f_sci.post_decimal = Some(String::from(&post_dec[0..i]));
+            }
         }
         let f_fl = get_primitive_dec(
             inprefix,

@@ -185,18 +185,15 @@ fn round_terminal_digit(
                 .next()
                 .expect("");
         }
-        match digit_at_pos {
-            '5'..='9' => {
-                let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);
-                if finished_in_dec {
-                    return (before_dec, new_after_dec);
-                } else {
-                    let (new_before_dec, _) = _round_str_from(&before_dec, before_dec.len());
-                    return (new_before_dec, new_after_dec);
-                }
-                // TODO
+        if let '5'..='9' = digit_at_pos {
+            let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);
+            if finished_in_dec {
+                return (before_dec, new_after_dec);
+            } else {
+                let (new_before_dec, _) = _round_str_from(&before_dec, before_dec.len());
+                return (new_before_dec, new_after_dec);
             }
-            _ => {}
+            // TODO
         }
     }
     (before_dec, after_dec)
@@ -297,11 +294,8 @@ pub fn get_primitive_dec(
 
 pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> String {
     let mut final_str = String::new();
-    match prim.prefix {
-        Some(ref prefix) => {
-            final_str.push_str(&prefix);
-        }
-        None => {}
+    if let Some(ref prefix) = prim.prefix {
+        final_str.push_str(&prefix);
     }
     match prim.pre_decimal {
         Some(ref pre_decimal) => {
@@ -344,11 +338,8 @@ pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> S
             );
         }
     }
-    match prim.suffix {
-        Some(ref suffix) => {
-            final_str.push_str(suffix);
-        }
-        None => {}
+    if let Some(ref suffix) = prim.suffix {
+        final_str.push_str(suffix);
     }
 
     final_str

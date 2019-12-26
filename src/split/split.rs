@@ -108,16 +108,13 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     settings.strategy_param = "1000".to_owned();
     let strategies = vec!["b", "C", "l"];
     for e in &strategies {
-        match matches.opt_str(*e) {
-            Some(a) => {
-                if settings.strategy == "l" {
-                    settings.strategy = (*e).to_owned();
-                    settings.strategy_param = a;
-                } else {
-                    crash!(1, "{}: cannot split in more than one way", NAME)
-                }
+        if let Some(a) = matches.opt_str(*e) {
+            if settings.strategy == "l" {
+                settings.strategy = (*e).to_owned();
+                settings.strategy_param = a;
+            } else {
+                crash!(1, "{}: cannot split in more than one way", NAME)
             }
-            None => {}
         }
     }
 

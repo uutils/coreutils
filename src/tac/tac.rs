@@ -103,12 +103,9 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         });
 
         let mut data = Vec::new();
-        match file.read_to_end(&mut data) {
-            Err(e) => {
-                show_warning!("failed to read '{}': {}", filename, e);
-                continue;
-            }
-            Ok(_) => (),
+        if let Err(e) = file.read_to_end(&mut data) {
+            show_warning!("failed to read '{}': {}", filename, e);
+            continue;
         };
 
         // find offsets in string of all separators

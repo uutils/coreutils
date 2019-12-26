@@ -32,19 +32,15 @@ impl Memo {
         let mut has_sub = false;
         loop {
             tmp_token = UnescapedText::from_it(&mut it, pf_args_it);
-            match tmp_token {
-                Some(x) => pm.tokens.push(x),
-                None => {}
+            if let Some(x) = tmp_token {
+                pm.tokens.push(x);
             }
             tmp_token = Sub::from_it(&mut it, pf_args_it);
-            match tmp_token {
-                Some(x) => {
-                    if !has_sub {
-                        has_sub = true;
-                    }
-                    pm.tokens.push(x);
+            if let Some(x) = tmp_token {
+                if !has_sub {
+                    has_sub = true;
                 }
-                None => {}
+                pm.tokens.push(x);
             }
             if let Some(x) = it.next() {
                 it.put_back(x);

@@ -52,22 +52,17 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
         if !matches.opts_present(&["A", "j", "N", "t", "v", "w"]) {
             // test if the last input can be parsed as an offset.
             let offset = parse_offset_operand(&input_strings[input_strings.len() - 1]);
-            match offset {
-                Ok(n) => {
-                    // if there is just 1 input (stdin), an offset must start with '+'
-                    if input_strings.len() == 1 && input_strings[0].starts_with('+') {
-                        return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
-                    }
-                    if input_strings.len() == 2 {
-                        return Ok(CommandLineInputs::FileAndOffset((
-                            input_strings[0].clone(),
-                            n,
-                            None,
-                        )));
-                    }
+            if let Ok(n) = offset {
+                // if there is just 1 input (stdin), an offset must start with '+'
+                if input_strings.len() == 1 && input_strings[0].starts_with('+') {
+                    return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
                 }
-                _ => {
-                    // if it cannot be parsed, it is considered a filename
+                if input_strings.len() == 2 {
+                    return Ok(CommandLineInputs::FileAndOffset((
+                        input_strings[0].clone(),
+                        n,
+                        None,
+                    )));
                 }
             }
         }

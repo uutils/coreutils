@@ -156,9 +156,8 @@ fn read_input_file(filename: &str) -> Vec<u8> {
     });
 
     let mut data = Vec::new();
-    match file.read_to_end(&mut data) {
-        Err(e) => crash!(1, "failed reading '{}': {}", filename, e),
-        Ok(_) => (),
+    if let Err(e) = file.read_to_end(&mut data) {
+        crash!(1, "failed reading '{}': {}", filename, e)
     };
 
     data

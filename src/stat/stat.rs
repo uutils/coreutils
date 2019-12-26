@@ -369,12 +369,9 @@ impl Stater {
                     let mut precision = -1_i32;
                     let mut j = i;
 
-                    match fmtstr[j..].scan_num::<usize>() {
-                        Some((field_width, offset)) => {
-                            width = field_width;
-                            j += offset;
-                        }
-                        None => (),
+                    if let Some((field_width, offset)) = fmtstr[j..].scan_num::<usize>() {
+                        width = field_width;
+                        j += offset;
                     }
                     check_bound!(fmtstr, bound, old, j);
 

@@ -232,9 +232,10 @@ impl UnescapedText {
                 new_vec.extend(tmp_str.bytes());
             }
         }
-        match addchar {
-            true => Some(Box::new(new_text)),
-            false => None,
+        if addchar {
+            Some(Box::new(new_text))
+        } else {
+            None
         }
     }
 }

@@ -21,15 +21,12 @@ pub fn warn_expected_numeric(pf_arg: &String) {
 fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
     match env::var("POSIXLY_CORRECT") {
         Ok(_) => {}
-        Err(e) => match e {
-            env::VarError::NotPresent => {
-                cli::err_msg(&format!(
-                    "warning: {:?}: character(s) following character \
-                     constant have been ignored",
-                    &*remaining_bytes
-                ));
-            }
-            _ => {}
+        Err(e) => if let env::VarError::NotPresent = e {
+            cli::err_msg(&format!(
+                "warning: {:?}: character(s) following character \
+                    constant have been ignored",
+                &*remaining_bytes
+            ));
         },
     }
 }
@@ -145,11 +142,8 @@ fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
                 }
                 e @ '0'..='9' => {
                     ret.offset += 1;
-                    match *field_type {
-                        FieldType::Intf => {
-                            ret.radix_in = Base::Octal;
-                        }
-                        _ => {}
+                    if let FieldType::Intf = *field_type {
+                        ret.radix_in = Base::Octal;
                     }
                     if e == '0' {
                         do_clean_lead_zeroes = true;

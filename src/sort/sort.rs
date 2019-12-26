@@ -110,16 +110,13 @@ impl<'a> FileMerger<'a> {
         }
     }
     fn push_file(&mut self, mut lines: Lines<BufReader<Box<dyn Read>>>) {
-        match lines.next() {
-            Some(Ok(next_line)) => {
-                let mergeable_file = MergeableFile {
-                    lines,
-                    current_line: next_line,
-                    settings: &self.settings,
-                };
-                self.heap.push(mergeable_file);
-            }
-            _ => {}
+        if let Some(Ok(next_line)) = lines.next() {
+            let mergeable_file = MergeableFile {
+                lines,
+                current_line: next_line,
+                settings: &self.settings,
+            };
+            self.heap.push(mergeable_file);
         }
     }
 }
@@ -522,12 +519,9 @@ where
 
     for line in iter {
         let str = format!("{}\n", line);
-        match file.write_all(str.as_bytes()) {
-            Err(e) => {
-                show_error!("sort: {0}", e.to_string());
-                panic!("Write failed");
-            }
-            Ok(_) => (),
+        if let Err(e) = file.write_all(str.as_bytes()) {
+            show_error!("sort: {0}", e.to_string());
+            panic!("Write failed");
         }
     }
 }

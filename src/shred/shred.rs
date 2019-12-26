@@ -570,11 +570,8 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
     }
 
     let renamed_path: Option<PathBuf> = wipe_name(&path, verbose);
-    match renamed_path {
-        Some(rp) => {
-            fs::remove_file(rp)?;
-        }
-        None => (),
+    if let Some(rp) = renamed_path {
+        fs::remove_file(rp)?;
     }
 
     if verbose {
