@@ -25,7 +25,7 @@ fn warn_excess_args(first_arg: &str) {
 }
 
 impl Memo {
-    pub fn new(pf_string: &String, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
+    pub fn new(pf_string: &str, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
         let mut pm = Memo { tokens: Vec::new() };
         let mut tmp_token: Option<Box<dyn Token>>;
         let mut it = put_back_n(pf_string.chars());

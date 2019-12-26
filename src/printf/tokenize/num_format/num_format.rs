@@ -11,7 +11,7 @@ use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
 use super::formatters::scif::Scif;
 use super::formatters::decf::Decf;
 
-pub fn warn_expected_numeric(pf_arg: &String) {
+pub fn warn_expected_numeric(pf_arg: &str) {
     // important: keep println here not print
     cli::err_msg(&format!("{}: expected a numeric value", pf_arg));
 }

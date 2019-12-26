@@ -229,7 +229,7 @@ fn check_default(path: &[String]) -> bool {
 }
 
 // check whether a path is or if other problems arise
-fn check_searchable(path: &String) -> bool {
+fn check_searchable(path: &str) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
@@ -243,12 +243,12 @@ fn check_searchable(path: &String) -> bool {
 }
 
 // check for a hyphen at the beginning of a path segment
-fn no_leading_hyphen(path_segment: &String) -> bool {
+fn no_leading_hyphen(path_segment: &str) -> bool {
     !path_segment.starts_with('-')
 }
 
 // check whether a path segment contains only valid (read: portable) characters
-fn check_portable_chars(path_segment: &String) -> bool {
+fn check_portable_chars(path_segment: &str) -> bool {
     let valid_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-".to_string();
     for ch in path_segment.chars() {
         if !valid_str.contains(ch) {
