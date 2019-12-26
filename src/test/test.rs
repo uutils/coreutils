@@ -370,7 +370,7 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         } else if gid == metadata.gid() {
             metadata.mode() & ((p as u32) << 3) != 0
         } else {
-            metadata.mode() & ((p as u32)) != 0
+            metadata.mode() & (p as u32) != 0
         }
     };
 
