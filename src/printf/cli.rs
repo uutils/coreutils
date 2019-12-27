@@ -1,5 +1,4 @@
 //! stdio convenience fns
-#[allow(unused_must_use)]
 
 use std::io::{stderr, stdout, Write};
 use std::env;
