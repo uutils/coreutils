@@ -389,9 +389,7 @@ Try '{} --help' for more information.",
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
-                    let size = if matches.opt_present("apparent-size") {
-                        stat.size
-                    } else if matches.opt_present("b") {
+                    let size = if matches.opt_present("apparent-size") || matches.opt_present("b") {
                         stat.size
                     } else {
                         // C's stat is such that each block is assume to be 512 bytes
