@@ -424,8 +424,8 @@ fn wipe_file(
                 pass_sequence.push(PassType::Pattern(*p));
             }
         }
-        for i in 0..remainder {
-            pass_sequence.push(PassType::Pattern(PATTERNS[i]));
+        for pattern in PATTERNS.iter().take(remainder) {
+            pass_sequence.push(PassType::Pattern(pattern));
         }
         rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
 
