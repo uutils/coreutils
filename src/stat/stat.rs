@@ -458,7 +458,7 @@ impl Stater {
         let fmtstr = if matches.opt_present("printf") {
             matches.opt_str("printf").expect("Invalid format string")
         } else {
-            matches.opt_str("format").unwrap_or("".to_owned())
+            matches.opt_str("format").unwrap_or_else(|| "".to_owned())
         };
 
         let use_printf = matches.opt_present("printf");
@@ -478,7 +478,7 @@ impl Stater {
             None
         } else {
             let reader = BufReader::new(
-                File::open(MOUNT_INFO).expect(&format!("Failed to read {}", MOUNT_INFO)),
+                File::open(MOUNT_INFO).unwrap_or_else(|_| panic!("Failed to read {}", MOUNT_INFO)),
             );
             let mut mount_list = reader
                 .lines()
@@ -608,7 +608,7 @@ impl Stater {
                                     // group name of owner
                                     'G' => {
                                         arg = entries::gid2grp(meta.gid())
-                                            .unwrap_or("UNKNOWN".to_owned());
+                                            .unwrap_or_else(|_| "UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
                                     // number of hard links
@@ -683,7 +683,7 @@ impl Stater {
                                     // user name of owner
                                     'U' => {
                                         arg = entries::uid2usr(meta.uid())
-                                            .unwrap_or("UNKNOWN".to_owned());
+                                            .unwrap_or_else(|_| "UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
 

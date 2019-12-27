@@ -60,7 +60,7 @@ FILE, separated by TABs, to standard output.",
         println!("{} {}", NAME, VERSION);
     } else {
         let serial = matches.opt_present("serial");
-        let delimiters = matches.opt_str("delimiters").unwrap_or("\t".to_owned());
+        let delimiters = matches.opt_str("delimiters").unwrap_or_else(|| "\t".to_owned());
         paste(matches.free, serial, delimiters);
     }
 

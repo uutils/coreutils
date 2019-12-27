@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             return kill(
                 &matches
                     .opt_str("signal")
-                    .unwrap_or(obs_signal.unwrap_or("9".to_owned())),
+                    .unwrap_or_else(|| obs_signal.unwrap_or_else(|| "9".to_owned())),
                 matches.free,
             )
         }

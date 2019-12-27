@@ -26,7 +26,7 @@ impl BirthTime for Metadata {
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
-            .unwrap_or("-".to_owned())
+            .unwrap_or_else(|| "-".to_owned())
     }
 
     fn birth(&self) -> String {
@@ -34,7 +34,7 @@ impl BirthTime for Metadata {
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|e| format!("{}", e.as_secs()))
-            .unwrap_or("0".to_owned())
+            .unwrap_or_else(|| "0".to_owned())
     }
 }
 
@@ -260,11 +260,11 @@ where
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
                         Err(CString::from_raw(strerror(errno))
                             .into_string()
-                            .unwrap_or("Unknown Error".to_owned()))
+                            .unwrap_or_else(|_| "Unknown Error".to_owned()))
+                        }
                     }
                 }
             }
-        }
         Err(e) => Err(e.description().to_owned()),
     }
 }

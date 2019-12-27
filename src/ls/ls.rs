@@ -60,7 +60,7 @@ static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do
 
 #[cfg(unix)]
 lazy_static! {
-    static ref LS_COLORS: String = std::env::var("LS_COLORS").unwrap_or(DEFAULT_COLORS.to_string());
+    static ref LS_COLORS: String = std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
     static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
         let codes = LS_COLORS.split(":");
         let mut map = HashMap::new();
@@ -454,7 +454,7 @@ fn display_uname(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("numeric-uid-gid") {
         metadata.uid().to_string()
     } else {
-        entries::uid2usr(metadata.uid()).unwrap_or(metadata.uid().to_string())
+        entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
     }
 }
 
@@ -463,7 +463,7 @@ fn display_group(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("numeric-uid-gid") {
         metadata.gid().to_string()
     } else {
-        entries::gid2grp(metadata.gid()).unwrap_or(metadata.gid().to_string())
+        entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
     }
 }
 

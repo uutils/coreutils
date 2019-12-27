@@ -254,7 +254,7 @@ impl Pinky {
             let ut_host = ut.host();
             let mut res = ut_host.splitn(2, ':');
             let host = match res.next() {
-                Some(_) => ut.canon_host().unwrap_or(ut_host.clone()),
+                Some(_) => ut.canon_host().unwrap_or_else(|_| ut_host.clone()),
                 None => ut_host.clone(),
             };
             match res.next() {

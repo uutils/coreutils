@@ -395,8 +395,8 @@ impl Chowner {
     fn wrap_chown<P: AsRef<Path>>(&self, path: P, meta: &Metadata, follow: bool) -> i32 {
         use self::Verbosity::*;
         let mut ret = 0;
-        let dest_uid = self.dest_uid.unwrap_or(meta.uid());
-        let dest_gid = self.dest_gid.unwrap_or(meta.gid());
+        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
+        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
         let path = path.as_ref();
         if let Err(e) = self.chown(path, dest_uid, dest_gid, follow) {
             match self.verbosity {

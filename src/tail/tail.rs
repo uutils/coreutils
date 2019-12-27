@@ -316,7 +316,7 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         let value: Option<u64> = size_slice.parse().ok();
         value
             .map(|v| Ok(multiplier * v))
-            .unwrap_or(Err(ParseSizeErr::parse_failure(size_slice)))
+            .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
     }
 }
 
