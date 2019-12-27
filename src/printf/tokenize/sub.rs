@@ -15,12 +15,12 @@ use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
 // use std::collections::HashSet;
 
-fn err_conv(sofar: &String) {
+fn err_conv(sofar: &str) {
     cli::err_msg(&format!("%{}: invalid conversion specification", sofar));
     exit(cli::EXIT_ERR);
 }
 
-fn convert_asterisk_arg_int(asterisk_arg: &String) -> isize {
+fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
     // this is a costly way to parse the
     // args used for asterisk values into integers
     // from various bases. Actually doing it correctly
@@ -32,11 +32,11 @@ fn convert_asterisk_arg_int(asterisk_arg: &String) -> isize {
     let field_info = FormatField {
         min_width: Some(0),
         second_field: Some(0),
-        orig: asterisk_arg,
+        orig: &asterisk_arg.to_string(),
         field_type: &field_type,
         field_char: &field_char,
     };
-    num_format::num_format(&field_info, Some(asterisk_arg))
+    num_format::num_format(&field_info, Some(&asterisk_arg.to_string()))
         .unwrap()
         .parse::<isize>()
         .unwrap()

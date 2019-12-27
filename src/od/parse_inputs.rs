@@ -131,7 +131,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLin
 }
 
 /// parses format used by offset and label on the commandline
-pub fn parse_offset_operand(s: &String) -> Result<usize, &'static str> {
+pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
     let mut start = 0;
     let mut len = s.len();
     let mut radix = 8;

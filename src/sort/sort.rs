@@ -49,7 +49,7 @@ struct Settings {
     unique: bool,
     check: bool,
     ignore_case: bool,
-    compare_fns: Vec<fn(&String, &String) -> Ordering>,
+    compare_fns: Vec<fn(&str, &str) -> Ordering>,
 }
 
 impl Default for Settings {
@@ -352,13 +352,13 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.sort_by(|a, b| compare_by(a, b, &settings))
 }
 
-fn compare_by(a: &String, b: &String, settings: &Settings) -> Ordering {
+fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     // Convert to uppercase if necessary
     let (a_upper, b_upper): (String, String);
     let (a, b) = if settings.ignore_case {
         a_upper = a.to_uppercase();
         b_upper = b.to_uppercase();
-        (&a_upper, &b_upper)
+        (&*a_upper, &*b_upper)
     } else {
         (a, b)
     };
@@ -402,7 +402,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 /// Compares two floating point numbers, with errors being assumed to be -inf.
 /// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
 /// 1,000 will parse as -inf.
-fn numeric_compare(a: &String, b: &String) -> Ordering {
+fn numeric_compare(a: &str, b: &str) -> Ordering {
     let fa = permissive_f64_parse(a);
     let fb = permissive_f64_parse(b);
     // f64::cmp isn't implemented because NaN messes with it
@@ -416,7 +416,7 @@ fn numeric_compare(a: &String, b: &String) -> Ordering {
     }
 }
 
-fn human_numeric_convert(a: &String) -> f64 {
+fn human_numeric_convert(a: &str) -> f64 {
     let int_iter = a.chars();
     let suffix_iter = a.chars();
     let int_str: String = int_iter.take_while(|c| c.is_numeric()).collect();
@@ -438,7 +438,7 @@ fn human_numeric_convert(a: &String) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_numeric_size_compare(a: &String, b: &String) -> Ordering {
+fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
     if fa > fb {
@@ -468,7 +468,7 @@ enum Month {
 }
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
-fn month_parse(line: &String) -> Month {
+fn month_parse(line: &str) -> Month {
     match line.split_whitespace()
         .next()
         .unwrap()
@@ -491,11 +491,11 @@ fn month_parse(line: &String) -> Month {
     }
 }
 
-fn month_compare(a: &String, b: &String) -> Ordering {
+fn month_compare(a: &str, b: &str) -> Ordering {
     month_parse(a).cmp(&month_parse(b))
 }
 
-fn version_compare(a: &String, b: &String) -> Ordering {
+fn version_compare(a: &str, b: &str) -> Ordering {
     let ver_a = Version::parse(a);
     let ver_b = Version::parse(b);
     if ver_a > ver_b {

@@ -1,4 +1,4 @@
-pub fn parse_number_of_bytes(s: &String) -> Result<usize, &'static str> {
+pub fn parse_number_of_bytes(s: &str) -> Result<usize, &'static str> {
     let mut start = 0;
     let mut len = s.len();
     let mut radix = 10;

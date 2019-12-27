@@ -272,7 +272,7 @@ fn is_format_dump_char(ch: Option<char>, show_ascii_dump: &mut bool) -> bool {
     }
 }
 
-fn parse_type_string(params: &String) -> Result<Vec<ParsedFormatterItemInfo>, String> {
+fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 
     let mut chars = params.chars();

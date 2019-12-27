@@ -135,12 +135,12 @@ impl Graph {
         self.in_edges.get(to).unwrap().contains(from)
     }
 
-    fn init_node(&mut self, n: &String) {
-        self.in_edges.insert(n.clone(), HashSet::new());
-        self.out_edges.insert(n.clone(), vec![]);
+    fn init_node(&mut self, n: &str) {
+        self.in_edges.insert(n.to_string(), HashSet::new());
+        self.out_edges.insert(n.to_string(), vec![]);
     }
 
-    fn add_edge(&mut self, from: &String, to: &String) {
+    fn add_edge(&mut self, from: &str, to: &str) {
         if !self.has_node(to) {
             self.init_node(to);
         }
@@ -150,8 +150,8 @@ impl Graph {
         }
 
         if from != to && !self.has_edge(from, to) {
-            self.in_edges.get_mut(to).unwrap().insert(from.clone());
-            self.out_edges.get_mut(from).unwrap().push(to.clone());
+            self.in_edges.get_mut(to).unwrap().insert(from.to_string());
+            self.out_edges.get_mut(from).unwrap().push(to.to_string());
         }
     }
 
