@@ -338,9 +338,7 @@ fn show_help(opts: &getopts::Options) {
 // TODO: Add support for all postfixes here up to and including EiB
 //       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    if size_str_opt.is_none() {
-        return None;
-    }
+    size_str_opt.as_ref()?;
 
     let mut size_str = size_str_opt.as_ref().unwrap().clone();
     // Immutably look at last character of size string
