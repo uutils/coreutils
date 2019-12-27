@@ -282,7 +282,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         );
         return 1;
     }
-    let ref formatstr = args[1];
+    let formatstr = &args[1];
 
     if formatstr == "--help" {
         print!("{} {}", LONGHELP_LEAD, LONGHELP_BODY);
