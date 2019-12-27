@@ -259,7 +259,7 @@ pub fn get_primitive_dec(
                         match c {
                             '0' => {}
                             _ => {
-                                m = ((i as isize) + 1) * -1;
+                                m = -((i as isize) + 1);
                                 pre = String::from(&second_segment[i..=i]);
                                 post = String::from(&second_segment[i + 1..]);
                                 break;
