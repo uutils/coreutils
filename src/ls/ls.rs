@@ -316,7 +316,7 @@ fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
 
 fn get_metadata(entry: &PathBuf, options: &getopts::Matches) -> std::io::Result<Metadata> {
     if options.opt_present("L") {
-        entry.metadata().or(entry.symlink_metadata())
+        entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
         entry.symlink_metadata()
     }
