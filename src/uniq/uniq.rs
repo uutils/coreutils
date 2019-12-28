@@ -252,10 +252,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage(
@@ -263,7 +263,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  writing to OUTPUT (or standard output)."
             )
         );
-        println!("");
+        println!();
         println!(
             "Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
              You may want to sort the input first, or use 'sort -u' without '{0}'.\n",

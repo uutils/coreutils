@@ -50,10 +50,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
     if matches.opt_present("help") || !matches.free.is_empty() {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage(

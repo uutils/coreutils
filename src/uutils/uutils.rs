@@ -24,7 +24,7 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage(cmap: &UtilityMap) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [util [arguments...]]\n", NAME);
     println!("Currently defined functions:");

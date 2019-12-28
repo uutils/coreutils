@@ -263,7 +263,7 @@ impl Pinky {
             }
         }
 
-        println!("");
+        println!();
     }
 
     fn print_heading(&self) {
@@ -279,7 +279,7 @@ impl Pinky {
         if self.include_where {
             print!(" Where");
         }
-        println!("");
+        println!();
     }
 
     fn short_pinky(&self) -> IOResult<()> {
@@ -325,7 +325,7 @@ impl Pinky {
                         read_to_console(f);
                     }
                 }
-                println!("");
+                println!();
             } else {
                 println!(" ???");
             }

@@ -84,20 +84,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         println!("{}", opts.usage("Remove (unlink) the FILE(s)."));
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
-        println!("");
+        println!();
         println!("To remove a file whose name starts with a '-', for example '-foo',");
         println!("use one of these commands:");
         println!("rm -- -foo");
-        println!("");
+        println!();
         println!("rm ./-foo");
-        println!("");
+        println!();
         println!("Note that if you use rm to remove a file, it might be possible to recover");
         println!("some of its contents, given sufficient expertise and/or time.  For greater");
         println!("assurance that the contents are truly unrecoverable, consider using shred.");

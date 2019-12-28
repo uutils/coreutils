@@ -295,7 +295,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         print!("'{}' -> '{}'", dst.display(), src.display());
         match backup_path {
             Some(path) => println!(" (backup: '{}')", path.display()),
-            None => println!(""),
+            None => println!(),
         }
     }
     Ok(())

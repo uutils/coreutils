@@ -86,9 +86,9 @@ fn print_usage(opts: &Options) {
          Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
          and are thus unaffected by 'stdbuf' settings.\n";
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage: stdbuf OPTION... COMMAND");
-    println!("");
+    println!();
     println!("{}\n{}", opts.usage(brief), explanation);
 }
 

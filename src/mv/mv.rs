@@ -387,7 +387,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
         print!("‘{}’ -> ‘{}’", from.display(), to.display());
         match backup_path {
             Some(path) => println!(" (backup: ‘{}’)", path.display()),
-            None => println!(""),
+            None => println!(),
         }
     }
     Ok(())

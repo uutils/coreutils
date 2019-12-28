@@ -290,7 +290,7 @@ fn show_help(opts: &getopts::Options) {
     println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
     println!("the files because it is common to operate on device files like /dev/hda,");
     println!("and those files usually should not be removed.");
-    println!("");
+    println!();
     println!(
         "CAUTION: Note that {} relies on a very important assumption:",
         NAME
@@ -302,20 +302,20 @@ fn show_help(opts: &getopts::Options) {
         NAME
     );
     println!("not effective, or is not guaranteed to be effective in all file system modes:");
-    println!("");
+    println!();
     println!("* log-structured or journaled file systems, such as those supplied with");
     println!("AIX and Solaris (and JFS, ReiserFS, XFS, Ext3, etc.)");
-    println!("");
+    println!();
     println!("* file systems that write redundant data and carry on even if some writes");
     println!("fail, such as RAID-based file systems");
-    println!("");
+    println!();
     println!("* file systems that make snapshots, such as Network Appliance's NFS server");
-    println!("");
+    println!();
     println!("* file systems that cache in temporary locations, such as NFS");
     println!("version 3 clients");
-    println!("");
+    println!();
     println!("* compressed file systems");
-    println!("");
+    println!();
     println!("In the case of ext3 file systems, the above disclaimer applies");
     println!(
         "(and {} is thus of limited effectiveness) only in data=journal mode,",
@@ -329,7 +329,7 @@ fn show_help(opts: &getopts::Options) {
     println!("Ext3 journaling modes can be changed by adding the data=something option");
     println!("to the mount options for a particular file system in the /etc/fstab file,");
     println!("as documented in the mount man page (man mount).");
-    println!("");
+    println!();
     println!("In addition, file system backups and remote mirrors may contain copies");
     println!("of the file that cannot be removed, and that will allow a shredded file");
     println!("to be recovered later.");

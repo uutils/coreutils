@@ -90,10 +90,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage("Print newline, word and byte counts for each FILE")
@@ -254,7 +254,7 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     if result.title != "-" {
         println!(" {}", result.title);
     } else {
-        println!("");
+        println!();
     }
 }
 

@@ -40,10 +40,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [FILE]... [OPTION]...", NAME);
-        println!("");
+        println!();
         println!("{}", opts.usage("Unlink the file at [FILE]."));
         return 0;
     }

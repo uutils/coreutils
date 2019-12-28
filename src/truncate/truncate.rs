@@ -58,10 +58,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [OPTION]... FILE...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage("Shrink or extend the size of each file to the specified size.")

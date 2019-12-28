@@ -147,7 +147,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn version() {
     println!("{} (uutils) {}", NAME, VERSION);
     println!("The MIT License");
-    println!("");
+    println!();
     println!("Author -- Alexander Fomin.");
 }
 

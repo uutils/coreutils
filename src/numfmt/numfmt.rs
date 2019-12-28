@@ -315,10 +315,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = opts.parse(&args[1..]).unwrap();
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage("Convert numbers from/to human-readable strings")

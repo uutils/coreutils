@@ -76,7 +76,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn print_help(opts: &getopts::Options) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     print!(
         "{}",

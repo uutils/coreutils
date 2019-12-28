@@ -178,10 +178,10 @@ fn translate_input<T: SymbolTranslator>(
 
 fn usage(opts: &Options) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [OPTIONS] SET1 [SET2]", NAME);
-    println!("");
+    println!();
     println!("{}", opts.usage("Translate or delete characters."));
 }
 

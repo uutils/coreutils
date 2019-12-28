@@ -107,7 +107,7 @@ fn table() {
         //TODO: obtain max signal width here
 
         if (idx + 1) % 7 == 0 {
-            println!("");
+            println!();
         }
     }
 }
@@ -133,7 +133,7 @@ fn print_signals() {
         pos += signal.name.len();
         print!("{}", signal.name);
         if idx > 0 && pos > 73 {
-            println!("");
+            println!();
             pos = 0;
         } else {
             pos += 1;

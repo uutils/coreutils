@@ -136,12 +136,12 @@ fn version() {
 
 fn show_usage(opts: &getopts::Options) {
     version();
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [-s|--strip] [-z|--zero] FILENAME...", NAME);
     println!("  {} -V|--version", NAME);
     println!("  {} -h|--help", NAME);
-    println!("");
+    println!();
     print!("{}", opts.usage(
             "Convert each FILENAME to the absolute path.\n\
             All the symbolic links will be resolved, resulting path will contain no special components like '.' or '..'.\n\

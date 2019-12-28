@@ -164,5 +164,5 @@ fn more(matches: getopts::Matches) {
     }
 
     reset_term(&mut term);
-    println!("");
+    println!();
 }

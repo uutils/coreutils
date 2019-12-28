@@ -272,7 +272,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         if matched_groups > 0 {
             // The current line is a section delimiter, so we output
             // a blank line.
-            println!("");
+            println!();
             // However the line does not count as a blank line, so we
             // reset the counter used for --join-blank-lines.
             empty_line_count = 0;

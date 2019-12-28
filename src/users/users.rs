@@ -37,10 +37,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [OPTION]... [FILE]", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage("Output who is currently logged in according to FILE.")
