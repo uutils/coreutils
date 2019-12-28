@@ -185,7 +185,7 @@ impl Graph {
     }
 
     fn is_acyclic(&self) -> bool {
-        for (_, edges) in &self.out_edges {
+        for edges in self.out_edges.values() {
             if !edges.is_empty() {
                 return false;
             }
