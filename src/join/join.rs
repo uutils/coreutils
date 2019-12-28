@@ -317,9 +317,9 @@ impl<'a> State<'a> {
         for line1 in &self.seq {
             for line2 in &other.seq {
                 if repr.uses_format() {
-                    repr.print_format(|spec| match spec {
-                        &Spec::Key => key,
-                        &Spec::Field(file_num, field_num) => {
+                    repr.print_format(|spec| match *spec {
+                        Spec::Key => key,
+                        Spec::Field(file_num, field_num) => {
                             if file_num == self.file_num {
                                 return line1.get_field(field_num);
                             }
@@ -423,9 +423,9 @@ impl<'a> State<'a> {
 
     fn print_line(&self, line: &Line, repr: &Repr) {
         if repr.uses_format() {
-            repr.print_format(|spec| match spec {
-                &Spec::Key => line.get_field(self.key),
-                &Spec::Field(file_num, field_num) => if file_num == self.file_num {
+            repr.print_format(|spec| match *spec {
+                Spec::Key => line.get_field(self.key),
+                Spec::Field(file_num, field_num) => if file_num == self.file_num {
                     line.get_field(field_num)
                 } else {
                     None
