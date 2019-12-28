@@ -249,7 +249,7 @@ fn create_word_set(
                 }
                 word_set.insert(WordRef {
                     word: word,
-                    filename: String::from(file.clone()),
+                    filename: file.clone(),
                     global_line_nr: offs + count,
                     local_line_nr: count,
                     position: beg,

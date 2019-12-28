@@ -186,7 +186,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
             }
         }
     }
-    tmpdir.push(String::from(buf));
+    tmpdir.push(buf);
     println!("{}", tmpdir.display());
     0
 }
