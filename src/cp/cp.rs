@@ -34,13 +34,18 @@ use kernel32::CreateFileW;
 extern crate winapi;
 
 use std::mem;
+#[cfg(not(windows))]
 use std::ffi::CString;
+#[cfg(windows)]
+use std::ffi::OsStr;
 use clap::{App, Arg, ArgMatches};
 use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{stdin, stdout, Write};
 use std::io;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use uucore::fs::{canonicalize, CanonicalizeMode};
@@ -712,11 +717,11 @@ fn preserve_hardlinks(
     {
         if !source.is_dir() {
             unsafe {
-                let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
                 let inode: u64;
                 let nlinks: u64;
                 #[cfg(unix)]
                 {
+                    let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
                     let mut stat = mem::zeroed();
                     if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
                         return Err(format!(
@@ -730,9 +735,10 @@ fn preserve_hardlinks(
                 }
                 #[cfg(windows)]
                 {
+                    let src_path: Vec<u16> = OsStr::new(source).encode_wide().collect();
                     let stat = mem::uninitialized();
                     let handle = CreateFileW(
-                        src_path.as_ptr() as *const u16,
+                        src_path.as_ptr(),
                         winapi::um::winnt::GENERIC_READ,
                         winapi::um::winnt::FILE_SHARE_READ,
                         std::ptr::null_mut(),
