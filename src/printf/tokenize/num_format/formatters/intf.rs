@@ -216,13 +216,12 @@ impl Formatter for Intf {
             if convert_hints.check_past_max || decr_from_max || radix_mismatch {
                 // radix of in and out is the same.
                 let segment = String::from(&str_in[begin..end]);
-                let m = Intf::conv_from_segment(
+                Intf::conv_from_segment(
                     &segment,
                     inprefix.radix_in.clone(),
                     *field.field_char,
                     inprefix.sign,
-                );
-                m
+                )
             } else {
                 // otherwise just do a straight string copy.
                 let mut fmt_prim: FormatPrimitive = Default::default();

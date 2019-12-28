@@ -86,8 +86,7 @@ pub fn arrnum_int_div_step<'a>(
                 Vec::new()
             } else {
                 let remainder_as_arrnum = unsigned_to_arrnum(bufferval);
-                let remainder_as_base_arrnum = base_conv_vec(&remainder_as_arrnum, 10, radix_in);
-                remainder_as_base_arrnum
+                base_conv_vec(&remainder_as_arrnum, 10, radix_in)
             };
             rem_out.position += 1 + (traversed - rem_out.replace.len());
             break;

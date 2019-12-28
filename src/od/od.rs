@@ -493,6 +493,5 @@ fn open_input_peek_reader<'a>(
 
     let mf = MultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
-    let input = PeekReader::new(pr);
-    input
+    PeekReader::new(pr)
 }
