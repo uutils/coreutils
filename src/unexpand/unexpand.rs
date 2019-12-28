@@ -189,13 +189,13 @@ fn write_tabs(
                 break;
             }
 
-            safe_unwrap!(output.write_all("\t".as_bytes()));
+            safe_unwrap!(output.write_all(b"\t"));
             scol += nts;
         }
     }
 
     while col > scol {
-        safe_unwrap!(output.write_all(" ".as_bytes()));
+        safe_unwrap!(output.write_all(b" "));
         scol += 1;
     }
 }
@@ -219,7 +219,7 @@ fn unexpand(options: Options) {
     for file in options.files.into_iter() {
         let mut fh = open(file);
 
-        while match fh.read_until('\n' as u8, &mut buf) {
+        while match fh.read_until(b'\n' as u8, &mut buf) {
             Ok(s) => s > 0,
             Err(_) => !buf.is_empty(),
         } {

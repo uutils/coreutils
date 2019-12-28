@@ -336,7 +336,7 @@ fn display_dir_entry_size(entry: &PathBuf, options: &getopts::Matches) -> (usize
 fn pad_left(string: String, count: usize) -> String {
     if count > string.len() {
         let pad = count - string.len();
-        let pad = String::from_utf8(vec![' ' as u8; pad]).unwrap();
+        let pad = String::from_utf8(vec![b' ' as u8; pad]).unwrap();
         format!("{}{}", pad, string)
     } else {
         string

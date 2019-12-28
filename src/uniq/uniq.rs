@@ -99,7 +99,7 @@ impl Uniq {
         if self.zero_terminated {
             0
         } else {
-            '\n' as u8
+            b'\n' as u8
         }
     }
 

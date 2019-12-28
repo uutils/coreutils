@@ -121,10 +121,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-const CR: u8 = '\r' as u8;
-const LF: u8 = '\n' as u8;
-const SPACE: u8 = ' ' as u8;
-const TAB: u8 = '\t' as u8;
+const CR: u8 = b'\r';
+const LF: u8 = b'\n';
+const SPACE: u8 = b' ';
+const TAB: u8 = b'\t';
 const SYN: u8 = 0x16 as u8;
 const FF: u8 = 0x0C as u8;
 
