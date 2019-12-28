@@ -254,13 +254,13 @@ With no FILE, or when FILE is -, read standard input.",
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
-        SortMode::Default => String::cmp,
+        SortMode::Default => default_compare,
     });
 
     if !settings.stable {
         match settings.mode {
             SortMode::Default => {}
-            _ => settings.compare_fns.push(String::cmp),
+            _ => settings.compare_fns.push(default_compare),
         }
     }
 
@@ -393,6 +393,10 @@ fn permissive_f64_parse(a: &str) -> f64 {
             }
         }
     }
+}
+
+fn default_compare(a: &str, b: &str) -> Ordering {
+    a.cmp(b)
 }
 
 /// Compares two floating point numbers, with errors being assumed to be -inf.
