@@ -171,7 +171,7 @@ fn list(options: getopts::Matches) {
     let locs: Vec<String> = if options.free.is_empty() {
         vec![String::from(".")]
     } else {
-        options.free.iter().cloned().collect()
+        options.free.to_vec()
     };
 
     let mut files = Vec::<PathBuf>::new();
