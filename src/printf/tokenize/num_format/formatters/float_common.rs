@@ -160,7 +160,7 @@ fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
             '9' => {
                 rev.push('0');
             }
-            e @ _ => {
+            e => {
                 rev.push(((e as u8) + 1) as char);
                 finished_in_dec = true;
                 break;

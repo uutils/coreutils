@@ -120,7 +120,7 @@ impl UnescapedText {
                     byte_vec.push(ch as u8);
                 }
             }
-            e @ _ => {
+            e => {
                 // only for hex and octal
                 // is byte encoding specified.
                 // otherwise, why not leave the door open
