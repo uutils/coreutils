@@ -336,14 +336,14 @@ fn display_dir_entry_size(entry: &PathBuf, options: &getopts::Matches) -> (usize
 fn pad_left(string: String, count: usize) -> String {
     if count > string.len() {
         let pad = count - string.len();
-        let pad = String::from_utf8(vec![b' ' as u8; pad]).unwrap();
+        let pad = String::from_utf8(vec![b' '; pad]).unwrap();
         format!("{}{}", pad, string)
     } else {
         string
     }
 }
 
-fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::Matches) {
+fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Matches) {
     if options.opt_present("long") || options.opt_present("numeric-uid-gid") {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {

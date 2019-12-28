@@ -478,7 +478,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader<'a>(
-    input_strings: &'a Vec<String>,
+    input_strings: &'a [String],
     skip_bytes: usize,
     read_bytes: Option<usize>,
 ) -> PeekReader<PartialReader<MultifileReader<'a>>> {
