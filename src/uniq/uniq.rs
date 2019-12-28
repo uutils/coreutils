@@ -79,12 +79,12 @@ impl Uniq {
                 let mut i = 0;
                 while field < skip_fields && i < line.len() {
                     while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                        i = i + 1;
+                        i += 1;
                     }
                     while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                        i = i + 1;
+                        i += 1;
                     }
-                    field = field + 1;
+                    field += 1;
                 }
                 &line[i..]
             } else {

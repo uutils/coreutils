@@ -72,7 +72,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     let r = 10f64.powi(l);
     if (f > 0.0 && r > f) || (f < 0.0 && -r < f) {
         // fix precision error
-        l = l - 1;
+        l -= 1;
     }
 
     if l >= 0 && l <= (precision as i32 - 1) {
