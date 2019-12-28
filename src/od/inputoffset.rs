@@ -58,7 +58,7 @@ impl InputOffset {
     /// both `Radix::NoPrefix` was set and no label (--traditional) is used.
     pub fn print_final_offset(&self) {
         if self.radix != Radix::NoPrefix || self.label.is_some() {
-            print!("{}\n", self.format_byte_offset());
+            println!("{}", self.format_byte_offset());
         }
     }
 }

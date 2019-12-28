@@ -91,7 +91,7 @@ fn print_loadavg() {
     let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
 
     if loads == -1 {
-        print!("\n");
+        println!();
     } else {
         print!("load average: ");
         for n in 0..loads {

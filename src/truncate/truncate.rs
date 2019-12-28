@@ -66,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             "{}",
             opts.usage("Shrink or extend the size of each file to the specified size.")
         );
-        print!(
+        println!(
             "
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -83,8 +83,7 @@ file based on its current size:
     '<'  => at most
     '>'  => at least
     '/'  => round down to multiple of
-    '%'  => round up to multiple of
-"
+    '%'  => round up to multiple of"
         );
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);

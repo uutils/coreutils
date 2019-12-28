@@ -469,7 +469,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
             // lines of multi-format rasters.
             print!("{:>width$}", "", width = prefix.chars().count());
         }
-        print!("{}\n", output_text);
+        println!("{}", output_text);
     }
 }
 
