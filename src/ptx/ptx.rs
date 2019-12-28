@@ -271,7 +271,7 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &str) -> String {
             Some(x) => (x.start(), x.end()),
             None => (0, 0),
         };
-        format!("{}", &line[beg..end])
+        line[beg..end].to_string()
     } else {
         String::new()
     }

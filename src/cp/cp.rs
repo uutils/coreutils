@@ -979,7 +979,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             }
             #[cfg(not(unix))]
             {
-                return Err(format!("XAttrs are only supported on unix.").into());
+                return Err("XAttrs are only supported on unix.".to_string().into());
             }
         }
     })
@@ -1114,7 +1114,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     if options.reflink {
         #[cfg(not(target_os = "linux"))]
-        return Err(format!("--reflink is only supported on linux").into());
+        return Err("--reflink is only supported on linux".to_string().into());
 
         #[cfg(target_os = "linux")]
         {

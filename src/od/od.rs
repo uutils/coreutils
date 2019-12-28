@@ -224,7 +224,7 @@ impl OdOptions {
         let formats = match parse_format_flags(&args) {
             Ok(f) => f,
             Err(e) => {
-                return Err(format!("{}", e));
+                return Err(e.to_string());
             }
         };
 
@@ -260,7 +260,7 @@ impl OdOptions {
             Some(s) => {
                 let st = s.into_bytes();
                 if st.len() != 1 {
-                    return Err(format!("Radix must be one of [d, o, n, x]"));
+                    return Err("Radix must be one of [d, o, n, x]".to_string());
                 } else {
                     let radix: char =
                         *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
@@ -269,7 +269,7 @@ impl OdOptions {
                         'x' => Radix::Hexadecimal,
                         'o' => Radix::Octal,
                         'n' => Radix::NoPrefix,
-                        _ => return Err(format!("Radix must be one of [d, o, n, x]")),
+                        _ => return Err("Radix must be one of [d, o, n, x]".to_string()),
                     }
                 }
             }

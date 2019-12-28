@@ -155,9 +155,7 @@ pub fn parse_format_flags(args: &Vec<String>) -> Result<Vec<ParsedFormatterItemI
         }
     }
     if expect_type_string {
-        return Err(format!(
-            "missing format specification after '--format' / '-t'"
-        ));
+        return Err("missing format specification after '--format' / '-t'".to_string());
     }
 
     if formats.is_empty() {
