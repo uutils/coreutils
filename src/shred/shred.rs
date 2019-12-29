@@ -369,8 +369,8 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     Some(coeff * unit)
 }
 
-fn pass_name(pass_type: &PassType) -> String {
-    match *pass_type {
+fn pass_name(pass_type: PassType) -> String {
+    match pass_type {
         PassType::Random => String::from("random"),
         PassType::Pattern(bytes) => {
             let mut s: String = String::new();
@@ -451,7 +451,7 @@ fn wipe_file(
 
         for (i, pass_type) in pass_sequence.iter().enumerate() {
             if verbose {
-                let pass_name: String = pass_name(pass_type);
+                let pass_name: String = pass_name(*pass_type);
                 if total_passes.to_string().len() == 1 {
                     println!(
                         "{}: {}: pass {}/{} ({})... ",
