@@ -28,6 +28,7 @@ fn usage(cmap: &UtilityMap) {
     println!("Usage:");
     println!("  {} [util [arguments...]]\n", NAME);
     println!("Currently defined functions:");
+    #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
     utils.sort();
     for util in utils {

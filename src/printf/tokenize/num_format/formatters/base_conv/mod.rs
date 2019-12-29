@@ -26,7 +26,8 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
             }
         }
     }
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| x.clone()).collect();
+    #[allow(clippy::map_clone)]
+    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
     ret
 }
 
@@ -190,7 +191,8 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
             }
         }
     }
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| x.clone()).collect();
+    #[allow(clippy::map_clone)]
+    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
     ret
 }
 
