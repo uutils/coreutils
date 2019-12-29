@@ -41,12 +41,12 @@ pub struct DivOut<'a> {
     pub remainder: Remainder<'a>,
 }
 
-pub fn arrnum_int_div_step<'a>(
-    rem_in: Remainder<'a>,
+pub fn arrnum_int_div_step(
+    rem_in: Remainder,
     radix_in: u8,
     base_ten_int_divisor: u8,
     after_decimal: bool,
-) -> DivOut<'a> {
+) -> DivOut {
     let mut rem_out = Remainder {
         position: rem_in.position,
         replace: Vec::new(),

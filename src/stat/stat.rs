@@ -85,10 +85,10 @@ macro_rules! print_adjusted {
     }
 }
 
-static NAME: &'static str = "stat";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "stat";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const MOUNT_INFO: &'static str = "/etc/mtab";
+const MOUNT_INFO: &str = "/etc/mtab";
 pub const F_ALTER: u8 = 1;
 pub const F_ZERO: u8 = 1 << 1;
 pub const F_LEFT: u8 = 1 << 2;
@@ -183,7 +183,7 @@ impl ScanUtil for str {
     }
 }
 
-pub fn group_num<'a>(s: &'a str) -> Cow<'a, str> {
+pub fn group_num(s: &str) -> Cow<str> {
     assert!(s.chars().all(char::is_numeric));
     if s.len() < 4 {
         return s.into();

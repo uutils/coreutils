@@ -74,7 +74,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let paths: Vec<PathBuf> = {
-        fn string_to_path<'a>(s: &'a String) -> &'a Path {
+        fn string_to_path(s: &String) -> &Path {
             Path::new(s)
         };
         let to_owned = |p: &Path| p.to_owned();

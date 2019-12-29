@@ -31,7 +31,7 @@ const BLOCK_SIZE: usize = 512;
 const NAMESET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
-const PATTERNS: [&'static [u8]; 22] = [
+const PATTERNS: [&[u8]; 22] = [
     b"\x00",
     b"\xFF",
     b"\x55",

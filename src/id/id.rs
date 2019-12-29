@@ -67,8 +67,8 @@ mod audit {
     }
 }
 
-static SYNTAX: &'static str = "[OPTION]... [USER]";
-static SUMMARY: &'static str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
+static SYNTAX: &str = "[OPTION]... [USER]";
+static SUMMARY: &str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");

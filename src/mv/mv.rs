@@ -124,7 +124,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let paths: Vec<PathBuf> = {
-        fn strip_slashes<'a>(p: &'a Path) -> &'a Path {
+        fn strip_slashes(p: &Path) -> &Path {
             p.components().as_path()
         }
         let to_owned = |p: &Path| p.to_owned();

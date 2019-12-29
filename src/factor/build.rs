@@ -149,5 +149,5 @@ const PREAMBLE: &'static str = r##"/*
 // Please do not edit by hand. Instead, modify and
 // re-run src/factor/gen_tables.rs.
 
-pub const P_INVS_U64: &'static [(u64, u64, u64)] = &[
+pub const P_INVS_U64: &[(u64, u64, u64)] = &[
    "##;
