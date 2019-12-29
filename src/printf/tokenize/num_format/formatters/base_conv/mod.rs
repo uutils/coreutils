@@ -11,7 +11,7 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
         let i = it.next();
         match i {
             Some(u) => {
-                new_amount = ((u.clone() as u16) * fact) + carry;
+                new_amount = ((*u as u16) * fact) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
                 ret_rev.push(rem as u8)
@@ -64,9 +64,9 @@ pub fn arrnum_int_div_step<'a>(
     let mut it_f = refd_vals.iter();
     loop {
         let u = match it_replace.next() {
-            Some(u_rep) => u_rep.clone() as u16,
+            Some(u_rep) => *u_rep as u16,
             None => match it_f.next() {
-                Some(u_orig) => u_orig.clone() as u16,
+                Some(u_orig) => *u_orig as u16,
                 None => {
                     if !after_decimal {
                         break;
@@ -176,7 +176,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
         let i = it.next();
         match i {
             Some(u) => {
-                new_amount = (u.clone() as u16) + carry;
+                new_amount = (*u as u16) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
                 ret_rev.push(rem as u8)
@@ -195,19 +195,19 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
     ret
 }
 
-pub fn base_conv_vec(src: &Vec<u8>, radix_src: u8, radix_dest: u8) -> Vec<u8> {
+pub fn base_conv_vec(src: &[u8], radix_src: u8, radix_dest: u8) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     result.push(0);
     for i in src {
         result = arrnum_int_mult(&result, radix_dest, radix_src);
-        result = arrnum_int_add(&result, radix_dest, i.clone());
+        result = arrnum_int_add(&result, radix_dest, *i);
     }
     result
 }
 
 pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
-    let mut src_tmp: u16 = src.clone();
+    let mut src_tmp: u16 = src;
     while src_tmp > 0 {
         result.push((src_tmp % 10) as u8);
         src_tmp /= 10;
@@ -235,7 +235,7 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
         }
         i += 1;
         factor /= radix_src_float;
-        r += factor * (u.clone() as f64)
+        r += factor * (*u as f64)
     }
     r
 }

@@ -26,7 +26,7 @@ static LONG_HELP: &str = "";
 fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
     let mut s = String::new();
     let delim = match opts.opt_str("output-delimiter") {
-        Some(d) => d.clone(),
+        Some(d) => d,
         None => "\t".to_owned(),
     };
 

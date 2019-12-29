@@ -90,7 +90,7 @@ fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
         sign: 1,
         offset: 0,
     };
-    let mut topchar = str_it.next().clone();
+    let mut topchar = str_it.next();
     // skip spaces and ensure topchar is the first non-space char
     // (or None if none exists)
     loop {
@@ -203,7 +203,7 @@ fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
 // if it is a numeric field, passing the field details
 // and an iterator to the argument
 pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<String> {
-    let fchar = field.field_char.clone();
+    let fchar = field.field_char;
 
     // num format mainly operates by further delegating to one of
     // several Formatter structs depending on the field

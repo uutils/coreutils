@@ -764,7 +764,7 @@ fn preserve_hardlinks(
                     }
                 }
                 if !(*found_hard_link) && nlinks > 1 {
-                    hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+                    hard_links.push((dest.to_str().unwrap().to_string(), inode));
                 }
             }
         }

@@ -224,7 +224,7 @@ impl OdOptions {
         let formats = match parse_format_flags(&args) {
             Ok(f) => f,
             Err(e) => {
-                return Err(e.to_string());
+                return Err(e);
             }
         };
 
