@@ -14,7 +14,7 @@ impl CommandLineOpts for Matches {
         self.free.clone()
     }
     fn opts_present(&self, opts: &[&str]) -> bool {
-        self.opts_present(&opts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        self.opts_present(&opts.iter().map(|s| (*s).to_string()).collect::<Vec<_>>())
     }
 }
 
