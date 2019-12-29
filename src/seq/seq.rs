@@ -95,10 +95,10 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                 Some(sep) => {
                                     options.separator = sep;
                                     let next = chiter.next();
-                                    if next.is_some() {
+                                    if let Some(n) = next {
                                         show_error!(
                                             "unexpected character ('{}')",
-                                            next.unwrap()
+                                            n
                                         );
                                         return Err(1);
                                     }
@@ -112,10 +112,10 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                 Some(term) => {
                                     options.terminator = Some(term);
                                     let next = chiter.next();
-                                    if next.is_some() {
+                                    if let Some(n) = next {
                                         show_error!(
                                             "unexpected character ('{}')",
-                                            next.unwrap()
+                                            n
                                         );
                                         return Err(1);
                                     }

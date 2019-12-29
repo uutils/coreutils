@@ -55,16 +55,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
     // Translate a ~str in octal form to u16, default to 755
     // Not tested on Windows
     let mode_match = matches.opts_str(&["mode".to_owned()]);
-    let mode: u16 = if mode_match.is_some() {
-        let m = mode_match.unwrap();
-        let res: Option<u16> = u16::from_str_radix(&m, 8).ok();
-        if res.is_some() {
-            res.unwrap()
-        } else {
-            crash!(1, "no mode given");
-        }
-    } else {
-        0o755 as u16
+    let mode: u16 = match mode_match {
+        Some(m) => {
+            let res: Option<u16> = u16::from_str_radix(&m, 8).ok();
+            match res {
+                Some(r) => r,
+                _ => crash!(1, "no mode given")
+            }
+        },
+        _ => 0o755 as u16
     };
 
     let dirs = matches.free;
