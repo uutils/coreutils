@@ -491,8 +491,10 @@ fn month_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn version_compare(a: &str, b: &str) -> Ordering {
+    #![allow(clippy::comparison_chain)]
     let ver_a = Version::parse(a);
     let ver_b = Version::parse(b);
+    // Version::cmp is not implemented; implement comparison directly
     if ver_a > ver_b {
         Ordering::Greater
     } else if ver_a < ver_b {
