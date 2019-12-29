@@ -156,15 +156,15 @@ struct LineSplitter {
 }
 
 impl LineSplitter {
-    fn new(settings: &Settings) -> Box<dyn Splitter> {
+    fn new(settings: &Settings) -> LineSplitter {
         let n = match settings.strategy_param.parse() {
             Ok(a) => a,
             Err(e) => crash!(1, "invalid number of lines: {}", e),
         };
-        Box::new(LineSplitter {
+        LineSplitter {
             saved_lines_to_write: n,
             lines_to_write: n,
-        }) as Box<dyn Splitter>
+        }
     }
 }
 
@@ -187,7 +187,7 @@ struct ByteSplitter {
 }
 
 impl ByteSplitter {
-    fn new(settings: &Settings) -> Box<dyn Splitter> {
+    fn new(settings: &Settings) -> ByteSplitter {
         let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
@@ -213,12 +213,12 @@ impl ByteSplitter {
                 Err(e) => crash!(1, "invalid number of bytes: {}", e),
             }
         };
-        Box::new(ByteSplitter {
+        ByteSplitter {
             saved_bytes_to_write: n * multiplier,
             bytes_to_write: n * multiplier,
             break_on_line_end: settings.strategy == "b",
             require_whole_line: false,
-        }) as Box<dyn Splitter>
+        }
     }
 }
 
@@ -290,8 +290,8 @@ fn split(settings: &Settings) -> i32 {
     });
 
     let mut splitter: Box<dyn Splitter> = match settings.strategy.as_ref() {
-        "l" => LineSplitter::new(settings),
-        "b" | "C" => ByteSplitter::new(settings),
+        "l" => Box::new(LineSplitter::new(settings)),
+        "b" | "C" => Box::new(ByteSplitter::new(settings)),
         a => crash!(1, "strategy {} not supported", a),
     };
 
