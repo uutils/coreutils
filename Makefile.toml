@@ -1,0 +1,91 @@
+[config]
+default_to_workspace = false
+
+[config.modify_core_tasks]
+namespace = "core"
+
+[env]
+CARGO_MAKE_CARGO_BUILD_TEST_FLAGS = { source = "${CARGO_MAKE_RUST_TARGET_OS}", default_value = "", mapping = { "linux" = "--no-default-features --features unix", "windows" = "--no-default-features --features windows" } }
+
+[tasks.default]
+description = "Build and Test"
+category = "[project]"
+dependencies = [
+	"build",
+    "test-terse",
+]
+
+[tasks.build]
+description = "Build"
+category = "[project]"
+dependencies = [
+	"core::pre-build",
+    "core::build",
+    "core::post-build",
+]
+
+[tasks.format]
+description = "Format"
+category = "[project]"
+dependencies = [
+	"action.format",
+]
+
+[tasks.help]
+description = "Help"
+category = "[project]"
+command = "cargo"
+args = [ "make", "--list-all-steps" ]
+
+[tasks.lint]
+description = "Lint report"
+category = "[project]"
+dependencies = [
+	"action-clippy",
+	"action-fmt_report",
+]
+
+[tasks.test]
+description = "Test"
+category = "[project]"
+dependencies = [
+	"core::pre-test",
+    "core::test",
+    "core::post-test",
+]
+
+[tasks.test-terse]
+description = "Test (with terse/summary output)"
+category = "[project]"
+dependencies = [
+	"core::pre-test",
+    "action-test_quiet",
+    "core::post-test",
+]
+
+### actions
+
+[tasks.action-clippy]
+description = "`cargo clippy` lint report"
+command = "cargo"
+args = ["clippy", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
+
+[tasks.action-format]
+description = "`cargo fmt`"
+command = "cargo"
+args = ["fmt"]
+
+[tasks.action-fmt]
+description = "`cargo fmt`"
+command = "cargo"
+args = ["fmt"]
+
+[tasks.action-fmt_report]
+description = "`cargo fmt` lint report"
+command = "cargo"
+args = ["fmt", "--", "--check"]
+
+[tasks.action-test_quiet]
+description = "Test (in `--quiet` mode)"
+command = "cargo"
+args = ["test", "--quiet", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
