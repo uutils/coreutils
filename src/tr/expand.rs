@@ -95,7 +95,10 @@ impl<'a> Iterator for ExpandSet<'a> {
                 self.unesc.next(); // this is the '-'
                 let last = self.unesc.next().unwrap(); // this is the end of the range
 
+                #[allow(clippy::range_plus_one)]
+                {
                 self.range = first as u32 + 1..last as u32 + 1;
+                }
             }
 
             return Some(first); // in any case, return the next char
