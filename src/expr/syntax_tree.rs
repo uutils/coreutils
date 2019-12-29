@@ -298,17 +298,18 @@ fn push_token_to_either_stack(
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
     let result = match *token {
-        Token::Value { .. } => Ok(out_stack.push((token_idx, token.clone()))),
+        Token::Value { .. } => { out_stack.push((token_idx, token.clone())); Ok(()) },
 
         Token::InfixOp { .. } => if op_stack.is_empty() {
-            Ok(op_stack.push((token_idx, token.clone())))
+            op_stack.push((token_idx, token.clone()));
+            Ok(())
         } else {
             push_op_to_stack(token_idx, token, out_stack, op_stack)
         },
 
-        Token::PrefixOp { .. } => Ok(op_stack.push((token_idx, token.clone()))),
+        Token::PrefixOp { .. } => { op_stack.push((token_idx, token.clone())); Ok(()) },
 
-        Token::ParOpen => Ok(op_stack.push((token_idx, token.clone()))),
+        Token::ParOpen => { op_stack.push((token_idx, token.clone())); Ok(()) },
 
         Token::ParClose => move_till_match_paren(out_stack, op_stack),
     };
@@ -349,7 +350,7 @@ fn push_op_to_stack(
     {
         loop {
             match op_stack.last() {
-                None => return Ok(op_stack.push((token_idx, token.clone()))),
+                None => { op_stack.push((token_idx, token.clone())); return Ok(()) },
 
                 Some(&(_, Token::ParOpen)) => {
                     op_stack.push((token_idx, token.clone()));

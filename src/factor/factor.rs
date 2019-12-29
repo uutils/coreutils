@@ -154,7 +154,7 @@ fn print_factors(num: u64) {
 }
 
 fn print_factors_str(num_str: &str) {
-    if let Err(e) = num_str.parse::<u64>().and_then(|x| Ok(print_factors(x))) {
+    if let Err(e) = num_str.parse::<u64>().and_then(|x| { print_factors(x); Ok(()) }) {
         show_warning!("{}: {}", num_str, e);
     }
 }

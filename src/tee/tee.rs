@@ -80,7 +80,7 @@ fn options(args: &[String]) -> Result<Options> {
 
 fn exec(options: Options) -> Result<()> {
     match options.print_and_exit {
-        Some(text) => Ok(println!("{}", text)),
+        Some(text) => { println!("{}", text); Ok(()) },
         None => tee(options),
     }
 }

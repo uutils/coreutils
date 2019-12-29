@@ -276,7 +276,8 @@ fn handle_stdin(options: NumfmtOptions) -> Result<()> {
     for l in lines {
         l.map_err(|e| e.to_string()).and_then(|l| {
             let l = format_string(l, &options)?;
-            Ok(println!("{}", l))
+            println!("{}", l);
+            Ok(())
         })?
     }
     Ok(())

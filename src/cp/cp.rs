@@ -946,7 +946,7 @@ impl OverwriteMode {
 
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("'{}' -> '{}'", source.display().to_string(), dest.display());
-    Ok(match *attribute {
+    match *attribute {
         #[cfg(unix)]
         Attribute::Mode => {
             let mode = fs::metadata(source).context(context)?.permissions().mode();
@@ -982,7 +982,8 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
                 return Err("XAttrs are only supported on unix.".to_string().into());
             }
         }
-    })
+    };
+    Ok(())
 }
 
 #[cfg(not(windows))]
