@@ -468,11 +468,11 @@ fn hashsum(
         }
     }
     if !status {
-        if bad_format == 1 {
-            show_warning!("{} line is improperly formatted", bad_format);
-        } else if bad_format > 1 {
-            show_warning!("{} lines are improperly formatted", bad_format);
-        }
+        match bad_format.cmp(&1) {
+            std::cmp::Ordering::Equal => show_warning!("{} line is improperly formatted", bad_format),
+            std::cmp::Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
+            _ => {}
+        };
         if failed > 0 {
             show_warning!("{} computed checksum did NOT match", failed);
         }

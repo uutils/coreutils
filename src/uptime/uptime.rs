@@ -137,11 +137,11 @@ fn process_utmpx() -> (Option<time_t>, usize) {
 }
 
 fn print_nusers(nusers: usize) {
-    if nusers == 1 {
-        print!("1 user,  ");
-    } else if nusers > 1 {
-        print!("{} users,  ", nusers);
-    }
+    match nusers.cmp(&1) {
+        std::cmp::Ordering::Equal => print!("1 user,  "),
+        std::cmp::Ordering::Greater => print!("{} users,  ", nusers),
+        _ => {}
+    };
 }
 
 fn print_time() {
@@ -188,11 +188,9 @@ fn print_uptime(upsecs: i64) {
     let updays = upsecs / 86400;
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
-    if updays == 1 {
-        print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins);
-    } else if updays > 1 {
-        print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
-    } else {
-        print!("up  {:2}:{:02}, ", uphours, upmins);
-    }
+    match updays.cmp(&1) {
+        std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
+        std::cmp::Ordering::Greater => print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins),
+        _ => print!("up  {:2}:{:02}, ", uphours, upmins),
+    };
 }
