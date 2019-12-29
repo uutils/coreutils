@@ -442,7 +442,7 @@ fn hashsum(
                 let f = safe_unwrap!(File::open(ck_filename));
                 let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
                 let real_sum = safe_unwrap!(digest_reader(
-                    &mut digest,
+                    &mut *digest,
                     &mut ckf,
                     binary_check,
                     output_bits
@@ -459,7 +459,7 @@ fn hashsum(
                 }
             }
         } else {
-            let sum = safe_unwrap!(digest_reader(&mut digest, &mut file, binary, output_bits));
+            let sum = safe_unwrap!(digest_reader(&mut *digest, &mut file, binary, output_bits));
             if tag {
                 println!("{} ({}) = {}", algoname, filename, sum);
             } else {
@@ -482,7 +482,7 @@ fn hashsum(
 }
 
 fn digest_reader<'a, T: Read>(
-    digest: &mut Box<dyn Digest + 'a>,
+    digest: &mut (dyn Digest + 'a),
     reader: &mut BufReader<T>,
     binary: bool,
     output_bits: usize,
