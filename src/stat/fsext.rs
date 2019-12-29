@@ -137,7 +137,7 @@ pub fn pretty_access(mode: mode_t) -> String {
     result
 }
 
-use std::mem::{self, transmute};
+use std::mem;
 use std::path::Path;
 use std::borrow::Cow;
 use std::ffi::CString;
@@ -219,7 +219,7 @@ impl FsMeta for Sstatfs {
     // struct statvfs, containing an  unsigned  long  f_fsid
     #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "linux"))]
     fn fsid(&self) -> u64 {
-        let f_fsid: &[u32; 2] = unsafe { transmute(&self.f_fsid) };
+        let f_fsid: &[u32; 2] = unsafe { &*(&self.f_fsid as *const uucore::libc::fsid_t as *const [u32; 2]) };
         (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
     #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
