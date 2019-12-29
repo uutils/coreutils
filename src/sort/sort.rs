@@ -398,6 +398,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 /// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
 /// 1,000 will parse as -inf.
 fn numeric_compare(a: &str, b: &str) -> Ordering {
+    #![allow(clippy::comparison_chain)]
     let fa = permissive_f64_parse(a);
     let fb = permissive_f64_parse(b);
     // f64::cmp isn't implemented because NaN messes with it
@@ -434,8 +435,10 @@ fn human_numeric_convert(a: &str) -> f64 {
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
 fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
+    #![allow(clippy::comparison_chain)]
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
+    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
     } else if fa < fb {
