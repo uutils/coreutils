@@ -188,7 +188,7 @@ fn du(
         }
     }
 
-    stats.extend(futures.into_iter().flat_map(|val| val).rev().filter(
+    stats.extend(futures.into_iter().flatten().rev().filter(
         |stat| {
             if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
                 my_stat.size += stat.size;
