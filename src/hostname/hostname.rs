@@ -46,6 +46,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     #![allow(clippy::let_and_return)]
     #[cfg(windows)]
     unsafe {
+        #[allow(deprecated)]
         let mut data = std::mem::uninitialized();
         if WSAStartup(MAKEWORD(2, 2), &mut data as *mut _) != 0 {
             eprintln!("Failed to start Winsock 2.2");

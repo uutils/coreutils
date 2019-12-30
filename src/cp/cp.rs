@@ -739,6 +739,7 @@ fn preserve_hardlinks(
                 #[cfg(windows)]
                 {
                     let src_path: Vec<u16> = OsStr::new(source).encode_wide().collect();
+                    #[allow(deprecated)]
                     let stat = mem::uninitialized();
                     let handle = CreateFileW(
                         src_path.as_ptr(),

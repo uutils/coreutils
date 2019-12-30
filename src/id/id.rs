@@ -30,7 +30,6 @@ macro_rules! cstr2cow {
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::mem::uninitialized;
     use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t, uint64_t};
 
     pub type au_id_t = uid_t;
@@ -278,7 +277,8 @@ fn auditid() {}
 
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
-    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
+    #[allow(deprecated)]
+    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { std::mem::uninitialized() };
     let address = &mut auditinfo as *mut audit::c_auditinfo_addr_t;
     if unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");

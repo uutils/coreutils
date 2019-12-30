@@ -72,6 +72,7 @@ mod platform {
     }
 
     unsafe fn find_first_volume() -> (String, winnt::HANDLE) {
+        #[allow(deprecated)]
         let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
         let handle = kernel32::FindFirstVolumeW(name.as_mut_ptr(), name.len() as minwindef::DWORD);
         if handle == handleapi::INVALID_HANDLE_VALUE {
@@ -87,6 +88,7 @@ mod platform {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
         loop {
+            #[allow(deprecated)]
             let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
             if kernel32::FindNextVolumeW(
                 next_volume_handle,
