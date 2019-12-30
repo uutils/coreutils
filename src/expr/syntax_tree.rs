@@ -219,6 +219,7 @@ fn maybe_dump_ast(result: &Result<Box<ASTNode>, String>) {
     }
 }
 
+#[allow(clippy::ptr_arg)]
 fn maybe_dump_rpn(rpn: &TokenStack) {
     use std::env;
     if let Ok(debug_var) = env::var("EXPR_DEBUG_RPN") {
@@ -317,6 +318,7 @@ fn push_token_to_either_stack(
     result
 }
 
+#[allow(clippy::ptr_arg)]
 fn maybe_dump_shunting_yard_step(
     token_idx: usize,
     token: &Token,
