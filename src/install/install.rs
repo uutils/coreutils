@@ -74,6 +74,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     let paths: Vec<PathBuf> = {
+        #[allow(clippy::ptr_arg)]
         fn string_to_path(s: &String) -> &Path {
             Path::new(s)
         };
