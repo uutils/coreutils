@@ -128,6 +128,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut assumptions = true;
 
+    #[allow(clippy::useless_let_if_seq)]
+    {
     if matches.opt_present("a") {
         need_boottime = true;
         need_deadprocs = true;
@@ -201,6 +203,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.free.len() > 2 {
         disp_err!("{}", msg_wrong_number_of_arguments!());
         exit!(1);
+    }
     }
 
     let mut who = Who {
