@@ -30,13 +30,14 @@ macro_rules! cstr2cow {
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t, uint64_t};
+    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 
     pub type au_id_t = uid_t;
     pub type au_asid_t = pid_t;
     pub type au_event_t = c_uint;
     pub type au_emod_t = c_uint;
     pub type au_class_t = c_int;
+    pub type au_flag_t = u64;
 
     #[repr(C)]
     pub struct au_mask {
@@ -57,7 +58,7 @@ mod audit {
         pub ai_mask: au_mask_t,       // Audit masks.
         pub ai_termid: au_tid_addr_t, // Terminal ID.
         pub ai_asid: au_asid_t,       // Audit session ID.
-        pub ai_flags: uint64_t,       // Audit session flags
+        pub ai_flags: au_flag_t,      // Audit session flags
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
