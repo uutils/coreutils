@@ -238,7 +238,7 @@ fn pretty(possible_pw: Option<Passwd>) {
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn pline(possible_uid: Option<uid_t>) {
-    let uid = possible_uid.unwrap_or(getuid());
+    let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
 
     println!(
