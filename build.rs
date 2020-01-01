@@ -16,8 +16,9 @@ pub fn main() {
         if val == "1" && key.starts_with(feature_prefix) {
             let krate = key[feature_prefix.len()..].to_lowercase();
             match krate.as_ref() {
-                "default" | "unix" | "redox" | "redox_generic" | "fuchsia" | "generic"
-                | "windows" | "windows_legacy" | "nightly" | "test_unimplemented" => continue,
+                "default" | "macos" | "unix" | "windows" => continue,
+                "nightly" | "test_unimplemented" => continue,
+                s if s.starts_with("feat_") => continue,
                 _ => {}
             }
             crates.push(krate.to_string());

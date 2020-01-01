@@ -6,7 +6,29 @@ build = "build.rs"
 autotests = false
 
 [features]
-unix = [
+default = [ "feat_common_core" ]
+#
+macos = [ "feat_os_unix" ]
+unix = [ "feat_os_unix" ]
+windows = [ "feat_os_windows" ]
+#
+test_unimplemented = []
+nightly = []
+#
+# "feat_os_unix" == set of utilities which can be compiled/run on modern/usual *nix platforms
+feat_os_unix = [
+  "stdbuf",
+  #
+  "feat_os_unix_musl",
+  "feat_os_unix_utmpx",
+]
+# "feat_os_unix_gnueabihf" == set of utilities which can be build/run for "arm-unknown-linux-gnueabihf" target (ARMv6 Linux, hardfloat)
+feat_os_unix_gnueabihf = [
+  "feat_os_unix_musl",
+  "feat_os_unix_utmpx",
+]
+# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
+feat_os_unix_musl = [
   "chgrp",
   "chmod",
   "chown",
@@ -24,36 +46,25 @@ unix = [
   "numfmt",
   "nohup",
   "pathchk",
-  "pinky",
   "stat",
-  "stdbuf",
   "timeout",
   "touch",
   "tty",
   "uname",
   "unlink",
+  #
+  "feat_common"
+]
+# "feat_os_unix_utmpx" == set of utilites requiring utmp/utmpx support
+# * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
+feat_os_unix_utmpx = [
+  "pinky",
   "uptime",
   "users",
   "who",
-
-  "generic"
 ]
-windows = ["generic"]
-windows_legacy = [
-  "arch",
-  "nproc",
-  "sync",
-  "touch",
-  "whoami",
-
-  "redox_generic"
-  ]
-# Feature "fuchsia" contains the exclusive list of utilities
-# that can be compiled and run on Fuchsia. Should be built
-# with --no-default-features when selecting this feature.
-# TODO: merge with "unix" to avoid duplication once we support
-# all utilities in that feature.
-fuchsia = [
+# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuschia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
+feat_os_unix_fuchsia = [
   # unix utilities
   "chgrp",
   "chmod",
@@ -71,27 +82,43 @@ fuchsia = [
   "tty",
   "uname",
   "unlink",
-
-  # All generic utilities
-  "generic"
+  #
+  "feat_common_core"
 ]
-generic = [
+# "feat_os_unix_redox" == set of utilities which can be compiled/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
+feat_os_unix_redox = [
+  "uname",
+  "chmod",
+  "install",
+  #
+  "feat_common_core"
+]
+# "feat_os_windows" == set of utilities which can be compiled/run on modern/usual windows platforms
+feat_os_windows = [ "feat_common" ]
+# "feat_os_windows_legacy" == slightly restricted set of utilities which can be compiled/run on early windows platforms (eg, "WinXP")
+feat_os_windows_legacy = [
+  "arch",
+  "nproc",
+  "sync",
+  "touch",
+  "whoami",
+
+  "feat_common_core"
+  ]
+##
+# "feat_common" == expanded set of utilities which can be compiled/run on usual rust "tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
+feat_common = [
   "arch",
   "hostname",
   "nproc",
   "sync",
   "touch",
   "whoami",
-  "redox_generic"
+  #
+  "feat_common_core"
 ]
-# Feature "redox"/"redox_generic" contains the exclusive list of utilities
-# that can be compiled and run on redox. Should be built
-# with --no-default-features when selecting this feature.
-# TODO: merge with "generic" to avoid duplication once we support
-# all utilities in that feature.
-redox_generic = [
-
-  # And maybe all generic utilities
+# "feat_common_core" == baseline core set of utilities which can be compiled/run on most targets
+feat_common_core = [
   "base32",
   "base64",
   "basename",
@@ -153,15 +180,6 @@ redox_generic = [
   "wc",
   "yes",
 ]
-redox = [
-  "uname",
-  "chmod",
-  "install",
-  "redox_generic"
-]
-test_unimplemented = []
-nightly = []
-default = ["unix"]
 
 [workspace]
 
