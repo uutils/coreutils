@@ -36,14 +36,32 @@ fn test_long_format() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn test_short_format() {
-    let scene = TestScenario::new(util_name!());
-
+fn test_short_format_i() {
+    // allow whitespace variation
+    // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
     let args = ["-i"];
-    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    let actual = TestScenario::new(util_name!()).ucmd().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(v_actual, v_expect);
+}
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_short_format_q() {
+    // allow whitespace variation
+    // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
     let args = ["-q"];
-    scene.ucmd().args(&args).run().stdout_is(expected_result(&args));
+    let actual = TestScenario::new(util_name!()).ucmd().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(v_actual, v_expect);
 }
 
 #[cfg(target_os = "linux")]
