@@ -18,7 +18,7 @@ filetime = "0.2"
 getopts = "0.2.18"
 libc = "0.2.42"
 quick-error = "1.2.3"
-uucore = { version = "0.0.1", features = ["fs"] }
+uucore = { version = "0.0.2", features = ["fs"] }
 walkdir = "2.2.8"
 
 [target.'cfg(target_os = "linux")'.dependencies]

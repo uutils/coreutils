@@ -10,7 +10,7 @@ name = "uu_pinky"
 path = "pinky.rs"
 
 [dependencies]
-uucore = { version = "0.0.1", features = ["utmpx", "entries"] }
+uucore = { version = "0.0.2", features = ["utmpx", "entries"] }
 
 [[bin]]
 name = "pinky"

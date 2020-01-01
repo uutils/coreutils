@@ -13,7 +13,7 @@ path = "mktemp.rs"
 getopts = "0.2.18"
 rand = "0.5"
 tempfile = "2.1.5"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "mktemp"

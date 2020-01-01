@@ -11,7 +11,7 @@ path = "chown.rs"
 
 [dependencies]
 glob = "0.3.0"
-uucore = { version = "0.0.1", features = ["entries", "fs"] }
+uucore = { version = "0.0.2", features = ["entries", "fs"] }
 walkdir = "2.2"
 
 [dependencies.clippy]

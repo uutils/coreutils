@@ -10,7 +10,7 @@ name = "uu_who"
 path = "who.rs"
 
 [dependencies]
-uucore = { version = "0.0.1", features = ["utmpx"] }
+uucore = { version = "0.0.2", features = ["utmpx"] }
 ## optional
 clippy = { version = "0.0.212", optional = true }
 

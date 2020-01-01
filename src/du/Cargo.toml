@@ -11,7 +11,7 @@ path = "du.rs"
 
 [dependencies]
 time = "0.1.40"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "du"

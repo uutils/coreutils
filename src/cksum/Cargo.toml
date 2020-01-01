@@ -10,7 +10,7 @@ path = "cksum.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "cksum"

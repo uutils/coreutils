@@ -13,7 +13,7 @@ path = "whoami.rs"
 [dependencies]
 advapi32-sys = "0.2.0"
 clap = "2.32"
-uucore = { version = "0.0.1", features = ["entries", "wide"] }
+uucore = { version = "0.0.2", features = ["entries", "wide"] }
 winapi = { version = "0.3", features = ["lmcons"] }
 
 [[bin]]

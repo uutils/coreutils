@@ -13,7 +13,7 @@ path = "timeout.rs"
 getopts = "0.2.18"
 libc = "0.2.42"
 time = "0.1.40"
-uucore = { version = "0.0.1", features = ["parse_time", "process"] }
+uucore = { version = "0.0.2", features = ["parse_time", "process"] }
 
 [[bin]]
 name = "timeout"

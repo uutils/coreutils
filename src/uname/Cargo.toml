@@ -12,7 +12,7 @@ path = "uname.rs"
 [dependencies]
 clap = "2.32.0"
 platform-info = "0.0.1"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "uname"

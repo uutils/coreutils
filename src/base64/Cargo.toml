@@ -10,7 +10,7 @@ name = "uu_base64"
 path = "base64.rs"
 
 [dependencies]
-uucore = { version = "0.0.1", features = ["encoding"] }
+uucore = { version = "0.0.2", features = ["encoding"] }
 
 [[bin]]
 name = "base64"

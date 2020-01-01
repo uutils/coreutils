@@ -13,7 +13,7 @@ path = "nproc.rs"
 getopts = "0.2.18"
 libc = "0.2.42"
 num_cpus = "1.10"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "nproc"

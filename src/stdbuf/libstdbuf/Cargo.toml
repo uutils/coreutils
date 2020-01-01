@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 cpp = "0.4"
 libc = "0.2"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [build-dependencies]
 cpp_build = "0.4"

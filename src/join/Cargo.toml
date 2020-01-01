@@ -11,7 +11,7 @@ path = "join.rs"
 
 [dependencies]
 clap = "2.32.0"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "join"

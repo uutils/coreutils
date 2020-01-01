@@ -187,7 +187,7 @@ feat_common_core = [
 [workspace]
 
 [dependencies]
-uucore   = "0.0.1"
+uucore   = "0.0.2"
 arch     = { optional=true, path="src/arch" }
 base32   = { optional=true, path="src/base32" }
 base64   = { optional=true, path="src/base64" }
@@ -306,3 +306,6 @@ path = "src/uutils/uutils.rs"
 
 [[test]]
 name = "tests"
+
+[patch.crates-io]
+uucore = { git = "https://github.com/rivy/rust.uucore", tag = "0.0.2" }

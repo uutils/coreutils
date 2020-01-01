@@ -11,7 +11,7 @@ path = "kill.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = { version = "0.0.1", features = ["signals"] }
+uucore = { version = "0.0.2", features = ["signals"] }
 
 [[bin]]
 name = "kill"

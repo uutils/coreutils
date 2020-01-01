@@ -11,7 +11,7 @@ path = "users.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = { version = "0.0.1", features = ["utmpx"] }
+uucore = { version = "0.0.2", features = ["utmpx"] }
 
 [[bin]]
 name = "users"

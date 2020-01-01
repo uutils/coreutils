@@ -13,7 +13,7 @@ path = "touch.rs"
 filetime = "0.2.1"
 getopts = "0.2.18"
 time = "0.1.40"
-uucore = { version = "0.0.1", features = ["libc"] }
+uucore = { version = "0.0.2", features = ["libc"] }
 
 [[bin]]
 name = "touch"
