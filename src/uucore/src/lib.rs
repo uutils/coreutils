@@ -38,7 +38,7 @@ pub mod parse_time;
 
 #[cfg(all(not(windows), feature = "mode"))]
 pub mod mode;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "utmpx"))]
+#[cfg(all(unix, not(target_os = "fuchsia"), not(target_env="musl"), feature = "utmpx"))]
 pub mod utmpx;
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
