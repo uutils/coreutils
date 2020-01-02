@@ -16,6 +16,7 @@ travis-ci = { repository = "uutils/uucore" }
 appveyor = { repository = "uutils/uucore" }
 
 [dependencies]
+dunce = "1.0.0"
 getopts = "0.2.18"
 failure = { version = "0.1.1", optional = true }
 failure_derive = { version = "0.1.1", optional = true }
@@ -43,4 +44,3 @@ entries = ["libc"]
 zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
 wide = []
 default = []
-
