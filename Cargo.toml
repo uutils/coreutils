@@ -27,6 +27,8 @@ wild = "2.0.1"
 nix = { version = "0.13", optional = true }
 lazy_static = { version = "1.3", optional = true }
 platform-info = { version = "0.0.1", optional = true }
+# * transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
+backtrace = ">= 0.3.3, <= 0.3.30"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 termion = "1.5"
