@@ -6,6 +6,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#[cfg(windows)]
+extern crate dunce;
 #[cfg(target_os = "redox")]
 extern crate termion;
 
@@ -101,7 +103,7 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
     let original = if original.is_absolute() {
         original.to_path_buf()
     } else {
-        env::current_dir().unwrap().join(original)
+        dunce::canonicalize(env::current_dir().unwrap()).unwrap().join(original)
     };
 
     let mut result = PathBuf::new();
