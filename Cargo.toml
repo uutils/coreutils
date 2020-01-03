@@ -278,6 +278,9 @@ wc       = { optional=true, path="src/wc" }
 who      = { optional=true, path="src/who" }
 whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
+#
+# * transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
+backtrace = ">= 0.3.3, <= 0.3.30"
 
 [dev-dependencies]
 time = "0.1.42"
