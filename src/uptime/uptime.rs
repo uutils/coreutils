@@ -139,9 +139,9 @@ fn process_utmpx() -> (Option<time_t>, usize) {
 
 fn print_nusers(nusers: usize) {
     if nusers == 1 {
-        print!("1 user, ");
+        print!("1 user,  ");
     } else if nusers > 1 {
-        print!("{} users, ", nusers);
+        print!("{} users,  ", nusers);
     }
 }
 
@@ -190,9 +190,9 @@ fn print_uptime(upsecs: i64) {
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     if updays == 1 {
-        print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
+        print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins);
     } else if updays > 1 {
-        print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
+        print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
     } else {
         print!("up  {:2}:{:02}, ", uphours, upmins);
     }
