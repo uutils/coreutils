@@ -64,10 +64,10 @@ impl FloatAnalysis {
         let mut pos_before_first_nonzero_after_decimal: Option<usize> = None;
         while let Some(c) = str_it.next() {
             match c {
-                e @ '0'...'9' | e @ 'A'...'F' | e @ 'a'...'f' => {
+                e @ '0'..='9' | e @ 'A'..='F' | e @ 'a'..='f' => {
                     if !hex_input {
                         match e {
-                            '0'...'9' => {}
+                            '0'..='9' => {}
                             _ => {
                                 warn_incomplete_conv(str_in);
                                 break;
@@ -188,7 +188,7 @@ fn round_terminal_digit(
                 .expect("");
         }
         match digit_at_pos {
-            '5'...'9' => {
+            '5'..='9' => {
                 let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);
                 if finished_in_dec {
                     return (before_dec, new_after_dec);

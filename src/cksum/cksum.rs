@@ -46,7 +46,7 @@ fn init_byte_array() -> Vec<u8> {
 
 #[cfg(not(windows))]
 fn init_byte_array() -> [u8; 1024 * 1024] {
-    unsafe { mem::uninitialized() }
+    unsafe { mem::MaybeUninit::uninit().assume_init() }
 }
 
 #[inline]

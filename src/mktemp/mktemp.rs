@@ -179,9 +179,9 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
         rand::thread_rng().fill(bytes);
         for byte in bytes.iter_mut() {
             *byte = match *byte % 62 {
-                v @ 0...9 => (v + '0' as u8),
-                v @ 10...35 => (v - 10 + 'a' as u8),
-                v @ 36...61 => (v - 36 + 'A' as u8),
+                v @ 0..=9 => (v + '0' as u8),
+                v @ 10..=35 => (v - 10 + 'a' as u8),
+                v @ 36..=61 => (v - 36 + 'A' as u8),
                 _ => unreachable!(),
             }
         }
