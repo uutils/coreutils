@@ -30,8 +30,8 @@ macro_rules! cstr2cow {
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::mem::uninitialized;
-    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t, uint64_t};
+    pub use std::mem::MaybeUninit;
+    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 
     pub type au_id_t = uid_t;
     pub type au_asid_t = pid_t;
@@ -58,7 +58,7 @@ mod audit {
         pub ai_mask: au_mask_t,       // Audit masks.
         pub ai_termid: au_tid_addr_t, // Terminal ID.
         pub ai_asid: au_asid_t,       // Audit session ID.
-        pub ai_flags: uint64_t,       // Audit session flags
+        pub ai_flags: u64,       // Audit session flags
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
@@ -278,7 +278,7 @@ fn auditid() {}
 
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
-    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
+    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::MaybeUninit::uninit().assume_init() };
     let address = &mut auditinfo as *mut audit::c_auditinfo_addr_t;
     if unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");
