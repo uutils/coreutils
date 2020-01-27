@@ -11,7 +11,7 @@ path = "ls.rs"
 [dependencies]
 getopts = "0.2.18"
 isatty = "0.1"
-number_prefix = "0.2.8"
+number_prefix = "0.3.0"
 term_grid = "0.1.5"
 termsize = "0.1.6"
 time = "0.1.40"
