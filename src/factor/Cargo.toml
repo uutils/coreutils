@@ -13,4 +13,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "factor"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

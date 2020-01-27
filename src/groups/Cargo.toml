@@ -2,7 +2,7 @@
 name = "groups"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_groups"
@@ -14,4 +14,4 @@ features = ["entries"]
 
 [[bin]]
 name = "groups"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

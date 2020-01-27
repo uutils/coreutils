@@ -2,7 +2,7 @@
 name = "mkdir"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_mkdir"
@@ -15,4 +15,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "mkdir"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

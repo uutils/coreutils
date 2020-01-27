@@ -2,7 +2,7 @@
 name = "relpath"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_relpath"
@@ -17,4 +17,4 @@ features = ["fs"]
 
 [[bin]]
 name = "relpath"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

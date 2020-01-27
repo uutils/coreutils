@@ -2,7 +2,7 @@
 name = "unexpand"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_unexpand"
@@ -15,4 +15,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "unexpand"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

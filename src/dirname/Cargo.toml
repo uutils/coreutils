@@ -2,7 +2,7 @@
 name = "dirname"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_dirname"
@@ -14,4 +14,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "dirname"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

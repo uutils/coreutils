@@ -2,7 +2,7 @@
 name = "sort"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_sort"
@@ -19,4 +19,4 @@ features = ["fs"]
 
 [[bin]]
 name = "sort"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

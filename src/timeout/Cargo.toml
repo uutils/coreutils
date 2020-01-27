@@ -2,7 +2,7 @@
 name = "timeout"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_timeout"
@@ -19,4 +19,4 @@ features = ["parse_time", "process"]
 
 [[bin]]
 name = "timeout"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

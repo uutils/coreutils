@@ -33,7 +33,7 @@ mod numeric;
 
 mod sieve;
 
-#[path = "../../mkmain.rs"]
+#[path = "../#common/mkmain.rs"]
 mod mkmain;
 
 // extended Euclid algorithm

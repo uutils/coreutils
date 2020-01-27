@@ -2,7 +2,7 @@
 name = "ln"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_ln"
@@ -14,4 +14,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "ln"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -3,7 +3,7 @@ name = "whoami"
 version = "0.0.1"
 authors = []
 description = "Print effective user ID."
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_whoami"
@@ -20,4 +20,4 @@ features = ["entries", "wide"]
 
 [[bin]]
 name = "whoami"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -2,7 +2,7 @@
 name = "tail"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tail"
@@ -20,4 +20,4 @@ redox_syscall = "0.1"
 
 [[bin]]
 name = "tail"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

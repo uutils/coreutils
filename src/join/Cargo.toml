@@ -2,7 +2,7 @@
 name = "join"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_join"
@@ -14,4 +14,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "join"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

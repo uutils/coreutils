@@ -2,7 +2,7 @@
 name = "sleep"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_sleep"
@@ -17,4 +17,4 @@ features = ["parse_time"]
 
 [[bin]]
 name = "sleep"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

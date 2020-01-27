@@ -2,7 +2,7 @@
 name = "more"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_more"
@@ -21,4 +21,4 @@ nix = "0.8.1"
 
 [[bin]]
 name = "more"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

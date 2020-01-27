@@ -2,7 +2,7 @@
 name = "sync"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_sync"
@@ -20,4 +20,4 @@ features = ["wide"]
 
 [[bin]]
 name = "sync"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

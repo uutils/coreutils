@@ -2,7 +2,7 @@
 name = "kill"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_kill"
@@ -17,4 +17,4 @@ features = ["signals"]
 
 [[bin]]
 name = "kill"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

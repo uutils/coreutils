@@ -2,7 +2,7 @@
 name = "tr"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tr"
@@ -16,4 +16,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "tr"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

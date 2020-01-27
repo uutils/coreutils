@@ -5,7 +5,7 @@ authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
 ]
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_cp"
@@ -35,4 +35,4 @@ xattr="0.2.1"
 
 [[bin]]
 name = "cp"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

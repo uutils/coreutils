@@ -2,7 +2,7 @@
 name = "id"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_id"
@@ -14,4 +14,4 @@ features = ["entries", "process"]
 
 [[bin]]
 name = "id"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -2,7 +2,7 @@
 name = "test"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_test"
@@ -17,4 +17,4 @@ redox_syscall = "0.1"
 
 [[bin]]
 name = "test"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

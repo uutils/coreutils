@@ -2,7 +2,7 @@
 name = "expr"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_expr"
@@ -15,4 +15,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "expr"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

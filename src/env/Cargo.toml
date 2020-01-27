@@ -3,7 +3,7 @@ name = "env"
 version = "0.0.1"
 authors = ["uutils developers"]
 description = "Set each NAME to VALUE in the environment and run COMMAND"
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 edition = "2018"
 
 [lib]
@@ -18,4 +18,4 @@ rust-ini = "0.13.0"
 
 [[bin]]
 name = "env"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

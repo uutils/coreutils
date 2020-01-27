@@ -2,7 +2,7 @@
 name = "cat"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_cat"
@@ -20,4 +20,4 @@ unix_socket = "0.5.0"
 
 [[bin]]
 name = "cat"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

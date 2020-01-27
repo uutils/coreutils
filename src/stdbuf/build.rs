@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-#[path = "../../mkmain.rs"]
+#[path = "../#common/mkmain.rs"]
 mod mkmain;
 
 #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]

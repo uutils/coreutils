@@ -2,7 +2,7 @@
 name = "tac"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tac"
@@ -14,4 +14,4 @@ uucore = "0.0.1"
 
 [[bin]]
 name = "tac"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

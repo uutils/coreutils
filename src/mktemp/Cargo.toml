@@ -2,7 +2,7 @@
 name = "mktemp"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_mktemp"
@@ -16,4 +16,4 @@ tempfile = "2.1.5"
 
 [[bin]]
 name = "mktemp"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

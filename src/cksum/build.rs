@@ -15,7 +15,7 @@ use std::path::Path;
 
 const CRC_TABLE_LEN: usize = 256;
 
-#[path = "../../mkmain.rs"]
+#[path = "../#common/mkmain.rs"]
 mod mkmain;
 
 fn main() {
