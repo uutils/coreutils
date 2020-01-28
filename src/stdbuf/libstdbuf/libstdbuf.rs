@@ -9,7 +9,7 @@ use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
 
-cpp!{{
+cpp! {{
     #include <cstdio>
 
     extern "C" {

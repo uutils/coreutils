@@ -14,8 +14,8 @@ extern crate libc;
 extern crate syscall;
 
 use std::collections::HashMap;
-use std::ffi::OsString;
 use std::env::args_os;
+use std::ffi::OsString;
 use std::str::from_utf8;
 
 static NAME: &str = "test";
@@ -25,7 +25,8 @@ static NAME: &str = "test";
 pub fn uumain(_: Vec<String>) -> i32 {
     let args = args_os().collect::<Vec<OsString>>();
     // This is completely disregarding valid windows paths that aren't valid unicode
-    let args = args.iter()
+    let args = args
+        .iter()
         .map(|a| a.to_str().unwrap().as_bytes())
         .collect::<Vec<&[u8]>>();
     if args.is_empty() {
@@ -149,7 +150,9 @@ fn isatty(fd: &[u8]) -> bool {
         .and_then(|s| s.parse().ok())
         .map_or(false, |i| {
             #[cfg(not(target_os = "redox"))]
-            unsafe { libc::isatty(i) == 1 }
+            unsafe {
+                libc::isatty(i) == 1
+            }
             #[cfg(target_os = "redox")]
             syscall::dup(i, b"termios").map(syscall::close).is_ok()
         })
@@ -342,10 +345,10 @@ enum PathCondition {
 
 #[cfg(not(windows))]
 fn path(path: &[u8], cond: PathCondition) -> bool {
-    use std::os::unix::fs::{MetadataExt, FileTypeExt};
-    use std::os::unix::ffi::OsStrExt;
-    use std::fs::{self, Metadata};
     use std::ffi::OsStr;
+    use std::fs::{self, Metadata};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
     let path = OsStr::from_bytes(path);
 
@@ -362,8 +365,10 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
         #[cfg(not(target_os = "redox"))]
         let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
         #[cfg(target_os = "redox")]
-        let (uid, gid) = (syscall::getuid().unwrap() as u32,
-                          syscall::getgid().unwrap() as u32);
+        let (uid, gid) = (
+            syscall::getuid().unwrap() as u32,
+            syscall::getgid().unwrap() as u32,
+        );
 
         if uid == metadata.uid() {
             metadata.mode() & ((p as u32) << 6) != 0
@@ -382,7 +387,9 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 
     let metadata = match metadata {
         Ok(metadata) => metadata,
-        Err(_) => { return false; }
+        Err(_) => {
+            return false;
+        }
     };
 
     let file_type = metadata.file_type();

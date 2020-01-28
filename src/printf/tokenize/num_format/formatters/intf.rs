@@ -1,11 +1,12 @@
 //! formatter for unsigned and signed int subs
 //! unsigned ints: %X %x (hex u64) %o (octal u64) %u (base ten u64)
 //! signed ints: %i %d (both base ten i64)
-use std::u64;
-use std::i64;
 use super::super::format_field::FormatField;
-use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter,
-                              InPrefix};
+use super::super::formatter::{
+    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter, InPrefix,
+};
+use std::i64;
+use std::u64;
 
 pub struct Intf {
     a: u32,

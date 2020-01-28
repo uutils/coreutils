@@ -9,12 +9,12 @@
 //
 
 extern crate getopts;
+extern crate number_prefix;
 extern crate term_grid;
 extern crate termsize;
 extern crate time;
 extern crate unicode_width;
-extern crate number_prefix;
-use number_prefix::{Standalone, Prefixed, decimal_prefix};
+use number_prefix::{decimal_prefix, Prefixed, Standalone};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 
@@ -30,20 +30,19 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 #[cfg(unix)]
-use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH,
-                   S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH, S_IXGRP, S_IXOTH, S_IXUSR};
 
-use std::fs;
-use std::fs::{DirEntry, FileType, Metadata};
-use std::path::{Path, PathBuf};
 use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
+use std::fs;
+use std::fs::{DirEntry, FileType, Metadata};
+use std::path::{Path, PathBuf};
 
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+#[cfg(any(unix, target_os = "redox"))]
+use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use unicode_width::UnicodeWidthStr;
 
@@ -63,7 +62,8 @@ static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do
 
 #[cfg(unix)]
 lazy_static! {
-    static ref LS_COLORS: String = std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
+    static ref LS_COLORS: String =
+        std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
     static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
         let codes = LS_COLORS.split(':');
         let mut map = HashMap::new();
@@ -163,7 +163,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
              directory.  This is especially useful when listing very large directories, \
              since not doing any sorting can be noticeably faster.",
         )
-        .optflagopt("", "color", "Color output based on file type.", "always|auto|never")
+        .optflagopt(
+            "",
+            "color",
+            "Color output based on file type.",
+            "always|auto|never",
+        )
         .parse(args);
 
     list(matches);
@@ -357,19 +362,17 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Mat
         }
     } else {
         if !options.opt_present("1") {
-            let names = items
-                .iter()
-                .filter_map(|i| {
-                    let md = get_metadata(i, options);
-                    match md {
-                        Err(e) => {
-                            let filename = get_file_name(i, strip);
-                            show_error!("{}: {}", filename, e);
-                            None
-                        }
-                        Ok(md) => Some(display_file_name(&i, strip, &md, options)),
+            let names = items.iter().filter_map(|i| {
+                let md = get_metadata(i, options);
+                match md {
+                    Err(e) => {
+                        let filename = get_file_name(i, strip);
+                        show_error!("{}: {}", filename, e);
+                        None
                     }
-                });
+                    Ok(md) => Some(display_file_name(&i, strip, &md, options)),
+                }
+            });
 
             if let Some(size) = termsize::get() {
                 let mut grid = Grid::new(GridOptions {
@@ -512,7 +515,7 @@ fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String 
     if options.opt_present("human-readable") {
         match decimal_prefix(metadata.len() as f64) {
             Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.2}{}", bytes, prefix).to_uppercase()
+            Prefixed(prefix, bytes) => format!("{:.2}{}", bytes, prefix).to_uppercase(),
         }
     } else {
         metadata.len().to_string()
@@ -596,9 +599,9 @@ fn color_name(name: String, typ: &str) -> String {
 
 #[cfg(unix)]
 macro_rules! has {
-    ($mode:expr, $perm:expr) => (
+    ($mode:expr, $perm:expr) => {
         $mode & ($perm as mode_t) != 0
-    )
+    };
 }
 
 #[cfg(unix)]

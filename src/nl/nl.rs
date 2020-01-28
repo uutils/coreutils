@@ -336,7 +336,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         // A line number is to be printed.
         let w = if settings.number_width > line_no_width {
             settings.number_width - line_no_width
-        } else { 0 };
+        } else {
+            0
+        };
         let fill: String = repeat(fill_char).take(w).collect();
         match settings.number_format {
             NumberFormat::Left => println!(

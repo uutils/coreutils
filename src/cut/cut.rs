@@ -466,8 +466,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 )
             })
         }
-        (None, None, Some(field_ranges)) => list_to_ranges(&field_ranges[..], complement)
-            .and_then(|ranges| {
+        (None, None, Some(field_ranges)) => {
+            list_to_ranges(&field_ranges[..], complement).and_then(|ranges| {
                 let out_delim = match matches.opt_str("output-delimiter") {
                     Some(s) => {
                         if s.is_empty() {
@@ -519,11 +519,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         },
                     )),
                 }
-            }),
+            })
+        }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
             msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)"),
         ),
-        _ => Err(msg_expects_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)")),
+        _ => Err(msg_expects_one_of!(
+            "--fields (-f)",
+            "--chars (-c)",
+            "--bytes (-b)"
+        )),
     };
 
     let mode_parse = match mode_parse {

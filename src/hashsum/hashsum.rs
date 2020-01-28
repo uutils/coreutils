@@ -65,10 +65,26 @@ fn detect_algo(
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
         "sha3sum" => match matches.opt_str("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                Ok(224) => ("SHA3-224", Box::new(Sha3_224::new()) as Box<dyn Digest>, 224),
-                Ok(256) => ("SHA3-256", Box::new(Sha3_256::new()) as Box<dyn Digest>, 256),
-                Ok(384) => ("SHA3-384", Box::new(Sha3_384::new()) as Box<dyn Digest>, 384),
-                Ok(512) => ("SHA3-512", Box::new(Sha3_512::new()) as Box<dyn Digest>, 512),
+                Ok(224) => (
+                    "SHA3-224",
+                    Box::new(Sha3_224::new()) as Box<dyn Digest>,
+                    224,
+                ),
+                Ok(256) => (
+                    "SHA3-256",
+                    Box::new(Sha3_256::new()) as Box<dyn Digest>,
+                    256,
+                ),
+                Ok(384) => (
+                    "SHA3-384",
+                    Box::new(Sha3_384::new()) as Box<dyn Digest>,
+                    384,
+                ),
+                Ok(512) => (
+                    "SHA3-512",
+                    Box::new(Sha3_512::new()) as Box<dyn Digest>,
+                    512,
+                ),
                 Ok(_) => crash!(
                     1,
                     "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
@@ -77,20 +93,44 @@ fn detect_algo(
             },
             None => crash!(1, "--bits required for SHA3"),
         },
-        "sha3-224sum" => ("SHA3-224", Box::new(Sha3_224::new()) as Box<dyn Digest>, 224),
-        "sha3-256sum" => ("SHA3-256", Box::new(Sha3_256::new()) as Box<dyn Digest>, 256),
-        "sha3-384sum" => ("SHA3-384", Box::new(Sha3_384::new()) as Box<dyn Digest>, 384),
-        "sha3-512sum" => ("SHA3-512", Box::new(Sha3_512::new()) as Box<dyn Digest>, 512),
+        "sha3-224sum" => (
+            "SHA3-224",
+            Box::new(Sha3_224::new()) as Box<dyn Digest>,
+            224,
+        ),
+        "sha3-256sum" => (
+            "SHA3-256",
+            Box::new(Sha3_256::new()) as Box<dyn Digest>,
+            256,
+        ),
+        "sha3-384sum" => (
+            "SHA3-384",
+            Box::new(Sha3_384::new()) as Box<dyn Digest>,
+            384,
+        ),
+        "sha3-512sum" => (
+            "SHA3-512",
+            Box::new(Sha3_512::new()) as Box<dyn Digest>,
+            512,
+        ),
         "shake128sum" => match matches.opt_str("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                Ok(bits) => ("SHAKE128", Box::new(Shake128::new()) as Box<dyn Digest>, bits),
+                Ok(bits) => (
+                    "SHAKE128",
+                    Box::new(Shake128::new()) as Box<dyn Digest>,
+                    bits,
+                ),
                 Err(err) => crash!(1, "{}", err),
             },
             None => crash!(1, "--bits required for SHAKE-128"),
         },
         "shake256sum" => match matches.opt_str("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
-                Ok(bits) => ("SHAKE256", Box::new(Shake256::new()) as Box<dyn Digest>, bits),
+                Ok(bits) => (
+                    "SHAKE256",
+                    Box::new(Shake256::new()) as Box<dyn Digest>,
+                    bits,
+                ),
                 Err(err) => crash!(1, "{}", err),
             },
             None => crash!(1, "--bits required for SHAKE-256"),
@@ -319,17 +359,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             matches.free
         };
         match hashsum(
-            name,
-            algo,
-            files,
-            binary,
-            check,
-            tag,
-            status,
-            quiet,
-            strict,
-            warn,
-            bits,
+            name, algo, files, binary, check, tag, status, quiet, strict, warn, bits,
         ) {
             Ok(()) => return 0,
             Err(e) => return e,
@@ -449,7 +479,8 @@ fn hashsum(
                     &mut ckf,
                     binary_check,
                     output_bits
-                )).to_ascii_lowercase();
+                ))
+                .to_ascii_lowercase();
                 if sum == real_sum {
                     if !quiet {
                         println!("{}: OK", ck_filename);
@@ -472,8 +503,12 @@ fn hashsum(
     }
     if !status {
         match bad_format.cmp(&1) {
-            std::cmp::Ordering::Equal => show_warning!("{} line is improperly formatted", bad_format),
-            std::cmp::Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
+            std::cmp::Ordering::Equal => {
+                show_warning!("{} line is improperly formatted", bad_format)
+            }
+            std::cmp::Ordering::Greater => {
+                show_warning!("{} lines are improperly formatted", bad_format)
+            }
             _ => {}
         };
         if failed > 0 {

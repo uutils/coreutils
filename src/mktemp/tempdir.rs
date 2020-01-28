@@ -1,8 +1,8 @@
 // Mainly taken from crate `tempdir`
 
 extern crate rand;
-use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};

@@ -1,7 +1,7 @@
 use formatteriteminfo::FormatterItemInfo;
-use prn_int::*;
 use prn_char::*;
 use prn_float::*;
+use prn_int::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ParsedFormatterItemInfo {
@@ -539,7 +539,8 @@ fn test_mixed_formats() {
             "--".to_string(),
             "-h".to_string(),
             "--format=f8".to_string(),
-        ]).unwrap(),
+        ])
+        .unwrap(),
         vec![
             ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC64S, false), // I
             ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC8U, true),   // tu1z

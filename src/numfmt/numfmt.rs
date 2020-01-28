@@ -70,7 +70,8 @@ impl fmt::Display for DisplayableSuffix {
             RawSuffix::E => write!(f, "E"),
             RawSuffix::Z => write!(f, "Z"),
             RawSuffix::Y => write!(f, "Y"),
-        }.and_then(|()| match with_i {
+        }
+        .and_then(|()| match with_i {
             true => write!(f, "i"),
             false => Ok(()),
         })

@@ -1,8 +1,8 @@
-use std::io;
 use byteorder_io::ByteOrder;
+use half::f16;
 use multifilereader::HasError;
 use peekreader::PeekRead;
-use half::f16;
+use std::io;
 
 /// Processes an input and provides access to the data read in various formats
 ///
@@ -60,7 +60,8 @@ where
     /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
     /// MemoryDecoder providing access to the result or returns an i/o error.
     pub fn peek_read(&mut self) -> io::Result<MemoryDecoder> {
-        match self.input
+        match self
+            .input
             .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)
         {
             Ok((n, p)) => {
@@ -157,9 +158,9 @@ impl<'a> MemoryDecoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
-    use peekreader::PeekReader;
     use byteorder_io::ByteOrder;
+    use peekreader::PeekReader;
+    use std::io::Cursor;
 
     #[test]
     fn smoke_test() {

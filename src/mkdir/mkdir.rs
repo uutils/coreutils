@@ -60,10 +60,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let res: Option<u16> = u16::from_str_radix(&m, 8).ok();
             match res {
                 Some(r) => r,
-                _ => crash!(1, "no mode given")
+                _ => crash!(1, "no mode given"),
             }
-        },
-        _ => 0o755 as u16
+        }
+        _ => 0o755 as u16,
     };
 
     let dirs = matches.free;
@@ -112,7 +112,11 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
  * Wrapper to catch errors, return 1 if failed
  */
 fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
-    let create_dir = if recursive { fs::create_dir_all } else { fs::create_dir };
+    let create_dir = if recursive {
+        fs::create_dir_all
+    } else {
+        fs::create_dir
+    };
     if let Err(e) = create_dir(path) {
         show_info!("{}: {}", path.display(), e.to_string());
         return 1;
@@ -124,17 +128,13 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
 
     #[cfg(any(unix, target_os = "redox"))]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        use fs::{Permissions, set_permissions};
-        use std::os::unix::fs::{PermissionsExt};
+        use fs::{set_permissions, Permissions};
+        use std::os::unix::fs::PermissionsExt;
 
         let mode = Permissions::from_mode(u32::from(mode));
 
         if let Err(err) = set_permissions(path, mode) {
-            show_error!(
-                "{}: {}",
-                path.display(),
-                err
-            );
+            show_error!("{}: {}", path.display(), err);
             return 1;
         }
         0

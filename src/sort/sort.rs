@@ -16,15 +16,15 @@ extern crate itertools;
 #[macro_use]
 extern crate uucore;
 
+use itertools::Itertools;
+use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use uucore::fs::is_stdin_interactive;
-use semver::Version;
-use itertools::Itertools; // for Iterator::dedup()
+use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -380,13 +380,11 @@ fn permissive_f64_parse(a: &str) -> f64 {
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.split_whitespace().next() {
         None => std::f64::NEG_INFINITY,
-        Some(sa) => {
-            match sa.parse::<f64>() {
-                Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
-                Ok(a) => a,
-                Err(_) => std::f64::NEG_INFINITY,
-            }
-        }
+        Some(sa) => match sa.parse::<f64>() {
+            Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
+            Ok(a) => a,
+            Err(_) => std::f64::NEG_INFINITY,
+        },
     }
 }
 
@@ -467,7 +465,8 @@ enum Month {
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
 fn month_parse(line: &str) -> Month {
-    match line.split_whitespace()
+    match line
+        .split_whitespace()
         .next()
         .unwrap()
         .to_uppercase()

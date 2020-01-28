@@ -14,9 +14,9 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
+use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
-use std::fs::File;
 use std::path::Path;
 
 static NAME: &str = "paste";
@@ -60,7 +60,9 @@ FILE, separated by TABs, to standard output.",
         println!("{} {}", NAME, VERSION);
     } else {
         let serial = matches.opt_present("serial");
-        let delimiters = matches.opt_str("delimiters").unwrap_or_else(|| "\t".to_owned());
+        let delimiters = matches
+            .opt_str("delimiters")
+            .unwrap_or_else(|| "\t".to_owned());
         paste(matches.free, serial, delimiters);
     }
 

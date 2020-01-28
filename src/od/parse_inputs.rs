@@ -323,23 +323,27 @@ mod tests {
             parse_inputs(&MockOptions::new(
                 vec!["file1", "10", "10"],
                 vec!["traditional"]
-            )).unwrap()
+            ))
+            .unwrap()
         );
 
         parse_inputs(&MockOptions::new(
             vec!["10", "file1", "10"],
             vec!["traditional"],
-        )).unwrap_err();
+        ))
+        .unwrap_err();
 
         parse_inputs(&MockOptions::new(
             vec!["10", "10", "file1"],
             vec!["traditional"],
-        )).unwrap_err();
+        ))
+        .unwrap_err();
 
         parse_inputs(&MockOptions::new(
             vec!["10", "10", "10", "10"],
             vec!["traditional"],
-        )).unwrap_err();
+        ))
+        .unwrap_err();
     }
 
     fn parse_offset_operand_str(s: &str) -> Result<usize, &'static str> {

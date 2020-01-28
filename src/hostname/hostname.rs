@@ -17,21 +17,21 @@ extern crate winapi;
 #[macro_use]
 extern crate uucore;
 
-use std::collections::hash_set::HashSet;
-use std::iter::repeat;
-use std::io;
-use std::str;
-use std::net::ToSocketAddrs;
 use getopts::Matches;
+use std::collections::hash_set::HashSet;
+use std::io;
+use std::iter::repeat;
+use std::net::ToSocketAddrs;
+use std::str;
 
 #[cfg(windows)]
-use winapi::um::winsock2::{GetHostNameW, WSACleanup, WSAStartup};
-#[cfg(windows)]
-use winapi::um::sysinfoapi::{ComputerNamePhysicalDnsHostname, SetComputerNameExW};
+use uucore::wide::*;
 #[cfg(windows)]
 use winapi::shared::minwindef::MAKEWORD;
 #[cfg(windows)]
-use uucore::wide::*;
+use winapi::um::sysinfoapi::{ComputerNamePhysicalDnsHostname, SetComputerNameExW};
+#[cfg(windows)]
+use winapi::um::winsock2::{GetHostNameW, WSACleanup, WSAStartup};
 
 #[cfg(not(windows))]
 use libc::gethostname;
@@ -63,12 +63,28 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 fn execute(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("d", "domain", "Display the name of the DNS domain if possible")
-        .optflag("i", "ip-address", "Display the network address(es) of the host")
+        .optflag(
+            "d",
+            "domain",
+            "Display the name of the DNS domain if possible",
+        )
+        .optflag(
+            "i",
+            "ip-address",
+            "Display the network address(es) of the host",
+        )
         // TODO: support --long
-        .optflag("f", "fqdn", "Display the FQDN (Fully Qualified Domain Name) (default)")
-        .optflag("s", "short", "Display the short hostname (the portion before the first dot) if \
-                                possible")
+        .optflag(
+            "f",
+            "fqdn",
+            "Display the FQDN (Fully Qualified Domain Name) (default)",
+        )
+        .optflag(
+            "s",
+            "short",
+            "Display the short hostname (the portion before the first dot) if \
+             possible",
+        )
         .parse(args);
 
     match matches.free.len() {

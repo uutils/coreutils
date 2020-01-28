@@ -1,5 +1,5 @@
-use std::str::from_utf8;
 use formatteriteminfo::*;
+use std::str::from_utf8;
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,

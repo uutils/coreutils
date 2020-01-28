@@ -163,40 +163,36 @@ fn du(
 
         for f in read {
             match f {
-                Ok(entry) => {
-                    match Stat::new(entry.path()) {
-                        Ok(this_stat) => {
-                            if this_stat.is_dir {
-                                futures.push(du(this_stat, options, depth + 1, inodes));
-                            } else {
-                                if inodes.contains(&this_stat.inode) {
-                                    continue;
-                                }
-                                inodes.insert(this_stat.inode);
-                                my_stat.size += this_stat.size;
-                                my_stat.blocks += this_stat.blocks;
-                                if options.all {
-                                    stats.push(this_stat);
-                                }
+                Ok(entry) => match Stat::new(entry.path()) {
+                    Ok(this_stat) => {
+                        if this_stat.is_dir {
+                            futures.push(du(this_stat, options, depth + 1, inodes));
+                        } else {
+                            if inodes.contains(&this_stat.inode) {
+                                continue;
+                            }
+                            inodes.insert(this_stat.inode);
+                            my_stat.size += this_stat.size;
+                            my_stat.blocks += this_stat.blocks;
+                            if options.all {
+                                stats.push(this_stat);
                             }
                         }
-                        Err(error) => show_error!("{}", error),
                     }
-                }
+                    Err(error) => show_error!("{}", error),
+                },
                 Err(error) => show_error!("{}", error),
             }
         }
     }
 
-    stats.extend(futures.into_iter().flatten().rev().filter(
-        |stat| {
-            if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
-                my_stat.size += stat.size;
-                my_stat.blocks += stat.blocks;
-            }
-            options.max_depth == None || depth < options.max_depth.unwrap()
-        },
-    ));
+    stats.extend(futures.into_iter().flatten().rev().filter(|stat| {
+        if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
+            my_stat.size += stat.size;
+            my_stat.blocks += stat.blocks;
+        }
+        options.max_depth == None || depth < options.max_depth.unwrap()
+    }));
     stats.push(my_stat);
     Box::new(stats.into_iter())
 }
@@ -220,7 +216,10 @@ fn convert_size_k(size: u64, multiplier: u64, _block_size: u64) -> String {
 }
 
 fn convert_size_m(size: u64, multiplier: u64, _block_size: u64) -> String {
-    format!("{}", ((size as f64) / ((multiplier * multiplier) as f64)).ceil())
+    format!(
+        "{}",
+        ((size as f64) / ((multiplier * multiplier) as f64)).ceil()
+    )
 }
 
 fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
@@ -235,66 +234,109 @@ pub fn uumain(args: Vec<String>) -> i32 {
         NAME
     );
     let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
-    // In task
-        .optflag("a", "all", " write counts for all files, not just directories")
-    // In main
-        .optflag("", "apparent-size", "print apparent sizes,  rather  than  disk  usage
+        // In task
+        .optflag(
+            "a",
+            "all",
+            " write counts for all files, not just directories",
+        )
+        // In main
+        .optflag(
+            "",
+            "apparent-size",
+            "print apparent sizes,  rather  than  disk  usage
             although  the apparent  size is usually smaller, it may be larger due to holes
-            in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like")
-    // In main
-        .optopt("B", "block-size", "scale sizes  by  SIZE before printing them.
+            in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like",
+        )
+        // In main
+        .optopt(
+            "B",
+            "block-size",
+            "scale sizes  by  SIZE before printing them.
             E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
-            "SIZE")
-    // In main
-        .optflag("b", "bytes", "equivalent to '--apparent-size --block-size=1'")
-    // In main
+            "SIZE",
+        )
+        // In main
+        .optflag(
+            "b",
+            "bytes",
+            "equivalent to '--apparent-size --block-size=1'",
+        )
+        // In main
         .optflag("c", "total", "produce a grand total")
-    // In task
-    // opts.optflag("D", "dereference-args", "dereference only symlinks that are listed
-    //     on the command line"),
-    // In main
-    // opts.optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
-    //                   names specified in file F;
-    //                   If F is - then read names from standard input", "F"),
-    // // In task
-    // opts.optflag("H", "", "equivalent to --dereference-args (-D)"),
-    // In main
-        .optflag("h", "human-readable", "print sizes in human readable format (e.g., 1K 234M 2G)")
-    // In main
+        // In task
+        // opts.optflag("D", "dereference-args", "dereference only symlinks that are listed
+        //     on the command line"),
+        // In main
+        // opts.optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
+        //                   names specified in file F;
+        //                   If F is - then read names from standard input", "F"),
+        // // In task
+        // opts.optflag("H", "", "equivalent to --dereference-args (-D)"),
+        // In main
+        .optflag(
+            "h",
+            "human-readable",
+            "print sizes in human readable format (e.g., 1K 234M 2G)",
+        )
+        // In main
         .optflag("", "si", "like -h, but use powers of 1000 not 1024")
-    // In main
+        // In main
         .optflag("k", "", "like --block-size=1K")
-    // In task
+        // In task
         .optflag("l", "count-links", "count sizes many times if hard linked")
-    // // In main
+        // // In main
         .optflag("m", "", "like --block-size=1M")
-    // // In task
-    // opts.optflag("L", "dereference", "dereference all symbolic links"),
-    // // In task
-    // opts.optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
-    // // In main
-        .optflag("0", "null", "end each output line with 0 byte rather than newline")
-    // In main
-        .optflag("S", "separate-dirs", "do not include size of subdirectories")
-    // In main
+        // // In task
+        // opts.optflag("L", "dereference", "dereference all symbolic links"),
+        // // In task
+        // opts.optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
+        // // In main
+        .optflag(
+            "0",
+            "null",
+            "end each output line with 0 byte rather than newline",
+        )
+        // In main
+        .optflag(
+            "S",
+            "separate-dirs",
+            "do not include size of subdirectories",
+        )
+        // In main
         .optflag("s", "summarize", "display only a total for each argument")
-    // // In task
-    // opts.optflag("x", "one-file-system", "skip directories on different file systems"),
-    // // In task
-    // opts.optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
-    // // In task
-    // opts.optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
-    // In main
-        .optopt("d", "max-depth", "print the total for a directory (or file, with --all)
+        // // In task
+        // opts.optflag("x", "one-file-system", "skip directories on different file systems"),
+        // // In task
+        // opts.optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
+        // // In task
+        // opts.optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
+        // In main
+        .optopt(
+            "d",
+            "max-depth",
+            "print the total for a directory (or file, with --all)
             only if it is N or fewer levels below the command
-            line argument;  --max-depth=0 is the same as --summarize", "N")
-    // In main
-        .optflagopt("", "time", "show time of the last modification of any file in the
+            line argument;  --max-depth=0 is the same as --summarize",
+            "N",
+        )
+        // In main
+        .optflagopt(
+            "",
+            "time",
+            "show time of the last modification of any file in the
             directory, or any of its subdirectories.  If WORD is given, show time as WORD instead
-            of modification time: atime, access, use, ctime or status", "WORD")
-    // In main
-        .optopt("", "time-style", "show times using style STYLE:
-            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'", "STYLE")
+            of modification time: atime, access, use, ctime or status",
+            "WORD",
+        )
+        // In main
+        .optopt(
+            "",
+            "time-style",
+            "show times using style STYLE:
+            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'",
+            "STYLE",
+        )
         .parse(args);
 
     let summarize = matches.opt_present("summarize");
@@ -350,26 +392,24 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let convert_size = |size| convert_size_fn(size, multiplier, block_size);
 
     let time_format_str = match matches.opt_str("time-style") {
-        Some(s) => {
-            match &s[..] {
-                "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
-                "long-iso" => "%Y-%m-%d %H:%M",
-                "iso" => "%Y-%m-%d",
-                _ => {
-                    show_error!(
-                        "invalid argument '{}' for 'time style'
+        Some(s) => match &s[..] {
+            "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
+            "long-iso" => "%Y-%m-%d %H:%M",
+            "iso" => "%Y-%m-%d",
+            _ => {
+                show_error!(
+                    "invalid argument '{}' for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
 Try '{} --help' for more information.",
-                        s,
-                        NAME
-                    );
-                    return 1;
-                }
+                    s,
+                    NAME
+                );
+                return 1;
             }
-        }
+        },
         None => "%Y-%m-%d %H:%M",
     };
 
@@ -397,23 +437,21 @@ Try '{} --help' for more information.",
                         let tm = {
                             let (secs, nsecs) = {
                                 let time = match matches.opt_str("time") {
-                                    Some(s) => {
-                                        match &s[..] {
-                                            "accessed" => stat.accessed,
-                                            "created" => stat.created,
-                                            "modified" => stat.modified,
-                                            _ => {
-                                                show_error!(
-                                                    "invalid argument 'modified' for '--time'
+                                    Some(s) => match &s[..] {
+                                        "accessed" => stat.accessed,
+                                        "created" => stat.created,
+                                        "modified" => stat.modified,
+                                        _ => {
+                                            show_error!(
+                                                "invalid argument 'modified' for '--time'
     Valid arguments are:
       - 'accessed', 'created', 'modified'
     Try '{} --help' for more information.",
-                                                    NAME
-                                                );
-                                                return 1;
-                                            }
+                                                NAME
+                                            );
+                                            return 1;
                                         }
-                                    }
+                                    },
                                     None => stat.modified,
                                 };
                                 ((time / 1000) as i64, (time % 1000 * 1_000_000) as i32)

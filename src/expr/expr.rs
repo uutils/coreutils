@@ -13,8 +13,8 @@ extern crate onig;
 #[macro_use]
 extern crate uucore;
 
-mod tokens;
 mod syntax_tree;
+mod tokens;
 
 static NAME: &str = "expr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");

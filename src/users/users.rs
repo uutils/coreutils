@@ -10,7 +10,6 @@
  */
 
 /* last synced with: whoami (GNU coreutils) 8.22 */
-
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #![allow(dead_code)]
 

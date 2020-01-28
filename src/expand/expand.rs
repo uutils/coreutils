@@ -45,7 +45,8 @@ fn tabstops_parse(s: String) -> Vec<usize> {
         crash!(1, "{}\n", "tab size cannot be 0");
     }
 
-    if let (false, _) = nums.iter()
+    if let (false, _) = nums
+        .iter()
         .fold((true, 0), |(acc, last), &n| (acc && last <= n, n))
     {
         crash!(1, "{}\n", "tab sizes must be ascending");

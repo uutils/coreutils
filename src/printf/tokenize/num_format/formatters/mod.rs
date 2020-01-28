@@ -1,7 +1,7 @@
-pub mod intf;
-pub mod floatf;
+mod base_conv;
 pub mod cninetyninehexfloatf;
-pub mod scif;
 pub mod decf;
 mod float_common;
-mod base_conv;
+pub mod floatf;
+pub mod intf;
+pub mod scif;

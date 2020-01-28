@@ -13,8 +13,8 @@
 extern crate uucore;
 
 use std::fs::hard_link;
-use std::path::Path;
 use std::io::Error;
+use std::path::Path;
 
 static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
 static SUMMARY: &str = "Create a link named FILE2 to FILE1";

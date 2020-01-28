@@ -168,7 +168,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         files.push("-".to_owned());
     }
 
-    let can_write_fast = !(show_tabs || show_nonprint || show_ends || squeeze_blank
+    let can_write_fast = !(show_tabs
+        || show_nonprint
+        || show_ends
+        || squeeze_blank
         || number_mode != NumberingMode::None);
 
     let success = if can_write_fast {
@@ -190,7 +193,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         write_lines(files, &options).is_ok()
     };
 
-    if success { 0 } else { 1 }
+    if success {
+        0
+    } else {
+        1
+    }
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -205,25 +212,13 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
 
     match metadata(path).context(path)?.file_type() {
         #[cfg(unix)]
-        ft if ft.is_block_device() =>
-        {
-            Ok(InputType::BlockDevice)
-        }
+        ft if ft.is_block_device() => Ok(InputType::BlockDevice),
         #[cfg(unix)]
-        ft if ft.is_char_device() =>
-        {
-            Ok(InputType::CharacterDevice)
-        }
+        ft if ft.is_char_device() => Ok(InputType::CharacterDevice),
         #[cfg(unix)]
-        ft if ft.is_fifo() =>
-        {
-            Ok(InputType::Fifo)
-        }
+        ft if ft.is_fifo() => Ok(InputType::Fifo),
         #[cfg(unix)]
-        ft if ft.is_socket() =>
-        {
-            Ok(InputType::Socket)
-        }
+        ft if ft.is_socket() => Ok(InputType::Socket),
         ft if ft.is_dir() => Ok(InputType::Directory),
         ft if ft.is_file() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
@@ -282,12 +277,14 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
 
     for file in files {
         match open(&file[..]) {
-            Ok(mut handle) => while let Ok(n) = handle.reader.read(&mut in_buf) {
-                if n == 0 {
-                    break;
+            Ok(mut handle) => {
+                while let Ok(n) = handle.reader.read(&mut in_buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    writer.write_all(&in_buf[..n]).context(&file[..])?;
                 }
-                writer.write_all(&in_buf[..n]).context(&file[..])?;
-            },
+            }
             Err(error) => {
                 writeln!(&mut stderr(), "{}", error)?;
                 error_count += 1;
@@ -421,10 +418,7 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     let mut count = 0;
     loop {
-        match in_buf
-            .iter()
-            .position(|c| *c == b'\n' || *c == b'\t')
-        {
+        match in_buf.iter().position(|c| *c == b'\n' || *c == b'\t') {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
                 if in_buf[p] == b'\n' {
@@ -458,7 +452,8 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
             _ => writer.write_all(&[b'M', b'-', b'^', 63]),
-        }.unwrap();
+        }
+        .unwrap();
         count += 1;
     }
     if count != in_buf.len() {

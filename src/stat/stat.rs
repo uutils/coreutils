@@ -19,29 +19,31 @@ pub use fsext::*;
 extern crate uucore;
 use uucore::entries;
 
-use std::{cmp, fs, iter};
+use std::borrow::Cow;
+use std::convert::AsRef;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::borrow::Cow;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
-use std::convert::AsRef;
+use std::{cmp, fs, iter};
 
 macro_rules! check_bound {
-    ($str: ident, $bound:expr, $beg: expr, $end: expr) => (
+    ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
             return Err(format!("‘{}’: invalid directive", &$str[$beg..$end]));
         }
-
-    )
+    };
 }
 macro_rules! fill_string {
-    ($str: ident, $c: expr, $cnt: expr) => (
-        iter::repeat($c).take($cnt).map(|c| $str.push(c)).all(|_| true)
-    )
+    ($str: ident, $c: expr, $cnt: expr) => {
+        iter::repeat($c)
+            .take($cnt)
+            .map(|c| $str.push(c))
+            .all(|_| true)
+    };
 }
 macro_rules! extend_digits {
-    ($str: expr, $min: expr) => (
+    ($str: expr, $min: expr) => {
         if $min > $str.len() {
             let mut pad = String::with_capacity($min);
             fill_string!(pad, '0', $min - $str.len());
@@ -50,10 +52,10 @@ macro_rules! extend_digits {
         } else {
             $str.into()
         }
-    )
+    };
 }
 macro_rules! pad_and_print {
-    ($result: ident, $str: ident, $left: expr, $width: expr, $padding: expr) => (
+    ($result: ident, $str: ident, $left: expr, $width: expr, $padding: expr) => {
         if $str.len() < $width {
             if $left {
                 $result.push_str($str.as_ref());
@@ -66,7 +68,7 @@ macro_rules! pad_and_print {
             $result.push_str($str.as_ref());
         }
         print!("{}", $result);
-    )
+    };
 }
 macro_rules! print_adjusted {
     ($str: ident, $left: expr, $width: expr, $padding: expr) => {
@@ -82,7 +84,7 @@ macro_rules! print_adjusted {
             field_width -= $prefix.len();
         }
         pad_and_print!(result, $str, $left, field_width, $padding);
-    }
+    };
 }
 
 static NAME: &str = "stat";
@@ -481,7 +483,11 @@ impl Stater {
             let mut mount_list = reader
                 .lines()
                 .filter_map(std::result::Result::ok)
-                .filter_map(|line| line.split_whitespace().nth(1).map(std::borrow::ToOwned::to_owned))
+                .filter_map(|line| {
+                    line.split_whitespace()
+                        .nth(1)
+                        .map(std::borrow::ToOwned::to_owned)
+                })
                 .collect::<Vec<String>>();
             // Reverse sort. The longer comes first.
             mount_list.sort_by(|a, b| b.cmp(a));

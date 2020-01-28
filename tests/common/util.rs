@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 extern crate tempdir;
 
+use self::tempdir::TempDir;
 use std::env;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
@@ -10,12 +12,10 @@ use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::str::from_utf8;
-use std::ffi::OsStr;
 use std::rc::Rc;
+use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
-use self::tempdir::TempDir;
 
 #[cfg(windows)]
 static PROGNAME: &'static str = "uutils.exe";
@@ -37,12 +37,12 @@ static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a
 pub fn is_wsl() -> bool {
     #[cfg(target_os = "linux")]
     {
-    if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
-        if let Ok(s) = std::str::from_utf8(&b) {
-            let a = s.to_ascii_lowercase();
-            return a.contains("microsoft") || a.contains("wsl");
+        if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
+            if let Ok(s) = std::str::from_utf8(&b) {
+                let a = s.to_ascii_lowercase();
+                return a.contains("microsoft") || a.contains("wsl");
+            }
         }
-    }
     }
     false
 }
@@ -108,10 +108,7 @@ impl CmdResult {
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
-        assert_eq!(
-            self.stdout,
-            String::from(msg.as_ref())
-        );
+        assert_eq!(self.stdout, String::from(msg.as_ref()));
         Box::new(self)
     }
 
@@ -373,7 +370,8 @@ impl AtPath {
 
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
-        let s = self.subdir
+        let s = self
+            .subdir
             .canonicalize()
             .unwrap()
             .to_str()
@@ -573,7 +571,8 @@ impl UCommand {
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let mut result = self.raw
+        let mut result = self
+            .raw
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

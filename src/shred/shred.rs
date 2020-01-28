@@ -18,8 +18,8 @@ use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::SeekFrom;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 #[macro_use]
@@ -473,7 +473,8 @@ fn wipe_file(
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
-            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed"); // Ignore failed writes; just keep trying
+            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed");
+            // Ignore failed writes; just keep trying
         }
     }
 

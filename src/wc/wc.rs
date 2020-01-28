@@ -40,7 +40,10 @@ impl Settings {
             show_max_line_length: matches.opt_present("L"),
         };
 
-        if settings.show_bytes || settings.show_chars || settings.show_lines || settings.show_words
+        if settings.show_bytes
+            || settings.show_chars
+            || settings.show_lines
+            || settings.show_words
             || settings.show_max_line_length
         {
             return settings;

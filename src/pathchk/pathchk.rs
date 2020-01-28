@@ -89,7 +89,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let mut res = if matches.free.is_empty() {
                 show_error!("missing operand\nTry {} --help for more information", NAME);
                 false
-            } else { true };
+            } else {
+                true
+            };
             // free strings are path operands
             // FIXME: TCS, seems inefficient and overly verbose (?)
             for p in matches.free {
@@ -233,12 +235,14 @@ fn check_searchable(path: &str) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
-        Err(e) => if e.kind() == ErrorKind::NotFound {
-            true
-        } else {
-            writeln!(&mut std::io::stderr(), "{}", e);
-            false
-        },
+        Err(e) => {
+            if e.kind() == ErrorKind::NotFound {
+                true
+            } else {
+                writeln!(&mut std::io::stderr(), "{}", e);
+                false
+            }
+        }
     }
 }
 

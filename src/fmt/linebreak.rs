@@ -7,12 +7,12 @@
  * file that was distributed with this source code.
  */
 
-use FmtOptions;
 use parasplit::{ParaWords, Paragraph, WordInfo};
-use std::io::{BufWriter, Stdout, Write};
-use std::i64;
 use std::cmp;
+use std::i64;
+use std::io::{BufWriter, Stdout, Write};
 use std::mem;
+use FmtOptions;
 
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,
@@ -58,18 +58,19 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
         }
     };
     // print the init, if it exists, and get its length
-    let p_init_len = w_len + if opts.crown || opts.tagged {
-        // handle "init" portion
-        silent_unwrap!(ostream.write_all(para.init_str.as_bytes()));
-        para.init_len
-    } else if !para.mail_header {
-        // for non-(crown, tagged) that's the same as a normal indent
-        silent_unwrap!(ostream.write_all(p_indent.as_bytes()));
-        p_indent_len
-    } else {
-        // except that mail headers get no indent at all
-        0
-    };
+    let p_init_len = w_len
+        + if opts.crown || opts.tagged {
+            // handle "init" portion
+            silent_unwrap!(ostream.write_all(para.init_str.as_bytes()));
+            para.init_len
+        } else if !para.mail_header {
+            // for non-(crown, tagged) that's the same as a normal indent
+            silent_unwrap!(ostream.write_all(p_indent.as_bytes()));
+            p_indent_len
+        } else {
+            // except that mail headers get no indent at all
+            0
+        };
     // write first word after writing init
     silent_unwrap!(ostream.write_all(w.as_bytes()));
 
@@ -218,17 +219,15 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
 ) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut iter = iter.peekable();
     // set up the initial null linebreak
-    let mut linebreaks = vec![
-        LineBreak {
-            prev: 0,
-            linebreak: None,
-            break_before: false,
-            demerits: 0,
-            prev_rat: 0.0f32,
-            length: args.init_len,
-            fresh: false,
-        },
-    ];
+    let mut linebreaks = vec![LineBreak {
+        prev: 0,
+        linebreak: None,
+        break_before: false,
+        demerits: 0,
+        prev_rat: 0.0f32,
+        length: args.init_len,
+        fresh: false,
+    }];
     // this vec holds the current active linebreaks; next_ holds the breaks that will be active for
     // the next word
     let active_breaks = &mut vec![0];
@@ -275,7 +274,9 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
             }
 
             // get the new length
-            let tlen = w.word_nchars + args.compute_width(w, active.length, active.fresh) + slen
+            let tlen = w.word_nchars
+                + args.compute_width(w, active.length, active.fresh)
+                + slen
                 + active.length;
 
             // if tlen is longer than args.opts.width, we drop this break from the active list
@@ -304,7 +305,8 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                     // do not even consider adding a line that has too many demerits
                     // also, try to detect overflow by checking signum
                     let total_demerits = new_demerits + active.demerits;
-                    if new_demerits < BAD_INFTY_SQ && total_demerits < ld_new
+                    if new_demerits < BAD_INFTY_SQ
+                        && total_demerits < ld_new
                         && active.demerits.signum() <= new_demerits.signum()
                     {
                         ld_new = total_demerits;

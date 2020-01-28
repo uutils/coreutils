@@ -130,7 +130,10 @@ With no FILE, or when FILE is -, read standard input.",
             }
             Mode::InputRange((b, e)) => {
                 let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
-                let mut rvec = rvec.iter().map(std::string::String::as_bytes).collect::<Vec<&[u8]>>();
+                let mut rvec = rvec
+                    .iter()
+                    .map(std::string::String::as_bytes)
+                    .collect::<Vec<&[u8]>>();
                 shuf_bytes(&mut rvec, repeat, count, sep, output, random);
             }
             Mode::Default => {

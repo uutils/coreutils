@@ -1,7 +1,7 @@
+use multifilereader::HasError;
 use std::cmp;
 use std::io;
 use std::io::Read;
-use multifilereader::HasError;
 
 /// When a large number of bytes must be skipped, it will be read into a
 /// dynamically allocated buffer. The buffer will be limited to this size.
@@ -21,11 +21,7 @@ impl<R> PartialReader<R> {
     /// `skip` bytes, and limits the output to `limit` bytes. Set `limit`
     /// to `None` if there should be no limit.
     pub fn new(inner: R, skip: usize, limit: Option<usize>) -> Self {
-        PartialReader {
-            inner,
-            skip,
-            limit,
-        }
+        PartialReader { inner, skip, limit }
     }
 }
 
@@ -77,9 +73,9 @@ impl<R: HasError> HasError for PartialReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, ErrorKind, Read};
-    use std::error::Error;
     use mockstream::*;
+    use std::error::Error;
+    use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
     fn test_read_without_limits() {

@@ -18,8 +18,8 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 // import crate time from utmpx
-use uucore::libc::time_t;
 pub use uucore::libc;
+use uucore::libc::time_t;
 
 use getopts::Options;
 
@@ -190,7 +190,9 @@ fn print_uptime(upsecs: i64) {
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     match updays.cmp(&1) {
         std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
-        std::cmp::Ordering::Greater => print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins),
+        std::cmp::Ordering::Greater => {
+            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins)
+        }
         _ => print!("up  {:2}:{:02}, ", uphours, upmins),
     };
 }

@@ -154,20 +154,22 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         }
-        None => if let Some(n) = given_options.opt_str("c") {
-            let mut slice: &str = n.as_ref();
-            if slice.chars().next().unwrap_or('_') == '+' {
-                settings.beginning = true;
-                slice = &slice[1..];
-            }
-            match parse_size(slice) {
-                Ok(m) => settings.mode = FilterMode::Bytes(m),
-                Err(e) => {
-                    show_error!("{}", e.description());
-                    return 1;
+        None => {
+            if let Some(n) = given_options.opt_str("c") {
+                let mut slice: &str = n.as_ref();
+                if slice.chars().next().unwrap_or('_') == '+' {
+                    settings.beginning = true;
+                    slice = &slice[1..];
+                }
+                match parse_size(slice) {
+                    Ok(m) => settings.mode = FilterMode::Bytes(m),
+                    Err(e) => {
+                        show_error!("{}", e.description());
+                        return 1;
+                    }
                 }
             }
-        },
+        }
     };
 
     if given_options.opt_present("z") {

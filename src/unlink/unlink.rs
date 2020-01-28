@@ -18,10 +18,10 @@ extern crate libc;
 extern crate uucore;
 
 use getopts::Options;
-use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use libc::{lstat, stat, unlink};
-use std::io::{Error, ErrorKind};
+use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
+use std::io::{Error, ErrorKind};
 
 static NAME: &str = "unlink";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -72,12 +72,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let st_mode = {
         #[allow(deprecated)]
         let mut buf: stat = unsafe { std::mem::uninitialized() };
-        let result = unsafe {
-            lstat(
-                c_string.as_ptr(),
-                &mut buf as *mut stat,
-            )
-        };
+        let result = unsafe { lstat(c_string.as_ptr(), &mut buf as *mut stat) };
 
         if result < 0 {
             crash!(

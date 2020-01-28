@@ -1,15 +1,15 @@
 //! handles creating printed output for numeric substitutions
 
-use std::env;
-use std::vec::Vec;
-use cli;
 use super::format_field::{FieldType, FormatField};
 use super::formatter::{Base, FormatPrimitive, Formatter, InPrefix};
-use super::formatters::intf::Intf;
-use super::formatters::floatf::Floatf;
 use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
-use super::formatters::scif::Scif;
 use super::formatters::decf::Decf;
+use super::formatters::floatf::Floatf;
+use super::formatters::intf::Intf;
+use super::formatters::scif::Scif;
+use cli;
+use std::env;
+use std::vec::Vec;
 
 pub fn warn_expected_numeric(pf_arg: &str) {
     // important: keep println here not print
@@ -21,13 +21,15 @@ pub fn warn_expected_numeric(pf_arg: &str) {
 fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
     match env::var("POSIXLY_CORRECT") {
         Ok(_) => {}
-        Err(e) => if let env::VarError::NotPresent = e {
-            cli::err_msg(&format!(
-                "warning: {:?}: character(s) following character \
-                    constant have been ignored",
-                &*remaining_bytes
-            ));
-        },
+        Err(e) => {
+            if let env::VarError::NotPresent = e {
+                cli::err_msg(&format!(
+                    "warning: {:?}: character(s) following character \
+                     constant have been ignored",
+                    &*remaining_bytes
+                ));
+            }
+        }
     }
 }
 
@@ -63,9 +65,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                         })
                     }
                     // first byte is not quote
-                    _ => {
-                        None
-                    } // no first byte
+                    _ => None, // no first byte
                 }
             } else {
                 Some(0 as u8)

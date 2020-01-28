@@ -1,8 +1,8 @@
 //! Contains the trait `PeekRead` and type `PeekReader` implementing it.
 
+use multifilereader::HasError;
 use std::io;
 use std::io::{Read, Write};
-use multifilereader::HasError;
 
 /// A trait which supplies a function to peek into a stream without
 /// actually reading it.

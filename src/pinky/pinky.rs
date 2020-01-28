@@ -11,9 +11,9 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::utmpx::{self, time, Utmpx};
-use uucore::libc::S_IWGRP;
 use uucore::entries::{Locate, Passwd};
+use uucore::libc::S_IWGRP;
+use uucore::utmpx::{self, time, Utmpx};
 
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -291,7 +291,7 @@ impl Pinky {
                 if self.names.is_empty() {
                     self.print_entry(&ut)
                 } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
-                        self.print_entry(&ut);
+                    self.print_entry(&ut);
                 }
             }
         }

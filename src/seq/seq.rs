@@ -96,10 +96,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                     options.separator = sep;
                                     let next = chiter.next();
                                     if let Some(n) = next {
-                                        show_error!(
-                                            "unexpected character ('{}')",
-                                            n
-                                        );
+                                        show_error!("unexpected character ('{}')", n);
                                         return Err(1);
                                     }
                                 }
@@ -113,10 +110,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                                     options.terminator = Some(term);
                                     let next = chiter.next();
                                     if let Some(n) = next {
-                                        show_error!(
-                                            "unexpected character ('{}')",
-                                            n
-                                        );
+                                        show_error!("unexpected character ('{}')", n);
                                         return Err(1);
                                     }
                                 }
@@ -137,7 +131,7 @@ fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<Stri
                 }
             }
         };
-    };
+    }
     Ok(seq_args)
 }
 

@@ -16,16 +16,16 @@
 
 #[macro_use]
 extern crate uucore;
+use std::ffi::CStr;
+use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
-use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::process::{getegid, geteuid, getgid, getuid};
-use std::ffi::CStr;
 
 macro_rules! cstr2cow {
-    ($v:expr) => (
+    ($v:expr) => {
         unsafe { CStr::from_ptr($v).to_string_lossy() }
-    )
+    };
 }
 
 #[cfg(not(target_os = "linux"))]

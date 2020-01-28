@@ -1,7 +1,7 @@
 use std;
+use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::fs::File;
 use std::vec::Vec;
 
 pub enum InputSource<'a> {
@@ -125,8 +125,8 @@ impl<'b> HasError for MultifileReader<'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, ErrorKind, Read};
     use mockstream::*;
+    use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
     fn test_multi_file_reader_one_read() {

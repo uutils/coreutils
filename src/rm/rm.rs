@@ -16,12 +16,12 @@ extern crate walkdir;
 #[macro_use]
 extern crate uucore;
 
+use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::Path;
-use remove_dir_all::remove_dir_all;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -181,7 +181,8 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                     false
                 }
             }
-        }.bitor(had_err);
+        }
+        .bitor(had_err);
     }
 
     had_err
@@ -247,9 +248,11 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     };
     if response {
         match fs::remove_dir(path) {
-            Ok(_) => if options.verbose {
-                println!("removed '{}'", path.display());
-            },
+            Ok(_) => {
+                if options.verbose {
+                    println!("removed '{}'", path.display());
+                }
+            }
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -268,9 +271,11 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     };
     if response {
         match fs::remove_file(path) {
-            Ok(_) => if options.verbose {
-                println!("removed '{}'", path.display());
-            },
+            Ok(_) => {
+                if options.verbose {
+                    println!("removed '{}'", path.display());
+                }
+            }
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -320,5 +325,6 @@ fn is_symlink_dir(metadata: &fs::Metadata) -> bool {
     pub type DWORD = c_ulong;
     pub const FILE_ATTRIBUTE_DIRECTORY: DWORD = 0x10;
 
-    metadata.file_type().is_symlink() && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    metadata.file_type().is_symlink()
+        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
 }

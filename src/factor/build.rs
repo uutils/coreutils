@@ -115,7 +115,8 @@ fn main() {
         file,
         "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n",
         x
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]

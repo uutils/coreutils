@@ -9,8 +9,8 @@
 * that was distributed with this source code.
 */
 
-use std::u64::MAX as MAX_U64;
 use std::num::Wrapping;
+use std::u64::MAX as MAX_U64;
 
 pub fn big_add(a: u64, b: u64, m: u64) -> u64 {
     let Wrapping(msb_mod_m) = Wrapping(MAX_U64) - Wrapping(m) + Wrapping(1);

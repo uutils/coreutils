@@ -319,7 +319,8 @@ fn split(settings: &Settings) -> i32 {
                     num_prefix(fileno, settings.suffix_length)
                 } else {
                     str_prefix(fileno, settings.suffix_length)
-                }.as_ref(),
+                }
+                .as_ref(),
             );
 
             if fileno != 0 {

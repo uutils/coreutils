@@ -14,10 +14,10 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
+use std::cmp::{min, Ordering};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
-use std::cmp::{min, Ordering};
-use clap::{App, Arg};
 
 static NAME: &str = "join";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -425,11 +425,13 @@ impl<'a> State<'a> {
         if repr.uses_format() {
             repr.print_format(|spec| match *spec {
                 Spec::Key => line.get_field(self.key),
-                Spec::Field(file_num, field_num) => if file_num == self.file_num {
-                    line.get_field(field_num)
-                } else {
-                    None
-                },
+                Spec::Field(file_num, field_num) => {
+                    if file_num == self.file_num {
+                        line.get_field(field_num)
+                    } else {
+                        None
+                    }
+                }
             });
         } else {
             repr.print_field(line.get_field(self.key));

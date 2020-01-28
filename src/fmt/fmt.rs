@@ -14,12 +14,12 @@ extern crate unicode_width;
 #[macro_use]
 extern crate uucore;
 
-use std::cmp;
-use std::io::{BufReader, BufWriter, Read};
-use std::fs::File;
-use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
+use std::cmp;
+use std::fs::File;
+use std::io::{stdin, stdout, Write};
+use std::io::{BufReader, BufWriter, Read};
 
 macro_rules! silent_unwrap(
     ($exp:expr) => (

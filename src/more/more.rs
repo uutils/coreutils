@@ -15,8 +15,8 @@ extern crate getopts;
 extern crate uucore;
 
 use getopts::Options;
-use std::io::{stdout, Read, Write};
 use std::fs::File;
+use std::io::{stdout, Read, Write};
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;

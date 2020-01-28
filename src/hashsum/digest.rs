@@ -71,7 +71,7 @@ impl Digest for sha1::Sha1 {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed ouput
 macro_rules! impl_digest_sha {
-    ($type: ty, $size: expr) => (
+    ($type: ty, $size: expr) => {
         impl Digest for $type {
             fn new() -> Self {
                 Self::default()
@@ -89,14 +89,16 @@ macro_rules! impl_digest_sha {
                 *self = Self::new();
             }
 
-            fn output_bits(&self) -> usize { $size }
+            fn output_bits(&self) -> usize {
+                $size
+            }
         }
-    )
+    };
 }
 
 // Implements the Digest trait for sha2 / sha3 algorithms with variable ouput
 macro_rules! impl_digest_shake {
-    ($type: ty) => (
+    ($type: ty) => {
         impl Digest for $type {
             fn new() -> Self {
                 Self::default()
@@ -114,9 +116,11 @@ macro_rules! impl_digest_shake {
                 *self = Self::new();
             }
 
-            fn output_bits(&self) -> usize { 0 }
+            fn output_bits(&self) -> usize {
+                0
+            }
         }
-    )
+    };
 }
 
 impl_digest_sha!(sha2::Sha224, 224);

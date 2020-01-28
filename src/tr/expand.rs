@@ -88,16 +88,18 @@ impl<'a> Iterator for ExpandSet<'a> {
 
         if let Some(first) = self.unesc.next() {
             // peek ahead
-            if self.unesc.peek() == Some(&'-') && match self.unesc.size_hint() {
-                (x, _) if x > 1 => true, // there's a range here; record it in our internal Range struct
-                _ => false,
-            } {
+            if self.unesc.peek() == Some(&'-')
+                && match self.unesc.size_hint() {
+                    (x, _) if x > 1 => true, // there's a range here; record it in our internal Range struct
+                    _ => false,
+                }
+            {
                 self.unesc.next(); // this is the '-'
                 let last = self.unesc.next().unwrap(); // this is the end of the range
 
                 #[allow(clippy::range_plus_one)]
                 {
-                self.range = first as u32 + 1..last as u32 + 1;
+                    self.range = first as u32 + 1..last as u32 + 1;
                 }
             }
 

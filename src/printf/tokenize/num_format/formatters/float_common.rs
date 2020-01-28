@@ -28,9 +28,9 @@ fn has_enough_digits(
             false //undecidable without converting
         }
     } else if hex_input {
-            ((((string_position - 1) - starting_position) * 9) / 8 >= limit)
+        ((((string_position - 1) - starting_position) * 9) / 8 >= limit)
     } else {
-            ((string_position - 1) - starting_position >= limit)
+        ((string_position - 1) - starting_position >= limit)
     }
 }
 
@@ -72,7 +72,8 @@ impl FloatAnalysis {
                             }
                         }
                     }
-                    if ret.decimal_pos.is_some() && pos_before_first_nonzero_after_decimal.is_none()
+                    if ret.decimal_pos.is_some()
+                        && pos_before_first_nonzero_after_decimal.is_none()
                         && e != '0'
                     {
                         pos_before_first_nonzero_after_decimal = Some(i - 1);
@@ -180,10 +181,7 @@ fn round_terminal_digit(
     if position < after_dec.len() {
         let digit_at_pos: char;
         {
-            digit_at_pos = (&after_dec[position..=position])
-                .chars()
-                .next()
-                .expect("");
+            digit_at_pos = (&after_dec[position..=position]).chars().next().expect("");
         }
         if let '5'..='9' = digit_at_pos {
             let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);

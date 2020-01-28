@@ -76,7 +76,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         CanonicalizeMode::Existing
     } else if matches.opt_present("canonicalize-missing") {
         CanonicalizeMode::Missing
-    } else { CanonicalizeMode::None };
+    } else {
+        CanonicalizeMode::None
+    };
 
     let files = matches.free;
     if files.is_empty() {

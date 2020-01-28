@@ -7,8 +7,8 @@
  * file that was distributed with this source code.
  */
 
-use std::iter::Peekable;
 use std::io::{BufRead, Lines};
+use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
@@ -72,10 +72,7 @@ pub struct FileLines<'a> {
 
 impl<'a> FileLines<'a> {
     fn new<'b>(opts: &'b FmtOptions, lines: Lines<&'b mut FileOrStdReader>) -> FileLines<'b> {
-        FileLines {
-            opts,
-            lines,
-        }
+        FileLines { opts, lines }
     }
 
     // returns true if this line should be formatted
@@ -363,8 +360,9 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     }
                 } else if !second_done {
                     // now we have enough info to handle crown margin and tagged mode
-                    if // in both crown and tagged modes we require that prefix_len is the same
-                        prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end
+                    if
+                    // in both crown and tagged modes we require that prefix_len is the same
+                    prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end
                         ||
                         // in tagged mode, indent has to be *different* on following lines
                         self.opts.tagged && indent_len - 4 == fl.indent_len && indent_end == fl.indent_end
@@ -380,7 +378,8 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     second_done = true;
                 } else {
                     // detect mismatch
-                    if indent_end != fl.indent_end || pfxind_end != fl.pfxind_end
+                    if indent_end != fl.indent_end
+                        || pfxind_end != fl.pfxind_end
                         || indent_len != fl.indent_len
                         || prefix_len != fl.prefix_len
                     {

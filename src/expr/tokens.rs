@@ -141,12 +141,7 @@ fn maybe_dump_tokens_acc(tokens_acc: &[(usize, Token)]) {
     }
 }
 
-fn push_token_if_not_escaped(
-    acc: &mut Vec<(usize, Token)>,
-    tok_idx: usize,
-    token: Token,
-    s: &str,
-) {
+fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, token: Token, s: &str) {
     // Smells heuristics... :(
     let prev_is_plus = match acc.last() {
         None => false,

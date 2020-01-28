@@ -20,12 +20,12 @@ extern crate uucore;
 
 use numeric::*;
 use rand::distributions::{Distribution, Uniform};
-use rand::{SeedableRng, thread_rng};
 use rand::rngs::SmallRng;
+use rand::{thread_rng, SeedableRng};
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead};
-use std::num::Wrapping;
 use std::mem::swap;
+use std::num::Wrapping;
 
 mod numeric;
 
@@ -155,7 +155,10 @@ fn print_factors(num: u64) {
 }
 
 fn print_factors_str(num_str: &str) {
-    if let Err(e) = num_str.parse::<u64>().and_then(|x| { print_factors(x); Ok(()) }) {
+    if let Err(e) = num_str.parse::<u64>().and_then(|x| {
+        print_factors(x);
+        Ok(())
+    }) {
         show_warning!("{}: {}", num_str, e);
     }
 }

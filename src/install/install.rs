@@ -101,49 +101,115 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
         NAME
     );
     new_coreopts!(&syntax, SUMMARY, LONG_HELP)
-    // TODO implement flag
-        .optflagopt("",  "backup", "(unimplemented) make a backup of each existing destination\n \
-                                    file", "CONTROL")
-    // TODO implement flag
-        .optflag("b", "", "(unimplemented) like --backup but does not accept an argument")
+        // TODO implement flag
+        .optflagopt(
+            "",
+            "backup",
+            "(unimplemented) make a backup of each existing destination\n \
+             file",
+            "CONTROL",
+        )
+        // TODO implement flag
+        .optflag(
+            "b",
+            "",
+            "(unimplemented) like --backup but does not accept an argument",
+        )
         .optflag("c", "", "ignored")
-    // TODO implement flag
-        .optflag("C", "compare", "(unimplemented) compare each pair of source and destination\n \
-                                  files, and in some cases, do not modify the destination at all")
-        .optflag("d", "directory", "treat all arguments as directory names.\n \
-                                    create all components of the specified directories")
-    // TODO implement flag
-        .optflag("D", "", "(unimplemented) create all leading components of DEST except the\n \
-                           last, then copy SOURCE to DEST")
-    // TODO implement flag
-        .optflagopt("g", "group", "(unimplemented) set group ownership, instead of process'\n \
-                                   current group", "GROUP")
-        .optflagopt("m", "mode", "set permission mode (as in chmod), instead\n \
-                                  of rwxr-xr-x", "MODE")
-    // TODO implement flag
-        .optflagopt("o", "owner", "(unimplemented) set ownership (super-user only)",
-                    "OWNER")
-    // TODO implement flag
-        .optflag("p", "preserve-timestamps", "(unimplemented) apply access/modification times\n \
-                                              of SOURCE files to corresponding destination files")
-    // TODO implement flag
+        // TODO implement flag
+        .optflag(
+            "C",
+            "compare",
+            "(unimplemented) compare each pair of source and destination\n \
+             files, and in some cases, do not modify the destination at all",
+        )
+        .optflag(
+            "d",
+            "directory",
+            "treat all arguments as directory names.\n \
+             create all components of the specified directories",
+        )
+        // TODO implement flag
+        .optflag(
+            "D",
+            "",
+            "(unimplemented) create all leading components of DEST except the\n \
+             last, then copy SOURCE to DEST",
+        )
+        // TODO implement flag
+        .optflagopt(
+            "g",
+            "group",
+            "(unimplemented) set group ownership, instead of process'\n \
+             current group",
+            "GROUP",
+        )
+        .optflagopt(
+            "m",
+            "mode",
+            "set permission mode (as in chmod), instead\n \
+             of rwxr-xr-x",
+            "MODE",
+        )
+        // TODO implement flag
+        .optflagopt(
+            "o",
+            "owner",
+            "(unimplemented) set ownership (super-user only)",
+            "OWNER",
+        )
+        // TODO implement flag
+        .optflag(
+            "p",
+            "preserve-timestamps",
+            "(unimplemented) apply access/modification times\n \
+             of SOURCE files to corresponding destination files",
+        )
+        // TODO implement flag
         .optflag("s", "strip", "(unimplemented) strip symbol tables")
-    // TODO implement flag
-        .optflagopt("", "strip-program", "(unimplemented) program used to strip binaries",
-                    "PROGRAM")
-    // TODO implement flag
-        .optopt("S", "suffix", "(unimplemented) override the usual backup suffix", "SUFFIX")
-    // TODO implement flag
-        .optopt("t", "target-directory", "(unimplemented) move all SOURCE arguments into\n \
-                                          DIRECTORY", "DIRECTORY")
-    // TODO implement flag
-        .optflag("T", "no-target-directory", "(unimplemented) treat DEST as a normal file")
+        // TODO implement flag
+        .optflagopt(
+            "",
+            "strip-program",
+            "(unimplemented) program used to strip binaries",
+            "PROGRAM",
+        )
+        // TODO implement flag
+        .optopt(
+            "S",
+            "suffix",
+            "(unimplemented) override the usual backup suffix",
+            "SUFFIX",
+        )
+        // TODO implement flag
+        .optopt(
+            "t",
+            "target-directory",
+            "(unimplemented) move all SOURCE arguments into\n \
+             DIRECTORY",
+            "DIRECTORY",
+        )
+        // TODO implement flag
+        .optflag(
+            "T",
+            "no-target-directory",
+            "(unimplemented) treat DEST as a normal file",
+        )
         .optflag("v", "verbose", "explain what is being done")
-    // TODO implement flag
-        .optflag("P", "preserve-context", "(unimplemented) preserve security context")
-    // TODO implement flag
-        .optflagopt("Z", "context", "(unimplemented) set security context of files and\n \
-                                     directories", "CONTEXT")
+        // TODO implement flag
+        .optflag(
+            "P",
+            "preserve-context",
+            "(unimplemented) preserve security context",
+        )
+        // TODO implement flag
+        .optflagopt(
+            "Z",
+            "context",
+            "(unimplemented) set security context of files and\n \
+             directories",
+            "CONTEXT",
+        )
         .parse(args)
 }
 

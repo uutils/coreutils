@@ -14,8 +14,8 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
-use std::fs;
 use std::env;
+use std::fs;
 use std::io::{stdin, Result};
 use std::path::{Path, PathBuf};
 
@@ -202,7 +202,9 @@ fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) 
                 );
             }
         }
-    } else if let (Ok(s), BackupMode::SimpleBackup) = (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode) {
+    } else if let (Ok(s), BackupMode::SimpleBackup) =
+        (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode)
+    {
         s
     } else {
         "~".to_owned()
@@ -257,7 +259,9 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
                         Err(e) => {
                             show_error!(
                                 "cannot move ‘{}’ to ‘{}’: {}",
-                                source.display(), target.display(), e
+                                source.display(),
+                                target.display(),
+                                e
                             );
                             1
                         }
@@ -269,7 +273,8 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
             } else if target.exists() && source.is_dir() {
                 show_error!(
                     "cannot overwrite non-directory ‘{}’ with directory ‘{}’",
-                    target.display(), source.display()
+                    target.display(),
+                    source.display()
                 );
                 return 1;
             }
@@ -359,8 +364,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             fs::rename(to, p)?;
         }
 
-        if b.update && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
-        {
+        if b.update && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
             return Ok(());
         }
     }
@@ -372,7 +376,10 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?
             } else {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Directory not empty"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Directory not empty",
+                ));
             }
         }
     }
@@ -425,9 +432,7 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
 
 fn is_empty_dir(path: &PathBuf) -> bool {
     match fs::read_dir(path) {
-        Ok(contents) => {
-            contents.peekable().peek().is_none()
-        },
-        Err(_e) => { false }
+        Ok(contents) => contents.peekable().peek().is_none(),
+        Err(_e) => false,
     }
 }

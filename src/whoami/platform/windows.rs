@@ -11,12 +11,12 @@ extern crate advapi32;
 extern crate uucore;
 extern crate winapi;
 
+use self::winapi::shared::lmcons;
+use self::winapi::shared::minwindef;
+use self::winapi::um::winnt;
 use std::io::{Error, Result};
 use std::mem;
 use uucore::wide::FromWide;
-use self::winapi::um::winnt;
-use self::winapi::shared::lmcons;
-use self::winapi::shared::minwindef;
 
 pub unsafe fn getusername() -> Result<String> {
     #[allow(deprecated)]

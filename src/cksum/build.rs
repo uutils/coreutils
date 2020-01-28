@@ -32,7 +32,8 @@ fn main() {
         &file,
         "#[allow(clippy::unreadable_literal)]\nconst CRC_TABLE: [u32; {}] = {:?};",
         CRC_TABLE_LEN, table
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[inline]

@@ -1,9 +1,9 @@
 //! formatter for %a %F C99 Hex-floating-point subs
 use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
-use super::float_common::{primitive_to_str_common, FloatAnalysis};
 use super::base_conv;
 use super::base_conv::RadixDef;
+use super::float_common::{primitive_to_str_common, FloatAnalysis};
 
 pub struct CninetyNineHexFloatf {
     as_num: f64,

@@ -63,7 +63,9 @@ impl UnescapedText {
         let leading_zeros = if eight_word {
             preface = 'U';
             8
-        } else { 4 };
+        } else {
+            4
+        };
         let err_msg = format!(
             "invalid universal character name {0}{1:02$x}",
             preface, val, leading_zeros
