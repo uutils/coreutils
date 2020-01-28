@@ -1,17 +1,80 @@
+# spell-checker:ignore (cargo-make) duckscript macos
+# spell-checker:ignore (rust) clippy
+
 [config]
+min_version = "0.26.2"
 default_to_workspace = false
+init_task = "_init"
 
 [config.modify_core_tasks]
 namespace = "core"
 
-[env]
-CARGO_MAKE_CARGO_BUILD_TEST_FLAGS = { source = "${CARGO_MAKE_RUST_TARGET_OS}", default_value = "", mapping = { "linux" = "--no-default-features --features unix", "windows" = "--no-default-features --features windows" } }
+[tasks._init_]
+private = true
+dependencies = [
+	"_init-vars",
+]
+
+[tasks._init-vars]
+private = true
+script_runner = "@duckscript"
+script = [
+'''
+# reset build/test flags
+set_env CARGO_MAKE_CARGO_BUILD_TEST_FLAGS ""
+# determine features
+env_features = get_env CARGO_FEATURES
+if is_empty "${env_features}"
+    env_features = get_env FEATURES
+end_if
+if is_empty "${env_features}"
+	if eq "${CARGO_MAKE_RUST_TARGET_OS}" "macos"
+		features = set "unix"
+	else
+		if eq "${CARGO_MAKE_RUST_TARGET_OS}" "linux"
+			features = set "unix"
+		else
+			if eq "${CARGO_MAKE_RUST_TARGET_OS}" "windows"
+				features = set "windows"
+			end_if
+		end_if
+	end_if
+end_if
+if is_empty "${features}"
+	features = set "${env_features}"
+else
+	if not is_empty "${env_features}"
+		features = set "${features},${env_features}"
+	end_if
+end_if
+# set build flags from features
+if not is_empty "${features}"
+	set_env CARGO_MAKE_VAR_BUILD_TEST_FEATURES "${features}"
+    set_env CARGO_MAKE_CARGO_BUILD_TEST_FLAGS "--features ${features}"
+end_if
+# determine show-utils helper script
+show_utils = set "util/show-utils.sh"
+if eq "${CARGO_MAKE_RUST_TARGET_OS}" "windows"
+	show_utils = set "util/show-utils.BAT"
+end_if
+set_env CARGO_MAKE_VAR_SHOW_UTILS "${show_utils}"
+# rebuild TASK_ARGS for "--features" and package-build compatibility (using "," instead of ";")
+args = set ${CARGO_MAKE_TASK_ARGS}
+args = replace ${args} ";" ","
+set_env CARGO_MAKE_TASK_BUILD_FEATURES_ARGS "${args}"
+args = replace ${args} "," " -p"
+if not is_empty "${args}"
+	args = set "-p${args}"
+end_if
+set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args}"
+'''
+]
 
 [tasks.default]
 description = "Build and Test"
 category = "[project]"
 dependencies = [
-	"build",
+	"action-build-debug",
     "test-terse",
 ]
 
@@ -20,15 +83,29 @@ description = "Build"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
-    "core::build",
+    "action-build",
     "core::post-build",
 ]
+
+[tasks.build-features]
+description = "Build (with features)"
+category = "[project]"
+dependencies = [
+	"core::pre-build",
+    "action-build-features",
+    "core::post-build",
+]
+
+[tasks.features]
+alias = "build-features"
+description = "Build (with features)"
+category = "[project]"
 
 [tasks.format]
 description = "Format"
 category = "[project]"
 dependencies = [
-	"action.format",
+	"action-format",
 ]
 
 [tasks.help]
@@ -44,6 +121,11 @@ dependencies = [
 	"action-clippy",
 	"action-fmt_report",
 ]
+
+[tasks.release]
+alias = "build"
+description = "Build"
+category = "[project]"
 
 [tasks.test]
 description = "Test"
@@ -63,12 +145,67 @@ dependencies = [
     "core::post-test",
 ]
 
+[tasks.util]
+alias = "utils"
+description = "Build (individual) utilities"
+category = "[project]"
+
+[tasks.utils]
+description = "Build (individual) utilities"
+category = "[project]"
+dependencies = [
+	"core::pre-build",
+	"action-determine-utils",
+    "action-build-utils",
+    "core::post-build",
+]
+
 ### actions
+
+[tasks.action-build]
+description = "`cargo build --release`"
+command = "cargo"
+args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
+
+[tasks.action-build-debug]
+description = "`cargo build`"
+command = "cargo"
+args = ["build", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
+
+[tasks.action-build-features]
+description = "`cargo build --release --features FEATURES`"
+command = "cargo"
+args = ["build", "--release", "--no-default-features", "--features", "${CARGO_MAKE_TASK_BUILD_FEATURES_ARGS}" ]
+
+[tasks.action-build-utils]
+description = "Build individual utilities"
+command = "cargo"
+# args = ["build", "@@remove-empty(CARGO_MAKE_TASK_BUILD_UTILS_ARGS)" ]
+args = ["build", "--release", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )" ]
 
 [tasks.action-clippy]
 description = "`cargo clippy` lint report"
 command = "cargo"
 args = ["clippy", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
+
+[tasks.action-determine-utils]
+script_runner = "@duckscript"
+script = [
+'''
+package_options = get_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS
+if is_empty "${package_options}"
+	show_utils = get_env CARGO_MAKE_VAR_SHOW_UTILS
+	result = exec "${show_utils}"
+	set_env CARGO_MAKE_VAR_UTILS ${result.stdout}
+	utils = array %{result.stdout}
+	for util in ${utils}
+		package_options = set "${package_options} -p${util}"
+	end
+	package_options = trim "${package_options}"
+end_if
+set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${package_options}"
+'''
+]
 
 [tasks.action-format]
 description = "`cargo fmt`"
@@ -89,3 +226,9 @@ args = ["fmt", "--", "--check"]
 description = "Test (in `--quiet` mode)"
 command = "cargo"
 args = ["test", "--quiet", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
+
+### private
+
+[tasks._init]
+private = true
+run_task = "_init_"
