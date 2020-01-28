@@ -1,5 +1,5 @@
-# spell-checker:words POSIX repo SDK SDKs toolchain toolchains
-# spell-checker:ignore uutils ARCH ABI BACKTRACE BINDIR cl COMNTOOLS dllcrt findstr maint MINGW MINGWDIR mkdir MSVC MSYS rustc rustlib rustup USERPROFILE vcvarsall
+# spell-checker:words POSIX SDK SDKs repo toolchain toolchains
+# spell-checker:ignore ABI ARCH BACKTRACE BINDIR COMNTOOLS MINGW MINGWDIR MSVC MSYS USERPROFILE cl dllcrt findstr maint mkdir rustc rustlib rustup targetting uutils vcvarsall
 
 version: "{build} ~ {branch}"
 
@@ -69,6 +69,7 @@ environment:
 #   - CHANNEL: nightly
 #     ARCH: x86_64
 #     ABI: gnu
+#     FEATURES: "windows nightly"
   # * specific gnu compilers
   - CHANNEL: stable
     ARCH: i686
