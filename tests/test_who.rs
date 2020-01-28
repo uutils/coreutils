@@ -1,5 +1,5 @@
+#[cfg(target_os = "linux")]
 use common::util::*;
-
 
 
 #[cfg(target_os = "linux")]

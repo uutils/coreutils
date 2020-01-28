@@ -14,11 +14,14 @@ extern crate termsize;
 extern crate time;
 extern crate unicode_width;
 extern crate number_prefix;
-extern crate isatty;
-use isatty::stdout_isatty;
 use number_prefix::{Standalone, Prefixed, decimal_prefix};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
+
+#[cfg(unix)]
+extern crate isatty;
+#[cfg(unix)]
+use isatty::stdout_isatty;
 
 #[cfg(unix)]
 #[macro_use]
