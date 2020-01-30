@@ -1,6 +1,9 @@
 #[macro_use]
 mod common;
 
+// [warning fix]; from ref: <https://github.com/rust-lang/rust-clippy/issues/1938#issuecomment-374816813>
+#[cfg_attr(feature = "cargo-clippy", allow(useless_attribute))]
+#[allow(unused_imports)]
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
