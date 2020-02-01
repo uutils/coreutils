@@ -171,7 +171,7 @@ fn test_fs_format() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_terse_normal_format() {
-    let args = ["-t", "/"];
+    let args = ["-t", "/dev"];
     new_ucmd!().args(&args)
         .run()
         .stdout_is(expected_result(&args));
