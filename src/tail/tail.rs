@@ -149,7 +149,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             match parse_size(slice) {
                 Ok(m) => settings.mode = FilterMode::Lines(m, b'\n'),
                 Err(e) => {
-                    show_error!("{}", e.description());
+                    show_error!("{}", e.to_string());
                     return 1;
                 }
             }
@@ -164,7 +164,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 match parse_size(slice) {
                     Ok(m) => settings.mode = FilterMode::Bytes(m),
                     Err(e) => {
-                        show_error!("{}", e.description());
+                        show_error!("{}", e.to_string());
                         return 1;
                     }
                 }
@@ -245,7 +245,7 @@ impl Error for ParseSizeErr {
 
 impl fmt::Display for ParseSizeErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", Error::description(self))
+        write!(f, "{}", self.to_string())
     }
 }
 

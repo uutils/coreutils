@@ -16,7 +16,7 @@ getopts = "0.2.18"
 libc = "0.2.42"
 walkdir = "2.2.8"
 clap = "2.32.0"
-quick-error = "1.2.2"
+quick-error = "1.2.3"
 filetime = "0.2"
 
 [dependencies.uucore]

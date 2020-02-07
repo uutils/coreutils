@@ -9,7 +9,7 @@ name = "uu_cat"
 path = "cat.rs"
 
 [dependencies]
-quick-error = "1.2.2"
+quick-error = "1.2.3"
 
 [dependencies.uucore]
 version = "0.0.1"

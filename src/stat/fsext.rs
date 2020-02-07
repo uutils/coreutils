@@ -141,7 +141,6 @@ pub fn pretty_access(mode: mode_t) -> String {
 
 use std::borrow::Cow;
 use std::convert::{AsRef, From};
-use std::error::Error;
 use std::ffi::CString;
 use std::io::Error as IOError;
 use std::mem;
@@ -290,7 +289,7 @@ where
                 }
             }
         }
-        Err(e) => Err(e.description().to_owned()),
+        Err(e) => Err(e.to_string()),
     }
 }
 
