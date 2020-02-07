@@ -80,8 +80,7 @@ fn main() {
 
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
     let n = args()
-        .skip(1)
-        .next()
+        .nth(1)
         .unwrap_or_else(|| "1027".to_string())
         .parse::<usize>()
         .ok()
