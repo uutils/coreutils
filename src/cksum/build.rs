@@ -41,9 +41,9 @@ fn crc_entry(input: u8) -> u32 {
     let mut crc = (input as u32) << 24;
 
     for _ in 0..8 {
-        if crc & 0x80000000 != 0 {
+        if crc & 0x8000_0000 != 0 {
             crc <<= 1;
-            crc ^= 0x04c11db7;
+            crc ^= 0x04c1_1db7;
         } else {
             crc <<= 1;
         }
