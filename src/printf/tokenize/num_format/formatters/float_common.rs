@@ -23,14 +23,14 @@ fn has_enough_digits(
     // -1s are for rounding
     if hex_output {
         if hex_input {
-            ((string_position - 1) - starting_position >= limit)
+            (string_position - 1) - starting_position >= limit
         } else {
             false //undecidable without converting
         }
     } else if hex_input {
-        ((((string_position - 1) - starting_position) * 9) / 8 >= limit)
+        (((string_position - 1) - starting_position) * 9) / 8 >= limit
     } else {
-        ((string_position - 1) - starting_position >= limit)
+        (string_position - 1) - starting_position >= limit
     }
 }
 
