@@ -137,7 +137,7 @@ fn test_generator() {
 }
 
 const MAX_WIDTH: usize = 102;
-const PREAMBLE: &'static str = r##"/*
+const PREAMBLE: &str = r##"/*
 * This file is part of the uutils coreutils package.
 *
 * (c) kwantam <kwantam@gmail.com>
