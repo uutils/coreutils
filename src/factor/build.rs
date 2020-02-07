@@ -82,7 +82,7 @@ fn main() {
     let n = args()
         .skip(1)
         .next()
-        .unwrap_or("1027".to_string())
+        .unwrap_or_else(|| "1027".to_string())
         .parse::<usize>()
         .ok()
         .unwrap_or(1027);
