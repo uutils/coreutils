@@ -84,8 +84,7 @@ fn print_version() {
 fn print_usage(opts: &Options) {
     let brief = "Run COMMAND, with modified buffering operations for its standard streams\n \
                  Mandatory arguments to long options are mandatory for short options too.";
-    let explanation =
-        "If MODE is 'L' the corresponding stream will be line buffered.\n \
+    let explanation = "If MODE is 'L' the corresponding stream will be line buffered.\n \
          This option is invalid with standard input.\n\n \
          If MODE is '0' the corresponding stream will be unbuffered.\n\n \
          Otherwise MODE is a number which may be followed by one of the following:\n\n \

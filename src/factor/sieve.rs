@@ -68,6 +68,7 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn primes() -> PrimeSieve {
+        #[allow(clippy::trivially_copy_pass_by_ref)]
         fn deref(x: &u64) -> u64 {
             *x
         }
@@ -78,6 +79,7 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn odd_primes() -> PrimeSieve {
+        #[allow(clippy::trivially_copy_pass_by_ref)]
         fn deref(x: &u64) -> u64 {
             *x
         }
