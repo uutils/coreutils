@@ -76,7 +76,7 @@ pub fn main() {
         }
     }
 
-    mf.write_all("map\n}\n".as_bytes()).unwrap();
+    mf.write_all(b"map\n}\n").unwrap();
 
     cf.flush().unwrap();
     mf.flush().unwrap();
