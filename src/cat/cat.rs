@@ -474,9 +474,18 @@ mod tests {
     #[test]
     fn test_write_nonprint_to_end_new_line() {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
-        let in_buf = [b'\n'];
+        let in_buf = *b"\n";
         let tab: [u8; 0] = [];
         super::write_nonprint_to_end(&in_buf, &mut writer, &tab);
         assert_eq!(writer.buffer().len(), 0);
+    }
+
+    #[test]
+    fn test_write_nonprint_to_end_9() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = [9u8];
+        let tab = b"tab";
+        super::write_nonprint_to_end(&in_buf, &mut writer, tab);
+        assert_eq!(writer.buffer(), tab);
     }
 }
