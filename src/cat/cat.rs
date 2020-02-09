@@ -474,18 +474,40 @@ mod tests {
     #[test]
     fn test_write_nonprint_to_end_new_line() {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
-        let in_buf = *b"\n";
-        let tab: [u8; 0] = [];
-        super::write_nonprint_to_end(&in_buf, &mut writer, &tab);
+        let in_buf = b"\n";
+        let tab = b"";
+        super::write_nonprint_to_end(in_buf, &mut writer, tab);
         assert_eq!(writer.buffer().len(), 0);
     }
 
     #[test]
     fn test_write_nonprint_to_end_9() {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
-        let in_buf = [9u8];
+        let in_buf = &[9u8];
         let tab = b"tab";
-        super::write_nonprint_to_end(&in_buf, &mut writer, tab);
+        super::write_nonprint_to_end(in_buf, &mut writer, tab);
         assert_eq!(writer.buffer(), tab);
+    }
+
+    #[test]
+    fn test_write_nonprint_to_end_0_to_8() {
+        for byte in 0u8..=8u8 {
+            let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+            let in_buf = &[byte];
+            let tab = b"";
+            super::write_nonprint_to_end(in_buf, &mut writer, tab);
+            assert_eq!(writer.buffer(), [b'^', byte + 64]);
+        }
+    }
+
+    #[test]
+    fn test_write_nonprint_to_end_10_to_31() {
+        for byte in 11u8..=31u8 {
+            let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+            let in_buf = &[byte];
+            let tab = b"";
+            super::write_nonprint_to_end(in_buf, &mut writer, tab);
+            assert_eq!(writer.buffer(), [b'^', byte + 64]);
+        }
     }
 }
