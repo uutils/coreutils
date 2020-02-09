@@ -467,3 +467,16 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
         0
     }
 }
+
+mod tests {
+    use std::io::{BufWriter, stdout};
+
+    #[test]
+    fn test_write_nonprint_to_end() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = [b'\n'];
+        let tab: [u8; 0] = [];
+        super::write_nonprint_to_end(&in_buf, &mut writer, &tab);
+        assert_eq!(tab.len(), 0);
+    }
+}
