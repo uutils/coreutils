@@ -21,8 +21,8 @@ matrix:
 environment:
   global:
     FEATURES: "windows"
-    BUILD_OPTIONS: "--no-default-features"
-    TEST_OPTIONS: "--no-default-features --no-fail-fast"
+    BUILD_OPTIONS: ""
+    TEST_OPTIONS: "--no-fail-fast"
 
   matrix:
   # minimum version
@@ -84,8 +84,8 @@ environment:
 install:
   # force branch checkout (if knowable), then reset to the specific commit ## (can be needed for accurate code coverage info)
   # * this allows later apps to see the branch name using standard `git branch` operations, yet always builds the correct specific commit
-  # * ref: <https://github.com/appveyor/ci/issues/1606>[`@`](https://archive.is/RVpnF)
-  - if DEFINED APPVEYOR_REPO_BRANCH if /I "%APPVEYOR_REPO_SCM%"=="git" ( git checkout "%APPVEYOR_REPO_BRANCH%" 2>NUL & git reset --hard "%APPVEYOR_REPO_COMMIT%" )
+  # * ref: <https://github.com/appveyor/ci/issues/1606>[`@`](https://archive.is/RVpnF) ; note: `git branch -a` may be helpful for debugging edge cases
+  - if DEFINED APPVEYOR_REPO_BRANCH if /I "%APPVEYOR_REPO_SCM%"=="git" ( git checkout "%APPVEYOR_REPO_BRANCH%" 2>NUL & git reset --hard FETCH_HEAD 2>NUL || git reset --hard "%APPVEYOR_REPO_COMMIT%" )
   # ensure CWD is project main directory
   - cd "%APPVEYOR_BUILD_FOLDER%"
   # create a working area
