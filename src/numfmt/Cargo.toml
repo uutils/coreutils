@@ -11,6 +11,7 @@ path = "numfmt.rs"
 [dependencies]
 getopts = "0.2.18"
 uucore = "0.0.1"
+regex = "1.0.1"
 
 [[bin]]
 name = "numfmt"

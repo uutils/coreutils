@@ -145,3 +145,37 @@ fn test_si_to_iec() {
         .run()
         .stdout_is("13.9T\n");
 }
+
+#[test]
+fn test_delim_with_field() {
+    new_ucmd!()
+        .args(&["--field=3", "--header", "--to=si"])
+        .pipe_in("total 164
+-rw-r--r--  1  2911 Feb 11 14:15 build.rs
+-rw-r--r--  1 90347 Mar  3 14:30 Cargo.lock
+-rw-r--r--  1  7034 Feb 11 14:15 Cargo.toml
+-rw-r--r--  1  2018 Feb 11 14:15 CONTRIBUTING.md
+drwxr-xr-x  2  4096 Feb 11 14:15 docs")
+        .run()
+        .stdout_is("total 164
+-rw-r--r--  1  2.9K Feb 11 14:15 build.rs
+-rw-r--r--  1 90.3K Mar  3 14:30 Cargo.lock
+-rw-r--r--  1  7.0K Feb 11 14:15 Cargo.toml
+-rw-r--r--  1  2.0K Feb 11 14:15 CONTRIBUTING.md
+drwxr-xr-x  2  4.1K Feb 11 14:15 docs
+");
+
+
+    new_ucmd!()
+        .args(&["--field=2-4", "--header=2", "--to=si"])
+        .pipe_in("
+Filesystem                                     1B-blocks         Used     Available Use% Mounted on
+udev                                         33560113152            0   33560113152   0% /dev
+tmpfs                                         6726156288      2158592    6723997696   1% /run")
+        .run()
+        .stdout_is("
+Filesystem                                     1B-blocks         Used     Available Use% Mounted on
+udev                                               33.6G            0         33.6G   0% /dev
+tmpfs                                               6.7G         2.2M          6.7G   1% /run
+");
+}

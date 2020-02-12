@@ -10,8 +10,10 @@
  */
 
 extern crate getopts;
+extern crate regex;
 
 use getopts::{Matches, Options};
+use regex::Regex;
 use std::fmt;
 use std::io::BufRead;
 
@@ -70,14 +72,15 @@ impl fmt::Display for DisplayableSuffix {
             RawSuffix::E => write!(f, "E"),
             RawSuffix::Z => write!(f, "Z"),
             RawSuffix::Y => write!(f, "Y"),
-        }.and_then(|()| match with_i {
+        }
+        .and_then(|()| match with_i {
             true => write!(f, "i"),
             false => Ok(()),
         })
     }
 }
 
-fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
+fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     let with_i = s.ends_with("i");
     let mut iter = s.chars();
     if with_i {
@@ -92,8 +95,8 @@ fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
         Some('E') => Ok(Some((RawSuffix::E, with_i))),
         Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
         Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
-        Some('0'...'9') => Ok(None),
-        _ => Err("Failed to parse suffix"),
+        Some('0'..='9') => Ok(None),
+        _ => Err(format!("Failed to parse suffix '{}'", s)),
     }?;
 
     let suffix_len = match suffix {
@@ -129,13 +132,47 @@ struct Transform {
     unit: Unit,
 }
 
-struct NumfmtOptions {
-    transform: TransformOptions,
-    padding: isize,
-    header: usize,
+type Field = (usize, usize);
+
+fn parse_field(s: &String) -> Result<Field> {
+    let field_max = std::usize::MAX.to_string();
+
+    let re = Regex::new(r"^(\d{0,10})?(-(\d{0,10})?)?$").unwrap();
+    match re.captures(s) {
+        Some(caps) => {
+            let first = caps.get(1).map(|m| m.as_str()).unwrap_or("1");
+            // caps.get(2) refers to the second part of N-M format
+            // If '-' is present in input then this match group will always exist
+            // irrespective of whether M is provided or not.
+            // To calculate the default value of M (when M is not provided)
+            // we need to consider whether this match group exists or not.
+            // If not then this means this is of the format 'N' which means that
+            // the range should be N-N, hence the default is same as first.
+            // If it exists then it means it can be of the following formats:
+            // '-M', 'N-M', 'N-' or '-'
+            // In the first two cases M is provided by user (default doesn't matter)
+            // In the last two cases M is not provided and we should process all
+            // fields till the end of line. Hence the default value is `field_max`
+            let default_second = caps.get(2).map_or(first, |_| field_max.as_str());
+            let second = caps.get(3).map(|m| m.as_str()).unwrap_or(default_second);
+            Ok((
+                first.parse::<usize>().map_err(|err| err.to_string())?,
+                second.parse::<usize>().map_err(|err| err.to_string())?,
+            ))
+        }
+        None => Err(format!("Invalid field format {}", s.to_string())),
+    }
 }
 
-fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
+struct NumfmtOptions {
+    transform: TransformOptions,
+    padding: Option<isize>,
+    header: usize,
+    delimiter: Option<String>, // String to handle unicode. Only 1 char is allowed
+    field: Field,
+}
+
+fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit, inp: &str) -> Result<f64> {
     match (s, u) {
         (None, _) => Ok(i),
         (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
@@ -162,13 +199,18 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
+        (Some(suffix), _) => Err(format!(
+            "Rejecting suffix {} in input {}",
+            DisplayableSuffix(suffix),
+            inp
+        )
+        .to_owned()),
     }
 }
 
-fn transform_from(s: String, opts: &Transform) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s)?;
-    remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
+fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
+    let (i, suffix) = parse_suffix(&s)?;
+    remove_suffix(i, suffix, &opts.unit, &s).map(|n| n.round())
 }
 
 fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
@@ -211,17 +253,56 @@ fn transform_to(s: f64, opts: &Transform) -> Result<String> {
     })
 }
 
-fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
+fn format_column(index: usize, col: &str, options: &NumfmtOptions) -> Result<String> {
+    let field = match options.delimiter {
+        Some(_) => col,
+        None => col.trim_start(),
+    };
     let number = transform_to(
-        transform_from(source, &options.transform.from)?,
+        transform_from(field, &options.transform.from)?,
         &options.transform.to,
     )?;
 
     Ok(match options.padding {
-        p if p == 0 => number,
-        p if p > 0 => format!("{:>padding$}", number, padding = p as usize),
-        p => format!("{:<padding$}", number, padding = p.abs() as usize),
+        None => match options.delimiter {
+            None if index > 0 || col.starts_with(char::is_whitespace) => {
+                format!("{:>padding$}", number, padding = col.len() as usize)
+            }
+            _ => number,
+        },
+        Some(p) if p == 0 => number,
+        Some(p) if p > 0 => format!("{:>padding$}", number, padding = p as usize),
+        Some(p) => format!("{:<padding$}", number, padding = p.abs() as usize),
     })
+}
+
+fn format_chosen_fields(index: usize, col: &str, options: &NumfmtOptions) -> Result<String> {
+    if index + 1 >= options.field.0 && index + 1 <= options.field.1 {
+        format_column(index, col, options)
+    } else {
+        Ok(col.to_string())
+    }
+}
+
+fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
+    struct SplitContext {
+        last_char: char,
+    };
+
+    let mut ctx = SplitContext { last_char: '\0' };
+    source
+        .split(|c: char| match &options.delimiter {
+            Some(s) => *s == c.to_string(),
+            None => {
+                let should_split = c.is_ascii_whitespace() && !ctx.last_char.is_ascii_whitespace();
+                ctx.last_char = c;
+                should_split
+            }
+        })
+        .enumerate()
+        .map(|(index, col)| format_chosen_fields(index, col, options))
+        .collect::<Result<Vec<_>>>()
+        .map(|x| x.join(&options.delimiter.as_ref().unwrap_or(&" ".to_owned())))
 }
 
 fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
@@ -241,8 +322,11 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
     };
 
     let padding = match args.opt_str("padding") {
-        Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
-        None => Ok(0),
+        Some(s) => s
+            .parse::<isize>()
+            .map(|p| Some(p))
+            .map_err(|err| err.to_string()),
+        None => Ok(None),
     }?;
 
     let header = match args.opt_default("header", "1") {
@@ -250,10 +334,23 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
         None => Ok(0),
     }?;
 
+    let delimiter = match args.opt_default("delimiter", " ") {
+        Some(s) if s.len() == 1 => Ok(Some(s)),
+        None => Ok(None),
+        Some(_) => Err("Delimiter must be a single character".to_owned()),
+    }?;
+
+    let field = match args.opt_str("field") {
+        Some(s) => parse_field(&s),
+        None => Ok((1, 1)),
+    }?;
+
     Ok(NumfmtOptions {
         transform: transform,
         padding: padding,
         header: header,
+        delimiter: delimiter,
+        field: field,
     })
 }
 
@@ -310,6 +407,18 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "header",
         "print (without converting) the first N header lines; N defaults to 1 if not specified",
         "N",
+    );
+    opts.optflagopt(
+        "d",
+        "delimiter",
+        "use X instead of white as field delimiter",
+        "X",
+    );
+    opts.optflagopt(
+        "",
+        "field",
+        "replace the numbers in these input fields (default=1)",
+        "FIELDS",
     );
 
     let matches = opts.parse(&args[1..]).unwrap();
