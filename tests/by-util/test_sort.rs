@@ -31,6 +31,16 @@ fn test_numeric_unsorted_ints() {
 }
 
 #[test]
+fn test_numeric_unsorted_head_ints() {
+    test_head_helper("numeric_unsorted_head_ints", "-n", "--head", "5");
+}
+
+#[test]
+fn test_numeric_unsorted_tail_ints() {
+    test_head_helper("numeric_unsorted_tail_ints", "-n", "--tail", "5");
+}
+
+#[test]
 fn test_human_block_sizes() {
     test_helper("human_block_sizes", "-h");
 }
@@ -133,6 +143,15 @@ fn test_check() {
         .stdout_is("");
 }
 
+fn test_head_helper(file_name: &str, arg1: &str, arg2: &str, arg3: &str) {
+    new_ucmd!()
+        .arg(arg1)
+        .arg(arg2)
+        .arg(arg3)
+        .arg(format!("{}{}", file_name, ".txt"))
+        .succeeds()
+        .stdout_is_fixture(format!("{}{}", file_name, ".expected"));
+}
 fn test_helper(file_name: &str, args: &str) {
     new_ucmd!()
         .arg(args)

@@ -49,6 +49,8 @@ struct Settings {
     check: bool,
     compare_fns: Vec<fn(&str, &str) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
+    head: usize,
+    is_tail: bool,
 }
 
 impl Default for Settings {
@@ -63,9 +65,43 @@ impl Default for Settings {
             check: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
+            head: std::usize::MAX,
+            is_tail: false,
         }
     }
 }
+
+fn is_head_mode(settings: &Settings) -> bool {
+    settings.head < std::usize::MAX
+}
+
+struct HeadHeapLine<'a> {
+    current_line: String,
+    settings: &'a Settings,
+}
+
+// BinaryHeap depends on `Ord`. Note that we want to pop smallest items
+// from the heap first, and BinaryHeap.pop() returns the largest, so we
+// trick it into the right order by calling reverse() here.
+impl<'a> Ord for HeadHeapLine<'a> {
+    fn cmp(&self, other: &HeadHeapLine) -> Ordering {
+        compare_by(&self.current_line, &other.current_line, &self.settings).reverse()
+    }
+}
+
+impl<'a> PartialOrd for HeadHeapLine<'a> {
+    fn partial_cmp(&self, other: &HeadHeapLine) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> PartialEq for HeadHeapLine<'a> {
+    fn eq(&self, other: &HeadHeapLine) -> bool {
+        Ordering::Equal == compare_by(&self.current_line, &other.current_line, &self.settings)
+    }
+}
+
+impl<'a> Eq for HeadHeapLine<'a> {}
 
 struct MergeableFile<'a> {
     lines: Lines<BufReader<Box<dyn Read>>>,
@@ -95,6 +131,20 @@ impl<'a> PartialEq for MergeableFile<'a> {
 }
 
 impl<'a> Eq for MergeableFile<'a> {}
+
+struct HeadHeap<'a> {
+    heap: BinaryHeap<HeadHeapLine<'a>>,
+    settings: &'a Settings,
+}
+
+impl<'a> HeadHeap<'a> {
+    fn new(settings: &'a Settings) -> HeadHeap<'a> {
+        HeadHeap {
+            heap: BinaryHeap::new(),
+            settings,
+        }
+    }
+}
 
 struct FileMerger<'a> {
     heap: BinaryHeap<MergeableFile<'a>>,
@@ -196,6 +246,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
     );
     opts.optflag("c", "check", "check for sorted input; do not sort");
+    opts.optopt("", "head", "output a maximal number of elements", "INTEGER");
+    opts.optopt(
+        "",
+        "tail",
+        "output a maximal number of last elements",
+        "INTEGER",
+    );
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -239,6 +296,28 @@ With no FILE, or when FILE is -, read standard input.",
     settings.merge = matches.opt_present("merge");
     settings.reverse = matches.opt_present("reverse");
     settings.outfile = matches.opt_str("output");
+    match matches.opt_str("head") {
+        None => match matches.opt_str("tail") {
+            None => {}
+            Some(s) => {
+                settings.head = s.parse().unwrap();
+                settings.is_tail = true;
+            }
+        },
+        Some(s) => {
+            settings.head = s.parse().unwrap();
+            match matches.opt_str("tail") {
+                None => {}
+                Some(_) => {
+                    crash!(
+                        1,
+                        "Invalid options\n{}",
+                        "--head and --tail cannot be both specified"
+                    );
+                }
+            }
+        }
+    };
     settings.stable = matches.opt_present("stable");
     settings.unique = matches.opt_present("unique");
     settings.check = matches.opt_present("check");
@@ -248,6 +327,9 @@ With no FILE, or when FILE is -, read standard input.",
     }
     if matches.opt_present("ignore-case") {
         settings.transform_fns.push(|s| s.to_uppercase());
+    }
+    if is_head_mode(&settings) && !settings.is_tail {
+        settings.reverse = !settings.reverse;
     }
 
     let mut files = matches.free;
@@ -276,7 +358,58 @@ With no FILE, or when FILE is -, read standard input.",
     exec(files, &settings)
 }
 
+fn exec_head(files: Vec<String>, settings: &Settings) -> i32 {
+    let mut lines = HeadHeap::new(&settings);
+    let mut file_merger = FileMerger::new(&settings);
+
+    for path in &files {
+        let (reader, _) = match open(path) {
+            Some(x) => x,
+            None => continue,
+        };
+
+        let buf_reader = BufReader::new(reader);
+
+        if settings.merge {
+            file_merger.push_file(buf_reader.lines());
+        } else if settings.check {
+            return exec_check_file(buf_reader.lines(), &settings);
+        } else {
+            for line in buf_reader.lines() {
+                if let Ok(n) = line {
+                    lines.heap.push(HeadHeapLine {
+                        current_line: n,
+                        settings: &settings,
+                    });
+                    if lines.heap.len() > settings.head {
+                        lines.heap.pop();
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    let mut revlines = Vec::new();
+    while !lines.heap.is_empty() {
+        match lines.heap.pop() {
+            None => {}
+            Some(line) => {
+                revlines.push(line.current_line);
+            }
+        }
+    }
+    if !settings.is_tail {
+        revlines.reverse();
+    }
+    print_sorted(revlines.iter(), &settings.outfile);
+    0
+}
+
 fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+    if is_head_mode(settings) {
+        return exec_head(files, settings);
+    }
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -531,6 +664,32 @@ fn remove_nondictionary_chars(s: &str) -> String {
     s.chars()
         .filter(|c| c.is_alphanumeric() || c.is_ascii_whitespace())
         .collect::<String>()
+}
+
+fn heap_print_sorted(iter: &mut HeadHeap, outfile: &Option<String>) {
+    let mut file: Box<dyn Write> = match *outfile {
+        Some(ref filename) => match File::create(Path::new(&filename)) {
+            Ok(f) => Box::new(BufWriter::new(f)) as Box<dyn Write>,
+            Err(e) => {
+                show_error!("sort: {0}: {1}", filename, e.to_string());
+                panic!("Could not open output file");
+            }
+        },
+        None => Box::new(stdout()) as Box<dyn Write>,
+    };
+
+    while !iter.heap.is_empty() {
+        match iter.heap.pop() {
+            None => {}
+            Some(line) => {
+                let str = format!("{}\n", line.current_line);
+                if let Err(e) = file.write_all(str.as_bytes()) {
+                    show_error!("sort: {0}", e.to_string());
+                    panic!("Write failed");
+                }
+            }
+        }
+    }
 }
 
 fn print_sorted<S, T: Iterator<Item = S>>(iter: T, outfile: &Option<String>)
