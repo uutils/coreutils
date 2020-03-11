@@ -2037,6 +2037,37 @@ fn test_skip_overflow() {
 }
 
 #[test]
+fn test_skip_blocks_times_ibs_overflow_does_not_wrap() {
+    // 17592186044416 * 1048576 == 2^64 would wrap around to 0, and
+    // must be rejected
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in.f", "0123456789abcdef");
+    ucmd.args(&["if=in.f", "skip=17592186044416", "ibs=1048576", "count=1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_seek_blocks_times_obs_overflow_does_not_wrap() {
+    // Same as test_skip_blocks_times_ibs_overflow_does_not_wrap,
+    // but for `seek=`/`obs=`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out.f", "0123456789abcdef");
+    ucmd.args(&[
+        "if=/dev/null",
+        "of=out.f",
+        "seek=17592186044416",
+        "obs=1048576",
+        "conv=notrunc",
+    ])
+    .fails()
+    .stderr_contains("Value too large for defined data type");
+    // The output file must be untouched, not overwritten at offset 0.
+    assert_eq!(at.read("out.f"), "0123456789abcdef");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_eof() {
     let (at, mut ucmd) = at_and_ucmd!();
