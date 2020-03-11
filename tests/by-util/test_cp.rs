@@ -801,6 +801,14 @@ fn test_cp_arg_interactive_verbose_clobber() {
 #[test]
 #[cfg(unix)]
 fn test_cp_f_i_verbose_non_writeable_destination_y() {
+    use uucore::process::geteuid;
+
+    // A privileged process can write to a 000-mode file regardless of its
+    // permission bits, so -f never needs to remove and recreate it
+    if geteuid() == 0 {
+        return;
+    }
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("a");

@@ -2157,9 +2157,22 @@ fn delete_dest_if_needed_and_allowed(
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
                 ClobberMode::Force => {
-                    // Determine whether `dest` needs to be removed before
-                    // copying by trying to open it for writing.
-                    is_symlink_loop(dest) || OpenOptions::new().write(true).open(dest).is_err()
+                    if is_symlink_loop(dest) {
+                        true
+                    } else {
+                        let dest_metadata = fs::metadata(dest)?;
+                        if dest_metadata.is_file() {
+                            // Determine whether `dest` needs to be removed before
+                            // copying by trying to open it for writing.
+                            OpenOptions::new().write(true).open(dest).is_err()
+                        } else {
+                            // For non-regular destinations (FIFOs, sockets,
+                            // devices) an open-for-write probe can block
+                            // indefinitely (e.g. opening a FIFO with no reader)
+                            // Fall back to the permission-bit check instead of actually opening.
+                            dest_metadata.permissions().readonly()
+                        }
+                    }
                 }
                 ClobberMode::RemoveDestination => true,
                 ClobberMode::Standard => {
