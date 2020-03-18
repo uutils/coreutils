@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (jargon) SHAs softprops toolchain
 # spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake halium libssl mkdir popd printf pushd rustc rustfmt rustup
-# spell-checker:ignore (misc) gnueabihf issuecomment maint onexitbegin onexitend uutils
+# spell-checker:ignore (misc) gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
 
 env:
   PROJECT_NAME: uutils
@@ -241,8 +241,9 @@ jobs:
         # `strip` binary (if needed)
         if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
         # README and LICENSE
-        cp README.md '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
-        cp LICENSE '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
+        # * spell-checker:ignore EADME ICENSE
+        (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
+        (shopt -s nullglob; for f in [L]"ICENSE"{-*,}{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
         # core compressed package
         pushd '${{ steps.vars.outputs.STAGING }}/' >/dev/null
         case '${{ matrix.job.target }}' in
