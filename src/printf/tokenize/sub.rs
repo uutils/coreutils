@@ -369,7 +369,8 @@ impl token::Token for Sub {
                             // for 'c': get iter of string vals,
                             // get opt<char> of first val
                             // and map it to opt<String>
-                            'c' | _ => arg_string.chars().next().map(|x| x.to_string()),
+                            /* 'c' | */
+                            _ => arg_string.chars().next().map(|x| x.to_string()),
                         }
                     }
                     None => None,

@@ -128,7 +128,7 @@ impl Intf {
             },
             'x' | 'X' => "ffffffffffffffff",
             'o' => "1777777777777777777777",
-            'u' | _ => "18446744073709551615",
+            /* 'u' | */ _ => "18446744073709551615",
         }));
         fmt_prim
     }
@@ -204,7 +204,7 @@ impl Formatter for Intf {
             let radix_out = match *field.field_char {
                 'd' | 'i' | 'u' => Base::Ten,
                 'x' | 'X' => Base::Hex,
-                'o' | _ => Base::Octal,
+                /* 'o' | */ _ => Base::Octal,
             };
             let radix_mismatch = !radix_out.eq(&inprefix.radix_in);
             let decr_from_max: bool = inprefix.sign == -1 && *field.field_char != 'i';

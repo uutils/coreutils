@@ -148,7 +148,7 @@ impl UnescapedText {
                     'u' | 'U' => {
                         let len = match e {
                             'u' => 4,
-                            'U' | _ => 8,
+                            /* 'U' | */ _ => 8,
                         };
                         let val = UnescapedText::base_to_u32(len, len, 16, it);
                         UnescapedText::validate_iec(val, false);

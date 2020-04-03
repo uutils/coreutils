@@ -623,7 +623,7 @@ fn display_file_name(
         Some(val) => match val.as_ref() {
             "always" | "yes" | "force" => true,
             "auto" | "tty" | "if-tty" => stdout_isatty(),
-            "never" | "no" | "none" | _ => false,
+            /* "never" | "no" | "none" | */ _ => false,
         },
     };
     let classify = options.opt_present("classify");
