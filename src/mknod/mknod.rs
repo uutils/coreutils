@@ -130,7 +130,7 @@ for details about the options it supports.",
             // 'mknod /dev/rst0 character 18 0'.
             let ch = args[1]
                 .chars()
-                .nth(0)
+                .next()
                 .expect("Failed to get the first char");
 
             if ch == 'p' {

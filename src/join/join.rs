@@ -569,7 +569,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
     if let Some(value) = matches.value_of("t") {
         settings.separator = match value.len() {
             0 => Sep::Line,
-            1 => Sep::Char(value.chars().nth(0).unwrap()),
+            1 => Sep::Char(value.chars().next().unwrap()),
             _ => crash!(1, "multi-character tab {}", value),
         };
     }

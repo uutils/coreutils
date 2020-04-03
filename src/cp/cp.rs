@@ -128,7 +128,7 @@ macro_rules! prompt_yes(
         crash_if_err!(1, stdout().flush());
         let mut s = String::new();
         match stdin().read_line(&mut s) {
-            Ok(_) => match s.char_indices().nth(0) {
+            Ok(_) => match s.char_indices().next() {
                 Some((_, x)) => x == 'y' || x == 'Y',
                 _ => false
             },

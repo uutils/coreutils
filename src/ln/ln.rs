@@ -325,7 +325,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
 fn read_yes() -> bool {
     let mut s = String::new();
     match stdin().read_line(&mut s) {
-        Ok(_) => match s.char_indices().nth(0) {
+        Ok(_) => match s.char_indices().next() {
             Some((_, x)) => x == 'y' || x == 'Y',
             _ => false,
         },

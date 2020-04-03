@@ -399,7 +399,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<()> {
 fn read_yes() -> bool {
     let mut s = String::new();
     match stdin().read_line(&mut s) {
-        Ok(_) => match s.chars().nth(0) {
+        Ok(_) => match s.chars().next() {
             Some(x) => x == 'y' || x == 'Y',
             _ => false,
         },

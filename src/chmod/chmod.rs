@@ -117,7 +117,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
 
 fn sanitize_input(args: &mut Vec<String>) -> Option<String> {
     for i in 0..args.len() {
-        let first = args[i].chars().nth(0).unwrap();
+        let first = args[i].chars().next().unwrap();
         if first != '-' {
             continue;
         }
