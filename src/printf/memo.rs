@@ -72,7 +72,7 @@ impl Memo {
     }
     pub fn run_all(pf_string: &str, pf_args: &[String]) {
         let mut arg_it = pf_args.iter().peekable();
-        let pm = Memo::new(&pf_string.to_string(), &mut arg_it);
+        let pm = Memo::new(pf_string, &mut arg_it);
         loop {
             if arg_it.peek().is_none() {
                 break;
