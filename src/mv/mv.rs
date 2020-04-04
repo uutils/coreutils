@@ -416,8 +416,7 @@ fn simple_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
 fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     (1_u64..)
         .map(|i| path.with_extension(format!("~{}~", i)))
-        .skip_while(|p| p.exists())
-        .next()
+        .find(|p| !p.exists())
         .expect("cannot create backup")
 }
 

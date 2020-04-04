@@ -146,7 +146,7 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> usize {
     if tabstops.len() == 1 {
         tabstops[0] - col % tabstops[0]
     } else {
-        match tabstops.iter().skip_while(|&&t| t <= col).next() {
+        match tabstops.iter().find(|&&t| t > col) {
             Some(t) => t - col,
             None => 1,
         }

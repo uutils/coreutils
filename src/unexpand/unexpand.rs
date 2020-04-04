@@ -164,7 +164,7 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
         Some(tabstops[0] - col % tabstops[0])
     } else {
         // find next larger tab
-        match tabstops.iter().skip_while(|&&t| t <= col).next() {
+        match tabstops.iter().find(|&&t| t > col) {
             Some(t) => Some(t - col),
             None => None, // if there isn't one in the list, tab becomes a single space
         }
