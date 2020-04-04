@@ -55,6 +55,7 @@ use std::os::unix::io::IntoRawFd;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
+use std::string::ToString;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
 
@@ -477,7 +478,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
     let paths: Vec<String> = matches
         .values_of("paths")
-        .map(|v| v.map(std::string::ToString::to_string).collect())
+        .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
     let (sources, target) = crash_if_err!(EXIT_ERR, parse_path_args(&paths, &options));
@@ -593,7 +594,7 @@ impl Options {
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
         let target_dir = matches
             .value_of(OPT_TARGET_DIRECTORY)
-            .map(std::string::ToString::to_string);
+            .map(ToString::to_string);
 
         // Parse attributes to preserve
         let preserve_attributes: Vec<Attribute> = if matches.is_present(OPT_PRESERVE) {

@@ -15,6 +15,7 @@ pub use libc::{
     S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
     S_IXGRP, S_IXOTH, S_IXUSR,
 };
+use std::time::UNIX_EPOCH;
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -26,7 +27,7 @@ impl BirthTime for Metadata {
     fn pretty_birth(&self) -> String {
         self.created()
             .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|e| pretty_time(e.as_secs() as i64, i64::from(e.subsec_nanos())))
             .unwrap_or_else(|| "-".to_owned())
     }
@@ -34,7 +35,7 @@ impl BirthTime for Metadata {
     fn birth(&self) -> String {
         self.created()
             .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|e| format!("{}", e.as_secs()))
             .unwrap_or_else(|| "0".to_owned())
     }

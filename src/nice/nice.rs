@@ -18,6 +18,7 @@ extern crate uucore;
 use libc::{c_char, c_int, execvp};
 use std::ffi::CString;
 use std::io::Error;
+use std::ptr;
 
 const NAME: &str = "nice";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -120,7 +121,7 @@ process).",
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
     let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
-    args.push(std::ptr::null::<c_char>());
+    args.push(ptr::null::<c_char>());
     unsafe {
         execvp(args[0], args.as_mut_ptr());
     }

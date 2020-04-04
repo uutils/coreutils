@@ -18,6 +18,7 @@ use ini::Ini;
 use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
+use std::iter::Iterator;
 use std::process::Command;
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
@@ -160,11 +161,11 @@ fn run_env(args: Vec<String>) -> Result<(), i32> {
     let null = matches.is_present("null");
     let files = matches
         .values_of("file")
-        .map(std::iter::Iterator::collect)
+        .map(Iterator::collect)
         .unwrap_or_else(|| Vec::with_capacity(0));
     let unsets = matches
         .values_of("unset")
-        .map(std::iter::Iterator::collect)
+        .map(Iterator::collect)
         .unwrap_or_else(|| Vec::with_capacity(0));
 
     let mut opts = Options {
