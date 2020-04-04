@@ -88,12 +88,7 @@ impl<'a> Iterator for ExpandSet<'a> {
 
         if let Some(first) = self.unesc.next() {
             // peek ahead
-            if self.unesc.peek() == Some(&'-')
-                && match self.unesc.size_hint() {
-                    (x, _) if x > 1 => true, // there's a range here; record it in our internal Range struct
-                    _ => false,
-                }
-            {
+            if self.unesc.peek() == Some(&'-') && self.unesc.size_hint().0 > 1 {
                 self.unesc.next(); // this is the '-'
                 let last = self.unesc.next().unwrap(); // this is the end of the range
 
