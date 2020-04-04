@@ -9,45 +9,41 @@
 //
 
 extern crate getopts;
+#[cfg(unix)]
+extern crate isatty;
 extern crate number_prefix;
 extern crate term_grid;
 extern crate termsize;
 extern crate time;
 extern crate unicode_width;
-use number_prefix::{decimal_prefix, Prefixed, Standalone};
-use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use time::{strftime, Timespec};
-
-#[cfg(unix)]
-extern crate isatty;
-#[cfg(unix)]
-use isatty::stdout_isatty;
 
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
-
 #[macro_use]
 extern crate uucore;
-#[cfg(unix)]
-use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH, S_IXGRP, S_IXOTH, S_IXUSR};
 
+#[cfg(unix)]
+use isatty::stdout_isatty;
+use number_prefix::{decimal_prefix, Prefixed, Standalone};
 use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
-use std::path::{Path, PathBuf};
-
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
-use unicode_width::UnicodeWidthStr;
-
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use time::{strftime, Timespec};
+#[cfg(unix)]
+use unicode_width::UnicodeWidthStr;
+#[cfg(unix)]
+use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH, S_IXGRP, S_IXOTH, S_IXUSR};
 
 static NAME: &str = "ls";
 static SUMMARY: &str = "";
