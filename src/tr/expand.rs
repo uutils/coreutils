@@ -12,7 +12,7 @@
 use std::char::from_u32;
 use std::cmp::min;
 use std::iter::Peekable;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 
 #[inline]
 fn unescape_char(c: char) -> char {
@@ -64,7 +64,7 @@ impl<'a> Iterator for Unescape<'a> {
 }
 
 pub struct ExpandSet<'a> {
-    range: Range<u32>,
+    range: RangeInclusive<u32>,
     unesc: Peekable<Unescape<'a>>,
 }
 
@@ -97,9 +97,8 @@ impl<'a> Iterator for ExpandSet<'a> {
                 self.unesc.next(); // this is the '-'
                 let last = self.unesc.next().unwrap(); // this is the end of the range
 
-                #[allow(clippy::range_plus_one)]
                 {
-                    self.range = first as u32 + 1..last as u32 + 1;
+                    self.range = first as u32 + 1..=last as u32;
                 }
             }
 
@@ -114,7 +113,7 @@ impl<'a> ExpandSet<'a> {
     #[inline]
     pub fn new(s: &'a str) -> ExpandSet<'a> {
         ExpandSet {
-            range: 0..0,
+            range: 0..=0,
             unesc: Unescape { string: s }.peekable(),
         }
     }
