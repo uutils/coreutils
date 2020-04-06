@@ -13,7 +13,7 @@ path = "cp.rs"
 
 [dependencies]
 getopts = "0.2.18"
-libc = "0.2.42"
+libc = "0.2.68"
 walkdir = "2.2.8"
 clap = "2.32.0"
 quick-error = "1.2.2"

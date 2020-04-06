@@ -10,7 +10,7 @@ path = "timeout.rs"
 
 [dependencies]
 getopts = "0.2.18"
-libc = "0.2.42"
+libc = "0.2.68"
 time = "0.1.40"
 
 [dependencies.uucore]

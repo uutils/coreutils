@@ -9,7 +9,7 @@ name = "uu_expr"
 path = "expr.rs"
 
 [dependencies]
-libc = "0.2.42"
+libc = "0.2.68"
 onig = "~4.3.2"
 uucore = "0.0.1"
 

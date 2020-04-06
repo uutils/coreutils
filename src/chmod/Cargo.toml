@@ -9,7 +9,7 @@ name = "uu_chmod"
 path = "chmod.rs"
 
 [dependencies]
-libc = "0.2.42"
+libc = "0.2.68"
 walker = "1.0.0"
 
 [dependencies.uucore]

@@ -9,7 +9,7 @@ name = "uu_ln"
 path = "ln.rs"
 
 [dependencies]
-libc = "0.2.42"
+libc = "0.2.68"
 uucore = "0.0.1"
 
 [[bin]]

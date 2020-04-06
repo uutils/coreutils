@@ -9,7 +9,7 @@ name = "uu_kill"
 path = "kill.rs"
 
 [dependencies]
-libc = "0.2.42"
+libc = "0.2.68"
 
 [dependencies.uucore]
 version = "0.0.1"
