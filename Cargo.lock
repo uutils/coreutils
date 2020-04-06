@@ -162,7 +162,7 @@ dependencies = [
 name = "cat"
 version = "0.0.1"
 dependencies = [
- "quick-error 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -307,7 +307,7 @@ dependencies = [
  "ioctl-sys 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
- "quick-error 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "walkdir 2.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -690,6 +690,17 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "isatty"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "cfg-if 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
+ "redox_syscall 0.1.54 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "itertools"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -784,6 +795,7 @@ name = "ls"
 version = "0.0.1"
 dependencies = [
  "getopts 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "isatty 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "number_prefix 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "term_grid 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1113,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "quick-error"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -2184,6 +2196,7 @@ dependencies = [
 "checksum idna 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "38f09e0f0b1fb55fdee1f17470ad800da77af5186a1a76c026b679358b7e844e"
 "checksum if_chain 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "4bac95d9aa0624e7b78187d6fb8ab012b41d9f6f54b1bcb61e61c4845f8357ec"
 "checksum ioctl-sys 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "5e2c4b26352496eaaa8ca7cfa9bd99e93419d3f7983dc6e99c2a35fe9e33504a"
+"checksum isatty 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)" = "e31a8281fc93ec9693494da65fbf28c0c2aa60a2eaec25dc58e2f31952e95edc"
 "checksum itertools 0.7.11 (registry+https://github.com/rust-lang/crates.io-index)" = "0d47946d458e94a1b7bcabbf6521ea7c037062c81f534615abcad76e84d4970d"
 "checksum itertools 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5b8467d9c1cebe26feb08c640139247fac215782d35371ade9a2136ed6085358"
 "checksum itoa 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)" = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
@@ -2209,7 +2222,7 @@ dependencies = [
 "checksum platform-info 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f2fd076acdc7a98374de6e300bf3af675997225bef21aecac2219553f04dd7e8"
 "checksum proc-macro2 0.4.30 (registry+https://github.com/rust-lang/crates.io-index)" = "cf3d2011ab5c909338f7887f4fc896d35932e29146c12c8d01da6b22a80ba759"
 "checksum pulldown-cmark 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d6fdf85cda6cadfae5428a54661d431330b312bc767ddbc57adbedc24da66e32"
-"checksum quick-error 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "9274b940887ce9addde99c4eee6b5c44cc494b182b97e73dc8ffdcb3397fd3f0"
+"checksum quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 "checksum quine-mc_cluskey 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "07589615d719a60c8dd8a4622e7946465dfef20d1a428f969e3443e7386d5f45"
 "checksum quote 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)" = "7a6e920b65c65f10b2ae65c831a81a073a89edd28c7cce89475bff467ab4167a"
 "checksum quote 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)" = "faf4799c5d274f3868a4aae320a0a182cbd2baee377b378f080e16a23e9d80db"
