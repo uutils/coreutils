@@ -14,7 +14,7 @@ path = "env.rs"
 clap = "2.33"
 libc = "0.2.42"
 uucore = "0.0.1"
-rust-ini = "0.13.0"
+rust-ini = "0.15.2"
 
 [[bin]]
 name = "env"
