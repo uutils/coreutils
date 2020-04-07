@@ -39,6 +39,15 @@ unix = [
   "generic"
 ]
 windows = ["generic"]
+windows_legacy = [
+  "arch",
+  "nproc",
+  "sync",
+  "touch",
+  "whoami",
+
+  "redox_generic"
+  ]
 # Feature "fuchsia" contains the exclusive list of utilities
 # that can be compiled and run on Fuchsia. Should be built
 # with --no-default-features when selecting this feature.
