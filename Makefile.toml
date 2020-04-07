@@ -9,6 +9,12 @@ init_task = "_init"
 [config.modify_core_tasks]
 namespace = "core"
 
+### initialization
+
+[tasks._init]
+private = true
+run_task = "_init_"
+
 [tasks._init_]
 private = true
 dependencies = [
@@ -70,6 +76,8 @@ set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args}"
 '''
 ]
 
+### tasks
+
 [tasks.default]
 description = "Build and Test"
 category = "[project]"
@@ -88,7 +96,7 @@ dependencies = [
 ]
 
 [tasks.build-features]
-description = "Build (with features)"
+description = "Build (with features); usage: `cargo make (build-features | features) FEATURE..`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -98,8 +106,6 @@ dependencies = [
 
 [tasks.features]
 alias = "build-features"
-description = "Build (with features)"
-category = "[project]"
 
 [tasks.format]
 description = "Format"
@@ -147,11 +153,9 @@ dependencies = [
 
 [tasks.util]
 alias = "utils"
-description = "Build (individual) utilities"
-category = "[project]"
 
 [tasks.utils]
-description = "Build (individual) utilities"
+description = "Build (individual) utilities; usage: `cargo make (util | utils) [UTIL_NAME..]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -226,9 +230,3 @@ args = ["fmt", "--", "--check"]
 description = "Test (in `--quiet` mode)"
 command = "cargo"
 args = ["test", "--quiet", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
-
-### private
-
-[tasks._init]
-private = true
-run_task = "_init_"
