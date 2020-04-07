@@ -165,19 +165,23 @@ impl<'a> Iterator for FileLines<'a> {
             return Some(Line::NoFormatLine("".to_owned(), true));
         }
 
+        let (pmatch, poffset) = self.match_prefix(&n[..]);
+
         // if this line does not match the prefix,
         // emit the line unprocessed and iterate again
-        let (pmatch, poffset) = self.match_prefix(&n[..]);
-        if !pmatch
-            ||
-            // if the line matches the prefix, but is blank after,
-            // don't allow lines to be combined through it (that is,
-            // treat it like a blank line, except that since it's
-            // not truly blank we will not allow mail headers on the
-            // following line)
-            n[poffset + self.opts.prefix.len()..]
-            .chars()
-            .all(char::is_whitespace)
+        if !pmatch {
+            return Some(Line::NoFormatLine(n, false));
+        }
+
+        // if the line matches the prefix, but is blank after,
+        // don't allow lines to be combined through it (that is,
+        // treat it like a blank line, except that since it's
+        // not truly blank we will not allow mail headers on the
+        // following line)
+        if pmatch
+            && n[poffset + self.opts.prefix.len()..]
+                .chars()
+                .all(char::is_whitespace)
         {
             return Some(Line::NoFormatLine(n, false));
         }
@@ -360,21 +364,26 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     }
                 } else if !second_done {
                     // now we have enough info to handle crown margin and tagged mode
-                    if
+
                     // in both crown and tagged modes we require that prefix_len is the same
-                    prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end
-                        ||
-                        // in tagged mode, indent has to be *different* on following lines
-                        self.opts.tagged && indent_len - 4 == fl.indent_len && indent_end == fl.indent_end
+                    if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
+                        break;
+                    }
+
+                    // in tagged mode, indent has to be *different* on following lines
+                    if self.opts.tagged
+                        && indent_len - 4 == fl.indent_len
+                        && indent_end == fl.indent_end
                     {
                         break;
-                    } else {
-                        // this is part of the same paragraph, get the indent info from this line
-                        indent_str.clear();
-                        indent_str.push_str(&fl.line[..fl.indent_end]);
-                        indent_len = fl.indent_len;
-                        indent_end = fl.indent_end;
                     }
+
+                    // this is part of the same paragraph, get the indent info from this line
+                    indent_str.clear();
+                    indent_str.push_str(&fl.line[..fl.indent_end]);
+                    indent_len = fl.indent_len;
+                    indent_end = fl.indent_end;
+
                     second_done = true;
                 } else {
                     // detect mismatch
