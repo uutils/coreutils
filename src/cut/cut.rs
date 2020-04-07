@@ -252,7 +252,7 @@ fn cut_fields_delimiter<R: Read>(
                 };
             }
 
-            for _ in 0..high - low + 1 {
+            for _ in 0..=high - low {
                 if print_delim {
                     crash_if_err!(1, out.write_all(out_delim.as_bytes()));
                 }

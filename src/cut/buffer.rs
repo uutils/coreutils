@@ -124,7 +124,7 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
                 buf_used if bytes < buf_used => {
                     // because the output delimiter should only be placed between
                     // segments check if the byte after bytes is a newline
-                    let buf_slice = &buffer[0..bytes + 1];
+                    let buf_slice = &buffer[0..=bytes];
 
                     match buf_slice.iter().position(|byte| *byte == newline_char) {
                         Some(idx) => (SRes::Newl, idx + 1),

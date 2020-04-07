@@ -66,7 +66,7 @@ impl Intf {
             let c_opt = str_it.next();
             if let Some(c) = c_opt {
                 match c {
-                    '0'...'9' | 'a'...'f' | 'A'...'F' => {
+                    '0'..='9' | 'a'..='f' | 'A'..='F' => {
                         if ret.len_digits == 0 && c == '0' {
                             ret.is_zero = true;
                         } else if ret.is_zero {
@@ -76,7 +76,7 @@ impl Intf {
                         if ret.len_digits == max_sd_in {
                             if let Some(next_ch) = str_it.next() {
                                 match next_ch {
-                                    '0'...'9' => {
+                                    '0'..='9' => {
                                         ret.past_max = true;
                                     }
                                     _ => {

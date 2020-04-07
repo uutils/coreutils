@@ -24,7 +24,7 @@ impl BirthTime for Metadata {
     fn pretty_birth(&self) -> String {
         self.created()
             .ok()
-            .and_then(|t| t.elapsed().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|e| pretty_time(e.as_secs() as i64, e.subsec_nanos() as i64))
             .unwrap_or("-".to_owned())
     }
@@ -32,7 +32,7 @@ impl BirthTime for Metadata {
     fn birth(&self) -> String {
         self.created()
             .ok()
-            .and_then(|t| t.elapsed().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|e| format!("{}", e.as_secs()))
             .unwrap_or("0".to_owned())
     }
@@ -46,6 +46,8 @@ macro_rules! has {
 }
 
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
+    // sec == seconds since UNIX_EPOCH
+    // nsec == nanoseconds since (UNIX_EPOCH + sec)
     let tm = time::at(Timespec::new(sec, nsec as i32));
     let res = time::strftime("%Y-%m-%d %H:%M:%S.%f %z", &tm).unwrap();
     if res.ends_with(" -0000") {

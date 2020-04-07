@@ -194,7 +194,7 @@ impl ByteSplitter {
         let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
-            '0'...'9' => 1usize,
+            '0'..='9' => 1usize,
             'b' => 512usize,
             'k' => 1024usize,
             'm' => 1024usize * 1024usize,

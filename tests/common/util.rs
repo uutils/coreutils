@@ -31,6 +31,22 @@ static ALREADY_RUN: &'static str =
      testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &'static str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
+/// Test if the program is running under WSL
+// ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
+// ToDO: test on WSL2 which likely doesn't need special handling; plan change to `is_wsl_1()` if WSL2 is less needy
+pub fn is_wsl() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+    if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
+        if let Ok(s) = std::str::from_utf8(&b) {
+            let a = s.to_ascii_lowercase();
+            return a.contains("microsoft") || a.contains("wsl");
+        }
+    }
+    }
+    false
+}
+
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
     AtPath::new(tmpdir_path).read(file_rel_path.as_ref().to_str().unwrap())
@@ -73,7 +89,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stdout will be
     /// or 2. you know that stdout will also be empty
     pub fn no_stderr(&self) -> Box<&CmdResult> {
-        assert_eq!("", self.stderr);
+        assert_eq!(self.stderr, "");
         Box::new(self)
     }
 
@@ -84,7 +100,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stderr will be
     /// or 2. you know that stderr will also be empty
     pub fn no_stdout(&self) -> Box<&CmdResult> {
-        assert_eq!("", self.stdout);
+        assert_eq!(self.stdout, "");
         Box::new(self)
     }
 
@@ -93,8 +109,8 @@ impl CmdResult {
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()),
-            self.stdout
+            self.stdout,
+            String::from(msg.as_ref())
         );
         Box::new(self)
     }
@@ -110,8 +126,8 @@ impl CmdResult {
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from(msg.as_ref()).trim_end(),
-            self.stderr.trim_end()
+            self.stderr.trim_end(),
+            String::from(msg.as_ref()).trim_end()
         );
         Box::new(self)
     }
@@ -152,7 +168,7 @@ impl CmdResult {
 
     pub fn fails_silently(&self) -> Box<&CmdResult> {
         assert!(!self.success);
-        assert_eq!("", self.stderr);
+        assert_eq!(self.stderr, "");
         Box::new(self)
     }
 }
@@ -163,7 +179,7 @@ pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
 
 pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
     if fs::metadata(src)?.is_dir() {
-        for entry in try!(fs::read_dir(src)) {
+        for entry in fs::read_dir(src)? {
             let entry = entry?;
             let mut new_dest = PathBuf::from(dest);
             new_dest.push(entry.file_name());

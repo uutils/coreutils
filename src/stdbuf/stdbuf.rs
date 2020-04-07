@@ -238,7 +238,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         stderr: BufferType::Default,
     };
     let mut command_idx: i32 = -1;
-    for i in 1..args.len() + 1 {
+    for i in 1..=args.len() {
         match parse_options(&args[1..i], &mut options, &opts) {
             Ok(OkMsg::Buffering) => {
                 command_idx = (i as i32) - 1;

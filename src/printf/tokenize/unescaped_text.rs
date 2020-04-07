@@ -85,14 +85,14 @@ impl UnescapedText {
             None => '\\',
         };
         match ch {
-            '0'...'9' | 'x' => {
+            '0'..='9' | 'x' => {
                 let min_len = 1;
                 let mut max_len = 2;
                 let mut base = 16;
                 let ignore = false;
                 match ch {
                     'x' => {}
-                    e @ '0'...'9' => {
+                    e @ '0'..='9' => {
                         max_len = 3;
                         base = 8;
                         // in practice, gnu coreutils printf
