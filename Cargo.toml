@@ -21,7 +21,6 @@ getopts = "<= 0.2.21"
 failure = { version = "<= 0.1.1", optional = true }
 failure_derive = { version = "<= 0.1.1", optional = true }
 time = { version = "<= 0.1.42", optional = true }
-libc = { version = "<= 0.2.66", optional = true }
 wild = "2.0.1"
 nix = { version = "<= 0.13", optional = true }
 lazy_static = { version = "1.3", optional = true }
@@ -31,6 +30,9 @@ platform-info = { version = "<= 0.0.1", optional = true }
 backtrace = ">= 0.3.3, <= 0.3.30"
 # * data-encoding: require 2.1, but 2.2.0 breaks the build for MinSRV 1.31.0
 data-encoding = { version = "~2.1", optional = true }
+# * libc: initial utmp support added in 0.2.15, but 0.2.68 break the build for MinSRV 1.31.0
+libc = { version = "0.2.15, <= 0.2.66", optional = true }
+
 
 [target.'cfg(target_os = "redox")'.dependencies]
 termion = "1.5"
