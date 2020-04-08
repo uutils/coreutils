@@ -10,13 +10,10 @@ path = "sync.rs"
 
 [dependencies]
 getopts = "0.2.18"
-libc = "0.2.42"
-winapi = { version = "0.3", features = ["handleapi", "winerror"] }
 kernel32-sys = "0.2.2"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["wide"]
+libc = "0.2.42"
+uucore = { version = "0.0.1", features = ["wide"] }
+winapi = { version = "0.3", features = ["handleapi", "winerror"] }
 
 [[bin]]
 name = "sync"

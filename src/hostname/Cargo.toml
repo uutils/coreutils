@@ -9,10 +9,10 @@ name = "uu_hostname"
 path = "hostname.rs"
 
 [dependencies]
-libc = "0.2.42"
-winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
 getopts = "0.2"
+libc = "0.2.42"
 uucore = "0.0.1"
+winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
 
 [[bin]]
 name = "hostname"

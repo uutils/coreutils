@@ -11,10 +11,7 @@ path = "tty.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["fs"]
+uucore = { version = "0.0.1", features = ["fs"] }
 
 [[bin]]
 name = "tty"

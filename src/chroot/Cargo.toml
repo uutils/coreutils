@@ -10,10 +10,7 @@ path = "chroot.rs"
 
 [dependencies]
 getopts = "0.2.18"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries"]
+uucore = { version = "0.0.1", features = ["entries"] }
 
 [[bin]]
 name = "chroot"

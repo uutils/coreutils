@@ -13,8 +13,8 @@ path = "env.rs"
 [dependencies]
 clap = "2.33"
 libc = "0.2.42"
-uucore = "0.0.1"
 rust-ini = "0.13.0"
+uucore = "0.0.1"
 
 [[bin]]
 name = "env"

@@ -8,9 +8,8 @@ build = "../#common/mkmain.rs"
 name = "uu_groups"
 path = "groups.rs"
 
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries"]
+[dependencies]
+uucore = { version = "0.0.1", features = ["entries"] }
 
 [[bin]]
 name = "groups"

@@ -10,13 +10,10 @@ name = "uu_whoami"
 path = "whoami.rs"
 
 [dependencies]
-clap = "2.32"
-winapi = { version = "0.3", features = ["lmcons"] }
 advapi32-sys = "0.2.0"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries", "wide"]
+clap = "2.32"
+uucore = { version = "0.0.1", features = ["entries", "wide"] }
+winapi = { version = "0.3", features = ["lmcons"] }
 
 [[bin]]
 name = "whoami"

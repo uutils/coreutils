@@ -9,11 +9,8 @@ name = "uu_chgrp"
 path = "chgrp.rs"
 
 [dependencies]
+uucore = { version = "0.0.1", features = ["entries", "fs"] }
 walkdir = "2.2.8"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries", "fs"]
 
 [[bin]]
 name = "chgrp"

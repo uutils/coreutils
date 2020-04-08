@@ -11,10 +11,7 @@ path = "uptime.rs"
 [dependencies]
 getopts = "0.2.18"
 time = "0.1.40"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["utmpx"]
+uucore = { version = "0.0.1", features = ["utmpx"] }
 
 [[bin]]
 name = "uptime"

@@ -10,11 +10,8 @@ path = "chmod.rs"
 
 [dependencies]
 libc = "0.2.42"
+uucore = { version = "0.0.1", features = ["mode"] }
 walker = "1.0.0"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["mode"]
 
 [[bin]]
 name = "chmod"

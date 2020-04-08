@@ -11,16 +11,13 @@ path = "ls.rs"
 [dependencies]
 getopts = "0.2.18"
 isatty = "0.1"
+lazy_static = "1.0.1"
 number_prefix = "0.2.8"
 term_grid = "0.1.5"
 termsize = "0.1.6"
 time = "0.1.40"
-lazy_static = "1.0.1"
 unicode-width = "0.1.5"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries", "fs"]
+uucore = { version = "0.0.1", features = ["entries", "fs"] }
 
 [[bin]]
 name = "ls"

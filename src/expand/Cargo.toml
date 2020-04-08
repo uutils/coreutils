@@ -9,8 +9,8 @@ name = "uu_expand"
 path = "expand.rs"
 
 [dependencies]
-unicode-width = "0.1.5"
 getopts = "0.2.18"
+unicode-width = "0.1.5"
 uucore = "0.0.1"
 
 [[bin]]

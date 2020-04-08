@@ -8,9 +8,8 @@ build = "../#common/mkmain.rs"
 name = "uu_pinky"
 path = "pinky.rs"
 
-[dependencies.uucore]
-version = "0.0.1"
-features = ["utmpx", "entries"]
+[dependencies]
+uucore = { version = "0.0.1", features = ["utmpx", "entries"] }
 
 [[bin]]
 name = "pinky"

@@ -8,13 +8,10 @@ build = "../#common/mkmain.rs"
 name = "uu_base32"
 path = "base32.rs"
 
-[dependencies.uucore]
-version = "0.0.1"
-features = ["encoding"]
-
-[dependencies.clippy]
-version = "0.0.212"
-optional = true
+[dependencies]
+uucore = { version = "0.0.1", features = ["encoding"] }
+## optional
+clippy = { version = "0.0.212", optional = true }
 
 [[bin]]
 name = "base32"

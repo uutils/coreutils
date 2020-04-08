@@ -11,10 +11,7 @@ path = "stat.rs"
 [dependencies]
 getopts = "0.2.18"
 time = "0.1.40"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries"]
+uucore = { version = "0.0.1", features = ["entries"] }
 
 [[bin]]
 name = "stat"
