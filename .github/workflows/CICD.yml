@@ -65,7 +65,11 @@ jobs:
 
   min_version:
     name: MinSRV # Minimum supported rust version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v1
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
@@ -74,6 +78,29 @@ jobs:
         toolchain: ${{ env.RUST_MIN_SRV }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: Install `cargo-tree` # for dependency information
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-tree
+        version: latest
+        use-tool-cache: true
+      env:
+        RUSTUP_TOOLCHAIN: stable
+    - name: Info
+      shell: bash
+      run: |
+        # Info
+        ## tooling info display
+        echo "## tooling"
+        which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
+        rustup -V
+        rustup show active-toolchain
+        cargo -V
+        rustc -V
+        ## dependencies
+        echo "## dependency list"
+        cargo +stable fetch --quiet
+        cargo +stable tree --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -206,15 +233,29 @@ jobs:
         target: ${{ matrix.job.target }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: Install `cargo-tree` # for dependency information
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-tree
+        version: latest
+        use-tool-cache: true
+      env:
+        RUSTUP_TOOLCHAIN: stable
     - name: Info
       shell: bash
       run: |
+        # Info
         ## tooling info display
+        echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
         rustup -V
-        rustup toolchain list
+        rustup show active-toolchain
         cargo -V
         rustc -V
+        ## dependencies
+        echo "## dependency list"
+        cargo fetch --quiet
+        cargo tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
       with:
