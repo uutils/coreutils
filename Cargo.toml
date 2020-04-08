@@ -1,6 +1,6 @@
 [package]
 name = "uucore"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 description = "Common cross-platform code used by various uutils projects"
 
