@@ -7,28 +7,53 @@ autotests = false
 
 [features]
 default = [ "feat_common_core" ]
-#
+## OS feature shortcodes
 macos = [ "feat_os_unix" ]
 unix = [ "feat_os_unix" ]
 windows = [ "feat_os_windows" ]
-#
-test_unimplemented = []
+## project-specific feature shortcodes
 nightly = []
-#
-# "feat_os_unix" == set of utilities which can be compiled/run on modern/usual *nix platforms
+test_unimplemented = []
+## feature sets
+# "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
 feat_os_unix = [
-  "stdbuf",
+  "feat_common",
+  "feat_os_unix_musl",
+  "feat_os_unix_utmpx_required",
   #
-  "feat_os_unix_musl",
-  "feat_os_unix_utmpx",
+  "stdbuf",
 ]
-# "feat_os_unix_gnueabihf" == set of utilities which can be build/run for "arm-unknown-linux-gnueabihf" target (ARMv6 Linux, hardfloat)
+# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuschia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
+feat_os_unix_fuchsia = [
+  "feat_common_core",
+  #
+  "chgrp",
+  "chmod",
+  "chown",
+  "du",
+  "groups",
+  "hostid",
+  "install",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "nice",
+  "pathchk",
+  "stdbuf",
+  "tty",
+  "uname",
+  "unlink",
+]
+# "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
+  "feat_common",
   "feat_os_unix_musl",
-  "feat_os_unix_utmpx",
+  "feat_os_unix_utmpx_required",
 ]
 # "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix_musl = [
+  "feat_common",
+  #
   "chgrp",
   "chmod",
   "chown",
@@ -52,72 +77,50 @@ feat_os_unix_musl = [
   "tty",
   "uname",
   "unlink",
-  #
-  "feat_common"
 ]
-# "feat_os_unix_utmpx" == set of utilites requiring utmp/utmpx support
+# "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
+feat_os_unix_redox = [
+  "feat_common_core",
+  #
+  "uname",
+  "chmod",
+  "install",
+]
+# "feat_os_unix_utmpx_required" == set of utilites requiring utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
-feat_os_unix_utmpx = [
+feat_os_unix_utmpx_required = [
   "pinky",
   "uptime",
   "users",
   "who",
 ]
-# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuschia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
-feat_os_unix_fuchsia = [
-  # unix utilities
-  "chgrp",
-  "chmod",
-  "chown",
-  "du",
-  "groups",
-  "hostid",
-  "install",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "nice",
-  "pathchk",
-  "stdbuf",
-  "tty",
-  "uname",
-  "unlink",
-  #
-  "feat_common_core"
-]
-# "feat_os_unix_redox" == set of utilities which can be compiled/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
-feat_os_unix_redox = [
-  "uname",
-  "chmod",
-  "install",
-  #
-  "feat_common_core"
-]
-# "feat_os_windows" == set of utilities which can be compiled/run on modern/usual windows platforms
-feat_os_windows = [ "feat_common" ]
-# "feat_os_windows_legacy" == slightly restricted set of utilities which can be compiled/run on early windows platforms (eg, "WinXP")
+# "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
+feat_os_windows = [
+  "feat_common", ## == "feat_os_windows_legacy" + "hostname"
+  ]
+# "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
 feat_os_windows_legacy = [
+  "feat_common_core",
+  #
   "arch",
   "nproc",
   "sync",
   "touch",
   "whoami",
-
-  "feat_common_core"
   ]
-##
-# "feat_common" == expanded set of utilities which can be compiled/run on usual rust "tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
+## (common/core) feature sets
+# "feat_common" == expanded set of utilities which can be built/run on the usual rust "tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_common = [
+  "feat_common_core",
+  #
   "arch",
   "hostname",
   "nproc",
   "sync",
   "touch",
   "whoami",
-  #
-  "feat_common_core"
 ]
-# "feat_common_core" == baseline core set of utilities which can be compiled/run on most targets
+# "feat_common_core" == baseline core set of utilities which can be built/run on most targets
 feat_common_core = [
   "base32",
   "base64",
