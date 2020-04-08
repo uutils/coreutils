@@ -12,21 +12,22 @@ categories = ["os"]
 license = "MIT"
 
 [badges]
-travis-ci = { repository = "uutils/uucore" }
 appveyor = { repository = "uutils/uucore" }
+travis-ci = { repository = "uutils/uucore" }
 
 [dependencies]
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
+wild = "2.0.1"
+## optional
 failure = { version = "<= 0.1.1", optional = true }
 failure_derive = { version = "<= 0.1.1", optional = true }
-time = { version = "<= 0.1.42", optional = true }
-wild = "2.0.1"
-nix = { version = "<= 0.13", optional = true }
 lazy_static = { version = "1.3", optional = true }
+nix = { version = "<= 0.13", optional = true }
 platform-info = { version = "<= 0.0.1", optional = true }
-## problem dependencies
-# * transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
+time = { version = "<= 0.1.42", optional = true }
+## "problem" dependencies
+# * backtrace: transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
 backtrace = ">= 0.3.3, <= 0.3.30"
 # * data-encoding: require 2.1, but 2.2.0 breaks the build for MinSRV 1.31.0
 data-encoding = { version = "~2.1", optional = true }
@@ -38,15 +39,16 @@ libc = { version = "0.2.15, <= 0.2.66", optional = true }
 termion = "1.5"
 
 [features]
-fs = ["libc"]
-utf8 = []
+default = []
+## non-default features
 encoding = ["data-encoding", "failure", "failure_derive"]
-parse_time = []
+entries = ["libc"]
+fs = ["libc"]
 mode = ["libc"]
-utmpx = ["time", "libc"]
+parse_time = []
 process = ["libc"]
 signals = []
-entries = ["libc"]
-zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
+utf8 = []
+utmpx = ["time", "libc"]
 wide = []
-default = []
+zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
