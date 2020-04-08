@@ -2,6 +2,7 @@
 name = "printf"
 version = "0.0.1"
 authors = ["Nathan Ross"]
+license = "MIT"
 build = "../#common/mkmain.rs"
 
 [lib]

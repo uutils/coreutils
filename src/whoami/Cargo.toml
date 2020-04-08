@@ -2,6 +2,7 @@
 name = "whoami"
 version = "0.0.1"
 authors = []
+license = "MIT"
 description = "Print effective user ID."
 build = "../#common/mkmain.rs"
 

@@ -2,6 +2,7 @@
 name = "stdbuf"
 version = "0.0.1"
 authors = []
+license = "MIT"
 build = "build.rs"
 
 [lib]

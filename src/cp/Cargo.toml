@@ -5,6 +5,7 @@ authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
 ]
+license = "MIT"
 build = "../#common/mkmain.rs"
 
 [lib]

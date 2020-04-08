@@ -2,6 +2,7 @@
 name = "yes"
 version = "0.0.1"
 authors = []
+license = "MIT"
 description = "Repeatedly output a line with all specified STRING(s), or 'y'."
 build = "../#common/mkmain.rs"
 

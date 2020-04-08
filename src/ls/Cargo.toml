@@ -2,6 +2,7 @@
 name = "ls"
 version = "0.0.1"
 authors = ["Jeremiah Peschka <jeremiah.peschka@gmail.com>"]
+license = "MIT"
 build = "../#common/mkmain.rs"
 
 [lib]
