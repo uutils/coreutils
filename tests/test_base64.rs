@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_encode() {
     let input = "hello, world!";
@@ -61,11 +60,10 @@ fn test_wrap() {
 #[test]
 fn test_wrap_no_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
-        new_ucmd!()
-            .arg(wrap_param)
-            .fails()
-            .stderr_only(format!("base64: error: Argument to option '{}' missing\n",
-                                 if wrap_param == "-w" { "w" } else { "wrap" }));
+        new_ucmd!().arg(wrap_param).fails().stderr_only(format!(
+            "base64: error: Argument to option '{}' missing\n",
+            if wrap_param == "-w" { "w" } else { "wrap" }
+        ));
     }
 }
 

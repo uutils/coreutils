@@ -1,34 +1,45 @@
 use common::util::*;
 
-
 #[test]
 fn test_directory() {
-    new_ucmd!().args(&["/root/alpha/beta/gamma/delta/epsilon/omega/"])
-        .succeeds().stdout_only("omega\n");
+    new_ucmd!()
+        .args(&["/root/alpha/beta/gamma/delta/epsilon/omega/"])
+        .succeeds()
+        .stdout_only("omega\n");
 }
 
 #[test]
 fn test_file() {
-    new_ucmd!().args(&["/etc/passwd"]).succeeds().stdout_only("passwd\n");
+    new_ucmd!()
+        .args(&["/etc/passwd"])
+        .succeeds()
+        .stdout_only("passwd\n");
 }
 
 #[test]
 fn test_remove_suffix() {
-    new_ucmd!().args(&["/usr/local/bin/reallylongexecutable.exe", ".exe"])
-        .succeeds().stdout_only("reallylongexecutable\n");
+    new_ucmd!()
+        .args(&["/usr/local/bin/reallylongexecutable.exe", ".exe"])
+        .succeeds()
+        .stdout_only("reallylongexecutable\n");
 }
 
 #[test]
 fn test_dont_remove_suffix() {
-    new_ucmd!().args(&["/foo/bar/baz", "baz"]).succeeds().stdout_only( "baz\n");
+    new_ucmd!()
+        .args(&["/foo/bar/baz", "baz"])
+        .succeeds()
+        .stdout_only("baz\n");
 }
 
 #[test]
 fn test_multiple_param() {
     for multiple_param in vec!["-a", "--multiple"] {
         let path = "/foo/bar/baz";
-        new_ucmd!().args(&[multiple_param, path, path])
-            .succeeds().stdout_only("baz\nbaz\n");
+        new_ucmd!()
+            .args(&[multiple_param, path, path])
+            .succeeds()
+            .stdout_only("baz\nbaz\n");
     }
 }
 
@@ -38,7 +49,8 @@ fn test_suffix_param() {
         let path = "/foo/bar/baz.exe";
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
-            .succeeds().stdout_only("baz\nbaz\n");
+            .succeeds()
+            .stdout_only("baz\nbaz\n");
     }
 }
 
@@ -46,15 +58,15 @@ fn test_suffix_param() {
 fn test_zero_param() {
     for zero_param in vec!["-z", "--zero"] {
         let path = "/foo/bar/baz";
-        new_ucmd!().args(&[zero_param, "-a", path, path])
-            .succeeds().stdout_only("baz\0baz\0");
+        new_ucmd!()
+            .args(&[zero_param, "-a", path, path])
+            .succeeds()
+            .stdout_only("baz\0baz\0");
     }
 }
 
-
 fn expect_error(input: Vec<&str>) {
-    assert!(new_ucmd!().args(&input)
-                .fails().no_stdout().stderr.len() > 0);
+    assert!(new_ucmd!().args(&input).fails().no_stdout().stderr.len() > 0);
 }
 
 #[test]

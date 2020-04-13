@@ -1,16 +1,18 @@
 extern crate rand;
 extern crate regex;
 
-use std::fs::{File, read_dir};
-use std::io::Write;
-use std::path::Path;
-use self::rand::{Rng, thread_rng};
+use self::rand::{thread_rng, Rng};
 use self::regex::Regex;
 use common::util::*;
-
+use std::fs::{read_dir, File};
+use std::io::Write;
+use std::path::Path;
 
 fn random_chars(n: usize) -> String {
-    thread_rng().sample_iter(&rand::distributions::Alphanumeric).take(n).collect::<String>()
+    thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(n)
+        .collect::<String>()
 }
 
 struct Glob {
@@ -35,7 +37,9 @@ impl Glob {
             .unwrap()
             .filter_map(|entry| {
                 let path = entry.unwrap().path();
-                let name = self.directory.minus_as_string(path.as_path().to_str().unwrap_or(""));
+                let name = self
+                    .directory
+                    .minus_as_string(path.as_path().to_str().unwrap_or(""));
                 if self.regex.is_match(&name) {
                     Some(name)
                 } else {
@@ -62,15 +66,13 @@ struct RandomFile {
 
 impl RandomFile {
     fn new(at: &AtPath, name: &str) -> RandomFile {
-        RandomFile { inner: File::create(&at.plus(name)).unwrap() }
+        RandomFile {
+            inner: File::create(&at.plus(name)).unwrap(),
+        }
     }
 
     fn add_bytes(&mut self, bytes: usize) {
-        let chunk_size: usize = if bytes >= 1024 {
-            1024
-        } else {
-            bytes
-        };
+        let chunk_size: usize = if bytes >= 1024 { 1024 } else { bytes };
         let mut n = bytes;
         while n > chunk_size {
             let _ = write!(self.inner, "{}", random_chars(chunk_size));

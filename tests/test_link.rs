@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_link_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -22,7 +21,8 @@ fn test_link_no_circular() {
     let (at, mut ucmd) = at_and_ucmd!();
     let link = "test_link_no_circular";
 
-    ucmd.args(&[link, link]).fails()
+    ucmd.args(&[link, link])
+        .fails()
         .stderr_is("link: error: No such file or directory (os error 2)\n");
     assert!(!at.file_exists(link));
 }
@@ -33,7 +33,8 @@ fn test_link_nonexistent_file() {
     let file = "test_link_nonexistent_file";
     let link = "test_link_nonexistent_file_link";
 
-    ucmd.args(&[file, link]).fails()
+    ucmd.args(&[file, link])
+        .fails()
         .stderr_is("link: error: No such file or directory (os error 2)\n");
     assert!(!at.file_exists(file));
     assert!(!at.file_exists(link));

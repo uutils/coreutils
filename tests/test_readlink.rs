@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 static GIBBERISH: &'static str = "supercalifragilisticexpialidocious";
 
 #[test]

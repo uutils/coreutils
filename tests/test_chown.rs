@@ -3,10 +3,9 @@ use common::util::*;
 extern crate uu_chown;
 pub use self::uu_chown::*;
 
-
 #[cfg(test)]
 mod test_passgrp {
-    use super::uu_chown::entries::{usr2uid,grp2gid,uid2usr,gid2grp};
+    use super::uu_chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
 
     #[test]
     fn test_usr2uid() {
@@ -45,7 +44,5 @@ mod test_passgrp {
 
 #[test]
 fn test_invalid_option() {
-    new_ucmd!()
-        .arg("-w").arg("-q").arg("/")
-        .fails();
+    new_ucmd!().arg("-w").arg("-q").arg("/").fails();
 }
