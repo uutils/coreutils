@@ -1,5 +1,12 @@
+# This file is part of the uutils coreutils package.
+# For the full copyright and license information, please view the LICENSE
+# file that was distributed with this source code.
+
 [package]
 name = "uutils"
+description = "uutils is an attempt at writing universal (as in cross-platform) CLI utils in Rust. This repo is to aggregate the GNU coreutils rewrites."
+license = "MIT"
+repository = "https://github.com/uutils/coreutils"
 version = "0.0.1"
 authors = []
 build = "build.rs"
