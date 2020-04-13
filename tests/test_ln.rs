@@ -107,16 +107,22 @@ fn test_symlink_interactive() {
     at.touch(file);
     at.touch(link);
 
-    scene.ucmd()
+    scene
+        .ucmd()
         .args(&["-i", "-s", file, link])
-        .pipe_in("n").succeeds().no_stderr();
+        .pipe_in("n")
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file));
     assert!(!at.is_symlink(link));
 
-    scene.ucmd()
+    scene
+        .ucmd()
         .args(&["-i", "-s", file, link])
-        .pipe_in("Yesh").succeeds().no_stderr();
+        .pipe_in("Yesh")
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
@@ -161,7 +167,9 @@ fn test_symlink_custom_backup_suffix() {
     assert_eq!(at.resolve_link(link), file);
 
     let arg = &format!("--suffix={}", suffix);
-    ucmd.args(&["-b", arg, "-s", file, link]).succeeds().no_stderr();
+    ucmd.args(&["-b", arg, "-s", file, link])
+        .succeeds()
+        .no_stderr();
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link));
@@ -184,7 +192,9 @@ fn test_symlink_backup_numbering() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    ucmd.args(&["-s", "--backup=t", file, link]).succeeds().no_stderr();
+    ucmd.args(&["-s", "--backup=t", file, link])
+        .succeeds()
+        .no_stderr();
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link));
@@ -216,7 +226,9 @@ fn test_symlink_existing_backup() {
     assert!(at.is_symlink(link_backup));
     assert_eq!(at.resolve_link(link_backup), file);
 
-    ucmd.args(&["-s", "--backup=nil", file, link]).succeeds().no_stderr();
+    ucmd.args(&["-s", "--backup=nil", file, link])
+        .succeeds()
+        .no_stderr();
     assert!(at.file_exists(file));
 
     assert!(at.is_symlink(link_backup));
@@ -237,7 +249,9 @@ fn test_symlink_target_dir() {
     at.touch(file_b);
     at.mkdir(dir);
 
-    ucmd.args(&["-s", "-t", dir, file_a, file_b]).succeeds().no_stderr();
+    ucmd.args(&["-s", "-t", dir, file_a, file_b])
+        .succeeds()
+        .no_stderr();
 
     let file_a_link = &format!("{}/{}", dir, file_a);
     assert!(at.is_symlink(file_a_link));
@@ -263,7 +277,9 @@ fn test_symlink_target_dir_from_dir() {
     at.touch(file_b);
     at.mkdir(dir);
 
-    ucmd.args(&["-s", "-t", dir, file_a, file_b]).succeeds().no_stderr();
+    ucmd.args(&["-s", "-t", dir, file_a, file_b])
+        .succeeds()
+        .no_stderr();
 
     let file_a_link = &format!("{}/{}", dir, filename_a);
     assert!(at.is_symlink(file_a_link));
@@ -283,7 +299,13 @@ fn test_symlink_overwrite_dir_fail() {
     at.touch(path_a);
     at.mkdir(path_b);
 
-    assert!(ucmd.args(&["-s", "-T", path_a, path_b]).fails().stderr.len() > 0);
+    assert!(
+        ucmd.args(&["-s", "-T", path_a, path_b])
+            .fails()
+            .stderr
+            .len()
+            > 0
+    );
 }
 
 #[test]
@@ -299,9 +321,12 @@ fn test_symlink_errors() {
 
     // $ ln -T -t a b
     // ln: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    ucmd.args(&["-T", "-t", dir, file_a, file_b]).fails()
-        .stderr_is("ln: error: cannot combine --target-directory (-t) and --no-target-directory \
-                (-T)\n");
+    ucmd.args(&["-T", "-t", dir, file_a, file_b])
+        .fails()
+        .stderr_is(
+            "ln: error: cannot combine --target-directory (-t) and --no-target-directory \
+                (-T)\n",
+        );
 }
 
 #[test]
@@ -313,13 +338,22 @@ fn test_symlink_verbose() {
 
     at.touch(file_a);
 
-    scene.ucmd().args(&["-v", file_a, file_b])
-        .succeeds().stdout_only(format!("'{}' -> '{}'\n", file_b, file_a));
+    scene
+        .ucmd()
+        .args(&["-v", file_a, file_b])
+        .succeeds()
+        .stdout_only(format!("'{}' -> '{}'\n", file_b, file_a));
 
     at.touch(file_b);
 
-    scene.ucmd().args(&["-v", "-b", file_a, file_b])
-        .succeeds().stdout_only(format!("'{}' -> '{}' (backup: '{}~')\n", file_b, file_a, file_b));
+    scene
+        .ucmd()
+        .args(&["-v", "-b", file_a, file_b])
+        .succeeds()
+        .stdout_only(format!(
+            "'{}' -> '{}' (backup: '{}~')\n",
+            file_b, file_a, file_b
+        ));
 }
 
 #[test]
@@ -377,6 +411,8 @@ fn test_symlink_missing_destination() {
 
     at.touch(file);
 
-    ucmd.args(&["-s", "-T", file]).fails()
-        .stderr_is(format!("ln: error: missing destination file operand after '{}'", file));
+    ucmd.args(&["-s", "-T", file]).fails().stderr_is(format!(
+        "ln: error: missing destination file operand after '{}'",
+        file
+    ));
 }

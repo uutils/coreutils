@@ -22,11 +22,7 @@ fn test_mkdir_dup_dir() {
 
 #[test]
 fn test_mkdir_mode() {
-    new_ucmd!()
-        .arg("-m")
-        .arg("755")
-        .arg(TEST_DIR3)
-        .succeeds();
+    new_ucmd!().arg("-m").arg("755").arg(TEST_DIR3).succeeds();
 }
 
 #[test]

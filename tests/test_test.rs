@@ -9,12 +9,9 @@
 
 use common::util::*;
 
-
 #[test]
 fn test_op_prec_and_or_1() {
-    new_ucmd!()
-        .args(&[" ", "-o", "", "-a", ""])
-        .succeeds();
+    new_ucmd!().args(&[" ", "-o", "", "-a", ""]).succeeds();
 }
 
 #[test]
@@ -26,7 +23,5 @@ fn test_op_prec_and_or_2() {
 
 #[test]
 fn test_or_as_filename() {
-    new_ucmd!()
-        .args(&["x", "-a", "-z", "-o"])
-        .fails();
+    new_ucmd!().args(&["x", "-a", "-z", "-o"]).fails();
 }

@@ -1,9 +1,8 @@
-extern crate time;
 extern crate filetime;
+extern crate time;
 
 use self::filetime::*;
 use common::util::*;
-
 
 #[test]
 fn test_mv_rename_dir() {
@@ -57,7 +56,10 @@ fn test_mv_move_file_between_dirs() {
 
     assert!(at.file_exists(&format!("{}/{}", dir1, file)));
 
-    ucmd.arg(&format!("{}/{}", dir1, file)).arg(dir2).succeeds().no_stderr();
+    ucmd.arg(&format!("{}/{}", dir1, file))
+        .arg(dir2)
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(&format!("{}/{}", dir1, file)));
     assert!(at.file_exists(&format!("{}/{}", dir2, file)));
@@ -79,7 +81,13 @@ fn test_mv_strip_slashes() {
 
     assert!(!at.file_exists(&format!("{}/{}", dir, file)));
 
-    scene.ucmd().arg("--strip-trailing-slashes").arg(source).arg(dir).succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg("--strip-trailing-slashes")
+        .arg(source)
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -95,7 +103,11 @@ fn test_mv_multiple_files() {
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg(file_a).arg(file_b).arg(target_dir).succeeds().no_stderr();
+    ucmd.arg(file_a)
+        .arg(file_b)
+        .arg(target_dir)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(&format!("{}/{}", target_dir, file_a)));
     assert!(at.file_exists(&format!("{}/{}", target_dir, file_b)));
@@ -112,7 +124,11 @@ fn test_mv_multiple_folders() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
 
-    ucmd.arg(dir_a).arg(dir_b).arg(target_dir).succeeds().no_stderr();
+    ucmd.arg(dir_a)
+        .arg(dir_b)
+        .arg(target_dir)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.dir_exists(&format!("{}/{}", target_dir, dir_a)));
     assert!(at.dir_exists(&format!("{}/{}", target_dir, dir_b)));
@@ -128,14 +144,26 @@ fn test_mv_interactive() {
     at.touch(file_a);
     at.touch(file_b);
 
-
-    scene.ucmd().arg("-i").arg(file_a).arg(file_b).pipe_in("n").succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg("-i")
+        .arg(file_a)
+        .arg(file_b)
+        .pipe_in("n")
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
 
-
-    scene.ucmd().arg("-i").arg(file_a).arg(file_b).pipe_in("Yesh").succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg("-i")
+        .arg(file_a)
+        .arg(file_b)
+        .pipe_in("Yesh")
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -150,7 +178,11 @@ fn test_mv_no_clobber() {
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg("-n").arg(file_a).arg(file_b).succeeds().no_stderr();
+    ucmd.arg("-n")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -180,7 +212,11 @@ fn test_mv_force_replace_file() {
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg("--force").arg(file_a).arg(file_b).succeeds().no_stderr();
+    ucmd.arg("--force")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -194,7 +230,11 @@ fn test_mv_simple_backup() {
 
     at.touch(file_a);
     at.touch(file_b);
-    ucmd.arg("-b").arg(file_a).arg(file_b).succeeds().no_stderr();
+    ucmd.arg("-b")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -214,7 +254,8 @@ fn test_mv_custom_backup_suffix() {
         .arg(format!("--suffix={}", suffix))
         .arg(file_a)
         .arg(file_b)
-        .succeeds().no_stderr();
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -233,7 +274,8 @@ fn test_mv_custom_backup_suffix_via_env() {
         .env("SIMPLE_BACKUP_SUFFIX", suffix)
         .arg(file_a)
         .arg(file_b)
-        .succeeds().no_stderr();
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -248,7 +290,11 @@ fn test_mv_backup_numbering() {
 
     at.touch(file_a);
     at.touch(file_b);
-    ucmd.arg("--backup=t").arg(file_a).arg(file_b).succeeds().no_stderr();
+    ucmd.arg("--backup=t")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -266,7 +312,11 @@ fn test_mv_existing_backup() {
     at.touch(file_a);
     at.touch(file_b);
     at.touch(file_b_backup);
-    ucmd.arg("--backup=nil").arg(file_a).arg(file_b).succeeds().no_stderr();
+    ucmd.arg("--backup=nil")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -294,7 +344,13 @@ fn test_mv_update_option() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
 
-    scene.ucmd().arg("--update").arg(file_b).arg(file_a).succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg("--update")
+        .arg(file_b)
+        .arg(file_a)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file_a));
     assert!(!at.file_exists(file_b));
@@ -310,7 +366,12 @@ fn test_mv_target_dir() {
     at.touch(file_a);
     at.touch(file_b);
     at.mkdir(dir);
-    ucmd.arg("-t").arg(dir).arg(file_a).arg(file_b).succeeds().no_stderr();
+    ucmd.arg("-t")
+        .arg(dir)
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
 
     assert!(!at.file_exists(file_a));
     assert!(!at.file_exists(file_b));
@@ -348,7 +409,16 @@ fn test_mv_overwrite_nonempty_dir() {
     // GNU:     "mv: cannot move ‘a’ to ‘b’: Directory not empty"
 
     // Verbose output for the move should not be shown on failure
-    assert!(ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails().no_stdout().stderr.len() > 0);
+    assert!(
+        ucmd.arg("-vT")
+            .arg(dir_a)
+            .arg(dir_b)
+            .fails()
+            .no_stdout()
+            .stderr
+            .len()
+            > 0
+    );
 
     assert!(at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -362,11 +432,14 @@ fn test_mv_backup_dir() {
 
     at.mkdir(dir_a);
     at.mkdir(dir_b);
-    ucmd.arg("-vbT").arg(dir_a).arg(dir_b).succeeds()
-        .stdout_only(format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
-                       dir_a,
-                       dir_b,
-                       dir_b));
+    ucmd.arg("-vbT")
+        .arg(dir_a)
+        .arg(dir_b)
+        .succeeds()
+        .stdout_only(format!(
+            "‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
+            dir_a, dir_b, dir_b
+        ));
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -386,15 +459,31 @@ fn test_mv_errors() {
 
     // $ mv -T -t a b
     // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    scene.ucmd().arg("-T").arg("-t").arg(dir).arg(file_a).arg(file_b).fails()
-    .stderr_is("mv: error: cannot combine --target-directory (-t) and --no-target-directory (-T)\n");
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg("-t")
+        .arg(dir)
+        .arg(file_a)
+        .arg(file_b)
+        .fails()
+        .stderr_is(
+            "mv: error: cannot combine --target-directory (-t) and --no-target-directory (-T)\n",
+        );
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir
     // err == mv: cannot overwrite directory ‘dir’ with non-directory
-    scene.ucmd().arg("-T").arg(file_a).arg(dir).fails()
-    .stderr_is(format!("mv: error: cannot overwrite directory ‘{}’ with non-directory\n",
-                       dir));
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(file_a)
+        .arg(dir)
+        .fails()
+        .stderr_is(format!(
+            "mv: error: cannot overwrite directory ‘{}’ with non-directory\n",
+            dir
+        ));
 
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
@@ -413,15 +502,25 @@ fn test_mv_verbose() {
     at.touch(file_a);
     at.touch(file_b);
 
-    scene.ucmd().arg("-v").arg(file_a).arg(file_b).succeeds()
-       .stdout_only(format!("‘{}’ -> ‘{}’\n", file_a, file_b));
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .stdout_only(format!("‘{}’ -> ‘{}’\n", file_a, file_b));
 
     at.touch(file_a);
-    scene.ucmd().arg("-vb").arg(file_a).arg(file_b).succeeds()
-        .stdout_only(format!("‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
-                             file_a,
-                             file_b,
-                             file_b));
+    scene
+        .ucmd()
+        .arg("-vb")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .stdout_only(format!(
+            "‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
+            file_a, file_b, file_b
+        ));
 }
 
 // Todo:

@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_current_directory() {
     let (at, mut ucmd) = at_and_ucmd!();

@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_sort_call_graph() {
     new_ucmd!()
@@ -13,5 +12,6 @@ fn test_sort_call_graph() {
 fn test_sort_self_loop() {
     new_ucmd!()
         .pipe_in("first first\nfirst second second second")
-        .succeeds().stdout_only("first\nsecond\n");
+        .succeeds()
+        .stdout_only("first\nsecond\n");
 }

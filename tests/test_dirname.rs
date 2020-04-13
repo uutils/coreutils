@@ -1,16 +1,19 @@
 use common::util::*;
 
-
 #[test]
 fn test_path_with_trailing_slashes() {
-    new_ucmd!().arg("/root/alpha/beta/gamma/delta/epsilon/omega//")
-        .run().stdout_is("/root/alpha/beta/gamma/delta/epsilon\n");
+    new_ucmd!()
+        .arg("/root/alpha/beta/gamma/delta/epsilon/omega//")
+        .run()
+        .stdout_is("/root/alpha/beta/gamma/delta/epsilon\n");
 }
 
 #[test]
 fn test_path_without_trailing_slashes() {
-    new_ucmd!().arg("/root/alpha/beta/gamma/delta/epsilon/omega")
-        .run().stdout_is("/root/alpha/beta/gamma/delta/epsilon\n");
+    new_ucmd!()
+        .arg("/root/alpha/beta/gamma/delta/epsilon/omega")
+        .run()
+        .stdout_is("/root/alpha/beta/gamma/delta/epsilon\n");
 }
 
 #[test]

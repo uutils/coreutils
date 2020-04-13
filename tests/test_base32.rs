@@ -8,7 +8,6 @@
 
 use common::util::*;
 
-
 #[test]
 fn test_encode() {
     let input = "Hello, World!";
@@ -62,18 +61,19 @@ fn test_wrap() {
             .arg("20")
             .pipe_in(input)
             .succeeds()
-            .stdout_only("KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n");
+            .stdout_only(
+                "KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n",
+            );
     }
 }
 
 #[test]
 fn test_wrap_no_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
-        new_ucmd!()
-            .arg(wrap_param)
-            .fails()
-            .stderr_only(format!("base32: error: Argument to option '{}' missing\n",
-                                 if wrap_param == "-w" { "w" } else { "wrap" }));
+        new_ucmd!().arg(wrap_param).fails().stderr_only(format!(
+            "base32: error: Argument to option '{}' missing\n",
+            if wrap_param == "-w" { "w" } else { "wrap" }
+        ));
     }
 }
 
@@ -81,7 +81,8 @@ fn test_wrap_no_arg() {
 fn test_wrap_bad_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
         new_ucmd!()
-            .arg(wrap_param).arg("b")
+            .arg(wrap_param)
+            .arg("b")
             .fails()
             .stderr_only("base32: error: invalid wrap size: ‘b’: invalid digit found in string\n");
     }

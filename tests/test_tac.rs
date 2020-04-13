@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_stdin_default() {
     new_ucmd!()
@@ -29,18 +28,24 @@ fn test_stdin_non_newline_separator_before() {
 
 #[test]
 fn test_single_default() {
-    new_ucmd!().arg("prime_per_line.txt")
-        .run().stdout_is_fixture("prime_per_line.expected");
+    new_ucmd!()
+        .arg("prime_per_line.txt")
+        .run()
+        .stdout_is_fixture("prime_per_line.expected");
 }
 
 #[test]
 fn test_single_non_newline_separator() {
-    new_ucmd!().args(&["-s", ":", "delimited_primes.txt"])
-        .run().stdout_is_fixture("delimited_primes.expected");
+    new_ucmd!()
+        .args(&["-s", ":", "delimited_primes.txt"])
+        .run()
+        .stdout_is_fixture("delimited_primes.expected");
 }
 
 #[test]
 fn test_single_non_newline_separator_before() {
-    new_ucmd!().args(&["-b", "-s", ":", "delimited_primes.txt"])
-        .run().stdout_is_fixture("delimited_primes_before.expected");
+    new_ucmd!()
+        .args(&["-b", "-s", ":", "delimited_primes.txt"])
+        .run()
+        .stdout_is_fixture("delimited_primes_before.expected");
 }

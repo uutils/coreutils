@@ -1,6 +1,6 @@
+extern crate tempdir;
 #[cfg(unix)]
 extern crate unix_socket;
-extern crate tempdir;
 
 use common::util::*;
 
@@ -9,7 +9,8 @@ fn test_output_multi_files_print_all_chars() {
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
         .succeeds()
-        .stdout_only("     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
+        .stdout_only(
+            "     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
                 5\tuvwxyz$\n     6\t^@^A^B^C^D^E^F^G^H^I$\n     \
                 7\t^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z^[^\\^]^^^_ \
                 !\"#$%&\'()*+,-./0123456789:;\
@@ -19,7 +20,8 @@ fn test_output_multi_files_print_all_chars() {
                 M-!M-\"M-#M-$M-%M-&M-\'M-(M-)M-*M-+M-,M--M-.M-/M-0M-1M-2M-3M-4M-5M-6M-7M-8M-9M-:\
                 M-;M-<M-=M->M-?M-@M-AM-BM-CM-DM-EM-FM-GM-HM-IM-JM-KM-LM-MM-NM-OM-PM-QM-RM-SM-TM-U\
                 M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
-                pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?");
+                pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
+        );
 }
 
 #[test]
@@ -27,8 +29,10 @@ fn test_numbered_lines_no_trailing_newline() {
     new_ucmd!()
         .args(&["nonewline.txt", "alpha.txt", "-n"])
         .succeeds()
-        .stdout_only("     1\ttext without a trailing newlineabcde\n     2\tfghij\n     \
-                3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n");
+        .stdout_only(
+            "     1\ttext without a trailing newlineabcde\n     2\tfghij\n     \
+                3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n",
+        );
 }
 
 #[test]
@@ -53,12 +57,11 @@ fn test_stdin_show_tabs() {
     }
 }
 
-
 #[test]
 fn test_stdin_show_ends() {
     for same_param in vec!["-E", "--show-ends"] {
         new_ucmd!()
-            .args(&[same_param,"-"])
+            .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
             .succeeds()
             .stdout_only("\t\0$\n\t");
@@ -139,15 +142,13 @@ fn test_squeeze_blank_before_numbering() {
     }
 }
 
-
-
 #[test]
 #[cfg(foo)]
 fn test_domain_socket() {
-    use std::thread;
-    use self::unix_socket::UnixListener;
     use self::tempdir::TempDir;
+    use self::unix_socket::UnixListener;
     use std::io::prelude::*;
+    use std::thread;
 
     let dir = TempDir::new("unix_socket").expect("failed to create dir");
     let socket_path = dir.path().join("sock");
@@ -155,7 +156,9 @@ fn test_domain_socket() {
 
     let thread = thread::spawn(move || {
         let mut stream = listener.accept().expect("failed to accept connection").0;
-        stream.write_all(b"a\tb").expect("failed to write test data");
+        stream
+            .write_all(b"a\tb")
+            .expect("failed to write test data");
     });
 
     new_ucmd!()

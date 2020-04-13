@@ -1,13 +1,16 @@
 use common::util::*;
 use std::os::unix::fs::PermissionsExt;
 
-
 #[test]
 fn test_install_help() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    assert!(
-        ucmd.arg("--help").succeeds().no_stderr().stdout.contains("Options:"));
+    assert!(ucmd
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout
+        .contains("Options:"));
 }
 
 #[test]
@@ -38,8 +41,13 @@ fn test_install_failing_not_dir() {
     at.touch(file1);
     at.touch(file2);
     at.touch(file3);
-    assert!(ucmd.arg(file1).arg(file2).arg(file3)
-            .fails().stderr.contains("not a directory"));
+    assert!(ucmd
+        .arg(file1)
+        .arg(file2)
+        .arg(file3)
+        .fails()
+        .stderr
+        .contains("not a directory"));
 }
 
 #[test]
@@ -51,8 +59,13 @@ fn test_install_unimplemented_arg() {
 
     at.touch(file);
     at.mkdir(dir);
-    assert!(ucmd.arg(context_arg).arg(file).arg(dir)
-            .fails().stderr.contains("Unimplemented"));
+    assert!(ucmd
+        .arg(context_arg)
+        .arg(file)
+        .arg(dir)
+        .fails()
+        .stderr
+        .contains("Unimplemented"));
 
     assert!(!at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -66,7 +79,8 @@ fn test_install_component_directories() {
     let directories_arg = "-d";
 
     ucmd.args(&[directories_arg, component1, component2, component3])
-        .succeeds().no_stderr();
+        .succeeds()
+        .no_stderr();
 
     assert!(at.dir_exists(component1));
     assert!(at.dir_exists(component2));
@@ -80,8 +94,12 @@ fn test_install_component_directories_failing() {
     let directories_arg = "-d";
 
     at.mkdir(component);
-    assert!(ucmd.arg(directories_arg).arg(component)
-            .fails().stderr.contains("File exists"));
+    assert!(ucmd
+        .arg(directories_arg)
+        .arg(component)
+        .fails()
+        .stderr
+        .contains("File exists"));
 }
 
 #[test]
@@ -129,8 +147,13 @@ fn test_install_mode_failing() {
 
     at.touch(file);
     at.mkdir(dir);
-    assert!(ucmd.arg(file).arg(dir).arg(mode_arg)
-            .fails().stderr.contains("Invalid mode string: invalid digit found in string"));
+    assert!(ucmd
+        .arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .fails()
+        .stderr
+        .contains("Invalid mode string: invalid digit found in string"));
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));
@@ -144,7 +167,11 @@ fn test_install_mode_directories() {
     let directories_arg = "-d";
     let mode_arg = "--mode=333";
 
-    ucmd.arg(directories_arg).arg(component).arg(mode_arg).succeeds().no_stderr();
+    ucmd.arg(directories_arg)
+        .arg(component)
+        .arg(mode_arg)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.dir_exists(component));
     let permissions = at.metadata(component).permissions();
@@ -173,7 +200,10 @@ fn test_install_target_new_file() {
 
     at.touch(file);
     at.mkdir(dir);
-    ucmd.arg(file).arg(format!("{}/{}", dir, file)).succeeds().no_stderr();
+    ucmd.arg(file)
+        .arg(format!("{}/{}", dir, file))
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
@@ -188,9 +218,11 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
 
     at.touch(file1);
 
-    let err = ucmd.arg(file1).arg(format!("{}/{}", dir, file2))
-             .fails().stderr;
+    let err = ucmd
+        .arg(file1)
+        .arg(format!("{}/{}", dir, file2))
+        .fails()
+        .stderr;
 
     assert!(err.contains("not a directory"))
 }
-
