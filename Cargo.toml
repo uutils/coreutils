@@ -3,7 +3,7 @@
 
 [package]
 name = "uutils"
-description = "uutils ~ universal (as in cross-platform) CLI utils, written in Rust" ## aggregates Rust rewrites of the GNU coreutils"
+description = "uutils ~ universal (as in cross-platform) CLI utils, written in Rust"
 license = "MIT"
 repository = "https://github.com/uutils/coreutils"
 version = "0.0.1"
