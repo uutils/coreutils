@@ -2,7 +2,8 @@
 name = "wc"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_wc"
@@ -10,8 +11,8 @@ path = "wc.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "wc"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

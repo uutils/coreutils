@@ -11,9 +11,9 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::libc::{self, gid_t, lchown, uid_t};
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
+use uucore::libc::{self, gid_t, lchown, uid_t};
 
 extern crate walkdir;
 use walkdir::WalkDir;
@@ -24,8 +24,8 @@ use std::os::unix::fs::MetadataExt;
 use std::io;
 use std::io::Result as IOResult;
 
-use std::path::Path;
 use std::convert::AsRef;
+use std::path::Path;
 
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
@@ -253,12 +253,12 @@ struct Chowner {
 }
 
 macro_rules! unwrap {
-    ($m:expr, $e:ident, $err:block) => (
+    ($m:expr, $e:ident, $err:block) => {
         match $m {
             Ok(meta) => meta,
             Err($e) => $err,
         }
-    )
+    };
 }
 
 impl Chowner {
@@ -395,8 +395,8 @@ impl Chowner {
     fn wrap_chown<P: AsRef<Path>>(&self, path: P, meta: &Metadata, follow: bool) -> i32 {
         use self::Verbosity::*;
         let mut ret = 0;
-        let dest_uid = self.dest_uid.unwrap_or(meta.uid());
-        let dest_gid = self.dest_gid.unwrap_or(meta.gid());
+        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
+        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
         let path = path.as_ref();
         if let Err(e) = self.chown(path, dest_uid, dest_gid, follow) {
             match self.verbosity {

@@ -2,7 +2,8 @@
 name = "paste"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_paste"
@@ -10,8 +11,8 @@ path = "paste.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "paste"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

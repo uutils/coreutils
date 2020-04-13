@@ -2,6 +2,7 @@
 name = "libstdbuf"
 version = "0.0.1"
 authors = []
+license = "MIT"
 
 [lib]
 name = "libstdbuf"
@@ -10,9 +11,9 @@ path = "libstdbuf.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-uucore = "0.0.1"
-libc = "0.2"
 cpp = "0.4"
+libc = "0.2"
+uucore = "0.0.2"
 
 [build-dependencies]
 cpp_build = "0.4"

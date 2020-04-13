@@ -1,9 +1,9 @@
 //! formatter for %a %F C99 Hex-floating-point subs
 use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
-use super::float_common::{primitive_to_str_common, FloatAnalysis};
 use super::base_conv;
 use super::base_conv::RadixDef;
+use super::float_common::{primitive_to_str_common, FloatAnalysis};
 
 pub struct CninetyNineHexFloatf {
     as_num: f64,
@@ -60,7 +60,7 @@ fn get_primitive_hex(
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
         None => (&str_in[..], "0"),
     };
-    if first_segment_raw.len() == 0 {
+    if first_segment_raw.is_empty() {
         first_segment_raw = "0";
     }
     // convert to string, hexifying if input is in dec.

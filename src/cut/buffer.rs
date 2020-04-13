@@ -10,8 +10,8 @@
  * file that was distributed with this source code.
  */
 
-use std::io::{BufRead, BufReader, Read, Write};
 use std::io::Result as IoResult;
+use std::io::{BufRead, BufReader, Read, Write};
 
 #[allow(non_snake_case)]
 pub mod Bytes {

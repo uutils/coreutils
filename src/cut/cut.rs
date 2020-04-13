@@ -203,6 +203,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
     0
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn cut_fields_delimiter<R: Read>(
     reader: R,
     ranges: &[Range],
@@ -288,6 +289,7 @@ fn cut_fields_delimiter<R: Read>(
     0
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     if let Some(ref o_delim) = opts.out_delimeter {
@@ -464,8 +466,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 )
             })
         }
-        (None, None, Some(field_ranges)) => list_to_ranges(&field_ranges[..], complement)
-            .and_then(|ranges| {
+        (None, None, Some(field_ranges)) => {
+            list_to_ranges(&field_ranges[..], complement).and_then(|ranges| {
                 let out_delim = match matches.opt_str("output-delimiter") {
                     Some(s) => {
                         if s.is_empty() {
@@ -488,7 +490,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                 "a value 2 characters or longer",
                                 "--delimiter",
                                 "-d"
-                            ).to_owned())
+                            ))
                         } else {
                             let delim = if delim.is_empty() {
                                 "\0".to_owned()
@@ -517,27 +519,30 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         },
                     )),
                 }
-            }),
+            })
+        }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
-            msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)")
-                .to_owned(),
+            msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)"),
         ),
-        _ => Err(msg_expects_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)").to_owned()),
+        _ => Err(msg_expects_one_of!(
+            "--fields (-f)",
+            "--chars (-c)",
+            "--bytes (-b)"
+        )),
     };
 
     let mode_parse = match mode_parse {
         Err(_) => mode_parse,
         Ok(mode) => match mode {
             Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("delimiter") => Err(
-                msg_opt_only_usable_if!("printing a sequence of fields", "--delimiter", "-d")
-                    .to_owned(),
+                msg_opt_only_usable_if!("printing a sequence of fields", "--delimiter", "-d"),
             ),
             Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("only-delimited") => {
                 Err(msg_opt_only_usable_if!(
                     "printing a sequence of fields",
                     "--only-delimited",
                     "-s"
-                ).to_owned())
+                ))
             }
             _ => Ok(mode),
         },

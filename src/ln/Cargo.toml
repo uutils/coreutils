@@ -2,7 +2,8 @@
 name = "ln"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_ln"
@@ -10,8 +11,8 @@ path = "ln.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "ln"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

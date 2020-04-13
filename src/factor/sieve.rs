@@ -68,6 +68,7 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn primes() -> PrimeSieve {
+        #[allow(clippy::trivially_copy_pass_by_ref)]
         fn deref(x: &u64) -> u64 {
             *x
         }
@@ -78,6 +79,7 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn odd_primes() -> PrimeSieve {
+        #[allow(clippy::trivially_copy_pass_by_ref)]
         fn deref(x: &u64) -> u64 {
             *x
         }
@@ -124,11 +126,11 @@ impl Wheel {
 
 /// The increments of a wheel of circumference 210
 /// (i.e., a wheel that skips all multiples of 2, 3, 5, 7)
-const WHEEL_INCS: &'static [u64] = &[
+const WHEEL_INCS: &[u64] = &[
     2, 4, 2, 4, 6, 2, 6, 4, 2, 4, 6, 6, 2, 6, 4, 2, 6, 4, 6, 8, 4, 2, 4, 2, 4, 8, 6, 4, 6, 2, 4, 6,
     2, 6, 6, 4, 2, 4, 6, 2, 6, 4, 2, 4, 2, 10, 2, 10,
 ];
-const INIT_PRIMES: &'static [u64] = &[2, 3, 5, 7];
+const INIT_PRIMES: &[u64] = &[2, 3, 5, 7];
 
 /// A min-heap of "infinite lists" of prime multiples, where a list is
 /// represented as (head, increment).

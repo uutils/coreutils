@@ -12,8 +12,8 @@
 //! * https://en.wikipedia.org/wiki/Shunting-yard_algorithm
 //!
 
-use tokens::Token;
 use onig::{Regex, RegexOptions, Syntax};
+use tokens::Token;
 
 type TokenStack = Vec<(usize, Token)>;
 pub type OperandsList = Vec<Box<ASTNode>>;
@@ -68,9 +68,9 @@ impl ASTNode {
 
     fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<ASTNode> {
         Box::new(ASTNode::Node {
-            token_idx: token_idx,
+            token_idx,
             op_type: op_type.into(),
-            operands: operands,
+            operands,
         })
     }
     fn new_leaf(token_idx: usize, value: &str) -> Box<ASTNode> {
@@ -85,25 +85,27 @@ impl ASTNode {
             ASTNode::Node { ref op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
-                    "+" => infix_operator_two_ints(|a: i64, b: i64| {
-                            checked_binop(|| a.checked_add(b), "+")
-                        }, &operand_values
+                    "+" => infix_operator_two_ints(
+                        |a: i64, b: i64| checked_binop(|| a.checked_add(b), "+"),
+                        &operand_values,
                     ),
-                    "-" => infix_operator_two_ints(|a: i64, b: i64| {
-                            checked_binop(|| a.checked_sub(b), "-")
-                        }, &operand_values
+                    "-" => infix_operator_two_ints(
+                        |a: i64, b: i64| checked_binop(|| a.checked_sub(b), "-"),
+                        &operand_values,
                     ),
-                    "*" => infix_operator_two_ints(|a: i64, b: i64| {
-                            checked_binop(|| a.checked_mul(b), "*")
-                        }, &operand_values
+                    "*" => infix_operator_two_ints(
+                        |a: i64, b: i64| checked_binop(|| a.checked_mul(b), "*"),
+                        &operand_values,
                     ),
-                    "/" => infix_operator_two_ints(|a: i64, b: i64| {
+                    "/" => infix_operator_two_ints(
+                        |a: i64, b: i64| {
                             if b == 0 {
                                 Err("division by zero".to_owned())
                             } else {
                                 checked_binop(|| a.checked_div(b), "/")
                             }
-                        }, &operand_values
+                        },
+                        &operand_values,
                     ),
                     "%" => infix_operator_two_ints(
                         |a: i64, b: i64| {
@@ -158,7 +160,7 @@ impl ASTNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let &ASTNode::Node { ref operands, .. } = self {
+        if let ASTNode::Node { ref operands, .. } = *self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
                 match operand.evaluate() {
@@ -219,6 +221,7 @@ fn maybe_dump_ast(result: &Result<Box<ASTNode>, String>) {
     }
 }
 
+#[allow(clippy::ptr_arg)]
 fn maybe_dump_rpn(rpn: &TokenStack) {
     use std::env;
     if let Ok(debug_var) = env::var("EXPR_DEBUG_RPN") {
@@ -298,17 +301,29 @@ fn push_token_to_either_stack(
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
     let result = match *token {
-        Token::Value { .. } => Ok(out_stack.push((token_idx, token.clone()))),
+        Token::Value { .. } => {
+            out_stack.push((token_idx, token.clone()));
+            Ok(())
+        }
 
-        Token::InfixOp { .. } => if op_stack.is_empty() {
-            Ok(op_stack.push((token_idx, token.clone())))
-        } else {
-            push_op_to_stack(token_idx, token, out_stack, op_stack)
-        },
+        Token::InfixOp { .. } => {
+            if op_stack.is_empty() {
+                op_stack.push((token_idx, token.clone()));
+                Ok(())
+            } else {
+                push_op_to_stack(token_idx, token, out_stack, op_stack)
+            }
+        }
 
-        Token::PrefixOp { .. } => Ok(op_stack.push((token_idx, token.clone()))),
+        Token::PrefixOp { .. } => {
+            op_stack.push((token_idx, token.clone()));
+            Ok(())
+        }
 
-        Token::ParOpen => Ok(op_stack.push((token_idx, token.clone()))),
+        Token::ParOpen => {
+            op_stack.push((token_idx, token.clone()));
+            Ok(())
+        }
 
         Token::ParClose => move_till_match_paren(out_stack, op_stack),
     };
@@ -316,6 +331,7 @@ fn push_token_to_either_stack(
     result
 }
 
+#[allow(clippy::ptr_arg)]
 fn maybe_dump_shunting_yard_step(
     token_idx: usize,
     token: &Token,
@@ -341,15 +357,18 @@ fn push_op_to_stack(
     out_stack: &mut TokenStack,
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
-    if let &Token::InfixOp {
+    if let Token::InfixOp {
         precedence: prec,
         left_assoc: la,
         ..
-    } = token
+    } = *token
     {
         loop {
             match op_stack.last() {
-                None => return Ok(op_stack.push((token_idx, token.clone()))),
+                None => {
+                    op_stack.push((token_idx, token.clone()));
+                    return Ok(());
+                }
 
                 Some(&(_, Token::ParOpen)) => {
                     op_stack.push((token_idx, token.clone()));
@@ -362,12 +381,14 @@ fn push_op_to_stack(
                         precedence: prev_prec,
                         ..
                     },
-                )) => if la && prev_prec >= prec || !la && prev_prec > prec {
-                    out_stack.push(op_stack.pop().unwrap())
-                } else {
-                    op_stack.push((token_idx, token.clone()));
-                    return Ok(());
-                },
+                )) => {
+                    if la && prev_prec >= prec || !la && prev_prec > prec {
+                        out_stack.push(op_stack.pop().unwrap())
+                    } else {
+                        op_stack.push((token_idx, token.clone()));
+                        return Ok(());
+                    }
+                }
 
                 Some(&(_, Token::PrefixOp { .. })) => {
                     op_stack.push((token_idx, token.clone()));
@@ -487,10 +508,7 @@ fn prefix_operator_index(values: &[String]) -> Result<String, String> {
     let haystack = &values[0];
     let needles = &values[1];
 
-    let mut current_idx = 0;
-    for ch_h in haystack.chars() {
-        current_idx += 1;
-
+    for (current_idx, ch_h) in haystack.chars().enumerate() {
         for ch_n in needles.chars() {
             if ch_n == ch_h {
                 return Ok(current_idx.to_string());

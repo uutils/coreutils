@@ -33,7 +33,7 @@ mod numeric;
 
 mod sieve;
 
-#[path = "../../mkmain.rs"]
+#[path = "../#common/mkmain.rs"]
 mod mkmain;
 
 // extended Euclid algorithm
@@ -80,9 +80,8 @@ fn main() {
 
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
     let n = args()
-        .skip(1)
-        .next()
-        .unwrap_or("1027".to_string())
+        .nth(1)
+        .unwrap_or_else(|| "1027".to_string())
         .parse::<usize>()
         .ok()
         .unwrap_or(1027);
@@ -115,7 +114,8 @@ fn main() {
         file,
         "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n",
         x
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]
@@ -131,12 +131,12 @@ fn test_inverter() {
 
 #[test]
 fn test_generator() {
-    let prime_10001 = Sieve::primes().skip(10000).next();
-    assert_eq!(prime_10001, Some(104743));
+    let prime_10001 = Sieve::primes().skip(10_000).next();
+    assert_eq!(prime_10001, Some(104_743));
 }
 
 const MAX_WIDTH: usize = 102;
-const PREAMBLE: &'static str = r##"/*
+const PREAMBLE: &str = r##"/*
 * This file is part of the uutils coreutils package.
 *
 * (c) kwantam <kwantam@gmail.com>
@@ -149,5 +149,6 @@ const PREAMBLE: &'static str = r##"/*
 // Please do not edit by hand. Instead, modify and
 // re-run src/factor/gen_tables.rs.
 
-pub const P_INVS_U64: &'static [(u64, u64, u64)] = &[
+#[allow(clippy::unreadable_literal)]
+pub const P_INVS_U64: &[(u64, u64, u64)] = &[
    "##;

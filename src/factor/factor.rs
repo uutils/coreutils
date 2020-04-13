@@ -20,12 +20,12 @@ extern crate uucore;
 
 use numeric::*;
 use rand::distributions::{Distribution, Uniform};
-use rand::{SeedableRng, thread_rng};
 use rand::rngs::SmallRng;
+use rand::{thread_rng, SeedableRng};
 use std::cmp::{max, min};
 use std::io::{stdin, BufRead};
-use std::num::Wrapping;
 use std::mem::swap;
+use std::num::Wrapping;
 
 mod numeric;
 
@@ -53,6 +53,7 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 fn rho_pollard_find_divisor(num: u64) -> u64 {
+    #![allow(clippy::many_single_char_names)]
     let range = Uniform::new(1, num);
     let mut rng = SmallRng::from_rng(&mut thread_rng()).unwrap();
     let mut x = range.sample(&mut rng);
@@ -154,7 +155,10 @@ fn print_factors(num: u64) {
 }
 
 fn print_factors_str(num_str: &str) {
-    if let Err(e) = num_str.parse::<u64>().and_then(|x| Ok(print_factors(x))) {
+    if let Err(e) = num_str.parse::<u64>().and_then(|x| {
+        print_factors(x);
+        Ok(())
+    }) {
         show_warning!("{}: {}", num_str, e);
     }
 }

@@ -18,8 +18,8 @@ use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::SeekFrom;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 #[macro_use]
@@ -31,7 +31,7 @@ const BLOCK_SIZE: usize = 512;
 const NAMESET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
-const PATTERNS: [&'static [u8]; 22] = [
+const PATTERNS: [&[u8]; 22] = [
     b"\x00",
     b"\xFF",
     b"\x55",
@@ -76,7 +76,7 @@ impl FilenameGenerator {
             indices.push(0);
         }
         FilenameGenerator {
-            name_len: name_len,
+            name_len,
             nameset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),
         }
@@ -137,12 +137,12 @@ impl<'a> BytesGenerator<'a> {
         };
 
         BytesGenerator {
-            total_bytes: total_bytes,
+            total_bytes,
             bytes_generated: Cell::new(0u64),
             block_size: BLOCK_SIZE,
-            exact: exact,
-            gen_type: gen_type,
-            rng: rng,
+            exact,
+            gen_type,
+            rng,
         }
     }
 }
@@ -290,7 +290,7 @@ fn show_help(opts: &getopts::Options) {
     println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
     println!("the files because it is common to operate on device files like /dev/hda,");
     println!("and those files usually should not be removed.");
-    println!("");
+    println!();
     println!(
         "CAUTION: Note that {} relies on a very important assumption:",
         NAME
@@ -302,20 +302,20 @@ fn show_help(opts: &getopts::Options) {
         NAME
     );
     println!("not effective, or is not guaranteed to be effective in all file system modes:");
-    println!("");
+    println!();
     println!("* log-structured or journaled file systems, such as those supplied with");
     println!("AIX and Solaris (and JFS, ReiserFS, XFS, Ext3, etc.)");
-    println!("");
+    println!();
     println!("* file systems that write redundant data and carry on even if some writes");
     println!("fail, such as RAID-based file systems");
-    println!("");
+    println!();
     println!("* file systems that make snapshots, such as Network Appliance's NFS server");
-    println!("");
+    println!();
     println!("* file systems that cache in temporary locations, such as NFS");
     println!("version 3 clients");
-    println!("");
+    println!();
     println!("* compressed file systems");
-    println!("");
+    println!();
     println!("In the case of ext3 file systems, the above disclaimer applies");
     println!(
         "(and {} is thus of limited effectiveness) only in data=journal mode,",
@@ -329,7 +329,7 @@ fn show_help(opts: &getopts::Options) {
     println!("Ext3 journaling modes can be changed by adding the data=something option");
     println!("to the mount options for a particular file system in the /etc/fstab file,");
     println!("as documented in the mount man page (man mount).");
-    println!("");
+    println!();
     println!("In addition, file system backups and remote mirrors may contain copies");
     println!("of the file that cannot be removed, and that will allow a shredded file");
     println!("to be recovered later.");
@@ -338,9 +338,7 @@ fn show_help(opts: &getopts::Options) {
 // TODO: Add support for all postfixes here up to and including EiB
 //       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    if size_str_opt.is_none() {
-        return None;
-    }
+    size_str_opt.as_ref()?;
 
     let mut size_str = size_str_opt.as_ref().unwrap().clone();
     // Immutably look at last character of size string
@@ -371,8 +369,8 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     Some(coeff * unit)
 }
 
-fn pass_name(pass_type: &PassType) -> String {
-    match *pass_type {
+fn pass_name(pass_type: PassType) -> String {
+    match pass_type {
         PassType::Random => String::from("random"),
         PassType::Pattern(bytes) => {
             let mut s: String = String::new();
@@ -426,8 +424,8 @@ fn wipe_file(
                 pass_sequence.push(PassType::Pattern(*p));
             }
         }
-        for i in 0..remainder {
-            pass_sequence.push(PassType::Pattern(PATTERNS[i]));
+        for pattern in PATTERNS.iter().take(remainder) {
+            pass_sequence.push(PassType::Pattern(pattern));
         }
         rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
 
@@ -453,7 +451,7 @@ fn wipe_file(
 
         for (i, pass_type) in pass_sequence.iter().enumerate() {
             if verbose {
-                let pass_name: String = pass_name(pass_type);
+                let pass_name: String = pass_name(*pass_type);
                 if total_passes.to_string().len() == 1 {
                     println!(
                         "{}: {}: pass {}/{} ({})... ",
@@ -475,7 +473,8 @@ fn wipe_file(
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
-            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed"); // Ignore failed writes; just keep trying
+            do_pass(&mut file, path, *pass_type, size, exact).expect("File write pass failed");
+            // Ignore failed writes; just keep trying
         }
     }
 
@@ -572,11 +571,8 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
     }
 
     let renamed_path: Option<PathBuf> = wipe_name(&path, verbose);
-    match renamed_path {
-        Some(rp) => {
-            fs::remove_file(rp)?;
-        }
-        None => (),
+    if let Some(rp) = renamed_path {
+        fs::remove_file(rp)?;
     }
 
     if verbose {

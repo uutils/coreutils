@@ -1,6 +1,5 @@
 //! Traits and enums dealing with Tokenization of printf Format String
 use itertools::PutBackN;
-#[allow(unused_must_use)]
 use std::iter::Peekable;
 use std::slice::Iter;
 use std::str::Chars;

@@ -15,8 +15,8 @@ extern crate getopts;
 extern crate uucore;
 
 use std::env;
-use std::path::{Path, PathBuf};
 use std::io;
+use std::path::{Path, PathBuf};
 
 static NAME: &str = "pwd";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -30,7 +30,8 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
             .as_path()
             .to_string_lossy()
             .trim_start_matches(r"\\?\"),
-    ).to_path_buf();
+    )
+    .to_path_buf();
 
     Ok(path_buf)
 }

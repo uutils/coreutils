@@ -1,7 +1,7 @@
+use formatteriteminfo::FormatterItemInfo;
+use parse_formats::ParsedFormatterItemInfo;
 use std::cmp;
 use std::slice::Iter;
-use parse_formats::ParsedFormatterItemInfo;
-use formatteriteminfo::FormatterItemInfo;
 
 /// Size in bytes of the max datatype. ie set to 16 for 128-bit numbers.
 const MAX_BYTES_PER_UNIT: usize = 8;
@@ -69,11 +69,11 @@ impl OutputInfo {
 
         OutputInfo {
             byte_size_line: line_bytes,
-            print_width_line: print_width_line,
-            byte_size_block: byte_size_block,
-            print_width_block: print_width_block,
-            spaced_formatters: spaced_formatters,
-            output_duplicates: output_duplicates,
+            print_width_line,
+            byte_size_block,
+            print_width_block,
+            spaced_formatters,
+            output_duplicates,
         }
     }
 

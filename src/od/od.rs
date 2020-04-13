@@ -16,36 +16,36 @@ extern crate half;
 #[macro_use]
 extern crate uucore;
 
-mod multifilereader;
-mod partialreader;
-mod peekreader;
 mod byteorder_io;
 mod formatteriteminfo;
-mod prn_int;
-mod prn_char;
-mod prn_float;
-mod parse_nrofbytes;
-mod parse_formats;
-mod parse_inputs;
-mod inputoffset;
 mod inputdecoder;
-mod output_info;
+mod inputoffset;
 #[cfg(test)]
 mod mockstream;
+mod multifilereader;
+mod output_info;
+mod parse_formats;
+mod parse_inputs;
+mod parse_nrofbytes;
+mod partialreader;
+mod peekreader;
+mod prn_char;
+mod prn_float;
+mod prn_int;
 
-use std::cmp;
 use byteorder_io::*;
+use formatteriteminfo::*;
+use inputdecoder::{InputDecoder, MemoryDecoder};
+use inputoffset::{InputOffset, Radix};
 use multifilereader::*;
+use output_info::OutputInfo;
+use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
+use parse_inputs::{parse_inputs, CommandLineInputs};
+use parse_nrofbytes::parse_number_of_bytes;
 use partialreader::*;
 use peekreader::*;
-use formatteriteminfo::*;
-use parse_nrofbytes::parse_number_of_bytes;
-use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use prn_char::format_ascii_dump;
-use parse_inputs::{parse_inputs, CommandLineInputs};
-use inputoffset::{InputOffset, Radix};
-use inputdecoder::{InputDecoder, MemoryDecoder};
-use output_info::OutputInfo;
+use std::cmp;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -224,7 +224,7 @@ impl OdOptions {
         let formats = match parse_format_flags(&args) {
             Ok(f) => f,
             Err(e) => {
-                return Err(format!("{}", e));
+                return Err(e);
             }
         };
 
@@ -260,7 +260,7 @@ impl OdOptions {
             Some(s) => {
                 let st = s.into_bytes();
                 if st.len() != 1 {
-                    return Err(format!("Radix must be one of [d, o, n, x]"));
+                    return Err("Radix must be one of [d, o, n, x]".to_string());
                 } else {
                     let radix: char =
                         *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
@@ -269,22 +269,22 @@ impl OdOptions {
                         'x' => Radix::Hexadecimal,
                         'o' => Radix::Octal,
                         'n' => Radix::NoPrefix,
-                        _ => return Err(format!("Radix must be one of [d, o, n, x]")),
+                        _ => return Err("Radix must be one of [d, o, n, x]".to_string()),
                     }
                 }
             }
         };
 
         Ok(OdOptions {
-            byte_order: byte_order,
-            skip_bytes: skip_bytes,
-            read_bytes: read_bytes,
-            label: label,
-            input_strings: input_strings,
-            formats: formats,
-            line_bytes: line_bytes,
-            output_duplicates: output_duplicates,
-            radix: radix,
+            byte_order,
+            skip_bytes,
+            read_bytes,
+            label,
+            input_strings,
+            formats,
+            line_bytes,
+            output_duplicates,
+            radix,
         })
     }
 }
@@ -379,7 +379,8 @@ where
                     memory_decoder.zero_out_buffer(length, max_used);
                 }
 
-                if !output_info.output_duplicates && length == line_bytes
+                if !output_info.output_duplicates
+                    && length == line_bytes
                     && memory_decoder.get_buffer(0) == &previous_bytes[..]
                 {
                     if !duplicate_line {
@@ -469,7 +470,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
             // lines of multi-format rasters.
             print!("{:>width$}", "", width = prefix.chars().count());
         }
-        print!("{}\n", output_text);
+        println!("{}", output_text);
     }
 }
 
@@ -478,7 +479,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader<'a>(
-    input_strings: &'a Vec<String>,
+    input_strings: &'a [String],
     skip_bytes: usize,
     read_bytes: Option<usize>,
 ) -> PeekReader<PartialReader<MultifileReader<'a>>> {
@@ -493,6 +494,5 @@ fn open_input_peek_reader<'a>(
 
     let mf = MultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
-    let input = PeekReader::new(pr);
-    input
+    PeekReader::new(pr)
 }

@@ -5,23 +5,21 @@ authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
 ]
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_cp"
 path = "cp.rs"
 
 [dependencies]
+clap = "2.32.0"
+filetime = "0.2"
 getopts = "0.2.18"
 libc = "0.2.42"
+quick-error = "1.2.3"
+uucore = { version = "0.0.2", features = ["fs"] }
 walkdir = "2.2.8"
-clap = "2.32.0"
-quick-error = "1.2.2"
-filetime = "0.2"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["fs"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
@@ -35,4 +33,4 @@ xattr="0.2.1"
 
 [[bin]]
 name = "cp"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

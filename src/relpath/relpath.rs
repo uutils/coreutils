@@ -108,12 +108,12 @@ fn version() {
 
 fn show_usage(opts: &getopts::Options) {
     version();
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [-d DIR] TO [FROM]", NAME);
     println!("  {} -V|--version", NAME);
     println!("  {} -h|--help", NAME);
-    println!("");
+    println!();
     print!(
         "{}",
         opts.usage(

@@ -14,8 +14,8 @@
 #[macro_use]
 extern crate uucore;
 
-use std::io::{stdin, BufRead, BufReader, Read};
 use std::fs::File;
+use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use std::str::from_utf8;
 
@@ -90,12 +90,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 }
             }
         }
-        None => if let Some(count) = matches.opt_str("c") {
-            match count.parse::<usize>() {
-                Ok(m) => settings.mode = FilterMode::Bytes(m),
-                Err(e) => {
-                    show_error!("invalid byte count '{}': {}", count, e);
-                    return 1;
+        None => {
+            if let Some(count) = matches.opt_str("c") {
+                match count.parse::<usize>() {
+                    Ok(m) => settings.mode = FilterMode::Bytes(m),
+                    Err(e) => {
+                        show_error!("invalid byte count '{}': {}", count, e);
+                        return 1;
+                    }
                 }
             }
         }
@@ -186,12 +188,16 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
 // TODO: handle errors on read
 fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
     match settings.mode {
-        FilterMode::Bytes(count) => for byte in reader.bytes().take(count) {
-            print!("{}", byte.unwrap() as char);
-        },
-        FilterMode::Lines(count) => for line in reader.lines().take(count) {
-            println!("{}", line.unwrap());
-        },
+        FilterMode::Bytes(count) => {
+            for byte in reader.bytes().take(count) {
+                print!("{}", byte.unwrap() as char);
+            }
+        }
+        FilterMode::Lines(count) => {
+            for line in reader.lines().take(count) {
+                println!("{}", line.unwrap());
+            }
+        }
     }
     true
 }

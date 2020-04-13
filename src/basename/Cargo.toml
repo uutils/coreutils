@@ -2,15 +2,16 @@
 name = "basename"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_basename"
 path = "basename.rs"
 
 [dependencies]
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "basename"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

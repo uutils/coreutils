@@ -60,11 +60,12 @@ impl UnescapedText {
     // dropped-in as a replacement.
     fn validate_iec(val: u32, eight_word: bool) {
         let mut preface = 'u';
-        let mut leading_zeros = 4;
-        if eight_word {
+        let leading_zeros = if eight_word {
             preface = 'U';
-            leading_zeros = 8;
-        }
+            8
+        } else {
+            4
+        };
         let err_msg = format!(
             "invalid universal character name {0}{1:02$x}",
             preface, val, leading_zeros
@@ -120,7 +121,7 @@ impl UnescapedText {
                     byte_vec.push(ch as u8);
                 }
             }
-            e @ _ => {
+            e => {
                 // only for hex and octal
                 // is byte encoding specified.
                 // otherwise, why not leave the door open
@@ -147,7 +148,7 @@ impl UnescapedText {
                     'u' | 'U' => {
                         let len = match e {
                             'u' => 4,
-                            'U' | _ => 8,
+                            /* 'U' | */ _ => 8,
                         };
                         let val = UnescapedText::base_to_u32(len, len, 16, it);
                         UnescapedText::validate_iec(val, false);
@@ -191,7 +192,7 @@ impl UnescapedText {
                         // lazy branch eval
                         // remember this fn could be called
                         // many times in a single exec through %b
-                        cli::flush_char(&ch);
+                        cli::flush_char(ch);
                         tmp_str.push(ch);
                     }
                     '\\' => {
@@ -202,7 +203,7 @@ impl UnescapedText {
                         // on non hex or octal escapes is costly
                         // then we can make it faster/more complex
                         // with as-necessary draining.
-                        if tmp_str.len() > 0 {
+                        if !tmp_str.is_empty() {
                             new_vec.extend(tmp_str.bytes());
                             tmp_str = String::new();
                         }
@@ -211,7 +212,7 @@ impl UnescapedText {
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {
                             if follow == '%' {
-                                cli::flush_char(&ch);
+                                cli::flush_char(ch);
                                 tmp_str.push(ch);
                             } else {
                                 it.put_back(follow);
@@ -224,18 +225,19 @@ impl UnescapedText {
                         }
                     }
                     _ => {
-                        cli::flush_char(&ch);
+                        cli::flush_char(ch);
                         tmp_str.push(ch);
                     }
                 }
             }
-            if tmp_str.len() > 0 {
+            if !tmp_str.is_empty() {
                 new_vec.extend(tmp_str.bytes());
             }
         }
-        match addchar {
-            true => Some(Box::new(new_text)),
-            false => None,
+        if addchar {
+            Some(Box::new(new_text))
+        } else {
+            None
         }
     }
 }

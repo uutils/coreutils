@@ -33,7 +33,7 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUFFER_LEN: usize = 1024;
 
 trait SymbolTranslator {
-    fn translate(&self, c: &char, prev_c: &char) -> Option<char>;
+    fn translate(&self, c: char, prev_c: char) -> Option<char>;
 }
 
 struct DeleteOperation {
@@ -45,16 +45,16 @@ impl DeleteOperation {
     fn new(set: ExpandSet, complement: bool) -> DeleteOperation {
         DeleteOperation {
             bset: set.map(|c| c as usize).collect(),
-            complement: complement,
+            complement,
         }
     }
 }
 
 impl SymbolTranslator for DeleteOperation {
-    fn translate(&self, c: &char, _prev_c: &char) -> Option<char> {
-        let uc = *c as usize;
+    fn translate(&self, c: char, _prev_c: char) -> Option<char> {
+        let uc = c as usize;
         if self.complement == self.bset.contains(uc) {
-            Some(*c)
+            Some(c)
         } else {
             None
         }
@@ -70,17 +70,17 @@ impl SqueezeOperation {
     fn new(squeeze_set: ExpandSet, complement: bool) -> SqueezeOperation {
         SqueezeOperation {
             squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement: complement,
+            complement,
         }
     }
 }
 
 impl SymbolTranslator for SqueezeOperation {
-    fn translate(&self, c: &char, prev_c: &char) -> Option<char> {
-        if *prev_c == *c && self.complement != self.squeeze_set.contains(*c as usize) {
+    fn translate(&self, c: char, prev_c: char) -> Option<char> {
+        if prev_c == c && self.complement != self.squeeze_set.contains(c as usize) {
             None
         } else {
-            Some(*c)
+            Some(c)
         }
     }
 }
@@ -100,19 +100,19 @@ impl DeleteAndSqueezeOperation {
         DeleteAndSqueezeOperation {
             delete_set: delete_set.map(|c| c as usize).collect(),
             squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement: complement,
+            complement,
         }
     }
 }
 
 impl SymbolTranslator for DeleteAndSqueezeOperation {
-    fn translate(&self, c: &char, prev_c: &char) -> Option<char> {
-        if self.complement != self.delete_set.contains(*c as usize)
-            || *prev_c == *c && self.squeeze_set.contains(*c as usize)
+    fn translate(&self, c: char, prev_c: char) -> Option<char> {
+        if self.complement != self.delete_set.contains(c as usize)
+            || prev_c == c && self.squeeze_set.contains(c as usize)
         {
             None
         } else {
-            Some(*c)
+            Some(c)
         }
     }
 }
@@ -140,8 +140,8 @@ impl TranslateOperation {
 }
 
 impl SymbolTranslator for TranslateOperation {
-    fn translate(&self, c: &char, _prev_c: &char) -> Option<char> {
-        Some(*self.translate_map.get(&(*c as usize)).unwrap_or(c))
+    fn translate(&self, c: char, _prev_c: char) -> Option<char> {
+        Some(*self.translate_map.get(&(c as usize)).unwrap_or(&c))
     }
 }
 
@@ -161,7 +161,7 @@ fn translate_input<T: SymbolTranslator>(
         {
             // isolation to make borrow checker happy
             let filtered = buf.chars().filter_map(|c| {
-                let res = translator.translate(&c, &prev_c);
+                let res = translator.translate(c, prev_c);
                 if res.is_some() {
                     prev_c = c;
                 }
@@ -178,10 +178,10 @@ fn translate_input<T: SymbolTranslator>(
 
 fn usage(opts: &Options) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [OPTIONS] SET1 [SET2]", NAME);
-    println!("");
+    println!();
     println!("{}", opts.usage("Translate or delete characters."));
 }
 

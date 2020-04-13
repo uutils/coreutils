@@ -2,6 +2,7 @@
 name = "stdbuf"
 version = "0.0.1"
 authors = []
+license = "MIT"
 build = "build.rs"
 
 [lib]
@@ -11,11 +12,11 @@ path = "stdbuf.rs"
 [dependencies]
 getopts = "0.2.18"
 tempdir = "0.3.7"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [build-dependencies]
 libstdbuf = { path="libstdbuf" }
 
 [[bin]]
 name = "stdbuf"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

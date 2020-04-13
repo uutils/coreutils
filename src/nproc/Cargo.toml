@@ -2,7 +2,8 @@
 name = "nproc"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_nproc"
@@ -12,8 +13,8 @@ path = "nproc.rs"
 getopts = "0.2.18"
 libc = "0.2.42"
 num_cpus = "1.10"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "nproc"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

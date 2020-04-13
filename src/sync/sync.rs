@@ -42,27 +42,29 @@ mod platform {
 mod platform {
     extern crate kernel32;
     extern crate winapi;
-    use std::mem;
-    use std::fs::OpenOptions;
-    use std::os::windows::prelude::*;
-    use uucore::wide::{FromWide, ToWide};
+    use self::winapi::shared::minwindef;
+    use self::winapi::shared::winerror;
+    use self::winapi::um::handleapi;
     use self::winapi::um::winbase;
     use self::winapi::um::winnt;
-    use self::winapi::shared::minwindef;
-    use self::winapi::um::handleapi;
-    use self::winapi::shared::winerror;
+    use std::fs::OpenOptions;
+    use std::mem;
+    use std::os::windows::prelude::*;
+    use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
         if kernel32::GetDriveTypeW(name_wide.as_ptr()) == winbase::DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
-                Ok(file) => if kernel32::FlushFileBuffers(file.as_raw_handle()) == 0 {
-                    crash!(
-                        kernel32::GetLastError() as i32,
-                        "failed to flush file buffer"
-                    );
-                },
+                Ok(file) => {
+                    if kernel32::FlushFileBuffers(file.as_raw_handle()) == 0 {
+                        crash!(
+                            kernel32::GetLastError() as i32,
+                            "failed to flush file buffer"
+                        );
+                    }
+                }
                 Err(e) => crash!(
                     e.raw_os_error().unwrap_or(1),
                     "failed to create volume handle"
@@ -72,6 +74,7 @@ mod platform {
     }
 
     unsafe fn find_first_volume() -> (String, winnt::HANDLE) {
+        #[allow(deprecated)]
         let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
         let handle = kernel32::FindFirstVolumeW(name.as_mut_ptr(), name.len() as minwindef::DWORD);
         if handle == handleapi::INVALID_HANDLE_VALUE {
@@ -87,6 +90,7 @@ mod platform {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
         loop {
+            #[allow(deprecated)]
             let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
             if kernel32::FindNextVolumeW(
                 next_volume_handle,
@@ -147,7 +151,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn version() {
     println!("{} (uutils) {}", NAME, VERSION);
     println!("The MIT License");
-    println!("");
+    println!();
     println!("Author -- Alexander Fomin.");
 }
 

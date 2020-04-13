@@ -12,8 +12,8 @@
 include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 
 use std::collections::hash_map::HashMap;
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
 
 extern crate uucore;
 
@@ -24,10 +24,11 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage(cmap: &UtilityMap) {
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage:");
     println!("  {} [util [arguments...]]\n", NAME);
     println!("Currently defined functions:");
+    #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = cmap.keys().map(|&s| s).collect();
     utils.sort();
     for util in utils {
@@ -50,8 +51,10 @@ fn main() {
         std::process::exit(uumain(args));
     }
 
-    if binary_as_util.ends_with("uutils") || binary_as_util.starts_with("uutils")
-        || binary_as_util.ends_with("busybox") || binary_as_util.starts_with("busybox")
+    if binary_as_util.ends_with("uutils")
+        || binary_as_util.starts_with("uutils")
+        || binary_as_util.ends_with("busybox")
+        || binary_as_util.starts_with("busybox")
     {
         args.remove(0);
     } else {
@@ -70,7 +73,7 @@ fn main() {
     }
 
     // try first arg as util name.
-    if args.len() >= 1 {
+    if !args.is_empty() {
         let util = &args[0][..];
 
         match umap.get(util) {

@@ -14,12 +14,12 @@ extern crate unicode_width;
 #[macro_use]
 extern crate uucore;
 
-use std::cmp;
-use std::io::{BufReader, BufWriter, Read};
-use std::fs::File;
-use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
+use std::cmp;
+use std::fs::File;
+use std::io::{stdin, stdout, Write};
+use std::io::{BufReader, BufWriter, Read};
 
 macro_rules! silent_unwrap(
     ($exp:expr) => (
@@ -57,6 +57,7 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")

@@ -1,7 +1,7 @@
 use std;
+use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::fs::File;
 use std::vec::Vec;
 
 pub enum InputSource<'a> {
@@ -36,7 +36,7 @@ impl<'b> MultifileReader<'b> {
     fn next_file(&mut self) {
         // loop retries with subsequent files if err - normally 'loops' once
         loop {
-            if self.ni.len() == 0 {
+            if self.ni.is_empty() {
                 self.curr_file = None;
                 break;
             }
@@ -125,8 +125,8 @@ impl<'b> HasError for MultifileReader<'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, ErrorKind, Read};
     use mockstream::*;
+    use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
     fn test_multi_file_reader_one_read() {

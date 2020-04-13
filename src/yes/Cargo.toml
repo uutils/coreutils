@@ -2,8 +2,9 @@
 name = "yes"
 version = "0.0.1"
 authors = []
+license = "MIT"
 description = "Repeatedly output a line with all specified STRING(s), or 'y'."
-build = "../../mkmain.rs"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_yes"
@@ -11,7 +12,7 @@ path = "yes.rs"
 
 [dependencies]
 clap = "2.32"
-uucore = { version = "0.0.1", features = ["zero-copy"] }
+uucore = { version = "0.0.2", features = ["zero-copy"] }
 
 [features]
 latency = []
@@ -19,4 +20,4 @@ default = []
 
 [[bin]]
 name = "yes"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -2,17 +2,18 @@
 name = "expand"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_expand"
 path = "expand.rs"
 
 [dependencies]
-unicode-width = "0.1.5"
 getopts = "0.2.18"
-uucore = "0.0.1"
+unicode-width = "0.1.5"
+uucore = "0.0.2"
 
 [[bin]]
 name = "expand"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

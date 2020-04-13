@@ -1,8 +1,8 @@
-use std::io;
 use byteorder_io::ByteOrder;
+use half::f16;
 use multifilereader::HasError;
 use peekreader::PeekRead;
-use half::f16;
+use std::io;
 
 /// Processes an input and provides access to the data read in various formats
 ///
@@ -43,12 +43,12 @@ impl<'a, I> InputDecoder<'a, I> {
         } // fast but uninitialized
 
         InputDecoder {
-            input: input,
+            input,
             data: bytes,
             reserved_peek_length: peek_length,
             used_normal_length: 0,
             used_peek_length: 0,
-            byte_order: byte_order,
+            byte_order,
         }
     }
 }
@@ -60,7 +60,8 @@ where
     /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
     /// MemoryDecoder providing access to the result or returns an i/o error.
     pub fn peek_read(&mut self) -> io::Result<MemoryDecoder> {
-        match self.input
+        match self
+            .input
             .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)
         {
             Ok((n, p)) => {
@@ -133,9 +134,9 @@ impl<'a> MemoryDecoder<'a> {
     /// Returns a u8/u16/u32/u64 from the internal buffer at position `start`.
     pub fn read_uint(&self, start: usize, byte_size: usize) -> u64 {
         match byte_size {
-            1 => self.data[start] as u64,
-            2 => self.byte_order.read_u16(&self.data[start..start + 2]) as u64,
-            4 => self.byte_order.read_u32(&self.data[start..start + 4]) as u64,
+            1 => u64::from(self.data[start]),
+            2 => u64::from(self.byte_order.read_u16(&self.data[start..start + 2])),
+            4 => u64::from(self.byte_order.read_u32(&self.data[start..start + 4])),
             8 => self.byte_order.read_u64(&self.data[start..start + 8]),
             _ => panic!("Invalid byte_size: {}", byte_size),
         }
@@ -147,7 +148,7 @@ impl<'a> MemoryDecoder<'a> {
             2 => f64::from(f16::from_bits(
                 self.byte_order.read_u16(&self.data[start..start + 2]),
             )),
-            4 => self.byte_order.read_f32(&self.data[start..start + 4]) as f64,
+            4 => f64::from(self.byte_order.read_f32(&self.data[start..start + 4])),
             8 => self.byte_order.read_f64(&self.data[start..start + 8]),
             _ => panic!("Invalid byte_size: {}", byte_size),
         }
@@ -157,9 +158,9 @@ impl<'a> MemoryDecoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
-    use peekreader::PeekReader;
     use byteorder_io::ByteOrder;
+    use peekreader::PeekReader;
+    use std::io::Cursor;
 
     #[test]
     fn smoke_test() {

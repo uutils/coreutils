@@ -10,7 +10,6 @@
  */
 
 /* last synced with: whoami (GNU coreutils) 8.22 */
-
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #![allow(dead_code)]
 
@@ -37,10 +36,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [OPTION]... [FILE]", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage("Output who is currently logged in according to FILE.")
@@ -67,7 +66,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn exec(filename: &str) {
     let mut users = Utmpx::iter_all_records()
         .read_from(filename)
-        .filter(|ut| ut.is_user_process())
+        .filter(Utmpx::is_user_process)
         .map(|ut| ut.user())
         .collect::<Vec<_>>();
 

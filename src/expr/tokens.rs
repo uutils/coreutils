@@ -58,10 +58,7 @@ impl Token {
     }
     fn is_a_number(&self) -> bool {
         match *self {
-            Token::Value { ref value, .. } => match value.parse::<i64>() {
-                Ok(_) => true,
-                Err(_) => false,
-            },
+            Token::Value { ref value, .. } => value.parse::<i64>().is_ok(),
             _ => false,
         }
     }
@@ -144,12 +141,7 @@ fn maybe_dump_tokens_acc(tokens_acc: &[(usize, Token)]) {
     }
 }
 
-fn push_token_if_not_escaped(
-    acc: &mut Vec<(usize, Token)>,
-    tok_idx: usize,
-    token: Token,
-    s: &str,
-) {
+fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, token: Token, s: &str) {
     // Smells heuristics... :(
     let prev_is_plus = match acc.last() {
         None => false,

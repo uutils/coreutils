@@ -1,11 +1,23 @@
 use formatteriteminfo::*;
 
 /// format string to print octal using `int_writer_unsigned`
-macro_rules! OCT { () => { " {:0width$o}" }}
+macro_rules! OCT {
+    () => {
+        " {:0width$o}"
+    };
+}
 /// format string to print hexadecimal using `int_writer_unsigned`
-macro_rules! HEX { () => { " {:0width$x}" }}
+macro_rules! HEX {
+    () => {
+        " {:0width$x}"
+    };
+}
 /// format string to print decimal using `int_writer_unsigned` or `int_writer_signed`
-macro_rules! DEC { () => { " {:width$}" }}
+macro_rules! DEC {
+    () => {
+        " {:width$}"
+    };
+}
 
 /// defines a static struct of type `FormatterItemInfo` called `$NAME`
 ///
@@ -15,9 +27,7 @@ macro_rules! DEC { () => { " {:width$}" }}
 macro_rules! int_writer_unsigned {
     ($NAME:ident, $byte_size:expr, $print_width:expr, $function:ident, $format_str:expr) => {
         fn $function(p: u64) -> String {
-            format!($format_str,
-                   p,
-                   width = $print_width - 1)
+            format!($format_str, p, width = $print_width - 1)
         }
 
         pub static $NAME: FormatterItemInfo = FormatterItemInfo {
@@ -25,7 +35,7 @@ macro_rules! int_writer_unsigned {
             print_width: $print_width,
             formatter: FormatWriter::IntWriter($function),
         };
-    }
+    };
 }
 
 /// defines a static struct of type `FormatterItemInfo` called `$NAME`
@@ -37,9 +47,7 @@ macro_rules! int_writer_signed {
     ($NAME:ident, $byte_size:expr, $print_width:expr, $function:ident, $format_str:expr) => {
         fn $function(p: u64) -> String {
             let s = sign_extend(p, $byte_size);
-            format!($format_str,
-                   s,
-                   width = $print_width - 1)
+            format!($format_str, s, width = $print_width - 1)
         }
 
         pub static $NAME: FormatterItemInfo = FormatterItemInfo {
@@ -47,7 +55,7 @@ macro_rules! int_writer_signed {
             print_width: $print_width,
             formatter: FormatWriter::IntWriter($function),
         };
-    }
+    };
 }
 
 /// Extends a signed number in `item` of `itembytes` bytes into a (signed) i64

@@ -86,11 +86,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
             0
         }
         _ => {
-            let mut res = true;
-            if matches.free.len() == 0 {
+            let mut res = if matches.free.is_empty() {
                 show_error!("missing operand\nTry {} --help for more information", NAME);
-                res = false;
-            }
+                false
+            } else {
+                true
+            };
             // free strings are path operands
             // FIXME: TCS, seems inefficient and overly verbose (?)
             for p in matches.free {
@@ -189,7 +190,7 @@ fn check_extra(path: &[String]) -> bool {
         }
     }
     // path length
-    if path.join("/").len() == 0 {
+    if path.join("/").is_empty() {
         writeln!(&mut std::io::stderr(), "empty file name");
         return false;
     }
@@ -230,26 +231,28 @@ fn check_default(path: &[String]) -> bool {
 }
 
 // check whether a path is or if other problems arise
-fn check_searchable(path: &String) -> bool {
+fn check_searchable(path: &str) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
-        Err(e) => if e.kind() == ErrorKind::NotFound {
-            true
-        } else {
-            writeln!(&mut std::io::stderr(), "{}", e);
-            false
-        },
+        Err(e) => {
+            if e.kind() == ErrorKind::NotFound {
+                true
+            } else {
+                writeln!(&mut std::io::stderr(), "{}", e);
+                false
+            }
+        }
     }
 }
 
 // check for a hyphen at the beginning of a path segment
-fn no_leading_hyphen(path_segment: &String) -> bool {
+fn no_leading_hyphen(path_segment: &str) -> bool {
     !path_segment.starts_with('-')
 }
 
 // check whether a path segment contains only valid (read: portable) characters
-fn check_portable_chars(path_segment: &String) -> bool {
+fn check_portable_chars(path_segment: &str) -> bool {
     let valid_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-".to_string();
     for ch in path_segment.chars() {
         if !valid_str.contains(ch) {

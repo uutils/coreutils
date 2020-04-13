@@ -16,8 +16,7 @@ use uucore::encoding::Format;
 mod base_common;
 
 static SYNTAX: &str = "[OPTION]... [FILE]";
-static SUMMARY: &str =
-    "Base32 encode or decode FILE, or standard input, to standard output.";
+static SUMMARY: &str = "Base32 encode or decode FILE, or standard input, to standard output.";
 static LONG_HELP: &str = "
  With no FILE, or when FILE is -, read standard input.
 

@@ -22,7 +22,7 @@ struct SeqOptions {
 }
 
 fn parse_float(mut s: &str) -> Result<f64, String> {
-    if s.starts_with("+") {
+    if s.starts_with('+') {
         s = &s[1..];
     }
     match s.parse() {
@@ -41,105 +41,96 @@ fn escape_sequences(s: &str) -> String {
 fn parse_options(args: Vec<String>, options: &mut SeqOptions) -> Result<Vec<String>, i32> {
     let mut seq_args = vec![];
     let mut iter = args.into_iter().skip(1);
-    loop {
-        match iter.next() {
-            Some(arg) => match &arg[..] {
-                "--help" | "-h" => {
-                    print_help();
-                    return Err(0);
-                }
-                "--version" | "-V" => {
-                    print_version();
-                    return Err(0);
-                }
-                "-s" | "--separator" => match iter.next() {
-                    Some(sep) => options.separator = sep,
-                    None => {
-                        show_error!("expected a separator after {}", arg);
-                        return Err(1);
-                    }
-                },
-                "-t" | "--terminator" => match iter.next() {
-                    Some(term) => options.terminator = Some(term),
-                    None => {
-                        show_error!("expected a terminator after '{}'", arg);
-                        return Err(1);
-                    }
-                },
-                "-w" | "--widths" => options.widths = true,
-                "--" => {
-                    seq_args.extend(iter);
-                    break;
-                }
-                _ => {
-                    if arg.len() > 1 && arg.chars().next().unwrap() == '-' {
-                        let argptr: *const String = &arg; // escape from the borrow checker
-                        let mut chiter = unsafe { &(*argptr)[..] }.chars().skip(1);
-                        let mut ch = ' ';
-                        while match chiter.next() {
-                            Some(m) => {
-                                ch = m;
-                                true
-                            }
-                            None => false,
-                        } {
-                            match ch {
-                                'h' => {
-                                    print_help();
-                                    return Err(0);
-                                }
-                                'V' => {
-                                    print_version();
-                                    return Err(0);
-                                }
-                                's' => match iter.next() {
-                                    Some(sep) => {
-                                        options.separator = sep;
-                                        let next = chiter.next();
-                                        if next.is_some() {
-                                            show_error!(
-                                                "unexpected character ('{}')",
-                                                next.unwrap()
-                                            );
-                                            return Err(1);
-                                        }
-                                    }
-                                    None => {
-                                        show_error!("expected a separator after {}", arg);
-                                        return Err(1);
-                                    }
-                                },
-                                't' => match iter.next() {
-                                    Some(term) => {
-                                        options.terminator = Some(term);
-                                        let next = chiter.next();
-                                        if next.is_some() {
-                                            show_error!(
-                                                "unexpected character ('{}')",
-                                                next.unwrap()
-                                            );
-                                            return Err(1);
-                                        }
-                                    }
-                                    None => {
-                                        show_error!("expected a terminator after {}", arg);
-                                        return Err(1);
-                                    }
-                                },
-                                'w' => options.widths = true,
-                                _ => {
-                                    seq_args.push(arg);
-                                    break;
-                                }
-                            }
-                        }
-                    } else {
-                        seq_args.push(arg);
-                    }
+    while let Some(arg) = iter.next() {
+        match &arg[..] {
+            "--help" | "-h" => {
+                print_help();
+                return Err(0);
+            }
+            "--version" | "-V" => {
+                print_version();
+                return Err(0);
+            }
+            "-s" | "--separator" => match iter.next() {
+                Some(sep) => options.separator = sep,
+                None => {
+                    show_error!("expected a separator after {}", arg);
+                    return Err(1);
                 }
             },
-            None => break,
-        }
+            "-t" | "--terminator" => match iter.next() {
+                Some(term) => options.terminator = Some(term),
+                None => {
+                    show_error!("expected a terminator after '{}'", arg);
+                    return Err(1);
+                }
+            },
+            "-w" | "--widths" => options.widths = true,
+            "--" => {
+                seq_args.extend(iter);
+                break;
+            }
+            _ => {
+                if arg.len() > 1 && arg.starts_with('-') {
+                    let argptr: *const String = &arg; // escape from the borrow checker
+                    let mut chiter = unsafe { &(*argptr)[..] }.chars().skip(1);
+                    let mut ch = ' ';
+                    while match chiter.next() {
+                        Some(m) => {
+                            ch = m;
+                            true
+                        }
+                        None => false,
+                    } {
+                        match ch {
+                            'h' => {
+                                print_help();
+                                return Err(0);
+                            }
+                            'V' => {
+                                print_version();
+                                return Err(0);
+                            }
+                            's' => match iter.next() {
+                                Some(sep) => {
+                                    options.separator = sep;
+                                    let next = chiter.next();
+                                    if let Some(n) = next {
+                                        show_error!("unexpected character ('{}')", n);
+                                        return Err(1);
+                                    }
+                                }
+                                None => {
+                                    show_error!("expected a separator after {}", arg);
+                                    return Err(1);
+                                }
+                            },
+                            't' => match iter.next() {
+                                Some(term) => {
+                                    options.terminator = Some(term);
+                                    let next = chiter.next();
+                                    if let Some(n) = next {
+                                        show_error!("unexpected character ('{}')", n);
+                                        return Err(1);
+                                    }
+                                }
+                                None => {
+                                    show_error!("expected a terminator after {}", arg);
+                                    return Err(1);
+                                }
+                            },
+                            'w' => options.widths = true,
+                            _ => {
+                                seq_args.push(arg);
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    seq_args.push(arg);
+                }
+            }
+        };
     }
     Ok(seq_args)
 }
@@ -189,11 +180,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         Ok(m) => m,
         Err(f) => return f,
     };
-    if free.len() < 1 || free.len() > 3 {
+    if free.is_empty() || free.len() > 3 {
         crash!(
             1,
             "too {} operands.\nTry '{} --help' for more information.",
-            if free.len() < 1 { "few" } else { "many" },
+            if free.is_empty() { "few" } else { "many" },
             NAME
         );
     }
@@ -233,7 +224,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     let last = {
         let slice = &free[free.len() - 1][..];
-        padding = cmp::max(padding, slice.find('.').unwrap_or(slice.len()));
+        padding = cmp::max(padding, slice.find('.').unwrap_or_else(|| slice.len()));
         match parse_float(slice) {
             Ok(n) => n,
             Err(s) => {
@@ -272,6 +263,7 @@ fn done_printing(next: f64, step: f64, last: f64) -> bool {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn print_seq(
     first: f64,
     step: f64,

@@ -9,43 +9,41 @@
 //
 
 extern crate getopts;
+#[cfg(unix)]
+extern crate isatty;
+extern crate number_prefix;
 extern crate term_grid;
 extern crate termsize;
 extern crate time;
 extern crate unicode_width;
-extern crate number_prefix;
-extern crate isatty;
-use isatty::stdout_isatty;
-use number_prefix::{Standalone, Prefixed, decimal_prefix};
-use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use time::{strftime, Timespec};
 
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
-
 #[macro_use]
 extern crate uucore;
-#[cfg(unix)]
-use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH,
-                   S_IXGRP, S_IXOTH, S_IXUSR};
 
-use std::fs;
-use std::fs::{DirEntry, FileType, Metadata};
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use isatty::stdout_isatty;
+use number_prefix::{decimal_prefix, Prefixed, Standalone};
 use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
-
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
+use std::fs;
+use std::fs::{DirEntry, FileType, Metadata};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(unix)]
-use unicode_width::UnicodeWidthStr;
-
+#[cfg(any(unix, target_os = "redox"))]
+use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use time::{strftime, Timespec};
+#[cfg(unix)]
+use unicode_width::UnicodeWidthStr;
+#[cfg(unix)]
+use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH, S_IXGRP, S_IXOTH, S_IXUSR};
 
 static NAME: &str = "ls";
 static SUMMARY: &str = "";
@@ -60,12 +58,13 @@ static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do
 
 #[cfg(unix)]
 lazy_static! {
-    static ref LS_COLORS: String = std::env::var("LS_COLORS").unwrap_or(DEFAULT_COLORS.to_string());
+    static ref LS_COLORS: String =
+        std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
     static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
-        let codes = LS_COLORS.split(":");
+        let codes = LS_COLORS.split(':');
         let mut map = HashMap::new();
         for c in codes {
-            let p: Vec<_> = c.split("=").collect();
+            let p: Vec<_> = c.split('=').collect();
             if p.len() == 2 {
                 map.insert(p[0], p[1]);
             }
@@ -160,7 +159,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
              directory.  This is especially useful when listing very large directories, \
              since not doing any sorting can be noticeably faster.",
         )
-        .optflagopt("", "color", "Color output based on file type.", "always|auto|never")
+        .optflagopt(
+            "",
+            "color",
+            "Color output based on file type.",
+            "always|auto|never",
+        )
         .parse(args);
 
     list(matches);
@@ -171,7 +175,7 @@ fn list(options: getopts::Matches) {
     let locs: Vec<String> = if options.free.is_empty() {
         vec![String::from(".")]
     } else {
-        options.free.iter().cloned().collect()
+        options.free.to_vec()
     };
 
     let mut files = Vec::<PathBuf>::new();
@@ -277,20 +281,17 @@ fn max(lhs: usize, rhs: usize) -> usize {
 fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
-    if !options.opt_present("a") && !options.opt_present("A") {
-        if name.starts_with('.') {
-            return false;
-        }
+    if !options.opt_present("a") && !options.opt_present("A") && name.starts_with('.') {
+        return false;
     }
     if options.opt_present("B") && name.ends_with('~') {
         return false;
     }
-    return true;
+    true
 }
 
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
-    let mut entries =
-        safe_unwrap!(fs::read_dir(dir).and_then(|e| e.collect::<Result<Vec<_>, _>>()));
+    let mut entries: Vec<_> = safe_unwrap!(fs::read_dir(dir).and_then(Iterator::collect));
 
     entries.retain(|e| should_display(e, options));
 
@@ -316,7 +317,7 @@ fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
 
 fn get_metadata(entry: &PathBuf, options: &getopts::Matches) -> std::io::Result<Metadata> {
     if options.opt_present("L") {
-        entry.metadata().or(entry.symlink_metadata())
+        entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
         entry.symlink_metadata()
     }
@@ -336,14 +337,14 @@ fn display_dir_entry_size(entry: &PathBuf, options: &getopts::Matches) -> (usize
 fn pad_left(string: String, count: usize) -> String {
     if count > string.len() {
         let pad = count - string.len();
-        let pad = String::from_utf8(vec![' ' as u8; pad]).unwrap();
+        let pad = String::from_utf8(vec![b' '; pad]).unwrap();
         format!("{}{}", pad, string)
     } else {
         string
     }
 }
 
-fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::Matches) {
+fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Matches) {
     if options.opt_present("long") || options.opt_present("numeric-uid-gid") {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -356,19 +357,17 @@ fn display_items(items: &Vec<PathBuf>, strip: Option<&Path>, options: &getopts::
         }
     } else {
         if !options.opt_present("1") {
-            let names = items
-                .iter()
-                .filter_map(|i| {
-                    let md = get_metadata(i, options);
-                    match md {
-                        Err(e) => {
-                            let filename = get_file_name(i, strip);
-                            show_error!("{}: {}", filename, e);
-                            None
-                        }
-                        Ok(md) => Some(display_file_name(&i, strip, &md, options)),
+            let names = items.iter().filter_map(|i| {
+                let md = get_metadata(i, options);
+                match md {
+                    Err(e) => {
+                        let filename = get_file_name(i, strip);
+                        show_error!("{}: {}", filename, e);
+                        None
                     }
-                });
+                    Ok(md) => Some(display_file_name(&i, strip, &md, options)),
+                }
+            });
 
             if let Some(size) = termsize::get() {
                 let mut grid = Grid::new(GridOptions {
@@ -454,7 +453,7 @@ fn display_uname(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("numeric-uid-gid") {
         metadata.uid().to_string()
     } else {
-        entries::uid2usr(metadata.uid()).unwrap_or(metadata.uid().to_string())
+        entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
     }
 }
 
@@ -463,7 +462,7 @@ fn display_group(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("numeric-uid-gid") {
         metadata.gid().to_string()
     } else {
-        entries::gid2grp(metadata.gid()).unwrap_or(metadata.gid().to_string())
+        entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
     }
 }
 
@@ -511,7 +510,7 @@ fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String 
     if options.opt_present("human-readable") {
         match decimal_prefix(metadata.len() as f64) {
             Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.2}{}", bytes, prefix).to_uppercase()
+            Prefixed(prefix, bytes) => format!("{:.2}{}", bytes, prefix).to_uppercase(),
         }
     } else {
         metadata.len().to_string()
@@ -533,7 +532,7 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
         Some(prefix) => name.strip_prefix(prefix).unwrap_or(name),
         None => name,
     };
-    if name.as_os_str().len() == 0 {
+    if name.as_os_str().is_empty() {
         name = Path::new(".");
     }
     name.to_string_lossy().into_owned()
@@ -595,12 +594,13 @@ fn color_name(name: String, typ: &str) -> String {
 
 #[cfg(unix)]
 macro_rules! has {
-    ($mode:expr, $perm:expr) => (
+    ($mode:expr, $perm:expr) => {
         $mode & ($perm as mode_t) != 0
-    )
+    };
 }
 
 #[cfg(unix)]
+#[allow(clippy::cognitive_complexity)]
 fn display_file_name(
     path: &Path,
     strip: Option<&Path>,
@@ -618,7 +618,7 @@ fn display_file_name(
         Some(val) => match val.as_ref() {
             "always" | "yes" | "force" => true,
             "auto" | "tty" | "if-tty" => stdout_isatty(),
-            "never" | "no" | "none" | _ => false,
+            /* "never" | "no" | "none" | */ _ => false,
         },
     };
     let classify = options.opt_present("classify");
@@ -697,7 +697,7 @@ fn display_file_name(
 
     Cell {
         contents: name,
-        width: width,
+        width,
     }
 }
 

@@ -1,5 +1,5 @@
-use std::str::from_utf8;
 use formatteriteminfo::*;
+use std::str::from_utf8;
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
@@ -30,7 +30,7 @@ fn format_item_a(p: u64) -> String {
     format!("{:>4}", A_CHRS.get(b as usize).unwrap_or(&"??"))
 }
 
-static C_CHRS: [&'static str; 128] = [
+static C_CHRS: [&str; 128] = [
     "\\0", "001", "002", "003", "004", "005", "006", "\\a", "\\b", "\\t", "\\n", "\\v", "\\f",
     "\\r", "016", "017", "020", "021", "022", "023", "024", "025", "026", "027", "030", "031",
     "032", "033", "034", "035", "036", "037", " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")",

@@ -43,6 +43,9 @@ fn hostid() {
         result = gethostid();
     }
 
-    result &= 0xffff_ffff;
+    #[allow(overflowing_literals)]
+    let mask = 0xffff_ffff;
+
+    result &= mask;
     println!("{:0>8x}", result);
 }

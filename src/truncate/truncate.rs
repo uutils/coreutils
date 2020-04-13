@@ -58,15 +58,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [OPTION]... FILE...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage("Shrink or extend the size of each file to the specified size.")
         );
-        print!(
+        println!(
             "
 SIZE is an integer with an optional prefix and optional unit.
 The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -83,8 +83,7 @@ file based on its current size:
     '<'  => at most
     '>'  => at least
     '/'  => round down to multiple of
-    '%'  => round up to multiple of
-"
+    '%'  => round up to multiple of"
         );
     } else if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
@@ -149,16 +148,20 @@ fn truncate(
                     TruncateMode::Reference => refsize,
                     TruncateMode::Extend => fsize + refsize,
                     TruncateMode::Reduce => fsize - refsize,
-                    TruncateMode::AtMost => if fsize > refsize {
-                        refsize
-                    } else {
-                        fsize
-                    },
-                    TruncateMode::AtLeast => if fsize < refsize {
-                        refsize
-                    } else {
-                        fsize
-                    },
+                    TruncateMode::AtMost => {
+                        if fsize > refsize {
+                            refsize
+                        } else {
+                            fsize
+                        }
+                    }
+                    TruncateMode::AtLeast => {
+                        if fsize < refsize {
+                            refsize
+                        } else {
+                            fsize
+                        }
+                    }
                     TruncateMode::RoundDown => fsize - fsize % refsize,
                     TruncateMode::RoundUp => fsize + fsize % refsize,
                 };
@@ -191,19 +194,21 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         };
         if slice.chars().last().unwrap().is_alphabetic() {
             slice = &slice[..slice.len() - 1];
-            if slice.len() > 0 && slice.chars().last().unwrap().is_alphabetic() {
+            if !slice.is_empty() && slice.chars().last().unwrap().is_alphabetic() {
                 slice = &slice[..slice.len() - 1];
             }
         }
         slice
-    }.to_owned();
+    }
+    .to_owned();
     let mut number: u64 = match bytes.parse() {
         Ok(num) => num,
         Err(e) => crash!(1, "'{}' is not a valid number: {}", size, e),
     };
     if size.chars().last().unwrap().is_alphabetic() {
         number *= match size.chars().last().unwrap().to_ascii_uppercase() {
-            'B' => match size.chars()
+            'B' => match size
+                .chars()
                 .nth(size.len() - 2)
                 .unwrap()
                 .to_ascii_uppercase()

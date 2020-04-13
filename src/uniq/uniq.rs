@@ -79,12 +79,12 @@ impl Uniq {
                 let mut i = 0;
                 while field < skip_fields && i < line.len() {
                     while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                        i = i + 1;
+                        i += 1;
                     }
                     while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                        i = i + 1;
+                        i += 1;
                     }
-                    field = field + 1;
+                    field += 1;
                 }
                 &line[i..]
             } else {
@@ -99,7 +99,7 @@ impl Uniq {
         if self.zero_terminated {
             0
         } else {
-            '\n' as u8
+            b'\n'
         }
     }
 
@@ -252,10 +252,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage(
@@ -263,7 +263,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  writing to OUTPUT (or standard output)."
             )
         );
-        println!("");
+        println!();
         println!(
             "Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
              You may want to sort the input first, or use 'sort -u' without '{0}'.\n",

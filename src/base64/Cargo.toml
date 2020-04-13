@@ -2,16 +2,16 @@
 name = "base64"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_base64"
 path = "base64.rs"
 
-[dependencies.uucore]
-version = "0.0.1"
-features = ["encoding"]
+[dependencies]
+uucore = { version = "0.0.2", features = ["encoding"] }
 
 [[bin]]
 name = "base64"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

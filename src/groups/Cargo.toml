@@ -2,16 +2,16 @@
 name = "groups"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_groups"
 path = "groups.rs"
 
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries"]
+[dependencies]
+uucore = { version = "0.0.2", features = ["entries"] }
 
 [[bin]]
 name = "groups"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -2,7 +2,8 @@
 name = "hashsum"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_hashsum"
@@ -19,8 +20,8 @@ regex-syntax = "0.6.7"
 sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "hashsum"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

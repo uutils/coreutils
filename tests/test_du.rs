@@ -82,7 +82,8 @@ fn test_du_soft_link() {
 
 #[cfg(target_os = "macos")]
 fn _du_soft_link(s: String) {
-    assert_eq!(s, "16\tsubdir/links\n");
+    // 'macos' host variants may have `du` output variation for soft links
+    assert!((s == "12\tsubdir/links\n") || (s == "16\tsubdir/links\n"));
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_soft_link(s: String) {

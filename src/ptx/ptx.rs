@@ -189,14 +189,12 @@ fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<S
     let mut files = Vec::new();
     if input_files.is_empty() {
         files.push("-");
-    } else {
-        if config.gnu_ext {
-            for file in input_files {
-                files.push(&file);
-            }
-        } else {
-            files.push(&input_files[0]);
+    } else if config.gnu_ext {
+        for file in input_files {
+            files.push(&file);
         }
+    } else {
+        files.push(&input_files[0]);
     }
     let mut lines_so_far: usize = 0;
     for filename in files {
@@ -248,8 +246,8 @@ fn create_word_set(
                     word = word.to_lowercase();
                 }
                 word_set.insert(WordRef {
-                    word: word,
-                    filename: String::from(file.clone()),
+                    word,
+                    filename: file.clone(),
                     global_line_nr: offs + count,
                     local_line_nr: count,
                     position: beg,
@@ -271,7 +269,7 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &str) -> String {
             Some(x) => (x.start(), x.end()),
             None => (0, 0),
         };
-        format!("{}", &line[beg..end])
+        line[beg..end].to_string()
     } else {
         String::new()
     }

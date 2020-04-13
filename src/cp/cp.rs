@@ -1,4 +1,5 @@
 #![crate_name = "uu_cp"]
+#![allow(clippy::missing_safety_doc)]
 
 /*
  * This file is part of the uutils coreutils package.
@@ -27,35 +28,42 @@ extern crate xattr;
 #[cfg(windows)]
 extern crate kernel32;
 #[cfg(windows)]
-use kernel32::GetFileInformationByHandle;
-#[cfg(windows)]
 use kernel32::CreateFileW;
+#[cfg(windows)]
+use kernel32::GetFileInformationByHandle;
 #[cfg(windows)]
 extern crate winapi;
 
-use std::mem;
-use std::ffi::CString;
 use clap::{App, Arg, ArgMatches};
+use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
+#[cfg(not(windows))]
+use std::ffi::CString;
+#[cfg(windows)]
+use std::ffi::OsStr;
 use std::fs;
-use std::io::{stdin, stdout, Write};
-use std::io;
-use std::path::{Path, PathBuf, StripPrefixError};
-use std::str::FromStr;
-use uucore::fs::{canonicalize, CanonicalizeMode};
-use walkdir::WalkDir;
-#[cfg(target_os = "linux")]
-use std::os::unix::io::IntoRawFd;
 #[cfg(target_os = "linux")]
 use std::fs::File;
 use std::fs::OpenOptions;
-use filetime::FileTime;
+use std::io;
+use std::io::{stdin, stdout, Write};
+use std::mem;
+#[cfg(target_os = "linux")]
+use std::os::unix::io::IntoRawFd;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+use std::path::{Path, PathBuf, StripPrefixError};
+use std::str::FromStr;
+use std::string::ToString;
+use uucore::fs::{canonicalize, CanonicalizeMode};
+use walkdir::WalkDir;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::missing_safety_doc)]
 ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
@@ -121,7 +129,7 @@ macro_rules! prompt_yes(
         crash_if_err!(1, stdout().flush());
         let mut s = String::new();
         match stdin().read_line(&mut s) {
-            Ok(_) => match s.char_indices().nth(0) {
+            Ok(_) => match s.char_indices().next() {
                 Some((_, x)) => x == 'y' || x == 'Y',
                 _ => false
             },
@@ -470,7 +478,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
     let paths: Vec<String> = matches
         .values_of("paths")
-        .map(|v| v.map(|p| p.to_string()).collect())
+        .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
     let (sources, target) = crash_if_err!(EXIT_ERR, parse_path_args(&paths, &options));
@@ -576,7 +584,8 @@ impl Options {
             }
         }
 
-        let recursive = matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_ALIAS)
+        let recursive = matches.is_present(OPT_RECURSIVE)
+            || matches.is_present(OPT_RECURSIVE_ALIAS)
             || matches.is_present(OPT_ARCHIVE);
 
         let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
@@ -585,7 +594,7 @@ impl Options {
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
         let target_dir = matches
             .value_of(OPT_TARGET_DIRECTORY)
-            .map(|v| v.to_string());
+            .map(ToString::to_string);
 
         // Parse attributes to preserve
         let preserve_attributes: Vec<Attribute> = if matches.is_present(OPT_PRESERVE) {
@@ -712,27 +721,30 @@ fn preserve_hardlinks(
     {
         if !source.is_dir() {
             unsafe {
-                let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
                 let inode: u64;
                 let nlinks: u64;
                 #[cfg(unix)]
                 {
+                    let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
                     let mut stat = mem::zeroed();
                     if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
                         return Err(format!(
                             "cannot stat {:?}: {}",
                             src_path,
                             std::io::Error::last_os_error()
-                        ).into());
+                        )
+                        .into());
                     }
                     inode = stat.st_ino as u64;
                     nlinks = stat.st_nlink as u64;
                 }
                 #[cfg(windows)]
                 {
+                    let src_path: Vec<u16> = OsStr::new(source).encode_wide().collect();
+                    #[allow(deprecated)]
                     let stat = mem::uninitialized();
                     let handle = CreateFileW(
-                        src_path.as_ptr() as *const u16,
+                        src_path.as_ptr(),
                         winapi::um::winnt::GENERIC_READ,
                         winapi::um::winnt::FILE_SHARE_READ,
                         std::ptr::null_mut(),
@@ -745,7 +757,8 @@ fn preserve_hardlinks(
                             "cannot get file information {:?}: {}",
                             source,
                             std::io::Error::last_os_error()
-                        ).into());
+                        )
+                        .into());
                     }
                     inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
                     nlinks = (*stat).nNumberOfLinks as u64;
@@ -758,7 +771,7 @@ fn preserve_hardlinks(
                     }
                 }
                 if !(*found_hard_link) && nlinks > 1 {
-                    hard_links.push((dest.clone().to_str().unwrap().to_string(), inode));
+                    hard_links.push((dest.to_str().unwrap().to_string(), inode));
                 }
             }
         }
@@ -826,7 +839,8 @@ fn construct_dest_path(
         return Err(format!(
             "cannot overwrite directory '{}' with non-directory",
             target.display()
-        ).into());
+        )
+        .into());
     }
 
     Ok(match *target_type {
@@ -940,7 +954,7 @@ impl OverwriteMode {
 
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("'{}' -> '{}'", source.display().to_string(), dest.display());
-    Ok(match *attribute {
+    match *attribute {
         #[cfg(unix)]
         Attribute::Mode => {
             let mode = fs::metadata(source).context(context)?.permissions().mode();
@@ -973,10 +987,11 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             }
             #[cfg(not(unix))]
             {
-                return Err(format!("XAttrs are only supported on unix.").into());
+                return Err("XAttrs are only supported on unix.".to_string().into());
             }
         }
-    })
+    };
+    Ok(())
 }
 
 #[cfg(not(windows))]
@@ -1072,8 +1087,8 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         CopyMode::Sparse => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
-                let src_metadata = fs::metadata(source.clone())?;
-                let dest_metadata = fs::metadata(dest.clone())?;
+                let src_metadata = fs::metadata(source)?;
+                let dest_metadata = fs::metadata(dest)?;
 
                 let src_time = src_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
@@ -1108,7 +1123,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     if options.reflink {
         #[cfg(not(target_os = "linux"))]
-        return Err(format!("--reflink is only supported on linux").into());
+        return Err("--reflink is only supported on linux".to_string().into());
 
         #[cfg(target_os = "linux")]
         {
@@ -1129,7 +1144,8 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
                             source,
                             dest,
                             std::io::Error::last_os_error()
-                        ).into());
+                        )
+                        .into());
                     } else {
                         return Ok(());
                     }
@@ -1158,7 +1174,8 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
         (&TargetType::File, true) => Err(format!(
             "cannot overwrite directory '{}' with non-directory",
             target.display()
-        ).into()),
+        )
+        .into()),
         _ => Ok(()),
     }
 }
@@ -1194,6 +1211,8 @@ fn test_cp_localize_to_target() {
             &Path::new("a/source/"),
             &Path::new("a/source/c.txt"),
             &Path::new("target/")
-        ).unwrap() == Path::new("target/c.txt")
+        )
+        .unwrap()
+            == Path::new("target/c.txt")
     )
 }

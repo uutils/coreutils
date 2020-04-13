@@ -9,8 +9,8 @@
  */
 
 use std::io::Result;
-use uucore::libc::geteuid;
 use uucore::entries::uid2usr;
+use uucore::libc::geteuid;
 
 pub unsafe fn getusername() -> Result<String> {
     // Get effective user id

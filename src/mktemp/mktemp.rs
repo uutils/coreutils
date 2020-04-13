@@ -17,9 +17,9 @@ extern crate tempfile;
 extern crate uucore;
 
 use std::env;
-use std::path::{is_separator, PathBuf};
-use std::mem::forget;
 use std::iter;
+use std::mem::forget;
+use std::path::{is_separator, PathBuf};
 
 use rand::Rng;
 use tempfile::NamedTempFileOptions;
@@ -179,14 +179,14 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
         rand::thread_rng().fill(bytes);
         for byte in bytes.iter_mut() {
             *byte = match *byte % 62 {
-                v @ 0..=9 => (v + '0' as u8),
-                v @ 10..=35 => (v - 10 + 'a' as u8),
-                v @ 36..=61 => (v - 36 + 'A' as u8),
+                v @ 0..=9 => (v + b'0'),
+                v @ 10..=35 => (v - 10 + b'a'),
+                v @ 36..=61 => (v - 36 + b'A'),
                 _ => unreachable!(),
             }
         }
     }
-    tmpdir.push(String::from(buf));
+    tmpdir.push(buf);
     println!("{}", tmpdir.display());
     0
 }

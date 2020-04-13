@@ -10,15 +10,15 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::libc::{self, gid_t, lchown};
 pub use uucore::entries;
 use uucore::fs::resolve_relative_path;
+use uucore::libc::{self, gid_t, lchown};
 
 extern crate walkdir;
 use walkdir::WalkDir;
 
-use std::io::Result as IOResult;
 use std::io::Error as IOError;
+use std::io::Result as IOResult;
 
 use std::fs;
 use std::fs::Metadata;
@@ -183,12 +183,12 @@ struct Chgrper {
 }
 
 macro_rules! unwrap {
-    ($m:expr, $e:ident, $err:block) => (
+    ($m:expr, $e:ident, $err:block) => {
         match $m {
             Ok(meta) => meta,
             Err($e) => $err,
         }
-    )
+    };
 }
 
 impl Chgrper {

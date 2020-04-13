@@ -48,7 +48,7 @@ struct Settings {
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
-            mode: FilterMode::Lines(10, '\n' as u8),
+            mode: FilterMode::Lines(10, b'\n'),
             sleep_msec: 1000,
             beginning: false,
             follow: false,
@@ -57,13 +57,14 @@ impl Default for Settings {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut settings: Settings = Default::default();
 
     // handle obsolete -number syntax
     let options = match obsolete(&args[1..]) {
         (args, Some(n)) => {
-            settings.mode = FilterMode::Lines(n, '\n' as u8);
+            settings.mode = FilterMode::Lines(n, b'\n');
             args
         }
         (args, None) => args,
@@ -114,16 +115,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     settings.follow = given_options.opt_present("f");
     if settings.follow {
-        match given_options.opt_str("s") {
-            Some(n) => {
-                let parsed: Option<u32> = n.parse().ok();
-                match parsed {
-                    Some(m) => settings.sleep_msec = m * 1000,
-                    None => {}
-                }
+        if let Some(n) = given_options.opt_str("s") {
+            let parsed: Option<u32> = n.parse().ok();
+            if let Some(m) = parsed {
+                settings.sleep_msec = m * 1000
             }
-            None => {}
-        };
+        }
     }
 
     if let Some(pid_str) = given_options.opt_str("pid") {
@@ -150,15 +147,15 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 slice = &slice[1..];
             }
             match parse_size(slice) {
-                Ok(m) => settings.mode = FilterMode::Lines(m, '\n' as u8),
+                Ok(m) => settings.mode = FilterMode::Lines(m, b'\n'),
                 Err(e) => {
-                    show_error!("{}", e.description());
+                    show_error!("{}", e.to_string());
                     return 1;
                 }
             }
         }
-        None => match given_options.opt_str("c") {
-            Some(n) => {
+        None => {
+            if let Some(n) = given_options.opt_str("c") {
                 let mut slice: &str = n.as_ref();
                 if slice.chars().next().unwrap_or('_') == '+' {
                     settings.beginning = true;
@@ -167,13 +164,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 match parse_size(slice) {
                     Ok(m) => settings.mode = FilterMode::Bytes(m),
                     Err(e) => {
-                        show_error!("{}", e.description());
+                        show_error!("{}", e.to_string());
                         return 1;
                     }
                 }
             }
-            None => {}
-        },
+        }
     };
 
     if given_options.opt_present("z") {
@@ -249,7 +245,7 @@ impl Error for ParseSizeErr {
 
 impl fmt::Display for ParseSizeErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", Error::description(self))
+        write!(f, "{}", self.to_string())
     }
 }
 
@@ -276,7 +272,7 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         1024u64
     };
 
-    let exponent = if size_slice.len() > 0 {
+    let exponent = if !size_slice.is_empty() {
         let mut has_suffix = true;
         let exp = match size_slice.chars().last().unwrap_or('_') {
             'K' | 'k' => 1u64,
@@ -316,7 +312,7 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         let value: Option<u64> = size_slice.parse().ok();
         value
             .map(|v| Ok(multiplier * v))
-            .unwrap_or(Err(ParseSizeErr::parse_failure(size_slice)))
+            .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
     }
 }
 
@@ -333,7 +329,7 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
         let current = options[a].clone();
         let current = current.as_bytes();
 
-        if current.len() > 1 && current[0] == '-' as u8 {
+        if current.len() > 1 && current[0] == b'-' {
             let len = current.len();
             for pos in 1..len {
                 // Ensure that the argument is only made out of digits
@@ -456,7 +452,7 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
     // Find the position in the file to start printing from.
     match settings.mode {
         FilterMode::Lines(mut count, delimiter) => {
-            backwards_thru_file(&mut file, size, &mut buf, delimiter, &mut |byte| {
+            backwards_thru_file(&file, size, &mut buf, delimiter, &mut |byte| {
                 if byte == delimiter {
                     count -= 1;
                     count == 0
@@ -476,7 +472,7 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
 
         let mut stdout = stdout();
         for b in &buf[0..bytes_read] {
-            print_byte(&mut stdout, b);
+            print_byte(&mut stdout, *b);
         }
 
         if bytes_read == 0 {
@@ -549,7 +545,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
             }
             let mut stdout = stdout();
             for datum in &ringbuf {
-                print_byte(&mut stdout, datum);
+                print_byte(&mut stdout, *datum);
             }
         }
     }
@@ -560,8 +556,8 @@ fn is_seekable<T: Seek>(file: &mut T) -> bool {
 }
 
 #[inline]
-fn print_byte<T: Write>(stdout: &mut T, ch: &u8) {
-    if let Err(err) = stdout.write(&[*ch]) {
+fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
+    if let Err(err) = stdout.write(&[ch]) {
         crash!(1, "{}", err);
     }
 }

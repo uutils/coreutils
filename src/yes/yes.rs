@@ -17,9 +17,9 @@ extern crate clap;
 extern crate uucore;
 
 use clap::Arg;
-use uucore::zero_copy::ZeroCopyWriter;
 use std::borrow::Cow;
 use std::io::{self, Write};
+use uucore::zero_copy::ZeroCopyWriter;
 
 // force a re-build whenever Cargo.toml changes
 const _CARGO_TOML: &str = include_str!("Cargo.toml");

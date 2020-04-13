@@ -95,9 +95,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") || matches.free.is_empty() {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage: {} [OPTION]... FILE...", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage(
@@ -164,14 +164,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
             let st = stat(path, !matches.opt_present("no-dereference"));
             let time = matches.opt_strs("time");
 
-            if !(matches.opt_present("a") || time.contains(&"access".to_owned())
+            if !(matches.opt_present("a")
+                || time.contains(&"access".to_owned())
                 || time.contains(&"atime".to_owned())
                 || time.contains(&"use".to_owned()))
             {
                 atime = st.0;
             }
 
-            if !(matches.opt_present("m") || time.contains(&"modify".to_owned())
+            if !(matches.opt_present("m")
+                || time.contains(&"modify".to_owned())
                 || time.contains(&"mtime".to_owned()))
             {
                 mtime = st.1;
@@ -182,10 +184,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if let Err(e) = set_symlink_file_times(path, atime, mtime) {
                 show_warning!("cannot touch '{}': {}", path, e);
             }
-        } else {
-            if let Err(e) = filetime::set_file_times(path, atime, mtime) {
-                show_warning!("cannot touch '{}': {}", path, e);
-            }
+        } else if let Err(e) = filetime::set_file_times(path, atime, mtime) {
+            show_warning!("cannot touch '{}': {}", path, e);
         }
     }
 

@@ -18,11 +18,10 @@ extern crate libc;
 extern crate uucore;
 
 use getopts::Options;
-use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use libc::{lstat, stat, unlink};
-use std::io::{Error, ErrorKind};
-use std::mem::uninitialized;
+use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
+use std::io::{Error, ErrorKind};
 
 static NAME: &str = "unlink";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -40,10 +39,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {} [FILE]... [OPTION]...", NAME);
-        println!("");
+        println!();
         println!("{}", opts.usage("Unlink the file at [FILE]."));
         return 0;
     }
@@ -71,13 +70,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let c_string = CString::new(matches.free[0].clone()).unwrap(); // unwrap() cannot fail, the string comes from argv so it cannot contain a \0.
 
     let st_mode = {
-        let mut buf: stat = unsafe { uninitialized() };
-        let result = unsafe {
-            lstat(
-                c_string.as_ptr(),
-                &mut buf as *mut stat,
-            )
-        };
+        #[allow(deprecated)]
+        let mut buf: stat = unsafe { std::mem::uninitialized() };
+        let result = unsafe { lstat(c_string.as_ptr(), &mut buf as *mut stat) };
 
         if result < 0 {
             crash!(

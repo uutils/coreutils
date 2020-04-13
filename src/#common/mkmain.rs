@@ -1,9 +1,9 @@
 use std::env;
-use std::io::Write;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 
-static TEMPLATE: &'static str = "\
+static TEMPLATE: &str = "\
 extern crate uu_@UTIL_CRATE@;
 extern crate uucore;
 

@@ -11,13 +11,13 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::utmpx::{self, time, Utmpx};
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
+use uucore::utmpx::{self, time, Utmpx};
 
 use std::borrow::Cow;
 use std::ffi::CStr;
-use std::path::PathBuf;
 use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
 
 static SYNTAX: &str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
 static SUMMARY: &str = "Print information about users who are currently logged in.";
@@ -60,7 +60,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "count",
         "all login names and number of users logged on",
     );
-    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "android"
+    ))]
     opts.optflag("r", "runlevel", "print current runlevel");
     opts.optflag("s", "short", "print only name, line, and time (default)");
     opts.optflag("t", "time", "print last system clock change");
@@ -128,97 +133,100 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let mut assumptions = true;
 
-    if matches.opt_present("a") {
-        need_boottime = true;
-        need_deadprocs = true;
-        need_login = true;
-        need_initspawn = true;
-        need_runlevel = true;
-        need_clockchange = true;
-        need_users = true;
-        include_idle = true;
-        include_exit = true;
-        assumptions = false;
-    }
+    #[allow(clippy::useless_let_if_seq)]
+    {
+        if matches.opt_present("a") {
+            need_boottime = true;
+            need_deadprocs = true;
+            need_login = true;
+            need_initspawn = true;
+            need_runlevel = true;
+            need_clockchange = true;
+            need_users = true;
+            include_idle = true;
+            include_exit = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("b") {
-        need_boottime = true;
-        assumptions = false;
-    }
+        if matches.opt_present("b") {
+            need_boottime = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("d") {
-        need_deadprocs = true;
-        include_idle = true;
-        include_exit = true;
-        assumptions = false;
-    }
+        if matches.opt_present("d") {
+            need_deadprocs = true;
+            include_idle = true;
+            include_exit = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("l") {
-        need_login = true;
-        include_idle = true;
-        assumptions = false;
-    }
+        if matches.opt_present("l") {
+            need_login = true;
+            include_idle = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("m") || matches.free.len() == 2 {
-        my_line_only = true;
-    }
+        if matches.opt_present("m") || matches.free.len() == 2 {
+            my_line_only = true;
+        }
 
-    if matches.opt_present("p") {
-        need_initspawn = true;
-        assumptions = false;
-    }
+        if matches.opt_present("p") {
+            need_initspawn = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("r") {
-        need_runlevel = true;
-        include_idle = true;
-        assumptions = false;
-    }
+        if matches.opt_present("r") {
+            need_runlevel = true;
+            include_idle = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("s") {
-        short_output = true;
-    }
+        if matches.opt_present("s") {
+            short_output = true;
+        }
 
-    if matches.opt_present("t") {
-        need_clockchange = true;
-        assumptions = false;
-    }
+        if matches.opt_present("t") {
+            need_clockchange = true;
+            assumptions = false;
+        }
 
-    if matches.opt_present("u") {
-        need_users = true;
-        include_idle = true;
-        assumptions = false;
-    }
+        if matches.opt_present("u") {
+            need_users = true;
+            include_idle = true;
+            assumptions = false;
+        }
 
-    if assumptions {
-        need_users = true;
-        short_output = true;
-    }
+        if assumptions {
+            need_users = true;
+            short_output = true;
+        }
 
-    if include_exit {
-        short_output = false;
-    }
+        if include_exit {
+            short_output = false;
+        }
 
-    if matches.free.len() > 2 {
-        disp_err!("{}", msg_wrong_number_of_arguments!());
-        exit!(1);
+        if matches.free.len() > 2 {
+            disp_err!("{}", msg_wrong_number_of_arguments!());
+            exit!(1);
+        }
     }
 
     let mut who = Who {
-        do_lookup: do_lookup,
-        short_list: short_list,
-        short_output: short_output,
-        include_idle: include_idle,
-        include_heading: include_heading,
-        include_mesg: include_mesg,
-        include_exit: include_exit,
-        need_boottime: need_boottime,
-        need_deadprocs: need_deadprocs,
-        need_login: need_login,
-        need_initspawn: need_initspawn,
-        need_clockchange: need_clockchange,
-        need_runlevel: need_runlevel,
-        need_users: need_users,
-        my_line_only: my_line_only,
+        do_lookup,
+        short_list,
+        short_output,
+        include_idle,
+        include_heading,
+        include_mesg,
+        include_exit,
+        need_boottime,
+        need_deadprocs,
+        need_login,
+        need_initspawn,
+        need_clockchange,
+        need_runlevel,
+        need_users,
+        my_line_only,
         has_records: false,
         args: matches.free,
     };
@@ -263,7 +271,8 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
                     "{:02}:{:02}",
                     seconds_idle / 3600,
                     (seconds_idle % 3600) / 60
-                ).into()
+                )
+                .into()
             }
         } else {
             " old ".into()
@@ -296,7 +305,12 @@ impl Who {
             #[allow(unused_assignments)]
             let mut res = false;
 
-            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "linux", target_os = "android"))]
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "linux",
+                target_os = "android"
+            ))]
             {
                 res = record == utmpx::RUN_LVL;
             }
@@ -311,7 +325,7 @@ impl Who {
         if self.short_list {
             let users = Utmpx::iter_all_records()
                 .read_from(f)
-                .filter(|ut| ut.is_user_process())
+                .filter(Utmpx::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
@@ -463,7 +477,7 @@ impl Who {
         let mut res = ut_host.splitn(2, ':');
         if let Some(h) = res.next() {
             if self.do_lookup {
-                buf.push(ut.canon_host().unwrap_or(h.to_owned()));
+                buf.push(ut.canon_host().unwrap_or_else(|_| h.to_owned()));
             } else {
                 buf.push(h.to_owned());
             }
@@ -486,6 +500,7 @@ impl Who {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn print_line(
         &self,
         user: &str,
@@ -525,14 +540,7 @@ impl Who {
     #[inline]
     fn print_heading(&self) {
         self.print_line(
-            "NAME",
-            ' ',
-            "LINE",
-            "TIME",
-            "IDLE",
-            "PID",
-            "COMMENT",
-            "EXIT",
+            "NAME", ' ', "LINE", "TIME", "IDLE", "PID", "COMMENT", "EXIT",
         );
     }
 }

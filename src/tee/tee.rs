@@ -80,7 +80,10 @@ fn options(args: &[String]) -> Result<Options> {
 
 fn exec(options: Options) -> Result<()> {
     match options.print_and_exit {
-        Some(text) => Ok(println!("{}", text)),
+        Some(text) => {
+            println!("{}", text);
+            Ok(())
+        }
         None => tee(options),
     }
 }
@@ -118,10 +121,7 @@ fn open(name: String, append: bool) -> Box<dyn Write> {
             Err(_) => Box::new(sink()),
         }
     };
-    Box::new(NamedWriter {
-        inner: inner,
-        path: path,
-    }) as Box<dyn Write>
+    Box::new(NamedWriter { inner, path }) as Box<dyn Write>
 }
 
 struct MultiWriter {

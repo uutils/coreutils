@@ -16,19 +16,19 @@ extern crate walkdir;
 #[macro_use]
 extern crate uucore;
 
+use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::Path;
-use remove_dir_all::remove_dir_all;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
-    InteractiveNone,
-    InteractiveOnce,
-    InteractiveAlways,
+    None,
+    Once,
+    Always,
 }
 
 struct Options {
@@ -84,20 +84,20 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         println!("{}", opts.usage("Remove (unlink) the FILE(s)."));
         println!("By default, rm does not remove directories.  Use the --recursive (-r)");
         println!("option to remove each listed directory, too, along with all of its contents");
-        println!("");
+        println!();
         println!("To remove a file whose name starts with a '-', for example '-foo',");
         println!("use one of these commands:");
         println!("rm -- -foo");
-        println!("");
+        println!();
         println!("rm ./-foo");
-        println!("");
+        println!();
         println!("Note that if you use rm to remove a file, it might be possible to recover");
         println!("some of its contents, given sufficient expertise and/or time.  For greater");
         println!("assurance that the contents are truly unrecoverable, consider using shred.");
@@ -109,21 +109,21 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     } else {
         let options = Options {
-            force: force,
+            force,
             interactive: {
                 if matches.opt_present("i") {
-                    InteractiveMode::InteractiveAlways
+                    InteractiveMode::Always
                 } else if matches.opt_present("I") {
-                    InteractiveMode::InteractiveOnce
+                    InteractiveMode::Once
                 } else if matches.opt_present("interactive") {
                     match &matches.opt_str("interactive").unwrap()[..] {
-                        "none" => InteractiveMode::InteractiveNone,
-                        "once" => InteractiveMode::InteractiveOnce,
-                        "always" => InteractiveMode::InteractiveAlways,
+                        "none" => InteractiveMode::None,
+                        "once" => InteractiveMode::Once,
+                        "always" => InteractiveMode::Always,
                         val => crash!(1, "Invalid argument to interactive ({})", val),
                     }
                 } else {
-                    InteractiveMode::InteractiveNone
+                    InteractiveMode::None
                 }
             },
             one_fs: matches.opt_present("one-file-system"),
@@ -132,7 +132,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             dir: matches.opt_present("dir"),
             verbose: matches.opt_present("verbose"),
         };
-        if options.interactive == InteractiveMode::InteractiveOnce
+        if options.interactive == InteractiveMode::Once
             && (options.recursive || matches.free.len() > 3)
         {
             let msg = if options.recursive {
@@ -181,7 +181,8 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                     false
                 }
             }
-        }.bitor(had_err);
+        }
+        .bitor(had_err);
     }
 
     had_err
@@ -192,7 +193,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::InteractiveAlways {
+        if options.interactive != InteractiveMode::Always {
             // we need the extra crate because apparently fs::remove_dir_all() does not function
             // correctly on Windows
             if let Err(e) = remove_dir_all(path) {
@@ -225,33 +226,33 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         }
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
+    } else if options.recursive {
+        show_error!("could not remove directory '{}'", path.display());
+        had_err = true;
     } else {
-        if options.recursive {
-            show_error!("could not remove directory '{}'", path.display());
-            had_err = true;
-        } else {
-            show_error!(
-                "could not remove directory '{}' (did you mean to pass '-r'?)",
-                path.display()
-            );
-            had_err = true;
-        }
+        show_error!(
+            "could not remove directory '{}' (did you mean to pass '-r'?)",
+            path.display()
+        );
+        had_err = true;
     }
 
     had_err
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    let response = if options.interactive == InteractiveMode::InteractiveAlways {
+    let response = if options.interactive == InteractiveMode::Always {
         prompt_file(path, true)
     } else {
         true
     };
     if response {
         match fs::remove_dir(path) {
-            Ok(_) => if options.verbose {
-                println!("removed '{}'", path.display());
-            },
+            Ok(_) => {
+                if options.verbose {
+                    println!("removed '{}'", path.display());
+                }
+            }
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -263,16 +264,18 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
-    let response = if options.interactive == InteractiveMode::InteractiveAlways {
+    let response = if options.interactive == InteractiveMode::Always {
         prompt_file(path, false)
     } else {
         true
     };
     if response {
         match fs::remove_file(path) {
-            Ok(_) => if options.verbose {
-                println!("removed '{}'", path.display());
-            },
+            Ok(_) => {
+                if options.verbose {
+                    println!("removed '{}'", path.display());
+                }
+            }
             Err(e) => {
                 show_error!("removing '{}': {}", path.display(), e);
                 return true;
@@ -299,7 +302,7 @@ fn prompt(msg: &str) -> bool {
     let stdin = stdin();
     let mut stdin = stdin.lock();
 
-    match stdin.read_until('\n' as u8, &mut buf) {
+    match stdin.read_until(b'\n', &mut buf) {
         Ok(x) if x > 0 => match buf[0] {
             b'y' | b'Y' => true,
             _ => false,
@@ -322,5 +325,6 @@ fn is_symlink_dir(metadata: &fs::Metadata) -> bool {
     pub type DWORD = c_ulong;
     pub const FILE_ATTRIBUTE_DIRECTORY: DWORD = 0x10;
 
-    metadata.file_type().is_symlink() && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    metadata.file_type().is_symlink()
+        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
 }
