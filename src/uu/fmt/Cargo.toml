@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_fmt"
-path = "fmt.rs"
+path = "src/fmt.rs"
 
 [dependencies]
 libc = "0.2.42"

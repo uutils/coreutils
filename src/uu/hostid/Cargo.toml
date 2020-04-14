@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_hostid"
-path = "hostid.rs"
+path = "src/hostid.rs"
 
 [dependencies]
 libc = "0.2.42"

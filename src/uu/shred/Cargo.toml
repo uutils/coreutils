@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_shred"
-path = "shred.rs"
+path = "src/shred.rs"
 
 [dependencies]
 filetime = "0.2.1"

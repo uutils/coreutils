@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_arch"
-path = "arch.rs"
+path = "src/arch.rs"
 
 [dependencies]
 platform-info = "0.0.1"

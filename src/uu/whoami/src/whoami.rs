@@ -19,7 +19,7 @@ extern crate uucore;
 mod platform;
 
 // force a re-build whenever Cargo.toml changes
-const _CARGO_TOML: &str = include_str!("Cargo.toml");
+const _CARGO_TOML: &str = include_str!("../Cargo.toml");
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let app = app_from_crate!();

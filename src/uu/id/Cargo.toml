@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_id"
-path = "id.rs"
+path = "src/id.rs"
 
 [dependencies]
 uucore = { version = "0.0.2", features = ["entries", "process"] }

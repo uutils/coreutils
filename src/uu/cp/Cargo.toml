@@ -10,7 +10,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_cp"
-path = "cp.rs"
+path = "src/cp.rs"
 
 [dependencies]
 clap = "2.32.0"

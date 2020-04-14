@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_seq"
-path = "seq.rs"
+path = "src/seq.rs"
 
 [dependencies]
 getopts = "0.2.18"

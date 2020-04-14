@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_expr"
-path = "expr.rs"
+path = "src/expr.rs"
 
 [dependencies]
 libc = "0.2.42"

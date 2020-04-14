@@ -8,7 +8,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_yes"
-path = "yes.rs"
+path = "src/yes.rs"
 
 [dependencies]
 clap = "2.32"

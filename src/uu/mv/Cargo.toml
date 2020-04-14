@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_mv"
-path = "mv.rs"
+path = "src/mv.rs"
 
 [dependencies]
 getopts = "0.2.18"

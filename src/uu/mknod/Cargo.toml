@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_mknod"
-path = "mknod.rs"
+path = "src/mknod.rs"
 
 [dependencies]
 getopts = "0.2.18"

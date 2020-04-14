@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_printf"
-path = "printf.rs"
+path = "src/printf.rs"
 
 [dependencies]
 itertools = "0.8.0"

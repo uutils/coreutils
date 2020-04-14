@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_pinky"
-path = "pinky.rs"
+path = "src/pinky.rs"
 
 [dependencies]
 uucore = { version = "0.0.2", features = ["utmpx", "entries"] }

@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_dircolors"
-path = "dircolors.rs"
+path = "src/dircolors.rs"
 
 [dependencies]
 glob = "0.3.0"

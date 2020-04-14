@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_kill"
-path = "kill.rs"
+path = "src/kill.rs"
 
 [dependencies]
 libc = "0.2.42"

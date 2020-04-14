@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tee"
-path = "tee.rs"
+path = "src/tee.rs"
 
 [dependencies]
 getopts = "0.2.18"

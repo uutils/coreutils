@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_nproc"
-path = "nproc.rs"
+path = "src/nproc.rs"
 
 [dependencies]
 getopts = "0.2.18"

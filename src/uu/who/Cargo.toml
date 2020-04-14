@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_who"
-path = "who.rs"
+path = "src/who.rs"
 
 [dependencies]
 uucore = { version = "0.0.2", features = ["utmpx"] }

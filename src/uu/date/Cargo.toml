@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_date"
-path = "date.rs"
+path = "src/date.rs"
 
 [dependencies]
 chrono = "0.4.4"

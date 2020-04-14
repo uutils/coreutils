@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tail"
-path = "tail.rs"
+path = "src/tail.rs"
 
 [dependencies]
 getopts = "0.2.18"

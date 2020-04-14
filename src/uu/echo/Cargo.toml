@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_echo"
-path = "echo.rs"
+path = "src/echo.rs"
 
 [dependencies]
 uucore = "0.0.2"

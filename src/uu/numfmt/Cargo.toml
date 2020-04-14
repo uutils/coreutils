@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_numfmt"
-path = "numfmt.rs"
+path = "src/numfmt.rs"
 
 [dependencies]
 getopts = "0.2.18"

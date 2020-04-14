@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_base64"
-path = "base64.rs"
+path = "src/base64.rs"
 
 [dependencies]
 uucore = { version = "0.0.2", features = ["encoding"] }

@@ -9,7 +9,7 @@ edition = "2018"
 
 [lib]
 name = "uu_env"
-path = "env.rs"
+path = "src/env.rs"
 
 [dependencies]
 clap = "2.33"

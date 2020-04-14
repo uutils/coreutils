@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_groups"
-path = "groups.rs"
+path = "src/groups.rs"
 
 [dependencies]
 uucore = { version = "0.0.2", features = ["entries"] }

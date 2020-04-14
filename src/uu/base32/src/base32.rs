@@ -12,7 +12,7 @@
 extern crate uucore;
 use uucore::encoding::Format;
 
-#[path = "../base64/base_common.rs"]
+#[path = "../../base64/src/base_common.rs"]
 mod base_common;
 
 static SYNTAX: &str = "[OPTION]... [FILE]";

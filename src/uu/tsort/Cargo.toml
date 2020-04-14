@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tsort"
-path = "tsort.rs"
+path = "src/tsort.rs"
 
 [dependencies]
 getopts = "0.2.18"

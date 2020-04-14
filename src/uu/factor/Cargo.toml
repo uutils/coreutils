@@ -6,7 +6,7 @@ license = "MIT"
 
 [lib]
 name = "uu_factor"
-path = "factor.rs"
+path = "src/factor.rs"
 
 [dependencies]
 rand = "0.5"

@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_unexpand"
-path = "unexpand.rs"
+path = "src/unexpand.rs"
 
 [dependencies]
 getopts = "0.2.18"

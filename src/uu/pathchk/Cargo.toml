@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_pathchk"
-path = "pathchk.rs"
+path = "src/pathchk.rs"
 
 [dependencies]
 getopts = "0.2.18"

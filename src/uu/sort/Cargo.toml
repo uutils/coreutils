@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_sort"
-path = "sort.rs"
+path = "src/sort.rs"
 
 [dependencies]
 getopts = "0.2.18"

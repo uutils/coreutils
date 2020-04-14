@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_ptx"
-path = "ptx.rs"
+path = "src/ptx.rs"
 
 [dependencies]
 aho-corasick = "0.7.3"

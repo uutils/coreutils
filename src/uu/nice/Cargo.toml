@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_nice"
-path = "nice.rs"
+path = "src/nice.rs"
 
 [dependencies]
 getopts = "0.2.18"

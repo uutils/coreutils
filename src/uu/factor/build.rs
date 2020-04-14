@@ -29,6 +29,7 @@ use std::u64::MAX as MAX_U64;
 use numeric::is_prime;
 
 #[cfg(test)]
+#[path = "src/numeric.rs"]
 mod numeric;
 
 mod sieve;

@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tr"
-path = "tr.rs"
+path = "src/tr.rs"
 
 [dependencies]
 bit-set = "0.5.0"

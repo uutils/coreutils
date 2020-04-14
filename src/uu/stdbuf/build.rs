@@ -28,7 +28,7 @@ fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let libstdbuf = format!(
-        "{}/../../{}/{}/deps/liblibstdbuf{}",
+        "{}/../../../{}/{}/deps/liblibstdbuf{}",
         manifest_dir,
         env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string()),
         profile,

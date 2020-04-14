@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_printenv"
-path = "printenv.rs"
+path = "src/printenv.rs"
 
 [dependencies]
 getopts = "0.2.18"

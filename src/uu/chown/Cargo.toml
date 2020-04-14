@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_chown"
-path = "chown.rs"
+path = "src/chown.rs"
 
 [dependencies]
 glob = "0.3.0"

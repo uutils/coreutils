@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_mkfifo"
-path = "mkfifo.rs"
+path = "src/mkfifo.rs"
 
 [dependencies]
 getopts = "0.2.18"

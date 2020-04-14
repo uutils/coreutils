@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_shuf"
-path = "shuf.rs"
+path = "src/shuf.rs"
 
 [dependencies]
 getopts = "0.2.18"

@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_truncate"
-path = "truncate.rs"
+path = "src/truncate.rs"
 
 [dependencies]
 getopts = "0.2.18"

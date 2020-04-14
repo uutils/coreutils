@@ -7,7 +7,7 @@ build = "build.rs"
 
 [lib]
 name = "uu_stdbuf"
-path = "stdbuf.rs"
+path = "src/stdbuf.rs"
 
 [dependencies]
 getopts = "0.2.18"
@@ -15,7 +15,7 @@ tempdir = "0.3.7"
 uucore = "0.0.2"
 
 [build-dependencies]
-libstdbuf = { path="libstdbuf" }
+libstdbuf = { path="src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"

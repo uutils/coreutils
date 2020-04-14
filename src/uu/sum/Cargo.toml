@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_sum"
-path = "sum.rs"
+path = "src/sum.rs"
 
 [dependencies]
 getopts = "0.2.18"

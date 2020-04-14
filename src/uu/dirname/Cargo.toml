@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_dirname"
-path = "dirname.rs"
+path = "src/dirname.rs"
 
 [dependencies]
 libc = "0.2.42"

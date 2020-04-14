@@ -6,7 +6,7 @@ license = "MIT"
 
 [lib]
 name = "uu_cksum"
-path = "cksum.rs"
+path = "src/cksum.rs"
 
 [dependencies]
 libc = "0.2.42"

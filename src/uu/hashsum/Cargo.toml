@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_hashsum"
-path = "hashsum.rs"
+path = "src/hashsum.rs"
 
 [dependencies]
 digest = "0.6.2"

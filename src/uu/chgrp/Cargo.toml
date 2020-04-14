@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_chgrp"
-path = "chgrp.rs"
+path = "src/chgrp.rs"
 
 [dependencies]
 uucore = { version = "0.0.2", features = ["entries", "fs"] }

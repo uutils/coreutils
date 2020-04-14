@@ -6,7 +6,7 @@ license = "MIT"
 
 [lib]
 name = "libstdbuf"
-path = "libstdbuf.rs"
+path = "src/libstdbuf.rs"
 # XXX: the rlib is just to prevent Cargo from spitting out a warning
 crate-type = ["cdylib", "rlib"]
 

@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_basename"
-path = "basename.rs"
+path = "src/basename.rs"
 
 [dependencies]
 uucore = "0.0.2"

@@ -7,7 +7,7 @@ build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_unlink"
-path = "unlink.rs"
+path = "src/unlink.rs"
 
 [dependencies]
 getopts = "0.2.18"
