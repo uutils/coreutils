@@ -12,7 +12,7 @@
 use std::char::from_u32;
 use std::cmp::min;
 use std::iter::Peekable;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 
 #[inline]
 fn unescape_char(c: char) -> char {
@@ -43,7 +43,7 @@ impl<'a> Iterator for Unescape<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.string.len() == 0 {
+        if self.string.is_empty() {
             return None;
         }
 
@@ -64,7 +64,7 @@ impl<'a> Iterator for Unescape<'a> {
 }
 
 pub struct ExpandSet<'a> {
-    range: Range<u32>,
+    range: RangeInclusive<u32>,
     unesc: Peekable<Unescape<'a>>,
 }
 
@@ -88,14 +88,13 @@ impl<'a> Iterator for ExpandSet<'a> {
 
         if let Some(first) = self.unesc.next() {
             // peek ahead
-            if self.unesc.peek() == Some(&'-') && match self.unesc.size_hint() {
-                (x, _) if x > 1 => true, // there's a range here; record it in our internal Range struct
-                _ => false,
-            } {
+            if self.unesc.peek() == Some(&'-') && self.unesc.size_hint().0 > 1 {
                 self.unesc.next(); // this is the '-'
                 let last = self.unesc.next().unwrap(); // this is the end of the range
 
-                self.range = first as u32 + 1..last as u32 + 1;
+                {
+                    self.range = first as u32 + 1..=last as u32;
+                }
             }
 
             return Some(first); // in any case, return the next char
@@ -109,7 +108,7 @@ impl<'a> ExpandSet<'a> {
     #[inline]
     pub fn new(s: &'a str) -> ExpandSet<'a> {
         ExpandSet {
-            range: 0..0,
+            range: 0..=0,
             unesc: Unescape { string: s }.peekable(),
         }
     }

@@ -38,9 +38,9 @@ static LONG_HELP: &str = "";
 
 #[derive(PartialEq)]
 enum NumberingMode {
-    NumberNone,
-    NumberNonEmpty,
-    NumberAll,
+    None,
+    NonEmpty,
+    All,
 }
 
 quick_error! {
@@ -100,7 +100,7 @@ struct OutputOptions {
 
 /// Represents an open file handle, stream, or other device
 struct InputHandle {
-    reader: Box<Read>,
+    reader: Box<dyn Read>,
     is_interactive: bool,
 }
 
@@ -147,11 +147,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(args);
 
     let number_mode = if matches.opt_present("b") {
-        NumberingMode::NumberNonEmpty
+        NumberingMode::NonEmpty
     } else if matches.opt_present("n") {
-        NumberingMode::NumberAll
+        NumberingMode::All
     } else {
-        NumberingMode::NumberNone
+        NumberingMode::None
     };
 
     let show_nonprint = matches.opts_present(&[
@@ -168,8 +168,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         files.push("-".to_owned());
     }
 
-    let can_write_fast = !(show_tabs || show_nonprint || show_ends || squeeze_blank
-        || number_mode != NumberingMode::NumberNone);
+    let can_write_fast = !(show_tabs
+        || show_nonprint
+        || show_ends
+        || squeeze_blank
+        || number_mode != NumberingMode::None);
 
     let success = if can_write_fast {
         write_fast(files).is_ok()
@@ -190,7 +193,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         write_lines(files, &options).is_ok()
     };
 
-    if success { 0 } else { 1 }
+    if success {
+        0
+    } else {
+        1
+    }
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -205,25 +212,13 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
 
     match metadata(path).context(path)?.file_type() {
         #[cfg(unix)]
-        ft if ft.is_block_device() =>
-        {
-            Ok(InputType::BlockDevice)
-        }
+        ft if ft.is_block_device() => Ok(InputType::BlockDevice),
         #[cfg(unix)]
-        ft if ft.is_char_device() =>
-        {
-            Ok(InputType::CharacterDevice)
-        }
+        ft if ft.is_char_device() => Ok(InputType::CharacterDevice),
         #[cfg(unix)]
-        ft if ft.is_fifo() =>
-        {
-            Ok(InputType::Fifo)
-        }
+        ft if ft.is_fifo() => Ok(InputType::Fifo),
         #[cfg(unix)]
-        ft if ft.is_socket() =>
-        {
-            Ok(InputType::Socket)
-        }
+        ft if ft.is_socket() => Ok(InputType::Socket),
         ft if ft.is_dir() => Ok(InputType::Directory),
         ft if ft.is_file() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
@@ -241,7 +236,7 @@ fn open(path: &str) -> CatResult<InputHandle> {
     if path == "-" {
         let stdin = stdin();
         return Ok(InputHandle {
-            reader: Box::new(stdin) as Box<Read>,
+            reader: Box::new(stdin) as Box<dyn Read>,
             is_interactive: is_stdin_interactive(),
         });
     }
@@ -253,14 +248,14 @@ fn open(path: &str) -> CatResult<InputHandle> {
             let socket = UnixStream::connect(path).context(path)?;
             socket.shutdown(Shutdown::Write).context(path)?;
             Ok(InputHandle {
-                reader: Box::new(socket) as Box<Read>,
+                reader: Box::new(socket) as Box<dyn Read>,
                 is_interactive: false,
             })
         }
         _ => {
             let file = File::open(path).context(path)?;
             Ok(InputHandle {
-                reader: Box::new(file) as Box<Read>,
+                reader: Box::new(file) as Box<dyn Read>,
                 is_interactive: false,
             })
         }
@@ -282,12 +277,14 @@ fn write_fast(files: Vec<String>) -> CatResult<()> {
 
     for file in files {
         match open(&file[..]) {
-            Ok(mut handle) => while let Ok(n) = handle.reader.read(&mut in_buf) {
-                if n == 0 {
-                    break;
+            Ok(mut handle) => {
+                while let Ok(n) = handle.reader.read(&mut in_buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    writer.write_all(&in_buf[..n]).context(&file[..])?;
                 }
-                writer.write_all(&in_buf[..n]).context(&file[..])?;
-            },
+            }
             Err(error) => {
                 writeln!(&mut stderr(), "{}", error)?;
                 error_count += 1;
@@ -357,7 +354,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
             if in_buf[pos] == b'\n' {
                 if !state.at_line_start || !options.squeeze_blank || !one_blank_kept {
                     one_blank_kept = true;
-                    if state.at_line_start && options.number == NumberingMode::NumberAll {
+                    if state.at_line_start && options.number == NumberingMode::All {
                         write!(&mut writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
                     }
@@ -371,7 +368,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
                 continue;
             }
             one_blank_kept = false;
-            if state.at_line_start && options.number != NumberingMode::NumberNone {
+            if state.at_line_start && options.number != NumberingMode::None {
                 write!(&mut writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
             }
@@ -421,10 +418,7 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     let mut count = 0;
     loop {
-        match in_buf
-            .iter()
-            .position(|c| *c == b'\n' || *c == b'\t')
-        {
+        match in_buf.iter().position(|c| *c == b'\n' || *c == b'\t') {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
                 if in_buf[p] == b'\n' {
@@ -452,13 +446,14 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
         }
         match byte {
             9 => writer.write_all(tab),
-            0...8 | 10...31 => writer.write_all(&[b'^', byte + 64]),
-            32...126 => writer.write_all(&[byte]),
+            0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
+            32..=126 => writer.write_all(&[byte]),
             127 => writer.write_all(&[b'^', byte - 64]),
-            128...159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
-            160...254 => writer.write_all(&[b'M', b'-', byte - 128]),
+            128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
+            160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
             _ => writer.write_all(&[b'M', b'-', b'^', 63]),
-        }.unwrap();
+        }
+        .unwrap();
         count += 1;
     }
     if count != in_buf.len() {

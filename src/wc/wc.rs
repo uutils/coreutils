@@ -40,7 +40,10 @@ impl Settings {
             show_max_line_length: matches.opt_present("L"),
         };
 
-        if settings.show_bytes || settings.show_chars || settings.show_lines || settings.show_words
+        if settings.show_bytes
+            || settings.show_chars
+            || settings.show_lines
+            || settings.show_words
             || settings.show_max_line_length
         {
             return settings;
@@ -90,10 +93,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage("Print newline, word and byte counts for each FILE")
@@ -121,10 +124,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-const CR: u8 = '\r' as u8;
-const LF: u8 = '\n' as u8;
-const SPACE: u8 = ' ' as u8;
-const TAB: u8 = '\t' as u8;
+const CR: u8 = b'\r';
+const LF: u8 = b'\n';
+const SPACE: u8 = b' ';
+const TAB: u8 = b'\t';
 const SYN: u8 = 0x16 as u8;
 const FF: u8 = 0x0C as u8;
 
@@ -254,13 +257,13 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     if result.title != "-" {
         println!(" {}", result.title);
     } else {
-        println!("");
+        println!();
     }
 }
 
-fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
+fn open(path: &str) -> StdResult<BufReader<Box<dyn Read + 'static>>, i32> {
     if "-" == path {
-        let reader = Box::new(stdin()) as Box<Read>;
+        let reader = Box::new(stdin()) as Box<dyn Read>;
         return Ok(BufReader::new(reader));
     }
 
@@ -270,7 +273,7 @@ fn open(path: &str) -> StdResult<BufReader<Box<Read + 'static>>, i32> {
     }
     match File::open(&fpath) {
         Ok(fd) => {
-            let reader = Box::new(fd) as Box<Read>;
+            let reader = Box::new(fd) as Box<dyn Read>;
             Ok(BufReader::new(reader))
         }
         Err(e) => {

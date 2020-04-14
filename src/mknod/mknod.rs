@@ -31,8 +31,7 @@ const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_
 #[inline(always)]
 fn makedev(maj: u64, min: u64) -> dev_t {
     // pick up from <sys/sysmacros.h>
-    ((min & 0xff) | ((maj & 0xfff) << 8) | (((min & !0xff)) << 12) | (((maj & !0xfff)) << 32))
-        as dev_t
+    ((min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)) as dev_t
 }
 
 #[cfg(windows)]
@@ -45,6 +44,7 @@ fn _makenod(path: CString, mode: mode_t, dev: dev_t) -> i32 {
     unsafe { libc::mknod(path.as_ptr(), mode, dev) }
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
@@ -130,7 +130,7 @@ for details about the options it supports.",
             // 'mknod /dev/rst0 character 18 0'.
             let ch = args[1]
                 .chars()
-                .nth(0)
+                .next()
                 .expect("Failed to get the first char");
 
             if ch == 'p' {

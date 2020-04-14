@@ -16,12 +16,12 @@ extern crate tempdir;
 extern crate uucore;
 
 use getopts::{Matches, Options};
-use tempdir::TempDir;
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
+use tempdir::TempDir;
 
 static NAME: &str = "stdbuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,7 +51,12 @@ enum OkMsg {
     Version,
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonflybsd"
+))]
 fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "so")
 }
@@ -61,7 +66,13 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd", target_os = "dragonflybsd", target_os = "macos")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonflybsd",
+    target_os = "macos"
+)))]
 fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
@@ -73,8 +84,7 @@ fn print_version() {
 fn print_usage(opts: &Options) {
     let brief = "Run COMMAND, with modified buffering operations for its standard streams\n \
                  Mandatory arguments to long options are mandatory for short options too.";
-    let explanation =
-        "If MODE is 'L' the corresponding stream will be line buffered.\n \
+    let explanation = "If MODE is 'L' the corresponding stream will be line buffered.\n \
          This option is invalid with standard input.\n\n \
          If MODE is '0' the corresponding stream will be unbuffered.\n\n \
          Otherwise MODE is a number which may be followed by one of the following:\n\n \
@@ -86,15 +96,15 @@ fn print_usage(opts: &Options) {
          Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
          and are thus unaffected by 'stdbuf' settings.\n";
     println!("{} {}", NAME, VERSION);
-    println!("");
+    println!();
     println!("Usage: stdbuf OPTION... COMMAND");
-    println!("");
+    println!();
     println!("{}\n{}", opts.usage(brief), explanation);
 }
 
 fn parse_size(size: &str) -> Option<u64> {
     let ext = size.trim_start_matches(|c: char| c.is_digit(10));
-    let num = size.trim_end_matches(|c: char| c.is_alphabetic());
+    let num = size.trim_end_matches(char::is_alphabetic);
     let mut recovered = num.to_owned();
     recovered.push_str(ext);
     if recovered != size {
@@ -238,7 +248,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         stderr: BufferType::Default,
     };
     let mut command_idx: i32 = -1;
-    for i in 1..args.len() + 1 {
+    for i in 1..=args.len() {
         match parse_options(&args[1..i], &mut options, &opts) {
             Ok(OkMsg::Buffering) => {
                 command_idx = (i as i32) - 1;
@@ -279,9 +289,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
     match process.wait() {
         Ok(status) => match status.code() {
-            Some(i) => return i,
+            Some(i) => i,
             None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
         },
         Err(e) => crash!(1, "{}", e),
-    };
+    }
 }

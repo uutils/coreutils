@@ -1,6 +1,5 @@
+#[cfg(target_os = "linux")]
 use common::util::*;
-
-
 
 #[cfg(target_os = "linux")]
 #[test]
@@ -22,7 +21,15 @@ fn test_boot() {
 #[test]
 fn test_heading() {
     for opt in vec!["-H"] {
-        new_ucmd!().arg(opt).run().stdout_is(expected_result(opt));
+        // allow whitespace variation
+        // * minor whitespace differences occur between platform built-in outputs; specfically number of TABs between "TIME" and "COMMENT" may be variant
+        let actual = new_ucmd!().arg(opt).run().stdout;
+        let expect = expected_result(opt);
+        println!("actual: {:?}", actual);
+        println!("expect: {:?}", expect);
+        let v_actual: Vec<&str> = actual.split_whitespace().collect();
+        let v_expect: Vec<&str> = expect.split_whitespace().collect();
+        assert_eq!(v_actual, v_expect);
     }
 }
 
@@ -68,5 +75,10 @@ fn test_all() {
 
 #[cfg(target_os = "linux")]
 fn expected_result(arg: &str) -> String {
-    TestScenario::new(util_name!()).cmd_keepenv(util_name!()).env("LANGUAGE", "C").args(&[arg]).run().stdout
+    TestScenario::new(util_name!())
+        .cmd_keepenv(util_name!())
+        .env("LANGUAGE", "C")
+        .args(&[arg])
+        .run()
+        .stdout
 }

@@ -14,8 +14,8 @@ extern crate chrono;
 extern crate clap;
 extern crate uucore;
 
-use chrono::{DateTime, FixedOffset, Local, Offset};
 use chrono::offset::Utc;
+use chrono::{DateTime, FixedOffset, Local, Offset};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -137,7 +137,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         // Iterate over all dates - whether it's a single date or a file.
-        let dates: Box<Iterator<Item = _>> = match settings.date_source {
+        let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
             DateSource::Custom(ref input) => {
                 let date = parse_date(input.clone());
                 let iter = std::iter::once(date);
@@ -210,12 +210,11 @@ fn parse_cli(args: Vec<String>) -> Settings {
              "set time described by STRING")
             (@arg utc: -u --utc --universal
              "print or set Coordinated Universal Time (UTC)"))
-
     // TODO: Decide whether this is appropriate.
     //   The GNU date command has an explanation of all formatting options,
     //   but the `chrono` crate has a few differences (most notably, the %Z option)
     // (after_help: include_str!("usage.txt")))
-        .get_matches_from(args);
+    .get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of("custom_format") {
         let form = form[1..].into();

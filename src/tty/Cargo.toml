@@ -2,7 +2,8 @@
 name = "tty"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_tty"
@@ -11,11 +12,8 @@ path = "tty.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["fs"]
+uucore = { version = "0.0.2", features = ["fs"] }
 
 [[bin]]
 name = "tty"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

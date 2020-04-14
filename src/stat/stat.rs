@@ -19,29 +19,31 @@ pub use fsext::*;
 extern crate uucore;
 use uucore::entries;
 
-use std::{cmp, fs, iter};
+use std::borrow::Cow;
+use std::convert::AsRef;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::borrow::Cow;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
-use std::convert::AsRef;
+use std::{cmp, fs, iter};
 
 macro_rules! check_bound {
-    ($str: ident, $bound:expr, $beg: expr, $end: expr) => (
+    ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
             return Err(format!("‘{}’: invalid directive", &$str[$beg..$end]));
         }
-
-    )
+    };
 }
 macro_rules! fill_string {
-    ($str: ident, $c: expr, $cnt: expr) => (
-        iter::repeat($c).take($cnt).map(|c| $str.push(c)).all(|_| true)
-    )
+    ($str: ident, $c: expr, $cnt: expr) => {
+        iter::repeat($c)
+            .take($cnt)
+            .map(|c| $str.push(c))
+            .all(|_| true)
+    };
 }
 macro_rules! extend_digits {
-    ($str: expr, $min: expr) => (
+    ($str: expr, $min: expr) => {
         if $min > $str.len() {
             let mut pad = String::with_capacity($min);
             fill_string!(pad, '0', $min - $str.len());
@@ -50,10 +52,10 @@ macro_rules! extend_digits {
         } else {
             $str.into()
         }
-    )
+    };
 }
 macro_rules! pad_and_print {
-    ($result: ident, $str: ident, $left: expr, $width: expr, $padding: expr) => (
+    ($result: ident, $str: ident, $left: expr, $width: expr, $padding: expr) => {
         if $str.len() < $width {
             if $left {
                 $result.push_str($str.as_ref());
@@ -66,7 +68,7 @@ macro_rules! pad_and_print {
             $result.push_str($str.as_ref());
         }
         print!("{}", $result);
-    )
+    };
 }
 macro_rules! print_adjusted {
     ($str: ident, $left: expr, $width: expr, $padding: expr) => {
@@ -82,13 +84,13 @@ macro_rules! print_adjusted {
             field_width -= $prefix.len();
         }
         pad_and_print!(result, $str, $left, field_width, $padding);
-    }
+    };
 }
 
-static NAME: &'static str = "stat";
-static VERSION: &'static str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "stat";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const MOUNT_INFO: &'static str = "/etc/mtab";
+const MOUNT_INFO: &str = "/etc/mtab";
 pub const F_ALTER: u8 = 1;
 pub const F_ZERO: u8 = 1 << 1;
 pub const F_LEFT: u8 = 1 << 2;
@@ -133,12 +135,12 @@ impl ScanUtil for str {
         let mut chars = self.chars();
         let mut i = 0;
         match chars.next() {
-            Some('-') | Some('+') | Some('0'...'9') => i += 1,
+            Some('-') | Some('+') | Some('0'..='9') => i += 1,
             _ => return None,
         }
-        while let Some(c) = chars.next() {
+        for c in chars {
             match c {
-                '0'...'9' => i += 1,
+                '0'..='9' => i += 1,
                 _ => break,
             }
         }
@@ -155,10 +157,10 @@ impl ScanUtil for str {
             16 => 2,
             _ => return None,
         };
-        let mut chars = self.chars().enumerate();
+        let chars = self.chars().enumerate();
         let mut res = 0_u32;
         let mut offset = 0_usize;
-        while let Some((i, c)) = chars.next() {
+        for (i, c) in chars {
             if i >= count {
                 break;
             }
@@ -183,7 +185,7 @@ impl ScanUtil for str {
     }
 }
 
-pub fn group_num<'a>(s: &'a str) -> Cow<'a, str> {
+pub fn group_num(s: &str) -> Cow<str> {
     assert!(s.chars().all(char::is_numeric));
     if s.len() < 4 {
         return s.into();
@@ -209,6 +211,7 @@ pub struct Stater {
     default_dev_tokens: Vec<Token>,
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn print_it(arg: &str, otype: OutputType, flag: u8, width: usize, precision: i32) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
@@ -369,12 +372,9 @@ impl Stater {
                     let mut precision = -1_i32;
                     let mut j = i;
 
-                    match fmtstr[j..].scan_num::<usize>() {
-                        Some((field_width, offset)) => {
-                            width = field_width;
-                            j += offset;
-                        }
-                        None => (),
+                    if let Some((field_width, offset)) = fmtstr[j..].scan_num::<usize>() {
+                        width = field_width;
+                        j += offset;
                     }
                     check_bound!(fmtstr, bound, old, j);
 
@@ -396,9 +396,9 @@ impl Stater {
 
                     i = j;
                     tokens.push(Token::Directive {
-                        width: width,
-                        flag: flag,
-                        precision: precision,
+                        width,
+                        flag,
+                        precision,
                         format: chars[i],
                     })
                 }
@@ -422,7 +422,7 @@ impl Stater {
                                     tokens.push(Token::Char('x'));
                                 }
                             }
-                            '0'...'7' => {
+                            '0'..='7' => {
                                 let (c, offset) = fmtstr[i..].scan_char(8).unwrap();
                                 tokens.push(Token::Char(c));
                                 i += offset - 1;
@@ -458,7 +458,7 @@ impl Stater {
         let fmtstr = if matches.opt_present("printf") {
             matches.opt_str("printf").expect("Invalid format string")
         } else {
-            matches.opt_str("format").unwrap_or("".to_owned())
+            matches.opt_str("format").unwrap_or_else(|| "".to_owned())
         };
 
         let use_printf = matches.opt_present("printf");
@@ -478,12 +478,12 @@ impl Stater {
             None
         } else {
             let reader = BufReader::new(
-                File::open(MOUNT_INFO).expect(&format!("Failed to read {}", MOUNT_INFO)),
+                File::open(MOUNT_INFO).unwrap_or_else(|_| panic!("Failed to read {}", MOUNT_INFO)),
             );
             let mut mount_list = reader
                 .lines()
-                .filter_map(|s| s.ok())
-                .filter_map(|line| line.split_whitespace().nth(1).map(|s| s.to_owned()))
+                .filter_map(Result::ok)
+                .filter_map(|line| line.split_whitespace().nth(1).map(ToOwned::to_owned))
                 .collect::<Vec<String>>();
             // Reverse sort. The longer comes first.
             mount_list.sort_by(|a, b| b.cmp(a));
@@ -492,12 +492,12 @@ impl Stater {
 
         Ok(Stater {
             follow: matches.opt_present("dereference"),
-            showfs: showfs,
+            showfs,
             from_user: !fmtstr.is_empty(),
             files: matches.free,
-            default_tokens: default_tokens,
-            default_dev_tokens: default_dev_tokens,
-            mount_list: mount_list,
+            default_tokens,
+            default_dev_tokens,
+            mount_list,
         })
     }
 
@@ -507,7 +507,7 @@ impl Stater {
             Err(_) => return None,
         };
         if let Some(ref mount_list) = self.mount_list {
-            for root in mount_list.into_iter() {
+            for root in mount_list.iter() {
                 if path.starts_with(root) {
                     return Some(root.clone());
                 }
@@ -541,10 +541,10 @@ impl Stater {
                             &self.default_dev_tokens
                         };
 
-                    for t in tokens.into_iter() {
-                        match t {
-                            &Token::Char(c) => print!("{}", c),
-                            &Token::Directive {
+                    for t in tokens.iter() {
+                        match *t {
+                            Token::Char(c) => print!("{}", c),
+                            Token::Directive {
                                 flag,
                                 width,
                                 precision,
@@ -608,7 +608,7 @@ impl Stater {
                                     // group name of owner
                                     'G' => {
                                         arg = entries::gid2grp(meta.gid())
-                                            .unwrap_or("UNKNOWN".to_owned());
+                                            .unwrap_or_else(|_| "UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
                                     // number of hard links
@@ -683,7 +683,7 @@ impl Stater {
                                     // user name of owner
                                     'U' => {
                                         arg = entries::uid2usr(meta.uid())
-                                            .unwrap_or("UNKNOWN".to_owned());
+                                            .unwrap_or_else(|_| "UNKNOWN".to_owned());
                                         otype = OutputType::Str;
                                     }
 
@@ -750,10 +750,10 @@ impl Stater {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
-                    for t in tokens.into_iter() {
-                        match t {
-                            &Token::Char(c) => print!("{}", c),
-                            &Token::Directive {
+                    for t in tokens.iter() {
+                        match *t {
+                            Token::Char(c) => print!("{}", c),
+                            Token::Directive {
                                 flag,
                                 width,
                                 precision,

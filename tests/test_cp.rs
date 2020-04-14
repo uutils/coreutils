@@ -2,25 +2,26 @@ use common::util::*;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
-static TEST_EXISTING_FILE:           &str = "existing_file.txt";
-static TEST_HELLO_WORLD_SOURCE:      &str = "hello_world.txt";
-static TEST_HELLO_WORLD_DEST:        &str = "copy_of_hello_world.txt";
-static TEST_HOW_ARE_YOU_SOURCE:      &str = "how_are_you.txt";
-static TEST_HOW_ARE_YOU_DEST:        &str = "hello_dir/how_are_you.txt";
-static TEST_COPY_TO_FOLDER:          &str = "hello_dir/";
-static TEST_COPY_TO_FOLDER_FILE:     &str = "hello_dir/hello_world.txt";
-static TEST_COPY_FROM_FOLDER:        &str = "hello_dir_with_file/";
-static TEST_COPY_FROM_FOLDER_FILE:   &str = "hello_dir_with_file/hello_world.txt";
-static TEST_COPY_TO_FOLDER_NEW:      &str = "hello_dir_new/";
+static TEST_EXISTING_FILE: &str = "existing_file.txt";
+static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
+static TEST_HELLO_WORLD_DEST: &str = "copy_of_hello_world.txt";
+static TEST_HOW_ARE_YOU_SOURCE: &str = "how_are_you.txt";
+static TEST_HOW_ARE_YOU_DEST: &str = "hello_dir/how_are_you.txt";
+static TEST_COPY_TO_FOLDER: &str = "hello_dir/";
+static TEST_COPY_TO_FOLDER_FILE: &str = "hello_dir/hello_world.txt";
+static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
+static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
+static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new/";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
 
 #[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-                     .arg(TEST_HELLO_WORLD_DEST)
-                     .run();
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .run();
 
     // Check that the exit code represents a successful copy.
     let exit_success = result.success;
@@ -30,11 +31,11 @@ fn test_cp_cp() {
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
-
 #[test]
 fn test_cp_existing_target() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
         .run();
 
@@ -47,11 +48,11 @@ fn test_cp_existing_target() {
     assert!(!at.file_exists(&*format!("{}~", TEST_EXISTING_FILE)));
 }
 
-
 #[test]
 fn test_cp_duplicate_files() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .run();
@@ -61,11 +62,11 @@ fn test_cp_duplicate_files() {
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
-
 #[test]
 fn test_cp_multiple_files_target_is_file() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
         .run();
@@ -77,7 +78,8 @@ fn test_cp_multiple_files_target_is_file() {
 #[test]
 fn test_cp_directory_not_recursive() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_COPY_TO_FOLDER)
+    let result = ucmd
+        .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
 
@@ -85,11 +87,11 @@ fn test_cp_directory_not_recursive() {
     assert!(result.stderr.contains("omitting directory"));
 }
 
-
 #[test]
 fn test_cp_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .run();
@@ -134,14 +136,16 @@ fn test_cp_with_dirs() {
     let at = &scene.fixtures;
 
     //using -t option
-    let result_to_dir = scene.ucmd()
+    let result_to_dir = scene
+        .ucmd()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .run();
     assert!(result_to_dir.success);
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 
-    let result_from_dir = scene.ucmd()
+    let result_from_dir = scene
+        .ucmd()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
@@ -152,7 +156,8 @@ fn test_cp_with_dirs() {
 #[test]
 fn test_cp_arg_target_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("-t")
         .arg(TEST_COPY_TO_FOLDER)
         .run();
@@ -164,7 +169,8 @@ fn test_cp_arg_target_directory() {
 #[test]
 fn test_cp_arg_no_target_directory() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("-v")
         .arg("-T")
         .arg(TEST_COPY_TO_FOLDER)
@@ -177,7 +183,8 @@ fn test_cp_arg_no_target_directory() {
 #[test]
 fn test_cp_arg_interactive() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("-i")
         .pipe_in("N\n")
@@ -188,12 +195,13 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(target_os="unix")]
+#[cfg(target_os = "unix")]
 fn test_cp_arg_link() {
     use std::os::linux::fs::MetadataExt;
 
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--link")
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
@@ -205,7 +213,8 @@ fn test_cp_arg_link() {
 #[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--symbolic-link")
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
@@ -214,11 +223,11 @@ fn test_cp_arg_symlink() {
     assert!(at.is_symlink(TEST_HELLO_WORLD_DEST));
 }
 
-
 #[test]
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--no-clobber")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .run();
@@ -234,11 +243,16 @@ fn test_cp_arg_force() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     // create dest without write permissions
-    let mut permissions = at.make_file(TEST_HELLO_WORLD_DEST).metadata().unwrap().permissions();
+    let mut permissions = at
+        .make_file(TEST_HELLO_WORLD_DEST)
+        .metadata()
+        .unwrap()
+        .permissions();
     permissions.set_readonly(true);
     set_permissions(at.plus(TEST_HELLO_WORLD_DEST), permissions).unwrap();
 
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--force")
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
@@ -260,11 +274,16 @@ fn test_cp_arg_remove_destination() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     // create dest without write permissions
-    let mut permissions = at.make_file(TEST_HELLO_WORLD_DEST).metadata().unwrap().permissions();
+    let mut permissions = at
+        .make_file(TEST_HELLO_WORLD_DEST)
+        .metadata()
+        .unwrap()
+        .permissions();
     permissions.set_readonly(true);
     set_permissions(at.plus(TEST_HELLO_WORLD_DEST), permissions).unwrap();
 
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--remove-destination")
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
@@ -277,21 +296,26 @@ fn test_cp_arg_remove_destination() {
 fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--backup")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .run();
 
     assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert_eq!(at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)), "How are you?\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
 }
 
 #[test]
 fn test_cp_arg_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--suffix")
         .arg(".bak")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -299,5 +323,8 @@ fn test_cp_arg_suffix() {
 
     assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert_eq!(at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)), "How are you?\n");
+    assert_eq!(
+        at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
 }

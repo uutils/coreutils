@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_combine_pairs_of_lines() {
     new_ucmd!()

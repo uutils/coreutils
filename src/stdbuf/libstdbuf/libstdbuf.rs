@@ -9,7 +9,7 @@ use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
 
-cpp!{{
+cpp! {{
     #include <cstdio>
 
     extern "C" {
@@ -55,6 +55,8 @@ fn set_buffer(stream: *mut FILE, value: &str) {
     }
 }
 
+/// # Safety
+/// ToDO ... (safety note)
 #[no_mangle]
 pub unsafe extern "C" fn __stdbuf() {
     if let Ok(val) = env::var("_STDBUF_E") {

@@ -14,10 +14,10 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
+use std::cmp::{min, Ordering};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
-use std::cmp::{min, Ordering};
-use clap::{App, Arg};
 
 static NAME: &str = "join";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -186,7 +186,7 @@ impl Spec {
         let file_num = match chars.next() {
             Some('0') => {
                 // Must be all alone without a field specifier.
-                if let None = chars.next() {
+                if chars.next().is_none() {
                     return Spec::Key;
                 }
 
@@ -235,7 +235,7 @@ struct State<'a> {
     file_name: &'a str,
     file_num: FileNum,
     print_unpaired: bool,
-    lines: Lines<Box<BufRead + 'a>>,
+    lines: Lines<Box<dyn BufRead + 'a>>,
     seq: Vec<Line>,
     max_fields: Option<usize>,
     line_num: usize,
@@ -251,18 +251,18 @@ impl<'a> State<'a> {
         print_unpaired: FileNum,
     ) -> State<'a> {
         let f = if name == "-" {
-            Box::new(stdin.lock()) as Box<BufRead>
+            Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
             match File::open(name) {
-                Ok(file) => Box::new(BufReader::new(file)) as Box<BufRead>,
+                Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
                 Err(err) => crash!(1, "{}: {}", name, err),
             }
         };
 
         State {
-            key: key,
+            key,
             file_name: name,
-            file_num: file_num,
+            file_num,
             print_unpaired: print_unpaired == file_num,
             lines: f.lines(),
             seq: Vec::new(),
@@ -294,7 +294,7 @@ impl<'a> State<'a> {
             }
         }
 
-        return None;
+        None
     }
 
     /// Print lines in the buffers as headers.
@@ -317,9 +317,9 @@ impl<'a> State<'a> {
         for line1 in &self.seq {
             for line2 in &other.seq {
                 if repr.uses_format() {
-                    repr.print_format(|spec| match spec {
-                        &Spec::Key => key,
-                        &Spec::Field(file_num, field_num) => {
+                    repr.print_format(|spec| match *spec {
+                        Spec::Key => key,
+                        Spec::Field(file_num, field_num) => {
                             if file_num == self.file_num {
                                 return line1.get_field(field_num);
                             }
@@ -423,13 +423,15 @@ impl<'a> State<'a> {
 
     fn print_line(&self, line: &Line, repr: &Repr) {
         if repr.uses_format() {
-            repr.print_format(|spec| match spec {
-                &Spec::Key => line.get_field(self.key),
-                &Spec::Field(file_num, field_num) => if file_num == self.file_num {
-                    line.get_field(field_num)
-                } else {
-                    None
-                },
+            repr.print_format(|spec| match *spec {
+                Spec::Key => line.get_field(self.key),
+                Spec::Field(file_num, field_num) => {
+                    if file_num == self.file_num {
+                        line.get_field(field_num)
+                    } else {
+                        None
+                    }
+                }
             });
         } else {
             repr.print_field(line.get_field(self.key));
@@ -567,7 +569,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
     if let Some(value) = matches.value_of("t") {
         settings.separator = match value.len() {
             0 => Sep::Line,
-            1 => Sep::Char(value.chars().nth(0).unwrap()),
+            1 => Sep::Char(value.chars().next().unwrap()),
             _ => crash!(1, "multi-character tab {}", value),
         };
     }

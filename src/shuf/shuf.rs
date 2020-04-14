@@ -123,14 +123,14 @@ With no FILE, or when FILE is -, read standard input.",
                 let mut evec = matches
                     .free
                     .iter()
-                    .map(|a| a.as_bytes())
+                    .map(String::as_bytes)
                     .collect::<Vec<&[u8]>>();
                 find_seps(&mut evec, sep);
                 shuf_bytes(&mut evec, repeat, count, sep, output, random);
             }
             Mode::InputRange((b, e)) => {
                 let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
-                let mut rvec = rvec.iter().map(|a| a.as_bytes()).collect::<Vec<&[u8]>>();
+                let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
                 shuf_bytes(&mut rvec, repeat, count, sep, output, random);
             }
             Mode::Default => {
@@ -147,18 +147,17 @@ With no FILE, or when FILE is -, read standard input.",
 
 fn read_input_file(filename: &str) -> Vec<u8> {
     let mut file = BufReader::new(if filename == "-" {
-        Box::new(stdin()) as Box<Read>
+        Box::new(stdin()) as Box<dyn Read>
     } else {
         match File::open(filename) {
-            Ok(f) => Box::new(f) as Box<Read>,
+            Ok(f) => Box::new(f) as Box<dyn Read>,
             Err(e) => crash!(1, "failed to open '{}': {}", filename, e),
         }
     });
 
     let mut data = Vec::new();
-    match file.read_to_end(&mut data) {
-        Err(e) => crash!(1, "failed reading '{}': {}", filename, e),
-        Ok(_) => (),
+    if let Err(e) = file.read_to_end(&mut data) {
+        crash!(1, "failed reading '{}': {}", filename, e)
     };
 
     data
@@ -206,9 +205,9 @@ fn shuf_bytes(
     random: Option<String>,
 ) {
     let mut output = BufWriter::new(match output {
-        None => Box::new(stdout()) as Box<Write>,
+        None => Box::new(stdout()) as Box<dyn Write>,
         Some(s) => match File::create(&s[..]) {
-            Ok(f) => Box::new(f) as Box<Write>,
+            Ok(f) => Box::new(f) as Box<dyn Write>,
             Err(e) => crash!(1, "failed to open '{}' for writing: {}", &s[..], e),
         },
     });
@@ -228,7 +227,6 @@ fn shuf_bytes(
         len >>= 1;
         len_mod <<= 1;
     }
-    drop(len);
 
     let mut count = count;
     while count > 0 && !input.is_empty() {

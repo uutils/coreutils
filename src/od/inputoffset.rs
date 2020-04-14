@@ -21,9 +21,9 @@ impl InputOffset {
     /// creates a new `InputOffset` using the provided values.
     pub fn new(radix: Radix, byte_pos: usize, label: Option<usize>) -> InputOffset {
         InputOffset {
-            radix: radix,
-            byte_pos: byte_pos,
-            label: label,
+            radix,
+            byte_pos,
+            label,
         }
     }
 
@@ -58,7 +58,7 @@ impl InputOffset {
     /// both `Radix::NoPrefix` was set and no label (--traditional) is used.
     pub fn print_final_offset(&self) {
         if self.radix != Radix::NoPrefix || self.label.is_some() {
-            print!("{}\n", self.format_byte_offset());
+            println!("{}", self.format_byte_offset());
         }
     }
 }

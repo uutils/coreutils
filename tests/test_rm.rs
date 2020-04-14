@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_rm_one_file() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -39,7 +38,8 @@ fn test_rm_interactive() {
     at.touch(file_a);
     at.touch(file_b);
 
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("-i")
         .arg(file_a)
         .arg(file_b)
@@ -49,7 +49,8 @@ fn test_rm_interactive() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
 
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("-i")
         .arg(file_a)
         .arg(file_b)
@@ -119,9 +120,10 @@ fn test_rm_errors() {
 
     // $ rm test_rm_errors_directory
     // rm: error: could not remove directory 'test_rm_errors_directory' (did you mean to pass '-r'?)
-    ucmd.arg(dir).fails()
-        .stderr_is("rm: error: could not remove directory 'test_rm_errors_directory' (did you mean \
-                to pass '-r'?)\n");
+    ucmd.arg(dir).fails().stderr_is(
+        "rm: error: could not remove directory 'test_rm_errors_directory' (did you mean \
+                to pass '-r'?)\n",
+    );
 }
 
 #[test]
@@ -133,7 +135,10 @@ fn test_rm_verbose() {
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg("-v").arg(file_a).arg(file_b).succeeds()
+    ucmd.arg("-v")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
         .stdout_only(format!("removed '{}'\nremoved '{}'\n", file_a, file_b));
 }
 

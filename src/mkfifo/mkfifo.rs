@@ -76,10 +76,8 @@ Create a FIFO with the given name.",
     let mut exit_status = 0;
     for f in &matches.free {
         let err = unsafe {
-            mkfifo(
-                CString::new(f.as_bytes()).unwrap().as_ptr(),
-                mode as libc::mode_t,
-            )
+            let name = CString::new(f.as_bytes()).unwrap();
+            mkfifo(name.as_ptr(), mode as libc::mode_t)
         };
         if err == -1 {
             show_error!(

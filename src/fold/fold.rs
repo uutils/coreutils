@@ -70,9 +70,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.starts_with('-') && slice.len() > 1
-            && slice.chars().nth(1).unwrap().is_digit(10)
-        {
+        if slice.starts_with('-') && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
             let mut v = args.to_vec();
             v.remove(i);
             return (v, Some(slice[1..].to_owned()));
@@ -89,10 +87,10 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
         let mut file_buf;
         let buffer = BufReader::new(if filename == "-" {
             stdin_buf = stdin();
-            &mut stdin_buf as &mut Read
+            &mut stdin_buf as &mut dyn Read
         } else {
             file_buf = safe_unwrap!(File::open(Path::new(filename)));
-            &mut file_buf as &mut Read
+            &mut file_buf as &mut dyn Read
         });
         fold_file(buffer, bytes, spaces, width);
     }
@@ -110,8 +108,8 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                 let slice = {
                     let slice = &line[i..i + width];
                     if spaces && i + width < len {
-                        match slice.rfind(|ch: char| ch.is_whitespace()) {
-                            Some(m) => &slice[..m + 1],
+                        match slice.rfind(char::is_whitespace) {
+                            Some(m) => &slice[..=m],
                             None => slice,
                         }
                     } else {
@@ -145,16 +143,18 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                                     let ncount = routput.chars().fold(0, |out, ch: char| {
                                         out + match ch {
                                             '\t' => 8,
-                                            '\x08' => if out > 0 {
-                                                !0
-                                            } else {
-                                                0
-                                            },
+                                            '\x08' => {
+                                                if out > 0 {
+                                                    !0
+                                                } else {
+                                                    0
+                                                }
+                                            }
                                             '\r' => return 0,
                                             _ => 1,
                                         }
                                     });
-                                    (&slice[0..m + 1], routput, ncount)
+                                    (&slice[0..=m], routput, ncount)
                                 }
                                 None => (slice, "", 0),
                             }

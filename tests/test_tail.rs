@@ -1,13 +1,12 @@
 extern crate uu_tail;
 
+use self::uu_tail::parse_size;
 use common::util::*;
 use std::char::from_digit;
-use self::uu_tail::parse_size;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
-
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
 static FOOBAR_2_TXT: &'static str = "foobar2.txt";
@@ -15,23 +14,37 @@ static FOOBAR_WITH_NULL_TXT: &'static str = "foobar_with_null.txt";
 
 #[test]
 fn test_stdin_default() {
-    new_ucmd!().pipe_in_fixture(FOOBAR_TXT).run().stdout_is_fixture("foobar_stdin_default.expected");
+    new_ucmd!()
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("foobar_stdin_default.expected");
 }
 
 #[test]
 fn test_single_default() {
-    new_ucmd!().arg(FOOBAR_TXT).run().stdout_is_fixture("foobar_single_default.expected");
+    new_ucmd!()
+        .arg(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("foobar_single_default.expected");
 }
 
 #[test]
 fn test_n_greater_than_number_of_lines() {
-    new_ucmd!().arg("-n").arg("99999999").arg(FOOBAR_TXT).run()
+    new_ucmd!()
+        .arg("-n")
+        .arg("99999999")
+        .arg(FOOBAR_TXT)
+        .run()
         .stdout_is_fixture(FOOBAR_TXT);
 }
 
 #[test]
 fn test_null_default() {
-    new_ucmd!().arg("-z").arg(FOOBAR_WITH_NULL_TXT).run().stdout_is_fixture("foobar_with_null_default.expected");
+    new_ucmd!()
+        .arg("-z")
+        .arg(FOOBAR_WITH_NULL_TXT)
+        .run()
+        .stdout_is_fixture("foobar_with_null_default.expected");
 }
 
 #[test]
@@ -55,7 +68,11 @@ fn test_follow() {
 #[test]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run_no_wait();
+    let mut child = ucmd
+        .arg("-f")
+        .arg(FOOBAR_TXT)
+        .arg(FOOBAR_2_TXT)
+        .run_no_wait();
 
     let expected = at.read("foobar_follow_multiple.expected");
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -74,7 +91,11 @@ fn test_follow_multiple() {
 
 #[test]
 fn test_follow_stdin() {
-    new_ucmd!().arg("-f").pipe_in_fixture(FOOBAR_TXT).run().stdout_is_fixture("follow_stdin.expected");
+    new_ucmd!()
+        .arg("-f")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("follow_stdin.expected");
 }
 
 #[test]
@@ -86,10 +107,18 @@ fn test_follow_with_pid() {
     #[cfg(windows)]
     let dummy_cmd = "cmd";
 
-    let mut dummy = Command::new(dummy_cmd).stdout(Stdio::null()).spawn().unwrap();
+    let mut dummy = Command::new(dummy_cmd)
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
     let pid = dummy.id();
 
-    let mut child = ucmd.arg("-f").arg(format!("--pid={}", pid)).arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run_no_wait();
+    let mut child = ucmd
+        .arg("-f")
+        .arg(format!("--pid={}", pid))
+        .arg(FOOBAR_TXT)
+        .arg(FOOBAR_2_TXT)
+        .run_no_wait();
 
     let expected = at.read("foobar_follow_multiple.expected");
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -140,19 +169,31 @@ fn test_single_big_args() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    ucmd.arg(FILE).arg("-n").arg(format!("{}", N_ARG)).run().stdout_is(at.read(EXPECTED_FILE));
+    ucmd.arg(FILE)
+        .arg("-n")
+        .arg(format!("{}", N_ARG))
+        .run()
+        .stdout_is(at.read(EXPECTED_FILE));
 }
 
 #[test]
 fn test_bytes_single() {
-    new_ucmd!().arg("-c").arg("10").arg(FOOBAR_TXT).run()
+    new_ucmd!()
+        .arg("-c")
+        .arg("10")
+        .arg(FOOBAR_TXT)
+        .run()
         .stdout_is_fixture("foobar_bytes_single.expected");
 }
 
 #[test]
 fn test_bytes_stdin() {
-    new_ucmd!().arg("-c").arg("13").pipe_in_fixture(FOOBAR_TXT).run()
-            .stdout_is_fixture("foobar_bytes_stdin.expected");
+    new_ucmd!()
+        .arg("-c")
+        .arg("13")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("foobar_bytes_stdin.expected");
 }
 
 #[test]
@@ -178,7 +219,12 @@ fn test_bytes_big() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    let result = ucmd.arg(FILE).arg("-c").arg(format!("{}", N_ARG)).run().stdout;
+    let result = ucmd
+        .arg(FILE)
+        .arg("-c")
+        .arg(format!("{}", N_ARG))
+        .run()
+        .stdout;
     let expected = at.read(EXPECTED_FILE);
 
     assert_eq!(result.len(), expected.len());
@@ -243,21 +289,40 @@ fn test_lines_with_size_suffix() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    ucmd.arg(FILE).arg("-n").arg("2K").run().stdout_is_fixture(EXPECTED_FILE);
+    ucmd.arg(FILE)
+        .arg("-n")
+        .arg("2K")
+        .run()
+        .stdout_is_fixture(EXPECTED_FILE);
 }
 
 #[test]
 fn test_multiple_input_files() {
-    new_ucmd!().arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).run().stdout_is_fixture("foobar_follow_multiple.expected");
+    new_ucmd!()
+        .arg(FOOBAR_TXT)
+        .arg(FOOBAR_2_TXT)
+        .run()
+        .stdout_is_fixture("foobar_follow_multiple.expected");
 }
 
 #[test]
 fn test_multiple_input_files_with_suppressed_headers() {
-    new_ucmd!().arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).arg("-q").run().stdout_is_fixture("foobar_multiple_quiet.expected");
+    new_ucmd!()
+        .arg(FOOBAR_TXT)
+        .arg(FOOBAR_2_TXT)
+        .arg("-q")
+        .run()
+        .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
 
 #[test]
 fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers() {
     // TODO: actually the later one should win, i.e. -qv should lead to headers being printed, -vq to them being suppressed
-    new_ucmd!().arg(FOOBAR_TXT).arg(FOOBAR_2_TXT).arg("-q").arg("-v").run().stdout_is_fixture("foobar_multiple_quiet.expected");
+    new_ucmd!()
+        .arg(FOOBAR_TXT)
+        .arg(FOOBAR_2_TXT)
+        .arg("-q")
+        .arg("-v")
+        .run()
+        .stdout_is_fixture("foobar_multiple_quiet.expected");
 }

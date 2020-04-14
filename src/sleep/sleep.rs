@@ -63,12 +63,14 @@ specified by the sum of their values.",
 }
 
 fn sleep(args: Vec<String>) {
-    let sleep_dur = args.iter().fold(Duration::new(0, 0), |result, arg| {
-        match uucore::parse_time::from_str(&arg[..]) {
-            Ok(m) => m + result,
-            Err(f) => crash!(1, "{}", f),
-        }
-    });
+    let sleep_dur =
+        args.iter().fold(
+            Duration::new(0, 0),
+            |result, arg| match uucore::parse_time::from_str(&arg[..]) {
+                Ok(m) => m + result,
+                Err(f) => crash!(1, "{}", f),
+            },
+        );
 
     thread::sleep(sleep_dur);
 }

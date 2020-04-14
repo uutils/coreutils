@@ -19,10 +19,10 @@ extern crate uucore;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
-use walker::Walker;
+use uucore::fs::display_permissions_unix;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::fs::display_permissions_unix;
+use walker::Walker;
 
 const NAME: &str = "chmod";
 static SUMMARY: &str = "Change the mode of each FILE to MODE.
@@ -39,14 +39,31 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
         NAME
     );
     let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
-    opts.optflag("c", "changes", "like verbose but report only when a change is made")
-        // TODO: support --silent (can be done using clap)
-        .optflag("f", "quiet", "suppress most error messages")
-        .optflag("v", "verbose", "output a diagnostic for every file processed")
-        .optflag("", "no-preserve-root", "do not treat '/' specially (the default)")
-        .optflag("", "preserve-root", "fail to operate recursively on '/'")
-        .optopt("", "reference", "use RFILE's mode instead of MODE values", "RFILE")
-        .optflag("R", "recursive", "change files and directories recursively");
+    opts.optflag(
+        "c",
+        "changes",
+        "like verbose but report only when a change is made",
+    )
+    // TODO: support --silent (can be done using clap)
+    .optflag("f", "quiet", "suppress most error messages")
+    .optflag(
+        "v",
+        "verbose",
+        "output a diagnostic for every file processed",
+    )
+    .optflag(
+        "",
+        "no-preserve-root",
+        "do not treat '/' specially (the default)",
+    )
+    .optflag("", "preserve-root", "fail to operate recursively on '/'")
+    .optopt(
+        "",
+        "reference",
+        "use RFILE's mode instead of MODE values",
+        "RFILE",
+    )
+    .optflag("R", "recursive", "change files and directories recursively");
 
     // sanitize input for - at beginning (e.g. chmod -x testfile). Remove
     // the option and save it for later, after parsing is finished.
@@ -100,13 +117,13 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
 
 fn sanitize_input(args: &mut Vec<String>) -> Option<String> {
     for i in 0..args.len() {
-        let first = args[i].chars().nth(0).unwrap();
+        let first = args[i].chars().next().unwrap();
         if first != '-' {
             continue;
         }
         if let Some(second) = args[i].chars().nth(1) {
             match second {
-                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'...'7' => {
+                'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
                     return Some(args.remove(i));
                 }
                 _ => {}
@@ -148,17 +165,19 @@ impl Chmoder {
                             // on Windows OsStrings cannot be built out of non-UTF-8 chars. One
                             // possible fix is to use CStrings rather than Strings in the args
                             // to chmod() and chmod_file().
-                            r = self.chmod(
-                                walk_dir
-                                    .filter_map(|x| match x {
-                                        Ok(o) => match o.path().into_os_string().to_str() {
-                                            Some(s) => Some(s.to_owned()),
-                                            None => None,
-                                        },
-                                        Err(_) => None,
-                                    })
-                                    .collect(),
-                            ).and(r);
+                            r = self
+                                .chmod(
+                                    walk_dir
+                                        .filter_map(|x| match x {
+                                            Ok(o) => match o.path().into_os_string().to_str() {
+                                                Some(s) => Some(s.to_owned()),
+                                                None => None,
+                                            },
+                                            Err(_) => None,
+                                        })
+                                        .collect(),
+                                )
+                                .and(r);
                             r = self.chmod_file(&file, filename).and(r);
                         }
                     } else {
@@ -230,7 +249,12 @@ impl Chmoder {
     fn change_file(&self, fperm: u32, mode: u32, file: &Path, path: &str) -> Result<(), i32> {
         if fperm == mode {
             if self.verbose && !self.changes {
-                show_info!("mode of '{}' retained as {:o} ({})", file.display(), fperm, display_permissions_unix(fperm));
+                show_info!(
+                    "mode of '{}' retained as {:o} ({})",
+                    file.display(),
+                    fperm,
+                    display_permissions_unix(fperm)
+                );
             }
             Ok(())
         } else if let Err(err) =

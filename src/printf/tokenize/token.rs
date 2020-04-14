@@ -1,10 +1,8 @@
 //! Traits and enums dealing with Tokenization of printf Format String
-#[allow(unused_must_use)]
-
-use std::iter::Peekable;
-use std::str::Chars;
-use std::slice::Iter;
 use itertools::PutBackN;
+use std::iter::Peekable;
+use std::slice::Iter;
+use std::str::Chars;
 
 // A token object is an object that can print the expected output
 // of a contiguous segment of the format string, and
@@ -26,5 +24,8 @@ pub trait Token {
 // a number of arguments equal to the number of argument-using tokens
 
 pub trait Tokenizer {
-    fn from_it(it: &mut PutBackN<Chars>, args: &mut Peekable<Iter<String>>) -> Option<Box<Token>>;
+    fn from_it(
+        it: &mut PutBackN<Chars>,
+        args: &mut Peekable<Iter<String>>,
+    ) -> Option<Box<dyn Token>>;
 }

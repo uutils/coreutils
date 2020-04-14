@@ -1,7 +1,6 @@
 use common::util::*;
 use std::io::{Seek, SeekFrom, Write};
 
-
 static TFILE1: &'static str = "truncate_test_1";
 static TFILE2: &'static str = "truncate_test_2";
 

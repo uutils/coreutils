@@ -1,20 +1,20 @@
 use std;
+use std::fs::File;
 use std::io;
 use std::io::BufReader;
-use std::fs::File;
 use std::vec::Vec;
 
 pub enum InputSource<'a> {
     FileName(&'a str),
     Stdin,
     #[allow(dead_code)]
-    Stream(Box<io::Read>),
+    Stream(Box<dyn io::Read>),
 }
 
 // MultifileReader - concatenate all our input, file or stdin.
 pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
-    curr_file: Option<Box<io::Read>>,
+    curr_file: Option<Box<dyn io::Read>>,
     any_err: bool,
 }
 
@@ -36,7 +36,7 @@ impl<'b> MultifileReader<'b> {
     fn next_file(&mut self) {
         // loop retries with subsequent files if err - normally 'loops' once
         loop {
-            if self.ni.len() == 0 {
+            if self.ni.is_empty() {
                 self.curr_file = None;
                 break;
             }
@@ -125,8 +125,8 @@ impl<'b> HasError for MultifileReader<'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, ErrorKind, Read};
     use mockstream::*;
+    use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
     fn test_multi_file_reader_one_read() {

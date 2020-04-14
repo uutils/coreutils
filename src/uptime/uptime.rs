@@ -18,8 +18,8 @@ extern crate time;
 #[macro_use]
 extern crate uucore;
 // import crate time from utmpx
-use uucore::libc::time_t;
 pub use uucore::libc;
+use uucore::libc::time_t;
 
 use getopts::Options;
 
@@ -50,10 +50,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
     if matches.opt_present("help") || !matches.free.is_empty() {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]", NAME);
-        println!("");
+        println!();
         println!(
             "{}",
             opts.usage(
@@ -85,13 +85,12 @@ pub fn uumain(args: Vec<String>) -> i32 {
 #[cfg(unix)]
 fn print_loadavg() {
     use libc::c_double;
-    use std::mem::transmute;
 
     let mut avg: [c_double; 3] = [0.0; 3];
-    let loads: i32 = unsafe { transmute(getloadavg(avg.as_mut_ptr(), 3)) };
+    let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };
 
     if loads == -1 {
-        print!("\n");
+        println!();
     } else {
         print!("load average: ");
         for n in 0..loads {
@@ -138,11 +137,11 @@ fn process_utmpx() -> (Option<time_t>, usize) {
 }
 
 fn print_nusers(nusers: usize) {
-    if nusers == 1 {
-        print!("1 user, ");
-    } else if nusers > 1 {
-        print!("{} users, ", nusers);
-    }
+    match nusers.cmp(&1) {
+        std::cmp::Ordering::Equal => print!("1 user,  "),
+        std::cmp::Ordering::Greater => print!("{} users,  ", nusers),
+        _ => {}
+    };
 }
 
 fn print_time() {
@@ -173,7 +172,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
             Some(t) => {
                 let now = time::get_time().sec;
                 let boottime = t as i64;
-                ((now - boottime) * 100)
+                (now - boottime) * 100
             }
             _ => -1,
         }
@@ -189,11 +188,11 @@ fn print_uptime(upsecs: i64) {
     let updays = upsecs / 86400;
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
-    if updays == 1 {
-        print!("up {:1} day, {:2}:{:02}, ", updays, uphours, upmins);
-    } else if updays > 1 {
-        print!("up {:1} days, {:2}:{:02}, ", updays, uphours, upmins);
-    } else {
-        print!("up  {:2}:{:02}, ", uphours, upmins);
-    }
+    match updays.cmp(&1) {
+        std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
+        std::cmp::Ordering::Greater => {
+            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins)
+        }
+        _ => print!("up  {:2}:{:02}, ", uphours, upmins),
+    };
 }

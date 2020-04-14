@@ -3,24 +3,24 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
-use std::slice::Iter;
-use std::iter::Peekable;
-use std::str::Chars;
-use std::process::exit;
-use cli;
-use itertools::{put_back_n, PutBackN};
-use super::token;
-use super::unescaped_text::UnescapedText;
 use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
+use super::token;
+use super::unescaped_text::UnescapedText;
+use cli;
+use itertools::{put_back_n, PutBackN};
+use std::iter::Peekable;
+use std::process::exit;
+use std::slice::Iter;
+use std::str::Chars;
 // use std::collections::HashSet;
 
-fn err_conv(sofar: &String) {
+fn err_conv(sofar: &str) {
     cli::err_msg(&format!("%{}: invalid conversion specification", sofar));
     exit(cli::EXIT_ERR);
 }
 
-fn convert_asterisk_arg_int(asterisk_arg: &String) -> isize {
+fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
     // this is a costly way to parse the
     // args used for asterisk values into integers
     // from various bases. Actually doing it correctly
@@ -32,11 +32,11 @@ fn convert_asterisk_arg_int(asterisk_arg: &String) -> isize {
     let field_info = FormatField {
         min_width: Some(0),
         second_field: Some(0),
-        orig: asterisk_arg,
+        orig: &asterisk_arg.to_string(),
         field_type: &field_type,
         field_char: &field_char,
     };
-    num_format::num_format(&field_info, Some(asterisk_arg))
+    num_format::num_format(&field_info, Some(&asterisk_arg.to_string()))
         .unwrap()
         .parse::<isize>()
         .unwrap()
@@ -80,11 +80,11 @@ impl Sub {
             }
         };
         Sub {
-            min_width: min_width,
-            second_field: second_field,
-            field_char: field_char,
-            field_type: field_type,
-            orig: orig,
+            min_width,
+            second_field,
+            field_char,
+            field_type,
+            orig,
         }
     }
 }
@@ -116,20 +116,20 @@ impl SubParser {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<token::Token>> {
+    ) -> Option<Box<dyn token::Token>> {
         let mut parser = SubParser::new();
         if parser.sub_vals_retrieved(it) {
-            let t: Box<token::Token> = SubParser::build_token(parser);
+            let t: Box<dyn token::Token> = SubParser::build_token(parser);
             t.print(args);
             Some(t)
         } else {
             None
         }
     }
-    fn build_token(parser: SubParser) -> Box<token::Token> {
+    fn build_token(parser: SubParser) -> Box<dyn token::Token> {
         // not a self method so as to allow move of subparser vals.
         // return new Sub struct as token
-        let t: Box<token::Token> = Box::new(Sub::new(
+        let t: Box<dyn token::Token> = Box::new(Sub::new(
             if parser.min_width_is_asterisk {
                 CanAsterisk::Asterisk
             } else {
@@ -155,32 +155,20 @@ impl SubParser {
         // though, as we want to mimic the original behavior of printing
         // the field as interpreted up until the error in the field.
 
-        let mut legal_fields = vec![// 'a', 'A', //c99 hex float implementation not yet complete
-                                    'b',
-                                    'c',
-                                    'd',
-                                    'e',
-                                    'E',
-                                    'f',
-                                    'F',
-                                    'g',
-                                    'G',
-                                    'i',
-                                    'o',
-                                    's',
-                                    'u',
-                                    'x',
-                                    'X'];
+        let mut legal_fields = vec![
+            // 'a', 'A', //c99 hex float implementation not yet complete
+            'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 's', 'u', 'x', 'X',
+        ];
         let mut specifiers = vec!['h', 'j', 'l', 'L', 't', 'z'];
         legal_fields.sort();
         specifiers.sort();
 
         // divide substitution from %([0-9]+)?(.[0-9+])?([a-zA-Z])
         // into min_width, second_field, field_char
-        while let Some(ch) = it.next() {
+        for ch in it {
             self.text_so_far.push(ch);
             match ch as char {
-                '-' | '*' | '0'...'9' => {
+                '-' | '*' | '0'..='9' => {
                     if !self.past_decimal {
                         if self.min_width_is_asterisk || self.specifiers_found {
                             err_conv(&self.text_so_far);
@@ -190,7 +178,7 @@ impl SubParser {
                         }
                         match self.min_width_tmp.as_mut() {
                             Some(x) => {
-                                if (ch == '-' || ch == '*') && x.len() > 0 {
+                                if (ch == '-' || ch == '*') && !x.is_empty() {
                                     err_conv(&self.text_so_far);
                                 }
                                 if ch == '*' {
@@ -213,7 +201,7 @@ impl SubParser {
                         }
                         match self.second_field_tmp.as_mut() {
                             Some(x) => {
-                                if ch == '*' && x.len() > 0 {
+                                if ch == '*' && !x.is_empty() {
                                     err_conv(&self.text_so_far);
                                 }
                                 if ch == '*' {
@@ -252,7 +240,7 @@ impl SubParser {
                 }
             }
         }
-        if !self.field_char.is_some() {
+        if self.field_char.is_none() {
             err_conv(&self.text_so_far);
         }
         let field_char_retrieved = self.field_char.unwrap();
@@ -262,13 +250,10 @@ impl SubParser {
         self.validate_field_params(field_char_retrieved);
         // if the dot is provided without a second field
         // printf interprets it as 0.
-        match self.second_field_tmp.as_mut() {
-            Some(x) => {
-                if x.len() == 0 {
-                    self.min_width_tmp = Some(String::from("0"));
-                }
+        if let Some(x) = self.second_field_tmp.as_mut() {
+            if x.is_empty() {
+                self.min_width_tmp = Some(String::from("0"));
             }
-            _ => {}
         }
 
         true
@@ -292,8 +277,12 @@ impl SubParser {
                 }
             }
         } else {
-            n_ch.map(|x| it.put_back(x));
-            preface.map(|x| it.put_back(x));
+            if let Some(x) = n_ch {
+                it.put_back(x)
+            };
+            if let Some(x) = preface {
+                it.put_back(x)
+            };
             false
         }
     }
@@ -305,7 +294,8 @@ impl SubParser {
             || (field_char == 'c'
                 && (self.min_width_tmp == Some(String::from("0")) || self.past_decimal))
             || (field_char == 'b'
-                && (self.min_width_tmp.is_some() || self.past_decimal
+                && (self.min_width_tmp.is_some()
+                    || self.past_decimal
                     || self.second_field_tmp.is_some()))
         {
             err_conv(&self.text_so_far);
@@ -317,7 +307,7 @@ impl token::Tokenizer for Sub {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<token::Token>> {
+    ) -> Option<Box<dyn token::Token>> {
         SubParser::from_it(it, args)
     }
 }
@@ -379,7 +369,8 @@ impl token::Token for Sub {
                             // for 'c': get iter of string vals,
                             // get opt<char> of first val
                             // and map it to opt<String>
-                            'c' | _ => arg_string.chars().next().map(|x| x.to_string()),
+                            /* 'c' | */
+                            _ => arg_string.chars().next().map(|x| x.to_string()),
                         }
                     }
                     None => None,
@@ -390,39 +381,35 @@ impl token::Token for Sub {
                 num_format::num_format(&field, pf_arg)
             }
         };
-        match pre_min_width_opt {
+        if let Some(pre_min_width) = pre_min_width_opt {
             // if have a string, print it, ensuring minimum width is met.
-            Some(pre_min_width) => {
-                print!(
-                    "{}",
-                    match field.min_width {
-                        Some(min_width) => {
-                            let diff: isize =
-                                min_width.abs() as isize - pre_min_width.len() as isize;
-                            if diff > 0 {
-                                let mut final_str = String::new();
-                                // definitely more efficient ways
-                                //  to do this.
-                                let pad_before = min_width > 0;
-                                if !pad_before {
-                                    final_str.push_str(&pre_min_width);
-                                }
-                                for _ in 0..diff {
-                                    final_str.push(' ');
-                                }
-                                if pad_before {
-                                    final_str.push_str(&pre_min_width);
-                                }
-                                final_str
-                            } else {
-                                pre_min_width
+            print!(
+                "{}",
+                match field.min_width {
+                    Some(min_width) => {
+                        let diff: isize = min_width.abs() as isize - pre_min_width.len() as isize;
+                        if diff > 0 {
+                            let mut final_str = String::new();
+                            // definitely more efficient ways
+                            //  to do this.
+                            let pad_before = min_width > 0;
+                            if !pad_before {
+                                final_str.push_str(&pre_min_width);
                             }
+                            for _ in 0..diff {
+                                final_str.push(' ');
+                            }
+                            if pad_before {
+                                final_str.push_str(&pre_min_width);
+                            }
+                            final_str
+                        } else {
+                            pre_min_width
                         }
-                        None => pre_min_width,
                     }
-                );
-            }
-            None => {}
+                    None => pre_min_width,
+                }
+            );
         }
     }
 }

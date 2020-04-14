@@ -23,16 +23,14 @@ fn has_enough_digits(
     // -1s are for rounding
     if hex_output {
         if hex_input {
-            ((string_position - 1) - starting_position >= limit)
+            (string_position - 1) - starting_position >= limit
         } else {
             false //undecidable without converting
         }
+    } else if hex_input {
+        (((string_position - 1) - starting_position) * 9) / 8 >= limit
     } else {
-        if hex_input {
-            ((((string_position - 1) - starting_position) * 9) / 8 >= limit)
-        } else {
-            ((string_position - 1) - starting_position >= limit)
-        }
+        (string_position - 1) - starting_position >= limit
     }
 }
 
@@ -47,7 +45,7 @@ impl FloatAnalysis {
         // this fn assumes
         // the input string
         // has no leading spaces or 0s
-        let mut str_it = get_it_at(inprefix.offset, str_in);
+        let str_it = get_it_at(inprefix.offset, str_in);
         let mut ret = FloatAnalysis {
             len_important: 0,
             decimal_pos: None,
@@ -62,19 +60,20 @@ impl FloatAnalysis {
         };
         let mut i = 0;
         let mut pos_before_first_nonzero_after_decimal: Option<usize> = None;
-        while let Some(c) = str_it.next() {
+        for c in str_it {
             match c {
-                e @ '0'...'9' | e @ 'A'...'F' | e @ 'a'...'f' => {
+                e @ '0'..='9' | e @ 'A'..='F' | e @ 'a'..='f' => {
                     if !hex_input {
                         match e {
-                            '0'...'9' => {}
+                            '0'..='9' => {}
                             _ => {
                                 warn_incomplete_conv(str_in);
                                 break;
                             }
                         }
                     }
-                    if ret.decimal_pos.is_some() && pos_before_first_nonzero_after_decimal.is_none()
+                    if ret.decimal_pos.is_some()
+                        && pos_before_first_nonzero_after_decimal.is_none()
                         && e != '0'
                     {
                         pos_before_first_nonzero_after_decimal = Some(i - 1);
@@ -160,7 +159,7 @@ fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
             '9' => {
                 rev.push('0');
             }
-            e @ _ => {
+            e => {
                 rev.push(((e as u8) + 1) as char);
                 finished_in_dec = true;
                 break;
@@ -182,23 +181,17 @@ fn round_terminal_digit(
     if position < after_dec.len() {
         let digit_at_pos: char;
         {
-            digit_at_pos = (&after_dec[position..position + 1])
-                .chars()
-                .next()
-                .expect("");
+            digit_at_pos = (&after_dec[position..=position]).chars().next().expect("");
         }
-        match digit_at_pos {
-            '5'...'9' => {
-                let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);
-                if finished_in_dec {
-                    return (before_dec, new_after_dec);
-                } else {
-                    let (new_before_dec, _) = _round_str_from(&before_dec, before_dec.len());
-                    return (new_before_dec, new_after_dec);
-                }
-                // TODO
+        if let '5'..='9' = digit_at_pos {
+            let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);
+            if finished_in_dec {
+                return (before_dec, new_after_dec);
+            } else {
+                let (new_before_dec, _) = _round_str_from(&before_dec, before_dec.len());
+                return (new_before_dec, new_after_dec);
             }
-            _ => {}
+            // TODO
         }
     }
     (before_dec, after_dec)
@@ -225,7 +218,7 @@ pub fn get_primitive_dec(
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
         None => (&str_in[..], "0"),
     };
-    if first_segment_raw.len() == 0 {
+    if first_segment_raw.is_empty() {
         first_segment_raw = "0";
     }
     // convert to string, de_hexifying if input is in hex.
@@ -251,16 +244,16 @@ pub fn get_primitive_dec(
         } else {
             match first_segment.chars().next() {
                 Some('0') => {
-                    let mut it = second_segment.chars().enumerate();
+                    let it = second_segment.chars().enumerate();
                     let mut m: isize = 0;
                     let mut pre = String::from("0");
                     let mut post = String::from("0");
-                    while let Some((i, c)) = it.next() {
+                    for (i, c) in it {
                         match c {
                             '0' => {}
                             _ => {
-                                m = ((i as isize) + 1) * -1;
-                                pre = String::from(&second_segment[i..i + 1]);
+                                m = -((i as isize) + 1);
+                                pre = String::from(&second_segment[i..=i]);
                                 post = String::from(&second_segment[i + 1..]);
                                 break;
                             }
@@ -299,11 +292,8 @@ pub fn get_primitive_dec(
 
 pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> String {
     let mut final_str = String::new();
-    match prim.prefix {
-        Some(ref prefix) => {
-            final_str.push_str(&prefix);
-        }
-        None => {}
+    if let Some(ref prefix) = prim.prefix {
+        final_str.push_str(&prefix);
     }
     match prim.pre_decimal {
         Some(ref pre_decimal) => {
@@ -319,7 +309,7 @@ pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> S
     let decimal_places = field.second_field.unwrap_or(6);
     match prim.post_decimal {
         Some(ref post_decimal) => {
-            if post_decimal.len() > 0 && decimal_places > 0 {
+            if !post_decimal.is_empty() && decimal_places > 0 {
                 final_str.push('.');
                 let len_avail = post_decimal.len() as u32;
 
@@ -346,11 +336,8 @@ pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> S
             );
         }
     }
-    match prim.suffix {
-        Some(ref suffix) => {
-            final_str.push_str(suffix);
-        }
-        None => {}
+    if let Some(ref suffix) = prim.suffix {
+        final_str.push_str(suffix);
     }
 
     final_str

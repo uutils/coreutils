@@ -15,7 +15,7 @@ use std::path::Path;
 
 const CRC_TABLE_LEN: usize = 256;
 
-#[path = "../../mkmain.rs"]
+#[path = "../#common/mkmain.rs"]
 mod mkmain;
 
 fn main() {
@@ -30,9 +30,10 @@ fn main() {
     let file = File::create(&Path::new(&out_dir).join("crc_table.rs")).unwrap();
     write!(
         &file,
-        "const CRC_TABLE: [u32; {}] = {:?};",
+        "#[allow(clippy::unreadable_literal)]\nconst CRC_TABLE: [u32; {}] = {:?};",
         CRC_TABLE_LEN, table
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[inline]
@@ -40,9 +41,9 @@ fn crc_entry(input: u8) -> u32 {
     let mut crc = (input as u32) << 24;
 
     for _ in 0..8 {
-        if crc & 0x80000000 != 0 {
+        if crc & 0x8000_0000 != 0 {
             crc <<= 1;
-            crc ^= 0x04c11db7;
+            crc ^= 0x04c1_1db7;
         } else {
             crc <<= 1;
         }

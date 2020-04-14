@@ -67,24 +67,45 @@ pub fn uumain(args: Vec<String>) -> i32 {
         NAME
     );
     let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
-        .optflag("b", "", "make a backup of each file that would otherwise be overwritten or \
-                           removed")
-        .optflagopt("", "backup", "make a backup of each file that would otherwise be overwritten \
-                                   or removed", "METHOD")
-    // TODO: opts.optflag("d", "directory", "allow users with appropriate privileges to attempt \
-    //                                       to make hard links to directories");
+        .optflag(
+            "b",
+            "",
+            "make a backup of each file that would otherwise be overwritten or \
+             removed",
+        )
+        .optflagopt(
+            "",
+            "backup",
+            "make a backup of each file that would otherwise be overwritten \
+             or removed",
+            "METHOD",
+        )
+        // TODO: opts.optflag("d", "directory", "allow users with appropriate privileges to attempt \
+        //                                       to make hard links to directories");
         .optflag("f", "force", "remove existing destination files")
-        .optflag("i", "interactive", "prompt whether to remove existing destination files")
-    // TODO: opts.optflag("L", "logical", "dereference TARGETs that are symbolic links");
-    // TODO: opts.optflag("n", "no-dereference", "treat LINK_NAME as a normal file if it is a \
-    //                                            symbolic link to a directory");
-    // TODO: opts.optflag("P", "physical", "make hard links directly to symbolic links");
-    // TODO: opts.optflag("r", "relative", "create symbolic links relative to link location");
+        .optflag(
+            "i",
+            "interactive",
+            "prompt whether to remove existing destination files",
+        )
+        // TODO: opts.optflag("L", "logical", "dereference TARGETs that are symbolic links");
+        // TODO: opts.optflag("n", "no-dereference", "treat LINK_NAME as a normal file if it is a \
+        //                                            symbolic link to a directory");
+        // TODO: opts.optflag("P", "physical", "make hard links directly to symbolic links");
+        // TODO: opts.optflag("r", "relative", "create symbolic links relative to link location");
         .optflag("s", "symbolic", "make symbolic links instead of hard links")
         .optopt("S", "suffix", "override the usual backup suffix", "SUFFIX")
-        .optopt("t", "target-directory", "specify the DIRECTORY in which to create the links",
-                "DIRECTORY")
-        .optflag("T", "no-target-directory", "treat LINK_NAME as a normal file always")
+        .optopt(
+            "t",
+            "target-directory",
+            "specify the DIRECTORY in which to create the links",
+            "DIRECTORY",
+        )
+        .optflag(
+            "T",
+            "no-target-directory",
+            "treat LINK_NAME as a normal file always",
+        )
         .optflag("v", "verbose", "print name of each linked file")
         .parse(args);
 
@@ -159,7 +180,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
-    if files.len() == 0 {
+    if files.is_empty() {
         show_error!(
             "missing file operand\nTry '{} --help' for more information.",
             NAME
@@ -201,7 +222,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
         );
         return 1;
     }
-    assert!(files.len() != 0);
+    assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => 0,
@@ -295,7 +316,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         print!("'{}' -> '{}'", dst.display(), src.display());
         match backup_path {
             Some(path) => println!(" (backup: '{}')", path.display()),
-            None => println!(""),
+            None => println!(),
         }
     }
     Ok(())
@@ -304,7 +325,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
 fn read_yes() -> bool {
     let mut s = String::new();
     match stdin().read_line(&mut s) {
-        Ok(_) => match s.char_indices().nth(0) {
+        Ok(_) => match s.char_indices().next() {
             Some((_, x)) => x == 'y' || x == 'Y',
             _ => false,
         },

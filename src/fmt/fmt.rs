@@ -14,12 +14,12 @@ extern crate unicode_width;
 #[macro_use]
 extern crate uucore;
 
-use std::cmp;
-use std::io::{BufReader, BufWriter, Read};
-use std::fs::File;
-use std::io::{stdin, stdout, Write};
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
+use std::cmp;
+use std::fs::File;
+use std::io::{stdin, stdout, Write};
+use std::io::{BufReader, BufWriter, Read};
 
 macro_rules! silent_unwrap(
     ($exp:expr) => (
@@ -38,7 +38,7 @@ static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
 static LONG_HELP: &str = "";
 
-pub type FileOrStdReader = BufReader<Box<Read + 'static>>;
+pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 pub struct FmtOptions {
     crown: bool,
     tagged: bool,
@@ -57,6 +57,7 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")
@@ -179,9 +180,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     for i in files.iter().map(|x| &x[..]) {
         let mut fp = match i {
-            "-" => BufReader::new(Box::new(stdin()) as Box<Read + 'static>),
+            "-" => BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>),
             _ => match File::open(i) {
-                Ok(f) => BufReader::new(Box::new(f) as Box<Read + 'static>),
+                Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
                 Err(e) => {
                     show_warning!("{}: {}", i, e);
                     continue;

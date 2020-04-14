@@ -45,7 +45,8 @@ fn tabstops_parse(s: String) -> Vec<usize> {
         crash!(1, "{}\n", "tab size cannot be 0");
     }
 
-    if let (false, _) = nums.iter()
+    if let (false, _) = nums
+        .iter()
         .fold((true, 0), |(acc, last), &n| (acc && last <= n, n))
     {
         crash!(1, "{}\n", "tab sizes must be ascending");
@@ -128,16 +129,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open(path: String) -> BufReader<Box<Read + 'static>> {
+fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     let file_buf;
     if path == "-" {
-        BufReader::new(Box::new(stdin()) as Box<Read>)
+        BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
         file_buf = match File::open(&path[..]) {
             Ok(a) => a,
             Err(e) => crash!(1, "{}: {}\n", &path[..], e),
         };
-        BufReader::new(Box::new(file_buf) as Box<Read>)
+        BufReader::new(Box::new(file_buf) as Box<dyn Read>)
     }
 }
 
@@ -145,7 +146,7 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> usize {
     if tabstops.len() == 1 {
         tabstops[0] - col % tabstops[0]
     } else {
-        match tabstops.iter().skip_while(|&&t| t <= col).next() {
+        match tabstops.iter().find(|&&t| t > col) {
             Some(t) => t - col,
             None => 1,
         }
@@ -169,7 +170,7 @@ fn expand(options: Options) {
     for file in options.files.into_iter() {
         let mut fh = open(file);
 
-        while match fh.read_until('\n' as u8, &mut buf) {
+        while match fh.read_until(b'\n', &mut buf) {
             Ok(s) => s > 0,
             Err(_) => buf.is_empty(),
         } {

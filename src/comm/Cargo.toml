@@ -2,17 +2,18 @@
 name = "comm"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_comm"
 path = "comm.rs"
 
 [dependencies]
-libc = "0.2.42"
 getopts = "0.2.18"
-uucore = "0.0.1"
+libc = "0.2.42"
+uucore = "0.0.2"
 
 [[bin]]
 name = "comm"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

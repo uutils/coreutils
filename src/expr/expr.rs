@@ -13,8 +13,8 @@ extern crate onig;
 #[macro_use]
 extern crate uucore;
 
-mod tokens;
 mod syntax_tree;
+mod tokens;
 
 static NAME: &str = "expr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -80,7 +80,7 @@ fn maybe_handle_help_or_version(args: &[String]) -> bool {
 
 fn print_help() {
     //! The following is taken from GNU coreutils' "expr --help" output.
-    print!(
+    println!(
         r#"Usage: expr EXPRESSION
   or:  expr OPTION
 
@@ -131,8 +131,7 @@ Environment variables:
 	* EXPR_DEBUG_TOKENS=1   dump expression's tokens
 	* EXPR_DEBUG_RPN=1      dump expression represented in reverse polish notation
 	* EXPR_DEBUG_SYA_STEP=1 dump each parser step
-	* EXPR_DEBUG_AST=1      dump expression represented abstract syntax tree
-"#
+	* EXPR_DEBUG_AST=1      dump expression represented abstract syntax tree"#
     );
 }
 

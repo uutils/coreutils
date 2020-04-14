@@ -108,16 +108,13 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     settings.strategy_param = "1000".to_owned();
     let strategies = vec!["b", "C", "l"];
     for e in &strategies {
-        match matches.opt_str(*e) {
-            Some(a) => {
-                if settings.strategy == "l" {
-                    settings.strategy = (*e).to_owned();
-                    settings.strategy_param = a;
-                } else {
-                    crash!(1, "{}: cannot split in more than one way", NAME)
-                }
+        if let Some(a) = matches.opt_str(*e) {
+            if settings.strategy == "l" {
+                settings.strategy = (*e).to_owned();
+                settings.strategy_param = a;
+            } else {
+                crash!(1, "{}: cannot split in more than one way", NAME)
             }
-            None => {}
         }
     }
 
@@ -159,15 +156,15 @@ struct LineSplitter {
 }
 
 impl LineSplitter {
-    fn new(settings: &Settings) -> Box<Splitter> {
+    fn new(settings: &Settings) -> LineSplitter {
         let n = match settings.strategy_param.parse() {
             Ok(a) => a,
             Err(e) => crash!(1, "invalid number of lines: {}", e),
         };
-        Box::new(LineSplitter {
+        LineSplitter {
             saved_lines_to_write: n,
             lines_to_write: n,
-        }) as Box<Splitter>
+        }
     }
 }
 
@@ -190,11 +187,11 @@ struct ByteSplitter {
 }
 
 impl ByteSplitter {
-    fn new(settings: &Settings) -> Box<Splitter> {
+    fn new(settings: &Settings) -> ByteSplitter {
         let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
         let suffix = strategy_param.pop().unwrap();
         let multiplier = match suffix {
-            '0'...'9' => 1usize,
+            '0'..='9' => 1usize,
             'b' => 512usize,
             'k' => 1024usize,
             'm' => 1024usize * 1024usize,
@@ -216,12 +213,12 @@ impl ByteSplitter {
                 Err(e) => crash!(1, "invalid number of bytes: {}", e),
             }
         };
-        Box::new(ByteSplitter {
+        ByteSplitter {
             saved_bytes_to_write: n * multiplier,
             bytes_to_write: n * multiplier,
             break_on_line_end: settings.strategy == "b",
             require_whole_line: false,
-        }) as Box<Splitter>
+        }
     }
 }
 
@@ -248,6 +245,7 @@ impl Splitter for ByteSplitter {
 }
 
 // (1, 3) -> "aab"
+#[allow(clippy::many_single_char_names)]
 fn str_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_owned();
     let mut n = i;
@@ -263,6 +261,7 @@ fn str_prefix(i: usize, width: usize) -> String {
 }
 
 // (1, 3) -> "001"
+#[allow(clippy::many_single_char_names)]
 fn num_prefix(i: usize, width: usize) -> String {
     let mut c = "".to_owned();
     let mut n = i;
@@ -279,7 +278,7 @@ fn num_prefix(i: usize, width: usize) -> String {
 
 fn split(settings: &Settings) -> i32 {
     let mut reader = BufReader::new(if settings.input == "-" {
-        Box::new(stdin()) as Box<Read>
+        Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = match File::open(Path::new(&settings.input)) {
             Ok(a) => a,
@@ -289,12 +288,12 @@ fn split(settings: &Settings) -> i32 {
                 settings.input
             ),
         };
-        Box::new(r) as Box<Read>
+        Box::new(r) as Box<dyn Read>
     });
 
-    let mut splitter: Box<Splitter> = match settings.strategy.as_ref() {
-        "l" => LineSplitter::new(settings),
-        "b" | "C" => ByteSplitter::new(settings),
+    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_ref() {
+        "l" => Box::new(LineSplitter::new(settings)),
+        "b" | "C" => Box::new(ByteSplitter::new(settings)),
         a => crash!(1, "strategy {} not supported", a),
     };
 
@@ -303,7 +302,7 @@ fn split(settings: &Settings) -> i32 {
         request_new_file: true,      // Request new file
     };
 
-    let mut writer = BufWriter::new(Box::new(stdout()) as Box<Write>);
+    let mut writer = BufWriter::new(Box::new(stdout()) as Box<dyn Write>);
     let mut fileno = 0;
     loop {
         if control.current_line.chars().count() == 0 {
@@ -320,7 +319,8 @@ fn split(settings: &Settings) -> i32 {
                     num_prefix(fileno, settings.suffix_length)
                 } else {
                     str_prefix(fileno, settings.suffix_length)
-                }.as_ref(),
+                }
+                .as_ref(),
             );
 
             if fileno != 0 {
@@ -333,7 +333,7 @@ fn split(settings: &Settings) -> i32 {
                     .create(true)
                     .open(Path::new(&filename))
                     .unwrap(),
-            ) as Box<Write>);
+            ) as Box<dyn Write>);
             control.request_new_file = false;
             if settings.verbose {
                 println!("creating file '{}'", filename);

@@ -2,7 +2,8 @@
 name = "touch"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_touch"
@@ -12,11 +13,8 @@ path = "touch.rs"
 filetime = "0.2.1"
 getopts = "0.2.18"
 time = "0.1.40"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["libc"]
+uucore = { version = "0.0.2", features = ["libc"] }
 
 [[bin]]
 name = "touch"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

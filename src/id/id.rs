@@ -16,28 +16,28 @@
 
 #[macro_use]
 extern crate uucore;
+use std::ffi::CStr;
+use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
-use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::process::{getegid, geteuid, getgid, getuid};
-use std::ffi::CStr;
 
 macro_rules! cstr2cow {
-    ($v:expr) => (
+    ($v:expr) => {
         unsafe { CStr::from_ptr($v).to_string_lossy() }
-    )
+    };
 }
 
 #[cfg(not(target_os = "linux"))]
 mod audit {
-    pub use std::mem::uninitialized;
-    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t, uint64_t};
+    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 
     pub type au_id_t = uid_t;
     pub type au_asid_t = pid_t;
     pub type au_event_t = c_uint;
     pub type au_emod_t = c_uint;
     pub type au_class_t = c_int;
+    pub type au_flag_t = u64;
 
     #[repr(C)]
     pub struct au_mask {
@@ -58,7 +58,7 @@ mod audit {
         pub ai_mask: au_mask_t,       // Audit masks.
         pub ai_termid: au_tid_addr_t, // Terminal ID.
         pub ai_asid: au_asid_t,       // Audit session ID.
-        pub ai_flags: uint64_t,       // Audit session flags
+        pub ai_flags: au_flag_t,      // Audit session flags
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
@@ -67,8 +67,8 @@ mod audit {
     }
 }
 
-static SYNTAX: &'static str = "[OPTION]... [USER]";
-static SUMMARY: &'static str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
+static SYNTAX: &str = "[OPTION]... [USER]";
+static SUMMARY: &str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
@@ -117,7 +117,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!(
             "{}",
             if nflag {
-                entries::gid2grp(id).unwrap_or(id.to_string())
+                entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
             } else {
                 id.to_string()
             }
@@ -132,7 +132,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         println!(
             "{}",
             if nflag {
-                entries::uid2usr(id).unwrap_or(id.to_string())
+                entries::uid2usr(id).unwrap_or_else(|_| id.to_string())
             } else {
                 id.to_string()
             }
@@ -146,7 +146,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             if nflag {
                 possible_pw
                     .map(|p| p.belongs_to())
-                    .unwrap_or(entries::get_groups().unwrap())
+                    .unwrap_or_else(|| entries::get_groups().unwrap())
                     .iter()
                     .map(|&id| entries::gid2grp(id).unwrap())
                     .collect::<Vec<_>>()
@@ -154,7 +154,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             } else {
                 possible_pw
                     .map(|p| p.belongs_to())
-                    .unwrap_or(entries::get_groups().unwrap())
+                    .unwrap_or_else(|| entries::get_groups().unwrap())
                     .iter()
                     .map(|&id| id.to_string())
                     .collect::<Vec<_>>()
@@ -238,7 +238,7 @@ fn pretty(possible_pw: Option<Passwd>) {
 
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn pline(possible_uid: Option<uid_t>) {
-    let uid = possible_uid.unwrap_or(getuid());
+    let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
 
     println!(
@@ -258,7 +258,7 @@ fn pline(possible_uid: Option<uid_t>) {
 
 #[cfg(target_os = "linux")]
 fn pline(possible_uid: Option<uid_t>) {
-    let uid = possible_uid.unwrap_or(getuid());
+    let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
 
     println!(
@@ -278,7 +278,8 @@ fn auditid() {}
 
 #[cfg(not(target_os = "linux"))]
 fn auditid() {
-    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { audit::uninitialized() };
+    #[allow(deprecated)]
+    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { std::mem::uninitialized() };
     let address = &mut auditinfo as *mut audit::c_auditinfo_addr_t;
     if unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");

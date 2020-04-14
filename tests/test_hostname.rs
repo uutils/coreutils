@@ -9,4 +9,3 @@ fn test_hostname() {
     assert!(ls_default_res.stdout.len() >= ls_short_res.stdout.len());
     assert!(ls_default_res.stdout.len() >= ls_domain_res.stdout.len());
 }
-

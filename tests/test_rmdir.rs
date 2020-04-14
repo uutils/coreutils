@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_rmdir_empty_directory_no_parents() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -39,9 +38,10 @@ fn test_rmdir_nonempty_directory_no_parents() {
     at.touch(file);
     assert!(at.file_exists(file));
 
-    ucmd.arg(dir).fails()
-        .stderr_is("rmdir: error: failed to remove 'test_rmdir_nonempty_no_parents': Directory not \
-                empty\n");
+    ucmd.arg(dir).fails().stderr_is(
+        "rmdir: error: failed to remove 'test_rmdir_nonempty_no_parents': Directory not \
+                empty\n",
+    );
 
     assert!(at.dir_exists(dir));
 }
@@ -58,12 +58,12 @@ fn test_rmdir_nonempty_directory_with_parents() {
     at.touch(file);
     assert!(at.file_exists(file));
 
-    ucmd.arg("-p").arg(dir).fails()
-        .stderr_is(
-               "rmdir: error: failed to remove 'test_rmdir_nonempty/with/parents': Directory not \
+    ucmd.arg("-p").arg(dir).fails().stderr_is(
+        "rmdir: error: failed to remove 'test_rmdir_nonempty/with/parents': Directory not \
                 empty\nrmdir: error: failed to remove 'test_rmdir_nonempty/with': Directory not \
                 empty\nrmdir: error: failed to remove 'test_rmdir_nonempty': Directory not \
-                empty\n");
+                empty\n",
+    );
 
     assert!(at.dir_exists(dir));
 }
@@ -80,7 +80,10 @@ fn test_rmdir_ignore_nonempty_directory_no_parents() {
     at.touch(file);
     assert!(at.file_exists(file));
 
-    ucmd.arg("--ignore-fail-on-non-empty").arg(dir).succeeds().no_stderr();
+    ucmd.arg("--ignore-fail-on-non-empty")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.dir_exists(dir));
 }
@@ -97,7 +100,11 @@ fn test_rmdir_ignore_nonempty_directory_with_parents() {
     at.touch(file);
     assert!(at.file_exists(file));
 
-    ucmd.arg("--ignore-fail-on-non-empty").arg("-p").arg(dir).succeeds().no_stderr();
+    ucmd.arg("--ignore-fail-on-non-empty")
+        .arg("-p")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
 
     assert!(at.dir_exists(dir));
 }

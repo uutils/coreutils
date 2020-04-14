@@ -1,17 +1,71 @@
+# uutils / coreutils
+# * see the repository LICENSE, README, and CONTRIBUTING files for more information
+
 [package]
 name = "uutils"
+description = "uutils ~ universal (as in cross-platform) CLI utils, written in Rust"
+license = "MIT"
+repository = "https://github.com/uutils/coreutils"
 version = "0.0.1"
 authors = []
 build = "build.rs"
 autotests = false
 
 [features]
-unix = [
+default = [ "feat_common_core" ]
+## OS feature shortcodes
+macos = [ "feat_os_unix" ]
+unix = [ "feat_os_unix" ]
+windows = [ "feat_os_windows" ]
+## project-specific feature shortcodes
+nightly = []
+test_unimplemented = []
+## feature sets
+# "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
+feat_os_unix = [
+  "feat_common",
+  "feat_os_unix_musl",
+  "feat_os_unix_utmpx_required",
+  #
+  "stdbuf",
+]
+# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuschia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
+feat_os_unix_fuchsia = [
+  "feat_common_core",
+  #
   "chgrp",
   "chmod",
   "chown",
   "chroot",
   "df",
+  "du",
+  "groups",
+  "hostid",
+  "install",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "nice",
+  "pathchk",
+  "stdbuf",
+  "tty",
+  "uname",
+  "unlink",
+]
+# "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
+feat_os_unix_gnueabihf = [
+  "feat_common",
+  "feat_os_unix_musl",
+  "feat_os_unix_utmpx_required",
+]
+# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
+feat_os_unix_musl = [
+  "feat_common",
+  #
+  "chgrp",
+  "chmod",
+  "chown",
+  "chroot",
   "du",
   "groups",
   "hostid",
@@ -25,65 +79,57 @@ unix = [
   "numfmt",
   "nohup",
   "pathchk",
-  "pinky",
   "stat",
-  "stdbuf",
   "timeout",
   "touch",
   "tty",
   "uname",
   "unlink",
+]
+# "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
+feat_os_unix_redox = [
+  "feat_common_core",
+  #
+  "uname",
+  "chmod",
+  "install",
+]
+# "feat_os_unix_utmpx_required" == set of utilites requiring utmp/utmpx support
+# * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
+feat_os_unix_utmpx_required = [
+  "pinky",
   "uptime",
   "users",
   "who",
-
-  "generic"
 ]
-windows = ["generic"]
-# Feature "fuchsia" contains the exclusive list of utilities
-# that can be compiled and run on Fuchsia. Should be built
-# with --no-default-features when selecting this feature.
-# TODO: merge with "unix" to avoid duplication once we support
-# all utilities in that feature.
-fuchsia = [
-  # unix utilities
-  "chgrp",
-  "chmod",
-  "chown",
-  "du",
-  "groups",
-  "hostid",
-  "install",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "nice",
-  "pathchk",
-  "stdbuf",
-  "tty",
-  "uname",
-  "unlink",
-
-  # All generic utilities
-  "generic"
-]
-generic = [
+# "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
+feat_os_windows = [
+  "feat_common", ## == "feat_os_windows_legacy" + "hostname"
+  ]
+# "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
+feat_os_windows_legacy = [
+  "feat_common_core",
+  #
+  "arch",
+  "nproc",
+  "sync",
+  "touch",
+  "whoami",
+  ]
+## (common/core) feature sets
+# "feat_common" == expanded set of utilities which can be built/run on the usual rust "tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
+feat_common = [
+  "feat_common_core",
+  #
   "arch",
   "hostname",
   "nproc",
   "sync",
   "touch",
   "whoami",
-  "redox_generic"
 ]
-# Feature "redox"/"redox_generic" contains the exclusive list of utilities
-# that can be compiled and run on redox. Should be built
-# with --no-default-features when selecting this feature.
-# TODO: merge with "generic" to avoid duplication once we support
-# all utilities in that feature.
-redox_generic = [
-
-  # And maybe all generic utilities
+# "feat_common_core" == baseline core set of utilities which can be built/run on most targets
+feat_common_core = [
   "base32",
   "base64",
   "basename",
@@ -145,20 +191,11 @@ redox_generic = [
   "wc",
   "yes",
 ]
-redox = [
-  "uname",
-  "chmod",
-  "install",
-  "redox_generic"
-]
-test_unimplemented = []
-nightly = []
-default = ["unix"]
 
 [workspace]
 
 [dependencies]
-uucore   = "0.0.1"
+uucore   = "0.0.2"
 arch     = { optional=true, path="src/arch" }
 base32   = { optional=true, path="src/base32" }
 base64   = { optional=true, path="src/base64" }
@@ -253,16 +290,19 @@ wc       = { optional=true, path="src/wc" }
 who      = { optional=true, path="src/who" }
 whoami   = { optional=true, path="src/whoami" }
 yes      = { optional=true, path="src/yes" }
+#
+# * transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
+backtrace = ">= 0.3.3, <= 0.3.30"
 
 [dev-dependencies]
-time = "0.1.42"
 filetime = "0.2.5"
-libc = "0.2.53"
-regex = "1.0.3"
-rand = "0.6.5"
-tempdir = "0.3.7"
-unindent = "0.1.3"
 lazy_static = "1.3.0"
+libc = "0.2.62"
+rand = "0.6.5"
+regex = "1.0.3"
+tempdir = "0.3.7"
+time = "0.1.42"
+unindent = "0.1.3"
 
 [target.'cfg(unix)'.dev-dependencies]
 # FIXME: this should use the normal users crate, but it conflicts with the users utility
@@ -275,3 +315,6 @@ path = "src/uutils/uutils.rs"
 
 [[test]]
 name = "tests"
+
+[patch.crates-io]
+uucore = { git = "https://github.com/rivy/rust.uucore", tag = "0.0.2" }

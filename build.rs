@@ -16,8 +16,9 @@ pub fn main() {
         if val == "1" && key.starts_with(feature_prefix) {
             let krate = key[feature_prefix.len()..].to_lowercase();
             match krate.as_ref() {
-                "default" | "unix" | "redox" | "redox_generic" | "fuchsia" | "generic" | "windows"
-                | "nightly" | "test_unimplemented" => continue,
+                "default" | "macos" | "unix" | "windows" => continue,
+                "nightly" | "test_unimplemented" => continue,
+                s if s.starts_with("feat_") => continue,
                 _ => {}
             }
             crates.push(krate.to_string());
@@ -35,7 +36,8 @@ pub fn main() {
     fn util_map() -> UtilityMap {
     let mut map: UtilityMap = HashMap::new();\n"
             .as_bytes(),
-    ).unwrap();
+    )
+    .unwrap();
 
     for krate in crates {
         cf.write_all(format!("extern crate uu_{krate};\n", krate = krate).as_bytes())
@@ -59,18 +61,22 @@ pub fn main() {
                               map.insert(\"shake128sum\", uu_hashsum::uumain);
                               map.insert(\"shake256sum\", uu_hashsum::uumain);\n"
                         .as_bytes(),
-                ).unwrap();
+                )
+                .unwrap();
             }
-            _ => mf.write_all(
-                format!(
-                    "map.insert(\"{krate}\", uu_{krate}::uumain);\n",
-                    krate = krate
-                ).as_bytes(),
-            ).unwrap(),
+            _ => mf
+                .write_all(
+                    format!(
+                        "map.insert(\"{krate}\", uu_{krate}::uumain);\n",
+                        krate = krate
+                    )
+                    .as_bytes(),
+                )
+                .unwrap(),
         }
     }
 
-    mf.write_all("map\n}\n".as_bytes()).unwrap();
+    mf.write_all(b"map\n}\n").unwrap();
 
     cf.flush().unwrap();
     mf.flush().unwrap();

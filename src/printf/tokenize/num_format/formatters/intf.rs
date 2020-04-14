@@ -1,11 +1,12 @@
 //! formatter for unsigned and signed int subs
 //! unsigned ints: %X %x (hex u64) %o (octal u64) %u (base ten u64)
 //! signed ints: %i %d (both base ten i64)
-use std::u64;
-use std::i64;
 use super::super::format_field::FormatField;
-use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter,
-                              InPrefix};
+use super::super::formatter::{
+    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter, InPrefix,
+};
+use std::i64;
+use std::u64;
 
 pub struct Intf {
     a: u32,
@@ -66,7 +67,7 @@ impl Intf {
             let c_opt = str_it.next();
             if let Some(c) = c_opt {
                 match c {
-                    '0'...'9' | 'a'...'f' | 'A'...'F' => {
+                    '0'..='9' | 'a'..='f' | 'A'..='F' => {
                         if ret.len_digits == 0 && c == '0' {
                             ret.is_zero = true;
                         } else if ret.is_zero {
@@ -76,7 +77,7 @@ impl Intf {
                         if ret.len_digits == max_sd_in {
                             if let Some(next_ch) = str_it.next() {
                                 match next_ch {
-                                    '0'...'9' => {
+                                    '0'..='9' => {
                                         ret.past_max = true;
                                     }
                                     _ => {
@@ -127,7 +128,7 @@ impl Intf {
             },
             'x' | 'X' => "ffffffffffffffff",
             'o' => "1777777777777777777777",
-            'u' | _ => "18446744073709551615",
+            /* 'u' | */ _ => "18446744073709551615",
         }));
         fmt_prim
     }
@@ -203,7 +204,7 @@ impl Formatter for Intf {
             let radix_out = match *field.field_char {
                 'd' | 'i' | 'u' => Base::Ten,
                 'x' | 'X' => Base::Hex,
-                'o' | _ => Base::Octal,
+                /* 'o' | */ _ => Base::Octal,
             };
             let radix_mismatch = !radix_out.eq(&inprefix.radix_in);
             let decr_from_max: bool = inprefix.sign == -1 && *field.field_char != 'i';
@@ -216,13 +217,12 @@ impl Formatter for Intf {
             if convert_hints.check_past_max || decr_from_max || radix_mismatch {
                 // radix of in and out is the same.
                 let segment = String::from(&str_in[begin..end]);
-                let m = Intf::conv_from_segment(
+                Intf::conv_from_segment(
                     &segment,
                     inprefix.radix_in.clone(),
                     *field.field_char,
                     inprefix.sign,
-                );
-                m
+                )
             } else {
                 // otherwise just do a straight string copy.
                 let mut fmt_prim: FormatPrimitive = Default::default();
@@ -242,26 +242,20 @@ impl Formatter for Intf {
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
         let mut finalstr: String = String::new();
-        match prim.prefix {
-            Some(ref prefix) => {
-                finalstr.push_str(&prefix);
-            }
-            None => {}
+        if let Some(ref prefix) = prim.prefix {
+            finalstr.push_str(&prefix);
         }
         // integral second fields is zero-padded minimum-width
         // which gets handled before general minimum-width
         match prim.pre_decimal {
             Some(ref pre_decimal) => {
-                match field.second_field {
-                    Some(min) => {
-                        let mut i = min;
-                        let len = pre_decimal.len() as u32;
-                        while i > len {
-                            finalstr.push('0');
-                            i -= 1;
-                        }
+                if let Some(min) = field.second_field {
+                    let mut i = min;
+                    let len = pre_decimal.len() as u32;
+                    while i > len {
+                        finalstr.push('0');
+                        i -= 1;
                     }
-                    None => {}
                 }
                 finalstr.push_str(&pre_decimal);
             }

@@ -2,7 +2,8 @@
 name = "stat"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_stat"
@@ -11,11 +12,8 @@ path = "stat.rs"
 [dependencies]
 getopts = "0.2.18"
 time = "0.1.40"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["entries"]
+uucore = { version = "0.0.2", features = ["entries"] }
 
 [[bin]]
 name = "stat"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -47,7 +47,12 @@ fn _du_basics_subdir(s: String) {
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_basics_subdir(s: String) {
-    assert_eq!(s, "8\tsubdir/deeper\n");
+    // MS-WSL linux has altered expected output
+    if !is_wsl() {
+        assert_eq!(s, "8\tsubdir/deeper\n");
+    } else {
+        assert_eq!(s, "0\tsubdir/deeper\n");
+    }
 }
 
 #[test]
@@ -77,11 +82,17 @@ fn test_du_soft_link() {
 
 #[cfg(target_os = "macos")]
 fn _du_soft_link(s: String) {
-    assert_eq!(s, "16\tsubdir/links\n");
+    // 'macos' host variants may have `du` output variation for soft links
+    assert!((s == "12\tsubdir/links\n") || (s == "16\tsubdir/links\n"));
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_soft_link(s: String) {
-    assert_eq!(s, "16\tsubdir/links\n");
+    // MS-WSL linux has altered expected output
+    if !is_wsl() {
+        assert_eq!(s, "16\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/links\n");
+    }
 }
 
 #[test]
@@ -104,7 +115,12 @@ fn _du_hard_link(s: String) {
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_hard_link(s: String) {
-    assert_eq!(s, "16\tsubdir/links\n");
+    // MS-WSL linux has altered expected output
+    if !is_wsl() {
+        assert_eq!(s, "16\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/links\n");
+    }
 }
 
 #[test]
@@ -123,5 +139,10 @@ fn _du_d_flag(s: String) {
 }
 #[cfg(not(target_os = "macos"))]
 fn _du_d_flag(s: String) {
-    assert_eq!(s, "28\t./subdir\n36\t./\n");
+    // MS-WSL linux has altered expected output
+    if !is_wsl() {
+        assert_eq!(s, "28\t./subdir\n36\t./\n");
+    } else {
+        assert_eq!(s, "8\t./subdir\n8\t./\n");
+    }
 }

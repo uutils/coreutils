@@ -49,18 +49,22 @@ macro_rules! path_concat {
 
 #[macro_export]
 macro_rules! util_name {
-  () => ( module_path!().split("_").nth(1).expect("no test name") )
+    () => {
+        module_path!().split("_").nth(1).expect("no test name")
+    };
 }
 
 #[macro_export]
 macro_rules! new_ucmd {
-  () => ( TestScenario::new(util_name!()).ucmd() )
+    () => {
+        TestScenario::new(util_name!()).ucmd()
+    };
 }
 
 #[macro_export]
 macro_rules! at_and_ucmd {
-  () => ({
-    let ts = TestScenario::new(util_name!());
-    (ts.fixtures.clone(), ts.ucmd())
-  })
+    () => {{
+        let ts = TestScenario::new(util_name!());
+        (ts.fixtures.clone(), ts.ucmd())
+    }};
 }

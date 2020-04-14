@@ -3,10 +3,7 @@ use rust_users::*;
 
 #[test]
 fn test_invalid_option() {
-    new_ucmd!()
-        .arg("-w")
-        .arg("/")
-        .fails();
+    new_ucmd!().arg("-w").arg("/").fails();
 }
 
 static DIR: &'static str = "/tmp";
@@ -48,9 +45,12 @@ fn test_fail_silently() {
 #[test]
 fn test_preserve_root() {
     // It's weird that on OS X, `realpath /etc/..` returns '/private'
-    for d in &["/", "/////tmp///../../../../",
-               "../../../../../../../../../../../../../../",
-               "./../../../../../../../../../../../../../../"] {
+    for d in &[
+        "/",
+        "/////tmp///../../../../",
+        "../../../../../../../../../../../../../../",
+        "./../../../../../../../../../../../../../../",
+    ] {
         new_ucmd!()
             .arg("--preserve-root")
             .arg("-R")
@@ -63,9 +63,12 @@ fn test_preserve_root() {
 #[test]
 fn test_preserve_root_symlink() {
     let file = "test_chgrp_symlink2root";
-    for d in &["/", "////tmp//../../../../",
-               "..//../../..//../..//../../../../../../../../",
-               ".//../../../../../../..//../../../../../../../"] {
+    for d in &[
+        "/",
+        "////tmp//../../../../",
+        "..//../../..//../..//../../../../../../../../",
+        ".//../../../../../../..//../../../../../../../",
+    ] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.symlink_file(d, file);
         ucmd.arg("--preserve-root")
@@ -91,14 +94,17 @@ fn test_preserve_root_symlink() {
         .fails()
         .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
 
-    use ::std::fs;
+    use std::fs;
     fs::remove_file("/tmp/__root__").unwrap();
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_reference() {
-    if get_effective_gid() != 0 {
+    // skip for root or MS-WSL
+    // * MS-WSL is bugged (as of 2019-12-25), allowing non-root accounts su-level privileges for `chgrp`
+    // * for MS-WSL, succeeds and stdout == 'group of /etc retained as root'
+    if !(get_effective_gid() == 0 || is_wsl()) {
         new_ucmd!()
             .arg("-v")
             .arg("--reference=/etc/passwd")
@@ -128,7 +134,9 @@ fn test_big_p() {
             .arg("bin")
             .arg("/proc/self/cwd")
             .fails()
-            .stderr_is("chgrp: changing group of '/proc/self/cwd': Operation not permitted (os error 1)\n");
+            .stderr_is(
+                "chgrp: changing group of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+            );
     }
 }
 
@@ -136,13 +144,16 @@ fn test_big_p() {
 #[cfg(target_os = "linux")]
 fn test_big_h() {
     if get_effective_gid() != 0 {
-        assert!(new_ucmd!()
-            .arg("-RH")
-            .arg("bin")
-            .arg("/proc/self/fd")
-            .fails()
-            .stderr
-            .lines()
-            .fold(0, |acc, _| acc + 1) > 1);
+        assert!(
+            new_ucmd!()
+                .arg("-RH")
+                .arg("bin")
+                .arg("/proc/self/fd")
+                .fails()
+                .stderr
+                .lines()
+                .fold(0, |acc, _| acc + 1)
+                > 1
+        );
     }
 }

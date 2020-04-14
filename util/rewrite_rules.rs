@@ -15,4 +15,3 @@ fn trim_left_matches_to_start<P: FnMut(char) -> bool>(s: &str, inner: P) {
     replace!(s.trim_left_matches(inner) => s.trim_start_matches(inner));
     replace!(s.trim_right_matches(inner) => s.trim_end_matches(inner));
 }
-

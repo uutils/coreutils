@@ -7,8 +7,8 @@
  * file that was distributed with this source code.
  */
 
-use std::iter::Peekable;
 use std::io::{BufRead, Lines};
+use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
 use FileOrStdReader;
@@ -72,10 +72,7 @@ pub struct FileLines<'a> {
 
 impl<'a> FileLines<'a> {
     fn new<'b>(opts: &'b FmtOptions, lines: Lines<&'b mut FileOrStdReader>) -> FileLines<'b> {
-        FileLines {
-            opts,
-            lines,
-        }
+        FileLines { opts, lines }
     }
 
     // returns true if this line should be formatted
@@ -164,24 +161,28 @@ impl<'a> Iterator for FileLines<'a> {
         // emit a blank line
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
-        if n.chars().all(|c| c.is_whitespace()) {
+        if n.chars().all(char::is_whitespace) {
             return Some(Line::NoFormatLine("".to_owned(), true));
         }
 
+        let (pmatch, poffset) = self.match_prefix(&n[..]);
+
         // if this line does not match the prefix,
         // emit the line unprocessed and iterate again
-        let (pmatch, poffset) = self.match_prefix(&n[..]);
         if !pmatch {
             return Some(Line::NoFormatLine(n, false));
-        } else if n[poffset + self.opts.prefix.len()..]
-            .chars()
-            .all(|c| c.is_whitespace())
+        }
+
+        // if the line matches the prefix, but is blank after,
+        // don't allow lines to be combined through it (that is,
+        // treat it like a blank line, except that since it's
+        // not truly blank we will not allow mail headers on the
+        // following line)
+        if pmatch
+            && n[poffset + self.opts.prefix.len()..]
+                .chars()
+                .all(char::is_whitespace)
         {
-            // if the line matches the prefix, but is blank after,
-            // don't allow lines to be combined through it (that is,
-            // treat it like a blank line, except that since it's
-            // not truly blank we will not allow mail headers on the
-            // following line)
             return Some(Line::NoFormatLine(n, false));
         }
 
@@ -363,25 +364,31 @@ impl<'a> Iterator for ParagraphStream<'a> {
                     }
                 } else if !second_done {
                     // now we have enough info to handle crown margin and tagged mode
+
+                    // in both crown and tagged modes we require that prefix_len is the same
                     if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
-                        // in both crown and tagged modes we require that prefix_len is the same
                         break;
-                    } else if self.opts.tagged && indent_len - 4 == fl.indent_len
+                    }
+
+                    // in tagged mode, indent has to be *different* on following lines
+                    if self.opts.tagged
+                        && indent_len - 4 == fl.indent_len
                         && indent_end == fl.indent_end
                     {
-                        // in tagged mode, indent has to be *different* on following lines
                         break;
-                    } else {
-                        // this is part of the same paragraph, get the indent info from this line
-                        indent_str.clear();
-                        indent_str.push_str(&fl.line[..fl.indent_end]);
-                        indent_len = fl.indent_len;
-                        indent_end = fl.indent_end;
                     }
+
+                    // this is part of the same paragraph, get the indent info from this line
+                    indent_str.clear();
+                    indent_str.push_str(&fl.line[..fl.indent_end]);
+                    indent_len = fl.indent_len;
+                    indent_end = fl.indent_end;
+
                     second_done = true;
                 } else {
                     // detect mismatch
-                    if indent_end != fl.indent_end || pfxind_end != fl.pfxind_end
+                    if indent_end != fl.indent_end
+                        || pfxind_end != fl.pfxind_end
                         || indent_len != fl.indent_len
                         || prefix_len != fl.prefix_len
                     {
@@ -436,7 +443,7 @@ impl<'a> ParaWords<'a> {
     fn create_words(&mut self) {
         if self.para.mail_header {
             // no extra spacing for mail headers; always exactly 1 space
-            // safe to trim_left on every line of a mail header, since the
+            // safe to trim_start on every line of a mail header, since the
             // first line is guaranteed not to have any spaces
             self.words.extend(
                 self.para

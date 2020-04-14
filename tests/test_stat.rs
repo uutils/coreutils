@@ -1,8 +1,9 @@
+extern crate regex;
+
 use common::util::*;
 
 extern crate uu_stat;
 pub use self::uu_stat::*;
-
 
 #[cfg(test)]
 mod test_fsext {
@@ -16,20 +17,32 @@ mod test_fsext {
         assert_eq!("lrw-r-xr-x", pretty_access(S_IFLNK | 0o655));
         assert_eq!("?rw-r-xr-x", pretty_access(0o655));
 
-        assert_eq!("brwSr-xr-x",
-                   pretty_access(S_IFBLK | S_ISUID as mode_t | 0o655));
-        assert_eq!("brwsr-xr-x",
-                   pretty_access(S_IFBLK | S_ISUID as mode_t | 0o755));
+        assert_eq!(
+            "brwSr-xr-x",
+            pretty_access(S_IFBLK | S_ISUID as mode_t | 0o655)
+        );
+        assert_eq!(
+            "brwsr-xr-x",
+            pretty_access(S_IFBLK | S_ISUID as mode_t | 0o755)
+        );
 
-        assert_eq!("prw---sr--",
-                   pretty_access(S_IFIFO | S_ISGID as mode_t | 0o614));
-        assert_eq!("prw---Sr--",
-                   pretty_access(S_IFIFO | S_ISGID as mode_t | 0o604));
+        assert_eq!(
+            "prw---sr--",
+            pretty_access(S_IFIFO | S_ISGID as mode_t | 0o614)
+        );
+        assert_eq!(
+            "prw---Sr--",
+            pretty_access(S_IFIFO | S_ISGID as mode_t | 0o604)
+        );
 
-        assert_eq!("c---r-xr-t",
-                   pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o055));
-        assert_eq!("c---r-xr-T",
-                   pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o054));
+        assert_eq!(
+            "c---r-xr-t",
+            pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o055)
+        );
+        assert_eq!(
+            "c---r-xr-T",
+            pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o054)
+        );
     }
 
     #[test]
@@ -88,73 +101,79 @@ mod test_generate_tokens {
     #[test]
     fn normal_format() {
         let s = "%'010.2ac%-#5.w\n";
-        let expected = vec![Token::Directive {
-                                flag: F_GROUP | F_ZERO,
-                                width: 10,
-                                precision: 2,
-                                format: 'a',
-                            },
-                            Token::Char('c'),
-                            Token::Directive {
-                                flag: F_LEFT | F_ALTER,
-                                width: 5,
-                                precision: 0,
-                                format: 'w',
-                            },
-                            Token::Char('\n')];
+        let expected = vec![
+            Token::Directive {
+                flag: F_GROUP | F_ZERO,
+                width: 10,
+                precision: 2,
+                format: 'a',
+            },
+            Token::Char('c'),
+            Token::Directive {
+                flag: F_LEFT | F_ALTER,
+                width: 5,
+                precision: 0,
+                format: 'w',
+            },
+            Token::Char('\n'),
+        ];
         assert_eq!(&expected, &Stater::generate_tokens(s, false).unwrap());
     }
 
     #[test]
     fn printf_format() {
         let s = "%-# 15a\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
-        let expected = vec![Token::Directive {
-                                flag: F_LEFT | F_ALTER | F_SPACE,
-                                width: 15,
-                                precision: -1,
-                                format: 'a',
-                            },
-                            Token::Char('\r'),
-                            Token::Char('"'),
-                            Token::Char('\\'),
-                            Token::Char('\x07'),
-                            Token::Char('\x08'),
-                            Token::Char('\x1B'),
-                            Token::Char('\x0C'),
-                            Token::Char('\x0B'),
-                            Token::Directive {
-                                flag: F_SIGN | F_ZERO,
-                                width: 20,
-                                precision: -1,
-                                format: 'w',
-                            },
-                            Token::Char('\x12'),
-                            Token::Char('w'),
-                            Token::Char('Z'),
-                            Token::Char('J'),
-                            Token::Char('\n')];
+        let expected = vec![
+            Token::Directive {
+                flag: F_LEFT | F_ALTER | F_SPACE,
+                width: 15,
+                precision: -1,
+                format: 'a',
+            },
+            Token::Char('\r'),
+            Token::Char('"'),
+            Token::Char('\\'),
+            Token::Char('\x07'),
+            Token::Char('\x08'),
+            Token::Char('\x1B'),
+            Token::Char('\x0C'),
+            Token::Char('\x0B'),
+            Token::Directive {
+                flag: F_SIGN | F_ZERO,
+                width: 20,
+                precision: -1,
+                format: 'w',
+            },
+            Token::Char('\x12'),
+            Token::Char('w'),
+            Token::Char('Z'),
+            Token::Char('J'),
+            Token::Char('\n'),
+        ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
 }
 
 #[test]
 fn test_invalid_option() {
-    new_ucmd!()
-        .arg("-w").arg("-q").arg("/").fails();
+    new_ucmd!().arg("-w").arg("-q").arg("/").fails();
 }
 
 #[cfg(target_os = "linux")]
-const NORMAL_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %w %W %x %X %y %Y %z %Z";
+const NORMAL_FMTSTR: &'static str =
+    "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
 #[cfg(target_os = "linux")]
-const DEV_FMTSTR: &'static str = "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
+const DEV_FMTSTR: &'static str =
+    "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
-const FS_FMTSTR: &'static str = "%a %b %c %d %f %i %l %n %s %S %t %T";
+const FS_FMTSTR: &'static str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_terse_fs_format() {
     let args = ["-f", "-t", "/proc"];
-    new_ucmd!().args(&args)
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -163,7 +182,8 @@ fn test_terse_fs_format() {
 #[cfg(target_os = "linux")]
 fn test_fs_format() {
     let args = ["-f", "-c", FS_FMTSTR, "/dev/shm"];
-    new_ucmd!().args(&args)
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -171,17 +191,66 @@ fn test_fs_format() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_terse_normal_format() {
+    // note: contains birth/creation date which increases test fragility
+    // * results may vary due to built-in `stat` limitations as well as linux kernel and rust version capability variations
     let args = ["-t", "/"];
-    new_ucmd!().args(&args)
-        .run()
-        .stdout_is(expected_result(&args));
+    let actual = new_ucmd!().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    let v_actual: Vec<&str> = actual.split(' ').collect();
+    let v_expect: Vec<&str> = expect.split(' ').collect();
+    // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
+    assert!(v_actual
+        .iter()
+        .zip(v_expect.iter())
+        .all(|(a, e)| a == e || *e == "0"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_format_created_time() {
+    let args = ["-c", "%w", "/boot"];
+    let actual = new_ucmd!().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    // note: using a regex instead of `split_whitespace()` in order to detect whitespace differences
+    let re = regex::Regex::new(r"\s").unwrap();
+    let v_actual: Vec<&str> = re.split(&actual).collect();
+    let v_expect: Vec<&str> = re.split(&expect).collect();
+    // * allow for inequality if `stat` (aka, expect) returns "-" (unknown value)
+    assert!(v_actual
+        .iter()
+        .zip(v_expect.iter())
+        .all(|(a, e)| a == e || *e == "-"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_format_created_seconds() {
+    let args = ["-c", "%W", "/boot"];
+    let actual = new_ucmd!().args(&args).run().stdout;
+    let expect = expected_result(&args);
+    println!("actual: {:?}", actual);
+    println!("expect: {:?}", expect);
+    // note: using a regex instead of `split_whitespace()` in order to detect whitespace differences
+    let re = regex::Regex::new(r"\s").unwrap();
+    let v_actual: Vec<&str> = re.split(&actual).collect();
+    let v_expect: Vec<&str> = re.split(&expect).collect();
+    // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
+    assert!(v_actual
+        .iter()
+        .zip(v_expect.iter())
+        .all(|(a, e)| a == e || *e == "0"));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
 fn test_normal_format() {
     let args = ["-c", NORMAL_FMTSTR, "/boot"];
-    new_ucmd!().args(&args)
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -190,7 +259,8 @@ fn test_normal_format() {
 #[cfg(target_os = "linux")]
 fn test_follow_symlink() {
     let args = ["-L", "-c", DEV_FMTSTR, "/dev/cdrom"];
-    new_ucmd!().args(&args)
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -199,7 +269,8 @@ fn test_follow_symlink() {
 #[cfg(target_os = "linux")]
 fn test_symlink() {
     let args = ["-c", DEV_FMTSTR, "/dev/cdrom"];
-    new_ucmd!().args(&args)
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -208,7 +279,8 @@ fn test_symlink() {
 #[cfg(target_os = "linux")]
 fn test_char() {
     let args = ["-c", DEV_FMTSTR, "/dev/pts/ptmx"];
-    new_ucmd!().args(&args)
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -216,8 +288,16 @@ fn test_char() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_multi_files() {
-    let args = ["-c", NORMAL_FMTSTR, "/dev", "/usr/lib", "/etc/fstab", "/var"];
-    new_ucmd!().args(&args)
+    let args = [
+        "-c",
+        NORMAL_FMTSTR,
+        "/dev",
+        "/usr/lib",
+        "/etc/fstab",
+        "/var",
+    ];
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
@@ -225,16 +305,22 @@ fn test_multi_files() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_printf() {
-    let args = ["--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n", "/"];
-    new_ucmd!().args(&args)
+    let args = [
+        "--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n",
+        "/",
+    ];
+    new_ucmd!()
+        .args(&args)
         .run()
         .stdout_is(expected_result(&args));
 }
 
 #[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
-    use std::process::Command;
-
-    let output = Command::new(util_name!()).env("LANGUAGE", "C").args(args).output().unwrap();
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    TestScenario::new(util_name!())
+        .cmd_keepenv(util_name!())
+        .env("LANGUAGE", "C")
+        .args(args)
+        .run()
+        .stdout
 }

@@ -1,6 +1,5 @@
 use common::util::*;
 
-
 #[test]
 fn test_default() {
     //CmdResult.stdout_only(...) trims trailing newlines
@@ -10,97 +9,159 @@ fn test_default() {
 #[test]
 fn test_no_trailing_newline() {
     //CmdResult.stdout_only(...) trims trailing newlines
-    assert_eq!("hi", new_ucmd!().arg("-n").arg("hi").succeeds().no_stderr().stdout);
+    assert_eq!(
+        "hi",
+        new_ucmd!()
+            .arg("-n")
+            .arg("hi")
+            .succeeds()
+            .no_stderr()
+            .stdout
+    );
 }
 
 #[test]
 fn test_escape_alert() {
-    new_ucmd!().args(&["-e", "\\a"]).succeeds().stdout_only("\x07\n");
+    new_ucmd!()
+        .args(&["-e", "\\a"])
+        .succeeds()
+        .stdout_only("\x07\n");
 }
 
 #[test]
 fn test_escape_backslash() {
-    new_ucmd!().args(&["-e", "\\\\"]).succeeds().stdout_only("\\\n");
+    new_ucmd!()
+        .args(&["-e", "\\\\"])
+        .succeeds()
+        .stdout_only("\\\n");
 }
 
 #[test]
 fn test_escape_backspace() {
-    new_ucmd!().args(&["-e", "\\b"]).succeeds().stdout_only("\x08\n");
+    new_ucmd!()
+        .args(&["-e", "\\b"])
+        .succeeds()
+        .stdout_only("\x08\n");
 }
 
 #[test]
 fn test_escape_carriage_return() {
-    new_ucmd!().args(&["-e", "\\r"]).succeeds().stdout_only("\r\n");
+    new_ucmd!()
+        .args(&["-e", "\\r"])
+        .succeeds()
+        .stdout_only("\r\n");
 }
 
 #[test]
 fn test_escape_escape() {
-    new_ucmd!().args(&["-e", "\\e"]).succeeds().stdout_only("\x1B\n");
+    new_ucmd!()
+        .args(&["-e", "\\e"])
+        .succeeds()
+        .stdout_only("\x1B\n");
 }
 
 #[test]
 fn test_escape_form_feed() {
-    new_ucmd!().args(&["-e", "\\f"]).succeeds().stdout_only("\x0C\n");
+    new_ucmd!()
+        .args(&["-e", "\\f"])
+        .succeeds()
+        .stdout_only("\x0C\n");
 }
 
 #[test]
 fn test_escape_hex() {
-    new_ucmd!().args(&["-e", "\\x41"]).succeeds().stdout_only("A\n");
+    new_ucmd!()
+        .args(&["-e", "\\x41"])
+        .succeeds()
+        .stdout_only("A\n");
 }
 
 #[test]
 fn test_escape_short_hex() {
-    new_ucmd!().args(&["-e", "foo\\xa bar"]).succeeds().stdout_only("foo\n bar\n");
+    new_ucmd!()
+        .args(&["-e", "foo\\xa bar"])
+        .succeeds()
+        .stdout_only("foo\n bar\n");
 }
 
 #[test]
 fn test_escape_no_hex() {
-    new_ucmd!().args(&["-e", "foo\\x bar"]).succeeds().stdout_only("foo\\x bar\n");
+    new_ucmd!()
+        .args(&["-e", "foo\\x bar"])
+        .succeeds()
+        .stdout_only("foo\\x bar\n");
 }
 
 #[test]
 fn test_escape_one_slash() {
-    new_ucmd!().args(&["-e", "foo\\ bar"]).succeeds().stdout_only("foo\\ bar\n");
+    new_ucmd!()
+        .args(&["-e", "foo\\ bar"])
+        .succeeds()
+        .stdout_only("foo\\ bar\n");
 }
 
 #[test]
 fn test_escape_one_slash_multi() {
-    new_ucmd!().args(&["-e", "foo\\", "bar"]).succeeds().stdout_only("foo\\ bar\n");
+    new_ucmd!()
+        .args(&["-e", "foo\\", "bar"])
+        .succeeds()
+        .stdout_only("foo\\ bar\n");
 }
 
 #[test]
 fn test_escape_newline() {
-    new_ucmd!().args(&["-e", "\\na"]).succeeds().stdout_only("\na\n");
+    new_ucmd!()
+        .args(&["-e", "\\na"])
+        .succeeds()
+        .stdout_only("\na\n");
 }
 
 #[test]
 fn test_escape_no_further_output() {
-    new_ucmd!().args(&["-e", "a\\cb", "c"]).succeeds().stdout_only("a\n");
+    new_ucmd!()
+        .args(&["-e", "a\\cb", "c"])
+        .succeeds()
+        .stdout_only("a\n");
 }
 
 #[test]
 fn test_escape_octal() {
-    new_ucmd!().args(&["-e", "\\0100"]).succeeds().stdout_only("@\n");
+    new_ucmd!()
+        .args(&["-e", "\\0100"])
+        .succeeds()
+        .stdout_only("@\n");
 }
 
 #[test]
 fn test_escape_short_octal() {
-    new_ucmd!().args(&["-e", "foo\\040bar"]).succeeds().stdout_only("foo bar\n");
+    new_ucmd!()
+        .args(&["-e", "foo\\040bar"])
+        .succeeds()
+        .stdout_only("foo bar\n");
 }
 
 #[test]
 fn test_escape_no_octal() {
-    new_ucmd!().args(&["-e", "foo\\0 bar"]).succeeds().stdout_only("foo\\0 bar\n");
+    new_ucmd!()
+        .args(&["-e", "foo\\0 bar"])
+        .succeeds()
+        .stdout_only("foo\\0 bar\n");
 }
 
 #[test]
 fn test_escape_tab() {
-    new_ucmd!().args(&["-e", "\\t"]).succeeds().stdout_only("\t\n");
+    new_ucmd!()
+        .args(&["-e", "\\t"])
+        .succeeds()
+        .stdout_only("\t\n");
 }
 
 #[test]
 fn test_escape_vertical_tab() {
-    new_ucmd!().args(&["-e", "\\v"]).succeeds().stdout_only("\x0B\n");
+    new_ucmd!()
+        .args(&["-e", "\\v"])
+        .succeeds()
+        .stdout_only("\x0B\n");
 }
 
 #[test]

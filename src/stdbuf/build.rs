@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-#[path = "../../mkmain.rs"]
+#[path = "../#common/mkmain.rs"]
 mod mkmain;
 
 #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
@@ -30,7 +30,7 @@ fn main() {
     let libstdbuf = format!(
         "{}/../../{}/{}/deps/liblibstdbuf{}",
         manifest_dir,
-        env::var("CARGO_TARGET_DIR").unwrap_or("target".to_string()),
+        env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string()),
         profile,
         platform::DYLIB_EXT
     );

@@ -42,10 +42,7 @@ impl FromStr for Range {
             (Some(n), Some(m)) if m.is_empty() => {
                 if let Ok(low) = n.parse::<usize>() {
                     if low > 0 {
-                        Ok(Range {
-                            low,
-                            high: MAX - 1,
-                        })
+                        Ok(Range { low, high: MAX - 1 })
                     } else {
                         Err(field)
                     }
@@ -53,7 +50,7 @@ impl FromStr for Range {
                     Err(inval)
                 }
             }
-            (Some(n), Some(m)) if n.len() == 0 => {
+            (Some(n), Some(m)) if n.is_empty() => {
                 if let Ok(high) = m.parse::<usize>() {
                     if high > 0 {
                         Ok(Range { low: 1, high })
@@ -67,10 +64,7 @@ impl FromStr for Range {
             (Some(n), Some(m)) => match (n.parse::<usize>(), m.parse::<usize>()) {
                 (Ok(low), Ok(high)) => {
                     if low > 0 && low <= high {
-                        Ok(Range {
-                            low,
-                            high,
-                        })
+                        Ok(Range { low, high })
                     } else if low == 0 {
                         Err(field)
                     } else {

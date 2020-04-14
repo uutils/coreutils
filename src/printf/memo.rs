@@ -5,16 +5,16 @@
 //! 2. feeds remaining arguments into function
 //! that prints tokens.
 
+use cli;
+use itertools::put_back_n;
 use std::iter::Peekable;
 use std::slice::Iter;
-use itertools::put_back_n;
-use cli;
+use tokenize::sub::Sub;
 use tokenize::token::{Token, Tokenizer};
 use tokenize::unescaped_text::UnescapedText;
-use tokenize::sub::Sub;
 
 pub struct Memo {
-    tokens: Vec<Box<Token>>,
+    tokens: Vec<Box<dyn Token>>,
 }
 
 fn warn_excess_args(first_arg: &str) {
@@ -25,26 +25,22 @@ fn warn_excess_args(first_arg: &str) {
 }
 
 impl Memo {
-    pub fn new(pf_string: &String, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
+    pub fn new(pf_string: &str, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
         let mut pm = Memo { tokens: Vec::new() };
-        let mut tmp_token: Option<Box<Token>>;
+        let mut tmp_token: Option<Box<dyn Token>>;
         let mut it = put_back_n(pf_string.chars());
         let mut has_sub = false;
         loop {
             tmp_token = UnescapedText::from_it(&mut it, pf_args_it);
-            match tmp_token {
-                Some(x) => pm.tokens.push(x),
-                None => {}
+            if let Some(x) = tmp_token {
+                pm.tokens.push(x);
             }
             tmp_token = Sub::from_it(&mut it, pf_args_it);
-            match tmp_token {
-                Some(x) => {
-                    if !has_sub {
-                        has_sub = true;
-                    }
-                    pm.tokens.push(x);
+            if let Some(x) = tmp_token {
+                if !has_sub {
+                    has_sub = true;
                 }
-                None => {}
+                pm.tokens.push(x);
             }
             if let Some(x) = it.next() {
                 it.put_back(x);
@@ -74,7 +70,7 @@ impl Memo {
             tkn.print(pf_args_it);
         }
     }
-    pub fn run_all(pf_string: &String, pf_args: &[String]) {
+    pub fn run_all(pf_string: &str, pf_args: &[String]) {
         let mut arg_it = pf_args.iter().peekable();
         let pm = Memo::new(pf_string, &mut arg_it);
         loop {

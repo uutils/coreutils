@@ -79,12 +79,12 @@ impl Uniq {
                 let mut i = 0;
                 while field < skip_fields && i < line.len() {
                     while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                        i = i + 1;
+                        i += 1;
                     }
                     while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                        i = i + 1;
+                        i += 1;
                     }
-                    field = field + 1;
+                    field += 1;
                 }
                 &line[i..]
             } else {
@@ -99,7 +99,7 @@ impl Uniq {
         if self.zero_terminated {
             0
         } else {
-            '\n' as u8
+            b'\n'
         }
     }
 
@@ -111,7 +111,7 @@ impl Uniq {
 
     fn cmp_key<F>(&self, line: &str, mut closure: F) -> bool
     where
-        F: FnMut(&mut Iterator<Item = char>) -> bool,
+        F: FnMut(&mut dyn Iterator<Item = char>) -> bool,
     {
         let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
@@ -126,7 +126,7 @@ impl Uniq {
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
                 return closure(&mut fields_to_check.chars().map(|c| match c {
-                    'a'...'z' => ((c as u8) - 32) as char,
+                    'a'..='z' => ((c as u8) - 32) as char,
                     _ => c,
                 }));
             }
@@ -142,7 +142,7 @@ impl Uniq {
                     .skip(slice_start)
                     .take(slice_stop)
                     .map(|c| match c {
-                        'a'...'z' => ((c as u8) - 32) as char,
+                        'a'..='z' => ((c as u8) - 32) as char,
                         _ => c,
                     }),
             )
@@ -252,10 +252,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage(
@@ -263,7 +263,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                  writing to OUTPUT (or standard output)."
             )
         );
-        println!("");
+        println!();
         println!(
             "Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
              You may want to sort the input first, or use 'sort -u' without '{0}'.\n",
@@ -307,26 +307,26 @@ pub fn uumain(args: Vec<String>) -> i32 {
     0
 }
 
-fn open_input_file(in_file_name: String) -> BufReader<Box<Read + 'static>> {
+fn open_input_file(in_file_name: String) -> BufReader<Box<dyn Read + 'static>> {
     let in_file = if in_file_name == "-" {
-        Box::new(stdin()) as Box<Read>
+        Box::new(stdin()) as Box<dyn Read>
     } else {
         let path = Path::new(&in_file_name[..]);
         let in_file = File::open(&path);
         let r = crash_if_err!(1, in_file);
-        Box::new(r) as Box<Read>
+        Box::new(r) as Box<dyn Read>
     };
     BufReader::new(in_file)
 }
 
-fn open_output_file(out_file_name: String) -> BufWriter<Box<Write + 'static>> {
+fn open_output_file(out_file_name: String) -> BufWriter<Box<dyn Write + 'static>> {
     let out_file = if out_file_name == "-" {
-        Box::new(stdout()) as Box<Write>
+        Box::new(stdout()) as Box<dyn Write>
     } else {
         let path = Path::new(&out_file_name[..]);
         let in_file = File::create(&path);
         let w = crash_if_err!(1, in_file);
-        Box::new(w) as Box<Write>
+        Box::new(w) as Box<dyn Write>
     };
     BufWriter::new(out_file)
 }

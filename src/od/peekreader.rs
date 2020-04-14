@@ -1,8 +1,8 @@
 //! Contains the trait `PeekRead` and type `PeekReader` implementing it.
 
+use multifilereader::HasError;
 use std::io;
 use std::io::{Read, Write};
-use multifilereader::HasError;
 
 /// A trait which supplies a function to peek into a stream without
 /// actually reading it.
@@ -41,7 +41,7 @@ impl<R> PeekReader<R> {
     /// Create a new `PeekReader` wrapping `inner`
     pub fn new(inner: R) -> Self {
         PeekReader {
-            inner: inner,
+            inner,
             temp_buffer: Vec::new(),
         }
     }
@@ -61,7 +61,7 @@ impl<R: Read> PeekReader<R> {
     fn write_to_tempbuffer(&mut self, bytes: &[u8]) {
         // if temp_buffer is not empty, data has to be inserted in front
         let org_buffer: Vec<_> = self.temp_buffer.drain(..).collect();
-        self.temp_buffer.write(bytes).unwrap();
+        self.temp_buffer.write_all(bytes).unwrap();
         self.temp_buffer.extend(org_buffer);
     }
 }

@@ -2,7 +2,8 @@
 name = "chmod"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_chmod"
@@ -10,12 +11,9 @@ path = "chmod.rs"
 
 [dependencies]
 libc = "0.2.42"
+uucore = { version = "0.0.2", features = ["mode"] }
 walker = "1.0.0"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["mode"]
 
 [[bin]]
 name = "chmod"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

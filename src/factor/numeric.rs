@@ -9,8 +9,8 @@
 * that was distributed with this source code.
 */
 
-use std::u64::MAX as MAX_U64;
 use std::num::Wrapping;
+use std::u64::MAX as MAX_U64;
 
 pub fn big_add(a: u64, b: u64, m: u64) -> u64 {
     let Wrapping(msb_mod_m) = Wrapping(MAX_U64) - Wrapping(m) + Wrapping(1);
@@ -125,7 +125,7 @@ pub fn is_prime(num: u64) -> bool {
 
     // These witnesses detect all composites up to at least 2^64.
     // Discovered by Jim Sinclair, according to http://miller-rabin.appspot.com
-    let witnesses = [2, 325, 9375, 28178, 450775, 9780504, 1795265022];
+    let witnesses = [2, 325, 9_375, 28_178, 450_775, 9_780_504, 1_795_265_022];
     !witnesses
         .iter()
         .any(|&wit| witness(wit % num, exponent, num))

@@ -2,7 +2,8 @@
 name = "sort"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_sort"
@@ -10,13 +11,10 @@ path = "sort.rs"
 
 [dependencies]
 getopts = "0.2.18"
+itertools = "0.8.0"
 semver = "0.9.0"
-itertools = "0.7.8"
-
-[dependencies.uucore]
-version = "0.0.1"
-features = ["fs"]
+uucore = { version = "0.0.2", features = ["fs"] }
 
 [[bin]]
 name = "sort"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

@@ -3,14 +3,14 @@
 //! and escaped character literals (of allowed escapes),
 //! into an unescaped text byte array
 
-use std::iter::Peekable;
-use std::slice::Iter;
-use std::str::Chars;
-use std::char::from_u32;
-use std::process::exit;
+use super::token;
 use cli;
 use itertools::PutBackN;
-use super::token;
+use std::char::from_u32;
+use std::iter::Peekable;
+use std::process::exit;
+use std::slice::Iter;
+use std::str::Chars;
 
 pub struct UnescapedText(Vec<u8>);
 impl UnescapedText {
@@ -60,11 +60,12 @@ impl UnescapedText {
     // dropped-in as a replacement.
     fn validate_iec(val: u32, eight_word: bool) {
         let mut preface = 'u';
-        let mut leading_zeros = 4;
-        if eight_word {
+        let leading_zeros = if eight_word {
             preface = 'U';
-            leading_zeros = 8;
-        }
+            8
+        } else {
+            4
+        };
         let err_msg = format!(
             "invalid universal character name {0}{1:02$x}",
             preface, val, leading_zeros
@@ -85,14 +86,14 @@ impl UnescapedText {
             None => '\\',
         };
         match ch {
-            '0'...'9' | 'x' => {
+            '0'..='9' | 'x' => {
                 let min_len = 1;
                 let mut max_len = 2;
                 let mut base = 16;
                 let ignore = false;
                 match ch {
                     'x' => {}
-                    e @ '0'...'9' => {
+                    e @ '0'..='9' => {
                         max_len = 3;
                         base = 8;
                         // in practice, gnu coreutils printf
@@ -120,7 +121,7 @@ impl UnescapedText {
                     byte_vec.push(ch as u8);
                 }
             }
-            e @ _ => {
+            e => {
                 // only for hex and octal
                 // is byte encoding specified.
                 // otherwise, why not leave the door open
@@ -147,7 +148,7 @@ impl UnescapedText {
                     'u' | 'U' => {
                         let len = match e {
                             'u' => 4,
-                            'U' | _ => 8,
+                            /* 'U' | */ _ => 8,
                         };
                         let val = UnescapedText::base_to_u32(len, len, 16, it);
                         UnescapedText::validate_iec(val, false);
@@ -173,7 +174,10 @@ impl UnescapedText {
     // and return a wrapper around a Vec<u8> of unescaped bytes
     // break on encounter of sub symbol ('%[^%]') unless called
     // through %b subst.
-    pub fn from_it_core(it: &mut PutBackN<Chars>, subs_mode: bool) -> Option<Box<token::Token>> {
+    pub fn from_it_core(
+        it: &mut PutBackN<Chars>,
+        subs_mode: bool,
+    ) -> Option<Box<dyn token::Token>> {
         let mut addchar = false;
         let mut new_text = UnescapedText::new();
         let mut tmp_str = String::new();
@@ -188,7 +192,7 @@ impl UnescapedText {
                         // lazy branch eval
                         // remember this fn could be called
                         // many times in a single exec through %b
-                        cli::flush_char(&ch);
+                        cli::flush_char(ch);
                         tmp_str.push(ch);
                     }
                     '\\' => {
@@ -199,7 +203,7 @@ impl UnescapedText {
                         // on non hex or octal escapes is costly
                         // then we can make it faster/more complex
                         // with as-necessary draining.
-                        if tmp_str.len() > 0 {
+                        if !tmp_str.is_empty() {
                             new_vec.extend(tmp_str.bytes());
                             tmp_str = String::new();
                         }
@@ -208,7 +212,7 @@ impl UnescapedText {
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {
                             if follow == '%' {
-                                cli::flush_char(&ch);
+                                cli::flush_char(ch);
                                 tmp_str.push(ch);
                             } else {
                                 it.put_back(follow);
@@ -221,18 +225,19 @@ impl UnescapedText {
                         }
                     }
                     _ => {
-                        cli::flush_char(&ch);
+                        cli::flush_char(ch);
                         tmp_str.push(ch);
                     }
                 }
             }
-            if tmp_str.len() > 0 {
+            if !tmp_str.is_empty() {
                 new_vec.extend(tmp_str.bytes());
             }
         }
-        match addchar {
-            true => Some(Box::new(new_text)),
-            false => None,
+        if addchar {
+            Some(Box::new(new_text))
+        } else {
+            None
         }
     }
 }
@@ -241,7 +246,7 @@ impl token::Tokenizer for UnescapedText {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<token::Token>> {
+    ) -> Option<Box<dyn token::Token>> {
         UnescapedText::from_it_core(it, false)
     }
 }

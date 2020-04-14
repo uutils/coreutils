@@ -108,25 +108,32 @@ Print the number of cores available to the current process.",
     0
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
 fn num_cpus_all() -> usize {
     let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
     if nprocs == 1 {
         // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
         // However, we want to guarantee that `nproc --all` >= `nproc`.
         num_cpus::get()
+    } else if nprocs > 0 {
+        nprocs as usize
     } else {
-        if nprocs > 0 {
-            nprocs as usize
-        } else {
-            1
-        }
+        1
     }
 }
 
 // Other platform(e.g., windows), num_cpus::get() directly.
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd",
-              target_os = "netbsd")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+    target_os = "netbsd"
+)))]
 fn num_cpus_all() -> usize {
     num_cpus::get()
 }

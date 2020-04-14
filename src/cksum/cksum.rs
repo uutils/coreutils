@@ -14,8 +14,6 @@ extern crate uucore;
 
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
-#[cfg(not(windows))]
-use std::mem;
 use std::path::Path;
 
 include!(concat!(env!("OUT_DIR"), "/crc_table.rs"));
@@ -39,14 +37,8 @@ fn crc_final(mut crc: u32, mut length: usize) -> u32 {
     !crc
 }
 
-#[cfg(windows)]
 fn init_byte_array() -> Vec<u8> {
     vec![0; 1024 * 1024]
-}
-
-#[cfg(not(windows))]
-fn init_byte_array() -> [u8; 1024 * 1024] {
-    unsafe { mem::uninitialized() }
 }
 
 #[inline]
@@ -55,7 +47,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut size = 0usize;
 
     let file;
-    let mut rd: Box<Read> = match fname {
+    let mut rd: Box<dyn Read> = match fname {
         "-" => Box::new(stdin()),
         _ => {
             file = File::open(&Path::new(fname))?;

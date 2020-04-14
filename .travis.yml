@@ -14,25 +14,27 @@ env:
 
 matrix:
   allow_failures:
+    - rust: beta
     - rust: nightly
   fast_finish: true
   include:
     - rust: 1.31.0
+      env: FEATURES=unix
     - rust: stable
       os: linux
-      env: TEST_INSTALL=true
+      env: FEATURES=unix TEST_INSTALL=true
     - rust: stable
       os: osx
-      env: TEST_INSTALL=true
+      env: FEATURES=macos TEST_INSTALL=true
     - rust: nightly
       os: linux
-      env: FEATURES=nightly
+      env: FEATURES=nightly,unix
     - rust: nightly
       os: osx
-      env: FEATURES=nightly
+      env: FEATURES=nightly,macos
     - rust: nightly
       os: linux
-      env: FEATURES=nightly,redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
+      env: FEATURES=nightly,feat_os_unix_redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
 
 cache:
   directories:

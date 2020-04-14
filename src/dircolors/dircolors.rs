@@ -13,10 +13,10 @@ extern crate glob;
 #[macro_use]
 extern crate uucore;
 
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::borrow::Borrow;
 use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 static SYNTAX: &str = "[OPTION]... [FILE]";
 static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
@@ -68,8 +68,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .optflag("p", "print-database", "print the byte counts")
         .parse(args);
 
-    if (matches.opt_present("csh") || matches.opt_present("c-shell") || matches.opt_present("sh")
-        || matches.opt_present("bourne-shell")) && matches.opt_present("print-database")
+    if (matches.opt_present("csh")
+        || matches.opt_present("c-shell")
+        || matches.opt_present("sh")
+        || matches.opt_present("bourne-shell"))
+        && matches.opt_present("print-database")
     {
         disp_err!(
             "the options to output dircolors' internal database and\nto select a shell \
@@ -120,7 +123,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
             Ok(f) => {
                 let fin = BufReader::new(f);
                 result = parse(
-                    fin.lines().filter_map(|l| l.ok()),
+                    fin.lines().filter_map(Result::ok),
                     out_format,
                     matches.free[0].as_str(),
                 )
@@ -291,7 +294,7 @@ where
                 } else if key.starts_with('*') {
                     result.push_str(format!("{}={}:", key, val).as_str());
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
-                // Slackware only. Ignore
+                    // Slackware only. Ignore
                 } else if let Some(s) = table.get(lower.as_str()) {
                     result.push_str(format!("{}={}:", s, val).as_str());
                 } else {

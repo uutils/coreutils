@@ -2,7 +2,8 @@
 name = "du"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_du"
@@ -10,8 +11,8 @@ path = "du.rs"
 
 [dependencies]
 time = "0.1.40"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [[bin]]
 name = "du"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

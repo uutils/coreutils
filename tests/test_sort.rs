@@ -1,7 +1,5 @@
 use common::util::*;
 
-
-
 #[test]
 fn test_numeric_floats_and_ints() {
     test_helper("numeric_floats_and_ints", "-n");
@@ -73,7 +71,8 @@ fn test_multiple_files() {
         .arg("-n")
         .arg("multiple_files1.txt")
         .arg("multiple_files2.txt")
-        .succeeds().stdout_only_fixture("multiple_files.expected");
+        .succeeds()
+        .stdout_only_fixture("multiple_files.expected");
 }
 
 #[test]
@@ -83,7 +82,8 @@ fn test_merge_interleaved() {
         .arg("merge_ints_interleaved_1.txt")
         .arg("merge_ints_interleaved_2.txt")
         .arg("merge_ints_interleaved_3.txt")
-        .succeeds().stdout_only_fixture("merge_ints_interleaved.expected");
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
 #[test]
@@ -97,7 +97,8 @@ fn test_merge_unique() {
         .arg("merge_ints_interleaved_3.txt")
         .arg("merge_ints_interleaved_2.txt")
         .arg("merge_ints_interleaved_1.txt")
-        .succeeds().stdout_only_fixture("merge_ints_interleaved.expected");
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
 #[test]
@@ -108,7 +109,8 @@ fn test_merge_reversed() {
         .arg("merge_ints_reversed_1.txt")
         .arg("merge_ints_reversed_2.txt")
         .arg("merge_ints_reversed_3.txt")
-        .succeeds().stdout_only_fixture("merge_ints_reversed.expected");
+        .succeeds()
+        .stdout_only_fixture("merge_ints_reversed.expected");
 }
 
 #[test]
@@ -116,15 +118,20 @@ fn test_check() {
     new_ucmd!()
         .arg("-c")
         .arg("check_fail.txt")
-        .fails().stdout_is("sort: disorder in line 4\n");
+        .fails()
+        .stdout_is("sort: disorder in line 4\n");
 
     new_ucmd!()
         .arg("-c")
         .arg("multiple_files.expected")
-        .succeeds().stdout_is("");
+        .succeeds()
+        .stdout_is("");
 }
 
 fn test_helper(file_name: &str, args: &str) {
-    new_ucmd!().arg(args).arg(format!("{}{}", file_name, ".txt"))
-        .succeeds().stdout_is_fixture(format!("{}{}", file_name, ".expected"));
+    new_ucmd!()
+        .arg(args)
+        .arg(format!("{}{}", file_name, ".txt"))
+        .succeeds()
+        .stdout_is_fixture(format!("{}{}", file_name, ".expected"));
 }

@@ -43,7 +43,7 @@ fn parse_code(
     max_digits: u32,
     bits_per_digit: u32,
 ) -> Option<char> {
-    let mut ret = 0x80000000;
+    let mut ret = 0x8000_0000;
     for _ in 0..max_digits {
         match input.peek().and_then(|c| c.to_digit(base)) {
             Some(n) => ret = (ret << bits_per_digit) | n,
@@ -71,8 +71,8 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                     'b' => '\x08',
                     'c' => {
                         should_stop = true;
-                        break
-                    },
+                        break;
+                    }
                     'e' => '\x1b',
                     'f' => '\x0c',
                     'n' => '\n',
@@ -90,7 +90,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                     _ => {
                         start = 0;
                         next
-                    },
+                    }
                 };
             }
         }
@@ -110,7 +110,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")
         .optflag("e", "", "enable interpretation of backslash escapes")
-        .optflag("E", "", "disable interpretation of backslash escapes (default)")
+        .optflag(
+            "E",
+            "",
+            "disable interpretation of backslash escapes (default)",
+        )
         .parse(args);
 
     let no_newline = matches.opt_present("n");

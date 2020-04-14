@@ -21,15 +21,15 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 const IEC_BASES: [f64; 10] = [
     //premature optimization
     1.,
-    1024.,
-    1048576.,
-    1073741824.,
-    1099511627776.,
-    1125899906842624.,
-    1152921504606846976.,
-    1180591620717411303424.,
-    1208925819614629174706176.,
-    1237940039285380274899124224.,
+    1_024.,
+    1_048_576.,
+    1_073_741_824.,
+    1_099_511_627_776.,
+    1_125_899_906_842_624.,
+    1_152_921_504_606_846_976.,
+    1_180_591_620_717_411_303_424.,
+    1_208_925_819_614_629_174_706_176.,
+    1_237_940_039_285_380_274_899_124_224.,
 ];
 
 type Result<T> = std::result::Result<T, String>;
@@ -70,7 +70,8 @@ impl fmt::Display for DisplayableSuffix {
             RawSuffix::E => write!(f, "E"),
             RawSuffix::Z => write!(f, "Z"),
             RawSuffix::Y => write!(f, "Y"),
-        }.and_then(|()| match with_i {
+        }
+        .and_then(|()| match with_i {
             true => write!(f, "i"),
             false => Ok(()),
         })
@@ -78,7 +79,7 @@ impl fmt::Display for DisplayableSuffix {
 }
 
 fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
-    let with_i = s.ends_with("i");
+    let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
         iter.next_back();
@@ -92,7 +93,7 @@ fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
         Some('E') => Ok(Some((RawSuffix::E, with_i))),
         Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
         Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
-        Some('0'...'9') => Ok(None),
+        Some('0'..='9') => Ok(None),
         _ => Err("Failed to parse suffix"),
     }?;
 
@@ -251,13 +252,13 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
     }?;
 
     Ok(NumfmtOptions {
-        transform: transform,
-        padding: padding,
-        header: header,
+        transform,
+        padding,
+        header,
     })
 }
 
-fn handle_args(args: &Vec<String>, options: NumfmtOptions) -> Result<()> {
+fn handle_args(args: &[String], options: NumfmtOptions) -> Result<()> {
     for l in args {
         println!("{}", format_string(l.clone(), &options)?)
     }
@@ -276,7 +277,8 @@ fn handle_stdin(options: NumfmtOptions) -> Result<()> {
     for l in lines {
         l.map_err(|e| e.to_string()).and_then(|l| {
             let l = format_string(l, &options)?;
-            Ok(println!("{}", l))
+            println!("{}", l);
+            Ok(())
         })?
     }
     Ok(())
@@ -315,10 +317,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = opts.parse(&args[1..]).unwrap();
     if matches.opt_present("help") {
         println!("{} {}", NAME, VERSION);
-        println!("");
+        println!();
         println!("Usage:");
         println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!("");
+        println!();
         print!(
             "{}",
             opts.usage("Convert numbers from/to human-readable strings")
@@ -353,7 +355,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let options = parse_options(&matches).unwrap();
 
-    if matches.free.len() == 0 {
+    if matches.free.is_empty() {
         handle_stdin(options).unwrap()
     } else {
         handle_args(&matches.free, options).unwrap()

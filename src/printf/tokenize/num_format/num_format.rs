@@ -1,17 +1,17 @@
 //! handles creating printed output for numeric substitutions
 
-use std::env;
-use std::vec::Vec;
-use cli;
 use super::format_field::{FieldType, FormatField};
 use super::formatter::{Base, FormatPrimitive, Formatter, InPrefix};
-use super::formatters::intf::Intf;
-use super::formatters::floatf::Floatf;
 use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
-use super::formatters::scif::Scif;
 use super::formatters::decf::Decf;
+use super::formatters::floatf::Floatf;
+use super::formatters::intf::Intf;
+use super::formatters::scif::Scif;
+use cli;
+use std::env;
+use std::vec::Vec;
 
-pub fn warn_expected_numeric(pf_arg: &String) {
+pub fn warn_expected_numeric(pf_arg: &str) {
     // important: keep println here not print
     cli::err_msg(&format!("{}: expected a numeric value", pf_arg));
 }
@@ -21,16 +21,15 @@ pub fn warn_expected_numeric(pf_arg: &String) {
 fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
     match env::var("POSIXLY_CORRECT") {
         Ok(_) => {}
-        Err(e) => match e {
-            env::VarError::NotPresent => {
+        Err(e) => {
+            if let env::VarError::NotPresent = e {
                 cli::err_msg(&format!(
                     "warning: {:?}: character(s) following character \
                      constant have been ignored",
                     &*remaining_bytes
                 ));
             }
-            _ => {}
-        },
+        }
     }
 }
 
@@ -46,13 +45,13 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
             if let Some(qchar) = byte_it.next() {
                 match qchar {
                     C_S_QUOTE | C_D_QUOTE => {
-                        return Some(match byte_it.next() {
+                        Some(match byte_it.next() {
                             Some(second_byte) => {
                                 let mut ignored: Vec<u8> = Vec::new();
-                                while let Some(cont) = byte_it.next() {
+                                for cont in byte_it {
                                     ignored.push(cont);
                                 }
-                                if ignored.len() > 0 {
+                                if !ignored.is_empty() {
                                     warn_char_constant_ign(ignored);
                                 }
                                 second_byte as u8
@@ -63,12 +62,10 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                                 warn_expected_numeric(&so_far);
                                 0 as u8
                             }
-                        });
+                        })
                     }
                     // first byte is not quote
-                    _ => {
-                        return None;
-                    } // no first byte
+                    _ => None, // no first byte
                 }
             } else {
                 Some(0 as u8)
@@ -83,26 +80,19 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
 // a base,
 // and an offset for index after all
 //  initial spacing, sign, base prefix, and leading zeroes
-fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
+fn get_inprefix(str_in: &str, field_type: &FieldType) -> InPrefix {
     let mut str_it = str_in.chars();
     let mut ret = InPrefix {
         radix_in: Base::Ten,
         sign: 1,
         offset: 0,
     };
-    let mut topchar = str_it.next().clone();
+    let mut topchar = str_it.next();
     // skip spaces and ensure topchar is the first non-space char
     // (or None if none exists)
-    loop {
-        match topchar {
-            Some(' ') => {
-                ret.offset += 1;
-                topchar = str_it.next();
-            }
-            _ => {
-                break;
-            }
-        }
+    while let Some(' ') = topchar {
+        ret.offset += 1;
+        topchar = str_it.next();
     }
     // parse sign
     match topchar {
@@ -143,13 +133,10 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
                     ret.radix_in = Base::Hex;
                     do_clean_lead_zeroes = true;
                 }
-                e @ '0'...'9' => {
+                e @ '0'..='9' => {
                     ret.offset += 1;
-                    match *field_type {
-                        FieldType::Intf => {
-                            ret.radix_in = Base::Octal;
-                        }
-                        _ => {}
+                    if let FieldType::Intf = *field_type {
+                        ret.radix_in = Base::Octal;
                     }
                     if e == '0' {
                         do_clean_lead_zeroes = true;
@@ -159,7 +146,7 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
             }
             if do_clean_lead_zeroes {
                 let mut first = true;
-                while let Some(ch_zero) = str_it.next() {
+                for ch_zero in str_it {
                     // see notes on offset above:
                     // this is why the offset for octals and decimals
                     // that reach this branch is 1 even though
@@ -203,14 +190,14 @@ fn get_inprefix(str_in: &String, field_type: &FieldType) -> InPrefix {
 // if it is a numeric field, passing the field details
 // and an iterator to the argument
 pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<String> {
-    let fchar = field.field_char.clone();
+    let fchar = field.field_char;
 
     // num format mainly operates by further delegating to one of
     // several Formatter structs depending on the field
     // see formatter.rs for more details
 
     // to do switch to static dispatch
-    let fmtr: Box<Formatter> = match *field.field_type {
+    let fmtr: Box<dyn Formatter> = match *field.field_type {
         FieldType::Intf => Box::new(Intf::new()),
         FieldType::Floatf => Box::new(Floatf::new()),
         FieldType::CninetyNineHexFloatf => Box::new(CninetyNineHexFloatf::new()),

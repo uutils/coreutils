@@ -11,14 +11,15 @@ extern crate advapi32;
 extern crate uucore;
 extern crate winapi;
 
+use self::winapi::shared::lmcons;
+use self::winapi::shared::minwindef;
+use self::winapi::um::winnt;
 use std::io::{Error, Result};
 use std::mem;
 use uucore::wide::FromWide;
-use self::winapi::um::winnt;
-use self::winapi::shared::lmcons;
-use self::winapi::shared::minwindef;
 
 pub unsafe fn getusername() -> Result<String> {
+    #[allow(deprecated)]
     let mut buffer: [winnt::WCHAR; lmcons::UNLEN as usize + 1] = mem::uninitialized();
     let mut len = buffer.len() as minwindef::DWORD;
     if advapi32::GetUserNameW(buffer.as_mut_ptr(), &mut len) == 0 {

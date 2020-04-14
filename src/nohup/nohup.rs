@@ -15,14 +15,14 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use libc::{c_char, execvp, signal, dup2};
+use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
+use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
-use std::env;
 use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
 
 static NAME: &str = "nohup";
@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     unsafe { signal(SIGHUP, SIG_IGN) };
 
-    if unsafe { _vprocmgr_detach_from_console(0) } != std::ptr::null() {
+    if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         crash!(2, "Cannot detach from console")
     };
 
@@ -105,10 +105,8 @@ fn replace_fds() {
         }
     }
 
-    if is_stderr_interactive() {
-        if unsafe { dup2(1, 2) } != 2 {
-            crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
-        }
+    if is_stderr_interactive() && unsafe { dup2(1, 2) } != 2 {
+        crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
     }
 }
 

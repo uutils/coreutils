@@ -91,10 +91,10 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
 
     for filename in &filenames {
         let mut file = BufReader::new(if filename == "-" {
-            Box::new(stdin()) as Box<Read>
+            Box::new(stdin()) as Box<dyn Read>
         } else {
             match File::open(filename) {
-                Ok(f) => Box::new(f) as Box<Read>,
+                Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
                     show_warning!("failed to open '{}' for reading: {}", filename, e);
                     continue;
@@ -103,12 +103,9 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         });
 
         let mut data = Vec::new();
-        match file.read_to_end(&mut data) {
-            Err(e) => {
-                show_warning!("failed to read '{}': {}", filename, e);
-                continue;
-            }
-            Ok(_) => (),
+        if let Err(e) = file.read_to_end(&mut data) {
+            show_warning!("failed to read '{}': {}", filename, e);
+            continue;
         };
 
         // find offsets in string of all separators
@@ -126,7 +123,6 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
                 i += 1;
             }
         }
-        drop(i);
 
         // if there isn't a separator at the end of the file, fake it
         if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {

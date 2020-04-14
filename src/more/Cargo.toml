@@ -2,7 +2,8 @@
 name = "more"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_more"
@@ -10,7 +11,7 @@ path = "more.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_termios = "0.1"
@@ -21,4 +22,4 @@ nix = "0.8.1"
 
 [[bin]]
 name = "more"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"

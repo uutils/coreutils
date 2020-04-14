@@ -2,19 +2,20 @@
 name = "od"
 version = "0.0.1"
 authors = []
-build = "../../mkmain.rs"
+license = "MIT"
+build = "../#common/mkmain.rs"
 
 [lib]
 name = "uu_od"
 path = "od.rs"
 
 [dependencies]
+byteorder = "1.3.2"
 getopts = "0.2.18"
-libc = "0.2.42"
-byteorder = "1.1.0"
 half = "1.1.1"
-uucore = "0.0.1"
+libc = "0.2.42"
+uucore = "0.0.2"
 
 [[bin]]
 name = "od"
-path = "../../uumain.rs"
+path = "../#common/uumain.rs"
