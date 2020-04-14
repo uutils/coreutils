@@ -1,0 +1,18 @@
+[package]
+name = "arch"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_arch"
+path = "src/arch.rs"
+
+[dependencies]
+platform-info = "0.0.1"
+uucore = "0.0.2"
+
+[[bin]]
+name = "arch"
+path = "../../common/uumain.rs"

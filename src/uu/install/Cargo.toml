@@ -1,0 +1,22 @@
+[package]
+name = "install"
+version = "0.0.1"
+authors = ["Ben Eills <ben@beneills.com>"]
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_install"
+path = "src/install.rs"
+
+[dependencies]
+getopts = "0.2.18"
+libc = ">= 0.2"
+uucore = "0.0.2"
+
+[dev-dependencies]
+time = "0.1.40"
+
+[[bin]]
+name = "install"
+path = "../../common/uumain.rs"

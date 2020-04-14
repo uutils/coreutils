@@ -1,0 +1,18 @@
+[package]
+name = "printenv"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_printenv"
+path = "src/printenv.rs"
+
+[dependencies]
+getopts = "0.2.18"
+uucore = "0.0.2"
+
+[[bin]]
+name = "printenv"
+path = "../../common/uumain.rs"

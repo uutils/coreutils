@@ -1,0 +1,18 @@
+[package]
+name = "chgrp"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_chgrp"
+path = "src/chgrp.rs"
+
+[dependencies]
+uucore = { version = "0.0.2", features = ["entries", "fs"] }
+walkdir = "2.2.8"
+
+[[bin]]
+name = "chgrp"
+path = "../../common/uumain.rs"

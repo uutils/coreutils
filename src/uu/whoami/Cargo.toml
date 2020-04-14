@@ -1,0 +1,21 @@
+[package]
+name = "whoami"
+version = "0.0.1"
+authors = []
+license = "MIT"
+description = "Print effective user ID."
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_whoami"
+path = "src/whoami.rs"
+
+[dependencies]
+advapi32-sys = "0.2.0"
+clap = "2.32"
+uucore = { version = "0.0.2", features = ["entries", "wide"] }
+winapi = { version = "0.3", features = ["lmcons"] }
+
+[[bin]]
+name = "whoami"
+path = "../../common/uumain.rs"

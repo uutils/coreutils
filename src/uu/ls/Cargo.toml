@@ -1,0 +1,25 @@
+[package]
+name = "ls"
+version = "0.0.1"
+authors = ["Jeremiah Peschka <jeremiah.peschka@gmail.com>"]
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_ls"
+path = "src/ls.rs"
+
+[dependencies]
+getopts = "0.2.18"
+isatty = "0.1"
+lazy_static = "1.0.1"
+number_prefix = "0.2.8"
+term_grid = "0.1.5"
+termsize = "0.1.6"
+time = "0.1.40"
+unicode-width = "0.1.5"
+uucore = { version = "0.0.2", features = ["entries", "fs"] }
+
+[[bin]]
+name = "ls"
+path = "../../common/uumain.rs"

@@ -1,0 +1,17 @@
+[package]
+name = "echo"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_echo"
+path = "src/echo.rs"
+
+[dependencies]
+uucore = "0.0.2"
+
+[[bin]]
+name = "echo"
+path = "../../common/uumain.rs"

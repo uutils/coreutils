@@ -1,0 +1,19 @@
+[package]
+name = "mkfifo"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_mkfifo"
+path = "src/mkfifo.rs"
+
+[dependencies]
+getopts = "0.2.18"
+libc = "0.2.42"
+uucore = "0.0.2"
+
+[[bin]]
+name = "mkfifo"
+path = "../../common/uumain.rs"

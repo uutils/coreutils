@@ -1,0 +1,17 @@
+[package]
+name = "pinky"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_pinky"
+path = "src/pinky.rs"
+
+[dependencies]
+uucore = { version = "0.0.2", features = ["utmpx", "entries"] }
+
+[[bin]]
+name = "pinky"
+path = "../../common/uumain.rs"
