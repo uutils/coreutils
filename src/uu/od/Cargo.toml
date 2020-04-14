@@ -1,0 +1,21 @@
+[package]
+name = "od"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_od"
+path = "src/od.rs"
+
+[dependencies]
+byteorder = "1.3.2"
+getopts = "0.2.18"
+half = "1.1.1"
+libc = "0.2.42"
+uucore = "0.0.2"
+
+[[bin]]
+name = "od"
+path = "../../common/uumain.rs"

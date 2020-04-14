@@ -9,7 +9,7 @@
 
 use common::util::*;
 
-#[path = "../src/factor/sieve.rs"]
+#[path = "../src/uu/factor/sieve.rs"]
 mod sieve;
 use self::sieve::Sieve;
 

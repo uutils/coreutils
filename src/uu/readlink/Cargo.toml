@@ -1,0 +1,19 @@
+[package]
+name = "readlink"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_readlink"
+path = "src/readlink.rs"
+
+[dependencies]
+getopts = "0.2.18"
+libc = "0.2.42"
+uucore = { version = "0.0.2", features = ["fs"] }
+
+[[bin]]
+name = "readlink"
+path = "../../common/uumain.rs"
