@@ -58,8 +58,13 @@ jobs:
       with:
         command: fmt
         args: --all -- --check
+    - name: "`fmt` testing of tests"
+      if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
+      shell: bash
+      run: |
+        find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check
     - name: "`clippy` testing"
-      if: success() || failure() # run regardless of prior step ("`fmt` testing") success/failure
+      if: success() || failure() # run regardless of prior step success/failure
       uses: actions-rs/cargo@v1
       with:
         command: clippy
