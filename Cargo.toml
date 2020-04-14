@@ -314,4 +314,4 @@ path = "src/bin/uutils.rs"
 name = "tests"
 
 [patch.crates-io]
-uucore = { git = "https://github.com/rivy/rust.uucore", tag = "0.0.2" }
+uucore = { git = "https://github.com/uutils/uucore/", tag = "0.0.2" }
