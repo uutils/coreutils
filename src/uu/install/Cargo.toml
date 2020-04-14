@@ -3,7 +3,7 @@ name = "install"
 version = "0.0.1"
 authors = ["Ben Eills <ben@beneills.com>"]
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_install"
@@ -19,4 +19,4 @@ time = "0.1.40"
 
 [[bin]]
 name = "install"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

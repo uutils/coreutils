@@ -3,7 +3,7 @@ name = "who"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_who"
@@ -16,4 +16,4 @@ clippy = { version = "0.0.212", optional = true }
 
 [[bin]]
 name = "who"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

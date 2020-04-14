@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = ["uutils developers"]
 description = "Set each NAME to VALUE in the environment and run COMMAND"
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 edition = "2018"
 
 [lib]
@@ -19,4 +19,4 @@ uucore = "0.0.2"
 
 [[bin]]
 name = "env"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

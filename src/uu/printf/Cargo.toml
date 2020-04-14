@@ -3,7 +3,7 @@ name = "printf"
 version = "0.0.1"
 authors = ["Nathan Ross"]
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_printf"
@@ -15,4 +15,4 @@ uucore = "0.0.2"
 
 [[bin]]
 name = "printf"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

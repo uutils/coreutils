@@ -14,4 +14,4 @@ uucore = "0.0.2"
 
 [[bin]]
 name = "cksum"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

@@ -3,7 +3,7 @@ name = "shred"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_shred"
@@ -19,4 +19,4 @@ uucore = "0.0.2"
 
 [[bin]]
 name = "shred"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

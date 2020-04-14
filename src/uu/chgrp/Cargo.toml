@@ -3,7 +3,7 @@ name = "chgrp"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_chgrp"
@@ -15,4 +15,4 @@ walkdir = "2.2.8"
 
 [[bin]]
 name = "chgrp"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

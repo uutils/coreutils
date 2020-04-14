@@ -6,7 +6,7 @@ authors = [
   "Joshua S. Miller <jsmiller@uchicago.edu>",
 ]
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_cp"
@@ -33,4 +33,4 @@ xattr="0.2.1"
 
 [[bin]]
 name = "cp"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

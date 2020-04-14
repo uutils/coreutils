@@ -19,4 +19,4 @@ libstdbuf = { path="src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

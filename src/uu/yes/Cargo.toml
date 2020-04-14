@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 license = "MIT"
 description = "Repeatedly output a line with all specified STRING(s), or 'y'."
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_yes"
@@ -20,4 +20,4 @@ default = []
 
 [[bin]]
 name = "yes"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

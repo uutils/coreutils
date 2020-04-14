@@ -3,7 +3,7 @@ name = "timeout"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_timeout"
@@ -17,4 +17,4 @@ uucore = { version = "0.0.2", features = ["parse_time", "process"] }
 
 [[bin]]
 name = "timeout"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

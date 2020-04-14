@@ -3,7 +3,7 @@ name = "sync"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_sync"
@@ -18,4 +18,4 @@ winapi = { version = "0.3", features = ["handleapi", "winerror"] }
 
 [[bin]]
 name = "sync"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = []
 license = "MIT"
 description = "Print effective user ID."
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_whoami"
@@ -18,4 +18,4 @@ winapi = { version = "0.3", features = ["lmcons"] }
 
 [[bin]]
 name = "whoami"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

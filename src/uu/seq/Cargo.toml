@@ -3,7 +3,7 @@ name = "seq"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_seq"
@@ -15,4 +15,4 @@ uucore = "0.0.2"
 
 [[bin]]
 name = "seq"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

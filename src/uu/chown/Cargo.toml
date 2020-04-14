@@ -3,7 +3,7 @@ name = "chown"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_chown"
@@ -20,4 +20,4 @@ optional = true
 
 [[bin]]
 name = "chown"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

@@ -3,7 +3,7 @@ name = "realpath"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_realpath"
@@ -15,4 +15,4 @@ uucore = { version = "0.0.2", features = ["fs"] }
 
 [[bin]]
 name = "realpath"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

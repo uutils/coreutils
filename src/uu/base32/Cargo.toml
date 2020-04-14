@@ -3,7 +3,7 @@ name = "base32"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_base32"
@@ -16,4 +16,4 @@ clippy = { version = "0.0.212", optional = true }
 
 [[bin]]
 name = "base32"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

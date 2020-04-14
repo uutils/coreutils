@@ -3,7 +3,7 @@ name = "ls"
 version = "0.0.1"
 authors = ["Jeremiah Peschka <jeremiah.peschka@gmail.com>"]
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_ls"
@@ -22,4 +22,4 @@ uucore = { version = "0.0.2", features = ["entries", "fs"] }
 
 [[bin]]
 name = "ls"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"

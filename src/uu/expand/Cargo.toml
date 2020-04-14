@@ -3,7 +3,7 @@ name = "expand"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../#common/mkmain.rs"
+build = "../../common/mkmain.rs"
 
 [lib]
 name = "uu_expand"
@@ -16,4 +16,4 @@ uucore = "0.0.2"
 
 [[bin]]
 name = "expand"
-path = "../#common/uumain.rs"
+path = "../../common/uumain.rs"
