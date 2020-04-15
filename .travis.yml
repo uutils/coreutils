@@ -6,7 +6,7 @@ rust:
 
 os:
     - linux
-    - osx
+    # - osx
 
 env:
   # sphinx v1.8.0 is bugged & fails for linux builds; so, force specfic `sphinx` version
@@ -20,18 +20,18 @@ matrix:
   include:
     - rust: 1.31.0
       env: FEATURES=unix
-    - rust: stable
-      os: linux
-      env: FEATURES=unix TEST_INSTALL=true
-    - rust: stable
-      os: osx
-      env: FEATURES=macos TEST_INSTALL=true
+    # - rust: stable
+    #   os: linux
+    #   env: FEATURES=unix TEST_INSTALL=true
+    # - rust: stable
+    #   os: osx
+    #   env: FEATURES=macos TEST_INSTALL=true
     - rust: nightly
       os: linux
-      env: FEATURES=nightly,unix
+      env: FEATURES=nightly,unix TEST_INSTALL=true
     - rust: nightly
       os: osx
-      env: FEATURES=nightly,macos
+      env: FEATURES=nightly,macos TEST_INSTALL=true
     - rust: nightly
       os: linux
       env: FEATURES=nightly,feat_os_unix_redox CC=x86_64-unknown-redox-gcc CARGO_ARGS='--no-default-features --target=x86_64-unknown-redox' REDOX=1
