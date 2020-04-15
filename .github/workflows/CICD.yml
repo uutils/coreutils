@@ -133,7 +133,7 @@ jobs:
           - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: nightly-x86_64-pc-windows-gnu }   ## !maint: [rivy; due 2020-21-03] disable/remove when rust beta >= v1.43.0 is available (~mid-March)
-          # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: beta-x86_64-pc-windows-gnu }      ## maint: [rivy; due 2020-21-03; due 2020-01-05] enable when rust beta >= v1.43.0 is available (~mid-March); disable when rust stable >= 1.43.0 is available (~early-May)
+          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: beta-x86_64-pc-windows-gnu }      ## maint: [rivy; due 2020-21-03; due 2020-01-05] enable when rust beta >= v1.43.0 is available (~mid-March); disable when rust stable >= 1.43.0 is available (~early-May)
           # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly # ! maint: [rivy; due 2020-01-05] enable when rust stable >= 1.43.0 is available
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
