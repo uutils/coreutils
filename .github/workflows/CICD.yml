@@ -104,11 +104,12 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
-        cargo tree -V
+        cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
-        cargo +stable fetch --quiet
-        cargo +stable tree --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
+        RUSTUP_TOOLCHAIN=stable cargo fetch --quiet
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -266,11 +267,11 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
-        cargo tree -V
+        cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
         cargo fetch --quiet
-        cargo tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+        cargo-tree tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
       with:
