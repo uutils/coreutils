@@ -9,46 +9,49 @@
  * that was distributed with this source code.
  */
 
-extern crate libc;
 extern crate clap;
-#[macro_use] extern crate uucore;
+extern crate libc;
+#[macro_use]
+extern crate uucore;
 
 #[cfg(windows)]
 extern crate kernel32;
 #[cfg(windows)]
 extern crate winapi;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
+#[cfg(windows)]
+use kernel32::{
+    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
+    GetLastError, GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+};
 #[cfg(unix)]
-use libc::{uid_t, fsid_t};
 #[cfg(target_os = "macos")]
 use libc::statfs;
-use std::{env, io, path, ptr, mem, slice, time};
-use std::ffi::{CStr, CString, OsString, OsStr};
-#[cfg(unix)]
-use std::os::raw::{c_char, c_int};
-use std::fs::{File};
-use std::collections::HashSet;
-use std::io::{Write, BufReader, BufRead};
 use std::cell::Cell;
 use std::collections::HashMap;
-#[cfg(windows)]
-use kernel32::{GetDriveTypeW, FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, QueryDosDeviceW,
-    GetVolumeInformationW, GetLastError, GetVolumePathNamesForVolumeNameW, GetDiskFreeSpaceW};
+use std::collections::HashSet;
+use std::ffi::CString;
+#[cfg(unix)]
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 #[cfg(windows)]
 use std::os::windows::prelude::*;
+use std::{env, mem};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
 
 const EXIT_OK: i32 = 0;
-const EXIT_ERR: i32 = 1;
 
-#[cfg(windows)] const MAX_PATH: usize = 266;
+#[cfg(windows)]
+const MAX_PATH: usize = 266;
 
-#[cfg(target_os = "linux")] static LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(target_os = "linux")] static LINUX_MTAB: &str = "/etc/mtab";
+#[cfg(target_os = "linux")]
+static LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
+#[cfg(target_os = "linux")]
+static LINUX_MTAB: &str = "/etc/mtab";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -84,7 +87,7 @@ struct Options {
     show_fs_type: bool,
     show_inode_instead: bool,
     print_grand_total: bool,
-    block_size: i64,
+    // block_size: usize,
     human_readable_base: i64,
     fs_selector: FsSelector,
 }
@@ -92,7 +95,7 @@ struct Options {
 #[derive(Debug, Clone)]
 struct MountInfo {
     // it stores `volume_name` in windows platform and `dev_id` in unix platform
-    dev_id: String, 
+    dev_id: String,
     dev_name: String,
     fs_type: String,
     mount_dir: String,
@@ -102,7 +105,10 @@ struct MountInfo {
     dummy: bool,
 }
 
-#[cfg(all(target_os = "freebsd", not(all(target_os = "macos", target_arch = "x86_64"))))]
+#[cfg(all(
+    target_os = "freebsd",
+    not(all(target_os = "macos", target_arch = "x86_64"))
+))]
 #[repr(C)]
 #[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
@@ -139,7 +145,7 @@ struct FsUsage {
     bavail: u64,
     bavail_top_bit_set: bool,
     files: u64,
-    ffree: u64
+    ffree: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -150,16 +156,24 @@ struct Filesystem {
 
 #[cfg(windows)]
 macro_rules! String2LPWSTR {
-    ($str: expr) => (OsString::from($str.clone()).as_os_str().encode_wide().chain(Some(0)).collect::<Vec<u16>>().as_ptr())
+    ($str: expr) => {
+        OsString::from($str.clone())
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<u16>>()
+            .as_ptr()
+    };
 }
 
 #[cfg(windows)]
 #[allow(non_snake_case)]
 fn LPWSTR2String(buf: &[u16]) -> String {
     let len = unsafe { libc::wcslen(buf.as_ptr()) };
-    OsString::from_wide(&buf[..len as usize]).into_string().unwrap()
+    OsString::from_wide(&buf[..len as usize])
+        .into_string()
+        .unwrap()
 }
-
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -171,7 +185,10 @@ extern "C" {
     #[link_name = "getmntinfo$INODE64"]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 
-    #[cfg(all(target_os = "freebsd", not(all(target_os = "macos", target_arch = "x86_64"))))]
+    #[cfg(all(
+        target_os = "freebsd",
+        not(all(target_os = "macos", target_arch = "x86_64"))
+    ))]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 }
 
@@ -180,9 +197,21 @@ impl From<statfs> for MountInfo {
     fn from(statfs: statfs) -> Self {
         let mut info = MountInfo {
             dev_id: "".to_string(),
-            dev_name: unsafe { CStr::from_ptr(&statfs.f_mntfromname[0]).to_string_lossy().into_owned() },
-            fs_type: unsafe { CStr::from_ptr(&statfs.f_fstypename[0]).to_string_lossy().into_owned() },
-            mount_dir: unsafe { CStr::from_ptr(&statfs.f_mntonname[0]).to_string_lossy().into_owned() },
+            dev_name: unsafe {
+                CStr::from_ptr(&statfs.f_mntfromname[0])
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            fs_type: unsafe {
+                CStr::from_ptr(&statfs.f_fstypename[0])
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            mount_dir: unsafe {
+                CStr::from_ptr(&statfs.f_mntonname[0])
+                    .to_string_lossy()
+                    .into_owned()
+            },
             mount_root: "".to_string(),
             mount_option: "".to_string(),
             remote: false,
@@ -197,7 +226,7 @@ impl FsSelector {
     fn new() -> FsSelector {
         FsSelector {
             include: HashSet::new(),
-            exclude: HashSet::new()
+            exclude: HashSet::new(),
         }
     }
 
@@ -211,15 +240,11 @@ impl FsSelector {
         self.exclude.insert(fs_type);
     }
 
-    fn should_select(&self, fs_type: &String) -> bool {
+    fn should_select(&self, fs_type: &str) -> bool {
         if self.exclude.contains(fs_type) {
             return false;
         }
-        if self.include.len() <= 0 || self.include.contains(fs_type) {
-            true
-        } else {
-            false
-        }
+        self.include.is_empty() || self.include.contains(fs_type)
     }
 }
 
@@ -232,12 +257,12 @@ impl Options {
             show_fs_type: false,
             show_inode_instead: false,
             print_grand_total: false,
-            block_size: match env::var("BLOCKSIZE") {
-                Ok(size) => size.parse().unwrap(),
-                Err(_) => 512
-            },
+            // block_size: match env::var("BLOCKSIZE") {
+            //     Ok(size) => size.parse().unwrap(),
+            //     Err(_) => 512,
+            // },
             human_readable_base: -1,
-            fs_selector: FsSelector::new()
+            fs_selector: FsSelector::new(),
         }
     }
 }
@@ -269,16 +294,18 @@ impl MountInfo {
                 && self.mount_option.find(MOUNT_OPT_BIND).is_none(),
         }
         // set MountInfo::remote
-        #[cfg(windows)] {
-            self.remote = winapi::winbase::DRIVE_REMOTE == unsafe {
-                GetDriveTypeW(String2LPWSTR!(self.mount_root))
-            };
+        #[cfg(windows)]
+        {
+            self.remote = winapi::winbase::DRIVE_REMOTE
+                == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
         }
-        #[cfg(unix)] {
-            if self.dev_name.find(":").is_some()
-                || (self.dev_name.starts_with("//")
-                    && self.fs_type == "smbfs" || self.fs_type == "cifs")
-                || self.dev_name == "-hosts" {
+        #[cfg(unix)]
+        {
+            if self.dev_name.find(':').is_some()
+                || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
+                    || self.fs_type == "cifs")
+                || self.dev_name == "-hosts"
+            {
                 self.remote = true;
             } else {
                 self.remote = false;
@@ -302,7 +329,7 @@ impl MountInfo {
                 };
                 m.set_missing_fields();
                 Some(m)
-            },
+            }
             "/etc/mtab" => {
                 let mut m = MountInfo {
                     dev_id: "".to_string(),
@@ -316,17 +343,27 @@ impl MountInfo {
                 };
                 m.set_missing_fields();
                 Some(m)
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
-     #[cfg(windows)]
+    #[cfg(windows)]
     fn new(mut volume_name: String) -> Option<MountInfo> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
-        let dev_name_len = unsafe { QueryDosDeviceW(
-            OsString::from(volume_name.clone()).as_os_str().encode_wide().chain(Some(0)).skip(4).collect::<Vec<u16>>().as_ptr(),
-            dev_name_buf.as_mut_ptr(), dev_name_buf.len() as winapi::DWORD) };
+        let dev_name_len = unsafe {
+            QueryDosDeviceW(
+                OsString::from(volume_name.clone())
+                    .as_os_str()
+                    .encode_wide()
+                    .chain(Some(0))
+                    .skip(4)
+                    .collect::<Vec<u16>>()
+                    .as_ptr(),
+                dev_name_buf.as_mut_ptr(),
+                dev_name_buf.len() as winapi::DWORD,
+            )
+        };
         volume_name.push('\\');
         let dev_name = LPWSTR2String(&dev_name_buf);
 
@@ -336,13 +373,13 @@ impl MountInfo {
                 String2LPWSTR!(volume_name),
                 mount_root_buf.as_mut_ptr(),
                 mount_root_buf.len() as winapi::DWORD,
-                ptr::null_mut()
+                ptr::null_mut(),
             )
         };
         if 0 == success {
             // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
             return None;
-        }         
+        }
         let mount_root = LPWSTR2String(&mount_root_buf);
 
         let mut fs_type_buf = [0u16; MAX_PATH];
@@ -355,10 +392,14 @@ impl MountInfo {
                 ptr::null_mut(),
                 ptr::null_mut(),
                 fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as winapi::DWORD
+                fs_type_buf.len() as winapi::DWORD,
             )
         };
-        let fs_type = if 0 != success { Some(LPWSTR2String(&fs_type_buf)) } else { None };
+        let fs_type = if 0 != success {
+            Some(LPWSTR2String(&fs_type_buf))
+        } else {
+            None
+        };
 
         let mut mn_info = MountInfo {
             dev_id: volume_name,
@@ -379,23 +420,29 @@ impl FsUsage {
     #[cfg(unix)]
     fn new(statvfs: libc::statvfs) -> FsUsage {
         FsUsage {
-            blocksize: if statvfs.f_frsize != 0 { statvfs.f_frsize as u64 } else { statvfs.f_bsize as u64 } ,
+            blocksize: if statvfs.f_frsize != 0 {
+                statvfs.f_frsize as u64
+            } else {
+                statvfs.f_bsize as u64
+            },
             blocks: statvfs.f_blocks as u64,
             bfree: statvfs.f_bfree as u64,
             bavail: statvfs.f_bavail as u64,
             bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
             files: statvfs.f_files as u64,
-            ffree: statvfs.f_ffree as u64
+            ffree: statvfs.f_ffree as u64,
         }
     }
     #[cfg(not(unix))]
-    unimplemented!();
+    fn new(statvfs: libc::statvfs) -> FsUsage {
+        unimplemented!();
+    }
 }
 
 impl Filesystem {
     // TODO: resolve uuid in `mountinfo.dev_name` if exists
     fn new(mountinfo: MountInfo) -> Option<Filesystem> {
-        let stat_path = if mountinfo.mount_dir.len() > 0 {
+        let stat_path = if !mountinfo.mount_dir.is_empty() {
             mountinfo.mount_dir.clone()
         } else {
             mountinfo.dev_name.clone()
@@ -407,13 +454,14 @@ impl Filesystem {
             if libc::statvfs(path.as_ptr(), &mut statvfs) < 0 {
                 None
             } else {
-                Some(Filesystem{
+                Some(Filesystem {
                     mountinfo,
-                    usage: FsUsage::new(statvfs)
+                    usage: FsUsage::new(statvfs),
                 })
             }
         }
-        #[cfg(windows)] {
+        #[cfg(windows)]
+        {
             unimplemented!();
         }
     }
@@ -421,32 +469,48 @@ impl Filesystem {
 
 /// Read file system list.
 fn read_fs_list() -> Vec<MountInfo> {
-    #[cfg(target_os = "linux")] {
-        let (file_name, fobj) = File::open(LINUX_MOUNTINFO).map(|f| (LINUX_MOUNTINFO, f))
-            .or(File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))
+    #[cfg(target_os = "linux")]
+    {
+        let (file_name, fobj) = File::open(LINUX_MOUNTINFO)
+            .map(|f| (LINUX_MOUNTINFO, f))
+            .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))
             .expect("failed to find mount list files");
         let reader = BufReader::new(fobj);
-        return reader.lines()
+        reader
+            .lines()
             .filter_map(|line| line.ok())
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
                 MountInfo::new(file_name, raw_data)
-            }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>()
     }
-    #[cfg(any(target_os = "freebsd", target_os = "macos"))] {
+    #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+    {
         let mut mptr: *mut statfs = ptr::null_mut();
         let len = unsafe { getmntinfo(&mut mptr, 1 as c_int) };
         if len < 0 {
             crash!(EXIT_ERR, "getmntinfo failed");
         }
         let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
-        return mounts.into_iter().map(|m| MountInfo::from(*m)).collect::<Vec<_>>();
+        return mounts
+            .into_iter()
+            .map(|m| MountInfo::from(*m))
+            .collect::<Vec<_>>();
     }
-    #[cfg(windows)] {
+    #[cfg(windows)]
+    {
         let mut volume_name_buf = [0u16; MAX_PATH];
-        let find_handle = unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as winapi::DWORD) };
+        let find_handle = unsafe {
+            FindFirstVolumeW(
+                volume_name_buf.as_mut_ptr(),
+                volume_name_buf.len() as winapi::DWORD,
+            )
+        };
         if winapi::shlobj::INVALID_HANDLE_VALUE == find_handle {
-            crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", unsafe { GetLastError() });
+            crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", unsafe {
+                GetLastError()
+            });
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
@@ -458,7 +522,13 @@ fn read_fs_list() -> Vec<MountInfo> {
             if let Some(m) = MountInfo::new(volume_name) {
                 mounts.push(m);
             }
-            if 0 == unsafe { FindNextVolumeW(find_handle, volume_name_buf.as_mut_ptr(), volume_name_buf.len() as winapi::DWORD) } {
+            if 0 == unsafe {
+                FindNextVolumeW(
+                    find_handle,
+                    volume_name_buf.as_mut_ptr(),
+                    volume_name_buf.len() as winapi::DWORD,
+                )
+            } {
                 let err = unsafe { GetLastError() };
                 if err != winapi::ERROR_NO_MORE_FILES {
                     crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
@@ -473,24 +543,31 @@ fn read_fs_list() -> Vec<MountInfo> {
     }
 }
 
+#[allow(clippy::map_entry)]
 fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
-    vmi.into_iter().filter_map(|mi| {
-        if (mi.remote && opt.show_local_fs)
-            || (mi.dummy && !opt.show_all_fs && !opt.show_listed_fs)
-            || !opt.fs_selector.should_select(&mi.fs_type) {
-            None
-        } else {
-            Some((mi.dev_id.clone(), mi))
-        }
-    }).fold(HashMap::<String, Cell<MountInfo>>::new(), |mut acc, (id, mi)| {
-        if acc.contains_key(&id) {
-            let seen = acc.get(&id).unwrap().replace(mi.clone());
-            let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
-            // With bind mounts, prefer items nearer the root of the source
-            let source_below_root = seen.mount_root.len() > 0 && mi.mount_root.len() > 0
-                && seen.mount_root.len() < mi.mount_root.len();
-            // let "real" devices with '/' in the name win.
-            if (!mi.dev_name.starts_with("/") || seen.dev_name.starts_with("/"))
+    vmi.into_iter()
+        .filter_map(|mi| {
+            if (mi.remote && opt.show_local_fs)
+                || (mi.dummy && !opt.show_all_fs && !opt.show_listed_fs)
+                || !opt.fs_selector.should_select(&mi.fs_type)
+            {
+                None
+            } else {
+                Some((mi.dev_id.clone(), mi))
+            }
+        })
+        .fold(
+            HashMap::<String, Cell<MountInfo>>::new(),
+            |mut acc, (id, mi)| {
+                if acc.contains_key(&id) {
+                    let seen = acc.get(&id).unwrap().replace(mi.clone());
+                    let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
+                    // With bind mounts, prefer items nearer the root of the source
+                    let source_below_root = !seen.mount_root.is_empty()
+                        && !mi.mount_root.is_empty()
+                        && seen.mount_root.len() < mi.mount_root.len();
+                    // let "real" devices with '/' in the name win.
+                    if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
                 // let points towards the root of the device win.
                 && (!target_nearer_root || source_below_root)
                 // let an entry overmounted on a new device win...
@@ -499,14 +576,19 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
                        to avoid problematic replacement when given
                        inaccurate mount lists, seen with some chroot
                        environments for example.  */
-                    || seen.mount_dir != mi.mount_dir) {
-                acc.get(&id).unwrap().replace(seen);
-            }
-        } else {
-            acc.insert(id, Cell::new(mi));
-        }
-        acc
-    }).into_iter().map(|ent| ent.1.into_inner()).collect::<Vec<_>>()
+                    || seen.mount_dir != mi.mount_dir)
+                    {
+                        acc.get(&id).unwrap().replace(seen);
+                    }
+                } else {
+                    acc.insert(id, Cell::new(mi));
+                }
+                acc
+            },
+        )
+        .into_iter()
+        .map(|ent| ent.1.into_inner())
+        .collect::<Vec<_>>()
 }
 
 /// Convert `value` to a human readable string based on `base`.
@@ -538,7 +620,10 @@ fn use_size(free_size: u64, total_size: u64) -> String {
     if total_size == 0 {
         return String::from("-");
     }
-    return format!("{:.0}%", 100f64 - 100f64 * (free_size as f64 / total_size as f64));
+    return format!(
+        "{:.0}%",
+        100f64 - 100f64 * (free_size as f64 / total_size as f64)
+    );
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
@@ -547,81 +632,119 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
-        .arg(Arg::with_name(OPT_ALL)
-            .short("a")
-            .long("all")
-            .help("include dummy file systems"))
-        .arg(Arg::with_name(OPT_BLOCKSIZE)
-            .short("B")
-            .long("block-size")
-            .takes_value(true)
-            .help("scale sizes by SIZE before printing them; e.g.\
-                      '-BM' prints sizes in units of 1,048,576 bytes"))
-        .arg(Arg::with_name(OPT_DIRECT)
-            .long("direct")
-            .help("show statistics for a file instead of mount point"))
-        .arg(Arg::with_name(OPT_TOTAL)
-            .long("total")
-            .help("produce a grand total"))
-        .arg(Arg::with_name(OPT_HUMAN_READABLE)
-            .short("h")
-            .long("human-readable")
-            .conflicts_with(OPT_HUMAN_READABLE_2)
-            .help("print sizes in human readable format (e.g., 1K 234M 2G)"))
-        .arg(Arg::with_name(OPT_HUMAN_READABLE_2)
-            .short("H")
-            .long("si")
-            .conflicts_with(OPT_HUMAN_READABLE)
-            .help("likewise, but use powers of 1000 not 1024"))
-        .arg(Arg::with_name(OPT_INODES)
-            .short("i")
-            .long("inodes")
-            .help("list inode information instead of block usage"))
-        .arg(Arg::with_name(OPT_KILO)
-            .short("k")
-            .help("like --block-size=1K"))
-        .arg(Arg::with_name(OPT_LOCAL)
-            .short("l")
-            .long("local")
-            .help("limit listing to local file systems"))
-        .arg(Arg::with_name(OPT_NO_SYNC)
-            .long("no-sync")
-            .conflicts_with(OPT_SYNC)
-            .help("do not invoke sync before getting usage info (default)"))
-        .arg(Arg::with_name(OPT_OUTPUT)
-            .long("output")
-            .takes_value(true)
-            .use_delimiter(true)
-            .help("use the output format defined by FIELD_LIST,\
-                    or print all fields if FIELD_LIST is omitted."))
-        .arg(Arg::with_name(OPT_PORTABILITY)
-            .short("P")
-            .long("portability")
-            .help("use the POSIX output format"))
-        .arg(Arg::with_name(OPT_SYNC)
-            .long("sync")
-            .conflicts_with(OPT_NO_SYNC)
-            .help("invoke sync before getting usage info"))
-        .arg(Arg::with_name(OPT_TYPE)
-            .short("t")
-            .long("type")
-            .takes_value(true)
-            .use_delimiter(true)
-            .help("limit listing to file systems of type TYPE"))
-        .arg(Arg::with_name(OPT_PRINT_TYPE)
-            .short("T")
-            .long("print-type")
-            .help("print file system type"))
-        .arg(Arg::with_name(OPT_EXCLUDE_TYPE)
-            .short("x")
-            .long("exclude-type")
-            .takes_value(true)
-            .use_delimiter(true)
-            .help("limit listing to file systems not of type TYPE"))
-        .arg(Arg::with_name(OPT_VERSION)
-            .short("v")
-            .long("version")
-            .help("output version information and exit"))
+        .arg(
+            Arg::with_name(OPT_ALL)
+                .short("a")
+                .long("all")
+                .help("include dummy file systems"),
+        )
+        .arg(
+            Arg::with_name(OPT_BLOCKSIZE)
+                .short("B")
+                .long("block-size")
+                .takes_value(true)
+                .help(
+                    "scale sizes by SIZE before printing them; e.g.\
+                      '-BM' prints sizes in units of 1,048,576 bytes",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_DIRECT)
+                .long("direct")
+                .help("show statistics for a file instead of mount point"),
+        )
+        .arg(
+            Arg::with_name(OPT_TOTAL)
+                .long("total")
+                .help("produce a grand total"),
+        )
+        .arg(
+            Arg::with_name(OPT_HUMAN_READABLE)
+                .short("h")
+                .long("human-readable")
+                .conflicts_with(OPT_HUMAN_READABLE_2)
+                .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
+        )
+        .arg(
+            Arg::with_name(OPT_HUMAN_READABLE_2)
+                .short("H")
+                .long("si")
+                .conflicts_with(OPT_HUMAN_READABLE)
+                .help("likewise, but use powers of 1000 not 1024"),
+        )
+        .arg(
+            Arg::with_name(OPT_INODES)
+                .short("i")
+                .long("inodes")
+                .help("list inode information instead of block usage"),
+        )
+        .arg(
+            Arg::with_name(OPT_KILO)
+                .short("k")
+                .help("like --block-size=1K"),
+        )
+        .arg(
+            Arg::with_name(OPT_LOCAL)
+                .short("l")
+                .long("local")
+                .help("limit listing to local file systems"),
+        )
+        .arg(
+            Arg::with_name(OPT_NO_SYNC)
+                .long("no-sync")
+                .conflicts_with(OPT_SYNC)
+                .help("do not invoke sync before getting usage info (default)"),
+        )
+        .arg(
+            Arg::with_name(OPT_OUTPUT)
+                .long("output")
+                .takes_value(true)
+                .use_delimiter(true)
+                .help(
+                    "use the output format defined by FIELD_LIST,\
+                    or print all fields if FIELD_LIST is omitted.",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_PORTABILITY)
+                .short("P")
+                .long("portability")
+                .help("use the POSIX output format"),
+        )
+        .arg(
+            Arg::with_name(OPT_SYNC)
+                .long("sync")
+                .conflicts_with(OPT_NO_SYNC)
+                .help("invoke sync before getting usage info"),
+        )
+        .arg(
+            Arg::with_name(OPT_TYPE)
+                .short("t")
+                .long("type")
+                .takes_value(true)
+                .use_delimiter(true)
+                .help("limit listing to file systems of type TYPE"),
+        )
+        .arg(
+            Arg::with_name(OPT_PRINT_TYPE)
+                .short("T")
+                .long("print-type")
+                .help("print file system type"),
+        )
+        .arg(
+            Arg::with_name(OPT_EXCLUDE_TYPE)
+                .short("x")
+                .long("exclude-type")
+                .takes_value(true)
+                .use_delimiter(true)
+                .help("limit listing to file systems not of type TYPE"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERSION)
+                .short("v")
+                .long("version")
+                .help("output version information and exit"),
+        )
         .get_matches_from(&args);
 
     if matches.is_present(OPT_VERSION) {
@@ -629,9 +752,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return EXIT_OK;
     }
 
-    #[cfg(windows)] {
+    #[cfg(windows)]
+    {
         if matches.is_present(OPT_INODES) {
-            println!("{}: {}", executable!(), "doesn't support -i option");
+            println!("{}: doesn't support -i option", executable!());
             return EXIT_OK;
         }
     }
@@ -658,15 +782,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
     if matches.is_present(OPT_HUMAN_READABLE_2) {
         opt.human_readable_base = 1000;
     }
-    for fs_type in matches.values_of_lossy(OPT_TYPE).unwrap_or(Vec::new()).iter() {
+    for fs_type in matches.values_of_lossy(OPT_TYPE).unwrap_or_default() {
         opt.fs_selector.include(fs_type.to_owned());
     }
-    for fs_type in matches.values_of_lossy(OPT_EXCLUDE_TYPE).unwrap_or(Vec::new()).iter() {
+    for fs_type in matches
+        .values_of_lossy(OPT_EXCLUDE_TYPE)
+        .unwrap_or_default()
+    {
         opt.fs_selector.exclude(fs_type.to_owned());
     }
 
-    let fs_list = filter_mount_list(read_fs_list(), &opt).into_iter()
-        .filter_map(|mi| Filesystem::new(mi))
+    let fs_list = filter_mount_list(read_fs_list(), &opt)
+        .into_iter()
+        .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
         .collect::<Vec<_>>();
 
@@ -678,7 +806,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
     header.extend_from_slice(&if opt.show_inode_instead {
         ["Inodes", "Iused", "IFree", "IUses%"]
     } else {
-        [if opt.human_readable_base == -1 { "1k-blocks" } else { "Size" }, "Used", "Available", "Use%"]
+        [
+            if opt.human_readable_base == -1 {
+                "1k-blocks"
+            } else {
+                "Size"
+            },
+            "Used",
+            "Available",
+            "Use%",
+        ]
     });
     header.push("Mounted on");
 
@@ -700,16 +837,40 @@ pub fn uumain(args: Vec<String>) -> i32 {
             print!("{0: <5} ", fs.mountinfo.fs_type);
         }
         if opt.show_inode_instead {
-            print!("{0: >12} ", human_readable(fs.usage.files, opt.human_readable_base));
-            print!("{0: >12} ", human_readable(fs.usage.files - fs.usage.ffree, opt.human_readable_base));
-            print!("{0: >12} ", human_readable(fs.usage.ffree, opt.human_readable_base));
-            print!("{0: >5} ", format!("{0:.1}%", 100f64 - 100f64 * (fs.usage.ffree as f64 / fs.usage.files as f64)));
+            print!(
+                "{0: >12} ",
+                human_readable(fs.usage.files, opt.human_readable_base)
+            );
+            print!(
+                "{0: >12} ",
+                human_readable(fs.usage.files - fs.usage.ffree, opt.human_readable_base)
+            );
+            print!(
+                "{0: >12} ",
+                human_readable(fs.usage.ffree, opt.human_readable_base)
+            );
+            print!(
+                "{0: >5} ",
+                format!(
+                    "{0:.1}%",
+                    100f64 - 100f64 * (fs.usage.ffree as f64 / fs.usage.files as f64)
+                )
+            );
         } else {
             let total_size = fs.usage.blocksize * fs.usage.blocks;
             let free_size = fs.usage.blocksize * fs.usage.bfree;
-            print!("{0: >12} ", human_readable(total_size, opt.human_readable_base));
-            print!("{0: >12} ", human_readable(total_size - free_size, opt.human_readable_base));
-            print!("{0: >12} ", human_readable(free_size, opt.human_readable_base));
+            print!(
+                "{0: >12} ",
+                human_readable(total_size, opt.human_readable_base)
+            );
+            print!(
+                "{0: >12} ",
+                human_readable(total_size - free_size, opt.human_readable_base)
+            );
+            print!(
+                "{0: >12} ",
+                human_readable(free_size, opt.human_readable_base)
+            );
             print!("{0: >5} ", use_size(free_size, total_size));
         }
         print!("{0: <16}", fs.mountinfo.mount_dir);
