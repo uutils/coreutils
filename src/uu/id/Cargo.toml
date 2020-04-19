@@ -1,0 +1,17 @@
+[package]
+name = "id"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_id"
+path = "src/id.rs"
+
+[dependencies]
+uucore = { version = "0.0.2", features = ["entries", "process"] }
+
+[[bin]]
+name = "id"
+path = "../../common/uumain.rs"

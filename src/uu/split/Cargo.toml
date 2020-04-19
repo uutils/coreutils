@@ -1,0 +1,18 @@
+[package]
+name = "split"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_split"
+path = "src/split.rs"
+
+[dependencies]
+getopts = "0.2.18"
+uucore = "0.0.2"
+
+[[bin]]
+name = "split"
+path = "../../common/uumain.rs"

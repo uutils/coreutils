@@ -1,0 +1,23 @@
+[package]
+name = "chown"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_chown"
+path = "src/chown.rs"
+
+[dependencies]
+glob = "0.3.0"
+uucore = { version = "0.0.2", features = ["entries", "fs"] }
+walkdir = "2.2"
+
+[dependencies.clippy]
+version = "0.0.212"
+optional = true
+
+[[bin]]
+name = "chown"
+path = "../../common/uumain.rs"

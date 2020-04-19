@@ -1,0 +1,18 @@
+[package]
+name = "printf"
+version = "0.0.1"
+authors = ["Nathan Ross"]
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_printf"
+path = "src/printf.rs"
+
+[dependencies]
+itertools = "0.8.0"
+uucore = "0.0.2"
+
+[[bin]]
+name = "printf"
+path = "../../common/uumain.rs"

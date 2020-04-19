@@ -1,10 +1,10 @@
 name: CICD
 
 # spell-checker:ignore (acronyms) CICD MSVC musl
-# spell-checker:ignore (env/flags) Ccodegen Cinline Coverflow RUSTFLAGS
+# spell-checker:ignore (env/flags) Ccodegen Coverflow RUSTFLAGS
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
-# spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium libssl mkdir popd printf pushd rustc rustfmt rustup shopt
+# spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt
 # spell-checker:ignore (misc) alnum gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
 
 
@@ -104,10 +104,12 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
+        cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
-        cargo +stable fetch --quiet
-        cargo +stable tree --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
+        RUSTUP_TOOLCHAIN=stable cargo fetch --quiet
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -132,7 +134,7 @@ jobs:
           - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: nightly-x86_64-pc-windows-gnu }   ## !maint: [rivy; due 2020-21-03] disable/remove when rust beta >= v1.43.0 is available (~mid-March)
-          # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: beta-x86_64-pc-windows-gnu }      ## maint: [rivy; due 2020-21-03; due 2020-01-05] enable when rust beta >= v1.43.0 is available (~mid-March); disable when rust stable >= 1.43.0 is available (~early-May)
+          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: beta-x86_64-pc-windows-gnu }      ## maint: [rivy; due 2020-21-03; due 2020-01-05] enable when rust beta >= v1.43.0 is available (~mid-March); disable when rust stable >= 1.43.0 is available (~early-May)
           # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly # ! maint: [rivy; due 2020-01-05] enable when rust stable >= 1.43.0 is available
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
@@ -254,6 +256,10 @@ jobs:
       shell: bash
       run: |
         # Info
+        ## commit info
+        echo "## commit"
+        echo GITHUB_REF=${GITHUB_REF}
+        echo GITHUB_SHA=${GITHUB_SHA}
         ## tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
@@ -261,10 +267,11 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
+        cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
         cargo fetch --quiet
-        cargo tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+        cargo-tree tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
       with:
@@ -317,7 +324,10 @@ jobs:
       fail-fast: true
       matrix:
         # job: [ { os: ubuntu-latest }, { os: macos-latest }, { os: windows-latest } ]
-        job: [ { os: ubuntu-latest } ] ## cargo-tarpaulin is currently only available on linux
+        job:
+          - { os: ubuntu-latest  , features: unix }
+          - { os: macos-latest   , features: unix }
+          - { os: windows-latest , features: windows , toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v1
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
@@ -326,41 +336,100 @@ jobs:
       id: vars
       shell: bash
       run: |
-        ## VARs setup
+        # toolchain
+        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain needed compiler flags)
+        # * use requested TOOLCHAIN if specified
+        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+        # * use requested TOOLCHAIN if specified
+        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+        echo set-output name=TOOLCHAIN::${TOOLCHAIN}
+        echo ::set-output name=TOOLCHAIN::${TOOLCHAIN}
         # staging directory
         STAGING='_staging'
         echo set-output name=STAGING::${STAGING}
         echo ::set-output name=STAGING::${STAGING}
-        # check for CODECOV_TOKEN availability (work-around for inaccessible 'secrets' object for 'if'; see <https://github.community/t5/GitHub-Actions/jobs-lt-job-id-gt-if-does-not-work-with-env-secrets/m-p/38549>)
-        unset HAS_CODECOV_TOKEN
-        if [ -n $CODECOV_TOKEN ]; then HAS_CODECOV_TOKEN='true' ; fi
-        echo set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
-        echo ::set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
+        ## # check for CODECOV_TOKEN availability (work-around for inaccessible 'secrets' object for 'if'; see <https://github.community/t5/GitHub-Actions/jobs-lt-job-id-gt-if-does-not-work-with-env-secrets/m-p/38549>)
+        ## # note: CODECOV_TOKEN / HAS_CODECOV_TOKEN is not needed for public repositories when using AppVeyor, Azure Pipelines, CircleCI, GitHub Actions, Travis (see <https://docs.codecov.io/docs/about-the-codecov-bash-uploader#section-upload-token>)
+        ## unset HAS_CODECOV_TOKEN
+        ## if [ -n $CODECOV_TOKEN ]; then HAS_CODECOV_TOKEN='true' ; fi
+        ## echo set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
+        ## echo ::set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        # * CODECOV_FLAGS
+        CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
+        echo set-output name=CODECOV_FLAGS::${CODECOV_FLAGS}
+        echo ::set-output name=CODECOV_FLAGS::${CODECOV_FLAGS}
+    - name: rust toolchain ~ install
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
       env:
-        CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
-    - name: Create all needed build/work directories
+        CARGO_INCREMENTAL: '0'
+        RUSTC_WRAPPER: ''
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+    - name: "`grcov` ~ install"
+      uses: actions-rs/install@v0.1
+      with:
+        crate: grcov
+        version: latest
+        use-tool-cache: true
+    - name: "`grcov` ~ display coverage files" ## (for debugging)
       shell: bash
       run: |
-        ## create build/work space
-        mkdir -p '${{ steps.vars.outputs.STAGING }}/work'
-    - name: Install required packages
+        # display coverage files (per `grcov`)
+        grcov . --output-type files | sort --unique
+    - name: "`grcov` ~ configure + fixups" ## note: fixups, when needed, must be done *after* testing so that coverage files exist for renaming
+      shell: bash
       run: |
-        sudo apt-get -y install libssl-dev
-        pushd '${{ steps.vars.outputs.STAGING }}/work' >/dev/null
-        wget --no-verbose https://github.com/xd009642/tarpaulin/releases/download/0.9.3/cargo-tarpaulin-0.9.3-travis.tar.gz
-        tar xf cargo-tarpaulin-0.9.3-travis.tar.gz
-        cp cargo-tarpaulin "$(dirname -- "$(which cargo)")"/
-        popd >/dev/null
-    - name: Generate coverage
+        # create `grcov` configuration file
+        GRCOV_CONFIG_DIR="${GITHUB_WORKSPACE}/.github/actions-rs"
+        mkdir -p "${GRCOV_CONFIG_DIR}"
+        GRCOV_CONFIG_FILE="${GRCOV_CONFIG_DIR}/grcov.yml"
+        echo "branch: true" >> "${GRCOV_CONFIG_FILE}"
+        echo "ignore:" >> "${GRCOV_CONFIG_FILE}"
+        echo "- \"build.rs\"" >> "${GRCOV_CONFIG_FILE}"
+        echo "- \"/*\"" >> "${GRCOV_CONFIG_FILE}"
+        echo "- \"[a-zA-Z]:/*\"" >> "${GRCOV_CONFIG_FILE}"
+        cat "${GRCOV_CONFIG_FILE}"
+        # ## 'actions-rs/grcov@v0.1' expects coverage files (*.gc*) to be prefixed with the crate name (using '_' in place of '-')
+        # ## * uutils workspace packages
+        # prefix="uu_"
+        # for f in "target/debug/deps/uu_"*-*.gc* ; do to="${f/uu_/${PROJECT_NAME}-uu_}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
+        # ## * tests
+        # for f in "target/debug/deps/tests"-*.gc* ; do to="${f/tests/${PROJECT_NAME}-tests}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
+    # - name: Generate coverage data (via `grcov`)
+    #   id: coverage
+    #   uses: actions-rs/grcov@v0.1
+    - name: Generate coverage data (via `grcov`)
+      id: coverage
+      shell: bash
       run: |
-        cargo tarpaulin --out Xml
-    - name: Upload coverage results (CodeCov.io)
-      # CODECOV_TOKEN (aka, "Repository Upload Token" for REPO from CodeCov.io) ## set via REPO/Settings/Secrets
-      # if: secrets.CODECOV_TOKEN (not supported {yet?}; see <https://github.community/t5/GitHub-Actions/jobs-lt-job-id-gt-if-does-not-work-with-env-secrets/m-p/38549>)
-      if: steps.vars.outputs.HAS_CODECOV_TOKEN
-      run: |
-        # CodeCov.io
-        cargo tarpaulin --out Xml
-        bash <(curl -s https://codecov.io/bash)
-      env:
-        CODECOV_TOKEN: "${{ secrets.CODECOV_TOKEN }}"
+        # generate coverage data
+        COVERAGE_REPORT_DIR="target/debug"
+        COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
+        mkdir -p "${COVERAGE_REPORT_DIR}"
+        grcov . --output-type lcov --output-file "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"
+        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
+    - name: Upload coverage results (to Codecov.io)
+      uses: codecov/codecov-action@v1
+      # if: steps.vars.outputs.HAS_CODECOV_TOKEN
+      with:
+        # token: ${{ secrets.CODECOV_TOKEN }}
+        file: ${{ steps.coverage.outputs.report }}
+        ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
+        flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
+        name: codecov-umbrella
+        fail_ci_if_error: true

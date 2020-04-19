@@ -1,0 +1,19 @@
+[package]
+name = "expr"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_expr"
+path = "src/expr.rs"
+
+[dependencies]
+libc = "0.2.42"
+onig = "~4.3.2"
+uucore = "0.0.2"
+
+[[bin]]
+name = "expr"
+path = "../../common/uumain.rs"

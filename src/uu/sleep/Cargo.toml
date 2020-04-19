@@ -1,0 +1,18 @@
+[package]
+name = "sleep"
+version = "0.0.1"
+authors = []
+license = "MIT"
+build = "../../common/mkmain.rs"
+
+[lib]
+name = "uu_sleep"
+path = "src/sleep.rs"
+
+[dependencies]
+getopts = "0.2.18"
+uucore = { version = "0.0.2", features = ["parse_time"] }
+
+[[bin]]
+name = "sleep"
+path = "../../common/uumain.rs"

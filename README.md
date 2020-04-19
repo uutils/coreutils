@@ -10,6 +10,7 @@ uutils coreutils
 [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build Status (Windows)](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
+[![codecov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 
 -----------------------------------------------
 
@@ -304,12 +305,12 @@ Utilities
 | link      |           |        |
 | ln        |           |        |
 | logname   |           |        |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/hashsum/hashsum.rs)) | |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
 | mkdir     |           |        |
 | mkfifo    |           |        |
 | mknod     |           |        |
