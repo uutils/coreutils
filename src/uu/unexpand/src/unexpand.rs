@@ -324,6 +324,7 @@ fn unexpand(options: Options) {
 
             // write out anything remaining
             write_tabs(&mut output, ts, scol, col, pctype == Tab, init, true);
+            safe_unwrap!(output.flush());
             buf.truncate(0); // clear out the buffer
         }
     }
