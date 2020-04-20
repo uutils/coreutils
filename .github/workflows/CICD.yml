@@ -25,7 +25,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest   , features: unix }
-          - { os: macos-latest    , features: unix }
+          - { os: macos-latest    , features: macos }
           - { os: windows-latest  , features: windows }
     steps:
     - uses: actions/checkout@v1
@@ -130,7 +130,7 @@ jobs:
           - { os: ubuntu-18.04   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-18.04   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-18.04   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
-          - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_unix }
+          - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: nightly-x86_64-pc-windows-gnu }   ## !maint: [rivy; due 2020-21-03] disable/remove when rust beta >= v1.43.0 is available (~mid-March)
@@ -326,7 +326,7 @@ jobs:
         # job: [ { os: ubuntu-latest }, { os: macos-latest }, { os: windows-latest } ]
         job:
           - { os: ubuntu-latest  , features: unix }
-          - { os: macos-latest   , features: unix }
+          - { os: macos-latest   , features: macos }
           - { os: windows-latest , features: windows , toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v1
