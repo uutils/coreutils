@@ -25,25 +25,39 @@ use kernel32::{
     FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
     GetLastError, GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
-#[cfg(unix)]
-#[cfg(target_os = "macos")]
-use libc::statfs;
+
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::CString;
-#[cfg(unix)]
+use std::{env, mem};
+
+#[cfg(target_os = "macos")]
+use libc::c_int;
+#[cfg(target_os = "macos")]
+use libc::statfs;
+#[cfg(target_os = "macos")]
+use std::ffi::CStr;
+#[cfg(target_os = "macos")]
+use std::ptr;
+#[cfg(target_os = "macos")]
+use std::slice;
+
+#[cfg(target_os = "linux")]
 use std::fs::File;
+#[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
+
 #[cfg(windows)]
 use std::os::windows::prelude::*;
-use std::{env, mem};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
 
-const EXIT_OK: i32 = 0;
+static EXIT_OK: i32 = 0;
+#[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "windows"))]
+static EXIT_ERR: i32 = 1;
 
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
@@ -493,10 +507,10 @@ fn read_fs_list() -> Vec<MountInfo> {
             crash!(EXIT_ERR, "getmntinfo failed");
         }
         let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
-        return mounts
-            .into_iter()
+        mounts
+            .iter()
             .map(|m| MountInfo::from(*m))
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
     }
     #[cfg(windows)]
     {
@@ -543,7 +557,6 @@ fn read_fs_list() -> Vec<MountInfo> {
     }
 }
 
-#[allow(clippy::map_entry)]
 fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
     vmi.into_iter()
         .filter_map(|mi| {
@@ -559,15 +572,17 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
         .fold(
             HashMap::<String, Cell<MountInfo>>::new(),
             |mut acc, (id, mi)| {
-                if acc.contains_key(&id) {
-                    let seen = acc.get(&id).unwrap().replace(mi.clone());
-                    let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
-                    // With bind mounts, prefer items nearer the root of the source
-                    let source_below_root = !seen.mount_root.is_empty()
-                        && !mi.mount_root.is_empty()
-                        && seen.mount_root.len() < mi.mount_root.len();
-                    // let "real" devices with '/' in the name win.
-                    if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
+                #[allow(clippy::map_entry)]
+                {
+                    if acc.contains_key(&id) {
+                        let seen = acc.get(&id).unwrap().replace(mi.clone());
+                        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
+                        // With bind mounts, prefer items nearer the root of the source
+                        let source_below_root = !seen.mount_root.is_empty()
+                            && !mi.mount_root.is_empty()
+                            && seen.mount_root.len() < mi.mount_root.len();
+                        // let "real" devices with '/' in the name win.
+                        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
                 // let points towards the root of the device win.
                 && (!target_nearer_root || source_below_root)
                 // let an entry overmounted on a new device win...
@@ -577,13 +592,14 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
                        inaccurate mount lists, seen with some chroot
                        environments for example.  */
                     || seen.mount_dir != mi.mount_dir)
-                    {
-                        acc.get(&id).unwrap().replace(seen);
+                        {
+                            acc.get(&id).unwrap().replace(seen);
+                        }
+                    } else {
+                        acc.insert(id, Cell::new(mi));
                     }
-                } else {
-                    acc.insert(id, Cell::new(mi));
+                    acc
                 }
-                acc
             },
         )
         .into_iter()
