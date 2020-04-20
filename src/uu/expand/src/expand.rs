@@ -244,10 +244,10 @@ fn expand(options: Options) {
                     }
                 }
 
-                safe_unwrap!(output.flush());
                 byte += nbytes; // advance the pointer
             }
 
+            safe_unwrap!(output.flush());
             buf.truncate(0); // clear the buffer
         }
     }
