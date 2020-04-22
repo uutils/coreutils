@@ -13,8 +13,8 @@ libc = "0.2.42"
 uucore = "0.0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-kernel32-sys = "*"
-winapi = "*"
+kernel32-sys = "0.2.2"
+winapi = { version = "0.3", features = ["handleapi"] }
 
 [[bin]]
 name = "df"
