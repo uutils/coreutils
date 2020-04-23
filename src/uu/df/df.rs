@@ -32,16 +32,19 @@ use std::collections::HashSet;
 use std::ffi::CString;
 use std::{env, mem};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use libc::c_int;
 #[cfg(target_os = "macos")]
 use libc::statfs;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use std::ffi::CStr;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "windows"))]
 use std::ptr;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use std::slice;
+
+#[cfg(target_os = "freebsd")]
+use libc::{c_char, fsid_t, uid_t};
 
 #[cfg(target_os = "linux")]
 use std::fs::File;
