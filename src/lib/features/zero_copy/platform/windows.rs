@@ -1,6 +1,6 @@
 use std::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 
-use crate::zero_copy::{AsRawObject, FromRawObject};
+use crate::features::zero_copy::{AsRawObject, FromRawObject};
 
 pub type RawObject = RawHandle;
 

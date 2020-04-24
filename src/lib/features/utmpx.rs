@@ -31,7 +31,6 @@
 //! }
 //! ```
 
-use super::libc;
 pub extern crate time;
 use self::time::{Timespec, Tm};
 
@@ -111,8 +110,6 @@ mod ut {
 
 #[cfg(target_os = "freebsd")]
 mod ut {
-    use super::libc;
-
     pub static DEFAULT_FILE: &str = "";
 
     pub const UT_LINESIZE: usize = 16;

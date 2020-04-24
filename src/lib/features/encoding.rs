@@ -7,7 +7,11 @@
 //
 
 extern crate data_encoding;
+extern crate failure;
+
 use self::data_encoding::{DecodeError, BASE32, BASE64};
+
+use failure::Fail;
 use std::io::{self, Read, Write};
 
 #[derive(Fail, Debug)]
