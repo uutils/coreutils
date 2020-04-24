@@ -15,6 +15,9 @@ license = "MIT"
 appveyor = { repository = "uutils/uucore" }
 travis-ci = { repository = "uutils/uucore" }
 
+[lib]
+path="src/lib/lib.rs"
+
 [dependencies]
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
@@ -33,7 +36,6 @@ backtrace = ">= 0.3.3, <= 0.3.30"
 data-encoding = { version = "~2.1", optional = true }
 # * libc: initial utmp support added in 0.2.15, but 0.2.68 break the build for MinSRV 1.31.0
 libc = { version = "0.2.15, <= 0.2.66", optional = true }
-
 
 [target.'cfg(target_os = "redox")'.dependencies]
 termion = "1.5"

@@ -12,9 +12,7 @@ extern crate dunce;
 extern crate termion;
 
 #[cfg(unix)]
-use super::libc;
-#[cfg(unix)]
-use super::libc::{
+use libc::{
     mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
     S_IXGRP, S_IXOTH, S_IXUSR,
 };

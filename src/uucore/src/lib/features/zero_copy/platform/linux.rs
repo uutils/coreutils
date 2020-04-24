@@ -9,9 +9,9 @@ use nix::sys::uio::IoVec;
 use nix::unistd::pipe;
 use platform_info::{PlatformInfo, Uname};
 
-use crate::zero_copy::{FromRawObject, RawObject};
+use crate::features::zero_copy::{FromRawObject, RawObject};
 
-lazy_static! {
+lazy_static::lazy_static! {
     static ref IN_WSL: bool = {
         let info = PlatformInfo::new().unwrap();
         info.release().contains("Microsoft")

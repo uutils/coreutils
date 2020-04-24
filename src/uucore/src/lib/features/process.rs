@@ -7,7 +7,6 @@
 // that was distributed with this source code.
 //
 
-use super::libc;
 use libc::{c_int, gid_t, pid_t, uid_t};
 use std::fmt;
 use std::io;

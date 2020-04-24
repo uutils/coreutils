@@ -6,8 +6,6 @@
 // file that was distributed with this source code.
 //
 
-use std::error::Error;
-
 pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
     let (op, pos) = parse_op(mode, Some('='))?;
     mode = mode[pos..].trim_start_matches('0');
@@ -21,7 +19,7 @@ pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
                 '=' => change,
                 _ => unreachable!(),
             }),
-            Err(err) => Err(err.description().to_owned()),
+            Err(err) => Err(err.to_string()),
         }
     }
 }

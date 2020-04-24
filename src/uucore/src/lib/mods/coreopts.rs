@@ -109,10 +109,10 @@ impl<'a> CoreOptions<'a> {
                 usage_str,
                 self.help_text.long_help
             );
-            exit!(0);
+            crate::exit!(0);
         } else if matches.opt_present("version") {
             println!("{} {}", self.help_text.name, self.help_text.version);
-            exit!(0);
+            crate::exit!(0);
         }
         matches
     }
