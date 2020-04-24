@@ -324,8 +324,7 @@ time = "0.1"
 unindent = "0.1"
 
 [target.'cfg(unix)'.dev-dependencies]
-# FIXME: this should use the normal users crate, but it conflicts with the users utility
-rust-users = { git = "https://github.com/uutils/rust-users" }
+rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 
 [[bin]]
