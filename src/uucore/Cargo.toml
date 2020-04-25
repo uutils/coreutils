@@ -2,14 +2,14 @@
 name = "uucore"
 version = "0.0.2"
 authors = ["uutils developers"]
-description = "Common cross-platform code used by various uutils projects"
+license = "MIT"
+description = "uutils ~ 'core' uutils code library (cross-platform)"
 
 homepage = "https://github.com/uutils/uucore"
 repository = "https://github.com/uutils/uucore"
 readme = "README.md"
 keywords = ["cross-platform", "uutils", "coreutils"]
 categories = ["os"]
-license = "MIT"
 
 [badges]
 appveyor = { repository = "uutils/uucore" }
@@ -35,9 +35,9 @@ time = { version = "<= 0.1.42", optional = true }
 ## "problem" dependencies
 # * backtrace: transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
 backtrace = ">= 0.3.3, <= 0.3.30"
-# * data-encoding: require 2.1, but 2.2.0 breaks the build for MinSRV 1.31.0
+# * data-encoding: require v2.1; but v2.2.0 breaks the build for MinSRV v1.31.0
 data-encoding = { version = "~2.1", optional = true }
-# * libc: initial utmp support added in 0.2.15, but 0.2.68 break the build for MinSRV 1.31.0
+# * libc: initial utmp support added in v0.2.15; but v0.2.68 breaks the build for MinSRV v1.31.0
 libc = { version = "0.2.15, <= 0.2.66", optional = true }
 
 [target.'cfg(target_os = "redox")'.dependencies]

@@ -3,7 +3,7 @@ name = "uucore_procs"
 version = "0.0.2"
 authors = []
 license = "MIT"
-description = "`uucore` proc-macros for use by various uutils projects"
+description = "uutils ~ 'uucore' proc-macros"
 
 [lib]
 proc-macro = true

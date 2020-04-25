@@ -47,17 +47,16 @@ pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let Tokens { expr } = syn::parse_macro_input!(stream as Tokens);
     proc_dbg!(&expr);
 
-    const ARG_PANIC_TEXT: &str = "expected ident lexical path (or a literal string version) to 'uumain()' as argument";
+    const ARG_PANIC_TEXT: &str =
+        "expected ident lexical path (or a literal string version) to 'uumain()' as argument";
 
     // match EXPR as a string literal or an ident path, o/w panic!()
     let mut expr = match expr {
-        syn::Expr::Lit(expr_lit) => {
-            match expr_lit.lit {
-                syn::Lit::Str(ref lit_str) => { lit_str.parse::<syn::ExprPath>().unwrap() },
-                _ => panic!(ARG_PANIC_TEXT),
-            }
+        syn::Expr::Lit(expr_lit) => match expr_lit.lit {
+            syn::Lit::Str(ref lit_str) => lit_str.parse::<syn::ExprPath>().unwrap(),
+            _ => panic!(ARG_PANIC_TEXT),
         },
-        syn::Expr::Path(expr_path) => { expr_path },
+        syn::Expr::Path(expr_path) => expr_path,
         _ => panic!(ARG_PANIC_TEXT),
     };
     proc_dbg!(&expr);
