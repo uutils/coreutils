@@ -1,5 +1,6 @@
 # spell-checker:ignore (cargo-make) duckscript macos
 # spell-checker:ignore (rust) clippy
+# spell-checker:ignore (uutils) uutil uutils
 
 [config]
 min_version = "0.26.2"
@@ -155,7 +156,7 @@ dependencies = [
 alias = "utils"
 
 [tasks.utils]
-description = "Build (individual) utilities; usage: `cargo make (util | utils) [UTIL_NAME..]`"
+description = "Build (individual) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME..]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -163,6 +164,12 @@ dependencies = [
     "action-build-utils",
     "core::post-build",
 ]
+
+[tasks.uutil]
+alias = "utils"
+
+[tasks.uutils]
+alias = "utils"
 
 ### actions
 
