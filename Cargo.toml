@@ -33,6 +33,7 @@ feat_common_core = [
   "cp",
   "cut",
   "date",
+  "df",
   "dircolors",
   "dirname",
   "echo",
@@ -228,6 +229,7 @@ comm     = { optional=true, path="src/uu/comm" }
 cp       = { optional=true, path="src/uu/cp" }
 cut      = { optional=true, path="src/uu/cut" }
 date     = { optional=true, path="src/uu/date" }
+df       = { optional=true, path="src/uu/df" }
 dircolors= { optional=true, path="src/uu/dircolors" }
 dirname  = { optional=true, path="src/uu/dirname" }
 du       = { optional=true, path="src/uu/du" }

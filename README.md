@@ -276,17 +276,17 @@ Utilities
 | arch      | cp        | chcon  |
 | base32    | expr      | csplit |
 | base64    | install   | dd     |
-| basename  | ls        | df     |
-| cat       | more      | numfmt |
-| chgrp     | od (`--strings` and 128-bit data types missing) | pr |
-| chmod     | printf    | runcon |
-| chown     | sort      | stty   |
+| basename  | ls        | numfmt |
+| cat       | more      | pr     |
+| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
+| chmod     | printf    | stty   |
+| chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
 | comm      | test      |        |
 | cut       | date      |        |
 | dircolors | join      |        |
-| dirname   |           |        |
+| dirname   | df        |        |
 | du        |           |        |
 | echo      |           |        |
 | env       |           |        |

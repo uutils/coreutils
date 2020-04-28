@@ -409,6 +409,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "df"
+version = "0.0.1"
+dependencies = [
+ "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "digest"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1914,6 +1925,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "uucore"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "getopts 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "termion 1.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wild 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "uucore"
 version = "0.0.2"
 source = "git+https://github.com/uutils/uucore/?tag=0.0.2#420b20f67267357f4f0f626a1e8a00a27304623d"
 dependencies = [
@@ -1951,6 +1972,7 @@ dependencies = [
  "cp 0.0.1",
  "cut 0.0.1",
  "date 0.0.1",
+ "df 0.0.1",
  "dircolors 0.0.1",
  "dirname 0.0.1",
  "du 0.0.1",
@@ -2295,6 +2317,7 @@ dependencies = [
 "checksum unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "6aa2700417c405c38f5e6902d699345241c28c0b7ade4abaad71e35a87eb1564"
 "checksum url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)" = "dd4e7c0d531266369519a4aa4f399d748bd37043b00bde1e4ff1f60a120b355a"
 "checksum utf8-ranges 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "796f7e48bef87609f7ade7e06495a87d5cd06c7866e6a5cbfceffc558a243737"
+"checksum uucore 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d9991e24be65c5df85c9f16445554785a68e5ae7ec7feb230424ba35c24ebad7"
 "checksum uucore 0.0.2 (git+https://github.com/uutils/uucore/?tag=0.0.2)" = "<none>"
 "checksum vec_map 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "05c78687fb1a80548ae3250346c3db86a80a7cdd77bda190189f2d0a0987c81a"
 "checksum void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"

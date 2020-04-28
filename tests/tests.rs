@@ -54,6 +54,7 @@ generic! {
     "cut", test_cut;
     "dircolors", test_dircolors;
     "dirname", test_dirname;
+    "df", test_df;
     "du", test_du;
     "echo", test_echo;
     "env", test_env;
