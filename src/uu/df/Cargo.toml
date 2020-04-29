@@ -10,6 +10,7 @@ path = "src/df.rs"
 [dependencies]
 clap = "2.32"
 libc = "0.2"
+number_prefix = "0.2"
 uucore = "0.0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]

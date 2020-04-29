@@ -12,6 +12,8 @@
 
 extern crate clap;
 extern crate libc;
+extern crate number_prefix;
+
 #[macro_use]
 extern crate uucore;
 
@@ -27,6 +29,7 @@ use kernel32::{
     GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 
+use number_prefix::{binary_prefix, decimal_prefix, Prefixed, Standalone};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -77,7 +80,6 @@ static ABOUT: &str = "Show information about the file system on which each FILE 
                       or all file systems by default.";
 
 static EXIT_OK: i32 = 0;
-#[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "windows"))]
 static EXIT_ERR: i32 = 1;
 
 #[cfg(windows)]
@@ -711,24 +713,20 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
 /// e.g. It returns 1G when value is 1 * 1024 * 1024 * 1024 and base is 1024.
 /// Note: It returns `value` if `base` isn't positive.
 fn human_readable(value: u64, base: i64) -> String {
-    #![allow(non_snake_case)]
-    if base <= 0 {
-        return value.to_string();
-    }
-    let KB: u64 = base as u64;
-    let MB: u64 = KB * base as u64;
-    let GB: u64 = MB * base as u64;
-    let TB: u64 = GB * base as u64;
-    if value >= TB {
-        format!("{:.1}T", (value as f64) / (TB as f64))
-    } else if value >= GB {
-        format!("{:.1}G", (value as f64) / (GB as f64))
-    } else if value >= MB {
-        format!("{:.1}M", (value as f64) / (MB as f64))
-    } else if value >= KB {
-        format!("{:.1}K", (value as f64) / (KB as f64))
-    } else {
-        format!("{}B", value)
+    match base {
+        d if d < 0 => value.to_string(),
+
+        1000 => match decimal_prefix(value as f64) {
+            Standalone(bytes) => bytes.to_string(),
+            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix).to_uppercase(),
+        },
+
+        1024 => match binary_prefix(value as f64) {
+            Standalone(bytes) => bytes.to_string(),
+            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix).to_uppercase(),
+        },
+
+        _ => crash!(EXIT_ERR, "Internal error: Unknown base value {}", base),
     }
 }
 
