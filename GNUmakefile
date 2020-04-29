@@ -54,6 +54,7 @@ PROGS       := \
   comm \
   cp \
   cut \
+  df \
   dircolors \
   dirname \
   echo \
