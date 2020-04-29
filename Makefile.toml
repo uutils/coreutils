@@ -121,6 +121,12 @@ category = "[project]"
 command = "cargo"
 args = [ "make", "--list-all-steps" ]
 
+[tasks.install]
+description = "Install project binary (to \"$HOME/.cargo/bin\")"
+category = "[project]"
+command = "cargo"
+args = ["install", "--path", "."]
+
 [tasks.lint]
 description = "Lint report"
 category = "[project]"
@@ -151,6 +157,12 @@ dependencies = [
     "action-test_quiet",
     "core::post-test",
 ]
+
+[tasks.uninstall]
+description = "Remove project binary (from \"$HOME/.cargo/bin\")"
+category = "[project]"
+command = "cargo"
+args = ["uninstall"]
 
 [tasks.util]
 alias = "utils"
