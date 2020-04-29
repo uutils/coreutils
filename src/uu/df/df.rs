@@ -100,6 +100,7 @@ static OPT_KILO: &str = "kilo";
 static OPT_LOCAL: &str = "local";
 static OPT_NO_SYNC: &str = "no-sync";
 static OPT_OUTPUT: &str = "output";
+static OPT_PATHS: &str = "paths";
 static OPT_PORTABILITY: &str = "portability";
 static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
@@ -645,7 +646,7 @@ fn read_fs_list() -> Vec<MountInfo> {
     }
 }
 
-fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
+fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
     vmi.into_iter()
         .filter_map(|mi| {
             if (mi.remote && opt.show_local_fs)
@@ -654,7 +655,17 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
             {
                 None
             } else {
-                Some((mi.dev_id.clone(), mi))
+                if paths.is_empty() {
+                    // No path specified
+                    return Some((mi.dev_id.clone(), mi));
+                }
+                if paths.contains(&mi.mount_dir) {
+                    // One or more paths have been provided
+                    Some((mi.dev_id.clone(), mi))
+                } else {
+                    // Not a path we want to see
+                    None
+                }
             }
         })
         .fold(
@@ -849,12 +860,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 .long("version")
                 .help("output version information and exit"),
         )
+        .arg(Arg::with_name(OPT_PATHS).multiple(true))
+        .help("Filesystem(s) to list")
         .get_matches_from(&args);
 
     if matches.is_present(OPT_VERSION) {
         println!("{} {}", executable!(), VERSION);
         return EXIT_OK;
     }
+
+    let paths: Vec<String> = matches
+        .values_of(OPT_PATHS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     #[cfg(windows)]
     {
@@ -896,7 +914,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         opt.fs_selector.exclude(fs_type.to_owned());
     }
 
-    let fs_list = filter_mount_list(read_fs_list(), &opt)
+    let fs_list = filter_mount_list(read_fs_list(), &paths, &opt)
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
