@@ -205,6 +205,7 @@ TEST_PROGS  := \
 	true \
 	truncate \
 	tsort \
+	uname \
 	unexpand \
 	uniq \
 	unlink \
