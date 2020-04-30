@@ -5,7 +5,7 @@ authors = []
 
 [lib]
 name = "uu_df"
-path = "df.rs"
+path = "src/df.rs"
 
 [dependencies]
 clap = "2.32.0"
@@ -18,4 +18,4 @@ winapi = { version = "0.3", features = ["handleapi"] }
 
 [[bin]]
 name = "df"
-path = "main.rs"
+path = "../../common/uumain.rs"
