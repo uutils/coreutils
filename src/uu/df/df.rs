@@ -356,11 +356,13 @@ impl MountInfo {
     #[cfg(target_os = "linux")]
     fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
         match file_name {
+            // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
+            // "man proc" for more details
             "/proc/self/mountinfo" => {
                 let mut m = MountInfo {
                     dev_id: "".to_string(),
-                    dev_name: raw[8].to_string(),
-                    fs_type: raw[7].to_string(),
+                    dev_name: raw[9].to_string(),
+                    fs_type: raw[8].to_string(),
                     mount_root: raw[3].to_string(),
                     mount_dir: raw[4].to_string(),
                     mount_option: raw[5].to_string(),
