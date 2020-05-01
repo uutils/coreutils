@@ -52,6 +52,7 @@ generic! {
     "comm", test_comm;
     "cp", test_cp;
     "cut", test_cut;
+    "date", test_date;
     "dircolors", test_dircolors;
     "dirname", test_dirname;
     "df", test_df;
