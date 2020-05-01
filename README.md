@@ -215,6 +215,12 @@ Cargo:
 $ cargo test
 ```
 
+By default, `cargo test` only runs the common programs. To run also platform
+specific tests, run:
+```bash
+$ cargo test --features unix
+```
+
 If you would prefer to test a select few utilities:
 ```bash
 $ cargo test --features "chmod mv tail" --no-default-features
