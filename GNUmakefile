@@ -261,7 +261,7 @@ build-uutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build-manpages:
-	cd $(DOCSDIR) && make man
+	cd $(DOCSDIR) && $(MAKE) man
 
 build: build-uutils build-pkgs build-manpages
 
@@ -294,7 +294,7 @@ endif
 
 clean:
 	$(RM) $(BUILDDIR)
-	cd $(DOCSDIR) && make clean
+	cd $(DOCSDIR) && $(MAKE) clean
 
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
