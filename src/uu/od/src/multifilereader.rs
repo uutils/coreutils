@@ -83,7 +83,7 @@ impl<'b> io::Read for MultifileReader<'b> {
     // If any call returns short (< buf.len()), all subsequent calls will return Ok<0>
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut xfrd = 0;
-        // while buffer we are filling is not full.. May go thru several files.
+        // while buffer we are filling is not full.. May go through several files.
         'fillloop: while xfrd < buf.len() {
             match self.curr_file {
                 None => break,

@@ -9,7 +9,7 @@ os:
     # - osx
 
 env:
-  # sphinx v1.8.0 is bugged & fails for linux builds; so, force specfic `sphinx` version
+  # sphinx v1.8.0 is bugged & fails for linux builds; so, force specific `sphinx` version
   global: FEATURES='' TEST_INSTALL='' SPHINX_VERSIONED='sphinx==1.7.8'
 
 matrix:

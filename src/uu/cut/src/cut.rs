@@ -146,7 +146,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         let mut print_delim = false;
 
         for &Range { low, high } in ranges.iter() {
-            // skip upto low
+            // skip up to low
             let orig_pos = cur_pos;
             loop {
                 match buf_read.select(low - cur_pos, None::<&mut Stdout>) {

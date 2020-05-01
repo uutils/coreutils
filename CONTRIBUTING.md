@@ -18,7 +18,7 @@ search the issues to make sure no one else is working on it.
 ## Commit messages
 
 To help the project maintainers review pull requests from contributors across
-numerous utilites, the team has settled on conventions for commit messages.
+numerous utilities, the team has settled on conventions for commit messages.
 
 From http://git-scm.com/book/ch5-2.html:
 

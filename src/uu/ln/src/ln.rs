@@ -247,7 +247,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
                     Some(basename) => target_dir.join(basename),
                     // This can be None only for "." or "..". Trying
                     // to create a link with such name will fail with
-                    // EEXIST, which agrees with the bahavior of GNU
+                    // EEXIST, which agrees with the behavior of GNU
                     // coreutils.
                     None => target_dir.join(name),
                 }

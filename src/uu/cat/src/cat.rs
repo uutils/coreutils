@@ -59,7 +59,7 @@ quick_error! {
             cause(err)
         }
 
-        /// Uknown Filetype  classification
+        /// Unknown Filetype  classification
         UnknownFiletype(path: String) {
             display("cat: {0}: unknown filetype", path)
         }

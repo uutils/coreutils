@@ -84,7 +84,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
             .opt_str("reference")
             .and_then(|ref fref| match fs::metadata(fref) {
                 Ok(meta) => Some(meta.mode()),
-                Err(err) => crash!(1, "cannot stat attribues of '{}': {}", fref, err),
+                Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
             });
         let cmode = if fmode.is_none() {
             // If there was a negative option, now it's a good time to

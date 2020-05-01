@@ -161,7 +161,7 @@ feat_require_unix = [
   "uname",
   "unlink",
 ]
-# "feat_require_unix_utmpx" == set of utilites requiring unix utmp/utmpx support
+# "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
 feat_require_unix_utmpx = [
   "pinky",
@@ -170,7 +170,7 @@ feat_require_unix_utmpx = [
   "who",
 ]
 ## (alternate/newer/smaller platforms) feature sets
-# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuschia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
+# "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
   "feat_common_core",
   #

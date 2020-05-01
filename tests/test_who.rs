@@ -22,7 +22,7 @@ fn test_boot() {
 fn test_heading() {
     for opt in vec!["-H"] {
         // allow whitespace variation
-        // * minor whitespace differences occur between platform built-in outputs; specfically number of TABs between "TIME" and "COMMENT" may be variant
+        // * minor whitespace differences occur between platform built-in outputs; specifically number of TABs between "TIME" and "COMMENT" may be variant
         let actual = new_ucmd!().arg(opt).run().stdout;
         let expect = expected_result(opt);
         println!("actual: {:?}", actual);

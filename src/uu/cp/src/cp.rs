@@ -86,7 +86,7 @@ quick_error! {
             from(err: &'static str) -> (err.to_string())
         }
 
-        /// Represents the state when a non-fatal error has occured
+        /// Represents the state when a non-fatal error has occurred
         /// and not all files were copied.
         NotAllFilesCopied {}
 

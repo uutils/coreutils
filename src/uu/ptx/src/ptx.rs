@@ -139,9 +139,9 @@ fn print_usage(opts: &Options) {
                  ptx -G [OPTION]... [INPUT [OUTPUT]] \n Output a permuted index, \
                  including context, of the words in the input files. \n\n Mandatory \
                  arguments to long options are mandatory for short options too.";
-    let explaination = "With no FILE, or when FILE is -, read standard input. \
+    let explanation = "With no FILE, or when FILE is -, read standard input. \
                         Default is '-F /'.";
-    println!("{}\n{}", opts.usage(&brief), explaination);
+    println!("{}\n{}", opts.usage(&brief), explanation);
 }
 
 fn get_config(matches: &Matches) -> Config {

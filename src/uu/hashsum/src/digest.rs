@@ -69,7 +69,7 @@ impl Digest for sha1::Sha1 {
     }
 }
 
-// Implements the Digest trait for sha2 / sha3 algorithms with fixed ouput
+// Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_sha {
     ($type: ty, $size: expr) => {
         impl Digest for $type {
@@ -96,7 +96,7 @@ macro_rules! impl_digest_sha {
     };
 }
 
-// Implements the Digest trait for sha2 / sha3 algorithms with variable ouput
+// Implements the Digest trait for sha2 / sha3 algorithms with variable output
 macro_rules! impl_digest_shake {
     ($type: ty) => {
         impl Digest for $type {
