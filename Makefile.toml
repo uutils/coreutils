@@ -113,6 +113,8 @@ description = "Format"
 category = "[project]"
 dependencies = [
 	"action-format",
+	"action-determine-tests",
+	"action-format-tests",
 ]
 
 [tasks.help]
@@ -230,15 +232,34 @@ set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${package_options}"
 '''
 ]
 
+[tasks.action-determine-tests]
+script_runner = "@duckscript"
+script = [
+'''
+test_files = glob_array tests/**/*.rs
+for file in ${test_files}
+	if is_empty "${tests}"
+		tests = set "${file}"
+	else
+		tests = set "${tests} ${file}"
+	end_if
+end
+set_env CARGO_MAKE_VAR_TESTS "${tests}"
+'''
+]
+
 [tasks.action-format]
 description = "`cargo fmt`"
 command = "cargo"
 args = ["fmt"]
 
-[tasks.action-fmt]
-description = "`cargo fmt`"
+[tasks.action-format-tests]
+description = "`cargo fmt` tests"
 command = "cargo"
-args = ["fmt"]
+args = ["fmt", "--", "@@split(CARGO_MAKE_VAR_TESTS, )"]
+
+[tasks.action-fmt]
+alias = "action-format"
 
 [tasks.action-fmt_report]
 description = "`cargo fmt` lint report"
