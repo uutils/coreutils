@@ -84,7 +84,7 @@ set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args}"
 ### tasks
 
 [tasks.default]
-description = "Build and Test"
+description = "## *DEFAULT* Build and test project"
 category = "[project]"
 dependencies = [
 	"action-build-debug",
@@ -92,7 +92,7 @@ dependencies = [
 ]
 
 [tasks.build]
-description = "Build"
+description = "## Build project"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -101,7 +101,7 @@ dependencies = [
 ]
 
 [tasks.build-features]
-description = "Build (with features); usage: `cargo make (build-features | features) FEATURE..`"
+description = "## Build (with features); usage: `cargo make (build-features | features) FEATURE...`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -113,7 +113,7 @@ dependencies = [
 alias = "build-features"
 
 [tasks.format]
-description = "Format"
+description = "## Format code files (with `cargo fmt`)"
 category = "[project]"
 dependencies = [
 	"action-format",
@@ -122,19 +122,20 @@ dependencies = [
 ]
 
 [tasks.help]
-description = "Help"
+description = "## Display help"
 category = "[project]"
-command = "cargo"
-args = [ "make", "--list-all-steps" ]
+dependencies = [
+	"action-display-help",
+]
 
 [tasks.install]
-description = "Install project binary (to \"$HOME/.cargo/bin\")"
+description = "## Install project binary (to $HOME/.cargo/bin)"
 category = "[project]"
 command = "cargo"
 args = ["install", "--path", "."]
 
 [tasks.lint]
-description = "Lint report"
+description = "## Display lint report"
 category = "[project]"
 dependencies = [
 	"action-clippy",
@@ -143,11 +144,9 @@ dependencies = [
 
 [tasks.release]
 alias = "build"
-description = "Build"
-category = "[project]"
 
 [tasks.test]
-description = "Test"
+description = "## Run project tests"
 category = "[project]"
 dependencies = [
 	"core::pre-test",
@@ -156,7 +155,7 @@ dependencies = [
 ]
 
 [tasks.test-terse]
-description = "Test (with terse/summary output)"
+description = "## Run project tests (with terse/summary output)"
 category = "[project]"
 dependencies = [
 	"core::pre-test",
@@ -165,7 +164,7 @@ dependencies = [
 ]
 
 [tasks.uninstall]
-description = "Remove project binary (from \"$HOME/.cargo/bin\")"
+description = "## Remove project binary (from $HOME/.cargo/bin)"
 category = "[project]"
 command = "cargo"
 args = ["uninstall"]
@@ -174,7 +173,7 @@ args = ["uninstall"]
 alias = "utils"
 
 [tasks.utils]
-description = "Build (individual) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME..]`"
+description = "## Build (individual) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME...]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -279,3 +278,41 @@ args = [".", "--skip=*/.git,./target,./tests/fixtures", "--ignore-words-list=mut
 description = "Test (in `--quiet` mode)"
 command = "cargo"
 args = ["test", "--quiet", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
+
+[tasks.action-display-help]
+script_runner = "@duckscript"
+script = [
+'''
+	echo ""
+	echo "usage: `cargo make TARGET [ARGS...]`"
+	echo ""
+	echo "TARGETs:"
+	echo ""
+	result = exec "cargo" make --list-all-steps
+	# set_env CARGO_MAKE_VAR_UTILS ${result.stdout}
+	# echo ${result.stdout}
+	lines = split ${result.stdout} "\n"
+	# echo ${lines}
+	for line in ${lines}
+		if not is_empty ${line}
+			if contains ${line} " - ##"
+				line_segments = split ${line} " - ##"
+				desc = array_pop ${line_segments}
+				desc = trim ${desc}
+				target = array_pop ${line_segments}
+				target = trim ${target}
+				l = length ${target}
+				r = range 0 20
+				spacing = set ""
+				for i in ${r}
+					if greater_than ${i} ${l}
+						spacing = set "${spacing} "
+					end_if
+				end
+				echo ${target}${spacing}${desc}
+			end_if
+		end_if
+	end
+	echo ""
+'''
+]
