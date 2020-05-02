@@ -5,18 +5,22 @@
 [config]
 min_version = "0.26.2"
 default_to_workspace = false
-init_task = "_init"
+init_task = "_init_task"
 
 [config.modify_core_tasks]
 namespace = "core"
 
 ### initialization
 
-[tasks._init]
-private = true
-run_task = "_init_"
+### * note: the task executed from 'init_task' ignores dependencies; workaround is to run a secondary task via 'run_task'
 
-[tasks._init_]
+[tasks._init_task]
+# dependencies are unavailable
+# * delegate (via 'run_task') to "real" initialization task ('_init') with full capabilities
+private = true
+run_task = "_init"
+
+[tasks._init]
 private = true
 dependencies = [
 	"_init-vars",
