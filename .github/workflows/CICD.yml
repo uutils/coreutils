@@ -133,9 +133,7 @@ jobs:
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
-          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: nightly-x86_64-pc-windows-gnu }   ## !maint: [rivy; due 2020-21-03] disable/remove when rust beta >= v1.43.0 is available (~mid-March)
-          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: beta-x86_64-pc-windows-gnu }      ## maint: [rivy; due 2020-21-03; due 2020-01-05] enable when rust beta >= v1.43.0 is available (~mid-March); disable when rust stable >= 1.43.0 is available (~early-May)
-          # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly # ! maint: [rivy; due 2020-01-05] enable when rust stable >= 1.43.0 is available
+          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }  ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v1
@@ -145,10 +143,6 @@ jobs:
         ## install/setup prerequisites
         case '${{ matrix.job.target }}' in
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          x86_64-pc-windows-gnu)
-            # hack: move interfering 'gcc' to head of PATH; fixes linking errors, but only works for rust >= v1.43.0; see GH:rust-lang/rust#68872 (after potential fix GH:rust-lang/rust#67429) for further discussion/repairs; follow issue/solutions? via PR GH:rust-lang/rust#67429 (from GH:rust-lang/rust#47048#issuecomment-437409270); refs: GH:rust-lang/cargo#6754, GH:rust-lang/rust#47048 , GH:rust-lang/rust#53454 , GH:bike-barn/hermit#172
-            echo  "::add-path::C:\\ProgramData\\Chocolatey\\lib\\mingw\\tools\\install\\mingw64\\bin"
-            ;;
         esac
     - name: Initialize workflow variables
       id: vars
