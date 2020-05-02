@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Ccodegen Coverflow RUSTFLAGS
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
-# spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt
+# spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
 # spell-checker:ignore (misc) alnum gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
 
 
@@ -50,26 +50,27 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        override: true
+        default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt, clippy
     - name: "`fmt` testing"
       if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
-      uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: --all -- --check
+      shell: bash
+      run: |
+        # `fmt` testing
+        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
     - name: "`fmt` testing of tests"
       if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
       shell: bash
       run: |
-        find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check
+        # `fmt` testing of tests
+        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
     - name: "`clippy` testing"
       if: success() || failure() # run regardless of prior step success/failure
-      uses: actions-rs/cargo@v1
-      with:
-        command: clippy
-        args: ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings
+      shell: bash
+      run: |
+        # `clippy` testing
+        S=$(cargo clippy ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
 
   min_version:
     name: MinSRV # Minimum supported rust version
