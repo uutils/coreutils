@@ -266,6 +266,11 @@ description = "`cargo fmt` lint report"
 command = "cargo"
 args = ["fmt", "--", "--check"]
 
+[tasks.action-spellcheck-codespell]
+description = "`codespell` spellcheck repository"
+command = "codespell" # (from `pip install codespell`)
+args = [".", "--skip=*/.git,./target,./tests/fixtures", "--ignore-words-list=mut,od"]
+
 [tasks.action-test_quiet]
 description = "Test (in `--quiet` mode)"
 command = "cargo"
