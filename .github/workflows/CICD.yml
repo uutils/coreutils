@@ -12,7 +12,8 @@ env:
   PROJECT_NAME: uutils
   PROJECT_DESC: "'Universal' (cross-platform) CLI utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.31.0"
+  RUST_MIN_SRV: "1.31.0" ## v1.31.0 == "Rust 2018" (2018-12-06)
+  RUST_COV_SRV: "2020-04-29" ## (~v1.45.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
 
@@ -321,7 +322,7 @@ jobs:
         job:
           - { os: ubuntu-latest  , features: unix }
           - { os: macos-latest   , features: macos }
-          - { os: windows-latest , features: windows , toolchain: nightly-x86_64-pc-windows-gnu }
+          - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v1
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
@@ -331,9 +332,9 @@ jobs:
       shell: bash
       run: |
         # toolchain
-        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain needed compiler flags)
-        # * use requested TOOLCHAIN if specified
-        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+        TOOLCHAIN="nightly-${{ env.RUST_COV_SRV }}" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
+        # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
+        case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
         echo set-output name=TOOLCHAIN::${TOOLCHAIN}
