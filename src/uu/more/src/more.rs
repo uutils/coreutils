@@ -88,10 +88,11 @@ fn help(usage: &str) {
 fn setup_term() -> termios::Termios {
     let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
-    term.c_lflag.remove(termios::ICANON);
+
+    term.local_flags.remove(termios::LocalFlags::ICANON);
     // Disable local echo
-    term.c_lflag.remove(termios::ECHO);
-    termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+    term.local_flags.remove(termios::LocalFlags::ECHO);
+    termios::tcsetattr(0, termios::SetArg::TCSADRAIN, &term).unwrap();
     term
 }
 
@@ -115,9 +116,9 @@ fn setup_term() -> redox_termios::Termios {
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn reset_term(term: &mut termios::Termios) {
-    term.c_lflag.insert(termios::ICANON);
-    term.c_lflag.insert(termios::ECHO);
-    termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+    term.local_flags.insert(termios::LocalFlags::ICANON);
+    term.local_flags.insert(termios::LocalFlags::ECHO);
+    termios::tcsetattr(0, termios::SetArg::TCSADRAIN, &term).unwrap();
 }
 
 #[cfg(any(windows, target_os = "fuchsia"))]
