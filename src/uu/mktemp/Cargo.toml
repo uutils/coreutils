@@ -11,7 +11,7 @@ path = "src/mktemp.rs"
 
 [dependencies]
 getopts = "0.2.18"
-rand = "0.5"
+rand = "0.6"
 tempfile = "2.1.5"
 uucore = "0.0.2"
 

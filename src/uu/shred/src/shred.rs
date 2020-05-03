@@ -13,7 +13,8 @@
 extern crate getopts;
 extern crate rand;
 
-use rand::{Rng, ThreadRng};
+use rand::prelude::ThreadRng;
+use rand::Rng;
 use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -427,6 +428,7 @@ fn wipe_file(
         for pattern in PATTERNS.iter().take(remainder) {
             pass_sequence.push(PassType::Pattern(pattern));
         }
+
         rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
 
         let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after

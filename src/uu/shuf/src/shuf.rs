@@ -213,11 +213,14 @@ fn shuf_bytes(
     });
 
     let mut rng = match random {
-        Some(r) => WrappedRng::RngFile(rand::read::ReadRng::new(match File::open(&r[..]) {
-            Ok(f) => f,
-            Err(e) => crash!(1, "failed to open random source '{}': {}", &r[..], e),
-        })),
-        None => WrappedRng::RngDefault(rand::thread_rng()),
+        Some(r) => {
+            let reader = match File::open(&r[..]) {
+                Ok(f) => f,
+                Err(e) => crash!(1, "failed to open random source '{}': {}", &r[..], e),
+            };
+            WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(reader))
+        }
+        None => WrappedRng::RngDefault(rand::prelude::thread_rng()),
     };
 
     // we're generating a random usize. To keep things fair, we take this number mod ceil(log2(length+1))
@@ -274,8 +277,8 @@ fn parse_range(input_range: String) -> Result<(usize, usize), String> {
 }
 
 enum WrappedRng {
-    RngFile(rand::read::ReadRng<File>),
-    RngDefault(rand::ThreadRng),
+    RngFile(rand::rngs::adapter::ReadRng<File>),
+    RngDefault(rand::prelude::ThreadRng),
 }
 
 impl WrappedRng {
