@@ -10,7 +10,7 @@
 // spell-checker:ignore (acronyms/names) Gehring
 // spell-checker:ignore (rustlang) clippy concat rustlang
 // spell-checker:ignore (uutils) coreutils uucore uumain uutils sigpipe
-// spell-checker:ignore (shell) busybox
+// spell-checker:ignore (shell) busybox symlinks
 
 include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 
@@ -24,7 +24,13 @@ use std::io::Write;
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 lazy_static! {
-    static ref BINARY_PATH: std::path::PathBuf = std::env::current_exe().unwrap();
+    static ref BINARY_PATH: std::path::PathBuf = {
+        // support symlinks by using args[0], when possible, with fallback to current_exe()
+        match std::env::args().next() {
+            Some(ref s) if !s.is_empty() => std::path::PathBuf::from(s),
+            _ => std::env::current_exe().unwrap(),
+        }
+    };
     static ref NAME: &'static str = &*BINARY_PATH.file_stem().unwrap().to_str().unwrap();
 }
 
