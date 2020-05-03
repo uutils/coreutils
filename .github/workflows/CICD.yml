@@ -76,7 +76,7 @@ jobs:
         S=$(cargo clippy ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
 
   min_version:
-    name: MinSRV # Minimum supported rust version
+    name: MinSUpportRustVer # Minimum supported rust version
     runs-on: ${{ matrix.job.os }}
     strategy:
       matrix:
