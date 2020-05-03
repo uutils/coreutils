@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Ccodegen Coverflow RUSTFLAGS
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
-# spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt
+# spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
 # spell-checker:ignore (misc) alnum gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
 
 
@@ -12,7 +12,8 @@ env:
   PROJECT_NAME: uutils
   PROJECT_DESC: "'Universal' (cross-platform) CLI utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.31.0"
+  RUST_MIN_SRV: "1.31.0" ## v1.31.0 == "Rust 2018" (2018-12-06)
+  RUST_COV_SRV: "2020-04-29" ## (~v1.45.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
 
@@ -49,26 +50,30 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
-        override: true
+        default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt, clippy
     - name: "`fmt` testing"
       if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
-      uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: --all -- --check
+      shell: bash
+      run: |
+        # `fmt` testing
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
     - name: "`fmt` testing of tests"
       if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
       shell: bash
       run: |
-        find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check
+        # `fmt` testing of tests
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
     - name: "`clippy` testing"
       if: success() || failure() # run regardless of prior step success/failure
-      uses: actions-rs/cargo@v1
-      with:
-        command: clippy
-        args: ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings
+      shell: bash
+      run: |
+        # `clippy` testing
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(cargo clippy ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
 
   min_version:
     name: MinSRV # Minimum supported rust version
@@ -133,9 +138,7 @@ jobs:
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
-          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: nightly-x86_64-pc-windows-gnu }   ## !maint: [rivy; due 2020-21-03] disable/remove when rust beta >= v1.43.0 is available (~mid-March)
-          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows , toolchain: beta-x86_64-pc-windows-gnu }      ## maint: [rivy; due 2020-21-03; due 2020-01-05] enable when rust beta >= v1.43.0 is available (~mid-March); disable when rust stable >= 1.43.0 is available (~early-May)
-          # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly # ! maint: [rivy; due 2020-01-05] enable when rust stable >= 1.43.0 is available
+          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }  ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v1
@@ -145,10 +148,6 @@ jobs:
         ## install/setup prerequisites
         case '${{ matrix.job.target }}' in
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          x86_64-pc-windows-gnu)
-            # hack: move interfering 'gcc' to head of PATH; fixes linking errors, but only works for rust >= v1.43.0; see GH:rust-lang/rust#68872 (after potential fix GH:rust-lang/rust#67429) for further discussion/repairs; follow issue/solutions? via PR GH:rust-lang/rust#67429 (from GH:rust-lang/rust#47048#issuecomment-437409270); refs: GH:rust-lang/cargo#6754, GH:rust-lang/rust#47048 , GH:rust-lang/rust#53454 , GH:bike-barn/hermit#172
-            echo  "::add-path::C:\\ProgramData\\Chocolatey\\lib\\mingw\\tools\\install\\mingw64\\bin"
-            ;;
         esac
     - name: Initialize workflow variables
       id: vars
@@ -327,7 +326,7 @@ jobs:
         job:
           - { os: ubuntu-latest  , features: unix }
           - { os: macos-latest   , features: macos }
-          - { os: windows-latest , features: windows , toolchain: nightly-x86_64-pc-windows-gnu }
+          - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v1
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
@@ -337,9 +336,9 @@ jobs:
       shell: bash
       run: |
         # toolchain
-        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain needed compiler flags)
-        # * use requested TOOLCHAIN if specified
-        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+        TOOLCHAIN="nightly-${{ env.RUST_COV_SRV }}" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
+        # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
+        case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
         echo set-output name=TOOLCHAIN::${TOOLCHAIN}
