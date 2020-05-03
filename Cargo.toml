@@ -311,7 +311,7 @@ whoami   = { optional=true, path="src/uu/whoami" }
 yes      = { optional=true, path="src/uu/yes" }
 #
 # * transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
-backtrace = ">= 0.3.3, <= 0.3.30"
+_backtrace = { version=">= 0.3.3, <= 0.3.30", package="backtrace" }
 
 [dev-dependencies]
 filetime = "0.2"
