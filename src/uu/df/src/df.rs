@@ -30,7 +30,6 @@ use kernel32::{
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::env;
 
 #[cfg(unix)]
 use std::ffi::CString;
