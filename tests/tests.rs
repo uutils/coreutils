@@ -29,6 +29,7 @@ unix_only! {
     "pathchk", test_pathchk;
     "pinky", test_pinky;
     "stdbuf", test_stdbuf;
+    "uname", test_uname;
     "unlink", test_unlink;
     "who", test_who;
     // Be aware of the trailing semicolon after the last item
