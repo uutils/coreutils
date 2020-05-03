@@ -13,7 +13,7 @@ path = "src/df.rs"
 clap = "2.32"
 libc = "0.2"
 number_prefix = "0.2"
-uucore = "0.0.1"
+uucore = "0.0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 kernel32-sys = "0.2"
