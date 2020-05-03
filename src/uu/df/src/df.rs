@@ -29,7 +29,7 @@ use kernel32::{
     GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 
-use number_prefix::{binary_prefix, decimal_prefix, Prefixed, Standalone};
+use number_prefix::{binary_prefix, decimal_prefix, Prefixed, Standalone, PrefixNames};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -716,14 +716,17 @@ fn human_readable(value: u64, base: i64) -> String {
     match base {
         d if d < 0 => value.to_string(),
 
+        // ref: [Binary prefix](https://en.wikipedia.org/wiki/Binary_prefix) @@ <https://archive.is/cnwmF>
+        // ref: [SI/metric prefix](https://en.wikipedia.org/wiki/Metric_prefix) @@ <https://archive.is/QIuLj>
+
         1000 => match decimal_prefix(value as f64) {
             Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix).to_uppercase(),
+            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
         1024 => match binary_prefix(value as f64) {
             Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix).to_uppercase(),
+            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
         _ => crash!(EXIT_ERR, "Internal error: Unknown base value {}", base),
