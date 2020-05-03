@@ -1,21 +1,26 @@
 # spell-checker:ignore (cargo-make) duckscript macos
 # spell-checker:ignore (rust) clippy
+# spell-checker:ignore (uutils) uutil uutils
 
 [config]
 min_version = "0.26.2"
 default_to_workspace = false
-init_task = "_init"
+init_task = "_init_task"
 
 [config.modify_core_tasks]
 namespace = "core"
 
 ### initialization
 
-[tasks._init]
-private = true
-run_task = "_init_"
+### * note: the task executed from 'init_task' ignores dependencies; workaround is to run a secondary task via 'run_task'
 
-[tasks._init_]
+[tasks._init_task]
+# dependencies are unavailable
+# * delegate (via 'run_task') to "real" initialization task ('_init') with full capabilities
+private = true
+run_task = "_init"
+
+[tasks._init]
 private = true
 dependencies = [
 	"_init-vars",
@@ -79,24 +84,33 @@ set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args}"
 ### tasks
 
 [tasks.default]
-description = "Build and Test"
+description = "## *DEFAULT* Build (debug-mode) and test project"
 category = "[project]"
 dependencies = [
 	"action-build-debug",
     "test-terse",
 ]
 
+##
+
 [tasks.build]
-description = "Build"
+description = "## Build (release-mode) project"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
-    "action-build",
+    "action-build-release",
     "core::post-build",
 ]
 
+[tasks.build-debug]
+description = "## Build (debug-mode) project"
+category = "[project]"
+dependencies = [
+	"action-build-debug",
+]
+
 [tasks.build-features]
-description = "Build (with features); usage: `cargo make (build-features | features) FEATURE..`"
+description = "## Build (with features; release-mode) project; usage: `cargo make (build-features | features) FEATURE...`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -104,24 +118,36 @@ dependencies = [
     "core::post-build",
 ]
 
+[tasks.debug]
+alias = "build-debug"
+
 [tasks.features]
 alias = "build-features"
 
 [tasks.format]
-description = "Format"
+description = "## Format code files (with `cargo fmt`)"
 category = "[project]"
 dependencies = [
 	"action-format",
+	"action-determine-tests",
+	"action-format-tests",
 ]
 
 [tasks.help]
-description = "Help"
+description = "## Display help"
+category = "[project]"
+dependencies = [
+	"action-display-help",
+]
+
+[tasks.install]
+description = "## Install project binary (to $HOME/.cargo/bin)"
 category = "[project]"
 command = "cargo"
-args = [ "make", "--list-all-steps" ]
+args = ["install", "--path", "."]
 
 [tasks.lint]
-description = "Lint report"
+description = "## Display lint report"
 category = "[project]"
 dependencies = [
 	"action-clippy",
@@ -130,11 +156,9 @@ dependencies = [
 
 [tasks.release]
 alias = "build"
-description = "Build"
-category = "[project]"
 
 [tasks.test]
-description = "Test"
+description = "## Run project tests"
 category = "[project]"
 dependencies = [
 	"core::pre-test",
@@ -143,7 +167,7 @@ dependencies = [
 ]
 
 [tasks.test-terse]
-description = "Test (with terse/summary output)"
+description = "## Run project tests (with terse/summary output)"
 category = "[project]"
 dependencies = [
 	"core::pre-test",
@@ -151,11 +175,17 @@ dependencies = [
     "core::post-test",
 ]
 
+[tasks.uninstall]
+description = "## Remove project binary (from $HOME/.cargo/bin)"
+category = "[project]"
+command = "cargo"
+args = ["uninstall"]
+
 [tasks.util]
 alias = "utils"
 
 [tasks.utils]
-description = "Build (individual) utilities; usage: `cargo make (util | utils) [UTIL_NAME..]`"
+description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME...]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -164,9 +194,15 @@ dependencies = [
     "core::post-build",
 ]
 
+[tasks.uutil]
+alias = "utils"
+
+[tasks.uutils]
+alias = "utils"
+
 ### actions
 
-[tasks.action-build]
+[tasks.action-build-release]
 description = "`cargo build --release`"
 command = "cargo"
 args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
@@ -211,22 +247,84 @@ set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${package_options}"
 '''
 ]
 
+[tasks.action-determine-tests]
+script_runner = "@duckscript"
+script = [
+'''
+test_files = glob_array tests/**/*.rs
+for file in ${test_files}
+	if is_empty "${tests}"
+		tests = set "${file}"
+	else
+		tests = set "${tests} ${file}"
+	end_if
+end
+set_env CARGO_MAKE_VAR_TESTS "${tests}"
+'''
+]
+
 [tasks.action-format]
 description = "`cargo fmt`"
 command = "cargo"
 args = ["fmt"]
 
-[tasks.action-fmt]
-description = "`cargo fmt`"
+[tasks.action-format-tests]
+description = "`cargo fmt` tests"
 command = "cargo"
-args = ["fmt"]
+args = ["fmt", "--", "@@split(CARGO_MAKE_VAR_TESTS, )"]
+
+[tasks.action-fmt]
+alias = "action-format"
 
 [tasks.action-fmt_report]
 description = "`cargo fmt` lint report"
 command = "cargo"
 args = ["fmt", "--", "--check"]
 
+[tasks.action-spellcheck-codespell]
+description = "`codespell` spellcheck repository"
+command = "codespell" # (from `pip install codespell`)
+args = [".", "--skip=*/.git,./target,./tests/fixtures", "--ignore-words-list=mut,od"]
+
 [tasks.action-test_quiet]
 description = "Test (in `--quiet` mode)"
 command = "cargo"
 args = ["test", "--quiet", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
+
+[tasks.action-display-help]
+script_runner = "@duckscript"
+script = [
+'''
+	echo ""
+	echo "usage: `cargo make TARGET [ARGS...]`"
+	echo ""
+	echo "TARGETs:"
+	echo ""
+	result = exec "cargo" make --list-all-steps
+	# set_env CARGO_MAKE_VAR_UTILS ${result.stdout}
+	# echo ${result.stdout}
+	lines = split ${result.stdout} "\n"
+	# echo ${lines}
+	for line in ${lines}
+		if not is_empty ${line}
+			if contains ${line} " - ##"
+				line_segments = split ${line} " - ##"
+				desc = array_pop ${line_segments}
+				desc = trim ${desc}
+				target = array_pop ${line_segments}
+				target = trim ${target}
+				l = length ${target}
+				r = range 0 20
+				spacing = set ""
+				for i in ${r}
+					if greater_than ${i} ${l}
+						spacing = set "${spacing} "
+					end_if
+				end
+				echo ${target}${spacing}${desc}
+			end_if
+		end_if
+	end
+	echo ""
+'''
+]
