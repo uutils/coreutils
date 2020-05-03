@@ -84,30 +84,42 @@ set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args}"
 ### tasks
 
 [tasks.default]
-description = "## *DEFAULT* Build and test project"
+description = "## *DEFAULT* Build (debug-mode) and test project"
 category = "[project]"
 dependencies = [
 	"action-build-debug",
     "test-terse",
 ]
 
+##
+
 [tasks.build]
-description = "## Build project"
+description = "## Build (release-mode) project"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
-    "action-build",
+    "action-build-release",
     "core::post-build",
 ]
 
+[tasks.build-debug]
+description = "## Build (debug-mode) project"
+category = "[project]"
+dependencies = [
+	"action-build-debug",
+]
+
 [tasks.build-features]
-description = "## Build (with features); usage: `cargo make (build-features | features) FEATURE...`"
+description = "## Build (with features; release-mode) project; usage: `cargo make (build-features | features) FEATURE...`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
     "action-build-features",
     "core::post-build",
 ]
+
+[tasks.debug]
+alias = "build-debug"
 
 [tasks.features]
 alias = "build-features"
@@ -173,7 +185,7 @@ args = ["uninstall"]
 alias = "utils"
 
 [tasks.utils]
-description = "## Build (individual) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME...]`"
+description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME...]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -190,7 +202,7 @@ alias = "utils"
 
 ### actions
 
-[tasks.action-build]
+[tasks.action-build-release]
 description = "`cargo build --release`"
 command = "cargo"
 args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
