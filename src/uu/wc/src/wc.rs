@@ -147,8 +147,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut max_width: usize = 0;
 
     // we do not need to decode the byte stream if we're only counting bytes/newlines
-    let decode_chars = settings.show_chars
-        || settings.show_words || settings.show_max_line_length;
+    let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
 
     for path in &files {
         let mut reader = open(&path[..])?;
