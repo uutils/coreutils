@@ -20,5 +20,6 @@ if NOT DEFINED JQ (
     echo WARN: missing `jq` ^(install with `scoop install jq`^)^; falling back to default ^(only fully cross-platform^) util list 1>&2
     echo %default_utils%
 ) else (
-    cargo metadata %* --format-version 1 | jq -r "[.resolve.nodes[] | {id: .id, deps: [.deps[].name]}] | .[] | select(.id|startswith(\"uutils\")) | [.deps[] | select(startswith(\"uu_\"))] | [.[] | sub(\"^uu_\"; \"\")] | join(\" \")"
+    REM cargo metadata %* --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"uutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^^\\w+\";\"g\")] | [.[].string | sub(\"^uu_\"; \"\")] | sort | join(\" \")"
+    cargo metadata %* --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"uutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^^\\w+\";\"g\")] | [.[].string] | sort | join(\" \")"
 )
