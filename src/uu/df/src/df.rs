@@ -29,7 +29,7 @@ use kernel32::{
     GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 
-use number_prefix::{binary_prefix, decimal_prefix, Prefixed, Standalone, PrefixNames};
+use number_prefix::{binary_prefix, decimal_prefix, PrefixNames, Prefixed, Standalone};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -718,7 +718,6 @@ fn human_readable(value: u64, base: i64) -> String {
 
         // ref: [Binary prefix](https://en.wikipedia.org/wiki/Binary_prefix) @@ <https://archive.is/cnwmF>
         // ref: [SI/metric prefix](https://en.wikipedia.org/wiki/Metric_prefix) @@ <https://archive.is/QIuLj>
-
         1000 => match decimal_prefix(value as f64) {
             Standalone(bytes) => bytes.to_string(),
             Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
