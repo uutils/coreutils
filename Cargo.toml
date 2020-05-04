@@ -215,6 +215,7 @@ feat_os_windows_legacy = [
 
 [dependencies]
 lazy_static = { version="1.3" }
+textwrap = { version="0.11.0", features=["term_size"] }
 uucore = { version="0.0.2" }
 # * uutils
 arch     = { optional=true, path="src/uu/arch" }

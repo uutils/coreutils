@@ -8,13 +8,14 @@
  */
 
 // spell-checker:ignore (acronyms/names) Gehring
-// spell-checker:ignore (rustlang) clippy concat rustlang
-// spell-checker:ignore (uutils) coreutils uucore uumain uutils sigpipe
+// spell-checker:ignore (rustlang/crates) clippy concat rustlang termwidth textwrap
+// spell-checker:ignore (uutils) coreutils sigpipe uucore uumain uutils
 // spell-checker:ignore (shell) busybox symlinks
 
 include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
 
 extern crate lazy_static;
+extern crate textwrap;
 extern crate uucore;
 
 use lazy_static::lazy_static;
@@ -37,17 +38,18 @@ lazy_static! {
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage(utils: &UtilityMap) {
-    println!("{} {}", *NAME, VERSION);
-    println!();
-    println!("Usage:");
-    println!("  {} [util [arguments...]]\n", *NAME);
-    println!("Currently defined functions:");
+    println!("{} {} (multi-call binary)\n", *NAME, VERSION);
+    println!("Usage: {} [function [arguments...]]\n", *NAME);
+    println!("Currently defined functions/utilities:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
     utils.sort();
-    for util in utils {
-        println!("\t{}", util);
-    }
+    let display_list = utils.join(", ");
+    let width = std::cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
+    println!(
+        "{}",
+        textwrap::indent(&textwrap::fill(&display_list, width), "    ")
+    );
 }
 
 fn main() {
@@ -98,7 +100,7 @@ fn main() {
                                 std::process::exit(code);
                             }
                             None => {
-                                println!("{}: applet not found", util);
+                                println!("{}: function/utility not found", util);
                                 std::process::exit(1);
                             }
                         }
@@ -106,7 +108,7 @@ fn main() {
                     usage(&utils);
                     std::process::exit(0);
                 } else {
-                    println!("{}: applet not found", util);
+                    println!("{}: function/utility not found", util);
                     std::process::exit(1);
                 }
             }
