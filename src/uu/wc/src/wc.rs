@@ -146,6 +146,9 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
     let mut results = vec![];
     let mut max_width: usize = 0;
 
+    // we do not need to decode the byte stream if we're only counting bytes/newlines
+    let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
+
     for path in &files {
         let mut reader = open(&path[..])?;
 
@@ -173,24 +176,26 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
 
             byte_count += raw_line.len();
 
-            // try and convert the bytes to UTF-8 first
-            let current_char_count;
-            match from_utf8(&raw_line[..]) {
-                Ok(line) => {
-                    word_count += line.split_whitespace().count();
-                    current_char_count = line.chars().count();
+            if decode_chars {
+                // try and convert the bytes to UTF-8 first
+                let current_char_count;
+                match from_utf8(&raw_line[..]) {
+                    Ok(line) => {
+                        word_count += line.split_whitespace().count();
+                        current_char_count = line.chars().count();
+                    }
+                    Err(..) => {
+                        word_count += raw_line.split(|&x| is_word_seperator(x)).count();
+                        current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
+                    }
                 }
-                Err(..) => {
-                    word_count += raw_line.split(|&x| is_word_seperator(x)).count();
-                    current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
-                }
-            }
-            char_count += current_char_count;
+                char_count += current_char_count;
 
-            if current_char_count > longest_line_length {
-                // we subtract one here because `line.len()` includes the LF
-                // matches GNU 'wc' behaviour
-                longest_line_length = current_char_count - 1;
+                if current_char_count > longest_line_length {
+                    // we subtract one here because `line.len()` includes the LF
+                    // matches GNU 'wc' behaviour
+                    longest_line_length = current_char_count - 1;
+                }
             }
 
             raw_line.truncate(0);
