@@ -1,11 +1,9 @@
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) kwantam <kwantam@gmail.com>
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// * This file is part of the uutils coreutils package.
+// *
+// * (c) kwantam <kwantam@gmail.com>
+// *
+// * For the full copyright and license information, please view the LICENSE file
+// * that was distributed with this source code.
 
 //! Generate a table of the multiplicative inverses of p_i mod 2^64
 //! for the first 1027 odd primes (all 13 bit and smaller primes).
@@ -33,9 +31,6 @@ use miller_rabin::is_prime;
 mod numeric;
 
 mod sieve;
-
-#[path = "../../common/mkmain.rs"]
-mod mkmain;
 
 // extended Euclid algorithm
 // precondition: a does not divide 2^64
@@ -74,8 +69,6 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
 
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
-    mkmain::main();
-
     let out_dir = env::var("OUT_DIR").unwrap();
     let mut file = File::create(&Path::new(&out_dir).join("prime_table.rs")).unwrap();
 

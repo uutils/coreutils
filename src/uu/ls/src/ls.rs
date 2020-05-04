@@ -1,12 +1,9 @@
-#![crate_name = "uu_ls"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
 
 extern crate getopts;
 #[cfg(unix)]

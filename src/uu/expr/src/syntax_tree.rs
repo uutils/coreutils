@@ -1,11 +1,9 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//* This file is part of the uutils coreutils package.
+//*
+//* (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
+//*
+//* For the full copyright and license information, please view the LICENSE
+//* file that was distributed with this source code.
 
 //!
 //! Here we employ shunting-yard algorithm for building AST from tokens according to operators' precedence and associativeness.

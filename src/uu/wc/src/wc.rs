@@ -1,13 +1,9 @@
-#![crate_name = "uu_wc"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Boden Garman <bpgarman@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Boden Garman <bpgarman@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 extern crate getopts;
 

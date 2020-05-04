@@ -1,13 +1,11 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Gehring <mg@ebfe.org>
- * (c) kwantam <kwantam@gmail.com>
- *     20150428 created `expand` module to eliminate most allocs during setup
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Michael Gehring <mg@ebfe.org>
+//  * (c) kwantam <kwantam@gmail.com>
+//  *     * 2015-04-28 ~ created `expand` module to eliminate most allocs during setup
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 use std::char::from_u32;
 use std::cmp::min;

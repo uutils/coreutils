@@ -1,5 +1,3 @@
-#![crate_name = "uu_base64"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jordy Dickinson <jordy.dickinson@gmail.com>

@@ -1,18 +1,17 @@
 [package]
-name = "hostid"
+name = "uu_hostid"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_hostid"
 path = "src/hostid.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "hostid"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

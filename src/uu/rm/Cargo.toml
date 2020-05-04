@@ -1,20 +1,19 @@
 [package]
-name = "rm"
+name = "uu_rm"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_rm"
 path = "src/rm.rs"
 
 [dependencies]
 getopts = "0.2.18"
 walkdir = "2.2.8"
 remove_dir_all = "0.5.1"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "rm"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

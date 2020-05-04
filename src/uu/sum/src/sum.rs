@@ -1,13 +1,9 @@
-#![crate_name = "uu_sum"]
-
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) T. Jameson Little <t.jameson.little@gmail.com>
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// * This file is part of the uutils coreutils package.
+// *
+// * (c) T. Jameson Little <t.jameson.little@gmail.com>
+// *
+// * For the full copyright and license information, please view the LICENSE file
+// * that was distributed with this source code.
 
 extern crate getopts;
 

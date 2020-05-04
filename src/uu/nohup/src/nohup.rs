@@ -1,13 +1,9 @@
-#![crate_name = "uu_nohup"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) 2014 Vsevolod Velichko <torkvemada@sorokdva.net>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) 2014 Vsevolod Velichko <torkvemada@sorokdva.net>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 extern crate getopts;
 extern crate libc;

@@ -1,19 +1,18 @@
 [package]
-name = "chmod"
+name = "uu_chmod"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_chmod"
 path = "src/chmod.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = { version = "0.0.2", features = ["mode"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["mode"] }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 walker = "1.0.0"
 
 [[bin]]
 name = "chmod"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

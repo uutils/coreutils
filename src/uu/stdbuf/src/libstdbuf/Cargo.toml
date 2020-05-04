@@ -1,5 +1,5 @@
 [package]
-name = "libstdbuf"
+name = "uu_stdbuf_libstdbuf"
 version = "0.0.1"
 authors = []
 license = "MIT"
@@ -7,13 +7,13 @@ license = "MIT"
 [lib]
 name = "libstdbuf"
 path = "src/libstdbuf.rs"
-# XXX: the rlib is just to prevent Cargo from spitting out a warning
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
 cpp = "0.4"
 libc = "0.2"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [build-dependencies]
 cpp_build = "0.4"

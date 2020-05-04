@@ -1,18 +1,17 @@
 [package]
-name = "users"
+name = "uu_users"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_users"
 path = "src/users.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = { version = "0.0.2", features = ["utmpx"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["utmpx"] }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "users"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

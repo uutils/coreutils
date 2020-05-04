@@ -1,12 +1,10 @@
 [package]
-name = "shred"
+name = "uu_shred"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_shred"
 path = "src/shred.rs"
 
 [dependencies]
@@ -15,8 +13,9 @@ getopts = "0.2.18"
 libc = "0.2.42"
 rand = "0.5"
 time = "0.1.40"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "shred"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

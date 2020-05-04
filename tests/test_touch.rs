@@ -1,5 +1,5 @@
-extern crate uu_touch;
-use self::uu_touch::filetime::{self, FileTime};
+extern crate touch;
+use self::touch::filetime::{self, FileTime};
 
 extern crate time;
 

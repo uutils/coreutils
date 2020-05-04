@@ -1,15 +1,11 @@
-#![crate_name = "uu_head"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alan Andrade <alan.andradec@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- *
- * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Alan Andrade <alan.andradec@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+//  *
+//  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
 
 #[macro_use]
 extern crate uucore;

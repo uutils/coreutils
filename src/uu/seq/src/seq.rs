@@ -1,5 +1,3 @@
-#![crate_name = "uu_seq"]
-
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 

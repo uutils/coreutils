@@ -1,19 +1,18 @@
 [package]
-name = "df"
+name = "uu_df"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_df"
 path = "src/df.rs"
 
 [dependencies]
 clap = "2.32"
 libc = "0.2"
 number_prefix = "0.2"
-uucore = "0.0.1"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 kernel32-sys = "0.2"
@@ -21,4 +20,4 @@ winapi = { version = "0.3", features = ["handleapi", "winerror"] }
 
 [[bin]]
 name = "df"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

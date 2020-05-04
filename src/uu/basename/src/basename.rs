@@ -1,13 +1,9 @@
-#![crate_name = "uu_basename"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jimmy Lu <jimmy.lu.2011@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jimmy Lu <jimmy.lu.2011@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;

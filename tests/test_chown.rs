@@ -1,11 +1,11 @@
 use common::util::*;
 
-extern crate uu_chown;
-pub use self::uu_chown::*;
+extern crate chown;
+// pub use self::uu_chown::*;
 
 #[cfg(test)]
 mod test_passgrp {
-    use super::uu_chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
+    use super::chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
 
     #[test]
     fn test_usr2uid() {

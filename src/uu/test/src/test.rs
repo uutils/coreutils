@@ -1,13 +1,9 @@
-#![crate_name = "uu_test"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) mahkoh (ju.orth [at] gmail [dot] com)
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) mahkoh (ju.orth [at] gmail [dot] com)
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 extern crate libc;
 #[cfg(target_os = "redox")]

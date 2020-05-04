@@ -1,4 +1,3 @@
-#![crate_name = "uu_printf"]
 #![allow(dead_code)]
 
 extern crate itertools;

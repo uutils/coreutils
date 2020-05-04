@@ -1,20 +1,19 @@
 [package]
-name = "mktemp"
+name = "uu_mktemp"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_mktemp"
 path = "src/mktemp.rs"
 
 [dependencies]
 getopts = "0.2.18"
 rand = "0.5"
 tempfile = "2.1.5"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "mktemp"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

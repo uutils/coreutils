@@ -15,12 +15,7 @@ use std::path::Path;
 
 const CRC_TABLE_LEN: usize = 256;
 
-#[path = "../../common/mkmain.rs"]
-mod mkmain;
-
 fn main() {
-    mkmain::main();
-
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let mut table = Vec::with_capacity(CRC_TABLE_LEN);

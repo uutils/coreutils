@@ -1,18 +1,17 @@
 [package]
-name = "chgrp"
+name = "uu_chgrp"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_chgrp"
 path = "src/chgrp.rs"
 
 [dependencies]
-uucore = { version = "0.0.2", features = ["entries", "fs"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries", "fs"] }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 walkdir = "2.2.8"
 
 [[bin]]
 name = "chgrp"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

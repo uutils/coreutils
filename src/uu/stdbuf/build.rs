@@ -2,9 +2,6 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-#[path = "../../common/mkmain.rs"]
-mod mkmain;
-
 #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
 mod platform {
     pub const DYLIB_EXT: &str = ".so";
@@ -21,8 +18,6 @@ mod platform {
 }
 
 fn main() {
-    mkmain::main();
-
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Could not find manifest dir");
     let profile = env::var("PROFILE").expect("Could not determine profile");
 

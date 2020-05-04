@@ -1,14 +1,10 @@
-#![crate_name = "uu_nl"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Tobias Bohumir Schottdorf <tobias.schottdorf@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- *
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Tobias Bohumir Schottdorf <tobias.schottdorf@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+//  *
 
 extern crate aho_corasick;
 extern crate getopts;

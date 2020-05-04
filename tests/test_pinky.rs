@@ -4,8 +4,8 @@ use common::util::*;
 
 use self::uucore::entries::{Locate, Passwd};
 
-extern crate uu_pinky;
-pub use self::uu_pinky::*;
+extern crate pinky;
+pub use self::pinky::*;
 
 #[test]
 fn test_capitalize() {

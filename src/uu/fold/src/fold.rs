@@ -1,13 +1,9 @@
-#![crate_name = "uu_fold"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Alex Lyon <arcterus@mail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;

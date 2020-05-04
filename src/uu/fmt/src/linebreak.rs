@@ -1,11 +1,9 @@
-/*
- * This file is part of `fmt` from the uutils coreutils package.
- *
- * (c) kwantam <kwantam@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of `fmt` from the uutils coreutils package.
+//  *
+//  * (c) kwantam <kwantam@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 use parasplit::{ParaWords, Paragraph, WordInfo};
 use std::cmp;

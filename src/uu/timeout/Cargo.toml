@@ -1,20 +1,19 @@
 [package]
-name = "timeout"
+name = "uu_timeout"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_timeout"
 path = "src/timeout.rs"
 
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
 time = "0.1.40"
-uucore = { version = "0.0.2", features = ["parse_time", "process"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["parse_time", "process", "signals"] }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "timeout"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

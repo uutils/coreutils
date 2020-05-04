@@ -1,18 +1,17 @@
 [package]
-name = "relpath"
+name = "uu_relpath"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_relpath"
 path = "src/relpath.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = { version = "0.0.2", features = ["fs"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["fs"] }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "relpath"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

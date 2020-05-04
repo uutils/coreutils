@@ -1,18 +1,17 @@
 [package]
-name = "printf"
+name = "uu_printf"
 version = "0.0.1"
 authors = ["Nathan Ross"]
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_printf"
 path = "src/printf.rs"
 
 [dependencies]
 itertools = "0.8.0"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "printf"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

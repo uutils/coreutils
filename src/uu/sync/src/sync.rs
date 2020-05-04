@@ -1,13 +1,9 @@
-#![crate_name = "uu_sync"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alexander Fomin <xander.fomin@ya.ru>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Alexander Fomin <xander.fomin@ya.ru>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 

@@ -1,12 +1,10 @@
 [package]
-name = "hashsum"
+name = "uu_hashsum"
 version = "0.0.1"
 authors = []
 license = "MIT"
-build = "../../common/mkmain.rs"
 
 [lib]
-name = "uu_hashsum"
 path = "src/hashsum.rs"
 
 [dependencies]
@@ -20,8 +18,9 @@ regex-syntax = "0.6.7"
 sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
-uucore = "0.0.2"
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "hashsum"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

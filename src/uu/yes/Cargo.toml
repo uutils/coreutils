@@ -1,23 +1,23 @@
 [package]
-name = "yes"
+name = "uu_yes"
 version = "0.0.1"
 authors = []
 license = "MIT"
-description = "Repeatedly output a line with all specified STRING(s), or 'y'."
-build = "../../common/mkmain.rs"
+description = "Repeatedly output a line with all specified STRING(s), or 'y'"
 
 [lib]
-name = "uu_yes"
 path = "src/yes.rs"
 
 [dependencies]
 clap = "2.32"
-uucore = { version = "0.0.2", features = ["zero-copy"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["zero-copy"] }
+uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [features]
-latency = []
 default = []
+#
+latency = []
 
 [[bin]]
 name = "yes"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

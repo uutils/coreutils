@@ -2,8 +2,8 @@ extern crate regex;
 
 use common::util::*;
 
-extern crate uu_stat;
-pub use self::uu_stat::*;
+extern crate stat;
+pub use self::stat::*;
 
 #[cfg(test)]
 mod test_fsext {

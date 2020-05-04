@@ -1,4 +1,3 @@
-#![crate_name = "uu_id"]
 // This file is part of the uutils coreutils package.
 //
 // (c) Alan Andrade <alan.andradec@gmail.com>
@@ -10,7 +9,7 @@
 // Synced with:
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
-//
+
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 

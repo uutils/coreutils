@@ -1,15 +1,12 @@
-#![crate_name = "uu_cp"]
 #![allow(clippy::missing_safety_doc)]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordy Dickinson <jordy.dickinson@gmail.com>
- * (c) Joshua S. Miller <jsmiller@uchicago.edu>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jordy Dickinson <jordy.dickinson@gmail.com>
+// (c) Joshua S. Miller <jsmiller@uchicago.edu>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
 
 extern crate clap;
 extern crate filetime;
