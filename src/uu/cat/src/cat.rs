@@ -463,8 +463,9 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
     }
 }
 
+#[test]
 mod tests {
-    use std::io::{BufWriter, stdout};
+    use std::io::{stdout, BufWriter};
 
     #[test]
     fn test_write_nonprint_to_end_new_line() {
