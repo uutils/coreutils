@@ -69,15 +69,23 @@ if eq "${CARGO_MAKE_RUST_TARGET_OS}" "windows"
 	show_utils = set "util/show-utils.BAT"
 end_if
 set_env CARGO_MAKE_VAR_SHOW_UTILS "${show_utils}"
-# rebuild TASK_ARGS for "--features" and package-build compatibility (using "," instead of ";")
+# rebuild CARGO_MAKE_TASK_ARGS for various targets
 args = set ${CARGO_MAKE_TASK_ARGS}
-args = replace ${args} ";" ","
-set_env CARGO_MAKE_TASK_BUILD_FEATURES_ARGS "${args}"
-args = replace ${args} "," " -p"
-if not is_empty "${args}"
-	args = set "-p${args}"
+# * rebuild for 'features' target
+args_features = replace ${args} ";" ","
+set_env CARGO_MAKE_TASK_BUILD_FEATURES_ARGS "${args_features}"
+# * rebuild for 'examples' target
+args_examples = replace ${args} ";" " --example "
+if is_empty "${args_examples}"
+	args_examples = set "--examples"
 end_if
-set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args}"
+set_env CARGO_MAKE_TASK_BUILD_EXAMPLES_ARGS "${args_examples}"
+# * rebuild for 'utils' target
+args_utils = replace ${args} ";" " -p"
+if not is_empty "${args_utils}"
+	args_utils = set "-p${args_utils}"
+end_if
+set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args_utils}"
 '''
 ]
 
@@ -109,6 +117,15 @@ dependencies = [
 	"action-build-debug",
 ]
 
+[tasks.build-examples]
+description = "## Build (release-mode) project example(s); usage: `cargo make (build-examples | examples | example) [EXAMPLE]...`"
+category = "[project]"
+dependencies = [
+	"core::pre-build",
+    "action-build-examples",
+    "core::post-build",
+]
+
 [tasks.build-features]
 description = "## Build (with features; release-mode) project; usage: `cargo make (build-features | features) FEATURE...`"
 category = "[project]"
@@ -120,6 +137,12 @@ dependencies = [
 
 [tasks.debug]
 alias = "build-debug"
+
+[tasks.example]
+alias = "build-examples"
+
+[tasks.examples]
+alias = "build-examples"
 
 [tasks.features]
 alias = "build-features"
@@ -211,6 +234,11 @@ args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
 description = "`cargo build`"
 command = "cargo"
 args = ["build", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
+
+[tasks.action-build-examples]
+description = "`cargo build (--examples|(--example EXAMPLE)...)`"
+command = "cargo"
+args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )", "${CARGO_MAKE_TASK_BUILD_EXAMPLES_ARGS}" ]
 
 [tasks.action-build-features]
 description = "`cargo build --release --features FEATURES`"
