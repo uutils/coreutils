@@ -64,6 +64,7 @@ generic! {
     "expr", test_expr;
     "factor", test_factor;
     "false", test_false;
+    "fmt", test_fmt;
     "fold", test_fold;
     "hashsum", test_hashsum;
     "head", test_head;
