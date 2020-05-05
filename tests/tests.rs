@@ -101,6 +101,7 @@ generic! {
     "unexpand", test_unexpand;
     "uniq", test_uniq;
     "wc", test_wc;
+    "whoami", test_whoami;
     // Be aware of the trailing semicolon after the last item
     "hostname", test_hostname
 }
