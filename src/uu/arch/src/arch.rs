@@ -15,7 +15,7 @@ extern crate uucore;
 
 use platform_info::*;
 
-static SYNTAX: &str = "";
+static SYNTAX: &str = "Print machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
 static LONG_HELP: &str = "";
 
