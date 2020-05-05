@@ -68,6 +68,7 @@ pub fn main() {
             | "yes"
             | "false" | "true"
             | "hashsum"
+            | "uu_test"
             => {
                 // cf.write_all(format!("extern crate {krate};\n", krate = krate).as_bytes())
                 //     .unwrap();
@@ -79,6 +80,14 @@ pub fn main() {
         }
 
         match krate.as_ref() {
+            // * use "uu_" prefix as bypass method to avoid name collisions with imported crates, when necessary (eg, 'test')
+            k if k.starts_with("uu_")
+                => mf
+                    .write_all(
+                        format!("map.insert(\"{k}\", {krate}::uumain);\n", k = krate.clone().remove("uu_".len()), krate = krate)
+                            .as_bytes(),
+                    )
+                    .unwrap(),
             "arch"
             | "base32" | "base64" | "basename"
             | "cat" | "chgrp" | "chmod" | "chown" | "chroot" | "cksum" | "comm" | "cp" | "cut"
@@ -97,7 +106,7 @@ pub fn main() {
             | "paste" | "pathchk" | "pinky" | "printenv" | "printf" | "ptx" | "pwd"
             | "readlink" | "realpath" | "relpath" | "rm" | "rmdir"
             | "seq" | "shred" | "shuf" | "sleep" | "sort" | "split" | "stat" | "stdbuf" | "sum" | "sync"
-            | "tac" | "tail" | "tee" | "test" | "timeout" | "touch" | "tr" | "truncate" | "tsort" | "tty"
+            | "tac" | "tail" | "tee" | "timeout" | "touch" | "tr" | "truncate" | "tsort" | "tty"
             | "uname" | "unexpand" | "uniq" | "unlink" | "uptime" | "users"
             | "wc" | "who" | "whoami"
             | "yes"
