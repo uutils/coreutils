@@ -1,9 +1,15 @@
 [package]
 name = "uucore_procs"
 version = "0.0.2"
-authors = []
+authors = ["Roy Ivy III <rivy.dev@gmail.com>"]
 license = "MIT"
 description = "uutils ~ 'uucore' proc-macros"
+
+homepage = "https://github.com/uutils/uucore/uucore_procs"
+repository = "https://github.com/uutils/uucore/uucore_procs"
+# readme = "README.md"
+keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
+# categories = ["os"]
 
 [lib]
 proc-macro = true
