@@ -81,10 +81,16 @@ if is_empty "${args_examples}"
 end_if
 set_env CARGO_MAKE_TASK_BUILD_EXAMPLES_ARGS "${args_examples}"
 # * rebuild for 'utils' target
-args_utils = replace ${args} ";" " -p"
-if not is_empty "${args_utils}"
-	args_utils = set "-p${args_utils}"
-end_if
+args_utils_list = split "${args}" ";"
+for arg in "${args_utils_list}"
+	if not is_empty "${arg}"
+		if not starts_with "${arg}" "uu_"
+			arg = set "uu_${arg}"
+		end_if
+		args_utils = set "${args_utils} -p${arg}"
+	end_if
+end
+args_utils = trim "${args_utils}"
 set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args_utils}"
 '''
 ]
@@ -282,7 +288,12 @@ if is_empty "${package_options}"
 	set_env CARGO_MAKE_VAR_UTILS ${result.stdout}
 	utils = array %{result.stdout}
 	for util in ${utils}
-		package_options = set "${package_options} -p${util}"
+		if not is_empty "${util}"
+			if not starts_with "${util}" "uu_"
+				util = set "uu_${util}"
+			end_if
+			package_options = set "${package_options} -p${util}"
+		end_if
 	end
 	package_options = trim "${package_options}"
 end_if
