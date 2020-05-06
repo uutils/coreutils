@@ -135,6 +135,9 @@ dependencies = [
 	"core::post-build",
 ]
 
+[tasks.build-release]
+alias = "build"
+
 [tasks.debug]
 alias = "build-debug"
 
