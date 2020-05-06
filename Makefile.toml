@@ -118,7 +118,7 @@ dependencies = [
 ]
 
 [tasks.build-examples]
-description = "## Build (release-mode) project example(s); usage: `cargo make (build-examples | examples | example) [EXAMPLE]...`"
+description = "## Build (release-mode) project example(s); usage: `cargo make (build-examples | examples) [EXAMPLE]...`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -139,7 +139,11 @@ dependencies = [
 alias = "build-debug"
 
 [tasks.example]
-alias = "build-examples"
+description = "hidden singular-form alias for 'examples'"
+category = "[project]"
+dependencies = [
+	"examples",
+]
 
 [tasks.examples]
 alias = "build-examples"
