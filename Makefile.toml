@@ -284,7 +284,12 @@ script = [
 package_options = get_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS
 if is_empty "${package_options}"
 	show_utils = get_env CARGO_MAKE_VAR_SHOW_UTILS
-	result = exec "${show_utils}"
+	features = get_env CARGO_MAKE_VAR_BUILD_TEST_FEATURES
+	if not is_empty "${features}"
+		result = exec "${show_utils}" --features "${features}"
+	else
+		result = exec "${show_utils}"
+	endif
 	set_env CARGO_MAKE_VAR_UTILS ${result.stdout}
 	utils = array %{result.stdout}
 	for util in ${utils}
