@@ -11,8 +11,9 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = { version="1.0" } ## debug: use `features=["extra-traits"]` to add Debug traits to structs (for `println!("{:?}", ...)`)
+syn = { version="1.0" }
 
 [features]
 default = []
-debug = []
+## non-default features
+debug = ["syn/extra-traits"] ## add Debug traits to syn structs (for `println!("{:?}", ...)`)

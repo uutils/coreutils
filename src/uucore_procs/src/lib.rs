@@ -6,6 +6,30 @@ extern crate proc_macro;
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
 //* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
 
+//## proc_dbg macro
+//* used to help debug the compile-time proc_macro code
+
+#[cfg(feature = "debug")]
+macro_rules! proc_dbg {
+    ($x:expr) => {
+        dbg!($x)
+    };
+}
+#[cfg(not(feature = "debug"))]
+macro_rules! proc_dbg {
+    ($x:expr) => {
+        std::convert::identity($x)
+    };
+}
+
+//## main!()
+
+// main!( EXPR )
+// generates a `main()` function for utilities within the uutils group
+// EXPR == syn::Expr::Lit::String | syn::Expr::Path::Ident ~ EXPR contains the location of the utility `uumain()` function
+//* for future use of "eager" macros and more generic use, EXPR may be in either STRING or IDENT form
+//* for ease-of-use, the trailing "::uumain" is optional and will be added if needed
+
 struct Tokens {
     expr: syn::Expr,
 }
@@ -18,11 +42,6 @@ impl syn::parse::Parse for Tokens {
     }
 }
 
-// main!( EXPR )
-// generates a `main()` function for utilities within the uutils group
-// EXPR == syn::Expr::Lit::String | syn::Expr::Path::Ident ~ EXPR contains the location of the utility `uumain()` function
-//* for future use of "eager" macros and more generic use, EXPR may be in either STRING or IDENT form
-//* for ease-of-use, the trailing "::uumain" is optional and will be added if needed
 #[proc_macro]
 pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let Tokens { expr } = syn::parse_macro_input!(stream as Tokens);
