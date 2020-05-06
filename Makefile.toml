@@ -212,10 +212,7 @@ command = "cargo"
 args = ["uninstall"]
 
 [tasks.util]
-alias = "utils"
-
-[tasks.utils]
-description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME...]`"
+description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | uutil) [UTIL_NAME...]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -224,11 +221,22 @@ dependencies = [
 	"core::post-build",
 ]
 
+[tasks.utils]
+description = "hidden plural-form alias for 'util'"
+category = "[project]"
+dependencies = [
+	"util",
+]
+
 [tasks.uutil]
 alias = "utils"
 
 [tasks.uutils]
-alias = "utils"
+description = "hidden plural-form alias for 'util'"
+category = "[project]"
+dependencies = [
+	"util",
+]
 
 ### actions
 
