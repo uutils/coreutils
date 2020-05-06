@@ -357,7 +357,7 @@ script = [
 				target = array_pop ${line_segments}
 				target = trim ${target}
 				l = length ${target}
-				r = range 0 20
+				r = range 0 18
 				spacing = set ""
 				for i in ${r}
 					if greater_than ${i} ${l}
