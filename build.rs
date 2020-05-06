@@ -29,7 +29,6 @@ pub fn main() {
     }
     crates.sort();
 
-    let mut cf = File::create(Path::new(&out_dir).join("uutils_crates.rs")).unwrap();
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
 
     mf.write_all(
@@ -44,42 +43,7 @@ pub fn main() {
 
     for krate in crates {
         match krate.as_ref() {
-            "arch"
-            | "base32" | "base64" | "basename"
-            | "cat" | "chgrp" | "chmod" | "chown" | "chroot" | "cksum" | "comm" | "cp" | "cut"
-            | "date" | "df" | "dircolors" | "dirname" | "du"
-            | "echo" | "env" | "expand" | "expr"
-            | "factor" | "fmt" | "fold"
-            | "groups"
-            | "head" | "hostid" | "hostname"
-            | "id" | "install"
-            | "join"
-            | "kill"
-            | "link" | "ln" | "logname" | "ls"
-            | "mkdir" | "mkfifo" | "mknod" | "mktemp" | "more" | "mv"
-            | "nice" | "nl" | "nohup" | "nproc" | "numfmt"
-            | "od"
-            | "paste" | "pathchk" | "pinky" | "printenv" | "printf" | "ptx" | "pwd"
-            | "readlink" | "realpath" | "relpath" | "rm" | "rmdir"
-            | "seq" | "shred" | "shuf" | "sleep" | "sort" | "split" | "stat" | "stdbuf" | "sum" | "sync"
-            | "tac" | "tail" | "tee" | "test" | "timeout" | "touch" | "tr" | "truncate" | "tsort" | "tty"
-            | "uname" | "unexpand" | "uniq" | "unlink" | "uptime" | "users"
-            | "wc" | "who" | "whoami"
-            | "yes"
-            | "false" | "true"
-            | "hashsum"
-            | "uu_test"
-            => {
-                // cf.write_all(format!("extern crate {krate};\n", krate = krate).as_bytes())
-                //     .unwrap();
-            }
-            _ => {
-                cf.write_all(format!("extern crate uu_{krate};\n", krate = krate).as_bytes())
-                    .unwrap();
-            }
-        }
-
-        match krate.as_ref() {
+            // ToDO: add another bypass method for publishing name collisions requiring a non-`uu_` prefix for a util
             // * use "uu_" prefix as bypass method to avoid name collisions with imported crates, when necessary (eg, 'test')
             k if k.starts_with("uu_")
                 => mf
@@ -88,34 +52,6 @@ pub fn main() {
                             .as_bytes(),
                     )
                     .unwrap(),
-            "arch"
-            | "base32" | "base64" | "basename"
-            | "cat" | "chgrp" | "chmod" | "chown" | "chroot" | "cksum" | "comm" | "cp" | "cut"
-            | "date" | "df" | "dircolors" | "dirname" | "du"
-            | "echo" | "env" | "expand" | "expr"
-            | "factor" | "fmt" | "fold"
-            | "groups"
-            | "head" | "hostid" | "hostname"
-            | "id" | "install"
-            | "join"
-            | "kill"
-            | "link" | "ln" | "logname" | "ls"
-            | "mkdir" | "mkfifo" | "mknod" | "mktemp" | "more" | "mv"
-            | "nice" | "nl" | "nohup" | "nproc" | "numfmt"
-            | "od"
-            | "paste" | "pathchk" | "pinky" | "printenv" | "printf" | "ptx" | "pwd"
-            | "readlink" | "realpath" | "relpath" | "rm" | "rmdir"
-            | "seq" | "shred" | "shuf" | "sleep" | "sort" | "split" | "stat" | "stdbuf" | "sum" | "sync"
-            | "tac" | "tail" | "tee" | "timeout" | "touch" | "tr" | "truncate" | "tsort" | "tty"
-            | "uname" | "unexpand" | "uniq" | "unlink" | "uptime" | "users"
-            | "wc" | "who" | "whoami"
-            | "yes"
-            => mf
-                .write_all(
-                    format!("map.insert(\"{krate}\", {krate}::uumain);\n", krate = krate)
-                        .as_bytes(),
-                )
-                .unwrap(),
             "false" | "true" => mf
                 .write_all(
                     format!("map.insert(\"{krate}\", r#{krate}::uumain);\n", krate = krate)
@@ -148,7 +84,7 @@ pub fn main() {
             _ => mf
                 .write_all(
                     format!(
-                        "map.insert(\"{krate}\", uu_{krate}::uumain);\n",
+                        "map.insert(\"{krate}\", {krate}::uumain);\n",
                         krate = krate
                     )
                     .as_bytes(),
@@ -159,6 +95,5 @@ pub fn main() {
 
     mf.write_all(b"map\n}\n").unwrap();
 
-    cf.flush().unwrap();
     mf.flush().unwrap();
 }

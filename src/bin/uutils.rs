@@ -12,8 +12,6 @@
 // spell-checker:ignore (uutils) coreutils sigpipe uucore uumain uutils
 // spell-checker:ignore (shell) busybox symlinks
 
-include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
-
 extern crate lazy_static;
 extern crate textwrap;
 extern crate uucore;
