@@ -369,7 +369,7 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
 
 fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     let (a_transformed, b_transformed): (String, String);
-    let (a, b) = if settings.transform_fns.len() > 0 {
+    let (a, b) = if !settings.transform_fns.is_empty() {
         a_transformed = transform(&a, &settings);
         b_transformed = transform(&b, &settings);
         (a_transformed.as_str(), b_transformed.as_str())
