@@ -298,7 +298,10 @@ fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
         .map(|p| (p.uid(), p.gid()))
         .unwrap_or((getuid(), getgid()));
 
-    let groups = Passwd::locate(uid).unwrap().belongs_to();
+    let groups = match Passwd::locate(uid) {
+        Ok(p) => p.belongs_to(),
+        Err(e) => crash!(1, "Could not find uid {}: {}", uid, e),
+    };
 
     print!("uid={}({})", uid, entries::uid2usr(uid).unwrap());
     print!(" gid={}({})", gid, entries::gid2grp(gid).unwrap());

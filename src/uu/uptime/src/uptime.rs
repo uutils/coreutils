@@ -49,6 +49,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 0;
     }
     if matches.opt_present("help") || !matches.free.is_empty() {
+        // TODO: use the standard method for this
         println!("{} {}", NAME, VERSION);
         println!();
         println!("Usage:");
