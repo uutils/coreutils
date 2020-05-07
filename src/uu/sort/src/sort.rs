@@ -48,8 +48,8 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
-    ignore_case: bool,
     compare_fns: Vec<fn(&str, &str) -> Ordering>,
+    transform_fns: Vec<fn(&str) -> String>,
 }
 
 impl Default for Settings {
@@ -62,8 +62,8 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
-            ignore_case: false,
             compare_fns: Vec::new(),
+            transform_fns: Vec::new(),
         }
     }
 }
@@ -148,6 +148,11 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let mut settings: Settings = Default::default();
     let mut opts = getopts::Options::new();
 
+    opts.optflag(
+        "d",
+        "dictionary-order",
+        "consider only blanks and alphanumeric characters",
+    );
     opts.optflag(
         "f",
         "ignore-case",
@@ -236,7 +241,13 @@ With no FILE, or when FILE is -, read standard input.",
     settings.stable = matches.opt_present("stable");
     settings.unique = matches.opt_present("unique");
     settings.check = matches.opt_present("check");
-    settings.ignore_case = matches.opt_present("ignore-case");
+
+    if matches.opt_present("dictionary-order") {
+        settings.transform_fns.push(remove_nondictionary_chars);
+    }
+    if matches.opt_present("ignore-case") {
+        settings.transform_fns.push(|s| s.to_uppercase());
+    }
 
     let mut files = matches.free;
     if files.is_empty() {
@@ -343,17 +354,25 @@ fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) 
     }
 }
 
+fn transform(line: &str, settings: &Settings) -> String {
+    let mut transformed = line.to_string();
+    for transform_fn in &settings.transform_fns {
+        transformed = transform_fn(&transformed);
+    }
+
+    transformed
+}
+
 fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.sort_by(|a, b| compare_by(a, b, &settings))
 }
 
 fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
-    // Convert to uppercase if necessary
-    let (a_upper, b_upper): (String, String);
-    let (a, b) = if settings.ignore_case {
-        a_upper = a.to_uppercase();
-        b_upper = b.to_uppercase();
-        (&*a_upper, &*b_upper)
+    let (a_transformed, b_transformed): (String, String);
+    let (a, b) = if settings.transform_fns.len() > 0 {
+        a_transformed = transform(&a, &settings);
+        b_transformed = transform(&b, &settings);
+        (a_transformed.as_str(), b_transformed.as_str())
     } else {
         (a, b)
     };
@@ -502,6 +521,15 @@ fn version_compare(a: &str, b: &str) -> Ordering {
     } else {
         Ordering::Equal
     }
+}
+
+fn remove_nondictionary_chars(s: &str) -> String {
+    // Using 'is_ascii_whitespace()' instead of 'is_whitespace()', because it
+    // uses only symbols compatible with UNIX sort (space, tab, newline).
+    // 'is_whitespace()' uses more symbols as whitespaces (e.g. vertical tab).
+    s.chars()
+        .filter(|c| c.is_alphanumeric() || c.is_ascii_whitespace())
+        .collect::<String>()
 }
 
 fn print_sorted<S, T: Iterator<Item = S>>(iter: T, outfile: &Option<String>)
