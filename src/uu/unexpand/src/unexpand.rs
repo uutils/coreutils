@@ -209,9 +209,51 @@ enum CharType {
     Other,
 }
 
-fn unexpand(options: Options) {
-    use self::CharType::*;
+fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
+    let (ctype, cwidth, nbytes) = if uflag {
+        let nbytes = char::from(buf[byte]).len_utf8();
 
+        if byte + nbytes > buf.len() {
+            // make sure we don't overrun the buffer because of invalid UTF-8
+            (CharType::Other, 1, 1)
+        } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
+            // Now that we think it's UTF-8, figure out what kind of char it is
+            match t.chars().next() {
+                Some(' ') => (CharType::Space, 0, 1),
+                Some('\t') => (CharType::Tab, 0, 1),
+                Some('\x08') => (CharType::Backspace, 0, 1),
+                Some(c) => (
+                    CharType::Other,
+                    UnicodeWidthChar::width(c).unwrap_or(0),
+                    nbytes,
+                ),
+                None => {
+                    // invalid char snuck past the utf8_validation_iterator somehow???
+                    (CharType::Other, 1, 1)
+                }
+            }
+        } else {
+            // otherwise, it's not valid
+            (CharType::Other, 1, 1) // implicit assumption: non-UTF8 char has display width 1
+        }
+    } else {
+        (
+            match buf[byte] {
+                // always take exactly 1 byte in strict ASCII mode
+                0x20 => CharType::Space,
+                0x09 => CharType::Tab,
+                0x08 => CharType::Backspace,
+                _ => CharType::Other,
+            },
+            1,
+            1,
+        )
+    };
+
+    (ctype, cwidth, nbytes)
+}
+
+fn unexpand(options: Options) {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];
     let mut buf = Vec::new();
@@ -228,60 +270,34 @@ fn unexpand(options: Options) {
             let mut col = 0; // the current column
             let mut scol = 0; // the start col for the current span, i.e., the already-printed width
             let mut init = true; // are we at the start of the line?
-            let mut pctype = Other;
+            let mut pctype = CharType::Other;
 
             while byte < buf.len() {
                 // when we have a finite number of columns, never convert past the last column
                 if lastcol > 0 && col >= lastcol {
-                    write_tabs(&mut output, ts, scol, col, pctype == Tab, init, true);
+                    write_tabs(
+                        &mut output,
+                        ts,
+                        scol,
+                        col,
+                        pctype == CharType::Tab,
+                        init,
+                        true,
+                    );
                     safe_unwrap!(output.write_all(&buf[byte..]));
                     scol = col;
                     break;
                 }
 
-                let (ctype, cwidth, nbytes) = if options.uflag {
-                    let nbytes = char::from(buf[byte]).len_utf8();
-
-                    // figure out how big the next char is, if it's UTF-8
-                    if byte + nbytes > buf.len() {
-                        // make sure we don't overrun the buffer because of invalid UTF-8
-                        (Other, 1, 1)
-                    } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
-                        // Now that we think it's UTF-8, figure out what kind of char it is
-                        match t.chars().next() {
-                            Some(' ') => (Space, 0, 1),
-                            Some('\t') => (Tab, 0, 1),
-                            Some('\x08') => (Backspace, 0, 1),
-                            Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
-                            None => {
-                                // invalid char snuck past the utf8_validation_iterator somehow???
-                                (Other, 1, 1)
-                            }
-                        }
-                    } else {
-                        // otherwise, it's not valid
-                        (Other, 1, 1) // implicit assumption: non-UTF8 char has display width 1
-                    }
-                } else {
-                    (
-                        match buf[byte] {
-                            // always take exactly 1 byte in strict ASCII mode
-                            0x20 => Space,
-                            0x09 => Tab,
-                            0x08 => Backspace,
-                            _ => Other,
-                        },
-                        1,
-                        1,
-                    )
-                };
+                // figure out how big the next char is, if it's UTF-8
+                let (ctype, cwidth, nbytes) = next_char_info(options.uflag, &buf, byte);
 
                 // now figure out how many columns this char takes up, and maybe print it
                 let tabs_buffered = init || options.aflag;
                 match ctype {
-                    Space | Tab => {
+                    CharType::Space | CharType::Tab => {
                         // compute next col, but only write space or tab chars if not buffering
-                        col += if ctype == Space {
+                        col += if ctype == CharType::Space {
                             1
                         } else {
                             next_tabstop(ts, col).unwrap_or(1)
@@ -292,19 +308,19 @@ fn unexpand(options: Options) {
                             scol = col; // now printed up to this column
                         }
                     }
-                    Other | Backspace => {
+                    CharType::Other | CharType::Backspace => {
                         // always
                         write_tabs(
                             &mut output,
                             ts,
                             scol,
                             col,
-                            pctype == Tab,
+                            pctype == CharType::Tab,
                             init,
                             options.aflag,
                         );
                         init = false; // no longer at the start of a line
-                        col = if ctype == Other {
+                        col = if ctype == CharType::Other {
                             // use computed width
                             col + cwidth
                         } else if col > 0 {
@@ -323,7 +339,15 @@ fn unexpand(options: Options) {
             }
 
             // write out anything remaining
-            write_tabs(&mut output, ts, scol, col, pctype == Tab, init, true);
+            write_tabs(
+                &mut output,
+                ts,
+                scol,
+                col,
+                pctype == CharType::Tab,
+                init,
+                true,
+            );
             safe_unwrap!(output.flush());
             buf.truncate(0); // clear out the buffer
         }
