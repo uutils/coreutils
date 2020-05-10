@@ -77,8 +77,8 @@ pub fn uumain(args: Vec<String>) -> i32 {
         "",
         "Display the process audit (not available on Linux)",
     );
-    opts.optflag("G", "", "Display the different group IDs");
-    opts.optflag("g", "", "Display the effective group ID as a number");
+    opts.optflag("G", "groups", "Display the different group IDs");
+    opts.optflag("g", "group", "Display the effective group ID as a number");
     opts.optflag(
         "n",
         "",
@@ -87,7 +87,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     opts.optflag("P", "", "Display the id as a password file entry");
     opts.optflag("p", "", "Make the output human-readable");
     opts.optflag("r", "", "Display the real ID for the -g and -u options");
-    opts.optflag("u", "", "Display the effective user ID as a number");
+    opts.optflag("u", "user", "Display the effective user ID as a number");
 
     let matches = opts.parse(args);
 
@@ -298,7 +298,10 @@ fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
         .map(|p| (p.uid(), p.gid()))
         .unwrap_or((getuid(), getgid()));
 
-    let groups = Passwd::locate(uid).unwrap().belongs_to();
+    let groups = match Passwd::locate(uid) {
+        Ok(p) => p.belongs_to(),
+        Err(e) => crash!(1, "Could not find uid {}: {}", uid, e),
+    };
 
     print!("uid={}({})", uid, entries::uid2usr(uid).unwrap());
     print!(" gid={}({})", gid, entries::gid2grp(gid).unwrap());
