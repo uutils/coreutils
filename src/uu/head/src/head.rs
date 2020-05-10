@@ -14,6 +14,7 @@
 #[macro_use]
 extern crate uucore;
 
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -26,6 +27,7 @@ static LONG_HELP: &str = "";
 enum FilterMode {
     Bytes(usize),
     Lines(usize),
+    NLines(usize),
 }
 
 struct Settings {
@@ -74,7 +76,6 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .parse(new_args);
 
     let use_bytes = matches.opt_present("c");
-
     // TODO: suffixes (e.g. b, kB, etc.)
     match matches.opt_str("n") {
         Some(n) => {
@@ -82,8 +83,17 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 show_error!("cannot specify both --bytes and --lines.");
                 return 1;
             }
-            match n.parse::<usize>() {
-                Ok(m) => settings.mode = FilterMode::Lines(m),
+
+            match n.parse::<isize>() {
+                Ok(m) => {
+                    settings.mode = if m < 0 {
+                        let m: usize = m.abs() as usize;
+                        FilterMode::NLines(m)
+                    } else {
+                        let m: usize = m.abs() as usize;
+                        FilterMode::Lines(m)
+                    }
+                }
                 Err(e) => {
                     show_error!("invalid line count '{}': {}", n, e);
                     return 1;
@@ -158,10 +168,11 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
     let b = options.len();
 
     while a < b {
+        let previous = options[a - 1].clone();
         let current = options[a].clone();
         let current = current.as_bytes();
 
-        if current.len() > 1 && current[0] == b'-' {
+        if previous != "-n" && current.len() > 1 && current[0] == b'-' {
             let len = current.len();
             for pos in 1..len {
                 // Ensure that the argument is only made out of digits
@@ -196,6 +207,17 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
         FilterMode::Lines(count) => {
             for line in reader.lines().take(count) {
                 println!("{}", line.unwrap());
+            }
+        }
+        FilterMode::NLines(count) => {
+            let mut vector: VecDeque<String> = VecDeque::new();
+
+            for line in reader.lines() {
+                vector.push_back(line.unwrap());
+                if vector.len() <= count {
+                    continue;
+                }
+                println!("{}", vector.pop_front().unwrap());
             }
         }
     }
