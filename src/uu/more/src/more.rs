@@ -41,6 +41,12 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub fn uumain(args: Vec<String>) -> i32 {
     let mut opts = Options::new();
 
+    // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)
+    if args.len() < 2 {
+        println!("{}: incorrect usage", args[0]);
+        return 1;
+    }
+
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("v", "version", "output version information and exit");
 
