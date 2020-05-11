@@ -46,6 +46,7 @@ macro_rules! generic {
     };
 }
 generic! {
+    "arch", test_arch;
     "base32", test_base32;
     "base64", test_base64;
     "basename", test_basename;
