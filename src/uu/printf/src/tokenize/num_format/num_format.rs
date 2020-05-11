@@ -245,7 +245,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
             // otherwise we'll interpret the argument as a number
             // using the appropriate Formatter
             let in_str = in_str_opt.expect(
-                "please send the devs this message: 
+                "please send the devs this message:
                 \n get_provided is failing to ret as Some(0) on no str ");
             // first get information about the beginning of the
             // numeric argument that would be useful for

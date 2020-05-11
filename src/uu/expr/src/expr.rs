@@ -128,10 +128,10 @@ Exit status is 0 if EXPRESSION is neither null nor 0, 1 if EXPRESSION is null
 or 0, 2 if EXPRESSION is syntactically invalid, and 3 if an error occurred.
 
 Environment variables:
-	* EXPR_DEBUG_TOKENS=1   dump expression's tokens
-	* EXPR_DEBUG_RPN=1      dump expression represented in reverse polish notation
-	* EXPR_DEBUG_SYA_STEP=1 dump each parser step
-	* EXPR_DEBUG_AST=1      dump expression represented abstract syntax tree"#
+    * EXPR_DEBUG_TOKENS=1   dump expression's tokens
+    * EXPR_DEBUG_RPN=1      dump expression represented in reverse polish notation
+    * EXPR_DEBUG_SYA_STEP=1 dump each parser step
+    * EXPR_DEBUG_AST=1      dump expression represented abstract syntax tree"#
     );
 }
 

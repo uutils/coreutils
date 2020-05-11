@@ -36,7 +36,7 @@ set_env CARGO_MAKE_CARGO_BUILD_TEST_FLAGS ""
 # determine features
 env_features = get_env CARGO_FEATURES
 if is_empty "${env_features}"
-    env_features = get_env FEATURES
+	env_features = get_env FEATURES
 end_if
 if is_empty "${env_features}"
 	if eq "${CARGO_MAKE_RUST_TARGET_OS}" "macos"
@@ -61,7 +61,7 @@ end_if
 # set build flags from features
 if not is_empty "${features}"
 	set_env CARGO_MAKE_VAR_BUILD_TEST_FEATURES "${features}"
-    set_env CARGO_MAKE_CARGO_BUILD_TEST_FLAGS "--features ${features}"
+	set_env CARGO_MAKE_CARGO_BUILD_TEST_FLAGS "--features ${features}"
 end_if
 # determine show-utils helper script
 show_utils = set "util/show-utils.sh"
@@ -96,7 +96,7 @@ description = "## *DEFAULT* Build (debug-mode) and test project"
 category = "[project]"
 dependencies = [
 	"action-build-debug",
-    "test-terse",
+	"test-terse",
 ]
 
 ##
@@ -106,8 +106,8 @@ description = "## Build (release-mode) project"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
-    "action-build-release",
-    "core::post-build",
+	"action-build-release",
+	"core::post-build",
 ]
 
 [tasks.build-debug]
@@ -122,8 +122,8 @@ description = "## Build (release-mode) project example(s); usage: `cargo make (b
 category = "[project]"
 dependencies = [
 	"core::pre-build",
-    "action-build-examples",
-    "core::post-build",
+	"action-build-examples",
+	"core::post-build",
 ]
 
 [tasks.build-features]
@@ -131,8 +131,8 @@ description = "## Build (with features; release-mode) project; usage: `cargo mak
 category = "[project]"
 dependencies = [
 	"core::pre-build",
-    "action-build-features",
-    "core::post-build",
+	"action-build-features",
+	"core::post-build",
 ]
 
 [tasks.debug]
@@ -185,8 +185,8 @@ description = "## Run project tests"
 category = "[project]"
 dependencies = [
 	"core::pre-test",
-    "core::test",
-    "core::post-test",
+	"core::test",
+	"core::post-test",
 ]
 
 [tasks.test-terse]
@@ -194,8 +194,8 @@ description = "## Run project tests (with terse/summary output)"
 category = "[project]"
 dependencies = [
 	"core::pre-test",
-    "action-test_quiet",
-    "core::post-test",
+	"action-test_quiet",
+	"core::post-test",
 ]
 
 [tasks.uninstall]
@@ -213,8 +213,8 @@ category = "[project]"
 dependencies = [
 	"core::pre-build",
 	"action-determine-utils",
-    "action-build-utils",
-    "core::post-build",
+	"action-build-utils",
+	"core::post-build",
 ]
 
 [tasks.uutil]

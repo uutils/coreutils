@@ -331,19 +331,19 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
    auto   accept optional single/two letter suffix:
 
-		  1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
+          1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
 
    si     accept optional single letter suffix:
 
-		  1K = 1000, 1M = 1000000, ...
+          1K = 1000, 1M = 1000000, ...
 
    iec    accept optional single letter suffix:
 
-		  1K = 1024, 1M = 1048576, ...
+          1K = 1024, 1M = 1048576, ...
 
    iec-i  accept optional two-letter suffix:
 
-		  1Ki = 1024, 1Mi = 1048576, ..."
+          1Ki = 1024, 1Mi = 1048576, ..."
         );
 
         return 0;
