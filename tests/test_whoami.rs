@@ -9,6 +9,10 @@ fn test_normal() {
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
     println!("env::var(CI).is_ok() = {}", env::var("CI").is_ok());
+    
+    for (key, value) in env::vars() {
+        println!("{}: {}", key, value);
+    }
     if env::var("CI").is_ok() && result.stderr.contains("failed to get username") {
         return;
     }
