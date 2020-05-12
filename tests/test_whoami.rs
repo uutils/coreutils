@@ -1,4 +1,5 @@
 use common::util::*;
+use std::env;
 
 #[test]
 fn test_normal() {
