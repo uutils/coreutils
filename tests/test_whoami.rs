@@ -7,7 +7,7 @@ fn test_normal() {
     let result = ucmd.run();
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
-    if result.stderr.contains("failed to get username") {
+    if env::var("CI").is_ok() && result.stderr.contains("failed to get username") {
         return;
     }
 
@@ -23,13 +23,13 @@ fn test_normal_compare_id() {
 
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
-    if result.stderr.contains("failed to get username") {
+    if env::var("CI").is_ok() && result.stderr.contains("failed to get username") {
         return;
     }
     assert!(result.success);
     let ts = TestScenario::new("id");
     let id = ts.cmd("id").arg("-un").run();
-    if id.stderr.contains("cannot find name for user ID") {
+    if env::var("CI").is_ok() && id.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
