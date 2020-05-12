@@ -8,7 +8,7 @@ fn test_normal() {
     let result = ucmd.run();
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
-    println!("env::var("CI").is_ok() = {}", env::var("CI").is_ok());
+    println!("env::var(CI).is_ok() = {}", env::var("CI").is_ok());
     if env::var("CI").is_ok() && result.stderr.contains("failed to get username") {
         return;
     }
