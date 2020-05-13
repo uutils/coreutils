@@ -3,8 +3,9 @@ use std::env;
 
 #[test]
 fn test_normal() {
-    let result = TestScenario::new(util_name!()).ucmd().run();
+    let (_, mut ucmd) = at_and_ucmd!();
 
+    let result = ucmd.run();
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
     println!("env::var(CI).is_ok() = {}", env::var("CI").is_ok());
@@ -27,7 +28,9 @@ fn test_normal() {
 
 #[test]
 fn test_normal_compare_id() {
-    let result = TestScenario::new(util_name!()).ucmd().run();
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    let result = ucmd.run();
 
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
@@ -40,7 +43,8 @@ fn test_normal_compare_id() {
         return;
     }
     assert!(result.success);
-    let id = TestScenario::new("id").ucmd().arg("-un").run();
+    let ts = TestScenario::new("id");
+    let id = ts.cmd("id").arg("-un").run();
 
     if env::var("USER").is_ok()
         && env::var("USER").unwrap() == "runner"
