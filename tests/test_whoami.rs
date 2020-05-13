@@ -3,9 +3,8 @@ use std::env;
 
 #[test]
 fn test_normal() {
-    let (_, mut ucmd) = at_and_ucmd!();
+    let result = TestScenario::new(util_name!()).ucmd_keepenv().run();
 
-    let result = ucmd.run();
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
     println!("env::var(CI).is_ok() = {}", env::var("CI").is_ok());
@@ -23,9 +22,7 @@ fn test_normal() {
 
 #[test]
 fn test_normal_compare_id() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.run();
+    let result = TestScenario::new(util_name!()).ucmd_keepenv().run();
 
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
@@ -33,8 +30,8 @@ fn test_normal_compare_id() {
         return;
     }
     assert!(result.success);
-    let ts = TestScenario::new("id");
-    let id = ts.cmd("id").arg("-un").run();
+    let id = TestScenario::new("id").ucmd_keepenv().arg("-un").run();
+
     if env::var("CI").is_ok() && id.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
