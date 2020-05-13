@@ -420,7 +420,7 @@ jobs:
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
         mkdir -p "${COVERAGE_REPORT_DIR}"
-        grcov . --output-type lcov --output-file "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"
+        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"
         echo ::set-output name=report::${COVERAGE_REPORT_FILE}
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v1
