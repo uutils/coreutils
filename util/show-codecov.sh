@@ -31,16 +31,16 @@ mkdir -p "${COVERAGE_REPORT_DIR}"
 export GRCOV_IGNORE_OPTION="--ignore build.rs --ignore \"/*\" --ignore \"[A-Za-z]:/*\""
 ## FixME: `grcov . ... ${GRCOV_IGNORE_OPTION}` fails, completely ignoring the contents of ${GRCOV_IGNORE_OPTION}
 # * build LCOV coverage file
-## FixME: grcov . --output-type lcov --output-path "${COVERAGE_REPORT_DIR}/../lcov.info" --branch ${GRCOV_IGNORE_OPTION}
-grcov . --output-type lcov --output-path "${COVERAGE_REPORT_DIR}/../lcov.info" --branch --ignore build.rs --ignore '/*' --ignore '[A-Za-z]:/*'
+## FixME: grcov . --output-type lcov --output-file "${COVERAGE_REPORT_DIR}/../lcov.info" --branch ${GRCOV_IGNORE_OPTION}
+grcov . --output-type lcov --output-file "${COVERAGE_REPORT_DIR}/../lcov.info" --branch --ignore build.rs --ignore '/*' --ignore '[A-Za-z]:/*'
 # * build HTML
 # -- use `genhtml` if available for display of additional branch coverage information
 genhtml --version 2>/dev/null 1>&2
 if [ $? -eq 0 ]; then
     genhtml "${COVERAGE_REPORT_DIR}/../lcov.info" --output-directory "${COVERAGE_REPORT_DIR}" --branch-coverage --function-coverage
 else
-    ## FixME: grcov . --output-type html --output-path "${COVERAGE_REPORT_DIR}" --branch ${GRCOV_IGNORE_OPTION}
-    grcov . --output-type html --output-path "${COVERAGE_REPORT_DIR}" --branch --ignore build.rs --ignore '/*' --ignore '[A-Za-z]:/*'
+    ## FixME: grcov . --output-type html --output-file "${COVERAGE_REPORT_DIR}" --branch ${GRCOV_IGNORE_OPTION}
+    grcov . --output-type html --output-file "${COVERAGE_REPORT_DIR}" --branch --ignore build.rs --ignore '/*' --ignore '[A-Za-z]:/*'
 fi
 if [ $? -ne 0 ]; then exit 1 ; fi
 
