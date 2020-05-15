@@ -62,6 +62,7 @@ generic! {
     "du", test_du;
     "echo", test_echo;
     "env", test_env;
+    "expand", test_expand;
     "expr", test_expr;
     "factor", test_factor;
     "false", test_false;
