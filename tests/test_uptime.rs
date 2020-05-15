@@ -9,5 +9,6 @@ fn test_uptime() {
 
     assert!(result.success);
     assert!(result.stdout.contains("load average:"));
-    assert!(result.stdout.contains("user"));
+    assert!(result.stdout.contains(" up "));
+    // Don't check for users as it doesn't show in some CI
 }
