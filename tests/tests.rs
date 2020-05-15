@@ -31,6 +31,7 @@ unix_only! {
     "stdbuf", test_stdbuf;
     "uname", test_uname;
     "unlink", test_unlink;
+    "uptime", test_uptime;
     "users", test_users;
     "who", test_who;
     // Be aware of the trailing semicolon after the last item
