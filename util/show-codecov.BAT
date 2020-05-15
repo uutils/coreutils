@@ -36,7 +36,7 @@ call genhtml --version 2>NUL 1>&2
 if NOT ERRORLEVEL 1 (
     call genhtml target/debug/lcov.info --output-directory "%COVERAGE_REPORT_DIR%" --branch-coverage --function-coverage
 ) else (
-    call grcov . --output-type html --output-path "%COVERAGE_REPORT_DIR%" --branch %GRCOV_IGNORE_OPTION%
+    call grcov . --output-type html --output-file "%COVERAGE_REPORT_DIR%" --branch %GRCOV_IGNORE_OPTION%
 )
 if ERRORLEVEL 1 goto _undefined_ 2>NUL || @for %%G in ("%COMSPEC%") do @title %%nG & @"%COMSPEC%" /d/c exit %ERRORLEVEL%
 
