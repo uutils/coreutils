@@ -1,0 +1,5 @@
+int main() {
+// The next line has both a leading & trailing tab
+	// with tabs=>	
+	return 0;
+}

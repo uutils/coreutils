@@ -1,0 +1,4 @@
+int foo() {
+    // with spaces
+    return 0;
+}
