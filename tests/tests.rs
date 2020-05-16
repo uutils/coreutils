@@ -78,6 +78,7 @@ generic! {
     "ls", test_ls;
     "mkdir", test_mkdir;
     "mktemp", test_mktemp;
+    "more", test_more;
     "mv", test_mv;
     "numfmt", test_numfmt;
     "nl", test_nl;
