@@ -15,7 +15,6 @@ path = "src/cp.rs"
 [dependencies]
 clap = "2.32.0"
 filetime = "0.2"
-getopts = "0.2.18"
 libc = "0.2.42"
 quick-error = "1.2.3"
 uucore = { version = "0.0.2", features = ["fs"] }

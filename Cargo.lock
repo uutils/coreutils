@@ -302,7 +302,6 @@ version = "0.0.1"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "filetime 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "getopts 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "ioctl-sys 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
