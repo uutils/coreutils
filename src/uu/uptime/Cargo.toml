@@ -12,6 +12,8 @@ path = "src/uptime.rs"
 [dependencies]
 getopts = "0.2.18"
 time = "0.1.40"
+chrono = "0.4"
+clap = "2.32"
 uucore = { version = "0.0.2", features = ["utmpx"] }
 
 [[bin]]
