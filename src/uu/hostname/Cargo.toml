@@ -10,7 +10,7 @@ name = "uu_hostname"
 path = "src/hostname.rs"
 
 [dependencies]
-getopts = "0.2"
+clap = "2.32"
 libc = "0.2.42"
 uucore = "0.0.2"
 winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
