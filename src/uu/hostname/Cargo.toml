@@ -14,6 +14,7 @@ getopts = "0.2"
 libc = "0.2.42"
 uucore = "0.0.2"
 winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
+hostname = { version = "^0.3", features = ["set"] }
 
 [[bin]]
 name = "hostname"
