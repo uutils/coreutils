@@ -25,11 +25,7 @@ use std::net::ToSocketAddrs;
 use std::str;
 
 #[cfg(windows)]
-use uucore::wide::*;
-#[cfg(windows)]
 use winapi::shared::minwindef::MAKEWORD;
-#[cfg(windows)]
-use winapi::um::sysinfoapi::{ComputerNamePhysicalDnsHostname, SetComputerNameExW};
 #[cfg(windows)]
 use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
