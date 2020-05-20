@@ -12,7 +12,7 @@ path = "src/hostname.rs"
 [dependencies]
 clap = "2.32"
 libc = "0.2.42"
-uucore = "0.0.2"
+uucore = { version = "0.0.2", features = [ "wide" ] }
 winapi = { version = "0.3", features = ["sysinfoapi", "winsock2"] }
 
 [[bin]]
