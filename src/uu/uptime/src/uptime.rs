@@ -12,8 +12,12 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
-extern crate getopts;
+extern crate chrono;
+extern crate clap;
 extern crate time;
+
+use chrono::{Local, TimeZone, Utc};
+use clap::{App, Arg};
 
 #[macro_use]
 extern crate uucore;
@@ -21,10 +25,11 @@ extern crate uucore;
 pub use uucore::libc;
 use uucore::libc::time_t;
 
-use getopts::Options;
-
-static NAME: &str = "uptime";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
+the number of users on the system, and the average number of jobs\n\
+in the run queue over the last 1, 5 and 15 minutes.";
+static OPT_SINCE: &str = "SINCE";
 
 #[cfg(unix)]
 use libc::getloadavg;
@@ -34,38 +39,24 @@ extern "C" {
     fn GetTickCount() -> libc::uint32_t;
 }
 
+fn get_usage() -> String {
+    format!("{0} [OPTION]...", executable!())
+}
+
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = Options::new();
+    let usage = get_usage();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_SINCE)
+                .short("s")
+                .long("since")
+                .help("system up since"),
+        )
+        .get_matches_from(&args);
 
-    opts.optflag("v", "version", "output version information and exit");
-    opts.optflag("h", "help", "display this help and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-    if matches.opt_present("help") || !matches.free.is_empty() {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {0} [OPTION]", NAME);
-        println!();
-        println!(
-            "{}",
-            opts.usage(
-                "Print the current time, the length of time the system has been up,\n\
-                 the number of users on the system, and the average number of jobs\n\
-                 in the run queue over the last 1, 5 and 15 minutes."
-            )
-        );
-        return 0;
-    }
-
-    print_time();
     let (boot_time, user_count) = process_utmpx();
     let uptime = get_uptime(boot_time);
     if uptime < 0 {
@@ -73,7 +64,14 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         1
     } else {
-        let upsecs = uptime / 100;
+        if matches.is_present(OPT_SINCE) {
+            let initial_date = Local.timestamp(Utc::now().timestamp() - uptime, 0);
+            println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
+            return 0;
+        }
+
+        print_time();
+        let upsecs = uptime;
         print_uptime(upsecs);
         print_nusers(user_count);
         print_loadavg();
@@ -164,7 +162,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         .ok()
         .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
         .and_then(|_| proc_uptime.split_whitespace().next())
-        .and_then(|s| s.replace(".", "").parse().ok())
+        .and_then(|s| s.split('.').next().unwrap_or("0").parse().ok())
     {
         n
     } else {
@@ -172,7 +170,7 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
             Some(t) => {
                 let now = time::get_time().sec;
                 let boottime = t as i64;
-                (now - boottime) * 100
+                now - boottime
             }
             _ => -1,
         }
