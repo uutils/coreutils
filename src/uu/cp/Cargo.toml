@@ -13,7 +13,7 @@ name = "uu_cp"
 path = "src/cp.rs"
 
 [dependencies]
-clap = "2.32.0"
+clap = "2.32"
 filetime = "0.2"
 libc = "0.2.42"
 quick-error = "1.2.3"
