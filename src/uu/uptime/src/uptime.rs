@@ -26,7 +26,7 @@ pub use uucore::libc;
 use uucore::libc::time_t;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static ABOUT: &str = "Print the current time, the length of time the system has been up,\n\
+static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
 the number of users on the system, and the average number of jobs\n\
 in the run queue over the last 1, 5 and 15 minutes.";
 static OPT_SINCE: &str = "SINCE";
