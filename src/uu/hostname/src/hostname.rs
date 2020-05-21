@@ -38,7 +38,7 @@ use libc::gethostname;
 #[cfg(not(windows))]
 use libc::sethostname;
 
-static ABOUT: &str = "Print or set the system's host name.";
+static ABOUT: &str = "Display or set the system's host name.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_DOMAIN: &str = "domain";
