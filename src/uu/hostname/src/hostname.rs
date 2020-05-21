@@ -114,7 +114,7 @@ fn execute(args: Vec<String>) -> i32 {
     }
 }
 
-fn display_hostname(matches: ArgMatches) -> i32 {
+fn display_hostname(matches: &ArgMatches) -> i32 {
     let hostname = return_if_err!(1, xgethostname());
 
     if matches.is_present(OPT_IP_ADDRESS) {
