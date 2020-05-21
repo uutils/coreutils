@@ -10,6 +10,7 @@
  */
 
 extern crate clap;
+extern crate hostname;
 extern crate libc;
 #[cfg(windows)]
 extern crate winapi;
@@ -19,24 +20,14 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
-use std::io;
-use std::iter::repeat;
+use std::ffi::OsStr;
 use std::net::ToSocketAddrs;
 use std::str;
 
 #[cfg(windows)]
-use uucore::wide::*;
-#[cfg(windows)]
 use winapi::shared::minwindef::MAKEWORD;
 #[cfg(windows)]
-use winapi::um::sysinfoapi::{ComputerNamePhysicalDnsHostname, SetComputerNameExW};
-#[cfg(windows)]
-use winapi::um::winsock2::{GetHostNameW, WSACleanup, WSAStartup};
-
-#[cfg(not(windows))]
-use libc::gethostname;
-#[cfg(not(windows))]
-use libc::sethostname;
+use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
 static ABOUT: &str = "Display or set the system's host name.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -104,7 +95,7 @@ fn execute(args: Vec<String>) -> i32 {
     match matches.value_of(OPT_HOST) {
         None => display_hostname(matches),
         Some(host) => {
-            if let Err(err) = xsethostname(host) {
+            if let Err(err) = hostname::set(OsStr::new(matches.free.last().unwrap())) {
                 show_error!("{}", err);
                 1
             } else {
@@ -115,7 +106,7 @@ fn execute(args: Vec<String>) -> i32 {
 }
 
 fn display_hostname(matches: &ArgMatches) -> i32 {
-    let hostname = return_if_err!(1, xgethostname());
+    let hostname = hostname::get().unwrap().into_string().unwrap();
 
     if matches.is_present(OPT_IP_ADDRESS) {
         // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
@@ -168,75 +159,5 @@ fn display_hostname(matches: &ArgMatches) -> i32 {
         println!("{}", hostname);
 
         0
-    }
-}
-
-#[cfg(not(windows))]
-fn xgethostname() -> io::Result<String> {
-    use std::ffi::CStr;
-
-    let namelen = 256;
-    let mut name: Vec<u8> = repeat(0).take(namelen).collect();
-    let err = unsafe {
-        gethostname(
-            name.as_mut_ptr() as *mut libc::c_char,
-            namelen as libc::size_t,
-        )
-    };
-
-    if err == 0 {
-        let null_pos = name.iter().position(|byte| *byte == 0).unwrap_or(namelen);
-        if null_pos == namelen {
-            name.push(0);
-        }
-
-        Ok(CStr::from_bytes_with_nul(&name[..=null_pos])
-            .unwrap()
-            .to_string_lossy()
-            .into_owned())
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(windows)]
-fn xgethostname() -> io::Result<String> {
-    let namelen = 256;
-    let mut name: Vec<u16> = repeat(0).take(namelen).collect();
-    let err = unsafe { GetHostNameW(name.as_mut_ptr(), namelen as libc::c_int) };
-
-    if err == 0 {
-        Ok(String::from_wide_null(&name))
-    } else {
-        Err(io::Error::last_os_error())
-    }
-}
-
-#[cfg(not(windows))]
-fn xsethostname(name: &str) -> io::Result<()> {
-    let vec_name: Vec<libc::c_char> = name.bytes().map(|c| c as libc::c_char).collect();
-
-    let err = unsafe { sethostname(vec_name.as_ptr(), vec_name.len() as _) };
-
-    if err != 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-#[cfg(windows)]
-fn xsethostname(name: &str) -> io::Result<()> {
-    use std::ffi::OsStr;
-
-    let wide_name = OsStr::new(name).to_wide_null();
-
-    let err = unsafe { SetComputerNameExW(ComputerNamePhysicalDnsHostname, wide_name.as_ptr()) };
-
-    if err == 0 {
-        // NOTE: the above is correct, failure is when the function returns 0 apparently
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
     }
 }
