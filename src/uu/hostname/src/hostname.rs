@@ -20,7 +20,6 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
-use std::ffi::OsStr;
 use std::net::ToSocketAddrs;
 use std::str;
 
@@ -93,7 +92,7 @@ fn execute(args: Vec<String>) -> i32 {
         .get_matches_from(&args);
 
     match matches.value_of(OPT_HOST) {
-        None => display_hostname(matches),
+        None => display_hostname(&matches),
         Some(host) => {
             if let Err(err) = hostname::set(host) {
                 show_error!("{}", err);
