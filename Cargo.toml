@@ -211,7 +211,7 @@ feat_os_windows_legacy = [
     "whoami",
 ]
 ##
-# * bypass ~ use "uu_" prefix to avoid collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
+# * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = [ "uu_test" ]
 
 [workspace]
