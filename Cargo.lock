@@ -660,7 +660,7 @@ dependencies = [
 name = "hostname"
 version = "0.0.1"
 dependencies = [
- "getopts 0.2.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hostname 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.62 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.2 (git+https://github.com/uutils/uucore/?tag=0.0.2)",
