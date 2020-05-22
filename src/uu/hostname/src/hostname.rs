@@ -95,7 +95,7 @@ fn execute(args: Vec<String>) -> i32 {
     match matches.value_of(OPT_HOST) {
         None => display_hostname(matches),
         Some(host) => {
-            if let Err(err) = hostname::set(OsStr::new(matches.free.last().unwrap())) {
+            if let Err(err) = hostname::set(host) {
                 show_error!("{}", err);
                 1
             } else {
