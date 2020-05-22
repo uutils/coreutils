@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-extern crate getopts;
+extern crate clap;
 extern crate hostname;
 extern crate libc;
 #[cfg(windows)]
@@ -18,7 +18,7 @@ extern crate winapi;
 #[macro_use]
 extern crate uucore;
 
-use getopts::Matches;
+use clap::{App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
 use std::ffi::OsStr;
 use std::net::ToSocketAddrs;
@@ -29,9 +29,14 @@ use winapi::shared::minwindef::MAKEWORD;
 #[cfg(windows)]
 use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
-const SYNTAX: &str = "[OPTION]... [HOSTNAME]";
-const SUMMARY: &str = "Print or set the system's host name.";
-const LONG_HELP: &str = "";
+static ABOUT: &str = "Display or set the system's host name.";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_DOMAIN: &str = "domain";
+static OPT_IP_ADDRESS: &str = "ip-address";
+static OPT_FQDN: &str = "fqdn";
+static OPT_SHORT: &str = "short";
+static OPT_HOST: &str = "host";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     #![allow(clippy::let_and_return)]
@@ -52,53 +57,58 @@ pub fn uumain(args: Vec<String>) -> i32 {
     result
 }
 
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [HOSTNAME]", executable!())
+}
 fn execute(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag(
-            "d",
-            "domain",
-            "Display the name of the DNS domain if possible",
+    let usage = get_usage();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_DOMAIN)
+                .short("d")
+                .long("domain")
+                .help("Display the name of the DNS domain if possible"),
         )
-        .optflag(
-            "i",
-            "ip-address",
-            "Display the network address(es) of the host",
+        .arg(
+            Arg::with_name(OPT_IP_ADDRESS)
+                .short("i")
+                .long("ip-address")
+                .help("Display the network address(es) of the host"),
         )
         // TODO: support --long
-        .optflag(
-            "f",
-            "fqdn",
-            "Display the FQDN (Fully Qualified Domain Name) (default)",
+        .arg(
+            Arg::with_name(OPT_FQDN)
+                .short("f")
+                .long("fqdn")
+                .help("Display the FQDN (Fully Qualified Domain Name) (default)"),
         )
-        .optflag(
-            "s",
-            "short",
+        .arg(Arg::with_name(OPT_SHORT).short("s").long("short").help(
             "Display the short hostname (the portion before the first dot) if \
-             possible",
-        )
-        .parse(args);
+                possible",
+        ))
+        .arg(Arg::with_name(OPT_HOST))
+        .get_matches_from(&args);
 
-    match matches.free.len() {
-        0 => display_hostname(matches),
-        1 => {
-            if let Err(err) = hostname::set(OsStr::new(matches.free.last().unwrap())) {
+    match matches.value_of(OPT_HOST) {
+        None => display_hostname(matches),
+        Some(host) => {
+            if let Err(err) = hostname::set(host) {
                 show_error!("{}", err);
                 1
             } else {
                 0
             }
         }
-        _ => {
-            show_error!("{}", msg_wrong_number_of_arguments!(0, 1));
-            1
-        }
     }
 }
 
-fn display_hostname(matches: Matches) -> i32 {
+fn display_hostname(matches: &ArgMatches) -> i32 {
     let hostname = hostname::get().unwrap().into_string().unwrap();
 
-    if matches.opt_present("i") {
+    if matches.is_present(OPT_IP_ADDRESS) {
         // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
         // This was originally supposed to use std::net::lookup_host, but that seems to be
         // deprecated.  Perhaps we should use the dns-lookup crate?
@@ -134,10 +144,10 @@ fn display_hostname(matches: Matches) -> i32 {
             }
         }
     } else {
-        if matches.opt_present("s") || matches.opt_present("d") {
+        if matches.is_present(OPT_SHORT) || matches.is_present(OPT_DOMAIN) {
             let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
             if let Some(ci) = it.next() {
-                if matches.opt_present("s") {
+                if matches.is_present(OPT_SHORT) {
                     println!("{}", &hostname[0..ci.0]);
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);
