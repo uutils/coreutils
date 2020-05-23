@@ -18,6 +18,9 @@ travis-ci = { repository = "uutils/uucore" }
 [lib]
 path="src/lib/lib.rs"
 
+[workspace]
+members=["src/uucore_procs"]
+
 [dependencies]
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
