@@ -1,0 +1,18 @@
+[package]
+name = "uucore_procs"
+version = "0.0.2"
+authors = []
+license = "MIT"
+description = "`uucore` proc-macros for use by various uutils projects"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version="1.0" } ## debug: use `features=["extra-traits"]` to add Debug traits to structs (for `println!("{:?}", ...)`)
+
+[features]
+default = []
+debug = []
