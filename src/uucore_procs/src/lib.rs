@@ -54,7 +54,7 @@ pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let result = quote::quote! {
         fn main() {
             use std::io::Write;
-            uucore::panic::install_sigpipe_hook();
+            uucore::panic::mute_sigpipe_panic();
             let code = #f;
             std::io::stdout().flush().expect("could not flush stdout");
             std::process::exit(code);
