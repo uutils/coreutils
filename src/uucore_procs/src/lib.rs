@@ -26,9 +26,9 @@ macro_rules! proc_dbg {
 
 // main!( EXPR )
 // generates a `main()` function for utilities within the uutils group
-// EXPR == syn::Expr::Lit::String | syn::Expr::Path::Ident ~ EXPR contains the location of the utility `uumain()` function
-//* for future use of "eager" macros and more generic use, EXPR may be in either STRING or IDENT form
-//* for ease-of-use, the trailing "::uumain" is optional and will be added if needed
+// EXPR == syn::Expr::Lit::String | syn::Expr::Path::Ident ~ EXPR contains the lexical path to the utility `uumain()` function
+//* NOTE: EXPR is ultimately expected to be a multi-segment lexical path (eg, `crate::func`); so, if a single segment path is provided, a trailing "::uumain" is automatically added
+//* for more generic use (and future use of "eager" macros), EXPR may be in either STRING or IDENT form
 
 struct Tokens {
     expr: syn::Expr,
@@ -45,30 +45,32 @@ impl syn::parse::Parse for Tokens {
 #[proc_macro]
 pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let Tokens { expr } = syn::parse_macro_input!(stream as Tokens);
+    proc_dbg!(&expr);
+
+    const ARG_PANIC_TEXT: &str = "expected ident lexical path (or a literal string version) to 'uumain()' as argument";
+
     // match EXPR as a string literal or an ident path, o/w panic!()
-    let expr = match expr {
-        syn::Expr::Lit(expr) => match expr.lit {
-            syn::Lit::Str(ref lit) => {
-                let mut s = lit.value();
-                if !s.ends_with("::uumain") {
-                    s += "::uumain";
-                }
-                syn::LitStr::new(&s, proc_macro2::Span::call_site())
-                    .parse()
-                    .unwrap()
+    let mut expr = match expr {
+        syn::Expr::Lit(expr_lit) => {
+            match expr_lit.lit {
+                syn::Lit::Str(ref lit_str) => { lit_str.parse::<syn::ExprPath>().unwrap() },
+                _ => panic!(ARG_PANIC_TEXT),
             }
-            _ => panic!(),
         },
-        syn::Expr::Path(expr) => {
-            if &expr.path.segments.last().unwrap().ident.to_string() != "uumain" {
-                syn::parse_quote!( #expr::uumain )
-            } else {
-                expr
-            }
-        }
-        _ => panic!(),
+        syn::Expr::Path(expr_path) => { expr_path },
+        _ => panic!(ARG_PANIC_TEXT),
     };
+    proc_dbg!(&expr);
+
+    // for a single segment ExprPath argument, add trailing '::uumain' segment
+    if expr.path.segments.len() < 2 {
+        expr = syn::parse_quote!( #expr::uumain );
+    };
+    proc_dbg!(&expr);
+
     let f = quote::quote! { #expr(uucore::args().collect()) };
+    proc_dbg!(&f);
+
     // generate a uutils utility `main()` function, tailored for the calling utility
     let result = quote::quote! {
         fn main() {
