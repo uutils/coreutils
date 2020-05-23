@@ -37,12 +37,12 @@ use libc::time_t;
 use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups, getpwnam, getpwuid, group, passwd};
 
-use std::ptr;
-use std::io::ErrorKind;
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
-use std::ffi::{CStr, CString};
 use std::borrow::Cow;
+use std::ffi::{CStr, CString};
+use std::io::Error as IOError;
+use std::io::ErrorKind;
+use std::io::Result as IOResult;
+use std::ptr;
 
 extern "C" {
     fn getgrouplist(
@@ -75,9 +75,9 @@ pub struct Passwd {
 }
 
 macro_rules! cstr2cow {
-    ($v:expr) => (
+    ($v:expr) => {
         unsafe { CStr::from_ptr($v).to_string_lossy() }
-    )
+    };
 }
 
 impl Passwd {
@@ -191,17 +191,20 @@ pub trait Locate<K> {
 }
 
 macro_rules! f {
-    ($fnam:ident, $fid:ident, $t:ident, $st:ident) => (
+    ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
         impl Locate<$t> for $st {
             fn locate(k: $t) -> IOResult<Self> {
                 unsafe {
                     let data = $fid(k);
                     if !data.is_null() {
                         Ok($st {
-                            inner: ptr::read(data as *const _)
+                            inner: ptr::read(data as *const _),
                         })
                     } else {
-                        Err(IOError::new(ErrorKind::NotFound, format!("No such id: {}", k)))
+                        Err(IOError::new(
+                            ErrorKind::NotFound,
+                            format!("No such id: {}", k),
+                        ))
                     }
                 }
             }
@@ -213,26 +216,32 @@ macro_rules! f {
                     let data = unsafe { $fid(id) };
                     if !data.is_null() {
                         Ok($st {
-                            inner: unsafe {ptr::read(data as *const _)}
+                            inner: unsafe { ptr::read(data as *const _) },
                         })
                     } else {
-                        Err(IOError::new(ErrorKind::NotFound, format!("No such id: {}", id)))
+                        Err(IOError::new(
+                            ErrorKind::NotFound,
+                            format!("No such id: {}", id),
+                        ))
                     }
                 } else {
                     unsafe {
                         let data = $fnam(CString::new(k).unwrap().as_ptr());
                         if !data.is_null() {
                             Ok($st {
-                                inner: ptr::read(data as *const _)
+                                inner: ptr::read(data as *const _),
                             })
                         } else {
-                            Err(IOError::new(ErrorKind::NotFound, format!("Not found: {}", k)))
+                            Err(IOError::new(
+                                ErrorKind::NotFound,
+                                format!("Not found: {}", k),
+                            ))
                         }
                     }
                 }
             }
         }
-    )
+    };
 }
 
 f!(getpwnam, getpwuid, uid_t, Passwd);

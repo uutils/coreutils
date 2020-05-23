@@ -84,13 +84,15 @@ impl<'a> CoreOptions<'a> {
                 eprintln!("{}", f);
                 ::std::process::exit(1);
             }
-        }.unwrap();
+        }
+        .unwrap();
         if matches.opt_present("help") {
             let usage_str = if self.help_text.display_usage {
                 format!(
                     "\n {}\n\n Reference\n",
                     self.options.usage(self.help_text.summary)
-                ).replace("Options:", " Options:")
+                )
+                .replace("Options:", " Options:")
             } else {
                 String::new()
             };
@@ -118,24 +120,24 @@ impl<'a> CoreOptions<'a> {
 
 #[macro_export]
 macro_rules! new_coreopts {
-    ($syntax: expr, $summary: expr, $long_help: expr) => (
+    ($syntax: expr, $summary: expr, $long_help: expr) => {
         uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
             name: executable!(),
             version: env!("CARGO_PKG_VERSION"),
             syntax: $syntax,
             summary: $summary,
             long_help: $long_help,
-            display_usage: true
+            display_usage: true,
         })
-    );
-    ($syntax: expr, $summary: expr, $long_help: expr, $display_usage: expr) => (
+    };
+    ($syntax: expr, $summary: expr, $long_help: expr, $display_usage: expr) => {
         uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
             name: executable!(),
             version: env!("CARGO_PKG_VERSION"),
             syntax: $syntax,
             summary: $summary,
             long_help: $long_help,
-            display_usage: $display_usage
+            display_usage: $display_usage,
         })
-    );
+    };
 }
