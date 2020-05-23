@@ -35,19 +35,19 @@ use super::libc;
 pub extern crate time;
 use self::time::{Timespec, Tm};
 
-use std::io::Result as IOResult;
-use std::io::Error as IOError;
-use std::ptr;
 use std::ffi::CString;
+use std::io::Error as IOError;
+use std::io::Result as IOResult;
+use std::ptr;
 
 pub use self::ut::*;
 use libc::utmpx;
 // pub use libc::getutxid;
 // pub use libc::getutxline;
 // pub use libc::pututxline;
+pub use libc::endutxent;
 pub use libc::getutxent;
 pub use libc::setutxent;
-pub use libc::endutxent;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use libc::utmpxname;
 #[cfg(target_os = "freebsd")]
@@ -57,53 +57,56 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
-    ($arr:expr) => (
-        $arr.iter().take_while(|i| **i > 0).map(|&i| i as u8 as char).collect::<String>()
-    )
+    ($arr:expr) => {
+        $arr.iter()
+            .take_while(|i| **i > 0)
+            .map(|&i| i as u8 as char)
+            .collect::<String>()
+    };
 }
 
 #[cfg(target_os = "linux")]
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
+    pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
-    pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
     pub const UT_IDSIZE: usize = 4;
 
-    pub use libc::EMPTY;
-    pub use libc::RUN_LVL;
+    pub use libc::ACCOUNTING;
     pub use libc::BOOT_TIME;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
+    pub use libc::DEAD_PROCESS;
+    pub use libc::EMPTY;
     pub use libc::INIT_PROCESS;
     pub use libc::LOGIN_PROCESS;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
+    pub use libc::RUN_LVL;
     pub use libc::USER_PROCESS;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::ACCOUNTING;
 }
 
 #[cfg(target_os = "macos")]
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 
-    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
-    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
     pub use libc::_UTX_HOSTSIZE as UT_HOSTSIZE;
     pub use libc::_UTX_IDSIZE as UT_IDSIZE;
+    pub use libc::_UTX_LINESIZE as UT_LINESIZE;
+    pub use libc::_UTX_USERSIZE as UT_NAMESIZE;
 
-    pub use libc::EMPTY;
-    pub use libc::RUN_LVL;
+    pub use libc::ACCOUNTING;
     pub use libc::BOOT_TIME;
-    pub use libc::NEW_TIME;
-    pub use libc::OLD_TIME;
+    pub use libc::DEAD_PROCESS;
+    pub use libc::EMPTY;
     pub use libc::INIT_PROCESS;
     pub use libc::LOGIN_PROCESS;
-    pub use libc::USER_PROCESS;
-    pub use libc::DEAD_PROCESS;
-    pub use libc::ACCOUNTING;
-    pub use libc::SIGNATURE;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
+    pub use libc::RUN_LVL;
     pub use libc::SHUTDOWN_TIME;
+    pub use libc::SIGNATURE;
+    pub use libc::USER_PROCESS;
 }
 
 #[cfg(target_os = "freebsd")]
@@ -117,15 +120,15 @@ mod ut {
     pub const UT_IDSIZE: usize = 8;
     pub const UT_HOSTSIZE: usize = 128;
 
-    pub use libc::EMPTY;
     pub use libc::BOOT_TIME;
-    pub use libc::OLD_TIME;
-    pub use libc::NEW_TIME;
-    pub use libc::USER_PROCESS;
+    pub use libc::DEAD_PROCESS;
+    pub use libc::EMPTY;
     pub use libc::INIT_PROCESS;
     pub use libc::LOGIN_PROCESS;
-    pub use libc::DEAD_PROCESS;
+    pub use libc::NEW_TIME;
+    pub use libc::OLD_TIME;
     pub use libc::SHUTDOWN_TIME;
+    pub use libc::USER_PROCESS;
 }
 
 pub struct Utmpx {

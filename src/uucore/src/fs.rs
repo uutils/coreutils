@@ -14,24 +14,26 @@ extern crate termion;
 #[cfg(unix)]
 use super::libc;
 #[cfg(unix)]
-use super::libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH,
-                  S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR};
+use super::libc::{
+    mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
+    S_IXGRP, S_IXOTH, S_IXUSR,
+};
+use std::borrow::Cow;
 use std::env;
 use std::fs;
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "redox")]
 use std::io;
-use std::io::{Error, ErrorKind};
 use std::io::Result as IOResult;
+use std::io::{Error, ErrorKind};
+#[cfg(any(unix, target_os = "redox"))]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
-use std::borrow::Cow;
 
 #[cfg(unix)]
 macro_rules! has {
-    ($mode:expr, $perm:expr) => (
+    ($mode:expr, $perm:expr) => {
         $mode & ($perm as u32) != 0
-    )
+    };
 }
 
 pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
@@ -103,7 +105,9 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
     let original = if original.is_absolute() {
         original.to_path_buf()
     } else {
-        dunce::canonicalize(env::current_dir().unwrap()).unwrap().join(original)
+        dunce::canonicalize(env::current_dir().unwrap())
+            .unwrap()
+            .join(original)
     };
 
     let mut result = PathBuf::new();
