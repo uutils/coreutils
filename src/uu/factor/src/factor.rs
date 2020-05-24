@@ -93,11 +93,6 @@ fn factor(mut n: u64) -> Factors {
         return factors;
     }
 
-    if numeric::is_prime(n) {
-        factors.push(n);
-        return factors;
-    }
-
     let (f, n) = table::factor(n);
     factors *= f;
 
