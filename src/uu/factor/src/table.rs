@@ -1,5 +1,4 @@
 use crate::Factors;
-use numeric::*;
 use std::num::Wrapping;
 
 include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
@@ -14,17 +13,15 @@ pub(crate) fn factor(mut num: u64) -> (Factors, u64) {
         // inv = prime^-1 mod 2^64
         // ceil = floor((2^64-1) / prime)
         // if (num * inv) mod 2^64 <= ceil, then prime divides num
-        // See http://math.stackexchange.com/questions/1251327/
+        // See https://math.stackexchange.com/questions/1251327/
         // for a nice explanation.
         loop {
-            let Wrapping(x) = Wrapping(num) * Wrapping(inv); // x = num * inv mod 2^64
+            let Wrapping(x) = Wrapping(num) * Wrapping(inv);
+
+            // While prime divides num
             if x <= ceil {
                 num = x;
                 factors.push(prime);
-                if is_prime(num) {
-                    factors.push(num);
-                    return (factors, 1);
-                }
             } else {
                 break;
             }
