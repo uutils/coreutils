@@ -20,7 +20,7 @@ impl Result {
 
 // Deterministic Miller-Rabin primality-checking algorithm, adapted to extract
 // (some) dividers; it will fail to factor strong pseudoprimes.
-pub(crate) fn test(n: u64) -> Result {
+pub(crate) fn test<A: Arithmetic>(n: u64) -> Result {
     use self::Result::*;
 
     if n < 2 {
@@ -32,28 +32,22 @@ pub(crate) fn test(n: u64) -> Result {
 
     let r = (n - 1) >> (n - 1).trailing_zeros();
 
-    let mul = if n < 1 << 63 {
-        sm_mul as fn(u64, u64, u64) -> u64
-    } else {
-        big_mul as fn(u64, u64, u64) -> u64
-    };
-
     for a in BASIS.iter() {
         let mut x = a % n;
         if x == 0 {
             break;
         }
 
-        if pow(x, n - 1, n, mul) != 1 {
+        if A::pow(x, n - 1, n) != 1 {
             return Pseudoprime;
         }
-        x = pow(x, r, n, mul);
+        x = A::pow(x, r, n);
         if x == 1 || x == n - 1 {
             break;
         }
 
         loop {
-            let y = mul(x, x, n);
+            let y = A::mul(x, x, n);
             if y == 1 {
                 return Composite(gcd(x - 1, n));
             }
@@ -72,5 +66,10 @@ pub(crate) fn test(n: u64) -> Result {
 // Used by build.rs' tests
 #[allow(dead_code)]
 pub(crate) fn is_prime(n: u64) -> bool {
-    test(n).is_prime()
+    if n < 1 << 63 {
+        test::<Small>(n)
+    } else {
+        test::<Big>(n)
+    }
+    .is_prime()
 }
