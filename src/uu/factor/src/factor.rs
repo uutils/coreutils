@@ -83,9 +83,10 @@ fn factor(mut n: u64) -> Factors {
         return factors;
     }
 
-    while n % 2 == 0 {
-        n /= 2;
-        factors.push(2);
+    let z = n.trailing_zeros();
+    if z > 0 {
+        factors.add(2, z as u8);
+        n = n >> z;
     }
 
     if n == 1 {
