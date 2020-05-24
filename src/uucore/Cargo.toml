@@ -24,7 +24,7 @@ members=["src/uucore_procs"]
 [dependencies]
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
-wild = "2.0.1"
+wild = "2.0.0, < 2.0.2"
 ## optional
 failure = { version = "<= 0.1.1", optional = true }
 failure_derive = { version = "<= 0.1.1", optional = true }
