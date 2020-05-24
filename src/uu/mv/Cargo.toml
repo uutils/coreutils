@@ -12,6 +12,7 @@ path = "src/mv.rs"
 [dependencies]
 getopts = "0.2.18"
 uucore = "0.0.2"
+fs_extra = "1.1.0"
 
 [[bin]]
 name = "mv"
