@@ -1,3 +1,4 @@
+use crate::miller_rabin::Result::*;
 use crate::{miller_rabin, Factors};
 use numeric::*;
 use rand::distributions::{Distribution, Uniform};
@@ -39,16 +40,25 @@ fn find_divisor(num: u64) -> u64 {
     }
 }
 
-pub(crate) fn factor(num: u64) -> Factors {
+pub(crate) fn factor(mut num: u64) -> Factors {
     let mut factors = Factors::new();
     if num == 1 {
         return factors;
     }
 
-    if miller_rabin::is_prime(num) {
-        factors.push(num);
-        return factors;
-    }
+    match miller_rabin::test(num) {
+        Prime => {
+            factors.push(num);
+            return factors;
+        }
+
+        Composite(d) => {
+            num = num / d;
+            factors *= factor(d);
+        }
+
+        Pseudoprime => {}
+    };
 
     let divisor = find_divisor(num);
     factors *= factor(divisor);
