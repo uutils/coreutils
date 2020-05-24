@@ -869,7 +869,7 @@ fn copy_source(
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
-/// Any errors encounted copying files in the tree will be logged but
+/// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
 fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult<()> {
     if !options.recursive {

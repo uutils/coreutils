@@ -3,7 +3,7 @@ name = "uu_whoami"
 version = "0.0.1"
 authors = []
 license = "MIT"
-description = "Diplay effective user ID"
+description = "Display effective user ID"
 
 [lib]
 path = "src/whoami.rs"

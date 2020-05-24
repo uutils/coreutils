@@ -136,7 +136,7 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
         .optflagopt(
             "g",
             "group",
-            "(unimplemented) set group ownership, instead of process'\n \
+            "(unimplemented) set group ownership, instead of process's\n \
              current group",
             "GROUP",
         )

@@ -10,9 +10,9 @@ static TEST_TEMPLATE5: &'static str = "tempXXX";
 static TEST_TEMPLATE6: &'static str = "tempXXXlate";
 static TEST_TEMPLATE7: &'static str = "XXXtemplate";
 #[cfg(unix)]
-static TEST_TEMPLATE8: &'static str = "tempXXXla/te";
+static TEST_TEMPLATE8: &'static str = "tempXXXl/ate";
 #[cfg(windows)]
-static TEST_TEMPLATE8: &'static str = "tempXXXla\\te";
+static TEST_TEMPLATE8: &'static str = "tempXXXl\\ate";
 
 const TMPDIR: &'static str = "TMPDIR";
 
