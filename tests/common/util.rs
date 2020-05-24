@@ -18,9 +18,9 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[cfg(windows)]
-static PROGNAME: &str = "uutils.exe";
+static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
 #[cfg(not(windows))]
-static PROGNAME: &str = "uutils";
+static PROGNAME: &str = env!("CARGO_PKG_NAME");
 
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
