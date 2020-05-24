@@ -35,17 +35,22 @@ fn find_divisor<A: Arithmetic>(n: u64) -> u64 {
     }
 }
 
-pub(crate) fn factor(mut num: u64) -> Factors {
+fn _factor<A: Arithmetic>(mut num: u64) -> Factors {
+    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
+    let _factor = |n| {
+        if n < 1 << 63 {
+            _factor::<Small>(n)
+        } else {
+            _factor::<A>(n)
+        }
+    };
+
     let mut factors = Factors::new();
     if num == 1 {
         return factors;
     }
 
-    match if num < 1 << 63 {
-        miller_rabin::test::<Small>(num)
-    } else {
-        miller_rabin::test::<Big>(num)
-    } {
+    match miller_rabin::test::<A>(num) {
         Prime => {
             factors.push(num);
             return factors;
@@ -53,18 +58,22 @@ pub(crate) fn factor(mut num: u64) -> Factors {
 
         Composite(d) => {
             num /= d;
-            factors *= factor(d);
+            factors *= _factor(d)
         }
 
         Pseudoprime => {}
     };
 
-    let divisor = if num < 1 << 63 {
-        find_divisor::<Small>(num)
-    } else {
-        find_divisor::<Big>(num)
-    };
-    factors *= factor(divisor);
-    factors *= factor(num / divisor);
+    let divisor = find_divisor::<A>(num);
+    factors *= _factor(divisor);
+    factors *= _factor(num / divisor);
     factors
+}
+
+pub(crate) fn factor(n: u64) -> Factors {
+    if n < 1 << 63 {
+        _factor::<Small>(n)
+    } else {
+        _factor::<Big>(n)
+    }
 }
