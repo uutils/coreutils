@@ -2,6 +2,7 @@ use crate::numeric::*;
 
 // Small set of bases for the Miller-Rabin prime test, valid for all 64b integers;
 //  discovered by Jim Sinclair on 2011-04-20, see miller-rabin.appspot.com
+#[allow(clippy::unreadable_literal)]
 const BASIS: [u64; 7] = [2, 325, 9375, 28178, 450775, 9780504, 1795265022];
 
 #[derive(Eq, PartialEq)]
@@ -13,7 +14,7 @@ pub(crate) enum Result {
 
 impl Result {
     pub(crate) fn is_prime(&self) -> bool {
-        return *self == Result::Prime;
+        *self == Result::Prime
     }
 }
 
@@ -29,8 +30,7 @@ pub(crate) fn test(n: u64) -> Result {
         return if n == 2 { Prime } else { Composite(2) };
     }
 
-    let d = (n - 1).trailing_zeros();
-    let r = (n - 1) >> d;
+    let r = (n - 1) >> (n - 1).trailing_zeros();
 
     let mul = if n < 1 << 63 {
         sm_mul as fn(u64, u64, u64) -> u64

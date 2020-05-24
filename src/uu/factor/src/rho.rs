@@ -53,7 +53,7 @@ pub(crate) fn factor(mut num: u64) -> Factors {
         }
 
         Composite(d) => {
-            num = num / d;
+            num /= d;
             factors *= factor(d);
         }
 
