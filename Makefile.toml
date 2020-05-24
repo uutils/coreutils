@@ -161,11 +161,10 @@ alias = "build-examples"
 alias = "build-features"
 
 [tasks.format]
-description = "## Format code files (with `cargo fmt`)"
+description = "## Format code files (with `cargo fmt`; includes tests)"
 category = "[project]"
 dependencies = [
 	"action-format",
-	"action-determine-tests",
 	"action-format-tests",
 ]
 
@@ -268,6 +267,9 @@ args = ["build", "--release", "--no-default-features", "--features", "${CARGO_MA
 
 [tasks.action-build-utils]
 description = "Build individual utilities"
+dependencies = [
+	"action-determine-utils",
+]
 command = "cargo"
 # args = ["build", "@@remove-empty(CARGO_MAKE_TASK_BUILD_UTILS_ARGS)" ]
 args = ["build", "--release", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )" ]
@@ -312,10 +314,13 @@ script = [
 '''
 test_files = glob_array tests/**/*.rs
 for file in ${test_files}
-	if is_empty "${tests}"
-		tests = set "${file}"
-	else
-		tests = set "${tests} ${file}"
+	file = replace "${file}" "\\" "/"
+	if not is_empty ${file}
+		if is_empty "${tests}"
+			tests = set "${file}"
+		else
+			tests = set "${tests} ${file}"
+		end_if
 	end_if
 end
 set_env CARGO_MAKE_VAR_TESTS "${tests}"
@@ -329,6 +334,9 @@ args = ["fmt"]
 
 [tasks.action-format-tests]
 description = "`cargo fmt` tests"
+dependencies = [
+	"action-determine-tests",
+]
 command = "cargo"
 args = ["fmt", "--", "@@split(CARGO_MAKE_VAR_TESTS, )"]
 
