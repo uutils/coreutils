@@ -1,4 +1,4 @@
-use crate::Factors;
+use crate::{miller_rabin, Factors};
 use numeric::*;
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::SmallRng;
@@ -41,8 +41,11 @@ fn find_divisor(num: u64) -> u64 {
 
 pub(crate) fn factor(num: u64) -> Factors {
     let mut factors = Factors::new();
-    if num == 1 { return factors; }
-    if is_prime(num) {
+    if num == 1 {
+        return factors;
+    }
+
+    if miller_rabin::is_prime(num) {
         factors.push(num);
         return factors;
     }

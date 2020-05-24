@@ -26,7 +26,7 @@ use std::path::Path;
 use std::u64::MAX as MAX_U64;
 
 #[cfg(test)]
-use numeric::is_prime;
+use miller_rabin::is_prime;
 
 #[cfg(test)]
 #[path = "src/numeric.rs"]

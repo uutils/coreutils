@@ -23,6 +23,7 @@ use std::fmt;
 use std::io::{stdin, BufRead};
 use std::ops;
 
+mod miller_rabin;
 mod numeric;
 mod rho;
 mod table;
