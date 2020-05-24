@@ -20,9 +20,7 @@ macro_rules! proc_dbg {
 }
 #[cfg(not(feature = "debug"))]
 macro_rules! proc_dbg {
-    ($x:expr) => {
-        $x
-    };
+    ($x:expr) => {};
 }
 
 //## main!()
