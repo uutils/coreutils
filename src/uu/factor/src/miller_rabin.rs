@@ -20,6 +20,7 @@ impl Result {
 
 // Deterministic Miller-Rabin primality-checking algorithm, adapted to extract
 // (some) dividers; it will fail to factor strong pseudoprimes.
+#[allow(clippy::many_single_char_names)]
 pub(crate) fn test<A: Arithmetic>(n: u64) -> Result {
     use self::Result::*;
 
@@ -30,18 +31,30 @@ pub(crate) fn test<A: Arithmetic>(n: u64) -> Result {
         return if n == 2 { Prime } else { Composite(2) };
     }
 
-    let r = (n - 1) >> (n - 1).trailing_zeros();
+    // n-1 = r 2ⁱ
+    let i = (n - 1).trailing_zeros();
+    let r = (n - 1) >> i;
 
     for a in BASIS.iter() {
-        let mut x = a % n;
-        if x == 0 {
+        let a = a % n;
+        if a == 0 {
             break;
         }
 
-        if A::pow(x, n - 1, n) != 1 {
-            return Pseudoprime;
+        // x = a^r mod n
+        let mut x = A::pow(a, r, n);
+
+        {
+            // y = ((x²)²...)² i times = x ^ (2ⁱ) = a ^ (r 2ⁱ) = x ^ (n - 1)
+            let mut y = x;
+            for _ in 0..i {
+                y = A::mul(y, y, n)
+            }
+            if y != 1 {
+                return Pseudoprime;
+            };
         }
-        x = A::pow(x, r, n);
+
         if x == 1 || x == n - 1 {
             break;
         }
