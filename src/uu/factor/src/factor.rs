@@ -100,7 +100,11 @@ fn factor(mut n: u64) -> Factors {
 
     let (f, n) = table::factor(n);
     factors *= f;
-    factors *= rho::factor(n);
+
+    if n >= table::NEXT_PRIME {
+        factors *= rho::factor(n);
+    }
+
     factors
 }
 
