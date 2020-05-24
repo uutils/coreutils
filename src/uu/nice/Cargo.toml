@@ -1,8 +1,15 @@
 [package]
 name = "uu_nice"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "nice ~ (uutils) run PROGRAM with modified scheduling priority"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/nice"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/nice.rs"

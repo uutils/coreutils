@@ -1,8 +1,15 @@
 [package]
 name = "uu_readlink"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "readlink ~ (uutils) display resolved path of PATHNAME"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/readlink"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/readlink.rs"

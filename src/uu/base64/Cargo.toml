@@ -1,8 +1,12 @@
 [package]
 name = "uu_base64"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "base64 ~ (uutils) decode/encode base64"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/base64"
 
 [lib]
 path = "src/base64.rs"

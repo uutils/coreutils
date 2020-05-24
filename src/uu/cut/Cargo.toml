@@ -1,8 +1,12 @@
 [package]
 name = "uu_cut"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "cut ~ (uutils) display byte or field columns of input lines"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cut"
 
 [lib]
 path = "src/cut.rs"

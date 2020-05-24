@@ -4,8 +4,13 @@ version = "0.0.1"
 authors = [
     "Jordy Dickinson <jordy.dickinson@gmail.com>",
     "Joshua S. Miller <jsmiller@uchicago.edu>",
+    "uutils developers",
 ]
 license = "MIT"
+description = "cp ~ (uutils) copy SOURCE to DESTINATION"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cp"
 
 [lib]
 path = "src/cp.rs"

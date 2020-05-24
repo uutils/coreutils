@@ -1,8 +1,12 @@
 [package]
 name = "uu_comm"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "comm ~ (uutils) compare sorted inputs"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/comm"
 
 [lib]
 path = "src/comm.rs"

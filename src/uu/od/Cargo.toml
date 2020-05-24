@@ -1,8 +1,15 @@
 [package]
 name = "uu_od"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "od ~ (uutils) display formatted representation of input"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/od"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/od.rs"

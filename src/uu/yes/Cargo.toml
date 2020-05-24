@@ -1,9 +1,15 @@
 [package]
 name = "uu_yes"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-description = "Repeatedly output a line with all specified STRING(s), or 'y'"
+description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/yes"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/yes.rs"

@@ -1,8 +1,12 @@
 [package]
 name = "uu_cat"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "cat ~ (uutils) concatentate inputs to output"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cat"
 
 [lib]
 path = "src/cat.rs"

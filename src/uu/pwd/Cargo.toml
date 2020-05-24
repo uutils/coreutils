@@ -1,8 +1,15 @@
 [package]
 name = "uu_pwd"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "pwd ~ (uutils) display current working directory"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/pwd"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/pwd.rs"

@@ -3,6 +3,13 @@ name = "uu_link"
 version = "0.0.1"
 authors = []
 license = "MIT"
+description = "link ~ (uutils) create a hard (file system) link to FILE"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/link"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/link.rs"

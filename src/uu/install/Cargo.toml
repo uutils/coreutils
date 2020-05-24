@@ -1,7 +1,10 @@
 [package]
 name = "uu_install"
 version = "0.0.1"
-authors = ["Ben Eills <ben@beneills.com>"]
+authors = [
+    "Ben Eills <ben@beneills.com>",
+    "uutils developers",
+]
 license = "MIT"
 
 [lib]

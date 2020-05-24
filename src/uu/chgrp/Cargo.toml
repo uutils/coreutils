@@ -1,8 +1,12 @@
 [package]
 name = "uu_chgrp"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "chgrp ~ (uutils) change the group ownership of FILES"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chgrp"
 
 [lib]
 path = "src/chgrp.rs"

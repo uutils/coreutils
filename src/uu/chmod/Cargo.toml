@@ -1,8 +1,12 @@
 [package]
 name = "uu_chmod"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "chmod ~ (uutils) change mode of FILES"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chmod"
 
 [lib]
 path = "src/chmod.rs"

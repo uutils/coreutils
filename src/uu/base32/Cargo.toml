@@ -1,8 +1,12 @@
 [package]
 name = "uu_base32"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "base32 ~ (uutils) decode/encode base32"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/base32"
 
 [lib]
 path = "src/base32.rs"

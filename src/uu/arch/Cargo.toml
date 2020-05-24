@@ -1,8 +1,12 @@
 [package]
 name = "uu_arch"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "arch ~ (uutils) display machine architecture"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/arch"
 
 [lib]
 path = "src/arch.rs"

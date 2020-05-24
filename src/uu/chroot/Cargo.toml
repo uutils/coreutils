@@ -1,8 +1,12 @@
 [package]
 name = "uu_chroot"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "chroot ~ (uutils) run a command under a new root directory"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chroot"
 
 [lib]
 path = "src/chroot.rs"

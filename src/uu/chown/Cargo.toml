@@ -1,8 +1,12 @@
 [package]
 name = "uu_chown"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "chown ~ (uutils) change the ownership of FILES"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chown"
 
 [lib]
 path = "src/chown.rs"

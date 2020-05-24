@@ -1,8 +1,15 @@
 [package]
 name = "uu_stdbuf_libstdbuf"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/stdbuf"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 name = "libstdbuf"
