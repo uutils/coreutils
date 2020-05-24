@@ -2,12 +2,18 @@
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
 [package]
-name = "uutils"
-description = "uutils ~ universal (as in cross-platform) CLI utils, written in Rust"
-license = "MIT"
-repository = "https://github.com/uutils/coreutils"
+name = "coreutils"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
+license = "MIT"
+description = "coreutils ~ GNU coreutils; implemented as universal (cross-platform) utils, written in Rust"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils"
+readme = "README.md"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["os"]
+
 build = "build.rs"
 autotests = false
 
@@ -335,8 +341,8 @@ rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 
 [[bin]]
-name = "uutils"
-path = "src/bin/uutils.rs"
+name = "coreutils"
+path = "src/bin/coreutils.rs"
 
 [[test]]
 name = "tests"
