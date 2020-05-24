@@ -18,7 +18,7 @@ macro_rules! proc_dbg {
 #[cfg(not(feature = "debug"))]
 macro_rules! proc_dbg {
     ($x:expr) => {
-        std::convert::identity($x)
+        $x
     };
 }
 
