@@ -9,8 +9,17 @@
 * that was distributed with this source code.
 */
 
+use std::mem::swap;
 use std::num::Wrapping;
 use std::u64::MAX as MAX_U64;
+
+pub fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b > 0 {
+        a %= b;
+        swap(&mut a, &mut b);
+    }
+    a
+}
 
 pub fn big_add(a: u64, b: u64, m: u64) -> u64 {
     let Wrapping(msb_mod_m) = Wrapping(MAX_U64) - Wrapping(m) + Wrapping(1);
