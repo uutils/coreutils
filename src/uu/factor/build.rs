@@ -20,55 +20,18 @@
 use std::env::{self, args};
 use std::fs::File;
 use std::io::Write;
-use std::num::Wrapping;
 use std::path::Path;
-use std::u64::MAX as MAX_U64;
 
 use self::sieve::Sieve;
 
 #[cfg(test)]
 use miller_rabin::is_prime;
 
-#[cfg(test)]
 #[path = "src/numeric.rs"]
 mod numeric;
+use numeric::inv_mod_u64;
 
 mod sieve;
-
-// extended Euclid algorithm
-// precondition: a does not divide 2^64
-fn inv_mod_u64(a: u64) -> Option<u64> {
-    let mut t = 0u64;
-    let mut newt = 1u64;
-    let mut r = 0u64;
-    let mut newr = a;
-
-    while newr != 0 {
-        let quot = if r == 0 {
-            // special case when we're just starting out
-            // This works because we know that
-            // a does not divide 2^64, so floor(2^64 / a) == floor((2^64-1) / a);
-            MAX_U64
-        } else {
-            r
-        } / newr;
-
-        let (tp, Wrapping(newtp)) = (newt, Wrapping(t) - (Wrapping(quot) * Wrapping(newt)));
-        t = tp;
-        newt = newtp;
-
-        let (rp, Wrapping(newrp)) = (newr, Wrapping(r) - (Wrapping(quot) * Wrapping(newr)));
-        r = rp;
-        newr = newrp;
-    }
-
-    if r > 1 {
-        // not invertible
-        return None;
-    }
-
-    Some(t)
-}
 
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
@@ -95,7 +58,7 @@ fn main() {
     let mut x = primes.next().unwrap();
     for next in primes {
         // format the table
-        let outstr = format!("({}, {}, {}),", x, inv_mod_u64(x).unwrap(), MAX_U64 / x);
+        let outstr = format!("({}, {}, {}),", x, inv_mod_u64(x), u64::MAX / x);
         if cols + outstr.len() > MAX_WIDTH {
             write!(file, "\n    {}", outstr).unwrap();
             cols = 4 + outstr.len();
@@ -116,18 +79,12 @@ fn main() {
 }
 
 #[test]
-fn test_inverter() {
-    let num = 10000;
-
-    let invs = Sieve::odd_primes().map(|x| inv_mod_u64(x).unwrap());
-    assert!(Sieve::odd_primes().zip(invs).take(num).all(|(x, y)| {
-        let Wrapping(z) = Wrapping(x) * Wrapping(y);
-        is_prime(x) && z == 1
-    }));
+fn test_generator_isprime() {
+    assert_eq!(Sieve::odd_primes.take(10_000).all(is_prime));
 }
 
 #[test]
-fn test_generator() {
+fn test_generator_10001() {
     let prime_10001 = Sieve::primes().skip(10_000).next();
     assert_eq!(prime_10001, Some(104_743));
 }
