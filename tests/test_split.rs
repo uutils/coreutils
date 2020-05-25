@@ -3,7 +3,7 @@ extern crate regex;
 
 use self::rand::{thread_rng, Rng};
 use self::regex::Regex;
-use common::util::*;
+use crate::common::util::*;
 use std::fs::{read_dir, File};
 use std::io::Write;
 use std::path::Path;

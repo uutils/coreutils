@@ -1,6 +1,6 @@
 extern crate regex;
 
-use common::util::*;
+use crate::common::util::*;
 
 extern crate stat;
 pub use self::stat::*;

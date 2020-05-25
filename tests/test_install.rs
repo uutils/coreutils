@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 use std::os::unix::fs::PermissionsExt;
 
 #[test]

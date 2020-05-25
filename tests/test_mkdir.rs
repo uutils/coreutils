@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 static TEST_DIR1: &'static str = "mkdir_test1";
 static TEST_DIR2: &'static str = "mkdir_test2";

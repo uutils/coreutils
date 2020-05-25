@@ -1,6 +1,6 @@
 extern crate uucore;
 
-use common::util::*;
+use crate::common::util::*;
 
 use self::uucore::entries::{Locate, Passwd};
 

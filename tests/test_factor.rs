@@ -7,7 +7,7 @@
 // that was distributed with this source code.
 //
 
-use common::util::*;
+use crate::common::util::*;
 
 #[path = "../src/uu/factor/sieve.rs"]
 mod sieve;

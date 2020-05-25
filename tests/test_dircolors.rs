@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 extern crate dircolors;
 use self::dircolors::{guess_syntax, OutputFmt, StrUtils};

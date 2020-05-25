@@ -1,5 +1,5 @@
 #[cfg(target_os = "linux")]
-use common::util::*;
+use crate::common::util::*;
 
 #[cfg(target_os = "linux")]
 #[test]

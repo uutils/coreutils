@@ -1,7 +1,7 @@
 extern crate tail;
 
 use self::tail::parse_size;
-use common::util::*;
+use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
 use std::process::{Command, Stdio};

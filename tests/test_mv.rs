@@ -2,7 +2,7 @@ extern crate filetime;
 extern crate time;
 
 use self::filetime::*;
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_mv_rename_dir() {

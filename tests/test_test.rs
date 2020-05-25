@@ -7,7 +7,7 @@
 // file that was distributed with this source code.
 //
 
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_op_prec_and_or_1() {

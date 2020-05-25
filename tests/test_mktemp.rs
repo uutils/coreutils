@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 extern crate tempdir;
 use self::tempdir::TempDir;
 

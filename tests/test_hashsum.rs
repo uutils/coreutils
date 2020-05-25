@@ -8,7 +8,7 @@ macro_rules! test_digest {
     ($($id:ident $t:ident $size:expr)*) => ($(
 
     mod $id {
-        use::common::util::*;
+        use crate::common::util::*;
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
         static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");

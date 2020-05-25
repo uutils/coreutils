@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 use std::path::PathBuf;
 
 #[test]
