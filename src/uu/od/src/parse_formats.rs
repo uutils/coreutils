@@ -1,7 +1,7 @@
-use formatteriteminfo::FormatterItemInfo;
-use prn_char::*;
-use prn_float::*;
-use prn_int::*;
+use crate::formatteriteminfo::FormatterItemInfo;
+use crate::prn_char::*;
+use crate::prn_float::*;
+use crate::prn_int::*;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ParsedFormatterItemInfo {

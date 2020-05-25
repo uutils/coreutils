@@ -15,13 +15,14 @@
 
 #![cfg_attr(test, allow(dead_code))]
 
-use sieve::Sieve;
 use std::env::{self, args};
 use std::fs::File;
 use std::io::Write;
 use std::num::Wrapping;
 use std::path::Path;
 use std::u64::MAX as MAX_U64;
+
+use self::sieve::Sieve;
 
 #[cfg(test)]
 use miller_rabin::is_prime;

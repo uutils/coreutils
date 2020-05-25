@@ -24,7 +24,7 @@ static LONG_HELP: &str = "
 ";
 
 mod colors;
-use colors::INTERNAL_DB;
+use self::colors::INTERNAL_DB;
 
 #[derive(PartialEq, Debug)]
 pub enum OutputFmt {

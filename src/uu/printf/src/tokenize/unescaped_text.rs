@@ -3,14 +3,16 @@
 //! and escaped character literals (of allowed escapes),
 //! into an unescaped text byte array
 
-use super::token;
-use cli;
 use itertools::PutBackN;
 use std::char::from_u32;
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
+
+use super::token;
+
+use crate::cli;
 
 pub struct UnescapedText(Vec<u8>);
 impl UnescapedText {

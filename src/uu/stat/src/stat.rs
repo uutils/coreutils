@@ -10,7 +10,7 @@ use getopts::Options;
 
 #[macro_use]
 mod fsext;
-pub use fsext::*;
+pub use crate::fsext::*;
 
 #[macro_use]
 extern crate uucore;

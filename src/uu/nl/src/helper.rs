@@ -2,17 +2,17 @@ extern crate getopts;
 extern crate regex;
 
 // parse_style parses a style string into a NumberingStyle.
-fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
+fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
     if chars.len() == 1 && chars[0] == 'a' {
-        Ok(::NumberingStyle::NumberForAll)
+        Ok(crate::NumberingStyle::NumberForAll)
     } else if chars.len() == 1 && chars[0] == 't' {
-        Ok(::NumberingStyle::NumberForNonEmpty)
+        Ok(crate::NumberingStyle::NumberForNonEmpty)
     } else if chars.len() == 1 && chars[0] == 'n' {
-        Ok(::NumberingStyle::NumberForNone)
+        Ok(crate::NumberingStyle::NumberForNone)
     } else if chars.len() > 1 && chars[0] == 'p' {
         let s: String = chars[1..].iter().cloned().collect();
         match regex::Regex::new(&s) {
-            Ok(re) => Ok(::NumberingStyle::NumberForRegularExpression(re)),
+            Ok(re) => Ok(crate::NumberingStyle::NumberForRegularExpression(re)),
             Err(_) => Err(String::from("Illegal regular expression")),
         }
     } else {
@@ -22,7 +22,7 @@ fn parse_style(chars: &[char]) -> Result<::NumberingStyle, String> {
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
-pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<String> {
+pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) -> Vec<String> {
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
     settings.renumber = !opts.opt_present("p");
@@ -36,13 +36,13 @@ pub fn parse_options(settings: &mut ::Settings, opts: &getopts::Matches) -> Vec<
         None => {}
         Some(val) => match val.as_ref() {
             "ln" => {
-                settings.number_format = ::NumberFormat::Left;
+                settings.number_format = crate::NumberFormat::Left;
             }
             "rn" => {
-                settings.number_format = ::NumberFormat::Right;
+                settings.number_format = crate::NumberFormat::Right;
             }
             "rz" => {
-                settings.number_format = ::NumberFormat::RightZero;
+                settings.number_format = crate::NumberFormat::RightZero;
             }
             _ => {
                 errs.push(String::from("Illegal value for -n"));

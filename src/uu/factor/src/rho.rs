@@ -1,10 +1,11 @@
-use crate::miller_rabin::Result::*;
-use crate::{miller_rabin, Factors};
-use numeric::*;
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::SmallRng;
 use rand::{thread_rng, SeedableRng};
 use std::cmp::{max, min};
+
+use crate::miller_rabin::Result::*;
+use crate::numeric::*;
+use crate::{miller_rabin, Factors};
 
 fn find_divisor<A: Arithmetic>(n: u64) -> u64 {
     #![allow(clippy::many_single_char_names)]

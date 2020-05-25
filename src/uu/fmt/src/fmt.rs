@@ -10,12 +10,13 @@ extern crate unicode_width;
 #[macro_use]
 extern crate uucore;
 
-use linebreak::break_lines;
-use parasplit::ParagraphStream;
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
+
+use self::linebreak::break_lines;
+use self::parasplit::ParagraphStream;
 
 macro_rules! silent_unwrap(
     ($exp:expr) => (

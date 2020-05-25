@@ -5,12 +5,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use parasplit::{ParaWords, Paragraph, WordInfo};
 use std::cmp;
 use std::i64;
 use std::io::{BufWriter, Stdout, Write};
 use std::mem;
-use FmtOptions;
+
+use crate::parasplit::{ParaWords, Paragraph, WordInfo};
+use crate::FmtOptions;
 
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,

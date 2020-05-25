@@ -1,4 +1,4 @@
-use formatteriteminfo::*;
+use crate::formatteriteminfo::*;
 
 /// format string to print octal using `int_writer_unsigned`
 macro_rules! OCT {

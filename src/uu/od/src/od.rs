@@ -29,19 +29,20 @@ mod prn_char;
 mod prn_float;
 mod prn_int;
 
-use byteorder_io::*;
-use formatteriteminfo::*;
-use inputdecoder::{InputDecoder, MemoryDecoder};
-use inputoffset::{InputOffset, Radix};
-use multifilereader::*;
-use output_info::OutputInfo;
-use parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
-use parse_inputs::{parse_inputs, CommandLineInputs};
-use parse_nrofbytes::parse_number_of_bytes;
-use partialreader::*;
-use peekreader::*;
-use prn_char::format_ascii_dump;
 use std::cmp;
+
+use crate::byteorder_io::*;
+use crate::formatteriteminfo::*;
+use crate::inputdecoder::{InputDecoder, MemoryDecoder};
+use crate::inputoffset::{InputOffset, Radix};
+use crate::multifilereader::*;
+use crate::output_info::OutputInfo;
+use crate::parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
+use crate::parse_inputs::{parse_inputs, CommandLineInputs};
+use crate::parse_nrofbytes::parse_number_of_bytes;
+use crate::partialreader::*;
+use crate::peekreader::*;
+use crate::prn_char::format_ascii_dump;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes

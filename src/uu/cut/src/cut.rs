@@ -12,8 +12,8 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
 
-use ranges::Range;
-use searcher::Searcher;
+use self::ranges::Range;
+use self::searcher::Searcher;
 
 mod buffer;
 mod ranges;
@@ -130,8 +130,8 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 }
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
-    use buffer::Bytes::Select;
-    use buffer::Bytes::Selected::*;
+    use self::buffer::Bytes::Select;
+    use self::buffer::Bytes::Selected::*;
 
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     let mut buf_read = buffer::ByteReader::new(reader, newline_char);

@@ -1,5 +1,8 @@
 //! handles creating printed output for numeric substitutions
 
+use std::env;
+use std::vec::Vec;
+
 use super::format_field::{FieldType, FormatField};
 use super::formatter::{Base, FormatPrimitive, Formatter, InPrefix};
 use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
@@ -7,9 +10,8 @@ use super::formatters::decf::Decf;
 use super::formatters::floatf::Floatf;
 use super::formatters::intf::Intf;
 use super::formatters::scif::Scif;
-use cli;
-use std::env;
-use std::vec::Vec;
+
+use crate::cli;
 
 pub fn warn_expected_numeric(pf_arg: &str) {
     // important: keep println here not print

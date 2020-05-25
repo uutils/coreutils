@@ -28,11 +28,11 @@ in the run queue over the last 1, 5 and 15 minutes.";
 static OPT_SINCE: &str = "SINCE";
 
 #[cfg(unix)]
-use libc::getloadavg;
+use uucore::libc::getloadavg;
 
 #[cfg(windows)]
 extern "C" {
-    fn GetTickCount() -> libc::uint32_t;
+    fn GetTickCount() -> uucore::libc::uint32_t;
 }
 
 fn get_usage() -> String {
@@ -78,7 +78,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 #[cfg(unix)]
 fn print_loadavg() {
-    use libc::c_double;
+    use uucore::libc::c_double;
 
     let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };

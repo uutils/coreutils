@@ -6,16 +6,15 @@
 // that was distributed with this source code.
 //
 
-pub use super::uucore::libc;
 extern crate time;
 
 use self::time::Timespec;
-pub use libc::{
+use std::time::UNIX_EPOCH;
+pub use uucore::libc::{
     c_int, mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG,
     S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
     S_IXGRP, S_IXOTH, S_IXUSR,
 };
-use std::time::UNIX_EPOCH;
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -153,7 +152,7 @@ use std::path::Path;
     target_os = "android",
     target_os = "freebsd"
 ))]
-use libc::statfs as Sstatfs;
+use uucore::libc::statfs as Sstatfs;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -161,7 +160,7 @@ use libc::statfs as Sstatfs;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-use libc::statvfs as Sstatfs;
+use uucore::libc::statvfs as Sstatfs;
 
 #[cfg(any(
     target_os = "linux",
@@ -169,7 +168,7 @@ use libc::statvfs as Sstatfs;
     target_os = "android",
     target_os = "freebsd"
 ))]
-use libc::statfs as statfs_fn;
+use uucore::libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -177,7 +176,7 @@ use libc::statfs as statfs_fn;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-use libc::statvfs as statfs_fn;
+use uucore::libc::statvfs as statfs_fn;
 
 pub trait FsMeta {
     fn fs_type(&self) -> i64;

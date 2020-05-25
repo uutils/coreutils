@@ -9,8 +9,9 @@ use std::io::{BufRead, Lines};
 use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
-use FileOrStdReader;
-use FmtOptions;
+
+use crate::FileOrStdReader;
+use crate::FmtOptions;
 
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {

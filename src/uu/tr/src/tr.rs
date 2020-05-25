@@ -15,14 +15,14 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
+mod expand;
+
 use bit_set::BitSet;
 use fnv::FnvHashMap;
 use getopts::Options;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
-use expand::ExpandSet;
-
-mod expand;
+use crate::expand::ExpandSet;
 
 static NAME: &str = "tr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");

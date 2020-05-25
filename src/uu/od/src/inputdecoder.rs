@@ -1,8 +1,9 @@
-use byteorder_io::ByteOrder;
 use half::f16;
-use multifilereader::HasError;
-use peekreader::PeekRead;
 use std::io;
+
+use crate::byteorder_io::ByteOrder;
+use crate::multifilereader::HasError;
+use crate::peekreader::PeekRead;
 
 /// Processes an input and provides access to the data read in various formats
 ///

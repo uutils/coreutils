@@ -5,13 +5,14 @@
 //! 2. feeds remaining arguments into function
 //! that prints tokens.
 
-use cli;
 use itertools::put_back_n;
 use std::iter::Peekable;
 use std::slice::Iter;
-use tokenize::sub::Sub;
-use tokenize::token::{Token, Tokenizer};
-use tokenize::unescaped_text::UnescapedText;
+
+use crate::cli;
+use crate::tokenize::sub::Sub;
+use crate::tokenize::token::{Token, Tokenizer};
+use crate::tokenize::unescaped_text::UnescapedText;
 
 pub struct Memo {
     tokens: Vec<Box<dyn Token>>,

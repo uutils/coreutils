@@ -21,7 +21,8 @@ extern crate uucore;
 
 mod digest;
 
-use digest::Digest;
+use self::digest::Digest;
+
 use hex::ToHex;
 use md5::Context as Md5;
 use regex::Regex;

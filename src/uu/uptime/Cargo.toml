@@ -19,7 +19,7 @@ getopts = "0.2.18"
 time = "0.1.40"
 chrono = "0.4"
 clap = "2.32"
-uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["utmpx"] }
+uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["libc", "utmpx"] }
 uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]

@@ -16,7 +16,7 @@ impl Clone for FormatWriter {
 
 impl PartialEq for FormatWriter {
     fn eq(&self, other: &FormatWriter) -> bool {
-        use formatteriteminfo::FormatWriter::*;
+        use crate::formatteriteminfo::FormatWriter::*;
 
         match (self, other) {
             (&IntWriter(ref a), &IntWriter(ref b)) => a == b,
