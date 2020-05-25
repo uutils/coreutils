@@ -16,7 +16,6 @@ categories = ["command-line-utilities"]
 edition = "2018"
 
 build = "build.rs"
-autotests = false
 
 [features]
 default = [ "feat_common_core" ]
@@ -347,6 +346,3 @@ unix_socket = "0.5.0"
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
-
-[[test]]
-name = "tests"
