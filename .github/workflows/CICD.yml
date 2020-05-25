@@ -5,12 +5,12 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) alnum gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
+# spell-checker:ignore (misc) alnum coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
 
 
 env:
-  PROJECT_NAME: uutils
-  PROJECT_DESC: "'Universal' (cross-platform) CLI utilities"
+  PROJECT_NAME: coreutils
+  PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
   RUST_MIN_SRV: "1.31.0" ## v1.31.0 == "Rust 2018" (2018-12-06)
   RUST_COV_SRV: "2020-04-29" ## (~v1.45.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
