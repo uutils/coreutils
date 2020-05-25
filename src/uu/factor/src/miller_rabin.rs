@@ -88,3 +88,21 @@ pub(crate) fn is_prime(n: u64) -> bool {
     }
     .is_prime()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_prime;
+    const LARGEST_U64_PRIME: u64 = 0xFFFFFFFFFFFFFFC5;
+
+    #[test]
+    fn largest_prime() {
+        assert!(is_prime(LARGEST_U64_PRIME));
+    }
+
+    #[test]
+    fn first_primes() {
+        use crate::table::{NEXT_PRIME, P_INVS_U64};
+        assert!(P_INVS_U64.iter().all(|(p, _, _)| is_prime(*p)));
+        assert!(is_prime(NEXT_PRIME));
+    }
+}
