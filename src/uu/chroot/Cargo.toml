@@ -3,10 +3,13 @@ name = "uu_chroot"
 version = "0.0.1"
 authors = ["uutils developers"]
 license = "MIT"
-description = "chroot ~ (uutils) run a command under a new root directory"
+description = "chroot ~ (uutils) run COMMAND under a new root directory"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chroot"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/chroot.rs"

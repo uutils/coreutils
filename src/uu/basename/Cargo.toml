@@ -7,6 +7,9 @@ description = "basename ~ (uutils) display PATHNAME with leading directory compo
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/basename"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/basename.rs"

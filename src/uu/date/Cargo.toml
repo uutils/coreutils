@@ -1,7 +1,7 @@
 [package]
 name = "uu_date"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
 

@@ -2,8 +2,13 @@
 name = "uu_env"
 version = "0.0.1"
 authors = ["uutils developers"]
-description = "Set each NAME to VALUE in the environment and run COMMAND"
 license = "MIT"
+description = "env ~ (uutils) set each NAME to VALUE in the environment and run COMMAND"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/env"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
 edition = "2018"
 
 [lib]

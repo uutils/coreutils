@@ -6,6 +6,13 @@ authors = [
     "uutils developers",
 ]
 license = "MIT"
+description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/install"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/install.rs"

@@ -1,8 +1,15 @@
 [package]
 name = "uu_ls"
 version = "0.0.1"
-authors = ["Jeremiah Peschka <jeremiah.peschka@gmail.com>"]
+authors = ["uutils developers"]
 license = "MIT"
+description = "ls ~ (uutils) display directory contents"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/ls"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/ls.rs"

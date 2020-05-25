@@ -3,10 +3,13 @@ name = "uu_base64"
 version = "0.0.1"
 authors = ["uutils developers"]
 license = "MIT"
-description = "base64 ~ (uutils) decode/encode base64"
+description = "base64 ~ (uutils) decode/encode input (base64-encoding)"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/base64"
+keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 path = "src/base64.rs"
