@@ -24,109 +24,109 @@ test_unimplemented = []
 ## (common/core and Tier1) feature sets
 # "feat_common_core" == baseline core set of utilities which can be built/run on most targets
 feat_common_core = [
-  "base32",
-  "base64",
-  "basename",
-  "cat",
-  "cksum",
-  "comm",
-  "cp",
-  "cut",
-  "date",
-  "df",
-  "dircolors",
-  "dirname",
-  "echo",
-  "env",
-  "expand",
-  "expr",
-  "factor",
-  "false",
-  "fmt",
-  "fold",
-  "hashsum",
-  "head",
-  "join",
-  "link",
-  "ln",
-  "ls",
-  "mkdir",
-  "mktemp",
-  "more",
-  "mv",
-  "nl",
-  "od",
-  "paste",
-  "printenv",
-  "printf",
-  "ptx",
-  "pwd",
-  "readlink",
-  "realpath",
-  "relpath",
-  "rm",
-  "rmdir",
-  "seq",
-  "shred",
-  "shuf",
-  "sleep",
-  "sort",
-  "split",
-  "sum",
-  "tac",
-  "tail",
-  "tee",
-  "test",
-  "tr",
-  "true",
-  "truncate",
-  "tsort",
-  "unexpand",
-  "uniq",
-  "wc",
-  "yes",
+    "base32",
+    "base64",
+    "basename",
+    "cat",
+    "cksum",
+    "comm",
+    "cp",
+    "cut",
+    "date",
+    "df",
+    "dircolors",
+    "dirname",
+    "echo",
+    "env",
+    "expand",
+    "expr",
+    "factor",
+    "false",
+    "fmt",
+    "fold",
+    "hashsum",
+    "head",
+    "join",
+    "link",
+    "ln",
+    "ls",
+    "mkdir",
+    "mktemp",
+    "more",
+    "mv",
+    "nl",
+    "od",
+    "paste",
+    "printenv",
+    "printf",
+    "ptx",
+    "pwd",
+    "readlink",
+    "realpath",
+    "relpath",
+    "rm",
+    "rmdir",
+    "seq",
+    "shred",
+    "shuf",
+    "sleep",
+    "sort",
+    "split",
+    "sum",
+    "tac",
+    "tail",
+    "tee",
+    "test",
+    "tr",
+    "true",
+    "truncate",
+    "tsort",
+    "unexpand",
+    "uniq",
+    "wc",
+    "yes",
 ]
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
-  "feat_common_core",
-  #
-  "arch",
-  "hostname",
-  "nproc",
-  "sync",
-  "touch",
-  "whoami",
+    "feat_common_core",
+    #
+    "arch",
+    "hostname",
+    "nproc",
+    "sync",
+    "touch",
+    "whoami",
 ]
 ## (primary platforms) feature sets
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
-  "feat_os_unix", ## == a modern/usual *nix platform
+    "feat_os_unix", ## == a modern/usual *nix platform
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
 feat_os_unix = [
-  "feat_Tier1",
-  #
-  "feat_require_crate_cpp",
-  "feat_require_unix",
-  "feat_require_unix_utmpx",
+    "feat_Tier1",
+    #
+    "feat_require_crate_cpp",
+    "feat_require_unix",
+    "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
 feat_os_windows = [
-  "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
-  ]
+    "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
+]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
-  "feat_Tier1",
-  #
-  "feat_require_unix",
-  "feat_require_unix_utmpx",
+    "feat_Tier1",
+    #
+    "feat_require_unix",
+    "feat_require_unix_utmpx",
 ]
 # "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix_musl = [
-  "feat_Tier1",
-  #
-  "feat_require_unix",
+    "feat_Tier1",
+    #
+    "feat_require_unix",
 ]
 ## feature sets with requirements (restricting cross-platform availability)
 #
@@ -134,87 +134,90 @@ feat_os_unix_musl = [
 #
 # "feat_require_crate_cpp" == set of utilities requiring the `cpp` crate (which fail to compile on several platforms; as of 2020-04-23)
 feat_require_crate_cpp = [
-  "stdbuf",
+    "stdbuf",
 ]
 # "feat_require_unix" == set of utilities requiring support which is only available on unix platforms (as of 2020-04-23)
 feat_require_unix = [
-  "chgrp",
-  "chmod",
-  "chown",
-  "chroot",
-  "du",
-  "groups",
-  "hostid",
-  "id",
-  "install",
-  "kill",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "nice",
-  "numfmt",
-  "nohup",
-  "pathchk",
-  "stat",
-  "timeout",
-  "tty",
-  "uname",
-  "unlink",
+    "chgrp",
+    "chmod",
+    "chown",
+    "chroot",
+    "du",
+    "groups",
+    "hostid",
+    "id",
+    "install",
+    "kill",
+    "logname",
+    "mkfifo",
+    "mknod",
+    "nice",
+    "numfmt",
+    "nohup",
+    "pathchk",
+    "stat",
+    "timeout",
+    "tty",
+    "uname",
+    "unlink",
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
 feat_require_unix_utmpx = [
-  "pinky",
-  "uptime",
-  "users",
-  "who",
+    "pinky",
+    "uptime",
+    "users",
+    "who",
 ]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
-  "feat_common_core",
-  #
-  "feat_require_crate_cpp",
-  #
-  "chgrp",
-  "chmod",
-  "chown",
-  "du",
-  "groups",
-  "hostid",
-  "install",
-  "logname",
-  "mkfifo",
-  "mknod",
-  "nice",
-  "pathchk",
-  "tty",
-  "uname",
-  "unlink",
+    "feat_common_core",
+    #
+    "feat_require_crate_cpp",
+    #
+    "chgrp",
+    "chmod",
+    "chown",
+    "du",
+    "groups",
+    "hostid",
+    "install",
+    "logname",
+    "mkfifo",
+    "mknod",
+    "nice",
+    "pathchk",
+    "tty",
+    "uname",
+    "unlink",
 ]
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
 feat_os_unix_redox = [
-  "feat_common_core",
-  #
-  "uname",
-  "chmod",
-  "install",
+    "feat_common_core",
+    #
+    "uname",
+    "chmod",
+    "install",
 ]
 # "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
 feat_os_windows_legacy = [
-  "feat_common_core",
-  #
-  "arch",
-  "nproc",
-  "sync",
-  "touch",
-  "whoami",
+    "feat_common_core",
+    #
+    "arch",
+    "nproc",
+    "sync",
+    "touch",
+    "whoami",
 ]
 
 [workspace]
 
 [dependencies]
-uucore   = "0.0.2"
+lazy_static = { version="1.3" }
+textwrap = { version="=0.11.0", features=["term_size"] } # !maint: [2020-05-10; rivy] unstable crate using undocumented features; pinned currently, will review
+uucore = { version="0.0.2" }
+# * uutils
 arch     = { optional=true, path="src/uu/arch" }
 base32   = { optional=true, path="src/uu/base32" }
 base64   = { optional=true, path="src/uu/base64" }
@@ -311,11 +314,10 @@ whoami   = { optional=true, path="src/uu/whoami" }
 yes      = { optional=true, path="src/uu/yes" }
 #
 # * transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
-backtrace = ">= 0.3.3, <= 0.3.30"
+_backtrace = { version=">= 0.3.3, <= 0.3.30", package="backtrace" }
 
 [dev-dependencies]
 filetime = "0.2"
-lazy_static = "1.3"
 libc = "0.2"
 rand = "0.6"
 regex = "1.0"
@@ -324,8 +326,7 @@ time = "0.1"
 unindent = "0.1"
 
 [target.'cfg(unix)'.dev-dependencies]
-# FIXME: this should use the normal users crate, but it conflicts with the users utility
-rust-users = { git = "https://github.com/uutils/rust-users" }
+rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 
 [[bin]]
