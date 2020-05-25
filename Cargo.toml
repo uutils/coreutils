@@ -12,7 +12,8 @@ homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
-categories = ["command-line-utilities", "os"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 build = "build.rs"
 autotests = false
