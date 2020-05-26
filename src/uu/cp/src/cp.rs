@@ -23,13 +23,11 @@ extern crate walkdir;
 extern crate xattr;
 
 #[cfg(windows)]
-extern crate kernel32;
-#[cfg(windows)]
-use kernel32::CreateFileW;
-#[cfg(windows)]
-use kernel32::GetFileInformationByHandle;
-#[cfg(windows)]
 extern crate winapi;
+#[cfg(windows)]
+use winapi::um::fileapi::CreateFileW;
+#[cfg(windows)]
+use winapi::um::fileapi::GetFileInformationByHandle;
 
 use clap::{App, Arg, ArgMatches};
 use filetime::FileTime;
