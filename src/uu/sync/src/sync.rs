@@ -36,7 +36,6 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    extern crate kernel32;
     extern crate winapi;
     use self::winapi::shared::minwindef;
     use self::winapi::shared::winerror;
@@ -50,13 +49,13 @@ mod platform {
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
-        if kernel32::GetDriveTypeW(name_wide.as_ptr()) == winbase::DRIVE_FIXED {
+        if winapi::um::fileapi::GetDriveTypeW(name_wide.as_ptr()) == winbase::DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
-                    if kernel32::FlushFileBuffers(file.as_raw_handle()) == 0 {
+                    if winapi::um::fileapi::FlushFileBuffers(file.as_raw_handle()) == 0 {
                         crash!(
-                            kernel32::GetLastError() as i32,
+                            winapi::um::errhandlingapi::GetLastError() as i32,
                             "failed to flush file buffer"
                         );
                     }
@@ -72,10 +71,13 @@ mod platform {
     unsafe fn find_first_volume() -> (String, winnt::HANDLE) {
         #[allow(deprecated)]
         let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
-        let handle = kernel32::FindFirstVolumeW(name.as_mut_ptr(), name.len() as minwindef::DWORD);
+        let handle = winapi::um::fileapi::FindFirstVolumeW(
+            name.as_mut_ptr(),
+            name.len() as minwindef::DWORD,
+        );
         if handle == handleapi::INVALID_HANDLE_VALUE {
             crash!(
-                kernel32::GetLastError() as i32,
+                winapi::um::errhandlingapi::GetLastError() as i32,
                 "failed to find first volume"
             );
         }
@@ -88,15 +90,15 @@ mod platform {
         loop {
             #[allow(deprecated)]
             let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = mem::uninitialized();
-            if kernel32::FindNextVolumeW(
+            if winapi::um::fileapi::FindNextVolumeW(
                 next_volume_handle,
                 name.as_mut_ptr(),
                 name.len() as minwindef::DWORD,
             ) == 0
             {
-                match kernel32::GetLastError() {
+                match winapi::um::errhandlingapi::GetLastError() {
                     winerror::ERROR_NO_MORE_FILES => {
-                        kernel32::FindVolumeClose(next_volume_handle);
+                        winapi::um::fileapi::FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
                     err => crash!(err as i32, "failed to find next volume"),
