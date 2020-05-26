@@ -22,8 +22,7 @@ uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uuc
 uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-kernel32-sys = "0.2"
-winapi = { version = "0.3", features = ["handleapi", "winerror"] }
+winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "winerror"] }
 
 [[bin]]
 name = "df"
