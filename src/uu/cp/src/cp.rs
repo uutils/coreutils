@@ -207,6 +207,7 @@ pub struct Options {
     copy_contents: bool,
     copy_mode: CopyMode,
     dereference: bool,
+    no_dereference: bool,
     no_target_dir: bool,
     one_file_system: bool,
     overwrite: OverwriteMode,
@@ -414,6 +415,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .value_name("ATTR_LIST")
              .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
              .help("don't preserve the specified attributes"))
+        .arg(Arg::with_name(OPT_NO_DEREFERENCE)
+             .short("-P")
+             .long(OPT_NO_DEREFERENCE)
+             .conflicts_with(OPT_DEREFERENCE)
+             .help("never follow symbolic links in SOURCE"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
@@ -433,11 +439,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .long(OPT_DEREFERENCE)
              .conflicts_with(OPT_NO_DEREFERENCE)
              .help("NotImplemented: always follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_NO_DEREFERENCE)
-             .short("-P")
-             .long(OPT_NO_DEREFERENCE)
-             .conflicts_with(OPT_DEREFERENCE)
-             .help("NotImplemented: never follow symbolic links in SOURCE"))
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
              .help("NotImplemented: use full source file name under DIRECTORY"))
@@ -565,7 +566,6 @@ impl Options {
             OPT_COPY_CONTENTS,
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
             OPT_DEREFERENCE,
-            OPT_NO_DEREFERENCE,
             OPT_PARENTS,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
@@ -627,6 +627,7 @@ impl Options {
             copy_contents: matches.is_present(OPT_COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
             dereference: matches.is_present(OPT_DEREFERENCE),
+            no_dereference: matches.is_present(OPT_NO_DEREFERENCE),
             one_file_system: matches.is_present(OPT_ONE_FILE_SYSTEM),
             overwrite: OverwriteMode::from_matches(matches),
             parents: matches.is_present(OPT_PARENTS),
@@ -794,6 +795,8 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
         }
     }
 
+    let dont_follow_symbolic_links = options.no_dereference;
+
     let mut hard_links: Vec<(String, u64)> = vec![];
 
     let mut non_fatal_errors = false;
@@ -807,7 +810,20 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
                 let dest = construct_dest_path(source, target, &target_type, options)?;
                 preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
             }
-            if !found_hard_link {
+
+            if dont_follow_symbolic_links && fs::symlink_metadata(&source)?.file_type().is_symlink()
+            {
+                // Here, we will copy the symlink itself (actually, just recreate it)
+                let link = fs::read_link(&source)?;
+                let dest = if target.is_dir() {
+                    // the target is a directory, we need to keep the filename
+                    let p = Path::new(source.file_name().unwrap());
+                    target.join(p)
+                } else {
+                    target.clone()
+                };
+                symlink_file(&link, &dest, &*context_for(&link, target))?;
+            } else if !found_hard_link {
                 if let Err(error) = copy_source(source, target, &target_type, options) {
                     show_error!("{}", error);
                     match error {
@@ -1070,7 +1086,6 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             }
         }
     }
-
     match options.copy_mode {
         CopyMode::Link => {
             fs::hard_link(source, dest).context(&*context_for(source, dest))?;
