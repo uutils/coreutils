@@ -1,9 +1,17 @@
 use common::util::*;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
+#[cfg(not(windows))]
+use std::os::unix::fs as symlink;
+
+use std::fs;
+
+#[cfg(windows)]
+use std::os::windows::fs::symlink_file as symlink;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
+static TEST_HELLO_WORLD_SOURCE_SYMLINK: &str = "hello_world.txt.link";
 static TEST_HELLO_WORLD_DEST: &str = "copy_of_hello_world.txt";
 static TEST_HOW_ARE_YOU_SOURCE: &str = "how_are_you.txt";
 static TEST_HOW_ARE_YOU_DEST: &str = "hello_dir/how_are_you.txt";
@@ -327,4 +335,43 @@ fn test_cp_arg_suffix() {
         at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
+}
+
+#[test]
+fn test_cp_no_deref() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink::symlink(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+
+    //using -t option
+    let result = scene
+        .ucmd()
+        .arg("-P")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE_SYMLINK)
+        .arg(TEST_COPY_TO_FOLDER)
+        .run();
+
+    // Check that the exit code represents a successful copy.
+    let exit_success = result.success;
+    assert!(exit_success);
+    let path_to_new_symlink = at
+        .subdir
+        .join(TEST_COPY_TO_FOLDER)
+        .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
+    assert!(at.is_symlink(
+        &path_to_new_symlink
+            .clone()
+            .into_os_string()
+            .into_string()
+            .unwrap()
+    ));
+    // Check the content of the destination file that was copied.
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    let path_to_check = path_to_new_symlink.to_str().unwrap();
+    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
 }
