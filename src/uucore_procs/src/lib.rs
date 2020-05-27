@@ -1,6 +1,8 @@
 #![allow(dead_code)] // work-around for GH:rust-lang/rust#62127; maint: can be removed when MinSRV >= v1.38.0
 #![allow(unused_macros)] // work-around for GH:rust-lang/rust#62127; maint: can be removed when MinSRV >= v1.38.0
 
+// Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
+
 extern crate proc_macro;
 
 // spell-checker:ignore () SIGPIPE maint uucore uumain uutils

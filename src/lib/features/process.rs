@@ -41,7 +41,7 @@ pub enum ExitStatus {
 impl ExitStatus {
     fn from_status(status: c_int) -> ExitStatus {
         if status & 0x7F != 0 {
-            // WIFSIGNALED(status)
+            // WIFSIGNALED(status) == terminating by/with unhandled signal
             ExitStatus::Signal(status & 0x7F)
         } else {
             ExitStatus::Code(status & 0xFF00 >> 8)
