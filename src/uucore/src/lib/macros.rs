@@ -7,40 +7,6 @@
  * file that was distributed with this source code.
  */
 
-// #[macro_export]
-// macro_rules! main { ($($arg:tt)+) => ({
-//     extern crate uu_arch;
-//     use std::io::Write;
-//     use uu_arch::uumain;
-
-//     fn main() {
-//         uucore::panic::install_sigpipe_hook();
-
-//         let code = uumain(uucore::args().collect());
-//         // Since stdout is line-buffered by default, we need to ensure any pending
-//         // writes are flushed before exiting. Ideally, this should be enforced by
-//         // each utility.
-//         //
-//         // See: https://github.com/rust-lang/rust/issues/23818
-//         //
-//         std::io::stdout().flush().expect("could not flush stdout");
-//         std::process::exit(code);
-//     }
-// })}
-
-// extern crate proc_macro;
-// use proc_macro::TokenStream;
-// #[proc_macro_attribute]
-// pub fn hello(attr: TokenStream, item: TokenStream) -> TokenStream {
-//     let result = quote! {
-//         fn main() {
-//             uucore::panic::install_sigpipe_hook();
-//             std::io::stdout().flush().expect("could not flush stdout");
-//             std::process::exit(code);
-//         }
-//     };
-// }
-
 #[macro_export]
 macro_rules! executable(
     () => ({
