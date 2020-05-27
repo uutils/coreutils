@@ -17,8 +17,8 @@ path = "src/sync.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-uucore = { version="0.0.3", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["wide"] }
-uucore_procs = { version="0.0.3", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["wide"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "std", "winbase", "winerror"] }
 
 [[bin]]
