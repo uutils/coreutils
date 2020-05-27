@@ -51,7 +51,7 @@ fn usage(utils: &UtilityMap) {
 }
 
 fn main() {
-    uucore::panic::install_sigpipe_hook();
+    uucore::panic::mute_sigpipe_panic();
 
     let utils = util_map();
     let mut args: Vec<String> = uucore::args().collect();
