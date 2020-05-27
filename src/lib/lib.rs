@@ -32,40 +32,40 @@ mod features; // feature-gated code modules
 mod mods; // core cross-platform modules
 
 // * cross-platform modules
-pub use mods::coreopts;
-pub use mods::panic;
+pub use crate::mods::coreopts;
+pub use crate::mods::panic;
 
 // * feature-gated modules
 #[cfg(feature = "encoding")]
-pub use features::encoding;
+pub use crate::features::encoding;
 #[cfg(feature = "fs")]
-pub use features::fs;
+pub use crate::features::fs;
 #[cfg(feature = "parse_time")]
-pub use features::parse_time;
+pub use crate::features::parse_time;
 #[cfg(feature = "zero-copy")]
-pub use features::zero_copy;
+pub use crate::features::zero_copy;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows
 #[cfg(all(not(windows), feature = "mode"))]
-pub use features::mode;
+pub use crate::features::mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
-pub use features::entries;
+pub use crate::features::entries;
 #[cfg(all(unix, feature = "process"))]
-pub use features::process;
+pub use crate::features::process;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
-pub use features::signals;
+pub use crate::features::signals;
 #[cfg(all(
     unix,
     not(target_os = "fuchsia"),
     not(target_env = "musl"),
     feature = "utmpx"
 ))]
-pub use features::utmpx;
+pub use crate::features::utmpx;
 // ** windows-only
 #[cfg(all(windows, feature = "wide"))]
-pub use features::wide;
+pub use crate::features::wide;
 
 //## core functions
 
