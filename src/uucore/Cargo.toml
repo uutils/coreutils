@@ -10,6 +10,7 @@ repository = "https://github.com/uutils/uucore"
 readme = "README.md"
 keywords = ["cross-platform", "uutils", "core", "library"]
 categories = ["os"]
+edition = "2018"
 
 [badges]
 appveyor = { repository = "uutils/uucore" }
