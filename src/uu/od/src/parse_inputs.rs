@@ -5,7 +5,7 @@ pub trait CommandLineOpts {
     /// returns all commandline parameters which do not belong to an option.
     fn inputs(&self) -> Vec<String>;
     /// tests if any of the specified options is present.
-    fn opts_present(&self, &[&str]) -> bool;
+    fn opts_present(&self, _: &[&str]) -> bool;
 }
 
 /// Implementation for `getopts`
