@@ -119,7 +119,7 @@ impl<'a> CoreOptions<'a> {
 }
 
 #[macro_export]
-macro_rules! new_coreopts {
+macro_rules! app {
     ($syntax: expr, $summary: expr, $long_help: expr) => {
         uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
             name: executable!(),
