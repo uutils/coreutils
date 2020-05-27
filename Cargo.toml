@@ -8,7 +8,7 @@ description = "uutils ~ 'core' uutils code library (cross-platform)"
 homepage = "https://github.com/uutils/uucore"
 repository = "https://github.com/uutils/uucore"
 readme = "README.md"
-keywords = ["cross-platform", "uutils", "coreutils"]
+keywords = ["cross-platform", "uutils", "core", "library"]
 categories = ["os"]
 
 [badges]
