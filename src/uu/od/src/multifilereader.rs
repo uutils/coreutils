@@ -1,4 +1,3 @@
-use std;
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
