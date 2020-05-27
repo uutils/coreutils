@@ -63,7 +63,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
     )
     .optflag("R", "recursive", "change files and directories recursively");
 
-    // sanitize input for - at beginning (e.g. chmod -x testfile). Remove
+    // sanitize input for - at beginning (e.g. chmod -x test_file). Remove
     // the option and save it for later, after parsing is finished.
     let negative_option = sanitize_input(&mut args);
 
