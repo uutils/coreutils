@@ -17,7 +17,7 @@ static SUMMARY: &str = "Determine architecture name for current machine.";
 static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
     let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
     0

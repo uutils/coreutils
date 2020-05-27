@@ -70,7 +70,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     let files = matches.free;
 

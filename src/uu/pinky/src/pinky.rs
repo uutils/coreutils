@@ -47,7 +47,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 The utmp file will be {}",
         utmpx::DEFAULT_FILE
     );
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, &long_help);
+    let mut opts = app!(SYNTAX, SUMMARY, &long_help);
     opts.optflag(
         "l",
         "",

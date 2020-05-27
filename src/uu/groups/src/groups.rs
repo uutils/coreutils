@@ -14,7 +14,7 @@ static SYNTAX: &str = "[user]";
 static SUMMARY: &str = "display current group names";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, "").parse(args);
+    let matches = app!(SYNTAX, SUMMARY, "").parse(args);
 
     if matches.free.is_empty() {
         println!(

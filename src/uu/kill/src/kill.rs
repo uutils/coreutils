@@ -30,7 +30,7 @@ pub enum Mode {
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_signal) = handle_obsolete(args);
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL")
         .optflagopt(
             "l",

@@ -99,7 +99,7 @@ impl Options {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("i", "initial", "do not convert tabs after non blanks")
         .optopt(
             "t",

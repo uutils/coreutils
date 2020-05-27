@@ -20,7 +20,7 @@ static LONG_HELP: &str = "
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("z", "zero", "separate output with NUL rather than newline")
         .parse(args);
 

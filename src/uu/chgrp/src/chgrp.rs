@@ -35,7 +35,7 @@ const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
+    let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag("c",
                  "changes",
                  "like verbose but report only when a change is made")

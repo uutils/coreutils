@@ -20,7 +20,7 @@ pub fn execute(
     long_help: &str,
     format: Format,
 ) -> i32 {
-    let matches = new_coreopts!(syntax, summary, long_help)
+    let matches = app!(syntax, summary, long_help)
         .optflag("d", "decode", "decode data")
         .optflag(
             "i",

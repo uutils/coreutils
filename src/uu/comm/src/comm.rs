@@ -120,7 +120,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("1", "", "suppress column 1 (lines uniq to FILE1)")
         .optflag("2", "", "suppress column 2 (lines uniq to FILE2)")
         .optflag(

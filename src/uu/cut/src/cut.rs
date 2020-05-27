@@ -422,7 +422,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("b", "bytes", "filter byte columns from the input source", "sequence")
         .optopt("c", "characters", "alias for character mode", "sequence")
         .optopt("d", "delimiter", "specify the delimiter character that separates fields in the input source. Defaults to Tab.", "delimiter")

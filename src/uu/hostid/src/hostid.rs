@@ -22,7 +22,7 @@ extern "C" {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
     hostid();
     0
 }

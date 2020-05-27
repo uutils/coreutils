@@ -96,7 +96,7 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
  {} SOURCE... DIRECTORY",
         NAME
     );
-    new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    app!(&syntax, SUMMARY, LONG_HELP)
         // TODO implement flag
         .optflagopt(
             "",

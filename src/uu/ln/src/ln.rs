@@ -62,7 +62,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
         NAME
     );
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
         .optflag(
             "b",
             "",

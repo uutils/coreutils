@@ -20,7 +20,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     //
     // Argument parsing
     //
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag(
             "a",
             "multiple",

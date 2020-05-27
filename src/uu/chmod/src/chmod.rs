@@ -34,7 +34,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
  {0} [OPTION]... --reference=RFILE FILE...",
         NAME
     );
-    let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
+    let mut opts = app!(&syntax, SUMMARY, LONG_HELP);
     opts.optflag(
         "c",
         "changes",

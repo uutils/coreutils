@@ -53,7 +53,7 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
         .optflag(
             "",

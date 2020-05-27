@@ -70,7 +70,7 @@ static SYNTAX: &str = "[OPTION]... [USER]";
 static SUMMARY: &str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
+    let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag(
         "A",
         "",

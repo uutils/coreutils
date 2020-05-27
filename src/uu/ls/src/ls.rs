@@ -80,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... [FILE]...",
         NAME
     );
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
         .optflag("1", "", "list one file per line.")
         .optflag(
             "a",

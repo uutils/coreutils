@@ -45,7 +45,7 @@ If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
+    let mut opts = app!(SYNTAX, SUMMARY, LONG_HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
     opts.optflag("b", "boot", "time of last system boot");
     opts.optflag("d", "dead", "print dead processes");

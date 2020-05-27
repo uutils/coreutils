@@ -229,7 +229,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... --files0-from=F",
         NAME
     );
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
         // In task
         .optflag(
             "a",
