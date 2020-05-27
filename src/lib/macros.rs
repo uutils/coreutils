@@ -79,7 +79,7 @@ macro_rules! show_info(
 );
 
 #[macro_export]
-macro_rules! disp_err(
+macro_rules! show_usage_error(
     ($($args:tt)+) => ({
         eprint!("{}: ", executable!());
         eprintln!($($args)+);
