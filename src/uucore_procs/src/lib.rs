@@ -5,8 +5,6 @@
 
 extern crate proc_macro;
 
-// spell-checker:ignore () SIGPIPE maint uucore uumain uutils
-
 //## rust proc-macro background info
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
 //* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
