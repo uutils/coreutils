@@ -20,6 +20,8 @@ pub fn main() {
     // println!("cargo:warning=out_dir={}", out_dir);
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap().replace("\\", "/");
     // println!("cargo:warning=manifest_dir={}", manifest_dir);
+    let util_tests_dir = format!("{}/tests/by-util", manifest_dir);
+    // println!("cargo:warning=util_tests_dir={}", util_tests_dir);
 
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
@@ -64,9 +66,9 @@ pub fn main() {
                 .unwrap();
                 tf.write_all(
                     format!(
-                        "#[path=\"{dir}/tests/by-crate/test_{k}.rs\"]\nmod test_{k};\n",
+                        "#[path=\"{dir}/test_{k}.rs\"]\nmod test_{k};\n",
                         k = krate[override_prefix.len()..].to_string(),
-                        dir = manifest_dir,
+                        dir = util_tests_dir,
                     )
                     .as_bytes(),
                 )
@@ -83,9 +85,9 @@ pub fn main() {
                 .unwrap();
                 tf.write_all(
                     format!(
-                        "#[path=\"{dir}/tests/by-crate/test_{krate}.rs\"]\nmod test_{krate};\n",
+                        "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
                         krate = krate,
-                        dir = manifest_dir,
+                        dir = util_tests_dir,
                     )
                     .as_bytes(),
                 )
@@ -117,9 +119,9 @@ pub fn main() {
                 .unwrap();
                 tf.write_all(
                     format!(
-                        "#[path=\"{dir}/tests/by-crate/test_{krate}.rs\"]\nmod test_{krate};\n",
+                        "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
                         krate = krate,
-                        dir = manifest_dir,
+                        dir = util_tests_dir,
                     )
                     .as_bytes(),
                 )
@@ -136,9 +138,9 @@ pub fn main() {
                 .unwrap();
                 tf.write_all(
                     format!(
-                        "#[path=\"{dir}/tests/by-crate/test_{krate}.rs\"]\nmod test_{krate};\n",
+                        "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
                         krate = krate,
-                        dir = manifest_dir,
+                        dir = util_tests_dir,
                     )
                     .as_bytes(),
                 )
