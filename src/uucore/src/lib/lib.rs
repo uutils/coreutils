@@ -1,6 +1,7 @@
 // library ~ (core/bundler file)
 
-// spell-checker:ignore (uucore/uutils) coreopts libc musl utmpx uucore uutils winapi
+// Copyright (C) ~ Alex Lyon <arcterus@mail.com>
+// Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
 //## external crates
 
