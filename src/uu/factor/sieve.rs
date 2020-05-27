@@ -5,6 +5,8 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) filts, minidx, minkey paridx
+
 use std::iter::{Chain, Cycle, Map};
 use std::slice::Iter;
 

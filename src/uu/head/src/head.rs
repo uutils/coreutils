@@ -131,16 +131,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let mut buffer = BufReader::new(stdin());
         head(&mut buffer, &settings);
     } else {
-        let mut firstime = true;
+        let mut first_time = true;
 
         for file in &files {
             if settings.verbose {
-                if !firstime {
+                if !first_time {
                     println!();
                 }
                 println!("==> {} <==", file);
             }
-            firstime = false;
+            first_time = false;
 
             let path = Path::new(file);
             let reader = File::open(&path).unwrap();

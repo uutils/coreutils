@@ -8,6 +8,8 @@
 
 /* last synced with: cat (GNU coreutils) 8.13 */
 
+// spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
+
 extern crate chrono;
 extern crate clap;
 extern crate time;

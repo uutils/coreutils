@@ -4,7 +4,8 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) strerror IFBLK IFCHR IFDIR IFLNK IFIFO IFMT IFREG IFSOCK subsec nanos gnulib statfs Sstatfs bitrig statvfs iosize blksize fnodes fsid namelen bsize bfree bavail ffree frsize namemax errno fstype adfs acfs aufs affs autofs befs bdevfs binfmt ceph cgroups cifs configfs cramfs cgroupfs debugfs devfs devpts ecryptfs btrfs efivarfs exofs fhgfs fuseblk fusectl futexfs gpfs hfsx hostfs hpfs inodefs ibrix inotifyfs isofs jffs logfs hugetlbfs mqueue nsfs ntfs ocfs panfs pipefs ramfs romfs nfsd nilfs pstorefs reiserfs securityfs smackfs snfs sockfs squashfs sysfs sysv tempfs tracefs ubifs usbdevfs vmhgfs tmpfs vxfs wslfs xenfs vzfs openprom overlayfs
 
 extern crate time;
 

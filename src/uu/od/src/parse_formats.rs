@@ -1,3 +1,5 @@
+// spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
+
 use crate::formatteriteminfo::FormatterItemInfo;
 use crate::prn_char::*;
 use crate::prn_float::*;
@@ -89,9 +91,9 @@ fn od_argument_with_option(ch: char) -> bool {
     }
 }
 
-/// Parses format flags from commandline
+/// Parses format flags from command line
 ///
-/// getopts, docopt, clap don't seem suitable to parse the commandline
+/// getopts, docopt, clap don't seem suitable to parse the command line
 /// arguments used for formats. In particular arguments can appear
 /// multiple times and the order they appear in, is significant.
 ///
@@ -99,7 +101,7 @@ fn od_argument_with_option(ch: char) -> bool {
 /// it can also be mixed with non format related flags like -v: -fvox
 /// arguments with parameters like -w16 can only appear at the end: -fvoxw16
 /// parameters of -t/--format specify 1 or more formats.
-/// if -- appears on the commandline, parsing should stop.
+/// if -- appears on the command line, parsing should stop.
 pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
 

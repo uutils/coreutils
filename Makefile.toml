@@ -1,6 +1,4 @@
-# spell-checker:ignore (cargo-make) duckscript macos
-# spell-checker:ignore (rust) clippy
-# spell-checker:ignore (uutils) uutil uutils
+# spell-checker:ignore (cargo-make) duckscript
 
 [config]
 min_version = "0.26.2"

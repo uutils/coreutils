@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) floatf inprefix
+
 //! formatter for %f %F common-notation floating-point subs
 use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};

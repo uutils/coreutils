@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety qchar topchar structs fmtr fchar inprefix devs octals cninetyninehexfloatf
+
 //! handles creating printed output for numeric substitutions
 
 use std::env;

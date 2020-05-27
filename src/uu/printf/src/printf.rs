@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 
+// spell-checker:ignore (change!) each's
+// spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
+
 extern crate itertools;
 extern crate uucore;
 

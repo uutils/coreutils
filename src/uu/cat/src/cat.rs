@@ -7,6 +7,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) nonprint nonblank nonprinting
+
 #[macro_use]
 extern crate quick_error;
 #[cfg(unix)]
@@ -265,7 +267,7 @@ fn open(path: &str) -> CatResult<InputHandle> {
 ///
 /// # Arguments
 ///
-/// * `files` - There is no short circuit when encountiner an error
+/// * `files` - There is no short circuit when encountering an error
 /// reading a file in this vector
 fn write_fast(files: Vec<String>) -> CatResult<()> {
     let mut writer = stdout();
@@ -310,7 +312,7 @@ struct OutputState {
 ///
 /// # Arguments
 ///
-/// * `files` - There is no short circuit when encountiner an error
+/// * `files` - There is no short circuit when encountering an error
 /// reading a file in this vector
 fn write_lines(files: Vec<String>, options: &OutputOptions) -> CatResult<()> {
     let mut error_count = 0;
@@ -332,7 +334,7 @@ fn write_lines(files: Vec<String>, options: &OutputOptions) -> CatResult<()> {
     }
 }
 
-/// Outputs file contents to stdout in a linewise fashion,
+/// Outputs file contents to stdout in a line-by-line fashion,
 /// propagating any errors that might occur.
 fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     let mut handle = open(file)?;

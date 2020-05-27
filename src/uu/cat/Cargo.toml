@@ -3,7 +3,7 @@ name = "uu_cat"
 version = "0.0.1"
 authors = ["uutils developers"]
 license = "MIT"
-description = "cat ~ (uutils) concatentate and display input"
+description = "cat ~ (uutils) concatenate and display input"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cat"

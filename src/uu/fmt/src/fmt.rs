@@ -5,6 +5,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
+
 extern crate unicode_width;
 
 #[macro_use]

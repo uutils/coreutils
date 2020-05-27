@@ -5,6 +5,8 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
+
 extern crate getopts;
 use getopts::Options;
 

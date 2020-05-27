@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) formatteriteminfo
+
 use std::fmt;
 
 #[derive(Copy)]

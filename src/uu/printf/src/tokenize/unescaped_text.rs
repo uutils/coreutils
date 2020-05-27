@@ -3,6 +3,8 @@
 //! and escaped character literals (of allowed escapes),
 //! into an unescaped text byte array
 
+// spell-checker:ignore (ToDO) retval hexchars octals printf's bvec vals coreutil addchar eval bytecode
+
 use itertools::PutBackN;
 use std::char::from_u32;
 use std::iter::Peekable;

@@ -16,6 +16,8 @@
 //! Hence all we need is to map the strings into the Token structures, except for some ugly fiddling with +-escaping.
 //!
 
+// spell-checker:ignore (ToDO) paren
+
 #[derive(Debug, Clone)]
 pub enum Token {
     Value {

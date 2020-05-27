@@ -7,6 +7,8 @@
 //  * file that was distributed with this source code.
 //  *
 
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf
+
 extern crate getopts;
 extern crate libc;
 

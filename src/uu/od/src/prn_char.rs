@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) CHRS itembytes MUTF
+
 use std::str::from_utf8;
 
 use crate::formatteriteminfo::*;

@@ -1,4 +1,8 @@
+<!-- spell-checker:ignore (markdown) markdownlint -->
+
 ## Feature list
+
+<!-- spell-checker:ignore (options) linkgs reflink -->
 
 ### To Do
 

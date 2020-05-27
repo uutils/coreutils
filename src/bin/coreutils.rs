@@ -7,11 +7,6 @@
  * file that was distributed with this source code.
  */
 
-// spell-checker:ignore (acronyms/names) Gehring
-// spell-checker:ignore (rustlang/crates) clippy concat rustlang termwidth textwrap
-// spell-checker:ignore (uutils) coreutils sigpipe uucore uumain uutils
-// spell-checker:ignore (shell) busybox symlinks
-
 extern crate lazy_static;
 extern crate textwrap;
 extern crate uucore;

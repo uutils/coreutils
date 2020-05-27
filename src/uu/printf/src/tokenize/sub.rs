@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety
+
 //! Sub is a token that represents a
 //! segment of the format string that is a substitution
 //! it is created by Sub's implementation of the Tokenizer trait

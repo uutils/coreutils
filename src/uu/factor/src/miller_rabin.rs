@@ -1,3 +1,5 @@
+// spell-checker:ignore (URL) appspot
+
 use crate::numeric::*;
 
 // Small set of bases for the Miller-Rabin prime test, valid for all 64b integers;

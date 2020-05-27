@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv
+
 extern crate getopts;
 extern crate regex;
 

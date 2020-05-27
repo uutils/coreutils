@@ -8,6 +8,8 @@
  * file that was distributed with this source code.
  */
 
+// spell-checker:ignore (ToDO) getusername
+
 use std::io::Result;
 use uucore::entries::uid2usr;
 use uucore::libc::geteuid;

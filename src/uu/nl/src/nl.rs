@@ -6,6 +6,8 @@
 //  * file that was distributed with this source code.
 //  *
 
+// spell-checker:ignore (ToDO) corasick memchr
+
 extern crate aho_corasick;
 extern crate getopts;
 extern crate memchr;

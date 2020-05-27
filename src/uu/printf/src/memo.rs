@@ -1,6 +1,6 @@
 //! Memo runner of printf
 //! Takes a format string and arguments
-//! 1. tokenizes format string into tokens, consuming
+//! 1. tokenize format string into tokens, consuming
 //! any subst. arguments along the way.
 //! 2. feeds remaining arguments into function
 //! that prints tokens.

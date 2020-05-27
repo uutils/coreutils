@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) inprefix for conv
+
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
 
@@ -55,7 +57,7 @@ pub trait Formatter {
         inprefix: &InPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive>;
-    // return a string from a formatprimitive,
+    // return a string from a FormatPrimitive,
     // given information about the field
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String;
 }

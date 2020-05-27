@@ -7,6 +7,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) allocs slen unesc
+
 use std::char::from_u32;
 use std::cmp::min;
 use std::iter::Peekable;

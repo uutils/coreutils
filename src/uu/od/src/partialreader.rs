@@ -1,3 +1,5 @@
+// spell-checker:ignore mockstream abcdefgh bcdefgh
+
 use std::cmp;
 use std::io;
 use std::io::Read;
@@ -147,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_limitting_all() {
+    fn test_read_limiting_all() {
         let mut v = [0; 10];
         let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), 0, Some(0));
 
@@ -155,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_limitting() {
+    fn test_read_limiting() {
         let mut v = [0; 10];
         let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), 0, Some(6));
 
@@ -164,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_limitting_with_error() {
+    fn test_read_limiting_with_error() {
         let mut v = [0; 10];
         let f = FailingMockStream::new(ErrorKind::PermissionDenied, "No access", 3);
         let mut sut = PartialReader::new(f, 0, Some(6));
@@ -175,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_limitting_with_large_limit() {
+    fn test_read_limiting_with_large_limit() {
         let mut v = [0; 10];
         let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), 0, Some(20));
 
@@ -184,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_limitting_with_multiple_reads() {
+    fn test_read_limiting_with_multiple_reads() {
         let mut v = [0; 3];
         let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), 0, Some(6));
 
@@ -196,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_skipping_and_limitting() {
+    fn test_read_skipping_and_limiting() {
         let mut v = [0; 10];
         let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), 2, Some(4));
 

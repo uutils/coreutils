@@ -7,6 +7,8 @@
  * file that was distributed with this source code.
  */
 
+// spell-checker:ignore (ToDO) advapi lmcons winnt getusername WCHAR UNLEN
+
 extern crate advapi32;
 extern crate uucore;
 extern crate winapi;

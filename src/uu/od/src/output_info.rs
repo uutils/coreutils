@@ -1,3 +1,5 @@
+// spell-checker:ignore formatteriteminfo blocksize thisblock
+
 use std::cmp;
 use std::slice::Iter;
 

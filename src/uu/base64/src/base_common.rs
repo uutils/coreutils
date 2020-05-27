@@ -7,11 +7,11 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-use uucore::encoding::{wrap_print, Data, Format};
-
 use std::fs::File;
 use std::io::{stdin, BufReader, Read};
 use std::path::Path;
+
+use uucore::encoding::{wrap_print, Data, Format};
 
 pub fn execute(
     args: Vec<String>,

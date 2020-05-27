@@ -7,6 +7,8 @@
  * file that was distributed with this source code.
  */
 
+// spell-checker:ignore (ToDO) inval
+
 use std::str::FromStr;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]

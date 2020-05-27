@@ -7,6 +7,8 @@
 //  *
 //  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
 
+// spell-checker:ignore (ToDO) ttyname filedesc
+
 extern crate getopts;
 extern crate libc;
 

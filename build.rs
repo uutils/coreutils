@@ -1,5 +1,4 @@
-// spell-checker:ignore (utils) chgrp chmod chown chroot cksum dircolors hashsum hostid logname mkdir mkfifo mknod mktemp nohup nproc numfmt pathchk printenv printf readlink realpath relpath rmdir shuf stdbuf tsort uname unexpand whoami
-// spell-checker:ignore () uutils uumain rustfmt rustc macos krate
+// spell-checker:ignore (vars) krate
 
 use std::env;
 use std::fs::File;

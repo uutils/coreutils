@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum fprim interp
+
 //! formatter for %g %G decimal subs
 use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};

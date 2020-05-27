@@ -5,6 +5,8 @@
 //  * For the full copyright and license information, please view the LICENSE file
 //  * that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) rwxr sourcepath targetpath
+
 extern crate getopts;
 extern crate libc;
 
@@ -25,7 +27,7 @@ static LONG_HELP: &str = "";
 const DEFAULT_MODE: u32 = 755;
 
 #[allow(dead_code)]
-pub struct Behaviour {
+pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
     suffix: String,
@@ -40,7 +42,7 @@ pub enum MainFunction {
     Standard,
 }
 
-impl Behaviour {
+impl Behavior {
     /// Determine the mode for chmod after copy.
     pub fn mode(&self) -> u32 {
         match self.specified_mode {
@@ -62,7 +64,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 2;
     }
 
-    let behaviour = match behaviour(&matches) {
+    let behavior = match behavior(&matches) {
         Ok(x) => x,
         Err(ret) => {
             return ret;
@@ -80,9 +82,9 @@ pub fn uumain(args: Vec<String>) -> i32 {
         arguments.map(to_owned).collect()
     };
 
-    match behaviour.main_function {
-        MainFunction::Directory => directory(&paths[..], behaviour),
-        MainFunction::Standard => standard(&paths[..], behaviour),
+    match behavior.main_function {
+        MainFunction::Directory => directory(&paths[..], behavior),
+        MainFunction::Standard => standard(&paths[..], behavior),
     }
 }
 
@@ -251,15 +253,15 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
     }
 }
 
-/// Determine behaviour, given command line arguments.
+/// Determine behavior, given command line arguments.
 ///
-/// If successful, returns a filled-out Behaviour struct.
+/// If successful, returns a filled-out Behavior struct.
 ///
 /// # Errors
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
+fn behavior(matches: &getopts::Matches) -> Result<Behavior, i32> {
     let main_function = if matches.opt_present("directory") {
         MainFunction::Directory
     } else {
@@ -306,7 +308,7 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
         "~".to_owned()
     };
 
-    Ok(Behaviour {
+    Ok(Behavior {
         main_function,
         specified_mode,
         suffix: backup_suffix,
@@ -321,7 +323,7 @@ fn behaviour(matches: &getopts::Matches) -> Result<Behaviour, i32> {
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn directory(paths: &[PathBuf], b: Behaviour) -> i32 {
+fn directory(paths: &[PathBuf], b: Behavior) -> i32 {
     if paths.is_empty() {
         println!("{} with -d requires at least one argument.", NAME);
         1
@@ -363,11 +365,11 @@ fn is_new_file_path(path: &Path) -> bool {
     path.is_file() || !path.exists() && path.parent().map(Path::is_dir).unwrap_or(true)
 }
 
-/// Perform an install, given a list of paths and behaviour.
+/// Perform an install, given a list of paths and behavior.
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn standard(paths: &[PathBuf], b: Behaviour) -> i32 {
+fn standard(paths: &[PathBuf], b: Behavior) -> i32 {
     if paths.len() < 2 {
         println!("{} requires at least 2 arguments.", NAME);
         1
@@ -393,7 +395,7 @@ fn standard(paths: &[PathBuf], b: Behaviour) -> i32 {
 /// _files_ must all exist as non-directories.
 /// _target_dir_ must be a directory.
 ///
-fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
+fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
@@ -435,7 +437,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
 /// _file_ must exist as a non-directory.
 /// _target_ must be a non-directory
 ///
-fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behaviour) -> i32 {
+fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
     if copy(file, &target, b).is_err() {
         1
     } else {
@@ -454,7 +456,7 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behaviour) -> i32 {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
-fn copy(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> Result<(), ()> {
+fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
     let io_result = fs::copy(from, to);
 
     if let Err(err) = io_result {

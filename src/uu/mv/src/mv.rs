@@ -6,6 +6,8 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) sourcepath targetpath
+
 extern crate fs_extra;
 extern crate getopts;
 
@@ -26,7 +28,7 @@ use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 static NAME: &str = "mv";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct Behaviour {
+pub struct Behavior {
     overwrite: OverwriteMode,
     backup: BackupMode,
     suffix: String,
@@ -117,7 +119,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         return 1;
     }
 
-    let behaviour = Behaviour {
+    let behavior = Behavior {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
@@ -147,7 +149,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         help(&usage);
         0
     } else {
-        exec(&paths[..], behaviour)
+        exec(&paths[..], behavior)
     }
 }
 
@@ -225,7 +227,7 @@ fn help(usage: &str) {
     );
 }
 
-fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
+fn exec(files: &[PathBuf], b: Behavior) -> i32 {
     if let Some(ref name) = b.target_dir {
         return move_files_into_dir(files, &PathBuf::from(name), &b);
     }
@@ -309,7 +311,7 @@ fn exec(files: &[PathBuf], b: Behaviour) -> i32 {
     0
 }
 
-fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -> i32 {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
@@ -347,7 +349,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behaviour) -
     }
 }
 
-fn rename(from: &PathBuf, to: &PathBuf, b: &Behaviour) -> io::Result<()> {
+fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -413,7 +415,7 @@ fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
             rename_symlink_fallback(&from, &to)?;
         } else if file_type.is_dir() {
             // We remove the destination directory if it exists to match the
-            // behaviour of `fs::rename`. As far as I can tell, `fs_extra`'s
+            // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
             // `move_dir` would otherwise behave differently.
             if to.exists() {
                 fs::remove_dir_all(to)?;

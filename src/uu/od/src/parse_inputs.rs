@@ -2,7 +2,7 @@ use getopts::Matches;
 
 /// Abstraction for getopts
 pub trait CommandLineOpts {
-    /// returns all commandline parameters which do not belong to an option.
+    /// returns all command line parameters which do not belong to an option.
     fn inputs(&self) -> Vec<String>;
     /// tests if any of the specified options is present.
     fn opts_present(&self, _: &[&str]) -> bool;
@@ -31,7 +31,7 @@ pub enum CommandLineInputs {
     FileAndOffset((String, usize, Option<usize>)),
 }
 
-/// Interprets the commandline inputs of od.
+/// Interprets the command line inputs of od.
 ///
 /// Returns either an unspecified number of filenames.
 /// Or it will return a single filename, with an offset and optional label.
@@ -45,7 +45,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
         return parse_inputs_traditional(input_strings);
     }
 
-    // test if commandline contains: [file] <offset>
+    // test if command line contains: [file] <offset>
     // fall-through if no (valid) offset is found
     if input_strings.len() == 1 || input_strings.len() == 2 {
         // if any of the options -A, -j, -N, -t, -v or -w are present there is no offset
@@ -74,7 +74,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
     Ok(CommandLineInputs::FileNames(input_strings))
 }
 
-/// interprets inputs when --traditional is on the commandline
+/// interprets inputs when --traditional is on the command line
 ///
 /// normally returns CommandLineInputs::FileAndOffset, but if no offset is found,
 /// it returns CommandLineInputs::FileNames (also to differentiate from the offset == 0)
@@ -125,7 +125,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLin
     }
 }
 
-/// parses format used by offset and label on the commandline
+/// parses format used by offset and label on the command line
 pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
     let mut start = 0;
     let mut len = s.len();
@@ -159,10 +159,10 @@ pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
 mod tests {
     use super::*;
 
-    /// A mock for the commandline options type
+    /// A mock for the command line options type
     ///
-    /// `inputs` are all commandline parameters which do not belong to an option.
-    /// `option_names` are the names of the options on the commandline.
+    /// `inputs` are all command line parameters which do not belong to an option.
+    /// `option_names` are the names of the options on the command line.
     struct MockOptions<'a> {
         inputs: Vec<String>,
         option_names: Vec<&'a str>,
@@ -245,13 +245,13 @@ mod tests {
             parse_inputs(&MockOptions::new(vec!["+10a"], vec![""])).unwrap()
         );
 
-        // if -j is included in the commandline, there cannot be an offset.
+        // if -j is included in the command line, there cannot be an offset.
         assert_eq!(
             CommandLineInputs::FileNames(vec!["+10".to_string()]),
             parse_inputs(&MockOptions::new(vec!["+10"], vec!["j"])).unwrap()
         );
 
-        // if -v is included in the commandline, there cannot be an offset.
+        // if -v is included in the command line, there cannot be an offset.
         assert_eq!(
             CommandLineInputs::FileNames(vec!["+10".to_string()]),
             parse_inputs(&MockOptions::new(vec!["+10"], vec!["o", "v"])).unwrap()
@@ -278,7 +278,7 @@ mod tests {
             parse_inputs(&MockOptions::new(vec!["file1", "+10"], vec!["j"])).unwrap()
         );
 
-        // offset must be last on the commandline
+        // offset must be last on the command line
         assert_eq!(
             CommandLineInputs::FileNames(vec!["+10".to_string(), "file1".to_string()]),
             parse_inputs(&MockOptions::new(vec!["+10", "file1"], vec![""])).unwrap()
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_parse_inputs_traditional() {
-        // it should not return FileAndOffset to signal no offset was entered on the commandline.
+        // it should not return FileAndOffset to signal no offset was entered on the command line.
         assert_eq!(
             CommandLineInputs::FileNames(vec!["-".to_string()]),
             parse_inputs(&MockOptions::new(vec![], vec!["traditional"])).unwrap()

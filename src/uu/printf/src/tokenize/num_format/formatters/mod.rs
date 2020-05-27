@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv cninetyninehexfloatf floatf intf scif
+
 mod base_conv;
 pub mod cninetyninehexfloatf;
 pub mod decf;

@@ -7,6 +7,8 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
+// spell-checker:ignore (ToDO) getusername
+
 #[macro_use]
 extern crate clap;
 #[macro_use]

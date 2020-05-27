@@ -7,6 +7,8 @@
 
 /* last synced with: logname (GNU coreutils) 8.22 */
 
+// spell-checker:ignore (ToDO) getlogin userlogin
+
 extern crate libc;
 
 #[macro_use]

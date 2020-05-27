@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) fchar conv decr inprefix intf ints finalstr
+
 //! formatter for unsigned and signed int subs
 //! unsigned ints: %X %x (hex u64) %o (octal u64) %u (base ten u64)
 //! signed ints: %i %d (both base ten i64)
@@ -193,7 +195,7 @@ impl Formatter for Intf {
             *field.field_char == 'i' || *field.field_char == 'd',
             inprefix,
         );
-        // We always will have a formatprimitive to return
+        // We always will have a format primitive to return
         Some(if convert_hints.len_digits == 0 || convert_hints.is_zero {
             // if non-digit or end is reached before a non-zero digit
             let mut fmt_prim: FormatPrimitive = Default::default();

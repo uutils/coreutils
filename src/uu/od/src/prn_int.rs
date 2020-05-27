@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) itembytes
+
 use crate::formatteriteminfo::*;
 
 /// format string to print octal using `int_writer_unsigned`

@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) tempbuffer abcdefgh abcdefghij
+
 //! Contains the trait `PeekRead` and type `PeekReader` implementing it.
 
 use std::io;

@@ -7,6 +7,8 @@
 
 /* last synced with: unlink (GNU coreutils) 8.21 */
 
+// spell-checker:ignore (ToDO) lstat IFLNK IFMT IFREG
+
 extern crate getopts;
 extern crate libc;
 

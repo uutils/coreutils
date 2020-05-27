@@ -10,6 +10,8 @@
  * file that was distributed with this source code.
  */
 
+// spell-checker:ignore (ToDO) SRes Newl
+
 use std::io::Result as IoResult;
 use std::io::{BufRead, BufReader, Read, Write};
 

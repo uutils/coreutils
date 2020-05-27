@@ -1,6 +1,8 @@
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 
+// spell-checker:ignore (ToDO) istr chiter argptr ilen
+
 extern crate getopts;
 
 #[macro_use]

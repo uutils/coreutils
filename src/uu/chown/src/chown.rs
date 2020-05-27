@@ -7,6 +7,8 @@
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
+// spell-checker:ignore (ToDO) COMFOLLOW Chowner Passwd RFILE RFILE's derefer dgid duid
+
 #[macro_use]
 extern crate uucore;
 pub use uucore::entries::{self, Group, Locate, Passwd};

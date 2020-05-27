@@ -5,6 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) delim sourcefiles
+
 #[macro_use]
 extern crate uucore;
 
@@ -110,7 +112,7 @@ struct Options {
 
 struct FieldOptions {
     delimiter: String, // one char long, String because of UTF8 representation
-    out_delimeter: Option<String>,
+    out_delimiter: Option<String>,
     only_delimited: bool,
     zero_terminated: bool,
 }
@@ -288,7 +290,7 @@ fn cut_fields_delimiter<R: Read>(
 #[allow(clippy::cognitive_complexity)]
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    if let Some(ref o_delim) = opts.out_delimeter {
+    if let Some(ref o_delim) = opts.out_delimiter {
         return cut_fields_delimiter(
             reader,
             ranges,
@@ -498,7 +500,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                 ranges,
                                 FieldOptions {
                                     delimiter: delim,
-                                    out_delimeter: out_delim,
+                                    out_delimiter: out_delim,
                                     only_delimited,
                                     zero_terminated,
                                 },
@@ -509,7 +511,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         ranges,
                         FieldOptions {
                             delimiter: "\t".to_owned(),
-                            out_delimeter: out_delim,
+                            out_delimiter: out_delim,
                             only_delimited,
                             zero_terminated,
                         },

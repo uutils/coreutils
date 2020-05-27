@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum
+
 use super::super::format_field::FormatField;
 use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, InPrefix};
 use super::base_conv;

@@ -1,4 +1,6 @@
-//! Primitievs used by Sub Tokenizer
+// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum fprim interp
+
+//! Primitives used by Sub Tokenizer
 //! and num_format modules
 #[derive(Clone)]
 pub enum FieldType {

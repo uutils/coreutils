@@ -1,3 +1,5 @@
+// spell-checker: ignore (ToDO) INVS
+
 use std::num::Wrapping;
 
 use crate::Factors;

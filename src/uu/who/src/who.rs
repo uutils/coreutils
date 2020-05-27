@@ -8,6 +8,8 @@
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
+// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
+
 #[macro_use]
 extern crate uucore;
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};

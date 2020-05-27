@@ -9,7 +9,7 @@ use uucore::mode;
 pub fn parse(mode_string: &str, considering_dir: bool) -> Result<u32, String> {
     let numbers: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-    // Passing 000 as the existing permissions seems to mirror GNU behaviour.
+    // Passing 000 as the existing permissions seems to mirror GNU behavior.
     if mode_string.contains(numbers) {
         mode::parse_numeric(0, mode_string)
     } else {

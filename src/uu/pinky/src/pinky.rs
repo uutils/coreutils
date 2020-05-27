@@ -8,6 +8,8 @@
 #![cfg_attr(feature = "clippy", feature(plugin))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
+// spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
+
 #[macro_use]
 extern crate uucore;
 use uucore::entries::{Locate, Passwd};

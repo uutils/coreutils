@@ -7,6 +7,8 @@
  * file that was distributed with this source code.
  */
 
+// spell-checker:ignore (ToDO) errno EPERM ENOSYS
+
 extern crate libc;
 
 use std::io::Error;

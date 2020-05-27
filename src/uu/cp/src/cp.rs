@@ -8,6 +8,8 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs
+
 extern crate clap;
 extern crate filetime;
 #[cfg(target_os = "linux")]
@@ -690,7 +692,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 
     let (sources, target) = match options.target_dir {
         Some(ref target) => {
-            // All path arges are sources, and the target dir was
+            // All path args are sources, and the target dir was
             // specified separately
             (paths, PathBuf::from(target))
         }
@@ -1041,7 +1043,7 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 }
 
 /// Copy the a file from `source` to `dest`. No path manipulation is
-/// done on either `source` or `dest`, the are used as provieded.
+/// done on either `source` or `dest`, the are used as provided.
 ///
 /// Behavior when copying to existing files is contingent on the
 /// `options.overwrite` mode. If a file is skipped, the return type

@@ -5,6 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
+
 #[cfg(unix)]
 extern crate libc;
 extern crate walker;

@@ -7,6 +7,8 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
+// spell-checker:ignore (ToDO) execvp progname subcommand subcommands unsets
+
 #[macro_use]
 extern crate clap;
 

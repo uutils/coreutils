@@ -5,6 +5,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
+
 extern crate byteorder;
 extern crate getopts;
 extern crate half;
@@ -54,14 +56,14 @@ static USAGE: &str = r#"Usage:
 
 Displays data in various human-readable formats. If multiple formats are
 specified, the output will contain all formats in the order they appear on the
-commandline. Each format will be printed on a new line. Only the line
+command line. Each format will be printed on a new line. Only the line
 containing the first format will be prefixed with the offset.
 
 If no filename is specified, or it is "-", stdin will be used. After a "--", no
-more options will be recognised. This allows for filenames starting with a "-".
+more options will be recognized. This allows for filenames starting with a "-".
 
 If a filename is a valid number which can be used as an offset in the second
-form, you can force it to be recognised as a filename if you include an option
+form, you can force it to be recognized as a filename if you include an option
 like "-j0", which is only valid in the first form.
 
 RADIX is one of o,d,x,n for octal, decimal, hexadecimal or none.
@@ -84,7 +86,7 @@ TYPE contains one or more format specifications consisting of:
 SIZE is the number of bytes which can be the number 1, 2, 4, 8 or 16,
     or C, I, S, L for 1, 2, 4, 8 bytes for integer types,
     or F, D, L for 4, 8, 16 bytes for floating point.
-Any type specification can have a "z" suffic, which will add a ASCII dump at
+Any type specification can have a "z" suffix, which will add a ASCII dump at
     the end of the line.
 
 If an error occurred, a diagnostic message will be printed to stderr, and the
@@ -286,7 +288,7 @@ impl OdOptions {
     }
 }
 
-/// parses and validates commandline parameters, prepares data structures,
+/// parses and validates command line parameters, prepares data structures,
 /// opens the input and calls `odfunc` to process the input.
 pub fn uumain(args: Vec<String>) -> i32 {
     let opts = create_getopts_options();

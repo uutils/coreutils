@@ -7,11 +7,13 @@
 
 //! Generate a table of the multiplicative inverses of p_i mod 2^64
 //! for the first 1027 odd primes (all 13 bit and smaller primes).
-//! You can supply a commandline argument to override the default
+//! You can supply a command line argument to override the default
 //! value of 1027 for the number of entries in the table.
 //!
 //! 2 has no multiplicative inverse mode 2^64 because 2 | 2^64,
 //! and in any case divisibility by two is trivial by checking the LSB.
+
+// spell-checker:ignore (ToDO) invs newr newrp newtp outstr
 
 #![cfg_attr(test, allow(dead_code))]
 
