@@ -4,7 +4,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
+// spell-checker:ignore (vars) fperm srwx
 
 pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
     let (op, pos) = parse_op(mode, Some('='))?;

@@ -1,5 +1,3 @@
-// spell-checker:ignore () SIGPIPE maint uutils
-
 use std::panic;
 
 //## SIGPIPE handling background/discussions ...
