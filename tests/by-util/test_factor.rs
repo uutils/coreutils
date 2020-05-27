@@ -9,7 +9,7 @@
 
 use crate::common::util::*;
 
-#[path = "../src/uu/factor/sieve.rs"]
+#[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
 use self::sieve::Sieve;
 
