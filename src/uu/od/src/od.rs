@@ -294,7 +294,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
-            disp_err!("{}", f);
+            show_usage_error!("{}", f);
             return 1;
         }
     };
@@ -310,7 +310,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     let od_options = match OdOptions::new(matches, args) {
         Err(s) => {
-            disp_err!("{}", s);
+            show_usage_error!("{}", s);
             return 1;
         }
         Ok(o) => o,

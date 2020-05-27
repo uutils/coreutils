@@ -117,8 +117,8 @@ for details about the options it supports.",
 
     let mut ret = 0i32;
     match matches.free.len() {
-        0 => disp_err!("missing operand"),
-        1 => disp_err!("missing operand after ‘{}’", matches.free[0]),
+        0 => show_usage_error!("missing operand"),
+        1 => show_usage_error!("missing operand after ‘{}’", matches.free[0]),
         _ => {
             let args = &matches.free;
             let c_str = CString::new(args[0].as_str()).expect("Failed to convert to CString");
@@ -150,10 +150,10 @@ for details about the options it supports.",
                     eprintln!("Try '{} --help' for more information.", NAME);
                     return 1;
                 } else if args.len() > 4 {
-                    disp_err!("extra operand ‘{}’", args[4]);
+                    show_usage_error!("extra operand ‘{}’", args[4]);
                     return 1;
                 } else if !"bcu".contains(ch) {
-                    disp_err!("invalid device type ‘{}’", args[1]);
+                    show_usage_error!("invalid device type ‘{}’", args[1]);
                     return 1;
                 }
 

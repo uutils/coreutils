@@ -115,10 +115,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.free.is_empty() {
-        disp_err!("missing operand");
+        show_usage_error!("missing operand");
         return 1;
     } else if matches.free.len() < 2 && !matches.opt_present("reference") {
-        disp_err!("missing operand after ‘{}’", matches.free[0]);
+        show_usage_error!("missing operand after ‘{}’", matches.free[0]);
         return 1;
     }
 

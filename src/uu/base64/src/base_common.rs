@@ -45,7 +45,7 @@ pub fn execute(
     let decode = matches.opt_present("decode");
 
     if matches.free.len() > 1 {
-        disp_err!("extra operand ‘{}’", matches.free[0]);
+        show_usage_error!("extra operand ‘{}’", matches.free[0]);
         return 1;
     }
 

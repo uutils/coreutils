@@ -119,7 +119,7 @@ The utmp file will be {}",
     }
 
     if !do_short_format && matches.free.is_empty() {
-        disp_err!("no username specified; at least one must be specified when using -l");
+        show_usage_error!("no username specified; at least one must be specified when using -l");
         return 1;
     }
 
@@ -136,7 +136,7 @@ The utmp file will be {}",
 
     if do_short_format {
         if let Err(e) = pk.short_pinky() {
-            disp_err!("{}", e);
+            show_usage_error!("{}", e);
             1
         } else {
             0

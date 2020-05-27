@@ -891,7 +891,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
-            disp_err!("{}", f);
+            show_usage_error!("{}", f);
             return 1;
         }
     };
@@ -903,7 +903,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.free.is_empty() {
-        disp_err!("missing operand");
+        show_usage_error!("missing operand");
         return 1;
     }
 

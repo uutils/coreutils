@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         || matches.opt_present("bourne-shell"))
         && matches.opt_present("print-database")
     {
-        disp_err!(
+        show_usage_error!(
             "the options to output dircolors' internal database and\nto select a shell \
              syntax are mutually exclusive"
         );
@@ -80,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("print-database") {
         if !matches.free.is_empty() {
-            disp_err!(
+            show_usage_error!(
                 "extra operand ‘{}’\nfile operands cannot be combined with \
                  --print-database (-p)",
                 matches.free[0]
@@ -113,7 +113,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
         if matches.free.len() > 1 {
-            disp_err!("extra operand ‘{}’", matches.free[1]);
+            show_usage_error!("extra operand ‘{}’", matches.free[1]);
             return 1;
         }
         match File::open(matches.free[0].as_str()) {

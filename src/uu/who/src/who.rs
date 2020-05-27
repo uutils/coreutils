@@ -205,7 +205,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         if matches.free.len() > 2 {
-            disp_err!("{}", msg_wrong_number_of_arguments!());
+            show_usage_error!("{}", msg_wrong_number_of_arguments!());
             exit!(1);
         }
     }
