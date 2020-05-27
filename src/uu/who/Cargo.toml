@@ -17,8 +17,6 @@ path = "src/who.rs"
 [dependencies]
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["utmpx"] }
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
-## optional
-clippy = { version = "0.0.212", optional = true }
 
 [[bin]]
 name = "who"

@@ -20,10 +20,6 @@ uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uuc
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 walkdir = "2.2"
 
-[dependencies.clippy]
-version = "0.0.212"
-optional = true
-
 [[bin]]
 name = "chown"
 path = "src/main.rs"
