@@ -143,7 +143,7 @@ struct SplitControl {
 
 trait Splitter {
     // Consume the current_line and return the consumed string
-    fn consume(&mut self, &mut SplitControl) -> String;
+    fn consume(&mut self, _: &mut SplitControl) -> String;
 }
 
 struct LineSplitter {
