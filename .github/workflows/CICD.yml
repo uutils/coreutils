@@ -34,11 +34,6 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        # #maint: [rivy; 2020-02-08] 'windows-latest' `cargo fmt` is bugged for this project (see reasons @ GH:rust-lang/rustfmt #3324, #3590, #3688 ; waiting for repair)
-        JOB_DO_FORMAT_TESTING="true"
-        case '${{ matrix.job.os }}' in windows-latest) unset JOB_DO_FORMAT_TESTING ;; esac;
-        echo set-output name=JOB_DO_FORMAT_TESTING::${JOB_DO_FORMAT_TESTING:-<empty>/false}
-        echo ::set-output name=JOB_DO_FORMAT_TESTING::${JOB_DO_FORMAT_TESTING}
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
@@ -53,14 +48,12 @@ jobs:
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt, clippy
     - name: "`fmt` testing"
-      if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
       shell: bash
       run: |
         # `fmt` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
     - name: "`fmt` testing of tests"
-      if: steps.vars.outputs.JOB_DO_FORMAT_TESTING
       shell: bash
       run: |
         # `fmt` testing of tests
