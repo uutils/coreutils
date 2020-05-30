@@ -58,7 +58,7 @@ fn main() {
     let mut x = primes.next().unwrap();
     for next in primes {
         // format the table
-        let outstr = format!("({}, {}, {}),", x, inv_mod_u64(x), u64::MAX / x);
+        let outstr = format!("({}, {}, {}),", x, inv_mod_u64(x), std::u64::MAX / x);
         if cols + outstr.len() > MAX_WIDTH {
             write!(file, "\n    {}", outstr).unwrap();
             cols = 4 + outstr.len();
