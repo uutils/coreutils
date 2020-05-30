@@ -39,7 +39,7 @@ impl Factors {
     }
 
     fn add(&mut self, prime: u64, exp: u8) {
-        assert!(exp > 0);
+        debug_assert!(exp > 0);
         let n = *self.f.get(&prime).unwrap_or(&0);
         self.f.insert(prime, exp + n);
     }
