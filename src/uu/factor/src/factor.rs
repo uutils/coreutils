@@ -11,7 +11,7 @@ extern crate rand;
 #[macro_use]
 extern crate uucore;
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::io::{stdin, BufRead};
 use std::ops;
@@ -27,12 +27,12 @@ static SUMMARY: &str = "Print the prime factors of the given number(s).
 static LONG_HELP: &str = "";
 
 struct Factors {
-    f: HashMap<u64, u8>,
+    f: BTreeMap<u64, u8>,
 }
 
 impl Factors {
     fn new() -> Factors {
-        Factors { f: HashMap::new() }
+        Factors { f: BTreeMap::new() }
     }
 
     fn add(&mut self, prime: u64, exp: u8) {
@@ -63,12 +63,8 @@ impl ops::MulAssign<Factors> for Factors {
 
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: Use a representation with efficient in-order iteration
-        let mut primes: Vec<&u64> = self.f.keys().collect();
-        primes.sort();
-
-        for p in primes {
-            for _ in 0..self.f[&p] {
+        for (p, exp) in self.f.iter() {
+            for _ in 0..*exp {
                 write!(f, " {}", p)?
             }
         }
