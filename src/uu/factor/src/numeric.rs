@@ -173,12 +173,12 @@ pub(crate) fn inv_mod_u64(a: u64) -> u64 {
             r
         } / newr;
 
-        let (tp, Wrapping(newtp)) = (newt, Wrapping(t) - (Wrapping(quot) * Wrapping(newt)));
-        t = tp;
+        let newtp = t.wrapping_sub(quot.wrapping_mul(newt));
+        t = newt;
         newt = newtp;
 
-        let (rp, Wrapping(newrp)) = (newr, Wrapping(r) - (Wrapping(quot) * Wrapping(newr)));
-        r = rp;
+        let newrp = r.wrapping_sub(quot.wrapping_mul(newr));
+        r = newr;
         newr = newrp;
     }
 
