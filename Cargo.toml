@@ -11,7 +11,7 @@ description = "coreutils ~ GNU coreutils; implemented as universal (cross-platfo
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
-keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
 
