@@ -7,7 +7,7 @@ description = "split ~ (uutils) split input into output files"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/split"
-keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
 

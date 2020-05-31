@@ -7,7 +7,7 @@ description = "shuf ~ (uutils) display random permutations of input lines"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/shuf"
-keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
 

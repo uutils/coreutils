@@ -7,7 +7,7 @@ description = "pwd ~ (uutils) display current working directory"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/pwd"
-keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
 

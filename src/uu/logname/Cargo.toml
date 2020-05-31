@@ -7,7 +7,7 @@ description = "logname ~ (uutils) display the login name of the current user"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/logname"
-keywords = ["coreutils", "uutils", "cross-platform", "core", "cli", "util", "utility"]
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
 
