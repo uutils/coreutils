@@ -8,7 +8,6 @@
 // * that was distributed with this source code.
 
 use std::mem::swap;
-use std::num::Wrapping;
 
 pub fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b > 0 {
@@ -89,7 +88,7 @@ impl Montgomery {
 impl Arithmetic for Montgomery {
     // Montgomery transform, R=2⁶⁴
     // Provides fast arithmetic mod n (n odd, u64)
-    type I = Wrapping<u64>;
+    type I = u64;
 
     fn new(n: u64) -> Self {
         let a = inv_mod_u64(n).wrapping_neg();
@@ -104,13 +103,13 @@ impl Arithmetic for Montgomery {
     fn from_u64(&self, x: u64) -> Self::I {
         // TODO: optimise!
         assert!(x < self.n);
-        let r = Wrapping((((x as u128) << 64) % self.n as u128) as u64);
+        let r = (((x as u128) << 64) % self.n as u128) as u64;
         debug_assert_eq!(x, self.to_u64(r));
         r
     }
 
     fn to_u64(&self, n: Self::I) -> u64 {
-        self.reduce(n.0)
+        self.reduce(n)
     }
 
     fn add(&self, a: Self::I, b: Self::I) -> Self::I {
@@ -134,7 +133,7 @@ impl Arithmetic for Montgomery {
     }
 
     fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = Wrapping(self.reduce((a * b).0));
+        let r = self.reduce(a.wrapping_mul(b));
 
         // Check that r (reduced back to the usual representation) equals
         // a*b % n
