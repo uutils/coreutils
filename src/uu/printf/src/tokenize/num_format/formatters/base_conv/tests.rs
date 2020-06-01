@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) conv arrnum mult shortcircuit
+
 #[cfg(test)]
 use super::*;
 

@@ -1,8 +1,9 @@
-use formatteriteminfo::*;
 use half::f16;
 use std::f32;
 use std::f64;
 use std::num::FpCategory;
+
+use crate::formatteriteminfo::*;
 
 pub static FORMAT_ITEM_F16: FormatterItemInfo = FormatterItemInfo {
     byte_size: 2,

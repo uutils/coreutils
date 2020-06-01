@@ -1,7 +1,7 @@
-extern crate uu_dircolors;
-use self::uu_dircolors::{guess_syntax, OutputFmt, StrUtils};
+use crate::common::util::*;
 
-use common::util::*;
+extern crate dircolors;
+use self::dircolors::{guess_syntax, OutputFmt, StrUtils};
 
 #[test]
 fn test_shell_syntax() {

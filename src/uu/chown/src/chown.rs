@@ -1,13 +1,11 @@
-#![crate_name = "uu_chown"]
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
+
+// spell-checker:ignore (ToDO) COMFOLLOW Chowner Passwd RFILE RFILE's derefer dgid duid
 
 #[macro_use]
 extern crate uucore;
@@ -39,7 +37,7 @@ const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
+    let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag("c",
                  "changes",
                  "like verbose but report only when a change is made")
@@ -137,10 +135,10 @@ pub fn uumain(args: Vec<String>) -> i32 {
     };
 
     if matches.free.is_empty() {
-        disp_err!("missing operand");
+        show_usage_error!("missing operand");
         return 1;
     } else if matches.free.len() < 2 && !matches.opt_present("reference") {
-        disp_err!("missing operand after ‘{}’", matches.free[0]);
+        show_usage_error!("missing operand after ‘{}’", matches.free[0]);
         return 1;
     }
 

@@ -1,5 +1,8 @@
-use crate::Factors;
+// spell-checker: ignore (ToDO) INVS
+
 use std::num::Wrapping;
+
+use crate::Factors;
 
 include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
 

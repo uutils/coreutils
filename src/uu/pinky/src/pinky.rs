@@ -1,13 +1,11 @@
-#![crate_name = "uu_pinky"]
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
+
+// spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
 #[macro_use]
 extern crate uucore;
@@ -48,7 +46,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 The utmp file will be {}",
         utmpx::DEFAULT_FILE
     );
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, &long_help);
+    let mut opts = app!(SYNTAX, SUMMARY, &long_help);
     opts.optflag(
         "l",
         "",
@@ -120,7 +118,7 @@ The utmp file will be {}",
     }
 
     if !do_short_format && matches.free.is_empty() {
-        disp_err!("no username specified; at least one must be specified when using -l");
+        show_usage_error!("no username specified; at least one must be specified when using -l");
         return 1;
     }
 
@@ -137,7 +135,7 @@ The utmp file will be {}",
 
     if do_short_format {
         if let Err(e) = pk.short_pinky() {
-            disp_err!("{}", e);
+            show_usage_error!("{}", e);
             1
         } else {
             0

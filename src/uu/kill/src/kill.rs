@@ -1,13 +1,11 @@
-#![crate_name = "uu_kill"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Maciej Dziardziel <fiedzia@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE file
+//  * that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Maciej Dziardziel <fiedzia@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) signalname pids
 
 extern crate libc;
 
@@ -34,7 +32,7 @@ pub enum Mode {
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_signal) = handle_obsolete(args);
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("s", "signal", "specify the <signal> to be sent", "SIGNAL")
         .optflagopt(
             "l",

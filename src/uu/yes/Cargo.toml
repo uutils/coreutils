@@ -1,23 +1,29 @@
 [package]
-name = "yes"
+name = "uu_yes"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-description = "Repeatedly output a line with all specified STRING(s), or 'y'."
-build = "../../common/mkmain.rs"
+description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/yes"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_yes"
 path = "src/yes.rs"
 
 [dependencies]
 clap = "2.32"
-uucore = { version = "0.0.2", features = ["zero-copy"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["zero-copy"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [features]
-latency = []
 default = []
+#
+latency = []
 
 [[bin]]
 name = "yes"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

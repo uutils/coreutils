@@ -1,13 +1,11 @@
-#![crate_name = "uu_split"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Akira Hayakawa <ruby.wktk@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Akira Hayakawa <ruby.wktk@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) PREFIXaa
 
 extern crate getopts;
 
@@ -147,7 +145,7 @@ struct SplitControl {
 
 trait Splitter {
     // Consume the current_line and return the consumed string
-    fn consume(&mut self, &mut SplitControl) -> String;
+    fn consume(&mut self, _: &mut SplitControl) -> String;
 }
 
 struct LineSplitter {

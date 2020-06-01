@@ -1,19 +1,26 @@
 [package]
-name = "libstdbuf"
+name = "uu_stdbuf_libstdbuf"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
+description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/stdbuf"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 name = "libstdbuf"
 path = "src/libstdbuf.rs"
-# XXX: the rlib is just to prevent Cargo from spitting out a warning
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
 cpp = "0.4"
 libc = "0.2"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [build-dependencies]
 cpp_build = "0.4"

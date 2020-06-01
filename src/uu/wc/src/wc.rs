@@ -1,13 +1,11 @@
-#![crate_name = "uu_wc"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Boden Garman <bpgarman@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Boden Garman <bpgarman@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) fpath
 
 extern crate getopts;
 
@@ -132,7 +130,7 @@ const SYN: u8 = 0x16 as u8;
 const FF: u8 = 0x0C as u8;
 
 #[inline(always)]
-fn is_word_seperator(byte: u8) -> bool {
+fn is_word_separator(byte: u8) -> bool {
     byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
 }
 
@@ -185,7 +183,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
                         current_char_count = line.chars().count();
                     }
                     Err(..) => {
-                        word_count += raw_line.split(|&x| is_word_seperator(x)).count();
+                        word_count += raw_line.split(|&x| is_word_separator(x)).count();
                         current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
                     }
                 }
@@ -193,7 +191,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
 
                 if current_char_count > longest_line_length {
                     // we subtract one here because `line.len()` includes the LF
-                    // matches GNU 'wc' behaviour
+                    // matches GNU 'wc' behavior
                     longest_line_length = current_char_count - 1;
                 }
             }

@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_combine_pairs_of_lines() {

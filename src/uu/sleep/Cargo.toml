@@ -1,18 +1,24 @@
 [package]
-name = "sleep"
+name = "uu_sleep"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "sleep ~ (uutils) pause for DURATION"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/sleep"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_sleep"
 path = "src/sleep.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = { version = "0.0.2", features = ["parse_time"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["parse_time"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "sleep"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

@@ -1,9 +1,9 @@
 extern crate regex;
 
-use common::util::*;
+use crate::common::util::*;
 
-extern crate uu_stat;
-pub use self::uu_stat::*;
+extern crate stat;
+pub use self::stat::*;
 
 #[cfg(test)]
 mod test_fsext {
@@ -200,11 +200,16 @@ fn test_terse_normal_format() {
     println!("expect: {:?}", expect);
     let v_actual: Vec<&str> = actual.split(' ').collect();
     let v_expect: Vec<&str> = expect.split(' ').collect();
+    assert!(!v_expect.is_empty());
     // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
-    assert!(v_actual
-        .iter()
-        .zip(v_expect.iter())
-        .all(|(a, e)| a == e || *e == "0"));
+    assert!(
+        expect == "0"
+            || expect == "0\n"
+            || v_actual
+                .iter()
+                .zip(v_expect.iter())
+                .all(|(a, e)| a == e || *e == "0" || *e == "0\n")
+    );
 }
 
 #[test]
@@ -219,11 +224,16 @@ fn test_format_created_time() {
     let re = regex::Regex::new(r"\s").unwrap();
     let v_actual: Vec<&str> = re.split(&actual).collect();
     let v_expect: Vec<&str> = re.split(&expect).collect();
+    assert!(!v_expect.is_empty());
     // * allow for inequality if `stat` (aka, expect) returns "-" (unknown value)
-    assert!(v_actual
-        .iter()
-        .zip(v_expect.iter())
-        .all(|(a, e)| a == e || *e == "-"));
+    assert!(
+        expect == "-"
+            || expect == "-\n"
+            || v_actual
+                .iter()
+                .zip(v_expect.iter())
+                .all(|(a, e)| a == e || *e == "-" || *e == "-\n")
+    );
 }
 
 #[test]
@@ -238,11 +248,16 @@ fn test_format_created_seconds() {
     let re = regex::Regex::new(r"\s").unwrap();
     let v_actual: Vec<&str> = re.split(&actual).collect();
     let v_expect: Vec<&str> = re.split(&expect).collect();
+    assert!(!v_expect.is_empty());
     // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
-    assert!(v_actual
-        .iter()
-        .zip(v_expect.iter())
-        .all(|(a, e)| a == e || *e == "0"));
+    assert!(
+        expect == "0"
+            || expect == "0\n"
+            || v_actual
+                .iter()
+                .zip(v_expect.iter())
+                .all(|(a, e)| a == e || *e == "0" || *e == "0\n")
+    );
 }
 
 #[test]

@@ -1,13 +1,11 @@
-#![crate_name = "uu_cut"]
+// This file is part of the uutils coreutils package.
+//
+// (c) Rolf Morel <rolfmorel@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Rolf Morel <rolfmorel@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) delim sourcefiles
 
 #[macro_use]
 extern crate uucore;
@@ -16,8 +14,8 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
 
-use ranges::Range;
-use searcher::Searcher;
+use self::ranges::Range;
+use self::searcher::Searcher;
 
 mod buffer;
 mod ranges;
@@ -114,7 +112,7 @@ struct Options {
 
 struct FieldOptions {
     delimiter: String, // one char long, String because of UTF8 representation
-    out_delimeter: Option<String>,
+    out_delimiter: Option<String>,
     only_delimited: bool,
     zero_terminated: bool,
 }
@@ -134,8 +132,8 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 }
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
-    use buffer::Bytes::Select;
-    use buffer::Bytes::Selected::*;
+    use self::buffer::Bytes::Select;
+    use self::buffer::Bytes::Selected::*;
 
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     let mut buf_read = buffer::ByteReader::new(reader, newline_char);
@@ -292,7 +290,7 @@ fn cut_fields_delimiter<R: Read>(
 #[allow(clippy::cognitive_complexity)]
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    if let Some(ref o_delim) = opts.out_delimeter {
+    if let Some(ref o_delim) = opts.out_delimiter {
         return cut_fields_delimiter(
             reader,
             ranges,
@@ -426,7 +424,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("b", "bytes", "filter byte columns from the input source", "sequence")
         .optopt("c", "characters", "alias for character mode", "sequence")
         .optopt("d", "delimiter", "specify the delimiter character that separates fields in the input source. Defaults to Tab.", "delimiter")
@@ -502,7 +500,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                                 ranges,
                                 FieldOptions {
                                     delimiter: delim,
-                                    out_delimeter: out_delim,
+                                    out_delimiter: out_delim,
                                     only_delimited,
                                     zero_terminated,
                                 },
@@ -513,7 +511,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                         ranges,
                         FieldOptions {
                             delimiter: "\t".to_owned(),
-                            out_delimeter: out_delim,
+                            out_delimiter: out_delim,
                             only_delimited,
                             zero_terminated,
                         },

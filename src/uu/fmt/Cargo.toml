@@ -1,19 +1,25 @@
 [package]
-name = "fmt"
+name = "uu_fmt"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "fmt ~ (uutils) reformat each paragraph of input"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/fmt"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_fmt"
 path = "src/fmt.rs"
 
 [dependencies]
 libc = "0.2.42"
 unicode-width = "0.1.5"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "fmt"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

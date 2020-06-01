@@ -1,15 +1,13 @@
-#![crate_name = "uu_expand"]
+// This file is part of the uutils coreutils package.
+//
+// (c) Virgile Andreani <virgile.andreani@anbuco.fr>
+// (c) kwantam <kwantam@gmail.com>
+//     * 2015-04-28 ~ updated to work with both UTF-8 and non-UTF-8 encodings
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Virgile Andreani <virgile.andreani@anbuco.fr>
- * (c) kwantam <kwantam@gmail.com>
- *     20150428 updated to work with both UTF-8 and non-UTF-8 encodings
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag
 
 extern crate getopts;
 extern crate unicode_width;
@@ -103,7 +101,7 @@ impl Options {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("i", "initial", "do not convert tabs after non blanks")
         .optopt(
             "t",

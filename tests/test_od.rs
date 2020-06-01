@@ -1,7 +1,7 @@
 extern crate unindent;
 
 use self::unindent::*;
-use common::util::*;
+use crate::common::util::*;
 use std::env;
 use std::fs::remove_file;
 use std::fs::File;

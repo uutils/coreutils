@@ -1,4 +1,5 @@
-use std;
+// spell-checker:ignore (ToDO) multifile curr fnames fname xfrd fillloop mockstream
+
 use std::fs::File;
 use std::io;
 use std::io::BufReader;

@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_sort_call_graph() {

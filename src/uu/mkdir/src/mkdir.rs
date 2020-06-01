@@ -1,16 +1,11 @@
-#![crate_name = "uu_mkdir"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Nicholas Juszczak <juszczakn@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Nicholas Juszczak <juszczakn@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 extern crate getopts;
-extern crate libc;
 
 #[macro_use]
 extern crate uucore;
@@ -128,7 +123,7 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
 
     #[cfg(any(unix, target_os = "redox"))]
     fn chmod(path: &Path, mode: u16) -> i32 {
-        use fs::{set_permissions, Permissions};
+        use std::fs::{set_permissions, Permissions};
         use std::os::unix::fs::PermissionsExt;
 
         let mode = Permissions::from_mode(u32::from(mode));

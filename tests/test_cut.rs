@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 static INPUT: &'static str = "lists.txt";
 

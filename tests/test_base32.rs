@@ -6,7 +6,7 @@
 // that was distributed with this source code.
 //
 
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_encode() {

@@ -1,14 +1,13 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Rolf Morel <rolfmorel@gmail.com>
- * (c) kwantam <kwantam@gmail.com>
- *     substantially rewritten to use the stdlib BufReader trait
- *     rather than re-implementing it here.
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Rolf Morel <rolfmorel@gmail.com>
+// (c) kwantam <kwantam@gmail.com>
+//     * substantial rewrite to use the `std::io::BufReader` trait
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) SRes Newl
 
 use std::io::Result as IoResult;
 use std::io::{BufRead, BufReader, Read, Write};

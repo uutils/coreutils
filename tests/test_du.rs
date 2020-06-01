@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DIR_LINKS: &str = "subdir/links";

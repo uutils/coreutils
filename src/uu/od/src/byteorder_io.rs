@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) byteorder
+
 // workaround until https://github.com/BurntSushi/byteorder/issues/41 has been fixed
 // based on: https://github.com/netvl/immeta/blob/4460ee/src/utils.rs#L76
 

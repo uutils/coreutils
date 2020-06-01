@@ -1,5 +1,5 @@
 # spell-checker:words POSIX SDK SDKs repo toolchain toolchains
-# spell-checker:ignore ABI ARCH BACKTRACE BINDIR COMNTOOLS MINGW MINGWDIR MSVC MSYS USERPROFILE cl dllcrt findstr maint mkdir rustc rustlib rustup targetting uutils vcvarsall
+# spell-checker:ignore ABI ARCH BACKTRACE BINDIR COMNTOOLS MINGW MINGWDIR MSVC MSYS USERPROFILE cl dllcrt findstr maint mkdir rustc rustlib rustup uutils vcvarsall
 
 version: "{build} ~ {branch}"
 

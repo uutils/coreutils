@@ -4,8 +4,9 @@ extern crate sha1;
 extern crate sha2;
 extern crate sha3;
 
-use digest::digest::{ExtendableOutput, Input, XofReader};
 use hex::ToHex;
+
+use crate::digest::digest::{ExtendableOutput, Input, XofReader};
 
 pub trait Digest {
     fn new() -> Self

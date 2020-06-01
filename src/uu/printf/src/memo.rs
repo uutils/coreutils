@@ -1,17 +1,18 @@
 //! Memo runner of printf
 //! Takes a format string and arguments
-//! 1. tokenizes format string into tokens, consuming
+//! 1. tokenize format string into tokens, consuming
 //! any subst. arguments along the way.
 //! 2. feeds remaining arguments into function
 //! that prints tokens.
 
-use cli;
 use itertools::put_back_n;
 use std::iter::Peekable;
 use std::slice::Iter;
-use tokenize::sub::Sub;
-use tokenize::token::{Token, Tokenizer};
-use tokenize::unescaped_text::UnescapedText;
+
+use crate::cli;
+use crate::tokenize::sub::Sub;
+use crate::tokenize::token::{Token, Tokenizer};
+use crate::tokenize::unescaped_text::UnescapedText;
 
 pub struct Memo {
     tokens: Vec<Box<dyn Token>>,

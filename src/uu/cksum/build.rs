@@ -1,12 +1,10 @@
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) Alex Lyon <arcterus@mail.com>
-* (c) Michael Gehring <mg@ebfe.org>
-*
-* For the full copyright and license information, please view the LICENSE
-* file that was distributed with this source code.
-*/
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+// (c) Michael Gehring <mg@ebfe.org>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use std::env;
 use std::fs::File;
@@ -15,12 +13,7 @@ use std::path::Path;
 
 const CRC_TABLE_LEN: usize = 256;
 
-#[path = "../../common/mkmain.rs"]
-mod mkmain;
-
 fn main() {
-    mkmain::main();
-
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let mut table = Vec::with_capacity(CRC_TABLE_LEN);

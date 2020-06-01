@@ -1,18 +1,24 @@
 [package]
-name = "wc"
+name = "uu_wc"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "wc ~ (uutils) display newline, word, and byte counts for input"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/wc"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_wc"
 path = "src/wc.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "wc"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

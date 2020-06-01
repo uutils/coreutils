@@ -4,15 +4,11 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
-
-#![crate_name = "uu_base32"]
 
 #[macro_use]
 extern crate uucore;
 use uucore::encoding::Format;
 
-#[path = "../../base64/src/base_common.rs"]
 mod base_common;
 
 static SYNTAX: &str = "[OPTION]... [FILE]";

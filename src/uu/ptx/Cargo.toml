@@ -1,12 +1,17 @@
 [package]
-name = "ptx"
+name = "uu_ptx"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "ptx ~ (uutils) display a permuted index of input"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/ptx"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_ptx"
 path = "src/ptx.rs"
 
 [dependencies]
@@ -16,8 +21,9 @@ libc = "0.2.42"
 memchr = "2.2.0"
 regex = "1.0.1"
 regex-syntax = "0.6.7"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "ptx"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

@@ -1,15 +1,14 @@
-#![crate_name = "uu_cp"]
 #![allow(clippy::missing_safety_doc)]
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordy Dickinson <jordy.dickinson@gmail.com>
- * (c) Joshua S. Miller <jsmiller@uchicago.edu>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Jordy Dickinson <jordy.dickinson@gmail.com>
+// (c) Joshua S. Miller <jsmiller@uchicago.edu>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs
 
 extern crate clap;
 extern crate filetime;
@@ -26,13 +25,11 @@ extern crate walkdir;
 extern crate xattr;
 
 #[cfg(windows)]
-extern crate kernel32;
-#[cfg(windows)]
-use kernel32::CreateFileW;
-#[cfg(windows)]
-use kernel32::GetFileInformationByHandle;
-#[cfg(windows)]
 extern crate winapi;
+#[cfg(windows)]
+use winapi::um::fileapi::CreateFileW;
+#[cfg(windows)]
+use winapi::um::fileapi::GetFileInformationByHandle;
 
 use clap::{App, Arg, ArgMatches};
 use filetime::FileTime;
@@ -695,7 +692,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 
     let (sources, target) = match options.target_dir {
         Some(ref target) => {
-            // All path arges are sources, and the target dir was
+            // All path args are sources, and the target dir was
             // specified separately
             (paths, PathBuf::from(target))
         }
@@ -872,7 +869,7 @@ fn copy_source(
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
-/// Any errors encounted copying files in the tree will be logged but
+/// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
 fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult<()> {
     if !options.recursive {
@@ -1046,7 +1043,7 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 }
 
 /// Copy the a file from `source` to `dest`. No path manipulation is
-/// done on either `source` or `dest`, the are used as provieded.
+/// done on either `source` or `dest`, the are used as provided.
 ///
 /// Behavior when copying to existing files is contingent on the
 /// `options.overwrite` mode. If a file is skipped, the return type

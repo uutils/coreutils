@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) tempdir tmpdir
+
 // Mainly taken from crate `tempdir`
 
 extern crate rand;

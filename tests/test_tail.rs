@@ -1,7 +1,7 @@
-extern crate uu_tail;
+extern crate tail;
 
-use self::uu_tail::parse_size;
-use common::util::*;
+use self::tail::parse_size;
+use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
 use std::process::{Command, Stdio};

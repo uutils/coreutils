@@ -1,29 +1,30 @@
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) kwantam <kwantam@gmail.com>
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// * This file is part of the uutils coreutils package.
+// *
+// * (c) kwantam <kwantam@gmail.com>
+// *
+// * For the full copyright and license information, please view the LICENSE file
+// * that was distributed with this source code.
 
 //! Generate a table of the multiplicative inverses of p_i mod 2^64
 //! for the first 1027 odd primes (all 13 bit and smaller primes).
-//! You can supply a commandline argument to override the default
+//! You can supply a command line argument to override the default
 //! value of 1027 for the number of entries in the table.
 //!
 //! 2 has no multiplicative inverse mode 2^64 because 2 | 2^64,
 //! and in any case divisibility by two is trivial by checking the LSB.
 
+// spell-checker:ignore (ToDO) invs newr newrp newtp outstr
+
 #![cfg_attr(test, allow(dead_code))]
 
-use sieve::Sieve;
 use std::env::{self, args};
 use std::fs::File;
 use std::io::Write;
 use std::num::Wrapping;
 use std::path::Path;
 use std::u64::MAX as MAX_U64;
+
+use self::sieve::Sieve;
 
 #[cfg(test)]
 use miller_rabin::is_prime;
@@ -33,9 +34,6 @@ use miller_rabin::is_prime;
 mod numeric;
 
 mod sieve;
-
-#[path = "../../common/mkmain.rs"]
-mod mkmain;
 
 // extended Euclid algorithm
 // precondition: a does not divide 2^64
@@ -74,8 +72,6 @@ fn inv_mod_u64(a: u64) -> Option<u64> {
 
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
-    mkmain::main();
-
     let out_dir = env::var("OUT_DIR").unwrap();
     let mut file = File::create(&Path::new(&out_dir).join("prime_table.rs")).unwrap();
 

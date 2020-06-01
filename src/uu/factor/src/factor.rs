@@ -1,17 +1,13 @@
-#![crate_name = "uu_factor"]
-
-/*
-* This file is part of the uutils coreutils package.
-*
-* (c) T. Jameson Little <t.jameson.little@gmail.com>
-* (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
-*     20150223 added Pollard rho method implementation
-* (c) kwantam <kwantam@gmail.com>
-*     20150429 sped up trial division by adding table of prime inverses
-*
-* For the full copyright and license information, please view the LICENSE file
-* that was distributed with this source code.
-*/
+// * This file is part of the uutils coreutils package.
+// *
+// * (c) T. Jameson Little <t.jameson.little@gmail.com>
+// * (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
+// *     * 2015-02-23 ~ added Pollard rho method implementation
+// * (c) kwantam <kwantam@gmail.com>
+// *     * 2015-04-29 ~ sped up trial division by adding table of prime inverses
+// *
+// * For the full copyright and license information, please view the LICENSE file
+// * that was distributed with this source code.
 
 extern crate rand;
 
@@ -120,7 +116,7 @@ fn print_factors_str(num_str: &str) {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     if matches.free.is_empty() {
         let stdin = stdin();

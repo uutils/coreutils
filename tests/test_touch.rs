@@ -1,9 +1,9 @@
-extern crate uu_touch;
-use self::uu_touch::filetime::{self, FileTime};
+extern crate touch;
+use self::touch::filetime::{self, FileTime};
 
 extern crate time;
 
-use common::util::*;
+use crate::common::util::*;
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);

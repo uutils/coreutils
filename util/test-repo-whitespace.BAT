@@ -8,8 +8,8 @@
 :: License: MIT/Apache-2.0 (see https://opensource.org/licenses/Apache-2.0 , https://opensource.org/licenses/MIT)
 :: * this software is provided for free, WITHOUT ANY EXPRESS OR IMPLIED WARRANTY (see the license for details)
 
+:: spell-checker:ignore (ignore) CTYPE POSIX RETval RETvar akefile makefile makefiles multiline
 :: spell-checker:ignore (shell/cmd) COMSPEC ERRORLEVEL
-:: spell-checker:ignore () CTYPE POSIX Tval Tvar akefile makefile makefiles multiline
 
 :config
 set "_exclude_dir=(?i)[_.#]build|[.]git|[.]gpg|[.]vs|fixtures|vendor"

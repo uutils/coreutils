@@ -1,25 +1,24 @@
-#![crate_name = "uu_fmt"]
+//  * This file is part of `fmt` from the uutils coreutils package.
+//  *
+//  * (c) kwantam <kwantam@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of `fmt` from the uutils coreutils package.
- *
- * (c) kwantam <kwantam@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
 extern crate unicode_width;
 
 #[macro_use]
 extern crate uucore;
 
-use linebreak::break_lines;
-use parasplit::ParagraphStream;
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
+
+use self::linebreak::break_lines;
+use self::parasplit::ParagraphStream;
 
 macro_rules! silent_unwrap(
     ($exp:expr) => (
@@ -59,7 +58,7 @@ pub struct FmtOptions {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")
         .optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.")
         .optflag("m", "preserve-headers", "Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with -p.")

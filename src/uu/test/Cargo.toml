@@ -1,21 +1,27 @@
 [package]
-name = "test"
+name = "uu_test"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "test ~ (uutils) evaluate comparison and file type expressions"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/test"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_test"
 path = "src/test.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"
 
 [[bin]]
 name = "test"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

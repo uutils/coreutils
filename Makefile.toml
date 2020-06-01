@@ -1,6 +1,4 @@
-# spell-checker:ignore (cargo-make) duckscript macos
-# spell-checker:ignore (rust) clippy
-# spell-checker:ignore (uutils) uutil uutils
+# spell-checker:ignore (cargo-make) duckscript
 
 [config]
 min_version = "0.26.2"
@@ -81,10 +79,16 @@ if is_empty "${args_examples}"
 end_if
 set_env CARGO_MAKE_TASK_BUILD_EXAMPLES_ARGS "${args_examples}"
 # * rebuild for 'utils' target
-args_utils = replace ${args} ";" " -p"
-if not is_empty "${args_utils}"
-	args_utils = set "-p${args_utils}"
-end_if
+args_utils_list = split "${args}" ";"
+for arg in "${args_utils_list}"
+	if not is_empty "${arg}"
+		if not starts_with "${arg}" "uu_"
+			arg = set "uu_${arg}"
+		end_if
+		args_utils = set "${args_utils} -p${arg}"
+	end_if
+end
+args_utils = trim "${args_utils}"
 set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args_utils}"
 '''
 ]
@@ -118,7 +122,7 @@ dependencies = [
 ]
 
 [tasks.build-examples]
-description = "## Build (release-mode) project example(s); usage: `cargo make (build-examples | examples | example) [EXAMPLE]...`"
+description = "## Build (release-mode) project example(s); usage: `cargo make (build-examples | examples) [EXAMPLE]...`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -135,11 +139,18 @@ dependencies = [
 	"core::post-build",
 ]
 
+[tasks.build-release]
+alias = "build"
+
 [tasks.debug]
 alias = "build-debug"
 
 [tasks.example]
-alias = "build-examples"
+description = "hidden singular-form alias for 'examples'"
+category = "[project]"
+dependencies = [
+	"examples",
+]
 
 [tasks.examples]
 alias = "build-examples"
@@ -148,11 +159,10 @@ alias = "build-examples"
 alias = "build-features"
 
 [tasks.format]
-description = "## Format code files (with `cargo fmt`)"
+description = "## Format code files (with `cargo fmt`; includes tests)"
 category = "[project]"
 dependencies = [
 	"action-format",
-	"action-determine-tests",
 	"action-format-tests",
 ]
 
@@ -205,10 +215,7 @@ command = "cargo"
 args = ["uninstall"]
 
 [tasks.util]
-alias = "utils"
-
-[tasks.utils]
-description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | utils | uutil | uutils) [UTIL_NAME...]`"
+description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | uutil) [UTIL_NAME...]`"
 category = "[project]"
 dependencies = [
 	"core::pre-build",
@@ -217,11 +224,22 @@ dependencies = [
 	"core::post-build",
 ]
 
+[tasks.utils]
+description = "hidden plural-form alias for 'util'"
+category = "[project]"
+dependencies = [
+	"util",
+]
+
 [tasks.uutil]
 alias = "utils"
 
 [tasks.uutils]
-alias = "utils"
+description = "hidden plural-form alias for 'util'"
+category = "[project]"
+dependencies = [
+	"util",
+]
 
 ### actions
 
@@ -247,6 +265,9 @@ args = ["build", "--release", "--no-default-features", "--features", "${CARGO_MA
 
 [tasks.action-build-utils]
 description = "Build individual utilities"
+dependencies = [
+	"action-determine-utils",
+]
 command = "cargo"
 # args = ["build", "@@remove-empty(CARGO_MAKE_TASK_BUILD_UTILS_ARGS)" ]
 args = ["build", "--release", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )" ]
@@ -263,11 +284,21 @@ script = [
 package_options = get_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS
 if is_empty "${package_options}"
 	show_utils = get_env CARGO_MAKE_VAR_SHOW_UTILS
-	result = exec "${show_utils}"
+	features = get_env CARGO_MAKE_VAR_BUILD_TEST_FEATURES
+	if not is_empty "${features}"
+		result = exec "${show_utils}" --features "${features}"
+	else
+		result = exec "${show_utils}"
+	endif
 	set_env CARGO_MAKE_VAR_UTILS ${result.stdout}
 	utils = array %{result.stdout}
 	for util in ${utils}
-		package_options = set "${package_options} -p${util}"
+		if not is_empty "${util}"
+			if not starts_with "${util}" "uu_"
+				util = set "uu_${util}"
+			end_if
+			package_options = set "${package_options} -p${util}"
+		end_if
 	end
 	package_options = trim "${package_options}"
 end_if
@@ -281,10 +312,13 @@ script = [
 '''
 test_files = glob_array tests/**/*.rs
 for file in ${test_files}
-	if is_empty "${tests}"
-		tests = set "${file}"
-	else
-		tests = set "${tests} ${file}"
+	file = replace "${file}" "\\" "/"
+	if not is_empty ${file}
+		if is_empty "${tests}"
+			tests = set "${file}"
+		else
+			tests = set "${tests} ${file}"
+		end_if
 	end_if
 end
 set_env CARGO_MAKE_VAR_TESTS "${tests}"
@@ -298,6 +332,9 @@ args = ["fmt"]
 
 [tasks.action-format-tests]
 description = "`cargo fmt` tests"
+dependencies = [
+	"action-determine-tests",
+]
 command = "cargo"
 args = ["fmt", "--", "@@split(CARGO_MAKE_VAR_TESTS, )"]
 
@@ -342,7 +379,7 @@ script = [
 				target = array_pop ${line_segments}
 				target = trim ${target}
 				l = length ${target}
-				r = range 0 20
+				r = range 0 18
 				spacing = set ""
 				for i in ${r}
 					if greater_than ${i} ${l}

@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) ENOSYS EPERM
+
 extern crate syscall;
 
 use self::syscall::{Error, ENOSYS, EPERM};

@@ -1,18 +1,19 @@
-/*
- * This file is part of `fmt` from the uutils coreutils package.
- *
- * (c) kwantam <kwantam@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of `fmt` from the uutils coreutils package.
+//  *
+//  * (c) kwantam <kwantam@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit pfxind plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
 
 use std::io::{BufRead, Lines};
 use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
-use FileOrStdReader;
-use FmtOptions;
+
+use crate::FileOrStdReader;
+use crate::FmtOptions;
 
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {

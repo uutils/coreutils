@@ -1,19 +1,25 @@
 [package]
-name = "tty"
+name = "uu_tty"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "tty ~ (uutils) display the name of the terminal connected to standard input"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tty"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_tty"
 path = "src/tty.rs"
 
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-uucore = { version = "0.0.2", features = ["fs"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["fs"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "tty"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

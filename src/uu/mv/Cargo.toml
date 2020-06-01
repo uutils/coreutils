@@ -1,19 +1,25 @@
 [package]
-name = "mv"
+name = "uu_mv"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/mv"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_mv"
 path = "src/mv.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = "0.0.2"
 fs_extra = "1.1.0"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "mv"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

@@ -1,19 +1,20 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//* This file is part of the uutils coreutils package.
+//*
+//* (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
+//*
+//* For the full copyright and license information, please view the LICENSE
+//* file that was distributed with this source code.
 
 //!
-//! Here we employ shunting-yard algorithm for building AST from tokens according to operators' precedence and associativeness.
+//! Here we employ shunting-yard algorithm for building AST from tokens according to operators' precedence and associative-ness.
 //! * https://en.wikipedia.org/wiki/Shunting-yard_algorithm
 //!
 
+// spell-checker:ignore (ToDO) binop binops ints paren prec
+
 use onig::{Regex, RegexOptions, Syntax};
-use tokens::Token;
+
+use crate::tokens::Token;
 
 type TokenStack = Vec<(usize, Token)>;
 pub type OperandsList = Vec<Box<ASTNode>>;
@@ -200,7 +201,10 @@ pub fn tokens_to_ast(
         maybe_dump_rpn(&out_stack);
         let result = ast_from_rpn(&mut out_stack);
         if !out_stack.is_empty() {
-            Err("syntax error (fist RPN token does not represent expression AST's root)".to_owned())
+            Err(
+                "syntax error (first RPN token does not represent the root of the expression AST)"
+                    .to_owned(),
+            )
         } else {
             maybe_dump_ast(&result);
             result

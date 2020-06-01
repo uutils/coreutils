@@ -1,13 +1,11 @@
-#![crate_name = "uu_ln"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Joseph Crail <jbcrail@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Joseph Crail <jbcrail@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 #[macro_use]
 extern crate uucore;
@@ -66,7 +64,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
         NAME
     );
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
         .optflag(
             "b",
             "",

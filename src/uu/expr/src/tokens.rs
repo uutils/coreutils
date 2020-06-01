@@ -1,11 +1,9 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//* This file is part of the uutils coreutils package.
+//*
+//* (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
+//*
+//* For the full copyright and license information, please view the LICENSE
+//* file that was distributed with this source code.
 
 //!
 //! The following tokens are present in the expr grammar:
@@ -17,6 +15,8 @@
 //! According to the man-page of expr we have expression split into tokens (each token -- separate CLI-argument).
 //! Hence all we need is to map the strings into the Token structures, except for some ugly fiddling with +-escaping.
 //!
+
+// spell-checker:ignore (ToDO) paren
 
 #[derive(Debug, Clone)]
 pub enum Token {

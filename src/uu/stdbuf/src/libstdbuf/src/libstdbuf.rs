@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
+
 #[macro_use]
 extern crate cpp;
 extern crate libc;

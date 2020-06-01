@@ -1,18 +1,19 @@
-/*
- * This file is part of `fmt` from the uutils coreutils package.
- *
- * (c) kwantam <kwantam@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of `fmt` from the uutils coreutils package.
+//  *
+//  * (c) kwantam <kwantam@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-use parasplit::{ParaWords, Paragraph, WordInfo};
+// spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
+
 use std::cmp;
 use std::i64;
 use std::io::{BufWriter, Stdout, Write};
 use std::mem;
-use FmtOptions;
+
+use crate::parasplit::{ParaWords, Paragraph, WordInfo};
+use crate::FmtOptions;
 
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,

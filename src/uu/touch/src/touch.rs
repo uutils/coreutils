@@ -1,5 +1,3 @@
-#![crate_name = "uu_touch"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Nick Platt <platt.nicholas@gmail.com>
@@ -7,7 +5,8 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm
 
 pub extern crate filetime;
 extern crate getopts;

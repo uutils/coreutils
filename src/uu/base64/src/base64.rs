@@ -1,5 +1,3 @@
-#![crate_name = "uu_base64"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jordy Dickinson <jordy.dickinson@gmail.com>
@@ -7,7 +5,6 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
 
 #[macro_use]
 extern crate uucore;

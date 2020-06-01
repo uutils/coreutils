@@ -1,19 +1,18 @@
-#![crate_name = "uu_stat"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
 
 extern crate getopts;
 use getopts::Options;
 
 #[macro_use]
 mod fsext;
-pub use fsext::*;
+pub use crate::fsext::*;
 
 #[macro_use]
 extern crate uucore;
@@ -894,7 +893,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
         Err(f) => {
-            disp_err!("{}", f);
+            show_usage_error!("{}", f);
             return 1;
         }
     };
@@ -906,7 +905,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     }
 
     if matches.free.is_empty() {
-        disp_err!("missing operand");
+        show_usage_error!("missing operand");
         return 1;
     }
 

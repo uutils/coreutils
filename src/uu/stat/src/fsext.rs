@@ -4,18 +4,18 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
 
-pub use super::uucore::libc;
+// spell-checker:ignore (ToDO) strerror IFBLK IFCHR IFDIR IFLNK IFIFO IFMT IFREG IFSOCK subsec nanos gnulib statfs Sstatfs bitrig statvfs iosize blksize fnodes fsid namelen bsize bfree bavail ffree frsize namemax errno fstype adfs acfs aufs affs autofs befs bdevfs binfmt ceph cgroups cifs configfs cramfs cgroupfs debugfs devfs devpts ecryptfs btrfs efivarfs exofs fhgfs fuseblk fusectl futexfs gpfs hfsx hostfs hpfs inodefs ibrix inotifyfs isofs jffs logfs hugetlbfs mqueue nsfs ntfs ocfs panfs pipefs ramfs romfs nfsd nilfs pstorefs reiserfs securityfs smackfs snfs sockfs squashfs sysfs sysv tempfs tracefs ubifs usbdevfs vmhgfs tmpfs vxfs wslfs xenfs vzfs openprom overlayfs
+
 extern crate time;
 
 use self::time::Timespec;
-pub use libc::{
+use std::time::UNIX_EPOCH;
+pub use uucore::libc::{
     c_int, mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG,
     S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
     S_IXGRP, S_IXOTH, S_IXUSR,
 };
-use std::time::UNIX_EPOCH;
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -153,7 +153,7 @@ use std::path::Path;
     target_os = "android",
     target_os = "freebsd"
 ))]
-use libc::statfs as Sstatfs;
+use uucore::libc::statfs as Sstatfs;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -161,7 +161,7 @@ use libc::statfs as Sstatfs;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-use libc::statvfs as Sstatfs;
+use uucore::libc::statvfs as Sstatfs;
 
 #[cfg(any(
     target_os = "linux",
@@ -169,7 +169,7 @@ use libc::statvfs as Sstatfs;
     target_os = "android",
     target_os = "freebsd"
 ))]
-use libc::statfs as statfs_fn;
+use uucore::libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -177,7 +177,7 @@ use libc::statfs as statfs_fn;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-use libc::statvfs as statfs_fn;
+use uucore::libc::statvfs as statfs_fn;
 
 pub trait FsMeta {
     fn fs_type(&self) -> i64;

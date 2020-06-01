@@ -1,19 +1,23 @@
 [package]
-name = "base32"
+name = "uu_base32"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/base32"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_base32"
 path = "src/base32.rs"
 
 [dependencies]
-uucore = { version = "0.0.2", features = ["encoding"] }
-## optional
-clippy = { version = "0.0.212", optional = true }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features = ["encoding"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "base32"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

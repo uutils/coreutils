@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn gnu_ext_disabled_roff_no_ref() {

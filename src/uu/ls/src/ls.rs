@@ -1,12 +1,11 @@
-#![crate_name = "uu_ls"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
 
 extern crate getopts;
 #[cfg(unix)]
@@ -83,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... [FILE]...",
         NAME
     );
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
         .optflag("1", "", "list one file per line.")
         .optflag(
             "a",

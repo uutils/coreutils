@@ -1,4 +1,3 @@
-#![crate_name = "uu_id"]
 // This file is part of the uutils coreutils package.
 //
 // (c) Alan Andrade <alan.andradec@gmail.com>
@@ -10,7 +9,9 @@
 // Synced with:
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
-//
+
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag
+
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
@@ -71,7 +72,7 @@ static SYNTAX: &str = "[OPTION]... [USER]";
 static SUMMARY: &str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, "");
+    let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag(
         "A",
         "",

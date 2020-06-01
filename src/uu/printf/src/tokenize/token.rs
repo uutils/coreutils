@@ -6,7 +6,7 @@ use std::str::Chars;
 
 // A token object is an object that can print the expected output
 // of a contiguous segment of the format string, and
-// requires at most 1 argusegment
+// requires at most 1 argument
 pub trait Token {
     fn print(&self, args: &mut Peekable<Iter<String>>);
 }

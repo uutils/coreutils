@@ -1,14 +1,13 @@
-#![crate_name = "uu_df"]
+// This file is part of the uutils coreutils package.
+//
+// (c) Fangxu Hu <framlog@gmail.com>
+// (c) Sylvestre Ledru <sylvestre@debian.org>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Fangxu Hu <framlog@gmail.com>
- * (c) Sylvestre Ledru <sylvestre@debian.org>
- *
- * For the full copyright and license information, please view the LICENSE file
- * that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) mountinfo mtab BLOCKSIZE getmntinfo fobj mptr noatime Iused overmounted
+// spell-checker:ignore (libc/fs) asyncreads asyncwrites autofs bavail bfree bsize charspare cifs debugfs devfs devpts ffree frsize fsid fstypename fusectl inode inodes iosize kernfs mntbufp mntfromname mntonname mqueue namemax pipefs smbfs statfs statvfs subfs syncreads syncwrites sysfs wcslen
 
 extern crate clap;
 extern crate libc;
@@ -17,16 +16,16 @@ extern crate number_prefix;
 #[macro_use]
 extern crate uucore;
 
-#[cfg(windows)]
-extern crate kernel32;
+use clap::{App, Arg};
+
 #[cfg(windows)]
 extern crate winapi;
-
-use clap::{App, Arg};
 #[cfg(windows)]
-use kernel32::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW, GetLastError,
-    GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+use winapi::um::errhandlingapi::GetLastError;
+#[cfg(windows)]
+use winapi::um::fileapi::{
+    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW, GetVolumeInformationW,
+    GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 
 use number_prefix::{binary_prefix, decimal_prefix, PrefixNames, Prefixed, Standalone};

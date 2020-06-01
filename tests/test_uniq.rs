@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 
 static INPUT: &'static str = "sorted.txt";
 static SKIP_CHARS: &'static str = "skip-chars.txt";

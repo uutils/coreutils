@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 use std::env;
 
 #[test]
@@ -27,6 +27,7 @@ fn test_normal() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_normal_compare_id() {
     let (_, mut ucmd) = at_and_ucmd!();
 

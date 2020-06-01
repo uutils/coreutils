@@ -1,4 +1,4 @@
-use common::util::*;
+use crate::common::util::*;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 

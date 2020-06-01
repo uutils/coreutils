@@ -1,12 +1,17 @@
 [package]
-name = "ls"
+name = "uu_ls"
 version = "0.0.1"
-authors = ["Jeremiah Peschka <jeremiah.peschka@gmail.com>"]
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "ls ~ (uutils) display directory contents"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/ls"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_ls"
 path = "src/ls.rs"
 
 [dependencies]
@@ -18,8 +23,9 @@ term_grid = "0.1.5"
 termsize = "0.1.6"
 time = "0.1.40"
 unicode-width = "0.1.5"
-uucore = { version = "0.0.2", features = ["entries", "fs"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries", "fs"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "ls"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

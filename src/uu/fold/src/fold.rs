@@ -1,13 +1,11 @@
-#![crate_name = "uu_fold"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Alex Lyon <arcterus@mail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDOs) ncount routput
 
 #[macro_use]
 extern crate uucore;
@@ -23,7 +21,7 @@ static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag(
             "b",
             "bytes",

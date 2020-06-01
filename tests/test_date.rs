@@ -1,7 +1,7 @@
 extern crate regex;
 
 use self::regex::Regex;
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_date_email() {

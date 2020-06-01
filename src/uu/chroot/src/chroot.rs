@@ -1,14 +1,12 @@
-#![crate_name = "uu_chroot"]
+// This file is part of the uutils coreutils package.
+//
+// (c) Vsevolod Velichko <torkvemada@sorokdva.net>
+// (c) Jian Zeng <anonymousknight96 AT gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
- * (c) Jian Zeng <anonymousknight96 AT gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus
 
 extern crate getopts;
 
@@ -32,7 +30,7 @@ static LONG_HELP: &str = "
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt(
             "u",
             "user",

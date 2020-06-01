@@ -1,13 +1,11 @@
-#![crate_name = "uu_join"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Konstantin Pospelov <kupospelov@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Konstantin Pospelov <kupospelov@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck
 
 extern crate clap;
 

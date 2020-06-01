@@ -1,15 +1,11 @@
-#![crate_name = "uu_head"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alan Andrade <alan.andradec@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- *
- * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Alan Andrade <alan.andradec@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+//  *
+//  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
 
 #[macro_use]
 extern crate uucore;
@@ -56,7 +52,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         (args, None) => args,
     };
 
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt(
             "c",
             "bytes",
@@ -135,16 +131,16 @@ pub fn uumain(args: Vec<String>) -> i32 {
         let mut buffer = BufReader::new(stdin());
         head(&mut buffer, &settings);
     } else {
-        let mut firstime = true;
+        let mut first_time = true;
 
         for file in &files {
             if settings.verbose {
-                if !firstime {
+                if !first_time {
                     println!();
                 }
                 println!("==> {} <==", file);
             }
-            firstime = false;
+            first_time = false;
 
             let path = Path::new(file);
             let reader = File::open(&path).unwrap();

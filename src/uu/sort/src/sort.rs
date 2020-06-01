@@ -1,13 +1,12 @@
-#![crate_name = "uu_sort"]
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Yin <mikeyin@mikeyin.org>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Michael Yin <mikeyin@mikeyin.org>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 #![allow(dead_code)]
+
+// spell-checker:ignore (ToDO) outfile nondictionary
 
 extern crate getopts;
 extern crate semver;
@@ -526,7 +525,7 @@ fn version_compare(a: &str, b: &str) -> Ordering {
 fn remove_nondictionary_chars(s: &str) -> String {
     // Using 'is_ascii_whitespace()' instead of 'is_whitespace()', because it
     // uses only symbols compatible with UNIX sort (space, tab, newline).
-    // 'is_whitespace()' uses more symbols as whitespaces (e.g. vertical tab).
+    // 'is_whitespace()' uses more symbols as whitespace (e.g. vertical tab).
     s.chars()
         .filter(|c| c.is_alphanumeric() || c.is_ascii_whitespace())
         .collect::<String>()

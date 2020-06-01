@@ -1,19 +1,25 @@
 [package]
-name = "stat"
+name = "uu_stat"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "stat ~ (uutils) display FILE status"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/stat"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_stat"
 path = "src/stat.rs"
 
 [dependencies]
 getopts = "0.2.18"
 time = "0.1.40"
-uucore = { version = "0.0.2", features = ["entries"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries", "libc"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "stat"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

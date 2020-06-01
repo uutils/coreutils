@@ -70,7 +70,7 @@ fn test_input_offset() {
     sut.increase_position(10);
     assert_eq!("000014", &sut.format_byte_offset());
 
-    // note normally the radix will not change after initialisation
+    // note normally the radix will not change after initialization
     sut.set_radix(Radix::Decimal);
     assert_eq!("0000020", &sut.format_byte_offset());
 
@@ -95,7 +95,7 @@ fn test_input_offset_with_label() {
     sut.increase_position(10);
     assert_eq!("000014 (00001E)", &sut.format_byte_offset());
 
-    // note normally the radix will not change after initialisation
+    // note normally the radix will not change after initialization
     sut.set_radix(Radix::Decimal);
     assert_eq!("0000020 (0000030)", &sut.format_byte_offset());
 

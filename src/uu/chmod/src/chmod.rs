@@ -1,13 +1,11 @@
-#![crate_name = "uu_chmod"]
+// This file is part of the uutils coreutils package.
+//
+// (c) Alex Lyon <arcterus@mail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Alex Lyon <arcterus@mail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
 #[cfg(unix)]
 extern crate libc;
@@ -38,7 +36,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
  {0} [OPTION]... --reference=RFILE FILE...",
         NAME
     );
-    let mut opts = new_coreopts!(&syntax, SUMMARY, LONG_HELP);
+    let mut opts = app!(&syntax, SUMMARY, LONG_HELP);
     opts.optflag(
         "c",
         "changes",
@@ -65,7 +63,7 @@ pub fn uumain(mut args: Vec<String>) -> i32 {
     )
     .optflag("R", "recursive", "change files and directories recursively");
 
-    // sanitize input for - at beginning (e.g. chmod -x testfile). Remove
+    // sanitize input for - at beginning (e.g. chmod -x test_file). Remove
     // the option and save it for later, after parsing is finished.
     let negative_option = sanitize_input(&mut args);
 

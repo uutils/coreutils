@@ -1,16 +1,14 @@
-#![crate_name = "uu_tr"]
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Michael Gehring <mg@ebfe.org>
+//  * (c) kwantam <kwantam@gmail.com>
+//  *     * 2015-04-28 ~ created `expand` module to eliminate most allocs during setup
+//  * (c) Sergey "Shnatsel" Davidoff <shnatsel@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Gehring <mg@ebfe.org>
- * (c) kwantam <kwantam@gmail.com>
- *     20150428 created `expand` module to eliminate most allocs during setup
- * (c) Sergey "Shnatsel" Davidoff <shnatsel@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
 extern crate bit_set;
 extern crate fnv;
@@ -19,14 +17,14 @@ extern crate getopts;
 #[macro_use]
 extern crate uucore;
 
+mod expand;
+
 use bit_set::BitSet;
 use fnv::FnvHashMap;
 use getopts::Options;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
-use expand::ExpandSet;
-
-mod expand;
+use crate::expand::ExpandSet;
 
 static NAME: &str = "tr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");

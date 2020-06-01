@@ -1,24 +1,29 @@
 [package]
-name = "tail"
+name = "uu_tail"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "tail ~ (uutils) display the last lines of input"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tail"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_tail"
 path = "src/tail.rs"
 
 [dependencies]
 getopts = "0.2.18"
-kernel32-sys = "0.2.2"
 libc = "0.2.42"
-winapi = "0.3"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"
 
 [[bin]]
 name = "tail"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

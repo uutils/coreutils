@@ -4,10 +4,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-#![crate_name = "uu_who"]
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
+
+// spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
 #[macro_use]
 extern crate uucore;
@@ -46,7 +44,7 @@ If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 ";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP);
+    let mut opts = app!(SYNTAX, SUMMARY, LONG_HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
     opts.optflag("b", "boot", "time of last system boot");
     opts.optflag("d", "dead", "print dead processes");
@@ -206,7 +204,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         }
 
         if matches.free.len() > 2 {
-            disp_err!("{}", msg_wrong_number_of_arguments!());
+            show_usage_error!("{}", msg_wrong_number_of_arguments!());
             exit!(1);
         }
     }

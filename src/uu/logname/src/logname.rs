@@ -1,15 +1,13 @@
-#![crate_name = "uu_logname"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Benoit Benedetti <benoit.benedetti@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Benoit Benedetti <benoit.benedetti@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 /* last synced with: logname (GNU coreutils) 8.22 */
+
+// spell-checker:ignore (ToDO) getlogin userlogin
 
 extern crate libc;
 
@@ -39,7 +37,7 @@ static SUMMARY: &str = "Print user's login name";
 static LONG_HELP: &str = "";
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    new_coreopts!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
     exec();
 

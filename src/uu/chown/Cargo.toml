@@ -1,23 +1,25 @@
 [package]
-name = "chown"
+name = "uu_chown"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "chown ~ (uutils) change the ownership of FILE"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chown"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_chown"
 path = "src/chown.rs"
 
 [dependencies]
 glob = "0.3.0"
-uucore = { version = "0.0.2", features = ["entries", "fs"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries", "fs"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 walkdir = "2.2"
-
-[dependencies.clippy]
-version = "0.0.212"
-optional = true
 
 [[bin]]
 name = "chown"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

@@ -1,18 +1,24 @@
 [package]
-name = "kill"
+name = "uu_kill"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "kill ~ (uutils) send a signal to a process"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/kill"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_kill"
 path = "src/kill.rs"
 
 [dependencies]
 libc = "0.2.42"
-uucore = { version = "0.0.2", features = ["signals"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["signals"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "kill"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

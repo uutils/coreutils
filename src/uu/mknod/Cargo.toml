@@ -1,9 +1,15 @@
 [package]
-name = "mknod"
+name = "uu_mknod"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "mknod ~ (uutils) create special file NAME of TYPE"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/mknod"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
 name = "uu_mknod"
@@ -12,8 +18,9 @@ path = "src/mknod.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "^0.2.42"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["mode"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "mknod"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

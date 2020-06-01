@@ -1,18 +1,9 @@
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Michael Gehring <mg@ebfe.org>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
-// spell-checker:ignore (acronyms/names) Gehring
-// spell-checker:ignore (rustlang/crates) clippy concat rustlang termwidth textwrap
-// spell-checker:ignore (uutils) coreutils sigpipe uucore uumain uutils
-// spell-checker:ignore (shell) busybox symlinks
-
-include!(concat!(env!("OUT_DIR"), "/uutils_crates.rs"));
+// This file is part of the uutils coreutils package.
+//
+// (c) Michael Gehring <mg@ebfe.org>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 extern crate lazy_static;
 extern crate textwrap;
@@ -53,7 +44,7 @@ fn usage(utils: &UtilityMap) {
 }
 
 fn main() {
-    uucore::panic::install_sigpipe_hook();
+    uucore::panic::mute_sigpipe_panic();
 
     let utils = util_map();
     let mut args: Vec<String> = uucore::args().collect();

@@ -1,18 +1,24 @@
 [package]
-name = "dircolors"
+name = "uu_dircolors"
 version = "0.0.1"
-authors = []
+authors = ["uutils developers"]
 license = "MIT"
-build = "../../common/mkmain.rs"
+description = "dircolors ~ (uutils) display commands to set LS_COLORS"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/dircolors"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
 
 [lib]
-name = "uu_dircolors"
 path = "src/dircolors.rs"
 
 [dependencies]
 glob = "0.3.0"
-uucore = "0.0.2"
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "dircolors"
-path = "../../common/uumain.rs"
+path = "src/main.rs"

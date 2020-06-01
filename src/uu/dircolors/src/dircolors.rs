@@ -1,12 +1,11 @@
-#![crate_name = "uu_dircolors"]
-
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid
 
 extern crate glob;
 
@@ -27,7 +26,7 @@ static LONG_HELP: &str = "
 ";
 
 mod colors;
-use colors::INTERNAL_DB;
+use self::colors::INTERNAL_DB;
 
 #[derive(PartialEq, Debug)]
 pub enum OutputFmt {
@@ -56,7 +55,7 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, LONG_HELP)
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
         .optflag(
             "",
@@ -74,7 +73,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         || matches.opt_present("bourne-shell"))
         && matches.opt_present("print-database")
     {
-        disp_err!(
+        show_usage_error!(
             "the options to output dircolors' internal database and\nto select a shell \
              syntax are mutually exclusive"
         );
@@ -83,7 +82,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
     if matches.opt_present("print-database") {
         if !matches.free.is_empty() {
-            disp_err!(
+            show_usage_error!(
                 "extra operand ‘{}’\nfile operands cannot be combined with \
                  --print-database (-p)",
                 matches.free[0]
@@ -116,7 +115,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
         if matches.free.len() > 1 {
-            disp_err!("extra operand ‘{}’", matches.free[1]);
+            show_usage_error!("extra operand ‘{}’", matches.free[1]);
             return 1;
         }
         match File::open(matches.free[0].as_str()) {

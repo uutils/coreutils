@@ -2,7 +2,7 @@ extern crate tempdir;
 #[cfg(unix)]
 extern crate unix_socket;
 
-use common::util::*;
+use crate::common::util::*;
 
 #[test]
 fn test_output_multi_files_print_all_chars() {

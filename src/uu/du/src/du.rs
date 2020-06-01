@@ -1,13 +1,11 @@
-#![crate_name = "uu_du"]
+// This file is part of the uutils coreutils package.
+//
+// (c) Derek Chiang <derekchiang93@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Derek Chiang <derekchiang93@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// spell-checker:ignore (ToDO) BLOCKSIZE inode inodes ment strs
 
 extern crate time;
 
@@ -233,7 +231,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
  {0} [OPTION]... --files0-from=F",
         NAME
     );
-    let matches = new_coreopts!(&syntax, SUMMARY, LONG_HELP)
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
         // In task
         .optflag(
             "a",

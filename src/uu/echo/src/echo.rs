@@ -1,14 +1,10 @@
-#![crate_name = "uu_echo"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Derek Chiang <derekchiang93@gmail.com>
- * (c) Christopher Brown <ccbrown112@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+// This file is part of the uutils coreutils package.
+//
+// (c) Derek Chiang <derekchiang93@gmail.com>
+// (c) Christopher Brown <ccbrown112@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -107,7 +103,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 }
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = new_coreopts!(SYNTAX, SUMMARY, HELP)
+    let matches = app!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")
         .optflag("e", "", "enable interpretation of backslash escapes")
         .optflag(

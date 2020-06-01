@@ -1,19 +1,22 @@
+// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety
+
 //! Sub is a token that represents a
 //! segment of the format string that is a substitution
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
-use super::num_format::format_field::{FieldType, FormatField};
-use super::num_format::num_format;
-use super::token;
-use super::unescaped_text::UnescapedText;
-use cli;
 use itertools::{put_back_n, PutBackN};
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
 // use std::collections::HashSet;
+
+use super::num_format::format_field::{FieldType, FormatField};
+use super::num_format::num_format;
+use super::token;
+use super::unescaped_text::UnescapedText;
+use crate::cli;
 
 fn err_conv(sofar: &str) {
     cli::err_msg(&format!("%{}: invalid conversion specification", sofar));

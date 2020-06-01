@@ -1,5 +1,7 @@
 //! stdio convenience fns
 
+// spell-checker:ignore (ToDO) bslice
+
 use std::env;
 use std::io::{stderr, stdout, Write};
 

@@ -7,6 +7,8 @@
  * file that was distributed with this source code.
  */
 
+// spell-checker:ignore (ToDO) getusername
+
 #[cfg(unix)]
 pub use self::unix::getusername;
 

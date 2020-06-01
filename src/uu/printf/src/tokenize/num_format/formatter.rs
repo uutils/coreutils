@@ -1,10 +1,14 @@
+// spell-checker:ignore (ToDO) inprefix for conv
+
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
 
-use super::format_field::FormatField;
-use cli;
 use itertools::{put_back_n, PutBackN};
 use std::str::Chars;
+
+use super::format_field::FormatField;
+
+use crate::cli;
 
 // contains the rough ingredients to final
 // output for a number, organized together
@@ -53,7 +57,7 @@ pub trait Formatter {
         inprefix: &InPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive>;
-    // return a string from a formatprimitive,
+    // return a string from a FormatPrimitive,
     // given information about the field
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String;
 }

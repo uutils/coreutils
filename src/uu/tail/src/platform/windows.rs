@@ -7,11 +7,12 @@
  * file that was distributed with this source code.
  */
 
-extern crate kernel32;
 extern crate winapi;
 
-use self::kernel32::{CloseHandle, OpenProcess, WaitForSingleObject};
 use self::winapi::shared::minwindef::DWORD;
+use self::winapi::um::handleapi::CloseHandle;
+use self::winapi::um::processthreadsapi::OpenProcess;
+use self::winapi::um::synchapi::WaitForSingleObject;
 use self::winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
 use self::winapi::um::winnt::{HANDLE, SYNCHRONIZE};
 

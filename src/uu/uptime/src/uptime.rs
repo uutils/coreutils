@@ -1,16 +1,14 @@
-#![crate_name = "uu_uptime"]
-
-/*
- * This file is part of the uutils coreutils package.
- *
- * (c) Jordi Boggiano <j.boggiano@seld.be>
- * (c) Jian Zeng <anonymousknight86@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Jordi Boggiano <j.boggiano@seld.be>
+//  * (c) Jian Zeng <anonymousknight86@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 /* last synced with: cat (GNU coreutils) 8.13 */
+
+// spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
 extern crate chrono;
 extern crate clap;
@@ -32,11 +30,11 @@ in the run queue over the last 1, 5 and 15 minutes.";
 static OPT_SINCE: &str = "SINCE";
 
 #[cfg(unix)]
-use libc::getloadavg;
+use uucore::libc::getloadavg;
 
 #[cfg(windows)]
 extern "C" {
-    fn GetTickCount() -> libc::uint32_t;
+    fn GetTickCount() -> uucore::libc::uint32_t;
 }
 
 fn get_usage() -> String {
@@ -82,7 +80,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
 #[cfg(unix)]
 fn print_loadavg() {
-    use libc::c_double;
+    use uucore::libc::c_double;
 
     let mut avg: [c_double; 3] = [0.0; 3];
     let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };
