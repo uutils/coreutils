@@ -1567,6 +1567,7 @@ dependencies = [
 name = "uu_nproc"
 version = "0.0.1"
 dependencies = [
+ "clap 2.33.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "num_cpus 1.13.0 (registry+https://github.com/rust-lang/crates.io-index)",

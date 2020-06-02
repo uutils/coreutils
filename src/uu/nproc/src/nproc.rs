@@ -9,6 +9,7 @@
 
 extern crate getopts;
 extern crate num_cpus;
+extern crate clap;
 
 #[cfg(unix)]
 extern crate libc;
@@ -17,6 +18,7 @@ extern crate libc;
 extern crate uucore;
 
 use std::env;
+use clap::{App, Arg};
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -27,50 +29,38 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
 #[cfg(target_os = "netbsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 
-static NAME: &str = "nproc";
+static OPT_ALL: &str = "all";
+static OPT_IGNORE: &str = "ignore";
+
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Print the number of cores available to the current process.";
+
+fn get_usage() -> String {
+    format!("{0} [OPTIONS]...", executable!())
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let mut opts = getopts::Options::new();
+    let usage = get_usage();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_ALL)
+                .short("")
+                .long("all")
+                .help("print the number of cores available to the system"),
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORE)
+                .short("")
+                .long("ignore")
+                .takes_value(true)
+                .help("ignore up to N cores"),
+        )
+        .get_matches_from(&args);
 
-    opts.optflag(
-        "",
-        "all",
-        "print the number of cores available to the system",
-    );
-    opts.optopt("", "ignore", "ignore up to N cores", "N");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(err) => {
-            show_error!("{}", err);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTIONS]...
-
-Print the number of cores available to the current process.",
-            NAME, VERSION
-        );
-
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-
-    let mut ignore = match matches.opt_str("ignore") {
+    let mut ignore = match matches.value_of(OPT_IGNORE) {
         Some(numstr) => match numstr.parse() {
             Ok(num) => num,
             Err(e) => {
@@ -81,7 +71,8 @@ Print the number of cores available to the current process.",
         None => 0,
     };
 
-    if !matches.opt_present("all") {
+    if ! matches.is_present(OPT_ALL) {
+        // OMP_NUM_THREADS doesn't have an impact on --all
         ignore += match env::var("OMP_NUM_THREADS") {
             Ok(threadstr) => match threadstr.parse() {
                 Ok(num) => num,
@@ -91,7 +82,7 @@ Print the number of cores available to the current process.",
         };
     }
 
-    let mut cores = if matches.opt_present("all") {
+    let mut cores = if matches.is_present(OPT_ALL) {
         num_cpus_all()
     } else {
         num_cpus::get()
@@ -125,7 +116,7 @@ fn num_cpus_all() -> usize {
     }
 }
 
-// Other platform(e.g., windows), num_cpus::get() directly.
+// Other platforms (e.g., windows), num_cpus::get() directly.
 #[cfg(not(any(
     target_os = "linux",
     target_os = "macos",
