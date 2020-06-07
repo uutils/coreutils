@@ -39,14 +39,10 @@ static LONG_HELP: &str = "";
 pub fn uumain(args: Vec<String>) -> i32 {
     app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
 
-    exec();
-
-    0
-}
-
-fn exec() {
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
         None => show_error!("no login name"),
     }
+
+    0
 }
