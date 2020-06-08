@@ -1334,6 +1334,7 @@ dependencies = [
 name = "uu_groups"
 version = "0.0.1"
 dependencies = [
+ "clap 2.33.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4 (git+https://github.com/uutils/uucore.git?branch=canary)",
  "uucore_procs 0.0.4 (git+https://github.com/uutils/uucore.git?branch=canary)",
 ]

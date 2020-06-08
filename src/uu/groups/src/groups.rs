@@ -12,34 +12,54 @@
 extern crate uucore;
 use uucore::entries::{get_groups, gid2grp, Locate, Passwd};
 
-static SYNTAX: &str = "[user]";
-static SUMMARY: &str = "display current group names";
+extern crate clap;
+use clap::{App, Arg};
+
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "display current group names";
+static OPT_USER: &str = "user";
+
+fn get_usage() -> String {
+    format!("{0} [USERNAME]", executable!())
+}
 
 pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, "").parse(args);
+    let usage = get_usage();
 
-    if matches.free.is_empty() {
-        println!(
-            "{}",
-            get_groups()
-                .unwrap()
-                .iter()
-                .map(|&g| gid2grp(g).unwrap())
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-    } else if let Ok(p) = Passwd::locate(matches.free[0].as_str()) {
-        println!(
-            "{}",
-            p.belongs_to()
-                .iter()
-                .map(|&g| gid2grp(g).unwrap())
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-    } else {
-        crash!(1, "unknown user {}", matches.free[0]);
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(Arg::with_name(OPT_USER))
+        .get_matches_from(&args);
+
+    match matches.value_of(OPT_USER) {
+        None => {
+            println!(
+                "{}",
+                get_groups()
+                    .unwrap()
+                    .iter()
+                    .map(|&g| gid2grp(g).unwrap())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            0
+        }
+        Some(user) => {
+            if let Ok(p) = Passwd::locate(user) {
+                println!(
+                    "{}",
+                    p.belongs_to()
+                        .iter()
+                        .map(|&g| gid2grp(g).unwrap())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+                0
+            } else {
+                crash!(1, "unknown user {}", user);
+            }
+        }
     }
-
-    0
 }

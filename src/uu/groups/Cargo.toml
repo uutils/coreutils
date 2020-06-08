@@ -17,6 +17,7 @@ path = "src/groups.rs"
 [dependencies]
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries"] }
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+clap = "2.32"
 
 [[bin]]
 name = "groups"
