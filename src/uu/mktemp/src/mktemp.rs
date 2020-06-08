@@ -21,7 +21,7 @@ use std::mem::forget;
 use std::path::{is_separator, PathBuf};
 
 use rand::Rng;
-use tempfile::NamedTempFileOptions;
+use tempfile::Builder;
 
 mod tempdir;
 
@@ -213,11 +213,10 @@ fn exec(
         }
     }
 
-    let tmpfile = NamedTempFileOptions::new()
-        .prefix(prefix)
+    let tmpfile = Builder::new()
         .rand_bytes(rand)
         .suffix(suffix)
-        .create_in(tmpdir);
+        .tempfile_in(tmpdir);
 
     let tmpfile = match tmpfile {
         Ok(f) => f,
