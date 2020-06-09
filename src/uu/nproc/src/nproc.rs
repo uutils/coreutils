@@ -7,9 +7,9 @@
 
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
+extern crate clap;
 extern crate getopts;
 extern crate num_cpus;
-extern crate clap;
 
 #[cfg(unix)]
 extern crate libc;
@@ -17,8 +17,8 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use std::env;
 use clap::{App, Arg};
+use std::env;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -71,7 +71,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         None => 0,
     };
 
-    if ! matches.is_present(OPT_ALL) {
+    if !matches.is_present(OPT_ALL) {
         // OMP_NUM_THREADS doesn't have an impact on --all
         ignore += match env::var("OMP_NUM_THREADS") {
             Ok(threadstr) => match threadstr.parse() {
