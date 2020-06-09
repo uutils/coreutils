@@ -1,7 +1,7 @@
 #![allow(dead_code)]
-extern crate tempdir;
+extern crate tempfile;
 
-use self::tempdir::TempDir;
+use self::tempfile::TempDir;
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
@@ -406,7 +406,7 @@ pub struct TestScenario {
 
 impl TestScenario {
     pub fn new(util_name: &str) -> TestScenario {
-        let tmpd = Rc::new(TempDir::new("uutils").unwrap());
+        let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = TestScenario {
             bin_path: {
                 // Instead of hardcoding the path relative to the current

@@ -8,7 +8,7 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
 
 extern crate getopts;
-extern crate tempdir;
+extern crate tempfile;
 
 #[macro_use]
 extern crate uucore;
@@ -19,7 +19,8 @@ use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process::Command;
-use tempdir::TempDir;
+use tempfile::tempdir;
+use tempfile::TempDir;
 
 static NAME: &str = "stdbuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -273,7 +274,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
     let command_name = &args[command_idx as usize];
     let mut command = Command::new(command_name);
 
-    let mut tmp_dir = return_if_err!(1, TempDir::new("stdbuf"));
+    let mut tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
     command
         .args(&args[(command_idx as usize) + 1..])

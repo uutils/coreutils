@@ -332,7 +332,7 @@ filetime = "0.2"
 libc = "0.2"
 rand = "0.6"
 regex = "1.0"
-tempdir = "0.3"
+tempfile = "3.1"
 time = "0.1"
 unindent = "0.1"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="master", features=["entries"] }
