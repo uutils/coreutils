@@ -1,6 +1,7 @@
 use crate::common::util::*;
-extern crate tempdir;
-use self::tempdir::TempDir;
+
+extern crate tempfile;
+use self::tempfile::tempdir;
 
 static TEST_TEMPLATE1: &'static str = "tempXXXXXX";
 static TEST_TEMPLATE2: &'static str = "temp";
@@ -266,9 +267,9 @@ fn test_mktemp_suffix() {
 #[test]
 fn test_mktemp_tmpdir() {
     let scene = TestScenario::new(util_name!());
-
-    let path = TempDir::new_in(scene.fixtures.as_string(), util_name!()).unwrap();
-    let pathname = path.path().as_os_str();
+    let dir = tempdir().unwrap();
+    let path = dir.path().join(scene.fixtures.as_string());
+    let pathname = path.as_os_str();
 
     scene
         .ucmd()
