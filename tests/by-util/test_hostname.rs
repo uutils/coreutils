@@ -12,7 +12,9 @@ fn test_hostname() {
 
 #[test]
 fn test_hostname_ip() {
-    let result = new_ucmd!().arg("-i").succeeds();
+    let result = new_ucmd!().arg("-i").run();
+    println!("{:#?}", result);
+    assert!(result.success);
     assert!(!result.stdout.trim().is_empty());
 }
 

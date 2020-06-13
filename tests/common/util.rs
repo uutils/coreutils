@@ -68,6 +68,7 @@ pub fn repeat_str(s: &str, n: u32) -> String {
 
 /// A command result is the outputs of a command (streams and status code)
 /// within a struct which has convenience assertion functions about those outputs
+#[derive(Debug)]
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
