@@ -30,6 +30,13 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
      testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
+/// Test if the program are running under CI
+pub fn is_ci() -> bool {
+    std::env::var("CI")
+        .unwrap_or(String::from("false"))
+        .eq_ignore_ascii_case("true")
+}
+
 /// Test if the program is running under WSL
 // ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
 // ToDO: test on WSL2 which likely doesn't need special handling; plan change to `is_wsl_1()` if WSL2 is less needy
