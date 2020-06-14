@@ -55,7 +55,7 @@ impl Formatter for Decf {
             Some(*field.field_char == 'G'),
         );
         // strip trailing zeroes
-        if let Some(ref post_dec) = f_sci.post_decimal.clone() {
+        if let Some(ref post_dec) = f_sci.post_decimal {
             let mut i = post_dec.len();
             {
                 let mut it = post_dec.chars();
