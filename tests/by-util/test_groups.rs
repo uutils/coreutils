@@ -1,5 +1,4 @@
 use crate::common::util::*;
-use std::env;
 
 #[test]
 fn test_groups() {
