@@ -286,6 +286,7 @@
         "coreutils",
         "libc",
         "musl",
+        "ucmd",
         "utmpx",
         "uucore",
         "uumain",
