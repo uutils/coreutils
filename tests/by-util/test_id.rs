@@ -14,7 +14,7 @@ fn test_id() {
 
     let uid = String::from(result.stdout.trim());
     result = scene.ucmd().run();
-    if result.stderr.contains("cannot find name for user ID") {
+    if is_ci() && result.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -31,7 +31,7 @@ fn test_id() {
 fn test_id_from_name() {
     let mut scene = TestScenario::new("whoami");
     let result = scene.cmd("whoami").run();
-    if result.stderr.contains("cannot find name for user ID") {
+    if is_ci() && result.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -65,7 +65,7 @@ fn test_id_name_from_id() {
 
     scene = TestScenario::new(util_name!());
     let result = scene.ucmd().arg("-nu").arg(uid).run();
-    if result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr.contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;

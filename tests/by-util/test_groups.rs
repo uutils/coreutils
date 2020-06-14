@@ -7,10 +7,7 @@ fn test_groups() {
     let result = ucmd.run();
     println!("result.stdout {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
-    if env::var("USER").is_ok()
-        && env::var("USER").unwrap() == "runner"
-        && result.stdout.trim().is_empty()
-    {
+    if is_ci() && result.stdout.trim().is_empty() {
         // In the CI, some server are failing to return the group.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -26,7 +23,7 @@ fn test_groups_arg() {
     println!("result.stdout {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
     let s1 = String::from(result.stdout.trim());
-    if s1.parse::<f64>().is_ok() {
+    if is_ci() && s1.parse::<f64>().is_ok() {
         // In the CI, some server are failing to return id -un.
         // So, if we are getting a uid, just skip this test
         // As seems to be a configuration issue, ignoring it
