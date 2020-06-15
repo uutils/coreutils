@@ -71,16 +71,25 @@ pub(crate) struct Montgomery {
 
 impl Montgomery {
     /// computes x/R mod n efficiently
-    fn reduce(&self, x: u64) -> u64 {
+    fn reduce(&self, x: u128) -> u64 {
+        debug_assert!(x < (self.n as u128) << 64);
         // TODO: optimiiiiiiise
         let Montgomery { a, n } = self;
-        let t = x.wrapping_mul(*a);
-        let nt = (*n as u128) * (t as u128);
-        let y = ((x as u128 + nt) >> 64) as u64;
-        if y >= *n {
-            y - n
+        let m = (x as u64).wrapping_mul(*a);
+        let nm = (*n as u128) * (m as u128);
+        let (xnm, overflow) = (x as u128).overflowing_add(nm); // x + n*m
+        debug_assert_eq!(xnm % (1 << 64), 0);
+
+        if !overflow {
+            let y = (xnm >> 64) as u64 + overflow as u64; // (x + n*m) / R
+            if y >= *n {
+                y - n
+            } else {
+                y
+            }
         } else {
-            y
+            // y = (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
+            (xnm >> 64) as u64 + n.wrapping_neg()
         }
     }
 }
@@ -109,7 +118,7 @@ impl Arithmetic for Montgomery {
     }
 
     fn to_u64(&self, n: Self::I) -> u64 {
-        self.reduce(n)
+        self.reduce(n as u128)
     }
 
     fn add(&self, a: Self::I, b: Self::I) -> Self::I {
@@ -133,7 +142,7 @@ impl Arithmetic for Montgomery {
     }
 
     fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = self.reduce(a.wrapping_mul(b));
+        let r = self.reduce((a as u128) * (b as u128));
 
         // Check that r (reduced back to the usual representation) equals
         // a*b % n
