@@ -38,6 +38,9 @@ pub(crate) fn test<A: Arithmetic>(m: A) -> Result {
     let i = (n - 1).trailing_zeros();
     let r = (n - 1) >> i;
 
+    let one = m.one();
+    let minus_one = m.minus_one();
+
     for _a in BASIS.iter() {
         let _a = _a % n;
         if _a == 0 {
@@ -55,21 +58,21 @@ pub(crate) fn test<A: Arithmetic>(m: A) -> Result {
             for _ in 0..i {
                 y = m.mul(y, y)
             }
-            if y != m.one() {
+            if y != one {
                 return Pseudoprime;
             };
         }
 
-        if x == m.one() || x == m.minus_one() {
+        if x == one || x == minus_one {
             break;
         }
 
         loop {
             let y = m.mul(x, x);
-            if y == m.one() {
+            if y == one {
                 return Composite(gcd(m.to_u64(x) - 1, m.modulus()));
             }
-            if y == m.minus_one() {
+            if y == minus_one {
                 // This basis element is not a witness of `n` being composite.
                 // Keep looking.
                 break;
