@@ -80,16 +80,16 @@ impl Montgomery {
         let (xnm, overflow) = (x as u128).overflowing_add(nm); // x + n*m
         debug_assert_eq!(xnm % (1 << 64), 0);
 
-        if !overflow {
-            let y = (xnm >> 64) as u64 + overflow as u64; // (x + n*m) / R
-            if y >= *n {
-                y - n
-            } else {
-                y
-            }
+        // (x + n*m) / R
+        // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
+        let y =
+            (xnm >> 64) as u64 +
+            if !overflow { 0 } else { n.wrapping_neg() };
+
+        if y >= *n {
+            y - n
         } else {
-            // y = (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-            (xnm >> 64) as u64 + n.wrapping_neg()
+            y
         }
     }
 }
