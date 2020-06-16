@@ -3,9 +3,9 @@ use rand::rngs::SmallRng;
 use rand::{thread_rng, SeedableRng};
 use std::cmp::{max, min};
 
-use crate::{Factors,miller_rabin};
 use crate::miller_rabin::Result::*;
 use crate::numeric::*;
+use crate::{miller_rabin, Factors};
 
 fn find_divisor<A: Arithmetic>(n: A) -> u64 {
     #![allow(clippy::many_single_char_names)]

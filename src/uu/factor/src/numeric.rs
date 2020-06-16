@@ -82,9 +82,7 @@ impl Montgomery {
 
         // (x + n*m) / R
         // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-        let y =
-            (xnm >> 64) as u64 +
-            if !overflow { 0 } else { n.wrapping_neg() };
+        let y = (xnm >> 64) as u64 + if !overflow { 0 } else { n.wrapping_neg() };
 
         if y >= *n {
             y - n
