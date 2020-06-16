@@ -36,8 +36,8 @@ static SYNTAX: &str = "";
 static SUMMARY: &str = "Print user's login name";
 static LONG_HELP: &str = "";
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
 
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),

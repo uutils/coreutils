@@ -32,7 +32,9 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     Ok(path_buf)
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = getopts::Options::new();
 
     opts.optflag("", "help", "display this help and exit");

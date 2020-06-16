@@ -124,7 +124,9 @@ enum InputType {
 
 type CatResult<T> = Result<T, CatError>;
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("A", "show-all", "equivalent to -vET")
         .optflag(

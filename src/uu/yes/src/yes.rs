@@ -21,7 +21,7 @@ use uucore::zero_copy::ZeroCopyWriter;
 // systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let app = app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true));
 
     let matches = match app.get_matches_from_safe(args) {

@@ -129,7 +129,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let syntax = format!(
         "{0} [OPTION]... [+FORMAT]...
  {0} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]",
@@ -199,7 +199,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 .help("print or set Coordinated Universal Time (UTC)"),
         )
         .arg(Arg::with_name(OPT_FORMAT).multiple(true))
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         let form = form[1..].into();

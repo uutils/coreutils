@@ -741,7 +741,7 @@ fn use_size(free_size: u64, total_size: u64) -> String {
     );
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
         .version(VERSION)
@@ -862,7 +862,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         )
         .arg(Arg::with_name(OPT_PATHS).multiple(true))
         .help("Filesystem(s) to list")
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     if matches.is_present(OPT_VERSION) {
         println!("{} {}", executable!(), VERSION);

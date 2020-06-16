@@ -12,16 +12,12 @@ extern crate libc;
 extern crate syscall;
 
 use std::collections::HashMap;
-use std::env::args_os;
-use std::ffi::OsString;
 use std::str::from_utf8;
 
 static NAME: &str = "test";
 
-// TODO: decide how to handle non-UTF8 input for all the utils
-// Definitely don't use [u8], try keeping it as OsStr or OsString instead
-pub fn uumain(_: Vec<String>) -> i32 {
-    let args = args_os().collect::<Vec<OsString>>();
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args: Vec<_> = args.collect();
     // This is completely disregarding valid windows paths that aren't valid unicode
     let args = args
         .iter()

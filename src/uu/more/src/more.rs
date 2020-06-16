@@ -36,7 +36,9 @@ pub enum Mode {
 static NAME: &str = "more";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = Options::new();
 
     // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)

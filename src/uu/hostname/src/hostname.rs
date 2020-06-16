@@ -35,7 +35,7 @@ static OPT_FQDN: &str = "fqdn";
 static OPT_SHORT: &str = "short";
 static OPT_HOST: &str = "host";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     #![allow(clippy::let_and_return)]
     #[cfg(windows)]
     unsafe {
@@ -57,7 +57,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 fn get_usage() -> String {
     format!("{0} [OPTION]... [HOSTNAME]", executable!())
 }
-fn execute(args: Vec<String>) -> i32 {
+fn execute(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
         .version(VERSION)
@@ -87,7 +87,7 @@ fn execute(args: Vec<String>) -> i32 {
                 possible",
         ))
         .arg(Arg::with_name(OPT_HOST))
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     match matches.value_of(OPT_HOST) {
         None => display_hostname(&matches),

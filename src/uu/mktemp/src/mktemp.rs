@@ -29,7 +29,9 @@ static NAME: &str = "mktemp";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = getopts::Options::new();
     opts.optflag("d", "directory", "Make a directory instead of a file");
     opts.optflag(

@@ -29,7 +29,9 @@ static LONG_HELP: &str = "
  If $(SHELL) is not set, /bin/sh is used.
 ";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt(
             "u",

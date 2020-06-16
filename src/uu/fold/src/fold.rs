@@ -19,7 +19,9 @@ static SUMMARY: &str = "Writes each file (or standard input if no files are give
  to standard output whilst breaking long lines";
 static LONG_HELP: &str = "";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag(
