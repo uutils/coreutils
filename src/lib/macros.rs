@@ -180,7 +180,11 @@ macro_rules! msg_opt_only_usable_if {
         msg_invalid_opt_use!(format!("only usable if {}", $clause), $flag)
     };
     ($clause:expr, $long_flag:expr, $short_flag:expr) => {
-        msg_invalid_opt_use!(format!("only usable if {}", $clause), $long_flag, $short_flag)
+        msg_invalid_opt_use!(
+            format!("only usable if {}", $clause),
+            $long_flag,
+            $short_flag
+        )
     };
 }
 
