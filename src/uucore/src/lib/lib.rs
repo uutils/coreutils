@@ -74,12 +74,12 @@ use std::ffi::OsString;
 
 pub trait Args: Iterator<Item = OsString> + Sized {
     fn collect_str(self) -> Vec<String> {
-	// FIXME: avoid unwrap()
-	self.map(|s| s.into_string().unwrap()).collect()
+        // FIXME: avoid unwrap()
+        self.map(|s| s.into_string().unwrap()).collect()
     }
 }
 
-impl<T: Iterator<Item = OsString> + Sized> Args for T { }
+impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
 // args() ...
 pub fn args() -> impl Iterator<Item = String> {
