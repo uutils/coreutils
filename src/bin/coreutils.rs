@@ -36,7 +36,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
 
 fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
-	Some(s) if !s.is_empty() => PathBuf::from(s),
+        Some(ref s) if !s.is_empty() => PathBuf::from(s),
         _ => std::env::current_exe().unwrap(),
     }
 }
@@ -61,22 +61,21 @@ fn main() {
 
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
-    let utilname =
-	if let Some(util) = utils.keys().find(|util| {
-            binary_as_util.ends_with(*util)
-		&& !(&binary_as_util[..binary_as_util.len() - (*util).len()])
-		.ends_with(char::is_alphanumeric)
-	}) {
-            // prefixed util => replace 0th (aka, executable name) argument
-	    Some(OsString::from(*util))
-	} else {
-            // unmatched binary name => regard as multi-binary container and advance argument list
-	    args.next()
-	};
+    let utilname = if let Some(util) = utils.keys().find(|util| {
+        binary_as_util.ends_with(*util)
+            && !(&binary_as_util[..binary_as_util.len() - (*util).len()])
+                .ends_with(char::is_alphanumeric)
+    }) {
+        // prefixed util => replace 0th (aka, executable name) argument
+        Some(OsString::from(*util))
+    } else {
+        // unmatched binary name => regard as multi-binary container and advance argument list
+        args.next()
+    };
 
     // 0th argument equals util name?
     if let Some(util_os) = utilname {
-	let util = util_os.as_os_str().to_string_lossy();
+        let util = util_os.as_os_str().to_string_lossy();
 
         match utils.get(&util[..]) {
             Some(&uumain) => {
@@ -90,7 +89,10 @@ fn main() {
 
                         match utils.get(&util[..]) {
                             Some(&uumain) => {
-                                let code = uumain((vec![util_os, OsString::from("--help")].into_iter()).chain(args));
+                                let code = uumain(
+                                    (vec![util_os, OsString::from("--help")].into_iter())
+                                        .chain(args),
+                                );
                                 io::stdout().flush().expect("could not flush stdout");
                                 process::exit(code);
                             }

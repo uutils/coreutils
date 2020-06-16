@@ -24,5 +24,11 @@ static LONG_HELP: &str = "
 ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    base_common::execute(args.collect_str(), SYNTAX, SUMMARY, LONG_HELP, Format::Base32)
+    base_common::execute(
+        args.collect_str(),
+        SYNTAX,
+        SUMMARY,
+        LONG_HELP,
+        Format::Base32,
+    )
 }
