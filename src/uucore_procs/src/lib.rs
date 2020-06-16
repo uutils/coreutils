@@ -69,7 +69,7 @@ pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
     proc_dbg!(&expr);
 
-    let f = quote::quote! { #expr(uucore::args().collect()) };
+    let f = quote::quote! { #expr(uucore::args_os()) };
     proc_dbg!(&f);
 
     // generate a uutils utility `main()` function, tailored for the calling utility
