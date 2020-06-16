@@ -84,7 +84,7 @@ $ cargo build --features "base32 cat echo rm" --no-default-features
 If you don't even want to build the multicall binary and would prefer to just
 build the utilities as individual binaries, that is possible too.  For example:
 ```bash
-$ cargo build -p base32 -p cat -p echo -p rm
+$ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 ```
 
 ### GNU Make ###

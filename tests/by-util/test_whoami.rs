@@ -13,10 +13,7 @@ fn test_normal() {
     for (key, value) in env::vars() {
         println!("{}: {}", key, value);
     }
-    if env::var("USER").is_ok()
-        && env::var("USER").unwrap() == "runner"
-        && result.stderr.contains("failed to get username")
-    {
+    if is_ci() && result.stderr.contains("failed to get username") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -35,10 +32,7 @@ fn test_normal_compare_id() {
 
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
-    if env::var("USER").is_ok()
-        && env::var("USER").unwrap() == "runner"
-        && result.stderr.contains("failed to get username")
-    {
+    if is_ci() && result.stderr.contains("failed to get username") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -47,10 +41,7 @@ fn test_normal_compare_id() {
     let ts = TestScenario::new("id");
     let id = ts.cmd("id").arg("-un").run();
 
-    if env::var("USER").is_ok()
-        && env::var("USER").unwrap() == "runner"
-        && id.stderr.contains("cannot find name for user ID")
-    {
+    if is_ci() && id.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;

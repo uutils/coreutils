@@ -1,4 +1,4 @@
-extern crate tempdir;
+extern crate tempfile;
 #[cfg(unix)]
 extern crate unix_socket;
 

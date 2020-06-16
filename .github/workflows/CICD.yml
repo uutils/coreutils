@@ -94,6 +94,9 @@ jobs:
       shell: bash
       run: |
         # Info
+        ## environment
+        echo "## environment"
+        echo "CI='${CI}'"
         ## tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
@@ -244,6 +247,10 @@ jobs:
         CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
         echo set-output name=CARGO_USE_CROSS::${CARGO_USE_CROSS:-<empty>/false}
         echo ::set-output name=CARGO_USE_CROSS::${CARGO_USE_CROSS}
+        # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
+        if [ -n "${CARGO_USE_CROSS}" ] && [ ! -e "Cross.toml" ] ; then
+          printf "[build.env]\npassthrough = [\"CI\"]\n" > Cross.toml
+        fi
         # * test only library and/or binaries for arm-type targets
         unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
         echo set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
@@ -287,6 +294,9 @@ jobs:
         echo "## commit"
         echo GITHUB_REF=${GITHUB_REF}
         echo GITHUB_SHA=${GITHUB_SHA}
+        ## environment
+        echo "## environment"
+        echo "CI='${CI}'"
         ## tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true

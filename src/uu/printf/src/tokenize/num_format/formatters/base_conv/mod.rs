@@ -259,7 +259,7 @@ pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     let mut str_out = String::new();
     for u in src.iter() {
         #[allow(clippy::single_match)]
-        match radix_def_dest.from_u8(u.clone()) {
+        match radix_def_dest.from_u8(*u) {
             Some(c) => {
                 str_out.push(c);
             }

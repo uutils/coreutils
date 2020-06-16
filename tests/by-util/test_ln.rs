@@ -416,3 +416,75 @@ fn test_symlink_missing_destination() {
         file
     ));
 }
+
+#[test]
+fn test_symlink_relative() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_symlink_relative_a";
+    let link = "test_symlink_relative_link";
+
+    at.touch(file_a);
+
+    // relative symlink
+    ucmd.args(&["-r", "-s", file_a, link]).succeeds();
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file_a);
+}
+
+#[test]
+fn test_hardlink_relative() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_hardlink_relative_a";
+    let link = "test_hardlink_relative_link";
+
+    at.touch(file_a);
+
+    // relative hardlink
+    ucmd.args(&["-r", "-v", file_a, link])
+        .succeeds()
+        .stdout_only(format!("'{}' -> '{}'\n", link, file_a));
+}
+
+#[test]
+fn test_symlink_relative_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_symlink_existing_dir";
+    let file_a = "test_symlink_relative_a";
+    let link = "test_symlink_relative_link";
+    let multi_dir =
+        "test_symlink_existing_dir/../test_symlink_existing_dir/../test_symlink_existing_dir/../";
+    let p = PathBuf::from(multi_dir).join(file_a);
+    at.mkdir(dir);
+
+    // relative symlink
+    // Thanks to -r, all the ../ should be resolved to a single file
+    ucmd.args(&["-r", "-s", "-v", &p.to_string_lossy(), link])
+        .succeeds()
+        .stdout_only(format!("'{}' -> '{}'\n", link, file_a));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file_a);
+
+    // Run the same command without -r to verify that we keep the full
+    // crazy path
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s", "-v", &p.to_string_lossy(), link])
+        .succeeds()
+        .stdout_only(format!("'{}' -> '{}'\n", link, &p.to_string_lossy()));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), p.to_string_lossy());
+}
+
+#[test]
+fn test_symlink_relative_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir = "test_symlink_existing_dir";
+    let link = "test_symlink_existing_dir_link";
+
+    at.mkdir(dir);
+
+    ucmd.args(&["-s", "-r", dir, link]).succeeds().no_stderr();
+    assert!(at.dir_exists(dir));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), dir);
+}

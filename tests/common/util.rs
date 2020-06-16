@@ -1,7 +1,7 @@
 #![allow(dead_code)]
-extern crate tempdir;
+extern crate tempfile;
 
-use self::tempdir::TempDir;
+use self::tempfile::TempDir;
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
@@ -29,6 +29,13 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
      another command in the same test, use TestScenario::new instead of \
      testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
+
+/// Test if the program are running under CI
+pub fn is_ci() -> bool {
+    std::env::var("CI")
+        .unwrap_or(String::from("false"))
+        .eq_ignore_ascii_case("true")
+}
 
 /// Test if the program is running under WSL
 // ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
@@ -61,6 +68,7 @@ pub fn repeat_str(s: &str, n: u32) -> String {
 
 /// A command result is the outputs of a command (streams and status code)
 /// within a struct which has convenience assertion functions about those outputs
+#[derive(Debug)]
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
@@ -406,7 +414,7 @@ pub struct TestScenario {
 
 impl TestScenario {
     pub fn new(util_name: &str) -> TestScenario {
-        let tmpd = Rc::new(TempDir::new("uutils").unwrap());
+        let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = TestScenario {
             bin_path: {
                 // Instead of hardcoding the path relative to the current

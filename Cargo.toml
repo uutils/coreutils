@@ -225,7 +225,7 @@ test = [ "uu_test" ]
 [dependencies]
 lazy_static = { version="1.3" }
 textwrap = { version="=0.11.0", features=["term_size"] } # !maint: [2020-05-10; rivy] unstable crate using undocumented features; pinned currently, will review
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="master" }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
 # * uutils
 uu_test  = { optional=true, version="0.0.1", package="uu_test", path="src/uu/test" }
 #
@@ -332,10 +332,10 @@ filetime = "0.2"
 libc = "0.2"
 rand = "0.6"
 regex = "1.0"
-tempdir = "0.3"
+tempfile = "3.1"
 time = "0.1"
 unindent = "0.1"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="master", features=["entries"] }
+uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 rust-users = { version="0.10", package="users" }
