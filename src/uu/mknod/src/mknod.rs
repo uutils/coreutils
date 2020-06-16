@@ -44,7 +44,9 @@ fn _makenod(path: CString, mode: mode_t, dev: dev_t) -> i32 {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = Options::new();
 
     // Linux-specific options, not implemented

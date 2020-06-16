@@ -39,7 +39,7 @@ fn get_usage() -> String {
     format!("{0} [OPTIONS]...", executable!())
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
         .version(VERSION)
@@ -58,7 +58,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 .takes_value(true)
                 .help("ignore up to N cores"),
         )
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
         Some(numstr) => match numstr.parse() {

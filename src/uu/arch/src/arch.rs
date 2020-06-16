@@ -16,8 +16,8 @@ static SYNTAX: &str = "Display machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
 static LONG_HELP: &str = "";
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
     let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
     0

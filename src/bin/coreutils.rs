@@ -5,108 +5,112 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-extern crate lazy_static;
 extern crate textwrap;
 extern crate uucore;
 
-use lazy_static::lazy_static;
+use std::cmp;
 use std::collections::hash_map::HashMap;
-use std::io::Write;
+use std::ffi::OsString;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::process;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-lazy_static! {
-    static ref BINARY_PATH: std::path::PathBuf = {
-        // support symlinks by using args[0], when possible, with fallback to current_exe()
-        match std::env::args().next() {
-            Some(ref s) if !s.is_empty() => std::path::PathBuf::from(s),
-            _ => std::env::current_exe().unwrap(),
-        }
-    };
-    static ref NAME: &'static str = &*BINARY_PATH.file_stem().unwrap().to_str().unwrap();
-}
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
-fn usage(utils: &UtilityMap) {
-    println!("{} {} (multi-call binary)\n", *NAME, VERSION);
-    println!("Usage: {} [function [arguments...]]\n", *NAME);
+fn usage<T>(utils: &UtilityMap<T>, name: &str) {
+    println!("{} {} (multi-call binary)\n", name, VERSION);
+    println!("Usage: {} [function [arguments...]]\n", name);
     println!("Currently defined functions/utilities:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
     utils.sort();
     let display_list = utils.join(", ");
-    let width = std::cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
+    let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(
         "{}",
         textwrap::indent(&textwrap::fill(&display_list, width), "    ")
     );
 }
 
+fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
+    match args.next() {
+	Some(s) if !s.is_empty() => PathBuf::from(s),
+        _ => std::env::current_exe().unwrap(),
+    }
+}
+
+fn name(binary_path: &Path) -> &str {
+    binary_path.file_stem().unwrap().to_str().unwrap()
+}
+
 fn main() {
     uucore::panic::mute_sigpipe_panic();
 
     let utils = util_map();
-    let mut args: Vec<String> = uucore::args().collect();
+    let mut args = uucore::args_os();
 
-    let binary = &BINARY_PATH;
-    let binary_as_util = binary.file_stem().unwrap().to_str().unwrap();
+    let binary = binary_path(&mut args);
+    let binary_as_util = name(&binary);
 
     // binary name equals util name?
     if let Some(&uumain) = utils.get(binary_as_util) {
-        std::process::exit(uumain(args));
+        process::exit(uumain((vec![binary.into()].into_iter()).chain(args)));
     }
 
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
-    if let Some(util) = utils.keys().find(|util| {
-        binary_as_util.ends_with(*util)
-            && !(&binary_as_util[..binary_as_util.len() - (*util).len()])
-                .ends_with(char::is_alphanumeric)
-    }) {
-        // prefixed util => replace 0th (aka, executable name) argument
-        args[0] = (*util).to_owned();
-    } else {
-        // unmatched binary name => regard as multi-binary container and advance argument list
-        args.remove(0);
-    }
+    let utilname =
+	if let Some(util) = utils.keys().find(|util| {
+            binary_as_util.ends_with(*util)
+		&& !(&binary_as_util[..binary_as_util.len() - (*util).len()])
+		.ends_with(char::is_alphanumeric)
+	}) {
+            // prefixed util => replace 0th (aka, executable name) argument
+	    Some(OsString::from(*util))
+	} else {
+            // unmatched binary name => regard as multi-binary container and advance argument list
+	    args.next()
+	};
 
     // 0th argument equals util name?
-    if !args.is_empty() {
-        let util = &args[0][..];
+    if let Some(util_os) = utilname {
+	let util = util_os.as_os_str().to_string_lossy();
 
-        match utils.get(util) {
+        match utils.get(&util[..]) {
             Some(&uumain) => {
-                std::process::exit(uumain(args.clone()));
+                process::exit(uumain((vec![util_os].into_iter()).chain(args)));
             }
             None => {
-                if &args[0][..] == "--help" || &args[0][..] == "-h" {
+                if util == "--help" || util == "-h" {
                     // see if they want help on a specific util
-                    if args.len() >= 2 {
-                        let util = &args[1][..];
-                        match utils.get(util) {
+                    if let Some(util_os) = args.next() {
+                        let util = util_os.as_os_str().to_string_lossy();
+
+                        match utils.get(&util[..]) {
                             Some(&uumain) => {
-                                let code = uumain(vec![util.to_owned(), "--help".to_owned()]);
-                                std::io::stdout().flush().expect("could not flush stdout");
-                                std::process::exit(code);
+                                let code = uumain((vec![util_os, OsString::from("--help")].into_iter()).chain(args));
+                                io::stdout().flush().expect("could not flush stdout");
+                                process::exit(code);
                             }
                             None => {
                                 println!("{}: function/utility not found", util);
-                                std::process::exit(1);
+                                process::exit(1);
                             }
                         }
                     }
-                    usage(&utils);
-                    std::process::exit(0);
+                    usage(&utils, binary_as_util);
+                    process::exit(0);
                 } else {
                     println!("{}: function/utility not found", util);
-                    std::process::exit(1);
+                    process::exit(1);
                 }
             }
         }
     } else {
         // no arguments provided
-        usage(&utils);
-        std::process::exit(0);
+        usage(&utils, binary_as_util);
+        process::exit(0);
     }
 }

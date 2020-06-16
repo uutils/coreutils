@@ -234,7 +234,9 @@ fn detect_algo(
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let program = &args[0];
     let binary_name = Path::new(program).file_name().unwrap().to_str().unwrap();
 

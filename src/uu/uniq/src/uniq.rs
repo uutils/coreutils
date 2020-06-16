@@ -201,7 +201,9 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &Matches) -> Option<T> {
     })
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = Options::new();
 
     opts.optflag("c", "count", "prefix lines by the number of occurrences");

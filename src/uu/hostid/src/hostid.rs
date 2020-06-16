@@ -23,8 +23,8 @@ extern "C" {
     pub fn gethostid() -> c_long;
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
     hostid();
     0
 }

@@ -302,7 +302,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     Attribute::Timestamps,
 ];
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
         .version(VERSION)
@@ -465,7 +465,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
 
         .arg(Arg::with_name(OPT_PATHS)
              .multiple(true))
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     if matches.is_present(OPT_VERSION) {
         print_version();

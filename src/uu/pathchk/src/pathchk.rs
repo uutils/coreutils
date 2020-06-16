@@ -36,7 +36,9 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     // add options
     let mut opts = Options::new();
     opts.optflag("p", "posix", "check for (most) POSIX systems");

@@ -57,7 +57,9 @@ pub struct FmtOptions {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("c", "crown-margin", "First and second line of paragraph may have different indentations, in which case the first line's indentation is preserved, and each subsequent line's indentation matches the second line.")
         .optflag("t", "tagged-paragraph", "Like -c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.")

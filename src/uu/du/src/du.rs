@@ -225,7 +225,9 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let syntax = format!(
         "[OPTION]... [FILE]...
  {0} [OPTION]... --files0-from=F",

@@ -76,7 +76,9 @@ lazy_static! {
     static ref END_CODE: &'static str = COLOR_MAP.get("ec").unwrap_or(&"");
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let syntax = format!(
         "[OPTION]... DIRECTORY
  {0} [OPTION]... [FILE]...",

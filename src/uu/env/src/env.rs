@@ -152,7 +152,7 @@ fn create_app() -> App<'static, 'static> {
             .help("remove variable from the environment"))
 }
 
-fn run_env(args: Vec<String>) -> Result<(), i32> {
+fn run_env(args: impl uucore::Args) -> Result<(), i32> {
     let app = create_app();
     let matches = app.get_matches_from(args);
 
@@ -251,7 +251,7 @@ fn run_env(args: Vec<String>) -> Result<(), i32> {
     Ok(())
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     match run_env(args) {
         Ok(()) => 0,
         Err(code) => code,

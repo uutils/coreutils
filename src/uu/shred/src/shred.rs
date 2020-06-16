@@ -203,7 +203,9 @@ impl<'a> Iterator for BytesGenerator<'a> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = getopts::Options::new();
 
     // TODO: Add force option

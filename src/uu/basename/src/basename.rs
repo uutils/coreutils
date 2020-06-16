@@ -18,7 +18,9 @@ static SUMMARY: &str = "Print NAME with any leading directory components removed
  If specified, also remove a trailing SUFFIX";
 static LONG_HELP: &str = "";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     //
     // Argument parsing
     //

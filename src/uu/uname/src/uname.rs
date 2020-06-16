@@ -48,7 +48,7 @@ const HOST_OS: &str = "Fuchsia";
 #[cfg(target_os = "redox")]
 const HOST_OS: &str = "Redox";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = format!("{} [OPTION]...", executable!());
     let matches = App::new(executable!())
         .version(VERSION)
@@ -94,34 +94,43 @@ pub fn uumain(args: Vec<String>) -> i32 {
             .short("o")
             .long(OPT_OS)
             .help("print the operating system name."))
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
-    let argc = args.len();
     let uname = return_if_err!(1, PlatformInfo::new());
     let mut output = String::new();
 
-    if matches.is_present(OPT_KERNELNAME) || matches.is_present(OPT_ALL) || argc == 1 {
+    let all = matches.is_present(OPT_ALL);
+    let kernelname = matches.is_present(OPT_KERNELNAME);
+    let nodename = matches.is_present(OPT_NODENAME);
+    let kernelrelease = matches.is_present(OPT_KERNELRELEASE);
+    let kernelversion = matches.is_present(OPT_KERNELVERSION);
+    let machine = matches.is_present(OPT_MACHINE);
+    let os = matches.is_present(OPT_OS);
+
+    let none = !(all || kernelname || nodename || kernelrelease || kernelversion || machine || os);
+
+    if kernelname || all || none {
         output.push_str(&uname.sysname());
         output.push_str(" ");
     }
 
-    if matches.is_present(OPT_NODENAME) || matches.is_present(OPT_ALL) {
+    if nodename || all {
         output.push_str(&uname.nodename());
         output.push_str(" ");
     }
-    if matches.is_present(OPT_KERNELRELEASE) || matches.is_present(OPT_ALL) {
+    if kernelrelease || all {
         output.push_str(&uname.release());
         output.push_str(" ");
     }
-    if matches.is_present(OPT_KERNELVERSION) || matches.is_present(OPT_ALL) {
+    if kernelversion || all {
         output.push_str(&uname.version());
         output.push_str(" ");
     }
-    if matches.is_present(OPT_MACHINE) || matches.is_present(OPT_ALL) {
+    if machine || all {
         output.push_str(&uname.machine());
         output.push_str(" ");
     }
-    if matches.is_present(OPT_OS) || matches.is_present(OPT_ALL) {
+    if os || all {
         output.push_str(HOST_OS);
         output.push_str(" ");
     }

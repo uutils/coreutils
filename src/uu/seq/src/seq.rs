@@ -170,7 +170,9 @@ fn print_version() {
     println!("{} {}", NAME, VERSION);
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut options = SeqOptions {
         separator: "\n".to_owned(),
         terminator: None,

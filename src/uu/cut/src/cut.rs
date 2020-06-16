@@ -423,7 +423,9 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
     exit_code
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("b", "bytes", "filter byte columns from the input source", "sequence")
         .optopt("c", "characters", "alias for character mode", "sequence")

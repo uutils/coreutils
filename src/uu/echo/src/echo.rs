@@ -102,7 +102,9 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
     Ok(should_stop)
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let matches = app!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")
         .optflag("e", "", "enable interpretation of backslash escapes")

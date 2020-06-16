@@ -290,7 +290,9 @@ impl OdOptions {
 
 /// parses and validates command line parameters, prepares data structures,
 /// opens the input and calls `odfunc` to process the input.
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let opts = create_getopts_options();
 
     let matches = match opts.parse(&args[1..]) {

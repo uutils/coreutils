@@ -143,7 +143,9 @@ impl<'a> Iterator for FileMerger<'a> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut settings: Settings = Default::default();
     let mut opts = getopts::Options::new();
 
