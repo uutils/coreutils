@@ -12,8 +12,9 @@ extern crate rand;
 extern crate uucore;
 
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::fmt;
-use std::io::{stdin, BufRead};
+use std::io::{self, stdin, stdout, BufRead, Write};
 use std::ops;
 
 mod miller_rabin;
@@ -101,35 +102,40 @@ fn factor(mut n: u64) -> Factors {
     factors
 }
 
-fn print_factors(num: u64) {
-    print!("{}:{}", num, factor(num));
-    println!();
-}
-
-fn print_factors_str(num_str: &str) {
-    if let Err(e) = num_str.parse::<u64>().and_then(|x| {
-        print_factors(x);
-        Ok(())
-    }) {
-        show_warning!("{}: {}", num_str, e);
-    }
+fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dyn Error>> {
+    num_str
+        .parse::<u64>()
+        .map_err(|e| e.into())
+        .and_then(|x| writeln!(w, "{}:{}", x, factor(x)).map_err(|e| e.into()))
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
+    let stdout = stdout();
+    let mut w = io::BufWriter::new(stdout.lock());
 
     if matches.free.is_empty() {
         let stdin = stdin();
+
         for line in stdin.lock().lines() {
             for number in line.unwrap().split_whitespace() {
-                print_factors_str(number);
+                if let Err(e) = print_factors_str(number, &mut w) {
+                    show_warning!("{}: {}", number, e);
+                }
             }
         }
     } else {
-        for num_str in &matches.free {
-            print_factors_str(num_str);
+        for number in &matches.free {
+            if let Err(e) = print_factors_str(number, &mut w) {
+                show_warning!("{}: {}", number, e);
+            }
         }
     }
+
+    if let Err(e) = w.flush() {
+        show_error!("{}", e);
+    }
+
     0
 }
 
