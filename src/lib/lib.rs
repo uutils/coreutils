@@ -70,7 +70,22 @@ pub use crate::features::wide;
 
 //## core functions
 
+use std::ffi::OsString;
+
+pub trait Args: Iterator<Item = OsString> + Sized {
+    fn collect_str(self) -> Vec<String> {
+	// FIXME: avoid unwrap()
+	self.map(|s| s.into_string().unwrap()).collect()
+    }
+}
+
+impl<T: Iterator<Item = OsString> + Sized> Args for T { }
+
 // args() ...
 pub fn args() -> impl Iterator<Item = String> {
     wild::args()
+}
+
+pub fn args_os() -> impl Iterator<Item = OsString> {
+    wild::args_os()
 }
