@@ -71,8 +71,8 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     //Ok((0 as u32,0 as usize))
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
 
     let files = matches.free;
 

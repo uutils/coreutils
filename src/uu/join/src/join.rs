@@ -444,7 +444,7 @@ impl<'a> State<'a> {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(NAME)
         .version(VERSION)
         .about(

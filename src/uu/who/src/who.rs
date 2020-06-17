@@ -43,7 +43,9 @@ If FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.
 If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 ";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = app!(SYNTAX, SUMMARY, LONG_HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
     opts.optflag("b", "boot", "time of last system boot");

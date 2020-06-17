@@ -23,8 +23,8 @@ pub fn normalize_error_message(e: Error) -> String {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
     if matches.free.len() != 2 {
         crash!(1, "{}", msg_wrong_number_of_arguments!(2));
     }

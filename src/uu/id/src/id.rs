@@ -71,7 +71,9 @@ mod audit {
 static SYNTAX: &str = "[OPTION]... [USER]";
 static SUMMARY: &str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag(
         "A",

@@ -16,7 +16,7 @@ extern crate uucore;
 
 mod platform;
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let app = app_from_crate!();
 
     if let Err(err) = app.get_matches_from_safe(args) {

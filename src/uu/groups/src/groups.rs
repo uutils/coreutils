@@ -23,7 +23,7 @@ fn get_usage() -> String {
     format!("{0} [USERNAME]", executable!())
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
@@ -31,7 +31,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(Arg::with_name(OPT_USER))
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     match matches.value_of(OPT_USER) {
         None => {

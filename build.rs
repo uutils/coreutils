@@ -43,10 +43,10 @@ pub fn main() {
     let mut tf = File::create(Path::new(&out_dir).join("test_modules.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap = HashMap<&'static str, fn(Vec<String>) -> i32>;\n\
+        "type UtilityMap<T> = HashMap<&'static str, fn(T) -> i32>;\n\
         \n\
-        fn util_map() -> UtilityMap {\n\
-        \tlet mut map: UtilityMap = HashMap::new();\n\
+        fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
+        \tlet mut map = UtilityMap::new();\n\
         "
         .as_bytes(),
     )

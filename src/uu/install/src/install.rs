@@ -56,7 +56,9 @@ impl Behavior {
 ///
 /// Returns a program return code.
 ///
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let matches = parse_opts(args);
 
     if let Err(s) = check_unimplemented(&matches) {

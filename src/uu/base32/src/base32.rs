@@ -23,6 +23,12 @@ static LONG_HELP: &str = "
  encoded stream.
 ";
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    base_common::execute(args, SYNTAX, SUMMARY, LONG_HELP, Format::Base32)
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    base_common::execute(
+        args.collect_str(),
+        SYNTAX,
+        SUMMARY,
+        LONG_HELP,
+        Format::Base32,
+    )
 }

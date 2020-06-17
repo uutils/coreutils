@@ -29,7 +29,9 @@ static LONG_HELP: &str = "
  Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
 ";
 
-pub fn uumain(mut args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let mut args = args.collect_str();
+
     let syntax = format!(
         "[OPTION]... MODE[,MODE]... FILE...
  {0} [OPTION]... OCTAL-MODE FILE...

@@ -29,7 +29,9 @@ extern "C" {
     fn setpriority(which: c_int, who: c_int, prio: c_int) -> c_int;
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut opts = getopts::Options::new();
 
     opts.optopt(

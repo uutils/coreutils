@@ -40,7 +40,9 @@ impl Default for Settings {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     let mut settings: Settings = Default::default();
 
     // handle obsolete -number syntax

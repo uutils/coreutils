@@ -115,8 +115,8 @@ fn print_factors_str(num_str: &str) {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
 
     if matches.free.is_empty() {
         let stdin = stdin();

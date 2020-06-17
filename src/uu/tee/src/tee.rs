@@ -16,7 +16,9 @@ use std::path::{Path, PathBuf};
 static NAME: &str = "tee";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
+
     match options(&args).and_then(exec) {
         Ok(_) => 0,
         Err(_) => 1,

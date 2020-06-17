@@ -41,7 +41,7 @@ fn get_usage() -> String {
     format!("{0} [OPTION]...", executable!())
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
         .version(VERSION)
@@ -53,7 +53,7 @@ pub fn uumain(args: Vec<String>) -> i32 {
                 .long("since")
                 .help("system up since"),
         )
-        .get_matches_from(&args);
+        .get_matches_from(args);
 
     let (boot_time, user_count) = process_utmpx();
     let uptime = get_uptime(boot_time);
