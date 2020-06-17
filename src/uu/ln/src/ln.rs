@@ -10,9 +10,9 @@
 #[macro_use]
 extern crate uucore;
 
-use std::fs;
-use std::ffi::OsStr;
 use std::borrow::Cow;
+use std::ffi::OsStr;
+use std::fs;
 
 use std::io::{stdin, Result};
 #[cfg(any(unix, target_os = "redox"))]
@@ -296,17 +296,14 @@ fn relative_path<'a>(src: &PathBuf, dst: &PathBuf) -> Result<Cow<'a, Path>> {
         .take_while(|(s, d)| s == d)
         .count();
 
-    let srciter = abssrc
-    .components()
-    .skip(suffix_pos)
-    .map(|x| x.as_os_str());
+    let srciter = abssrc.components().skip(suffix_pos).map(|x| x.as_os_str());
 
     let result: PathBuf = absdst
-    .components()
-    .skip(suffix_pos + 1)
-    .map(|_| OsStr::new(".."))
-    .chain(srciter)
-    .collect();
+        .components()
+        .skip(suffix_pos + 1)
+        .map(|_| OsStr::new(".."))
+        .chain(srciter)
+        .collect();
     Ok(result.into())
 }
 
