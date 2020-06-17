@@ -394,7 +394,7 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-pub fn symlink<P: AsRef<Path>>(src: P, dst: P) -> Result<()> {
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<()> {
     if src.as_ref().is_dir() {
         symlink_dir(src, dst)
     } else {
