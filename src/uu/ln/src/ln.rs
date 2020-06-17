@@ -12,6 +12,7 @@ extern crate uucore;
 
 use std::fs;
 use std::ffi::OsStr;
+use std::borrow::Cow;
 
 use std::io::{stdin, Result};
 #[cfg(any(unix, target_os = "redox"))]
@@ -286,7 +287,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
     }
 }
 
-fn relative_path(src: &PathBuf, dst: &PathBuf) -> std::io::Result<PathBuf> {
+fn relative_path<'a>(src: &PathBuf, dst: &PathBuf) -> Result<Cow<'a, Path>> {
     let abssrc = canonicalize(src, CanonicalizeMode::Normal)?;
     let absdst = canonicalize(dst, CanonicalizeMode::Normal)?;
     let suffix_pos = abssrc
@@ -300,21 +301,21 @@ fn relative_path(src: &PathBuf, dst: &PathBuf) -> std::io::Result<PathBuf> {
     .skip(suffix_pos)
     .map(|x| x.as_os_str());
 
-    let result = absdst
+    let result: PathBuf = absdst
     .components()
     .skip(suffix_pos + 1)
     .map(|_| OsStr::new(".."))
     .chain(srciter)
     .collect();
-    Ok(result)
+    Ok(result.into())
 }
 
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
-    let source = if settings.relative {
+    let source: Cow<'_, Path> = if settings.relative {
         relative_path(&src, dst)?
     } else {
-        src.clone()
+        src.into()
     };
 
     if is_symlink(dst) || dst.exists() {
