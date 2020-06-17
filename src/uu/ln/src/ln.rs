@@ -11,6 +11,8 @@
 extern crate uucore;
 
 use std::fs;
+use std::ffi::OsStr;
+
 use std::io::{stdin, Result};
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
@@ -284,33 +286,33 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
     }
 }
 
-fn relative_path(src: &PathBuf, dst: &PathBuf) -> PathBuf {
-    let abssrc = canonicalize(src, CanonicalizeMode::Normal).unwrap();
-    let absdst = canonicalize(dst, CanonicalizeMode::Normal).unwrap();
+fn relative_path(src: &PathBuf, dst: &PathBuf) -> std::io::Result<PathBuf> {
+    let abssrc = canonicalize(src, CanonicalizeMode::Normal)?;
+    let absdst = canonicalize(dst, CanonicalizeMode::Normal)?;
     let suffix_pos = abssrc
         .components()
         .zip(absdst.components())
         .take_while(|(s, d)| s == d)
         .count();
 
-    let mut result = PathBuf::new();
-    absdst
-        .components()
-        .skip(suffix_pos + 1)
-        .map(|_| result.push(".."))
-        .last();
-    abssrc
-        .components()
-        .skip(suffix_pos)
-        .map(|x| result.push(x.as_os_str()))
-        .last();
-    result
+    let srciter = abssrc
+    .components()
+    .skip(suffix_pos)
+    .map(|x| x.as_os_str());
+
+    let result = absdst
+    .components()
+    .skip(suffix_pos + 1)
+    .map(|_| OsStr::new(".."))
+    .chain(srciter)
+    .collect();
+    Ok(result)
 }
 
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
     let source = if settings.relative {
-        relative_path(&src, dst)
+        relative_path(&src, dst)?
     } else {
         src.clone()
     };
