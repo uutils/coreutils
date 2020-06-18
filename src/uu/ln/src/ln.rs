@@ -10,13 +10,17 @@
 #[macro_use]
 extern crate uucore;
 
+use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::fs;
+
 use std::io::{stdin, Result};
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
+use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static NAME: &str = "ln";
 static SUMMARY: &str = "";
@@ -36,6 +40,7 @@ pub struct Settings {
     backup: BackupMode,
     suffix: String,
     symbolic: bool,
+    relative: bool,
     target_dir: Option<String>,
     no_target_dir: bool,
     verbose: bool,
@@ -92,7 +97,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // TODO: opts.optflag("n", "no-dereference", "treat LINK_NAME as a normal file if it is a \
         //                                            symbolic link to a directory");
         // TODO: opts.optflag("P", "physical", "make hard links directly to symbolic links");
-        // TODO: opts.optflag("r", "relative", "create symbolic links relative to link location");
         .optflag("s", "symbolic", "make symbolic links instead of hard links")
         .optopt("S", "suffix", "override the usual backup suffix", "SUFFIX")
         .optopt(
@@ -105,6 +109,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             "T",
             "no-target-directory",
             "treat LINK_NAME as a normal file always",
+        )
+        .optflag(
+            "r",
+            "relative",
+            "create symbolic links relative to link location",
         )
         .optflag("v", "verbose", "print name of each linked file")
         .parse(args);
@@ -168,6 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         backup: backup_mode,
         suffix: backup_suffix,
         symbolic: matches.opt_present("s"),
+        relative: matches.opt_present("r"),
         target_dir: matches.opt_str("t"),
         no_target_dir: matches.opt_present("T"),
         verbose: matches.opt_present("v"),
@@ -279,8 +289,33 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
     }
 }
 
+fn relative_path<'a>(src: &PathBuf, dst: &PathBuf) -> Result<Cow<'a, Path>> {
+    let abssrc = canonicalize(src, CanonicalizeMode::Normal)?;
+    let absdst = canonicalize(dst, CanonicalizeMode::Normal)?;
+    let suffix_pos = abssrc
+        .components()
+        .zip(absdst.components())
+        .take_while(|(s, d)| s == d)
+        .count();
+
+    let srciter = abssrc.components().skip(suffix_pos).map(|x| x.as_os_str());
+
+    let result: PathBuf = absdst
+        .components()
+        .skip(suffix_pos + 1)
+        .map(|_| OsStr::new(".."))
+        .chain(srciter)
+        .collect();
+    Ok(result.into())
+}
+
 fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
+    let source: Cow<'_, Path> = if settings.relative {
+        relative_path(&src, dst)?
+    } else {
+        src.into()
+    };
 
     if is_symlink(dst) || dst.exists() {
         match settings.overwrite {
@@ -307,13 +342,13 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
     }
 
     if settings.symbolic {
-        symlink(src, dst)?;
+        symlink(&source, dst)?;
     } else {
-        fs::hard_link(src, dst)?;
+        fs::hard_link(&source, dst)?;
     }
 
     if settings.verbose {
-        print!("'{}' -> '{}'", dst.display(), src.display());
+        print!("'{}' -> '{}'", dst.display(), &source.display());
         match backup_path {
             Some(path) => println!(" (backup: '{}')", path.display()),
             None => println!(),
@@ -359,7 +394,7 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-pub fn symlink<P: AsRef<Path>>(src: P, dst: P) -> Result<()> {
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<()> {
     if src.as_ref().is_dir() {
         symlink_dir(src, dst)
     } else {
