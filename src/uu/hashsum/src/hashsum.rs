@@ -34,7 +34,7 @@ use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use std::cmp::Ordering;
-use std::ffi::{OsString, OsStr};
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
@@ -257,7 +257,9 @@ fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
 }
 
 fn is_valid_bit_num(arg: String) -> Result<(), String> {
-    parse_bit_num(&arg).map(|_| ()).map_err(|e| format!("{}", e))
+    parse_bit_num(&arg)
+        .map(|_| ())
+        .map_err(|e| format!("{}", e))
 }
 
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -279,7 +281,8 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
             " (default)"
         } else {
             ""
-        });
+        }
+    );
 
     let text_help = format!(
         "read in text mode{}",
@@ -287,54 +290,75 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
             ""
         } else {
             " (default)"
-        });
+        }
+    );
 
     let mut app = App::new(executable!())
         .version(crate_version!())
         .about("Compute and check message digests.")
-        .arg(Arg::with_name("binary")
-            .short("b")
-            .long("binary")
-            .help(&binary_help))
-        .arg(Arg::with_name("check")
-            .short("c")
-            .long("check")
-            .help("read hashsums from the FILEs and check them"))
-        .arg(Arg::with_name("tag")
-            .long("tag")
-            .help("create a BSD-style checksum"))
-        .arg(Arg::with_name("text")
-            .short("t")
-            .long("text")
-            .help(&text_help)
-            .conflicts_with("binary"))
-        .arg(Arg::with_name("quiet")
-            .short("q")
-            .long("quiet")
-            .help("don't print OK for each successfully verified file"))
-        .arg(Arg::with_name("status")
-            .short("s")
-            .long("status")
-            .help("don't output anything, status code shows success"))
-        .arg(Arg::with_name("strict")
-            .long("strict")
-            .help("exit non-zero for improperly formatted checksum lines"))
-        .arg(Arg::with_name("warn")
-            .short("w")
-            .long("warn")
-            .help("warn about improperly formatted checksum lines"))
+        .arg(
+            Arg::with_name("binary")
+                .short("b")
+                .long("binary")
+                .help(&binary_help),
+        )
+        .arg(
+            Arg::with_name("check")
+                .short("c")
+                .long("check")
+                .help("read hashsums from the FILEs and check them"),
+        )
+        .arg(
+            Arg::with_name("tag")
+                .long("tag")
+                .help("create a BSD-style checksum"),
+        )
+        .arg(
+            Arg::with_name("text")
+                .short("t")
+                .long("text")
+                .help(&text_help)
+                .conflicts_with("binary"),
+        )
+        .arg(
+            Arg::with_name("quiet")
+                .short("q")
+                .long("quiet")
+                .help("don't print OK for each successfully verified file"),
+        )
+        .arg(
+            Arg::with_name("status")
+                .short("s")
+                .long("status")
+                .help("don't output anything, status code shows success"),
+        )
+        .arg(
+            Arg::with_name("strict")
+                .long("strict")
+                .help("exit non-zero for improperly formatted checksum lines"),
+        )
+        .arg(
+            Arg::with_name("warn")
+                .short("w")
+                .long("warn")
+                .help("warn about improperly formatted checksum lines"),
+        )
         // Needed for variable-length output sums (e.g. SHAKE)
-        .arg(Arg::with_name("bits")
-            .long("bits")
-            .help("set the size of the output (only for SHAKE)")
-            .takes_value(true)
-            .value_name("BITS")
-            // XXX: should we actually use validators?  they're not particularly efficient
-            .validator(is_valid_bit_num))
-        .arg(Arg::with_name("FILE")
-            .index(1)
-            .multiple(true)
-            .value_name("FILE"));
+        .arg(
+            Arg::with_name("bits")
+                .long("bits")
+                .help("set the size of the output (only for SHAKE)")
+                .takes_value(true)
+                .value_name("BITS")
+                // XXX: should we actually use validators?  they're not particularly efficient
+                .validator(is_valid_bit_num),
+        )
+        .arg(
+            Arg::with_name("FILE")
+                .index(1)
+                .multiple(true)
+                .value_name("FILE"),
+        );
 
     if !is_custom_binary(&binary_name) {
         let algos = &[
@@ -349,14 +373,18 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
             ("sha3-256", "work with SHA3-256"),
             ("sha3-384", "work with SHA3-384"),
             ("sha3-512", "work with SHA3-512"),
-            ("shake128", "work with SHAKE128 using BITS for the output size"),
-            ("shake256", "work with SHAKE256 using BITS for the output size"),
+            (
+                "shake128",
+                "work with SHAKE128 using BITS for the output size",
+            ),
+            (
+                "shake256",
+                "work with SHAKE256 using BITS for the output size",
+            ),
         ];
 
         for (name, desc) in algos {
-            app = app.arg(Arg::with_name(name)
-                .long(name)
-                .help(desc));
+            app = app.arg(Arg::with_name(name).long(name).help(desc));
         }
     }
 
@@ -492,7 +520,12 @@ where
                 }
             }
         } else {
-            let sum = safe_unwrap!(digest_reader(&mut *options.digest, &mut file, options.binary, options.output_bits));
+            let sum = safe_unwrap!(digest_reader(
+                &mut *options.digest,
+                &mut file,
+                options.binary,
+                options.output_bits
+            ));
             if options.tag {
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else {
