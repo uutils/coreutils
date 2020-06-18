@@ -9,7 +9,8 @@
 
 // spell-checker:ignore (ToDO) algo, algoname, regexes, nread
 
-extern crate getopts;
+#[macro_use]
+extern crate clap;
 extern crate hex;
 extern crate md5;
 extern crate regex;
@@ -25,6 +26,7 @@ mod digest;
 
 use self::digest::Digest;
 
+use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
 use regex::Regex;
@@ -32,12 +34,27 @@ use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use std::cmp::Ordering;
+use std::ffi::{OsString, OsStr};
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Read};
+use std::iter;
+use std::num::ParseIntError;
 use std::path::Path;
 
-static NAME: &str = "hashsum";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+const NAME: &str = "hashsum";
+
+struct Options {
+    algoname: &'static str,
+    digest: Box<dyn Digest + 'static>,
+    binary: bool,
+    check: bool,
+    tag: bool,
+    status: bool,
+    quiet: bool,
+    strict: bool,
+    warn: bool,
+    output_bits: usize,
+}
 
 fn is_custom_binary(program: &str) -> bool {
     match program {
@@ -49,9 +66,9 @@ fn is_custom_binary(program: &str) -> bool {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn detect_algo(
+fn detect_algo<'a>(
     program: &str,
-    matches: &getopts::Matches,
+    matches: &ArgMatches<'a>,
 ) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     let mut alg: Option<Box<dyn Digest>> = None;
     let mut name: &'static str = "";
@@ -63,7 +80,7 @@ fn detect_algo(
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "sha3sum" => match matches.opt_str("bits") {
+        "sha3sum" => match matches.value_of("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                 Ok(224) => (
                     "SHA3-224",
@@ -113,7 +130,7 @@ fn detect_algo(
             Box::new(Sha3_512::new()) as Box<dyn Digest>,
             512,
         ),
-        "shake128sum" => match matches.opt_str("bits") {
+        "shake128sum" => match matches.value_of("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                 Ok(bits) => (
                     "SHAKE128",
@@ -124,7 +141,7 @@ fn detect_algo(
             },
             None => crash!(1, "--bits required for SHAKE-128"),
         },
-        "shake256sum" => match matches.opt_str("bits") {
+        "shake256sum" => match matches.value_of("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                 Ok(bits) => (
                     "SHAKE256",
@@ -145,26 +162,26 @@ fn detect_algo(
                     alg = Some(val);
                     output_bits = bits
                 };
-                if matches.opt_present("md5") {
+                if matches.is_present("md5") {
                     set_or_crash("MD5", Box::new(Md5::new()), 128)
                 }
-                if matches.opt_present("sha1") {
+                if matches.is_present("sha1") {
                     set_or_crash("SHA1", Box::new(Sha1::new()), 160)
                 }
-                if matches.opt_present("sha224") {
+                if matches.is_present("sha224") {
                     set_or_crash("SHA224", Box::new(Sha224::new()), 224)
                 }
-                if matches.opt_present("sha256") {
+                if matches.is_present("sha256") {
                     set_or_crash("SHA256", Box::new(Sha256::new()), 256)
                 }
-                if matches.opt_present("sha384") {
+                if matches.is_present("sha384") {
                     set_or_crash("SHA384", Box::new(Sha384::new()), 384)
                 }
-                if matches.opt_present("sha512") {
+                if matches.is_present("sha512") {
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512)
                 }
-                if matches.opt_present("sha3") {
-                    match matches.opt_str("bits") {
+                if matches.is_present("sha3") {
+                    match matches.value_of("bits") {
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                             Ok(224) => set_or_crash(
                                 "SHA3-224",
@@ -195,20 +212,20 @@ fn detect_algo(
                         None => crash!(1, "--bits required for SHA3"),
                     }
                 }
-                if matches.opt_present("sha3-224") {
+                if matches.is_present("sha3-224") {
                     set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224)
                 }
-                if matches.opt_present("sha3-256") {
+                if matches.is_present("sha3-256") {
                     set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256)
                 }
-                if matches.opt_present("sha3-384") {
+                if matches.is_present("sha3-384") {
                     set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384)
                 }
-                if matches.opt_present("sha3-512") {
+                if matches.is_present("sha3-512") {
                     set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512)
                 }
-                if matches.opt_present("shake128") {
-                    match matches.opt_str("bits") {
+                if matches.is_present("shake128") {
+                    match matches.value_of("bits") {
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                             Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
                             Err(err) => crash!(1, "{}", err),
@@ -216,8 +233,8 @@ fn detect_algo(
                         None => crash!(1, "--bits required for SHAKE-128"),
                     }
                 }
-                if matches.opt_present("shake256") {
-                    match matches.opt_str("bits") {
+                if matches.is_present("shake256") {
+                    match matches.value_of("bits") {
                         Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                             Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
                             Err(err) => crash!(1, "{}", err),
@@ -234,211 +251,191 @@ fn detect_algo(
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+// TODO: return custom error type
+fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
+    usize::from_str_radix(arg, 10)
+}
 
-    let program = &args[0];
-    let binary_name = Path::new(program).file_name().unwrap().to_str().unwrap();
+fn is_valid_bit_num(arg: String) -> Result<(), String> {
+    parse_bit_num(&arg).map(|_| ()).map_err(|e| format!("{}", e))
+}
+
+pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    // if there is no program name for some reason, default to "hashsum"
+    let program = args.next().unwrap_or_else(|| OsString::from(NAME));
+    let binary_name = Path::new(&program)
+        .file_name()
+        .unwrap_or_else(|| OsStr::new(NAME))
+        .to_string_lossy();
+
+    let args = iter::once(program.clone()).chain(args);
 
     // Default binary in Windows, text mode otherwise
     let binary_flag_default = cfg!(windows);
 
-    let mut opts = getopts::Options::new();
-    opts.optflag(
-        "b",
-        "binary",
-        &format!(
-            "read in binary mode{}",
-            if binary_flag_default {
-                " (default)"
-            } else {
-                ""
-            }
-        ),
-    );
-    opts.optflag("c", "check", "read hashsums from the FILEs and check them");
-    opts.optflag("", "tag", "create a BSD-style checksum");
-    opts.optflag(
-        "t",
-        "text",
-        &format!(
-            "read in text mode{}",
-            if binary_flag_default {
-                ""
-            } else {
-                " (default)"
-            }
-        ),
-    );
-    opts.optflag(
-        "q",
-        "quiet",
-        "don't print OK for each successfully verified file",
-    );
-    opts.optflag(
-        "s",
-        "status",
-        "don't output anything, status code shows success",
-    );
-    opts.optflag(
-        "",
-        "strict",
-        "exit non-zero for improperly formatted checksum lines",
-    );
-    opts.optflag(
-        "w",
-        "warn",
-        "warn about improperly formatted checksum lines",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    if !is_custom_binary(program) {
-        opts.optflag("", "md5", "work with MD5");
-        opts.optflag("", "sha1", "work with SHA1");
-        opts.optflag("", "sha224", "work with SHA224");
-        opts.optflag("", "sha256", "work with SHA256");
-        opts.optflag("", "sha384", "work with SHA384");
-        opts.optflag("", "sha512", "work with SHA512");
-        opts.optflag("", "sha3", "work with SHA3");
-        opts.optflag("", "sha3-224", "work with SHA3-224");
-        opts.optflag("", "sha3-256", "work with SHA3-256");
-        opts.optflag("", "sha3-384", "work with SHA3-384");
-        opts.optflag("", "sha3-512", "work with SHA3-512");
-        opts.optflag(
-            "",
-            "shake128",
-            "work with SHAKE128 using BITS for the output size",
-        );
-        opts.optflag(
-            "",
-            "shake256",
-            "work with SHAKE256 using BITS for the output size",
-        );
-    }
-
-    // Needed for variable-length output sums (e.g. SHAKE)
-    opts.optopt(
-        "",
-        "bits",
-        "set the size of the output (only for SHAKE)",
-        "BITS",
-    );
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-
-    if matches.opt_present("help") {
-        usage(program, binary_name, &opts);
-    } else if matches.opt_present("version") {
-        version();
-    } else {
-        let (name, algo, bits) = detect_algo(binary_name, &matches);
-
-        let binary_flag = matches.opt_present("binary");
-        let text_flag = matches.opt_present("text");
-        if binary_flag && text_flag {
-            crash!(1, "cannot set binary and text mode at the same time");
-        }
-        let binary = if binary_flag {
-            true
-        } else if text_flag {
-            false
+    let binary_help = format!(
+        "read in binary mode{}",
+        if binary_flag_default {
+            " (default)"
         } else {
-            binary_flag_default
-        };
-        let check = matches.opt_present("check");
-        let tag = matches.opt_present("tag");
-        let status = matches.opt_present("status");
-        let quiet = matches.opt_present("quiet") || status;
-        let strict = matches.opt_present("strict");
-        let warn = matches.opt_present("warn") && !status;
-        let files = if matches.free.is_empty() {
-            vec!["-".to_owned()]
+            ""
+        });
+
+    let text_help = format!(
+        "read in text mode{}",
+        if binary_flag_default {
+            ""
         } else {
-            matches.free
-        };
-        match hashsum(
-            name, algo, files, binary, check, tag, status, quiet, strict, warn, bits,
-        ) {
-            Ok(()) => return 0,
-            Err(e) => return e,
+            " (default)"
+        });
+
+    let mut app = App::new(executable!())
+        .version(crate_version!())
+        .about("Compute and check message digests.")
+        .arg(Arg::with_name("binary")
+            .short("b")
+            .long("binary")
+            .help(&binary_help))
+        .arg(Arg::with_name("check")
+            .short("c")
+            .long("check")
+            .help("read hashsums from the FILEs and check them"))
+        .arg(Arg::with_name("tag")
+            .long("tag")
+            .help("create a BSD-style checksum"))
+        .arg(Arg::with_name("text")
+            .short("t")
+            .long("text")
+            .help(&text_help)
+            .conflicts_with("binary"))
+        .arg(Arg::with_name("quiet")
+            .short("q")
+            .long("quiet")
+            .help("don't print OK for each successfully verified file"))
+        .arg(Arg::with_name("status")
+            .short("s")
+            .long("status")
+            .help("don't output anything, status code shows success"))
+        .arg(Arg::with_name("strict")
+            .long("strict")
+            .help("exit non-zero for improperly formatted checksum lines"))
+        .arg(Arg::with_name("warn")
+            .short("w")
+            .long("warn")
+            .help("warn about improperly formatted checksum lines"))
+        // Needed for variable-length output sums (e.g. SHAKE)
+        .arg(Arg::with_name("bits")
+            .long("bits")
+            .help("set the size of the output (only for SHAKE)")
+            .takes_value(true)
+            .value_name("BITS")
+            // XXX: should we actually use validators?  they're not particularly efficient
+            .validator(is_valid_bit_num))
+        .arg(Arg::with_name("FILE")
+            .index(1)
+            .multiple(true)
+            .value_name("FILE"));
+
+    if !is_custom_binary(&binary_name) {
+        let algos = &[
+            ("md5", "work with MD5"),
+            ("sha1", "work with SHA1"),
+            ("sha224", "work with SHA224"),
+            ("sha256", "work with SHA256"),
+            ("sha384", "work with SHA384"),
+            ("sha512", "work with SHA512"),
+            ("sha3", "work with SHA3"),
+            ("sha3-224", "work with SHA3-224"),
+            ("sha3-256", "work with SHA3-256"),
+            ("sha3-384", "work with SHA3-384"),
+            ("sha3-512", "work with SHA3-512"),
+            ("shake128", "work with SHAKE128 using BITS for the output size"),
+            ("shake256", "work with SHAKE256 using BITS for the output size"),
+        ];
+
+        for (name, desc) in algos {
+            app = app.arg(Arg::with_name(name)
+                .long(name)
+                .help(desc));
         }
     }
 
-    0
-}
+    // FIXME: this should use get_matches_from_safe() and crash!(), but at the moment that just
+    //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
+    //        the current setup, the name of the utility is not printed, but I think this is at
+    //        least somewhat better from a user's perspective.
+    let matches = app.get_matches_from(args);
 
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
+    let (name, algo, bits) = detect_algo(&binary_name, &matches);
 
-fn usage(program: &str, binary_name: &str, opts: &getopts::Options) {
-    let spec = if is_custom_binary(binary_name) {
-        format!("  {} [OPTION]... [FILE]...", program)
+    let binary = if matches.is_present("binary") {
+        true
+    } else if matches.is_present("text") {
+        false
     } else {
-        format!(
-            "  {} {{--md5|--sha1|--sha224|--sha256|--sha384|--sha512|\
-             --sha3|--sha3-224|--sha3-256|--sha3-384|--sha3-512|\
-             --shake128|--shake256}} [OPTION]... [FILE]...",
-            program
-        )
+        binary_flag_default
+    };
+    let check = matches.is_present("check");
+    let tag = matches.is_present("tag");
+    let status = matches.is_present("status");
+    let quiet = matches.is_present("quiet") || status;
+    let strict = matches.is_present("strict");
+    let warn = matches.is_present("warn") && !status;
+
+    let opts = Options {
+        algoname: name,
+        digest: algo,
+        output_bits: bits,
+        binary,
+        check,
+        tag,
+        status,
+        quiet,
+        strict,
+        warn,
     };
 
-    let msg = format!(
-        "{} {}
+    let res = match matches.values_of_os("FILE") {
+        Some(files) => hashsum(opts, files),
+        None => hashsum(opts, iter::once(OsStr::new("-"))),
+    };
 
-Usage:
-{}
-
-Compute and check message digests.",
-        NAME, VERSION, spec
-    );
-
-    print!("{}", opts.usage(&msg));
+    match res {
+        Ok(()) => 0,
+        Err(e) => e,
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[allow(clippy::too_many_arguments)]
-fn hashsum(
-    algoname: &str,
-    mut digest: Box<dyn Digest>,
-    files: Vec<String>,
-    binary: bool,
-    check: bool,
-    tag: bool,
-    status: bool,
-    quiet: bool,
-    strict: bool,
-    warn: bool,
-    output_bits: usize,
-) -> Result<(), i32> {
+fn hashsum<'a, I>(mut options: Options, files: I) -> Result<(), i32>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
     let mut bad_format = 0;
     let mut failed = 0;
-    let binary_marker = if binary { "*" } else { " " };
-    for filename in &files {
-        let filename: &str = filename;
+    let binary_marker = if options.binary { "*" } else { " " };
+    for filename in files {
+        let filename = Path::new(filename);
+
         let stdin_buf;
         let file_buf;
-        let mut file = BufReader::new(if filename == "-" {
+        let mut file = BufReader::new(if filename == OsStr::new("-") {
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
         } else {
             file_buf = safe_unwrap!(File::open(filename));
             Box::new(file_buf) as Box<dyn Read>
         });
-        if check {
+        if options.check {
             // Set up Regexes for line validation and parsing
-            let bytes = digest.output_bits() / 4;
+            let bytes = options.digest.output_bits() / 4;
             let gnu_re = safe_unwrap!(Regex::new(&format!(
                 r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
                 bytes
             )));
             let bsd_re = safe_unwrap!(Regex::new(&format!(
                 r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{{{digest_size}}})",
-                algorithm = algoname,
+                algorithm = options.algoname,
                 digest_size = bytes
             )));
 
@@ -459,15 +456,15 @@ fn hashsum(
                         ),
                         None => {
                             bad_format += 1;
-                            if strict {
+                            if options.strict {
                                 return Err(1);
                             }
-                            if warn {
+                            if options.warn {
                                 show_warning!(
                                     "{}: {}: improperly formatted {} checksum line",
-                                    filename,
+                                    filename.display(),
                                     i + 1,
-                                    algoname
+                                    options.algoname
                                 );
                             }
                             continue;
@@ -477,33 +474,33 @@ fn hashsum(
                 let f = safe_unwrap!(File::open(ck_filename));
                 let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
                 let real_sum = safe_unwrap!(digest_reader(
-                    &mut *digest,
+                    &mut *options.digest,
                     &mut ckf,
                     binary_check,
-                    output_bits
+                    options.output_bits
                 ))
                 .to_ascii_lowercase();
                 if sum == real_sum {
-                    if !quiet {
+                    if !options.quiet {
                         println!("{}: OK", ck_filename);
                     }
                 } else {
-                    if !status {
+                    if !options.status {
                         println!("{}: FAILED", ck_filename);
                     }
                     failed += 1;
                 }
             }
         } else {
-            let sum = safe_unwrap!(digest_reader(&mut *digest, &mut file, binary, output_bits));
-            if tag {
-                println!("{} ({}) = {}", algoname, filename, sum);
+            let sum = safe_unwrap!(digest_reader(&mut *options.digest, &mut file, options.binary, options.output_bits));
+            if options.tag {
+                println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else {
-                println!("{} {}{}", sum, binary_marker, filename);
+                println!("{} {}{}", sum, binary_marker, filename.display());
             }
         }
     }
-    if !status {
+    if !options.status {
         match bad_format.cmp(&1) {
             Ordering::Equal => show_warning!("{} line is improperly formatted", bad_format),
             Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
