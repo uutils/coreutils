@@ -1,8 +1,7 @@
 // * This file is part of the uutils coreutils package.
 // *
-// * (c) Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
-// * (c) kwantam <kwantam@gmail.com>
-// *     * 20150507 ~ added big_ routines to prevent overflow when num > 2^63
+// * (c) 2015 Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
+// * (c) 2020 nicoo            <nicoo@debian.org>
 // *
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
