@@ -23,8 +23,8 @@ clap = "2.32"
 filetime = "0.2"
 libc = "0.2.42"
 quick-error = "1.2.3"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["fs"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["fs"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore/src/uucore_procs" }
 walkdir = "2.2.8"
 
 [target.'cfg(target_os = "linux")'.dependencies]

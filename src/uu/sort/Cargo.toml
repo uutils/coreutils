@@ -18,8 +18,8 @@ path = "src/sort.rs"
 getopts = "0.2.18"
 itertools = "0.8.0"
 semver = "0.9.0"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["fs"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["fs"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore/src/uucore_procs" }
 
 [[bin]]
 name = "sort"
