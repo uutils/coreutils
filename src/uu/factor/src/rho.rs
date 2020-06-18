@@ -7,15 +7,15 @@ use crate::miller_rabin::Result::*;
 use crate::numeric::*;
 use crate::{miller_rabin, Factors};
 
-fn find_divisor<A: Arithmetic>(n: u64) -> u64 {
+fn find_divisor<A: Arithmetic>(n: A) -> u64 {
     #![allow(clippy::many_single_char_names)]
     let mut rand = {
-        let range = Uniform::new(1, n);
+        let range = Uniform::new(1, n.modulus());
         let mut rng = SmallRng::from_rng(&mut thread_rng()).unwrap();
-        move || range.sample(&mut rng)
+        move || n.from_u64(range.sample(&mut rng))
     };
 
-    let quadratic = |a, b| move |x| A::add(A::mul(a, A::mul(x, x, n), n), b, n);
+    let quadratic = |a, b| move |x| n.add(n.mul(a, n.mul(x, x)), b);
 
     loop {
         let f = quadratic(rand(), rand());
@@ -25,8 +25,12 @@ fn find_divisor<A: Arithmetic>(n: u64) -> u64 {
         loop {
             x = f(x);
             y = f(f(y));
-            let d = gcd(n, max(x, y) - min(x, y));
-            if d == n {
+            let d = {
+                let _x = n.to_u64(x);
+                let _y = n.to_u64(y);
+                gcd(n.modulus(), max(_x, _y) - min(_x, _y))
+            };
+            if d == n.modulus() {
                 // Failure, retry with a different quadratic
                 break;
             } else if d > 1 {
@@ -39,11 +43,8 @@ fn find_divisor<A: Arithmetic>(n: u64) -> u64 {
 fn _factor<A: Arithmetic>(mut num: u64) -> Factors {
     // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
     let _factor = |n| {
-        if n < 1 << 63 {
-            _factor::<Small>(n)
-        } else {
-            _factor::<A>(n)
-        }
+        // TODO: Optimise with 32 and 64b versions
+        _factor::<A>(n)
     };
 
     let mut factors = Factors::new();
@@ -51,7 +52,8 @@ fn _factor<A: Arithmetic>(mut num: u64) -> Factors {
         return factors;
     }
 
-    match miller_rabin::test::<A>(num) {
+    let n = A::new(num);
+    match miller_rabin::test::<A>(n) {
         Prime => {
             factors.push(num);
             return factors;
@@ -65,16 +67,12 @@ fn _factor<A: Arithmetic>(mut num: u64) -> Factors {
         Pseudoprime => {}
     };
 
-    let divisor = find_divisor::<A>(num);
+    let divisor = find_divisor::<A>(n);
     factors *= _factor(divisor);
     factors *= _factor(num / divisor);
     factors
 }
 
 pub(crate) fn factor(n: u64) -> Factors {
-    if n < 1 << 63 {
-        _factor::<Small>(n)
-    } else {
-        _factor::<Big>(n)
-    }
+    _factor::<Montgomery>(n)
 }

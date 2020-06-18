@@ -23,9 +23,10 @@ impl Result {
 // Deterministic Miller-Rabin primality-checking algorithm, adapted to extract
 // (some) dividers; it will fail to factor strong pseudoprimes.
 #[allow(clippy::many_single_char_names)]
-pub(crate) fn test<A: Arithmetic>(n: u64) -> Result {
+pub(crate) fn test<A: Arithmetic>(m: A) -> Result {
     use self::Result::*;
 
+    let n = m.modulus();
     if n < 2 {
         return Pseudoprime;
     }
@@ -37,36 +38,41 @@ pub(crate) fn test<A: Arithmetic>(n: u64) -> Result {
     let i = (n - 1).trailing_zeros();
     let r = (n - 1) >> i;
 
-    for a in BASIS.iter() {
-        let a = a % n;
-        if a == 0 {
+    let one = m.one();
+    let minus_one = m.minus_one();
+
+    for _a in BASIS.iter() {
+        let _a = _a % n;
+        if _a == 0 {
             break;
         }
 
+        let a = m.from_u64(_a);
+
         // x = a^r mod n
-        let mut x = A::pow(a, r, n);
+        let mut x = m.pow(a, r);
 
         {
             // y = ((x²)²...)² i times = x ^ (2ⁱ) = a ^ (r 2ⁱ) = x ^ (n - 1)
             let mut y = x;
             for _ in 0..i {
-                y = A::mul(y, y, n)
+                y = m.mul(y, y)
             }
-            if y != 1 {
+            if y != one {
                 return Pseudoprime;
             };
         }
 
-        if x == 1 || x == n - 1 {
+        if x == one || x == minus_one {
             break;
         }
 
         loop {
-            let y = A::mul(x, x, n);
-            if y == 1 {
-                return Composite(gcd(x - 1, n));
+            let y = m.mul(x, x);
+            if y == one {
+                return Composite(gcd(m.to_u64(x) - 1, m.modulus()));
             }
-            if y == n - 1 {
+            if y == minus_one {
                 // This basis element is not a witness of `n` being composite.
                 // Keep looking.
                 break;
@@ -81,10 +87,25 @@ pub(crate) fn test<A: Arithmetic>(n: u64) -> Result {
 // Used by build.rs' tests
 #[allow(dead_code)]
 pub(crate) fn is_prime(n: u64) -> bool {
-    if n < 1 << 63 {
-        test::<Small>(n)
-    } else {
-        test::<Big>(n)
+    test::<Montgomery>(Montgomery::new(n)).is_prime()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_prime;
+    const LARGEST_U64_PRIME: u64 = 0xFFFFFFFFFFFFFFC5;
+
+    #[test]
+    fn largest_prime() {
+        assert!(is_prime(LARGEST_U64_PRIME));
     }
-    .is_prime()
+
+    #[test]
+    fn first_primes() {
+        use crate::table::{NEXT_PRIME, P_INVS_U64};
+        for (p, _, _) in P_INVS_U64.iter() {
+            assert!(is_prime(*p), "{} reported composite", p);
+        }
+        assert!(is_prime(NEXT_PRIME));
+    }
 }

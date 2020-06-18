@@ -8,10 +8,11 @@
 // * that was distributed with this source code.
 
 use std::mem::swap;
-use std::num::Wrapping;
-use std::u64::MAX as MAX_U64;
 
-pub fn gcd(mut a: u64, mut b: u64) -> u64 {
+// This is incorrectly reported as dead code,
+//  presumably when included in build.rs.
+#[allow(dead_code)]
+pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
     while b > 0 {
         a %= b;
         swap(&mut a, &mut b);
@@ -19,87 +20,243 @@ pub fn gcd(mut a: u64, mut b: u64) -> u64 {
     a
 }
 
-pub(crate) trait Arithmetic {
-    fn add(a: u64, b: u64, modulus: u64) -> u64;
-    fn mul(a: u64, b: u64, modulus: u64) -> u64;
+pub(crate) trait Arithmetic: Copy + Sized {
+    type I: Copy + Sized + Eq;
 
-    fn pow(mut a: u64, mut b: u64, m: u64) -> u64 {
-        let mut result = 1;
+    fn new(m: u64) -> Self;
+    fn modulus(&self) -> u64;
+    fn from_u64(&self, n: u64) -> Self::I;
+    fn to_u64(&self, n: Self::I) -> u64;
+    fn add(&self, a: Self::I, b: Self::I) -> Self::I;
+    fn mul(&self, a: Self::I, b: Self::I) -> Self::I;
+
+    fn pow(&self, mut a: Self::I, mut b: u64) -> Self::I {
+        let (_a, _b) = (a, b);
+        let mut result = self.one();
         while b > 0 {
             if b & 1 != 0 {
-                result = Self::mul(result, a, m);
+                result = self.mul(result, a);
             }
-            a = Self::mul(a, a, m);
+            a = self.mul(a, a);
             b >>= 1;
         }
+
+        // Check that r (reduced back to the usual representation) equals
+        //  a^b % n, unless the latter computation overflows
+        // Temporarily commented-out, as there u64::checked_pow is not available
+        //  on the minimum supported Rust version, nor is an appropriate method
+        //  for compiling the check conditionally.
+        //debug_assert!(self
+        //    .to_u64(_a)
+        //    .checked_pow(_b as u32)
+        //    .map(|r| r % self.modulus() == self.to_u64(result))
+        //    .unwrap_or(true));
+
         result
+    }
+
+    fn one(&self) -> Self::I {
+        self.from_u64(1)
+    }
+    fn minus_one(&self) -> Self::I {
+        self.from_u64(self.modulus() - 1)
+    }
+    fn zero(&self) -> Self::I {
+        self.from_u64(0)
     }
 }
 
-pub(crate) struct Big {}
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Montgomery {
+    a: u64,
+    n: u64,
+}
 
-impl Arithmetic for Big {
-    fn add(a: u64, b: u64, m: u64) -> u64 {
-        let Wrapping(msb_mod_m) = Wrapping(MAX_U64) - Wrapping(m) + Wrapping(1);
-        let msb_mod_m = msb_mod_m % m;
+impl Montgomery {
+    /// computes x/R mod n efficiently
+    fn reduce(&self, x: u128) -> u64 {
+        debug_assert!(x < (self.n as u128) << 64);
+        // TODO: optimiiiiiiise
+        let Montgomery { a, n } = self;
+        let m = (x as u64).wrapping_mul(*a);
+        let nm = (*n as u128) * (m as u128);
+        let (xnm, overflow) = (x as u128).overflowing_add(nm); // x + n*m
+        debug_assert_eq!(xnm % (1 << 64), 0);
 
-        let Wrapping(res) = Wrapping(a) + Wrapping(b);
-        if b <= MAX_U64 - a {
-            res
+        // (x + n*m) / R
+        // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
+        let y = (xnm >> 64) as u64 + if !overflow { 0 } else { n.wrapping_neg() };
+
+        if y >= *n {
+            y - n
         } else {
-            (res + msb_mod_m) % m
+            y
         }
-    }
-
-    // computes (a + b) % m using the russian peasant algorithm
-    // Only necessary when m >= 2^63; otherwise, just wastes time.
-    fn mul(mut a: u64, mut b: u64, m: u64) -> u64 {
-        // precompute 2^64 mod m, since we expect to wrap
-        let Wrapping(msb_mod_m) = Wrapping(MAX_U64) - Wrapping(m) + Wrapping(1);
-        let msb_mod_m = msb_mod_m % m;
-
-        let mut result = 0;
-        while b > 0 {
-            if b & 1 != 0 {
-                let Wrapping(next_res) = Wrapping(result) + Wrapping(a);
-                let next_res = next_res % m;
-                result = if result <= MAX_U64 - a {
-                    next_res
-                } else {
-                    (next_res + msb_mod_m) % m
-                };
-            }
-            let Wrapping(next_a) = Wrapping(a) << 1;
-            let next_a = next_a % m;
-            a = if a < 1 << 63 {
-                next_a
-            } else {
-                (next_a + msb_mod_m) % m
-            };
-            b >>= 1;
-        }
-        result
     }
 }
 
-pub(crate) struct Small {}
+impl Arithmetic for Montgomery {
+    // Montgomery transform, R=2⁶⁴
+    // Provides fast arithmetic mod n (n odd, u64)
+    type I = u64;
 
-impl Arithmetic for Small {
-    // computes (a + b) % m using the russian peasant algorithm
-    // CAUTION: Will overflow if m >= 2^63
-    fn mul(mut a: u64, mut b: u64, m: u64) -> u64 {
-        let mut result = 0;
-        while b > 0 {
-            if b & 1 != 0 {
-                result = (result + a) % m;
-            }
-            a = (a << 1) % m;
-            b >>= 1;
-        }
-        result
+    fn new(n: u64) -> Self {
+        let a = inv_mod_u64(n).wrapping_neg();
+        debug_assert_eq!(n.wrapping_mul(a), 1_u64.wrapping_neg());
+        Montgomery { a, n }
     }
 
-    fn add(a: u64, b: u64, m: u64) -> u64 {
-        (a + b) % m
+    fn modulus(&self) -> u64 {
+        self.n
+    }
+
+    fn from_u64(&self, x: u64) -> Self::I {
+        // TODO: optimise!
+        assert!(x < self.n);
+        let r = (((x as u128) << 64) % self.n as u128) as u64;
+        debug_assert_eq!(x, self.to_u64(r));
+        r
+    }
+
+    fn to_u64(&self, n: Self::I) -> u64 {
+        self.reduce(n as u128)
+    }
+
+    fn add(&self, a: Self::I, b: Self::I) -> Self::I {
+        let (r, overflow) = a.overflowing_add(b);
+
+        // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
+        let r = if !overflow {
+            r
+        } else {
+            r + self.n.wrapping_neg()
+        };
+
+        // Normalise to [0; n[
+        let r = if r < self.n { r } else { r - self.n };
+
+        // Check that r (reduced back to the usual representation) equals
+        // a+b % n
+        #[cfg(debug_assertions)]
+        {
+            let a_r = self.to_u64(a);
+            let b_r = self.to_u64(b);
+            let r_r = self.to_u64(r);
+            let r_2 = (((a_r as u128) + (b_r as u128)) % (self.n as u128)) as u64;
+            debug_assert_eq!(
+                r_r, r_2,
+                "[{}] = {} ≠ {} = {} + {} = [{}] + [{}] mod {}; a = {}",
+                r, r_r, r_2, a_r, b_r, a, b, self.n, self.a
+            );
+        }
+        r
+    }
+
+    fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
+        let r = self.reduce((a as u128) * (b as u128));
+
+        // Check that r (reduced back to the usual representation) equals
+        // a*b % n
+        #[cfg(debug_assertions)]
+        {
+            let a_r = self.to_u64(a);
+            let b_r = self.to_u64(b);
+            let r_r = self.to_u64(r);
+            let r_2 = (((a_r as u128) * (b_r as u128)) % (self.n as u128)) as u64;
+            debug_assert_eq!(
+                r_r, r_2,
+                "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
+                r, r_r, r_2, a_r, b_r, a, b, self.n, self.a
+            );
+        }
+        r
+    }
+}
+
+// extended Euclid algorithm
+// precondition: a is odd
+pub(crate) fn inv_mod_u64(a: u64) -> u64 {
+    assert!(a % 2 == 1);
+    let mut t = 0u64;
+    let mut newt = 1u64;
+    let mut r = 0u64;
+    let mut newr = a;
+
+    while newr != 0 {
+        let quot = if r == 0 {
+            // special case when we're just starting out
+            // This works because we know that
+            // a does not divide 2^64, so floor(2^64 / a) == floor((2^64-1) / a);
+            std::u64::MAX
+        } else {
+            r
+        } / newr;
+
+        let newtp = t.wrapping_sub(quot.wrapping_mul(newt));
+        t = newt;
+        newt = newtp;
+
+        let newrp = r.wrapping_sub(quot.wrapping_mul(newr));
+        r = newr;
+        newr = newrp;
+    }
+
+    assert_eq!(r, 1);
+    t
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_inverter() {
+        // All odd integers from 1 to 20 000
+        let mut test_values = (0..10_000u64).map(|i| 2 * i + 1);
+
+        assert!(test_values.all(|x| x.wrapping_mul(inv_mod_u64(x)) == 1));
+    }
+
+    #[test]
+    fn test_montgomery_add() {
+        for n in 0..100 {
+            let n = 2 * n + 1;
+            let m = Montgomery::new(n);
+            for x in 0..n {
+                let m_x = m.from_u64(x);
+                for y in 0..=x {
+                    let m_y = m.from_u64(y);
+                    println!("{n:?}, {x:?}, {y:?}", n = n, x = x, y = y);
+                    assert_eq!((x + y) % n, m.to_u64(m.add(m_x, m_y)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_montgomery_mult() {
+        for n in 0..100 {
+            let n = 2 * n + 1;
+            let m = Montgomery::new(n);
+            for x in 0..n {
+                let m_x = m.from_u64(x);
+                for y in 0..=x {
+                    let m_y = m.from_u64(y);
+                    assert_eq!((x * y) % n, m.to_u64(m.mul(m_x, m_y)));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_montgomery_roundtrip() {
+        for n in 0..100 {
+            let n = 2 * n + 1;
+            let m = Montgomery::new(n);
+            for x in 0..n {
+                let x_ = m.from_u64(x);
+                assert_eq!(x, m.to_u64(x_));
+            }
+        }
     }
 }

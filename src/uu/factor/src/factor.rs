@@ -39,13 +39,20 @@ impl Factors {
     }
 
     fn add(&mut self, prime: u64, exp: u8) {
-        assert!(exp > 0);
+        debug_assert!(exp > 0);
         let n = *self.f.get(&prime).unwrap_or(&0);
         self.f.insert(prime, exp + n);
     }
 
     fn push(&mut self, prime: u64) {
         self.add(prime, 1)
+    }
+
+    #[cfg(test)]
+    fn product(&self) -> u64 {
+        self.f
+            .iter()
+            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
     }
 }
 
@@ -131,4 +138,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::factor;
+
+    #[test]
+    fn factor_recombines_small() {
+        assert!((1..10_000)
+            .map(|i| 2 * i + 1)
+            .all(|i| factor(i).product() == i));
+    }
+
+    #[test]
+    fn factor_recombines_overflowing() {
+        assert!((0..250)
+            .map(|i| 2 * i + 2u64.pow(32) + 1)
+            .all(|i| factor(i).product() == i));
+    }
 }
