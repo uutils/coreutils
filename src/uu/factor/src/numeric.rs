@@ -123,7 +123,17 @@ impl Arithmetic for Montgomery {
     }
 
     fn add(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = a + b;
+        let (r, overflow) = a.overflowing_add(b);
+
+        // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
+        let r = if !overflow {
+            r
+        } else {
+            r + self.n.wrapping_neg()
+        };
+
+        // Normalise to [0; n[
+        let r = if r < self.n { r } else { r - self.n };
 
         // Check that r (reduced back to the usual representation) equals
         // a+b % n
