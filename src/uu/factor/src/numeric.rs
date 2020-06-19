@@ -175,7 +175,7 @@ impl Arithmetic for Montgomery {
 // extended Euclid algorithm
 // precondition: a is odd
 pub(crate) fn inv_mod_u64(a: u64) -> u64 {
-    assert!(a % 2 == 1);
+    assert!(a % 2 == 1, "{} is not odd", a);
     let mut t = 0u64;
     let mut newt = 1u64;
     let mut r = 0u64;
