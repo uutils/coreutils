@@ -55,17 +55,15 @@ fn _factor<A: Arithmetic>(num: u64) -> Factors {
         _factor::<A>(n)
     };
 
-    let mut factors = Factors::one();
     if num == 1 {
-        return factors;
+        return Factors::one();
     }
 
     let n = A::new(num);
     let divisor;
     match miller_rabin::test::<A>(n) {
         Prime => {
-            factors.push(num);
-            return factors;
+            return Factors::prime(num);
         }
 
         Composite(d) => {
@@ -77,7 +75,7 @@ fn _factor<A: Arithmetic>(num: u64) -> Factors {
         }
     };
 
-    factors *= _factor(divisor);
+    let mut factors = _factor(divisor);
     factors *= _factor(num / divisor);
     factors
 }
