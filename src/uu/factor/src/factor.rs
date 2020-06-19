@@ -156,4 +156,17 @@ mod tests {
             .map(|i| 2 * i + 2u64.pow(32) + 1)
             .all(|i| factor(i).product() == i));
     }
+
+    #[test]
+    fn factor_recombines_strong_pseudoprime() {
+        // This is a strong pseudoprime (wrt. miller_rabin::BASIS)
+        //  and triggered a bug in rho::factor's codepath handling
+        //  miller_rabbin::Result::Composite
+        let pseudoprime = 17179869183;
+        for _ in 0..20 {
+            // Repeat the test 20 times, as it only fails some fraction
+            // of the time.
+            assert!(factor(pseudoprime).product() == pseudoprime);
+        }
+    }
 }
