@@ -32,7 +32,7 @@ struct Factors {
 }
 
 impl Factors {
-    fn new() -> Factors {
+    fn one() -> Factors {
         Factors { f: BTreeMap::new() }
     }
 
@@ -75,7 +75,7 @@ impl fmt::Display for Factors {
 }
 
 fn factor(mut n: u64) -> Factors {
-    let mut factors = Factors::new();
+    let mut factors = Factors::one();
 
     if n < 2 {
         factors.push(n);

@@ -15,7 +15,7 @@ use crate::Factors;
 include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
 
 pub(crate) fn factor(mut num: u64) -> (Factors, u64) {
-    let mut factors = Factors::new();
+    let mut factors = Factors::one();
     for &(prime, inv, ceil) in P_INVS_U64 {
         if num == 1 {
             break;

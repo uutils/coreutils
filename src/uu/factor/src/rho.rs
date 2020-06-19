@@ -55,7 +55,7 @@ fn _factor<A: Arithmetic>(num: u64) -> Factors {
         _factor::<A>(n)
     };
 
-    let mut factors = Factors::new();
+    let mut factors = Factors::one();
     if num == 1 {
         return factors;
     }
