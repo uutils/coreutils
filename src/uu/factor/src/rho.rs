@@ -60,19 +60,13 @@ fn _factor<A: Arithmetic>(num: u64) -> Factors {
     }
 
     let n = A::new(num);
-    let divisor;
-    match miller_rabin::test::<A>(n) {
+    let divisor = match miller_rabin::test::<A>(n) {
         Prime => {
             return Factors::prime(num);
         }
 
-        Composite(d) => {
-            divisor = d;
-        }
-
-        Pseudoprime => {
-            divisor = find_divisor::<A>(n);
-        }
+        Composite(d) => d,
+        Pseudoprime => find_divisor::<A>(n),
     };
 
     let mut factors = _factor(divisor);
