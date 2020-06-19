@@ -156,4 +156,12 @@ mod tests {
             .map(|i| 2 * i + 2u64.pow(32) + 1)
             .all(|i| factor(i).product() == i));
     }
+
+    #[test]
+    fn factor_recombines_strong_pseudoprime() {
+        let pseudoprime = 17179869183;
+        for _ in 0..20 {
+            assert!(factor(pseudoprime).product() == pseudoprime);
+        }
+    }
 }
