@@ -39,7 +39,7 @@ fn main() {
     let mut file = File::create(&Path::new(&out_dir).join("prime_table.rs")).unwrap();
 
     // By default, we print the multiplicative inverses mod 2^64 of the first 1k primes
-    const DEFAULT_SIZE: usize = 1027;
+    const DEFAULT_SIZE: usize = 320;
     let n = args()
         .nth(1)
         .and_then(|s| s.parse::<usize>().ok())
