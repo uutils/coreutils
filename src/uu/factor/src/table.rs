@@ -26,14 +26,18 @@ pub(crate) fn factor(mut num: u64) -> (Factors, u64) {
         // if (num * inv) mod 2^64 <= ceil, then prime divides num
         // See https://math.stackexchange.com/questions/1251327/
         // for a nice explanation.
+        let mut k = 0;
         loop {
             let Wrapping(x) = Wrapping(num) * Wrapping(inv);
 
             // While prime divides num
             if x <= ceil {
                 num = x;
-                factors.push(prime);
+                k += 1;
             } else {
+                if k > 0 {
+                    factors.add(prime, k);
+                }
                 break;
             }
         }
