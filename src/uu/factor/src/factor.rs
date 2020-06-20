@@ -32,8 +32,15 @@ struct Factors {
 }
 
 impl Factors {
-    fn new() -> Factors {
+    fn one() -> Factors {
         Factors { f: BTreeMap::new() }
+    }
+
+    fn prime(p: u64) -> Factors {
+        debug_assert!(miller_rabin::is_prime(p));
+        let mut f = Factors::one();
+        f.push(p);
+        f
     }
 
     fn add(&mut self, prime: u64, exp: u8) {
@@ -75,7 +82,7 @@ impl fmt::Display for Factors {
 }
 
 fn factor(mut n: u64) -> Factors {
-    let mut factors = Factors::new();
+    let mut factors = Factors::one();
 
     if n < 2 {
         factors.push(n);
