@@ -2,10 +2,27 @@
 
 use crate::numeric::*;
 
-// Small set of bases for the Miller-Rabin prime test, valid for all 64b integers;
-//  discovered by Jim Sinclair on 2011-04-20, see miller-rabin.appspot.com
-#[allow(clippy::unreadable_literal)]
-const BASIS: [u64; 7] = [2, 325, 9375, 28178, 450775, 9780504, 1795265022];
+pub(crate) trait Basis {
+    const BASIS: &'static [u64];
+}
+
+impl Basis for Montgomery {
+    // Small set of bases for the Miller-Rabin prime test, valid for all 64b integers;
+    //  discovered by Jim Sinclair on 2011-04-20, see miller-rabin.appspot.com
+    #[allow(clippy::unreadable_literal)]
+    const BASIS: &'static [u64] = &[2, 325, 9375, 28178, 450775, 9780504, 1795265022];
+}
+
+impl Basis for Montgomery32 {
+    // Small set of bases for the Miller-Rabin prime test, valid for all 32b integers;
+    //  discovered by Steve Worley on 2013-05-27, see miller-rabin.appspot.com
+    #[allow(clippy::unreadable_literal)]
+    const BASIS: &'static [u64] = &[
+        4230279247111683200,
+        14694767155120705706,
+        16641139526367750375,
+    ];
+}
 
 #[derive(Eq, PartialEq)]
 pub(crate) enum Result {
@@ -23,7 +40,7 @@ impl Result {
 // Deterministic Miller-Rabin primality-checking algorithm, adapted to extract
 // (some) dividers; it will fail to factor strong pseudoprimes.
 #[allow(clippy::many_single_char_names)]
-pub(crate) fn test<A: Arithmetic>(m: A) -> Result {
+pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
     use self::Result::*;
 
     let n = m.modulus();
@@ -41,7 +58,7 @@ pub(crate) fn test<A: Arithmetic>(m: A) -> Result {
     let one = m.one();
     let minus_one = m.minus_one();
 
-    for _a in BASIS.iter() {
+    for _a in A::BASIS.iter() {
         let _a = _a % n;
         if _a == 0 {
             break;

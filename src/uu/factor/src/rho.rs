@@ -15,7 +15,7 @@ use crate::miller_rabin::Result::*;
 use crate::numeric::*;
 use crate::{miller_rabin, Factors};
 
-fn find_divisor<A: Arithmetic>(n: A) -> u64 {
+fn find_divisor<A: Arithmetic + miller_rabin::Basis>(n: A) -> u64 {
     #![allow(clippy::many_single_char_names)]
     let mut rand = {
         let range = Uniform::new(1, n.modulus());
@@ -48,7 +48,7 @@ fn find_divisor<A: Arithmetic>(n: A) -> u64 {
     }
 }
 
-fn _factor<A: Arithmetic>(num: u64) -> Factors {
+fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64) -> Factors {
     // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
     let _factor = |n| {
         if n < (1 << 32) {
