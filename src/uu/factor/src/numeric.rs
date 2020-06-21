@@ -216,6 +216,114 @@ pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
     t
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Montgomery32 {
+    a: u32,
+    n: u32,
+}
+
+impl Montgomery32 {
+    /// computes x/R mod n efficiently
+    fn reduce(&self, x: u64) -> u32 {
+        debug_assert!(x < (self.n as u64) << 32);
+        // TODO: optimiiiiiiise
+        let Montgomery32 { a, n } = self;
+        let m = (x as u32).wrapping_mul(*a);
+        let nm = (*n as u64) * (m as u64);
+        let (xnm, overflow) = x.overflowing_add(nm); // x + n*m
+        debug_assert_eq!(xnm % (1 << 32), 0);
+
+        // (x + n*m) / R
+        // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
+        let y = (xnm >> 32) as u32 + if !overflow { 0 } else { n.wrapping_neg() };
+
+        if y >= *n {
+            y - n
+        } else {
+            y
+        }
+    }
+}
+
+impl Arithmetic for Montgomery32 {
+    // Montgomery transform, R=2⁶⁴
+    // Provides fast arithmetic mod n (n odd, u64)
+    type I = u32;
+
+    fn new(n: u64) -> Self {
+        debug_assert!(n < (1 << 32));
+        let n = n as u32;
+        let a = modular_inverse(n).wrapping_neg();
+        debug_assert_eq!(n.wrapping_mul(a), 1_u32.wrapping_neg());
+        Montgomery32 { a, n }
+    }
+
+    fn modulus(&self) -> u64 {
+        self.n as u64
+    }
+
+    fn from_u64(&self, x: u64) -> Self::I {
+        assert!(x < self.n as u64);
+        let r = ((x << 32) % self.n as u64) as u32;
+        debug_assert_eq!(x, self.to_u64(r));
+        r
+    }
+
+    fn to_u64(&self, n: Self::I) -> u64 {
+        self.reduce(n as u64) as u64
+    }
+
+    fn add(&self, a: Self::I, b: Self::I) -> Self::I {
+        let (r, overflow) = a.overflowing_add(b);
+
+        // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
+        let r = if !overflow {
+            r
+        } else {
+            r + self.n.wrapping_neg()
+        };
+
+        // Normalise to [0; n[
+        let r = if r < self.n { r } else { r - self.n };
+
+        // Check that r (reduced back to the usual representation) equals
+        // a+b % n
+        #[cfg(debug_assertions)]
+        {
+            let a_r = self.to_u64(a);
+            let b_r = self.to_u64(b);
+            let r_r = self.to_u64(r);
+            let r_2 = (((a_r as u128) + (b_r as u128)) % (self.n as u128)) as u64;
+            debug_assert_eq!(
+                r_r, r_2,
+                "[{}] = {} ≠ {} = {} + {} = [{}] + [{}] mod {}; a = {}",
+                r, r_r, r_2, a_r, b_r, a, b, self.n, self.a
+            );
+        }
+        r
+    }
+
+    fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
+        let r = self.reduce((a as u64) * (b as u64));
+
+        // Check that r (reduced back to the usual representation) equals
+        // a*b % n
+        #[cfg(debug_assertions)]
+        {
+            let a_r = self.to_u64(a);
+            let b_r = self.to_u64(b);
+            let r_r = self.to_u64(r);
+            let r_2 = (a_r * b_r) % (self.n as u64);
+            debug_assert_eq!(
+                r_r, r_2,
+                "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
+                r, r_r, r_2, a_r, b_r, a, b, self.n, self.a
+            );
+        }
+        r
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

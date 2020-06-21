@@ -51,8 +51,11 @@ fn find_divisor<A: Arithmetic>(n: A) -> u64 {
 fn _factor<A: Arithmetic>(num: u64) -> Factors {
     // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
     let _factor = |n| {
-        // TODO: Optimise with 32 and 64b versions
-        _factor::<A>(n)
+        if n < (1 << 32) {
+            _factor::<Montgomery32>(n)
+        } else {
+            _factor::<A>(n)
+        }
     };
 
     if num == 1 {
@@ -75,5 +78,9 @@ fn _factor<A: Arithmetic>(num: u64) -> Factors {
 }
 
 pub(crate) fn factor(n: u64) -> Factors {
-    _factor::<Montgomery>(n)
+    if n < (1 << 32) {
+        _factor::<Montgomery32>(n)
+    } else {
+        _factor::<Montgomery>(n)
+    }
 }
