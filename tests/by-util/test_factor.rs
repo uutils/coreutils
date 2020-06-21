@@ -1,11 +1,9 @@
-//
 // This file is part of the uutils coreutils package.
 //
 // (c) kwantam <kwantam@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-//
 
 use crate::common::util::*;
 
@@ -27,6 +25,7 @@ fn test_random() {
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
     let mut rng = SmallRng::from_entropy();
+    println!("(seed) rng={:?}", rng);
     let mut rand_gt = move |min: u64| {
         let mut product = 1u64;
         let mut factors = Vec::new();
@@ -72,13 +71,10 @@ fn test_random() {
     run(instring.as_bytes(), outstring.as_bytes());
 }
 
-// FixME: random failures; avoid for CI until fixed; ref: GH:uutils/coreutils#1531
 #[test]
 fn test_random_big() {
-    if is_ci() {
-        return;
-    }; // skip test under CI until random failures are fixed
     let mut rng = SmallRng::from_entropy();
+    println!("(seed) rng={:?}", rng);
     let bitrange_1 = Uniform::new(14usize, 51);
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
