@@ -6,6 +6,11 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
+use num_traits::{
+    int::PrimInt,
+    ops::wrapping::{WrappingMul, WrappingSub},
+};
+use std::fmt::Debug;
 use std::mem::swap;
 
 // This is incorrectly reported as dead code,
@@ -100,7 +105,7 @@ impl Arithmetic for Montgomery {
     type I = u64;
 
     fn new(n: u64) -> Self {
-        let a = inv_mod_u64(n).wrapping_neg();
+        let a = modular_inverse(n).wrapping_neg();
         debug_assert_eq!(n.wrapping_mul(a), 1_u64.wrapping_neg());
         Montgomery { a, n }
     }
@@ -172,35 +177,42 @@ impl Arithmetic for Montgomery {
     }
 }
 
+pub(crate) trait Int: Debug + PrimInt + WrappingSub + WrappingMul {}
+impl Int for u64 {}
+impl Int for u32 {}
+
 // extended Euclid algorithm
 // precondition: a is odd
-pub(crate) fn inv_mod_u64(a: u64) -> u64 {
-    assert!(a % 2 == 1, "{} is not odd", a);
-    let mut t = 0u64;
-    let mut newt = 1u64;
-    let mut r = 0u64;
+pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
+    let zero = T::zero();
+    let one = T::one();
+    assert!(a % (one + one) == one, "{:?} is not odd", a);
+
+    let mut t = zero;
+    let mut newt = one;
+    let mut r = zero;
     let mut newr = a;
 
-    while newr != 0 {
-        let quot = if r == 0 {
+    while newr != zero {
+        let quot = if r == zero {
             // special case when we're just starting out
             // This works because we know that
             // a does not divide 2^64, so floor(2^64 / a) == floor((2^64-1) / a);
-            std::u64::MAX
+            T::max_value()
         } else {
             r
         } / newr;
 
-        let newtp = t.wrapping_sub(quot.wrapping_mul(newt));
+        let newtp = t.wrapping_sub(&quot.wrapping_mul(&newt));
         t = newt;
         newt = newtp;
 
-        let newrp = r.wrapping_sub(quot.wrapping_mul(newr));
+        let newrp = r.wrapping_sub(&quot.wrapping_mul(&newr));
         r = newr;
         newr = newrp;
     }
 
-    assert_eq!(r, 1);
+    assert_eq!(r, one);
     t
 }
 
@@ -208,12 +220,25 @@ pub(crate) fn inv_mod_u64(a: u64) -> u64 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_inverter() {
+    fn test_inverter<T: Int>() {
         // All odd integers from 1 to 20 000
-        let mut test_values = (0..10_000u64).map(|i| 2 * i + 1);
+        let one = T::from(1).unwrap();
+        let two = T::from(2).unwrap();
+        let mut test_values = (0..10_000)
+            .map(|i| T::from(i).unwrap())
+            .map(|i| two * i + one);
 
-        assert!(test_values.all(|x| x.wrapping_mul(inv_mod_u64(x)) == 1));
+        assert!(test_values.all(|x| x.wrapping_mul(&modular_inverse(x)) == one));
+    }
+
+    #[test]
+    fn test_inverter_u32() {
+        test_inverter::<u32>()
+    }
+
+    #[test]
+    fn test_inverter_u64() {
+        test_inverter::<u64>()
     }
 
     #[test]

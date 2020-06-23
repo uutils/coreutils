@@ -14,7 +14,11 @@ edition = "2018"
 [lib]
 path = "src/factor.rs"
 
+[build-dependencies]
+num-traits="0.2"
+
 [dependencies]
+num-traits = "0.2"
 rand = "0.5"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
