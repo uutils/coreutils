@@ -64,7 +64,7 @@ pub(crate) fn test<A: Arithmetic>(m: A) -> Result {
         }
 
         if x == one || x == minus_one {
-            break;
+            continue;
         }
 
         loop {
