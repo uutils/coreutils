@@ -108,4 +108,23 @@ mod tests {
         }
         assert!(is_prime(NEXT_PRIME));
     }
+
+    #[test]
+    fn issue_1556() {
+        // 10 425 511 = 2441 × 4271
+        assert!(!is_prime(10_425_511));
+    }
+
+    #[test]
+    fn small_composites() {
+        use crate::table::P_INVS_U64;
+
+        for i in 0..P_INVS_U64.len() {
+            let (p, _, _) = P_INVS_U64[i];
+            for (q, _, _) in &P_INVS_U64[0..i] {
+                let n = p * q;
+                assert!(!is_prime(n), "{} = {} × {} reported prime", n, p, q);
+            }
+        }
+    }
 }
