@@ -31,10 +31,13 @@ use winapi::um::fileapi::CreateFileW;
 #[cfg(windows)]
 use winapi::um::fileapi::GetFileInformationByHandle;
 
+use std::borrow::Cow;
+
 use clap::{App, Arg, ArgMatches};
 use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
+use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 #[cfg(windows)]
@@ -53,6 +56,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
+use uucore::fs::resolve_relative_path;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
 
@@ -207,6 +211,7 @@ pub struct Options {
     copy_contents: bool,
     copy_mode: CopyMode,
     dereference: bool,
+    no_dereference: bool,
     no_target_dir: bool,
     one_file_system: bool,
     overwrite: OverwriteMode,
@@ -414,6 +419,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .value_name("ATTR_LIST")
              .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
              .help("don't preserve the specified attributes"))
+        .arg(Arg::with_name(OPT_NO_DEREFERENCE)
+             .short("-P")
+             .long(OPT_NO_DEREFERENCE)
+             .conflicts_with(OPT_DEREFERENCE)
+             .help("never follow symbolic links in SOURCE"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_ARCHIVE)
@@ -433,11 +443,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .long(OPT_DEREFERENCE)
              .conflicts_with(OPT_NO_DEREFERENCE)
              .help("NotImplemented: always follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_NO_DEREFERENCE)
-             .short("-P")
-             .long(OPT_NO_DEREFERENCE)
-             .conflicts_with(OPT_DEREFERENCE)
-             .help("NotImplemented: never follow symbolic links in SOURCE"))
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
              .help("NotImplemented: use full source file name under DIRECTORY"))
@@ -565,7 +570,6 @@ impl Options {
             OPT_COPY_CONTENTS,
             OPT_NO_DEREFERENCE_PRESERVE_LINKS,
             OPT_DEREFERENCE,
-            OPT_NO_DEREFERENCE,
             OPT_PARENTS,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
@@ -627,6 +631,7 @@ impl Options {
             copy_contents: matches.is_present(OPT_COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
             dereference: matches.is_present(OPT_DEREFERENCE),
+            no_dereference: matches.is_present(OPT_NO_DEREFERENCE),
             one_file_system: matches.is_present(OPT_ONE_FILE_SYSTEM),
             overwrite: OverwriteMode::from_matches(matches),
             parents: matches.is_present(OPT_PARENTS),
@@ -807,6 +812,7 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
                 let dest = construct_dest_path(source, target, &target_type, options)?;
                 preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
             }
+
             if !found_hard_link {
                 if let Err(error) = copy_source(source, target, &target_type, options) {
                     show_error!("{}", error);
@@ -866,6 +872,27 @@ fn copy_source(
     }
 }
 
+#[cfg(target_os = "windows")]
+fn adjust_canonicalization<'a>(p: &'a Path) -> Cow<'a, Path> {
+    // In some cases, \\? can be missing on some Windows paths.  Add it at the
+    // beginning unless the path is prefixed with a device namespace.
+    const VERBATIM_PREFIX: &str = r#"\\?"#;
+    const DEVICE_NS_PREFIX: &str = r#"\\."#;
+
+    let has_prefix = p
+        .components()
+        .next()
+        .and_then(|comp| comp.as_os_str().to_str())
+        .map(|p_str| p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX))
+        .unwrap_or_default();
+
+    if has_prefix {
+        p.into()
+    } else {
+        Path::new(VERBATIM_PREFIX).join(p).into()
+    }
+}
+
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
@@ -898,9 +925,35 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
     let mut hard_links: Vec<(String, u64)> = vec![];
 
     for path in WalkDir::new(root) {
-        let path = or_continue!(or_continue!(path).path().canonicalize());
+        let p = or_continue!(path);
+        let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
+        let path = if options.no_dereference && is_symlink {
+            // we are dealing with a symlink. Don't follow it
+            match env::current_dir() {
+                Ok(cwd) => cwd.join(resolve_relative_path(p.path())),
+                Err(e) => crash!(1, "failed to get current directory {}", e),
+            }
+        } else {
+            or_continue!(p.path().canonicalize())
+        };
+
         let local_to_root_parent = match root_parent {
-            Some(parent) => or_continue!(path.strip_prefix(&parent)).to_path_buf(),
+            Some(parent) => {
+                #[cfg(windows)]
+                {
+                    // On Windows, some pathes are starting with \\?
+                    // but not always, so, make sure that we are consistent for strip_prefix
+                    // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
+                    let parent_can = adjust_canonicalization(parent);
+                    let path_can = adjust_canonicalization(&path);
+
+                    or_continue!(&path_can.strip_prefix(&parent_can)).to_path_buf()
+                }
+                #[cfg(not(windows))]
+                {
+                    or_continue!(path.strip_prefix(&parent)).to_path_buf()
+                }
+            }
             None => path.clone(),
         };
 
@@ -1070,7 +1123,6 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             }
         }
     }
-
     match options.copy_mode {
         CopyMode::Link => {
             fs::hard_link(source, dest).context(&*context_for(source, dest))?;
@@ -1156,9 +1208,26 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
                 ReflinkMode::Never => {}
             }
         }
+    } else if options.no_dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
+        // Here, we will copy the symlink itself (actually, just recreate it)
+        let link = fs::read_link(&source)?;
+        let dest: Cow<'_, Path> = if dest.is_dir() {
+            match source.file_name() {
+                Some(name) => dest.join(name).into(),
+                None => crash!(
+                    EXIT_ERR,
+                    "cannot stat ‘{}’: No such file or directory",
+                    source.display()
+                ),
+            }
+        } else {
+            dest.into()
+        };
+        symlink_file(&link, &dest, &*context_for(&link, &dest))?;
     } else {
         fs::copy(source, dest).context(&*context_for(source, dest))?;
     }
+
     Ok(())
 }
 
