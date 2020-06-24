@@ -6,14 +6,14 @@ pub(crate) trait Basis {
     const BASIS: &'static [u64];
 }
 
-impl Basis for Montgomery {
+impl Basis for Montgomery<u64> {
     // Small set of bases for the Miller-Rabin prime test, valid for all 64b integers;
     //  discovered by Jim Sinclair on 2011-04-20, see miller-rabin.appspot.com
     #[allow(clippy::unreadable_literal)]
     const BASIS: &'static [u64] = &[2, 325, 9375, 28178, 450775, 9780504, 1795265022];
 }
 
-impl Basis for Montgomery32 {
+impl Basis for Montgomery<u32> {
     // Small set of bases for the Miller-Rabin prime test, valid for all 32b integers;
     //  discovered by Steve Worley on 2013-05-27, see miller-rabin.appspot.com
     #[allow(clippy::unreadable_literal)]
@@ -104,7 +104,7 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
 // Used by build.rs' tests
 #[allow(dead_code)]
 pub(crate) fn is_prime(n: u64) -> bool {
-    test::<Montgomery>(Montgomery::new(n)).is_prime()
+    test::<Montgomery<u64>>(Montgomery::new(n)).is_prime()
 }
 
 #[cfg(test)]

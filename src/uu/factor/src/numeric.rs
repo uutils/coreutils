@@ -7,10 +7,12 @@
 // * that was distributed with this source code.
 
 use num_traits::{
+    cast::AsPrimitive,
+    identities::{One, Zero},
     int::PrimInt,
-    ops::wrapping::{WrappingMul, WrappingSub},
+    ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
 };
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::mem::swap;
 
 // This is incorrectly reported as dead code,
@@ -71,63 +73,78 @@ pub(crate) trait Arithmetic: Copy + Sized {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Montgomery {
-    a: u64,
-    n: u64,
+pub(crate) struct Montgomery<T: Int> {
+    a: T,
+    n: T,
 }
 
-impl Montgomery {
+impl<T: Int> Montgomery<T> {
     /// computes x/R mod n efficiently
-    fn reduce(&self, x: u128) -> u64 {
-        debug_assert!(x < (self.n as u128) << 64);
+    fn reduce(&self, x: T::Intermediate) -> T {
+        let t_bits = T::zero().count_zeros() as usize;
+
+        debug_assert!(x < (self.n.as_intermediate()) << t_bits);
         // TODO: optimiiiiiiise
         let Montgomery { a, n } = self;
-        let m = (x as u64).wrapping_mul(*a);
-        let nm = (*n as u128) * (m as u128);
-        let (xnm, overflow) = (x as u128).overflowing_add(nm); // x + n*m
-        debug_assert_eq!(xnm % (1 << 64), 0);
+        let m = T::from_intermediate(x).wrapping_mul(a);
+        let nm = (n.as_intermediate()) * (m.as_intermediate());
+        let (xnm, overflow) = x.overflowing_add_(nm); // x + n*m
+        debug_assert_eq!(
+            xnm % (T::Intermediate::one() << T::zero().count_zeros() as usize),
+            T::Intermediate::zero()
+        );
 
         // (x + n*m) / R
         // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-        let y = (xnm >> 64) as u64 + if !overflow { 0 } else { n.wrapping_neg() };
+        let y = T::from_intermediate(xnm >> t_bits)
+            + if !overflow {
+                T::zero()
+            } else {
+                n.wrapping_neg()
+            };
 
         if y >= *n {
-            y - n
+            y - *n
         } else {
             y
         }
     }
 }
 
-impl Arithmetic for Montgomery {
+impl<T: Int> Arithmetic for Montgomery<T> {
     // Montgomery transform, R=2⁶⁴
     // Provides fast arithmetic mod n (n odd, u64)
-    type I = u64;
+    type I = T;
 
     fn new(n: u64) -> Self {
+        debug_assert!(T::zero().count_zeros() >= 64 || n < (1 << T::zero().count_zeros() as usize));
+        let n = T::from_u64(n);
         let a = modular_inverse(n).wrapping_neg();
-        debug_assert_eq!(n.wrapping_mul(a), 1_u64.wrapping_neg());
+        debug_assert_eq!(n.wrapping_mul(&a), T::one().wrapping_neg());
         Montgomery { a, n }
     }
 
     fn modulus(&self) -> u64 {
-        self.n
+        self.n.as_()
     }
 
     fn from_u64(&self, x: u64) -> Self::I {
         // TODO: optimise!
-        assert!(x < self.n);
-        let r = (((x as u128) << 64) % self.n as u128) as u64;
+        assert!(x < self.n.as_());
+        let r = T::from_intermediate(
+            ((T::Intermediate::from(x)) << T::zero().count_zeros() as usize)
+                % self.n.as_intermediate(),
+        );
         debug_assert_eq!(x, self.to_u64(r));
         r
     }
 
     fn to_u64(&self, n: Self::I) -> u64 {
-        self.reduce(n as u128)
+        self.reduce(n.as_intermediate()).as_()
     }
 
     fn add(&self, a: Self::I, b: Self::I) -> Self::I {
-        let (r, overflow) = a.overflowing_add(b);
+        let (r, overflow) = a.overflowing_add_(b);
 
         // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
         let r = if !overflow {
@@ -146,7 +163,8 @@ impl Arithmetic for Montgomery {
             let a_r = self.to_u64(a);
             let b_r = self.to_u64(b);
             let r_r = self.to_u64(r);
-            let r_2 = (((a_r as u128) + (b_r as u128)) % (self.n as u128)) as u64;
+            let r_2 =
+                (((a_r as u128) + (b_r as u128)) % <T as AsPrimitive<u128>>::as_(self.n)) as u64;
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} + {} = [{}] + [{}] mod {}; a = {}",
@@ -157,7 +175,7 @@ impl Arithmetic for Montgomery {
     }
 
     fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = self.reduce((a as u128) * (b as u128));
+        let r = self.reduce(a.as_intermediate() * b.as_intermediate());
 
         // Check that r (reduced back to the usual representation) equals
         // a*b % n
@@ -166,7 +184,9 @@ impl Arithmetic for Montgomery {
             let a_r = self.to_u64(a);
             let b_r = self.to_u64(b);
             let r_r = self.to_u64(r);
-            let r_2 = (((a_r as u128) * (b_r as u128)) % (self.n as u128)) as u64;
+            let r_2: u64 = ((T::Intermediate::from(a_r) * T::Intermediate::from(b_r))
+                % self.n.as_intermediate())
+            .as_();
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
@@ -177,9 +197,76 @@ impl Arithmetic for Montgomery {
     }
 }
 
-pub(crate) trait Int: Debug + PrimInt + WrappingSub + WrappingMul {}
-impl Int for u64 {}
-impl Int for u32 {}
+pub(crate) trait OverflowingAdd: Sized {
+    fn overflowing_add_(self, n: Self) -> (Self, bool);
+}
+impl OverflowingAdd for u32 {
+    fn overflowing_add_(self, n: Self) -> (Self, bool) {
+        self.overflowing_add(n)
+    }
+}
+impl OverflowingAdd for u64 {
+    fn overflowing_add_(self, n: Self) -> (Self, bool) {
+        self.overflowing_add(n)
+    }
+}
+impl OverflowingAdd for u128 {
+    fn overflowing_add_(self, n: Self) -> (Self, bool) {
+        self.overflowing_add(n)
+    }
+}
+
+pub(crate) trait Int:
+    AsPrimitive<u64>
+    + AsPrimitive<u128>
+    + Display
+    + Debug
+    + PrimInt
+    + OverflowingAdd
+    + WrappingNeg
+    + WrappingSub
+    + WrappingMul
+{
+    type Intermediate: From<u64>
+        + AsPrimitive<u64>
+        + Display
+        + Debug
+        + PrimInt
+        + OverflowingAdd
+        + WrappingNeg
+        + WrappingSub
+        + WrappingMul;
+
+    fn as_intermediate(self) -> Self::Intermediate;
+    fn from_intermediate(n: Self::Intermediate) -> Self;
+    fn from_u64(n: u64) -> Self;
+}
+impl Int for u64 {
+    type Intermediate = u128;
+
+    fn as_intermediate(self) -> u128 {
+        self as _
+    }
+    fn from_intermediate(n: u128) -> u64 {
+        n as _
+    }
+    fn from_u64(n: u64) -> u64 {
+        n
+    }
+}
+impl Int for u32 {
+    type Intermediate = u64;
+
+    fn as_intermediate(self) -> u64 {
+        self as _
+    }
+    fn from_intermediate(n: u64) -> u32 {
+        n as _
+    }
+    fn from_u64(n: u64) -> u32 {
+        n as _
+    }
+}
 
 // extended Euclid algorithm
 // precondition: a is odd
@@ -214,114 +301,6 @@ pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
 
     assert_eq!(r, one);
     t
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Montgomery32 {
-    a: u32,
-    n: u32,
-}
-
-impl Montgomery32 {
-    /// computes x/R mod n efficiently
-    fn reduce(&self, x: u64) -> u32 {
-        debug_assert!(x < (self.n as u64) << 32);
-        // TODO: optimiiiiiiise
-        let Montgomery32 { a, n } = self;
-        let m = (x as u32).wrapping_mul(*a);
-        let nm = (*n as u64) * (m as u64);
-        let (xnm, overflow) = x.overflowing_add(nm); // x + n*m
-        debug_assert_eq!(xnm % (1 << 32), 0);
-
-        // (x + n*m) / R
-        // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-        let y = (xnm >> 32) as u32 + if !overflow { 0 } else { n.wrapping_neg() };
-
-        if y >= *n {
-            y - n
-        } else {
-            y
-        }
-    }
-}
-
-impl Arithmetic for Montgomery32 {
-    // Montgomery transform, R=2⁶⁴
-    // Provides fast arithmetic mod n (n odd, u64)
-    type I = u32;
-
-    fn new(n: u64) -> Self {
-        debug_assert!(n < (1 << 32));
-        let n = n as u32;
-        let a = modular_inverse(n).wrapping_neg();
-        debug_assert_eq!(n.wrapping_mul(a), 1_u32.wrapping_neg());
-        Montgomery32 { a, n }
-    }
-
-    fn modulus(&self) -> u64 {
-        self.n as u64
-    }
-
-    fn from_u64(&self, x: u64) -> Self::I {
-        assert!(x < self.n as u64);
-        let r = ((x << 32) % self.n as u64) as u32;
-        debug_assert_eq!(x, self.to_u64(r));
-        r
-    }
-
-    fn to_u64(&self, n: Self::I) -> u64 {
-        self.reduce(n as u64) as u64
-    }
-
-    fn add(&self, a: Self::I, b: Self::I) -> Self::I {
-        let (r, overflow) = a.overflowing_add(b);
-
-        // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
-        let r = if !overflow {
-            r
-        } else {
-            r + self.n.wrapping_neg()
-        };
-
-        // Normalise to [0; n[
-        let r = if r < self.n { r } else { r - self.n };
-
-        // Check that r (reduced back to the usual representation) equals
-        // a+b % n
-        #[cfg(debug_assertions)]
-        {
-            let a_r = self.to_u64(a);
-            let b_r = self.to_u64(b);
-            let r_r = self.to_u64(r);
-            let r_2 = (((a_r as u128) + (b_r as u128)) % (self.n as u128)) as u64;
-            debug_assert_eq!(
-                r_r, r_2,
-                "[{}] = {} ≠ {} = {} + {} = [{}] + [{}] mod {}; a = {}",
-                r, r_r, r_2, a_r, b_r, a, b, self.n, self.a
-            );
-        }
-        r
-    }
-
-    fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = self.reduce((a as u64) * (b as u64));
-
-        // Check that r (reduced back to the usual representation) equals
-        // a*b % n
-        #[cfg(debug_assertions)]
-        {
-            let a_r = self.to_u64(a);
-            let b_r = self.to_u64(b);
-            let r_r = self.to_u64(r);
-            let r_2 = (a_r * b_r) % (self.n as u64);
-            debug_assert_eq!(
-                r_r, r_2,
-                "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
-                r, r_r, r_2, a_r, b_r, a, b, self.n, self.a
-            );
-        }
-        r
-    }
 }
 
 #[cfg(test)]

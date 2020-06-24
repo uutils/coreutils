@@ -52,7 +52,7 @@ fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64) -> Factors {
     // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
     let _factor = |n| {
         if n < (1 << 32) {
-            _factor::<Montgomery32>(n)
+            _factor::<Montgomery<u32>>(n)
         } else {
             _factor::<A>(n)
         }
@@ -79,8 +79,8 @@ fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64) -> Factors {
 
 pub(crate) fn factor(n: u64) -> Factors {
     if n < (1 << 32) {
-        _factor::<Montgomery32>(n)
+        _factor::<Montgomery<u32>>(n)
     } else {
-        _factor::<Montgomery>(n)
+        _factor::<Montgomery<u64>>(n)
     }
 }
