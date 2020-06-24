@@ -328,11 +328,10 @@ mod tests {
         test_inverter::<u64>()
     }
 
-    #[test]
-    fn test_montgomery_add() {
+    fn test_add<A: Arithmetic>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = Montgomery::new(n);
+            let m = A::new(n);
             for x in 0..n {
                 let m_x = m.from_u64(x);
                 for y in 0..=x {
@@ -345,10 +344,19 @@ mod tests {
     }
 
     #[test]
-    fn test_montgomery_mult() {
+    fn test_add_m32() {
+        test_add::<Montgomery<u32>>()
+    }
+
+    #[test]
+    fn test_add_m64() {
+        test_add::<Montgomery<u64>>()
+    }
+
+    fn test_mult<A: Arithmetic>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = Montgomery::new(n);
+            let m = A::new(n);
             for x in 0..n {
                 let m_x = m.from_u64(x);
                 for y in 0..=x {
@@ -360,14 +368,33 @@ mod tests {
     }
 
     #[test]
-    fn test_montgomery_roundtrip() {
+    fn test_mult_m32() {
+        test_mult::<Montgomery<u32>>()
+    }
+
+    #[test]
+    fn test_mult_m64() {
+        test_mult::<Montgomery<u64>>()
+    }
+
+    fn test_roundtrip<A: Arithmetic>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = Montgomery::new(n);
+            let m = A::new(n);
             for x in 0..n {
                 let x_ = m.from_u64(x);
                 assert_eq!(x, m.to_u64(x_));
             }
         }
+    }
+
+    #[test]
+    fn test_roundtrip_m32() {
+        test_roundtrip::<Montgomery<u32>>()
+    }
+
+    #[test]
+    fn test_roundtrip_m64() {
+        test_roundtrip::<Montgomery<u64>>()
     }
 }
