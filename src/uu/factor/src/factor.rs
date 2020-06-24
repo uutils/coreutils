@@ -1,6 +1,5 @@
 // * This file is part of the uutils coreutils package.
 // *
-// * (c) 2014 T. Jameson Little <t.jameson.little@gmail.com>
 // * (c) 2020 nicoo <nicoo@debian.org>
 // *
 // * For the full copyright and license information, please view the LICENSE file
@@ -8,48 +7,35 @@
 
 extern crate rand;
 
-#[macro_use]
-extern crate uucore;
-
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::fmt;
-use std::io::{self, stdin, stdout, BufRead, Write};
 use std::ops;
 
-mod miller_rabin;
-mod numeric;
-mod rho;
-mod table;
+use crate::{miller_rabin, rho, table};
 
-static SYNTAX: &str = "[OPTION] [NUMBER]...";
-static SUMMARY: &str = "Print the prime factors of the given number(s).
- If none are specified, read from standard input.";
-static LONG_HELP: &str = "";
-
-struct Factors {
+pub struct Factors {
     f: BTreeMap<u64, u8>,
 }
 
 impl Factors {
-    fn one() -> Factors {
+    pub fn one() -> Factors {
         Factors { f: BTreeMap::new() }
     }
 
-    fn prime(p: u64) -> Factors {
+    pub fn prime(p: u64) -> Factors {
         debug_assert!(miller_rabin::is_prime(p));
         let mut f = Factors::one();
         f.push(p);
         f
     }
 
-    fn add(&mut self, prime: u64, exp: u8) {
+    pub fn add(&mut self, prime: u64, exp: u8) {
         debug_assert!(exp > 0);
         let n = *self.f.get(&prime).unwrap_or(&0);
         self.f.insert(prime, exp + n);
     }
 
-    fn push(&mut self, prime: u64) {
+    pub fn push(&mut self, prime: u64) {
         self.add(prime, 1)
     }
 
@@ -81,7 +67,7 @@ impl fmt::Display for Factors {
     }
 }
 
-fn factor(mut n: u64) -> Factors {
+pub fn factor(mut n: u64) -> Factors {
     let mut factors = Factors::one();
 
     if n < 2 {
@@ -107,43 +93,6 @@ fn factor(mut n: u64) -> Factors {
     }
 
     factors
-}
-
-fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dyn Error>> {
-    num_str
-        .parse::<u64>()
-        .map_err(|e| e.into())
-        .and_then(|x| writeln!(w, "{}:{}", x, factor(x)).map_err(|e| e.into()))
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
-    let stdout = stdout();
-    let mut w = io::BufWriter::new(stdout.lock());
-
-    if matches.free.is_empty() {
-        let stdin = stdin();
-
-        for line in stdin.lock().lines() {
-            for number in line.unwrap().split_whitespace() {
-                if let Err(e) = print_factors_str(number, &mut w) {
-                    show_warning!("{}: {}", number, e);
-                }
-            }
-        }
-    } else {
-        for number in &matches.free {
-            if let Err(e) = print_factors_str(number, &mut w) {
-                show_warning!("{}: {}", number, e);
-            }
-        }
-    }
-
-    if let Err(e) = w.flush() {
-        show_error!("{}", e);
-    }
-
-    0
 }
 
 #[cfg(test)]
