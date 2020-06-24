@@ -130,7 +130,7 @@ impl<T: Int> Arithmetic for Montgomery<T> {
 
     fn from_u64(&self, x: u64) -> Self::I {
         // TODO: optimise!
-        assert!(x < self.n.as_());
+        debug_assert!(x < self.n.as_());
         let r = T::from_intermediate(
             ((T::Intermediate::from(x)) << T::zero().count_zeros() as usize)
                 % self.n.as_intermediate(),
@@ -273,7 +273,7 @@ impl Int for u32 {
 pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
     let zero = T::zero();
     let one = T::one();
-    assert!(a % (one + one) == one, "{:?} is not odd", a);
+    debug_assert!(a % (one + one) == one, "{:?} is not odd", a);
 
     let mut t = zero;
     let mut newt = one;
@@ -299,7 +299,7 @@ pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
         newr = newrp;
     }
 
-    assert_eq!(r, one);
+    debug_assert_eq!(r, one);
     t
 }
 
