@@ -9,7 +9,6 @@ extern crate rand;
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::ops;
 
 use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
@@ -48,14 +47,6 @@ impl Factors {
     }
 }
 
-impl ops::MulAssign<Factors> for Factors {
-    fn mul_assign(&mut self, other: Factors) {
-        for (prime, exp) in &other.f {
-            self.add(*prime, *exp);
-        }
-    }
-}
-
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (p, exp) in self.f.iter() {
@@ -68,31 +59,32 @@ impl fmt::Display for Factors {
     }
 }
 
-fn _factor<A: Arithmetic>(num: u64) -> Factors {
+fn _factor<A: Arithmetic>(num: u64, f: Factors) -> Factors {
     use miller_rabin::Result::*;
     // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
-    let _factor = |n| {
+    let _factor = |n, f| {
         // TODO: Optimise with 32 and 64b versions
-        _factor::<A>(n)
+        _factor::<A>(n, f)
     };
 
     if num == 1 {
-        return Factors::one();
+        return f;
     }
 
     let n = A::new(num);
     let divisor = match miller_rabin::test::<A>(n) {
         Prime => {
-            return Factors::prime(num);
+            let mut r = f;
+            r.push(num);
+            return r;
         }
 
         Composite(d) => d,
         Pseudoprime => rho::find_divisor::<A>(n),
     };
 
-    let mut factors = _factor(divisor);
-    factors *= _factor(num / divisor);
-    factors
+    let f = _factor(divisor, f);
+    _factor(num / divisor, f)
 }
 
 pub fn factor(mut n: u64) -> Factors {
@@ -113,16 +105,13 @@ pub fn factor(mut n: u64) -> Factors {
         return factors;
     }
 
-    let (f, n) = table::factor(n);
-    factors *= f;
+    let (factors, n) = table::factor(n, factors);
 
     if n < (1 << 32) {
-        factors *= _factor::<Montgomery>(n);
+        _factor::<Montgomery>(n, factors)
     } else {
-        factors *= _factor::<Montgomery>(n);
+        _factor::<Montgomery>(n, factors)
     }
-
-    factors
 }
 
 #[cfg(test)]
