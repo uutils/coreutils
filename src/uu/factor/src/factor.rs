@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::ops;
 
+use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
 pub struct Factors {
@@ -67,6 +68,33 @@ impl fmt::Display for Factors {
     }
 }
 
+fn _factor<A: Arithmetic>(num: u64) -> Factors {
+    use miller_rabin::Result::*;
+    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
+    let _factor = |n| {
+        // TODO: Optimise with 32 and 64b versions
+        _factor::<A>(n)
+    };
+
+    if num == 1 {
+        return Factors::one();
+    }
+
+    let n = A::new(num);
+    let divisor = match miller_rabin::test::<A>(n) {
+        Prime => {
+            return Factors::prime(num);
+        }
+
+        Composite(d) => d,
+        Pseudoprime => rho::find_divisor::<A>(n),
+    };
+
+    let mut factors = _factor(divisor);
+    factors *= _factor(num / divisor);
+    factors
+}
+
 pub fn factor(mut n: u64) -> Factors {
     let mut factors = Factors::one();
 
@@ -88,8 +116,10 @@ pub fn factor(mut n: u64) -> Factors {
     let (f, n) = table::factor(n);
     factors *= f;
 
-    if n >= table::NEXT_PRIME {
-        factors *= rho::factor(n);
+    if n < (1 << 32) {
+        factors *= _factor::<Montgomery>(n);
+    } else {
+        factors *= _factor::<Montgomery>(n);
     }
 
     factors
