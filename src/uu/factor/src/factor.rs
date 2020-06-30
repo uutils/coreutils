@@ -22,12 +22,6 @@ impl Factors {
         Factors { f: BTreeMap::new() }
     }
 
-    pub fn prime(p: u64) -> Factors {
-        let mut f = Factors::one();
-        f.push(p);
-        f
-    }
-
     pub fn add(&mut self, prime: u64, exp: u8) {
         debug_assert!(miller_rabin::is_prime(prime));
         debug_assert!(exp > 0);
@@ -107,11 +101,8 @@ pub fn factor(mut n: u64) -> Factors {
 
     let (factors, n) = table::factor(n, factors);
 
-    if n < (1 << 32) {
-        _factor::<Montgomery>(n, factors)
-    } else {
-        _factor::<Montgomery>(n, factors)
-    }
+    // TODO: Optimise with 32 and 64b versions
+    _factor::<Montgomery>(n, factors)
 }
 
 #[cfg(test)]
