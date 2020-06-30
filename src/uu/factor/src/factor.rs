@@ -23,13 +23,13 @@ impl Factors {
     }
 
     pub fn prime(p: u64) -> Factors {
-        debug_assert!(miller_rabin::is_prime(p));
         let mut f = Factors::one();
         f.push(p);
         f
     }
 
     pub fn add(&mut self, prime: u64, exp: u8) {
+        debug_assert!(miller_rabin::is_prime(prime));
         debug_assert!(exp > 0);
         let n = *self.f.get(&prime).unwrap_or(&0);
         self.f.insert(prime, exp + n);
