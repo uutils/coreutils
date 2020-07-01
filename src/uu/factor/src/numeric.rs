@@ -252,31 +252,25 @@ macro_rules! int {
         }
     };
 }
+macro_rules! double_int {
+    ( $x:ty, $y:ty ) => {
+        int!($x);
+        impl DoubleInt for $x {
+            type Double = $y;
 
-int!(u32);
-int!(u64);
+            fn as_double(self) -> $y {
+                self as _
+            }
+            fn from_double(n: $y) -> $x {
+                n as _
+            }
+        }
+    };
+}
+
+double_int!(u32, u64);
+double_int!(u64, u128);
 int!(u128);
-
-impl DoubleInt for u64 {
-    type Double = u128;
-
-    fn as_double(self) -> u128 {
-        self as _
-    }
-    fn from_double(n: u128) -> u64 {
-        n as _
-    }
-}
-impl DoubleInt for u32 {
-    type Double = u64;
-
-    fn as_double(self) -> u64 {
-        self as _
-    }
-    fn from_double(n: u64) -> u32 {
-        n as _
-    }
-}
 
 // extended Euclid algorithm
 // precondition: a is odd
