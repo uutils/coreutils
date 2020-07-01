@@ -7,7 +7,7 @@
 // * that was distributed with this source code.
 
 use num_traits::{
-    cast::AsPrimitive,
+    cast::{AsPrimitive, ToPrimitive},
     identities::{One, Zero},
     int::PrimInt,
     ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
@@ -73,30 +73,30 @@ pub(crate) trait Arithmetic: Copy + Sized {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Montgomery<T: Int> {
+pub(crate) struct Montgomery<T: DoubleInt> {
     a: T,
     n: T,
 }
 
-impl<T: Int> Montgomery<T> {
+impl<T: DoubleInt> Montgomery<T> {
     /// computes x/R mod n efficiently
-    fn reduce(&self, x: T::Intermediate) -> T {
+    fn reduce(&self, x: T::Double) -> T {
         let t_bits = T::zero().count_zeros() as usize;
 
-        debug_assert!(x < (self.n.as_intermediate()) << t_bits);
+        debug_assert!(x < (self.n.as_double()) << t_bits);
         // TODO: optimiiiiiiise
         let Montgomery { a, n } = self;
-        let m = T::from_intermediate(x).wrapping_mul(a);
-        let nm = (n.as_intermediate()) * (m.as_intermediate());
+        let m = T::from_double(x).wrapping_mul(a);
+        let nm = (n.as_double()) * (m.as_double());
         let (xnm, overflow) = x.overflowing_add_(nm); // x + n*m
         debug_assert_eq!(
-            xnm % (T::Intermediate::one() << T::zero().count_zeros() as usize),
-            T::Intermediate::zero()
+            xnm % (T::Double::one() << T::zero().count_zeros() as usize),
+            T::Double::zero()
         );
 
         // (x + n*m) / R
         // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-        let y = T::from_intermediate(xnm >> t_bits)
+        let y = T::from_double(xnm >> t_bits)
             + if !overflow {
                 T::zero()
             } else {
@@ -111,7 +111,7 @@ impl<T: Int> Montgomery<T> {
     }
 }
 
-impl<T: Int> Arithmetic for Montgomery<T> {
+impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     // Montgomery transform, R=2⁶⁴
     // Provides fast arithmetic mod n (n odd, u64)
     type I = T;
@@ -131,16 +131,15 @@ impl<T: Int> Arithmetic for Montgomery<T> {
     fn from_u64(&self, x: u64) -> Self::I {
         // TODO: optimise!
         debug_assert!(x < self.n.as_());
-        let r = T::from_intermediate(
-            ((T::Intermediate::from(x)) << T::zero().count_zeros() as usize)
-                % self.n.as_intermediate(),
+        let r = T::from_double(
+            ((T::Double::from(x)) << T::zero().count_zeros() as usize) % self.n.as_double(),
         );
         debug_assert_eq!(x, self.to_u64(r));
         r
     }
 
     fn to_u64(&self, n: Self::I) -> u64 {
-        self.reduce(n.as_intermediate()).as_()
+        self.reduce(n.as_double()).as_()
     }
 
     fn add(&self, a: Self::I, b: Self::I) -> Self::I {
@@ -175,7 +174,7 @@ impl<T: Int> Arithmetic for Montgomery<T> {
     }
 
     fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = self.reduce(a.as_intermediate() * b.as_intermediate());
+        let r = self.reduce(a.as_double() * b.as_double());
 
         // Check that r (reduced back to the usual representation) equals
         // a*b % n
@@ -184,9 +183,9 @@ impl<T: Int> Arithmetic for Montgomery<T> {
             let a_r = self.to_u64(a);
             let b_r = self.to_u64(b);
             let r_r = self.to_u64(r);
-            let r_2: u64 = ((T::Intermediate::from(a_r) * T::Intermediate::from(b_r))
-                % self.n.as_intermediate())
-            .as_();
+            let r_2: u64 = ((T::Double::from(a_r) * T::Double::from(b_r)) % self.n.as_double())
+                .to_u64()
+                .unwrap();
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
@@ -229,40 +228,40 @@ pub(crate) trait Int:
     + WrappingSub
     + WrappingMul
 {
-    type Intermediate: From<u64>
-        + AsPrimitive<u64>
-        + Display
-        + Debug
-        + PrimInt
-        + OverflowingAdd
-        + WrappingNeg
-        + WrappingSub
-        + WrappingMul;
+}
 
-    fn as_intermediate(self) -> Self::Intermediate;
-    fn from_intermediate(n: Self::Intermediate) -> Self;
+pub(crate) trait DoubleInt: Int {
+    type Double: Int + From<u64> + ToPrimitive;
+
+    fn as_double(self) -> Self::Double;
+    fn from_double(n: Self::Double) -> Self;
     fn from_u64(n: u64) -> Self;
 }
-impl Int for u64 {
-    type Intermediate = u128;
 
-    fn as_intermediate(self) -> u128 {
+impl Int for u32 {}
+impl Int for u64 {}
+impl Int for u128 {}
+
+impl DoubleInt for u64 {
+    type Double = u128;
+
+    fn as_double(self) -> u128 {
         self as _
     }
-    fn from_intermediate(n: u128) -> u64 {
+    fn from_double(n: u128) -> u64 {
         n as _
     }
     fn from_u64(n: u64) -> u64 {
         n
     }
 }
-impl Int for u32 {
-    type Intermediate = u64;
+impl DoubleInt for u32 {
+    type Double = u64;
 
-    fn as_intermediate(self) -> u64 {
+    fn as_double(self) -> u64 {
         self as _
     }
-    fn from_intermediate(n: u64) -> u32 {
+    fn from_double(n: u64) -> u32 {
         n as _
     }
     fn from_u64(n: u64) -> u32 {
