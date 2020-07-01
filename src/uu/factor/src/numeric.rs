@@ -232,54 +232,30 @@ pub(crate) trait DoubleInt: Int {
     fn from_double(n: Self::Double) -> Self;
 }
 
-impl Int for u32 {
-    fn as_u64(&self) -> u64 {
-        *self as _
-    }
-    fn from_u64(n: u64) -> Self {
-        n as _
-    }
-    #[cfg(debug_assertions)]
-    fn as_u128(&self) -> u128 {
-        *self as _
-    }
-    #[cfg(debug_assertions)]
-    fn from_u128(n: u64) -> Self {
-        n as _
-    }
+macro_rules! int {
+    ( $x:ty ) => {
+        impl Int for $x {
+            fn as_u64(&self) -> u64 {
+                *self as u64
+            }
+            fn from_u64(n: u64) -> Self {
+                n as _
+            }
+            #[cfg(debug_assertions)]
+            fn as_u128(&self) -> u128 {
+                *self as u128
+            }
+            #[cfg(debug_assertions)]
+            fn from_u128(n: u64) -> Self {
+                n as _
+            }
+        }
+    };
 }
-impl Int for u64 {
-    fn as_u64(&self) -> u64 {
-        *self as _
-    }
-    fn from_u64(n: u64) -> Self {
-        n as _
-    }
-    #[cfg(debug_assertions)]
-    fn as_u128(&self) -> u128 {
-        *self as _
-    }
-    #[cfg(debug_assertions)]
-    fn from_u128(n: u64) -> Self {
-        n as _
-    }
-}
-impl Int for u128 {
-    fn as_u64(&self) -> u64 {
-        *self as _
-    }
-    fn from_u64(n: u64) -> Self {
-        n as _
-    }
-    #[cfg(debug_assertions)]
-    fn as_u128(&self) -> u128 {
-        *self as _
-    }
-    #[cfg(debug_assertions)]
-    fn from_u128(n: u64) -> Self {
-        n as _
-    }
-}
+
+int!(u32);
+int!(u64);
+int!(u128);
 
 impl DoubleInt for u64 {
     type Double = u128;
