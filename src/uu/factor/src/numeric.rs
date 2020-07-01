@@ -197,6 +197,8 @@ impl<T: Int> Arithmetic for Montgomery<T> {
     }
 }
 
+// NOTE: Trait can be removed once num-traits adds a similar one;
+//       see https://github.com/rust-num/num-traits/issues/168
 pub(crate) trait OverflowingAdd: Sized {
     fn overflowing_add_(self, n: Self) -> (Self, bool);
 }
