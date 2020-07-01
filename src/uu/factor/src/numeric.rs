@@ -27,16 +27,17 @@ pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 pub(crate) trait Arithmetic: Copy + Sized {
-    type I: Copy + Sized + Eq;
+    // The type of integers mod m, in some opaque representation
+    type ModInt: Copy + Sized + Eq;
 
     fn new(m: u64) -> Self;
     fn modulus(&self) -> u64;
-    fn from_u64(&self, n: u64) -> Self::I;
-    fn to_u64(&self, n: Self::I) -> u64;
-    fn add(&self, a: Self::I, b: Self::I) -> Self::I;
-    fn mul(&self, a: Self::I, b: Self::I) -> Self::I;
+    fn from_u64(&self, n: u64) -> Self::ModInt;
+    fn to_u64(&self, n: Self::ModInt) -> u64;
+    fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt;
+    fn mul(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt;
 
-    fn pow(&self, mut a: Self::I, mut b: u64) -> Self::I {
+    fn pow(&self, mut a: Self::ModInt, mut b: u64) -> Self::ModInt {
         let (_a, _b) = (a, b);
         let mut result = self.one();
         while b > 0 {
@@ -61,13 +62,13 @@ pub(crate) trait Arithmetic: Copy + Sized {
         result
     }
 
-    fn one(&self) -> Self::I {
+    fn one(&self) -> Self::ModInt {
         self.from_u64(1)
     }
-    fn minus_one(&self) -> Self::I {
+    fn minus_one(&self) -> Self::ModInt {
         self.from_u64(self.modulus() - 1)
     }
-    fn zero(&self) -> Self::I {
+    fn zero(&self) -> Self::ModInt {
         self.from_u64(0)
     }
 }
@@ -114,7 +115,7 @@ impl<T: DoubleInt> Montgomery<T> {
 impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     // Montgomery transform, R=2⁶⁴
     // Provides fast arithmetic mod n (n odd, u64)
-    type I = T;
+    type ModInt = T;
 
     fn new(n: u64) -> Self {
         debug_assert!(T::zero().count_zeros() >= 64 || n < (1 << T::zero().count_zeros() as usize));
@@ -128,7 +129,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         self.n.as_()
     }
 
-    fn from_u64(&self, x: u64) -> Self::I {
+    fn from_u64(&self, x: u64) -> Self::ModInt {
         // TODO: optimise!
         debug_assert!(x < self.n.as_());
         let r = T::from_double(
@@ -138,11 +139,11 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         r
     }
 
-    fn to_u64(&self, n: Self::I) -> u64 {
+    fn to_u64(&self, n: Self::ModInt) -> u64 {
         self.reduce(n.as_double()).as_()
     }
 
-    fn add(&self, a: Self::I, b: Self::I) -> Self::I {
+    fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
         let (r, overflow) = a.overflowing_add_(b);
 
         // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
@@ -173,7 +174,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         r
     }
 
-    fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
+    fn mul(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
         let r = self.reduce(a.as_double() * b.as_double());
 
         // Check that r (reduced back to the usual representation) equals
