@@ -7,7 +7,6 @@
 // * that was distributed with this source code.
 
 use num_traits::{
-    cast::{AsPrimitive, ToPrimitive},
     identities::{One, Zero},
     int::PrimInt,
     ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
@@ -126,21 +125,21 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     }
 
     fn modulus(&self) -> u64 {
-        self.n.as_()
+        self.n.as_u64()
     }
 
     fn from_u64(&self, x: u64) -> Self::ModInt {
         // TODO: optimise!
-        debug_assert!(x < self.n.as_());
+        debug_assert!(x < self.n.as_u64());
         let r = T::from_double(
-            ((T::Double::from(x)) << T::zero().count_zeros() as usize) % self.n.as_double(),
+            ((T::Double::from_u64(x)) << T::zero().count_zeros() as usize) % self.n.as_double(),
         );
         debug_assert_eq!(x, self.to_u64(r));
         r
     }
 
     fn to_u64(&self, n: Self::ModInt) -> u64 {
-        self.reduce(n.as_double()).as_()
+        self.reduce(n.as_double()).as_u64()
     }
 
     fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
@@ -160,11 +159,10 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         // a+b % n
         #[cfg(debug_assertions)]
         {
-            let a_r = self.to_u64(a);
-            let b_r = self.to_u64(b);
+            let a_r = self.to_u64(a) as u128;
+            let b_r = self.to_u64(b) as u128;
             let r_r = self.to_u64(r);
-            let r_2 =
-                (((a_r as u128) + (b_r as u128)) % <T as AsPrimitive<u128>>::as_(self.n)) as u64;
+            let r_2 = ((a_r + b_r) % self.n.as_u128()) as u64;
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} + {} = [{}] + [{}] mod {}; a = {}",
@@ -181,12 +179,10 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         // a*b % n
         #[cfg(debug_assertions)]
         {
-            let a_r = self.to_u64(a);
-            let b_r = self.to_u64(b);
+            let a_r = self.to_u64(a) as u128;
+            let b_r = self.to_u64(b) as u128;
             let r_r = self.to_u64(r);
-            let r_2: u64 = ((T::Double::from(a_r) * T::Double::from(b_r)) % self.n.as_double())
-                .to_u64()
-                .unwrap();
+            let r_2: u64 = ((a_r * b_r) % self.n.as_u128()) as u64;
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
@@ -219,29 +215,71 @@ impl OverflowingAdd for u128 {
 }
 
 pub(crate) trait Int:
-    AsPrimitive<u64>
-    + AsPrimitive<u128>
-    + Display
-    + Debug
-    + PrimInt
-    + OverflowingAdd
-    + WrappingNeg
-    + WrappingSub
-    + WrappingMul
+    Display + Debug + PrimInt + OverflowingAdd + WrappingNeg + WrappingSub + WrappingMul
 {
+    fn as_u64(&self) -> u64;
+    fn from_u64(n: u64) -> Self;
+    #[cfg(debug_assertions)]
+    fn as_u128(&self) -> u128;
+    #[cfg(debug_assertions)]
+    fn from_u128(n: u64) -> Self;
 }
 
 pub(crate) trait DoubleInt: Int {
-    type Double: Int + From<u64> + ToPrimitive;
+    type Double: Int;
 
     fn as_double(self) -> Self::Double;
     fn from_double(n: Self::Double) -> Self;
-    fn from_u64(n: u64) -> Self;
 }
 
-impl Int for u32 {}
-impl Int for u64 {}
-impl Int for u128 {}
+impl Int for u32 {
+    fn as_u64(&self) -> u64 {
+        *self as _
+    }
+    fn from_u64(n: u64) -> Self {
+        n as _
+    }
+    #[cfg(debug_assertions)]
+    fn as_u128(&self) -> u128 {
+        *self as _
+    }
+    #[cfg(debug_assertions)]
+    fn from_u128(n: u64) -> Self {
+        n as _
+    }
+}
+impl Int for u64 {
+    fn as_u64(&self) -> u64 {
+        *self as _
+    }
+    fn from_u64(n: u64) -> Self {
+        n as _
+    }
+    #[cfg(debug_assertions)]
+    fn as_u128(&self) -> u128 {
+        *self as _
+    }
+    #[cfg(debug_assertions)]
+    fn from_u128(n: u64) -> Self {
+        n as _
+    }
+}
+impl Int for u128 {
+    fn as_u64(&self) -> u64 {
+        *self as _
+    }
+    fn from_u64(n: u64) -> Self {
+        n as _
+    }
+    #[cfg(debug_assertions)]
+    fn as_u128(&self) -> u128 {
+        *self as _
+    }
+    #[cfg(debug_assertions)]
+    fn from_u128(n: u64) -> Self {
+        n as _
+    }
+}
 
 impl DoubleInt for u64 {
     type Double = u128;
@@ -252,9 +290,6 @@ impl DoubleInt for u64 {
     fn from_double(n: u128) -> u64 {
         n as _
     }
-    fn from_u64(n: u64) -> u64 {
-        n
-    }
 }
 impl DoubleInt for u32 {
     type Double = u64;
@@ -263,9 +298,6 @@ impl DoubleInt for u32 {
         self as _
     }
     fn from_double(n: u64) -> u32 {
-        n as _
-    }
-    fn from_u64(n: u64) -> u32 {
         n as _
     }
 }
