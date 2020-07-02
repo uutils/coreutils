@@ -198,21 +198,18 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
 pub(crate) trait OverflowingAdd: Sized {
     fn overflowing_add_(self, n: Self) -> (Self, bool);
 }
-impl OverflowingAdd for u32 {
-    fn overflowing_add_(self, n: Self) -> (Self, bool) {
-        self.overflowing_add(n)
-    }
+macro_rules! overflowing {
+    ($x:ty) => {
+        impl OverflowingAdd for $x {
+            fn overflowing_add_(self, n: Self) -> (Self, bool) {
+                self.overflowing_add(n)
+            }
+        }
+    };
 }
-impl OverflowingAdd for u64 {
-    fn overflowing_add_(self, n: Self) -> (Self, bool) {
-        self.overflowing_add(n)
-    }
-}
-impl OverflowingAdd for u128 {
-    fn overflowing_add_(self, n: Self) -> (Self, bool) {
-        self.overflowing_add(n)
-    }
-}
+overflowing!(u32);
+overflowing!(u64);
+overflowing!(u128);
 
 pub(crate) trait Int:
     Display + Debug + PrimInt + OverflowingAdd + WrappingNeg + WrappingSub + WrappingMul
