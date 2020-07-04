@@ -146,21 +146,28 @@ mod tests {
         assert!(is_prime(2));
     }
 
+    // TODO: Deduplicate with macro in numeric.rs
+    macro_rules! parametrized_check {
+        ( $f:ident ) => {
+            paste::item! {
+                #[test]
+                fn [< $f _ u32 >]() {
+                    $f::<Montgomery<u32>>()
+                }
+                #[test]
+                fn [< $f _ u64 >]() {
+                    $f::<Montgomery<u64>>()
+                }
+            }
+        };
+    }
+
     fn first_primes<A: Arithmetic + Basis>() {
         for p in odd_primes() {
             assert!(test(A::new(p)).is_prime(), "{} reported composite", p);
         }
     }
-
-    #[test]
-    fn first_primes_32() {
-        first_primes::<Montgomery<u32>>()
-    }
-
-    #[test]
-    fn first_primes_64() {
-        first_primes::<Montgomery<u64>>()
-    }
+    parametrized_check!(first_primes);
 
     #[test]
     fn one() {
@@ -178,16 +185,7 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn first_composites_32() {
-        first_composites::<Montgomery<u32>>()
-    }
-
-    #[test]
-    fn first_composites_64() {
-        first_composites::<Montgomery<u64>>()
-    }
+    parametrized_check!(first_composites);
 
     #[test]
     fn issue_1556() {
@@ -204,16 +202,7 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn small_semiprimes_32() {
-        small_semiprimes::<Montgomery<u32>>()
-    }
-
-    #[test]
-    fn small_semiprimes_64() {
-        small_semiprimes::<Montgomery<u64>>()
-    }
+    parametrized_check!(small_semiprimes);
 
     quickcheck! {
         fn composites(i: u64, j: u64) -> bool {
