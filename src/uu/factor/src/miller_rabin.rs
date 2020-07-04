@@ -122,6 +122,13 @@ mod tests {
     }
 
     #[test]
+    fn largest_composites() {
+        for i in LARGEST_U64_PRIME + 1..=u64::MAX {
+            assert!(!is_prime(i), "2⁶⁴ - {} reported prime", u64::MAX - i + 1);
+        }
+    }
+
+    #[test]
     fn first_primes() {
         use crate::table::{NEXT_PRIME, P_INVS_U64};
         for (p, _, _) in P_INVS_U64.iter() {
