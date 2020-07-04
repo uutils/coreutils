@@ -111,16 +111,22 @@ pub(crate) fn is_prime(n: u64) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_prime;
+    use super::*;
+    use crate::numeric::{Arithmetic, Montgomery};
     use quickcheck::quickcheck;
+    use std::iter;
     const LARGEST_U64_PRIME: u64 = 0xFFFFFFFFFFFFFFC5;
 
     fn primes() -> impl Iterator<Item = u64> {
+        iter::once(2).chain(odd_primes())
+    }
+
+    fn odd_primes() -> impl Iterator<Item = u64> {
         use crate::table::{NEXT_PRIME, P_INVS_U64};
-        use std::iter::once;
-        once(2)
-            .chain(P_INVS_U64.iter().map(|(p, _, _)| *p))
-            .chain(once(NEXT_PRIME))
+        P_INVS_U64
+            .iter()
+            .map(|(p, _, _)| *p)
+            .chain(iter::once(NEXT_PRIME))
     }
 
     #[test]
@@ -136,22 +142,51 @@ mod tests {
     }
 
     #[test]
-    fn first_primes() {
-        for p in primes() {
-            assert!(is_prime(p), "{} reported composite", p);
+    fn two() {
+        assert!(is_prime(2));
+    }
+
+    fn first_primes<A: Arithmetic + Basis>() {
+        for p in odd_primes() {
+            assert!(test(A::new(p)).is_prime(), "{} reported composite", p);
         }
     }
 
     #[test]
-    fn first_composites() {
-        assert!(!is_prime(0));
-        assert!(!is_prime(1));
+    fn first_primes_32() {
+        first_primes::<Montgomery<u32>>()
+    }
 
-        for (p, q) in primes().zip(primes().skip(1)) {
+    #[test]
+    fn first_primes_64() {
+        first_primes::<Montgomery<u64>>()
+    }
+
+    #[test]
+    fn one() {
+        assert!(!is_prime(1));
+    }
+    #[test]
+    fn zero() {
+        assert!(!is_prime(0));
+    }
+
+    fn first_composites<A: Arithmetic + Basis>() {
+        for (p, q) in primes().zip(odd_primes()) {
             for i in p + 1..q {
                 assert!(!is_prime(i), "{} reported prime", i);
             }
         }
+    }
+
+    #[test]
+    fn first_composites_32() {
+        first_composites::<Montgomery<u32>>()
+    }
+
+    #[test]
+    fn first_composites_64() {
+        first_composites::<Montgomery<u64>>()
     }
 
     #[test]
@@ -160,14 +195,24 @@ mod tests {
         assert!(!is_prime(10_425_511));
     }
 
-    #[test]
-    fn small_semiprimes() {
-        for p in primes() {
-            for q in primes().take_while(|q| *q <= p) {
+    fn small_semiprimes<A: Arithmetic + Basis>() {
+        for p in odd_primes() {
+            for q in odd_primes().take_while(|q| *q <= p) {
                 let n = p * q;
-                assert!(!is_prime(n), "{} = {} × {} reported prime", n, p, q);
+                let m = A::new(n);
+                assert!(!test(m).is_prime(), "{} = {} × {} reported prime", n, p, q);
             }
         }
+    }
+
+    #[test]
+    fn small_semiprimes_32() {
+        small_semiprimes::<Montgomery<u32>>()
+    }
+
+    #[test]
+    fn small_semiprimes_64() {
+        small_semiprimes::<Montgomery<u64>>()
     }
 
     quickcheck! {
