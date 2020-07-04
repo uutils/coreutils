@@ -114,6 +114,7 @@ pub(crate) fn is_prime(n: u64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::is_prime;
+    use quickcheck::quickcheck;
     const LARGEST_U64_PRIME: u64 = 0xFFFFFFFFFFFFFFC5;
 
     fn primes() -> impl Iterator<Item = u64> {
@@ -168,6 +169,12 @@ mod tests {
                 let n = p * q;
                 assert!(!is_prime(n), "{} = {} × {} reported prime", n, p, q);
             }
+        }
+    }
+
+    quickcheck! {
+        fn composites(i: u64, j: u64) -> bool {
+            i < 2 || j < 2 || !is_prime(i*j)
         }
     }
 }
