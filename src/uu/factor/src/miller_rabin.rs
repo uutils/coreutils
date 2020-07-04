@@ -101,10 +101,14 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
     Prime
 }
 
-// Used by build.rs' tests
+// Used by build.rs' tests and debug assertions
 #[allow(dead_code)]
 pub(crate) fn is_prime(n: u64) -> bool {
-    test::<Montgomery<u64>>(Montgomery::new(n)).is_prime()
+    if n % 2 == 0 {
+        n == 2
+    } else {
+        test::<Montgomery<u64>>(Montgomery::new(n)).is_prime()
+    }
 }
 
 #[cfg(test)]
