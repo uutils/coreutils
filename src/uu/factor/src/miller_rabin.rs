@@ -144,6 +144,18 @@ mod tests {
     }
 
     #[test]
+    fn first_composites() {
+        assert!(!is_prime(0));
+        assert!(!is_prime(1));
+
+        for (p, q) in primes().zip(primes().skip(1)) {
+            for i in p + 1..q {
+                assert!(!is_prime(i), "{} reported prime", i);
+            }
+        }
+    }
+
+    #[test]
     fn issue_1556() {
         // 10 425 511 = 2441 × 4271
         assert!(!is_prime(10_425_511));
