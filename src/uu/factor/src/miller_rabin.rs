@@ -57,7 +57,7 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
     for _a in A::BASIS.iter() {
         let _a = _a % n;
         if _a == 0 {
-            break;
+            continue;
         }
 
         let a = m.from_u64(_a);
