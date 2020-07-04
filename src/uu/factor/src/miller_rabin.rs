@@ -116,6 +116,14 @@ mod tests {
     use super::is_prime;
     const LARGEST_U64_PRIME: u64 = 0xFFFFFFFFFFFFFFC5;
 
+    fn primes() -> impl Iterator<Item = u64> {
+        use crate::table::{NEXT_PRIME, P_INVS_U64};
+        use std::iter::once;
+        once(2)
+            .chain(P_INVS_U64.iter().map(|(p, _, _)| *p))
+            .chain(once(NEXT_PRIME))
+    }
+
     #[test]
     fn largest_prime() {
         assert!(is_prime(LARGEST_U64_PRIME));
@@ -130,11 +138,9 @@ mod tests {
 
     #[test]
     fn first_primes() {
-        use crate::table::{NEXT_PRIME, P_INVS_U64};
-        for (p, _, _) in P_INVS_U64.iter() {
-            assert!(is_prime(*p), "{} reported composite", p);
+        for p in primes() {
+            assert!(is_prime(p), "{} reported composite", p);
         }
-        assert!(is_prime(NEXT_PRIME));
     }
 
     #[test]
@@ -145,11 +151,8 @@ mod tests {
 
     #[test]
     fn small_composites() {
-        use crate::table::P_INVS_U64;
-
-        for i in 0..P_INVS_U64.len() {
-            let (p, _, _) = P_INVS_U64[i];
-            for (q, _, _) in &P_INVS_U64[0..i] {
+        for p in primes() {
+            for q in primes().take_while(|q| *q <= p) {
                 let n = p * q;
                 assert!(!is_prime(n), "{} = {} × {} reported prime", n, p, q);
             }
