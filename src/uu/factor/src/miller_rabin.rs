@@ -162,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn small_composites() {
+    fn small_semiprimes() {
         for p in primes() {
             for q in primes().take_while(|q| *q <= p) {
                 let n = p * q;
