@@ -11,11 +11,9 @@ use rand::rngs::SmallRng;
 use rand::{thread_rng, SeedableRng};
 use std::cmp::{max, min};
 
-use crate::miller_rabin::Result::*;
 use crate::numeric::*;
-use crate::{miller_rabin, Factors};
 
-fn find_divisor<A: Arithmetic>(n: A) -> u64 {
+pub(crate) fn find_divisor<A: Arithmetic>(n: A) -> u64 {
     #![allow(clippy::many_single_char_names)]
     let mut rand = {
         let range = Uniform::new(1, n.modulus());
@@ -46,34 +44,4 @@ fn find_divisor<A: Arithmetic>(n: A) -> u64 {
             }
         }
     }
-}
-
-fn _factor<A: Arithmetic>(num: u64) -> Factors {
-    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
-    let _factor = |n| {
-        // TODO: Optimise with 32 and 64b versions
-        _factor::<A>(n)
-    };
-
-    if num == 1 {
-        return Factors::one();
-    }
-
-    let n = A::new(num);
-    let divisor = match miller_rabin::test::<A>(n) {
-        Prime => {
-            return Factors::prime(num);
-        }
-
-        Composite(d) => d,
-        Pseudoprime => find_divisor::<A>(n),
-    };
-
-    let mut factors = _factor(divisor);
-    factors *= _factor(num / divisor);
-    factors
-}
-
-pub(crate) fn factor(n: u64) -> Factors {
-    _factor::<Montgomery>(n)
 }
