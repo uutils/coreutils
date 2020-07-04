@@ -44,12 +44,8 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
     use self::Result::*;
 
     let n = m.modulus();
-    if n < 2 {
-        return Pseudoprime;
-    }
-    if n % 2 == 0 {
-        return if n == 2 { Prime } else { Composite(2) };
-    }
+    debug_assert!(n > 1);
+    debug_assert!(n % 2 != 0);
 
     // n-1 = r 2ⁱ
     let i = (n - 1).trailing_zeros();
@@ -104,7 +100,9 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
 // Used by build.rs' tests and debug assertions
 #[allow(dead_code)]
 pub(crate) fn is_prime(n: u64) -> bool {
-    if n % 2 == 0 {
+    if n < 2 {
+        false
+    } else if n % 2 == 0 {
         n == 2
     } else {
         test::<Montgomery<u64>>(Montgomery::new(n)).is_prime()
