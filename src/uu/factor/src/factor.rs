@@ -108,6 +108,7 @@ pub fn factor(mut n: u64) -> Factors {
 #[cfg(test)]
 mod tests {
     use super::factor;
+    use quickcheck::quickcheck;
 
     #[test]
     fn factor_recombines_small() {
@@ -133,6 +134,12 @@ mod tests {
             // Repeat the test 20 times, as it only fails some fraction
             // of the time.
             assert!(factor(pseudoprime).product() == pseudoprime);
+        }
+    }
+
+    quickcheck! {
+        fn factor_recombines(i: u64) -> bool {
+            i == 0 || factor(i).product() == i
         }
     }
 }
