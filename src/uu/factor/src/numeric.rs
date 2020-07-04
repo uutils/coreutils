@@ -308,6 +308,21 @@ pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
 mod tests {
     use super::*;
 
+    macro_rules! parametrized_check {
+        ( $f:ident ) => {
+            paste::item! {
+                #[test]
+                fn [< $f _ u32 >]() {
+                    $f::<u32>()
+                }
+                #[test]
+                fn [< $f _ u64 >]() {
+                    $f::<u64>()
+                }
+            }
+        };
+    }
+
     fn test_inverter<T: Int>() {
         // All odd integers from 1 to 20 000
         let one = T::from(1).unwrap();
@@ -318,21 +333,12 @@ mod tests {
 
         assert!(test_values.all(|x| x.wrapping_mul(&modular_inverse(x)) == one));
     }
+    parametrized_check!(test_inverter);
 
-    #[test]
-    fn test_inverter_u32() {
-        test_inverter::<u32>()
-    }
-
-    #[test]
-    fn test_inverter_u64() {
-        test_inverter::<u64>()
-    }
-
-    fn test_add<A: Arithmetic>() {
+    fn test_add<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = A::new(n);
+            let m = Montgomery::<A>::new(n);
             for x in 0..n {
                 let m_x = m.from_u64(x);
                 for y in 0..=x {
@@ -343,21 +349,12 @@ mod tests {
             }
         }
     }
+    parametrized_check!(test_add);
 
-    #[test]
-    fn test_add_m32() {
-        test_add::<Montgomery<u32>>()
-    }
-
-    #[test]
-    fn test_add_m64() {
-        test_add::<Montgomery<u64>>()
-    }
-
-    fn test_mult<A: Arithmetic>() {
+    fn test_mult<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = A::new(n);
+            let m = Montgomery::<A>::new(n);
             for x in 0..n {
                 let m_x = m.from_u64(x);
                 for y in 0..=x {
@@ -367,35 +364,17 @@ mod tests {
             }
         }
     }
+    parametrized_check!(test_mult);
 
-    #[test]
-    fn test_mult_m32() {
-        test_mult::<Montgomery<u32>>()
-    }
-
-    #[test]
-    fn test_mult_m64() {
-        test_mult::<Montgomery<u64>>()
-    }
-
-    fn test_roundtrip<A: Arithmetic>() {
+    fn test_roundtrip<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = A::new(n);
+            let m = Montgomery::<A>::new(n);
             for x in 0..n {
                 let x_ = m.from_u64(x);
                 assert_eq!(x, m.to_u64(x_));
             }
         }
     }
-
-    #[test]
-    fn test_roundtrip_m32() {
-        test_roundtrip::<Montgomery<u32>>()
-    }
-
-    #[test]
-    fn test_roundtrip_m64() {
-        test_roundtrip::<Montgomery<u64>>()
-    }
+    parametrized_check!(test_roundtrip);
 }
