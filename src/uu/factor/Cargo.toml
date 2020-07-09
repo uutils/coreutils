@@ -12,7 +12,8 @@ categories = ["command-line-utilities"]
 edition = "2018"
 
 [build-dependencies]
-num-traits="0.2"
+num-traits = "0.2" # used in src/numerics.rs, which is included by build.rs
+
 
 [dependencies]
 num-traits = "0.2"
