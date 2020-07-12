@@ -228,6 +228,13 @@ If you would prefer to test a select few utilities:
 $ cargo test --features "chmod mv tail" --no-default-features
 ```
 
+To debug:
+```bash
+$ gdb --args target/debug/coreutils ls
+(gdb) b ls.rs:79
+(gdb) run
+```
+
 ### GNU Make ###
 
 To simply test all available utilities:
