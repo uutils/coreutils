@@ -1,6 +1,5 @@
 // * This file is part of the uutils coreutils package.
 // *
-// * (c) 2014 T. Jameson Little <t.jameson.little@gmail.com>
 // * (c) 2020 nicoo <nicoo@debian.org>
 // *
 // * For the full copyright and license information, please view the LICENSE file
@@ -8,48 +7,30 @@
 
 extern crate rand;
 
-#[macro_use]
-extern crate uucore;
-
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::fmt;
-use std::io::{self, stdin, stdout, BufRead, Write};
-use std::ops;
 
-mod miller_rabin;
-mod numeric;
-mod rho;
-mod table;
+use crate::numeric::{Arithmetic, Montgomery};
+use crate::{miller_rabin, rho, table};
 
-static SYNTAX: &str = "[OPTION] [NUMBER]...";
-static SUMMARY: &str = "Print the prime factors of the given number(s).
- If none are specified, read from standard input.";
-static LONG_HELP: &str = "";
-
-struct Factors {
+#[derive(Clone, Debug)]
+pub struct Factors {
     f: BTreeMap<u64, u8>,
 }
 
 impl Factors {
-    fn one() -> Factors {
+    pub fn one() -> Factors {
         Factors { f: BTreeMap::new() }
     }
 
-    fn prime(p: u64) -> Factors {
-        debug_assert!(miller_rabin::is_prime(p));
-        let mut f = Factors::one();
-        f.push(p);
-        f
-    }
-
-    fn add(&mut self, prime: u64, exp: u8) {
+    pub fn add(&mut self, prime: u64, exp: u8) {
+        debug_assert!(miller_rabin::is_prime(prime));
         debug_assert!(exp > 0);
         let n = *self.f.get(&prime).unwrap_or(&0);
         self.f.insert(prime, exp + n);
     }
 
-    fn push(&mut self, prime: u64) {
+    pub fn push(&mut self, prime: u64) {
         self.add(prime, 1)
     }
 
@@ -58,14 +39,6 @@ impl Factors {
         self.f
             .iter()
             .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
-    }
-}
-
-impl ops::MulAssign<Factors> for Factors {
-    fn mul_assign(&mut self, other: Factors) {
-        for (prime, exp) in &other.f {
-            self.add(*prime, *exp);
-        }
     }
 }
 
@@ -81,11 +54,38 @@ impl fmt::Display for Factors {
     }
 }
 
-fn factor(mut n: u64) -> Factors {
+fn _factor<A: Arithmetic>(num: u64, f: Factors) -> Factors {
+    use miller_rabin::Result::*;
+    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
+    let _factor = |n, f| {
+        // TODO: Optimise with 32 and 64b versions
+        _factor::<A>(n, f)
+    };
+
+    if num == 1 {
+        return f;
+    }
+
+    let n = A::new(num);
+    let divisor = match miller_rabin::test::<A>(n) {
+        Prime => {
+            let mut r = f;
+            r.push(num);
+            return r;
+        }
+
+        Composite(d) => d,
+        Pseudoprime => rho::find_divisor::<A>(n),
+    };
+
+    let f = _factor(divisor, f);
+    _factor(num / divisor, f)
+}
+
+pub fn factor(mut n: u64) -> Factors {
     let mut factors = Factors::one();
 
     if n < 2 {
-        factors.push(n);
         return factors;
     }
 
@@ -99,56 +99,16 @@ fn factor(mut n: u64) -> Factors {
         return factors;
     }
 
-    let (f, n) = table::factor(n);
-    factors *= f;
+    let (factors, n) = table::factor(n, factors);
 
-    if n >= table::NEXT_PRIME {
-        factors *= rho::factor(n);
-    }
-
-    factors
-}
-
-fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dyn Error>> {
-    num_str
-        .parse::<u64>()
-        .map_err(|e| e.into())
-        .and_then(|x| writeln!(w, "{}:{}", x, factor(x)).map_err(|e| e.into()))
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
-    let stdout = stdout();
-    let mut w = io::BufWriter::new(stdout.lock());
-
-    if matches.free.is_empty() {
-        let stdin = stdin();
-
-        for line in stdin.lock().lines() {
-            for number in line.unwrap().split_whitespace() {
-                if let Err(e) = print_factors_str(number, &mut w) {
-                    show_warning!("{}: {}", number, e);
-                }
-            }
-        }
-    } else {
-        for number in &matches.free {
-            if let Err(e) = print_factors_str(number, &mut w) {
-                show_warning!("{}: {}", number, e);
-            }
-        }
-    }
-
-    if let Err(e) = w.flush() {
-        show_error!("{}", e);
-    }
-
-    0
+    // TODO: Optimise with 32 and 64b versions
+    _factor::<Montgomery>(n, factors)
 }
 
 #[cfg(test)]
 mod tests {
     use super::factor;
+    use quickcheck::quickcheck;
 
     #[test]
     fn factor_recombines_small() {
@@ -174,6 +134,12 @@ mod tests {
             // Repeat the test 20 times, as it only fails some fraction
             // of the time.
             assert!(factor(pseudoprime).product() == pseudoprime);
+        }
+    }
+
+    quickcheck! {
+        fn factor_recombines(i: u64) -> bool {
+            i == 0 || factor(i).product() == i
         }
     }
 }
