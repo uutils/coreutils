@@ -25,6 +25,7 @@ impl Basis for Montgomery<u32> {
 }
 
 #[derive(Eq, PartialEq)]
+#[must_use = "Ignoring the output of a primality test."]
 pub(crate) enum Result {
     Prime,
     Pseudoprime,
