@@ -73,8 +73,7 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
             let y = m.mul(x, x);
             if y == one {
                 return Composite(gcd(m.to_u64(x) - 1, m.modulus()));
-            }
-            if y == minus_one {
+            } else if y == minus_one {
                 // This basis element is not a witness of `n` being composite.
                 // Keep looking.
                 continue 'witness;
