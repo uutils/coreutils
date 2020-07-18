@@ -11,6 +11,7 @@ use num_traits::{
     int::PrimInt,
     ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
 };
+use std::cmp::min;
 use std::fmt::{Debug, Display};
 use std::mem::swap;
 
@@ -26,19 +27,19 @@ pub fn gcd(mut n: u64, mut m: u64) -> u64 {
         return n;
     }
 
-    // First, let's extract common factor-2: gcd(2ⁱ n, 2ⁱ m) = 2ⁱ gcd(n, m)
-    let k = (n | m).trailing_zeros();
-    n >>= k;
-    m >>= k;
-
-    // Second, ensure n is odd; gcd(n, m) = gcd(n/2, m) when n or m is odd
-    n >>= n.trailing_zeros();
+    // Extract common factor-2: gcd(2ⁱ n, 2ⁱ m) = 2ⁱ gcd(n, m)
+    // and reducing until odd gcd(2ⁱ n, m) = gcd(n, m) if m is odd
+    let k = {
+        let k_n = n.trailing_zeros();
+        let k_m = m.trailing_zeros();
+        n >>= k_n;
+        m >>= k_m;
+        min(k_n, k_m)
+    };
 
     loop {
         // Invariant: n odd
         debug_assert!(n % 2 == 1, "n = {} is even", n);
-
-        m >>= m.trailing_zeros();
 
         if n > m {
             swap(&mut n, &mut m);
@@ -48,6 +49,8 @@ pub fn gcd(mut n: u64, mut m: u64) -> u64 {
         if m == 0 {
             return n << k;
         }
+
+        m >>= m.trailing_zeros();
     }
 }
 
