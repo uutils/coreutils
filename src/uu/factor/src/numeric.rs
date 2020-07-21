@@ -217,11 +217,15 @@ pub(crate) trait Int:
 {
     fn as_u64(&self) -> u64;
     fn from_u64(n: u64) -> Self;
+
     #[cfg(debug_assertions)]
     fn as_u128(&self) -> u128;
 }
 
 pub(crate) trait DoubleInt: Int {
+    /// An integer type with twice the width of `Self`.
+    /// In particular, multiplications (of `Int` values) can be performed in
+    ///  `Self::DoubleWidth` without possibility of overflow.
     type DoubleWidth: Int;
 
     fn as_double_width(self) -> Self::DoubleWidth;
