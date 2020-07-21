@@ -219,8 +219,6 @@ pub(crate) trait Int:
     fn from_u64(n: u64) -> Self;
     #[cfg(debug_assertions)]
     fn as_u128(&self) -> u128;
-    #[cfg(debug_assertions)]
-    fn from_u128(n: u64) -> Self;
 }
 
 pub(crate) trait DoubleInt: Int {
@@ -242,10 +240,6 @@ macro_rules! int {
             #[cfg(debug_assertions)]
             fn as_u128(&self) -> u128 {
                 *self as u128
-            }
-            #[cfg(debug_assertions)]
-            fn from_u128(n: u64) -> Self {
-                n as _
             }
         }
     };
