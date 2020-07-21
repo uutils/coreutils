@@ -80,23 +80,23 @@ pub(crate) struct Montgomery<T: DoubleInt> {
 
 impl<T: DoubleInt> Montgomery<T> {
     /// computes x/R mod n efficiently
-    fn reduce(&self, x: T::Double) -> T {
+    fn reduce(&self, x: T::DoubleWidth) -> T {
         let t_bits = T::zero().count_zeros() as usize;
 
-        debug_assert!(x < (self.n.as_double()) << t_bits);
+        debug_assert!(x < (self.n.as_double_width()) << t_bits);
         // TODO: optimiiiiiiise
         let Montgomery { a, n } = self;
-        let m = T::from_double(x).wrapping_mul(a);
-        let nm = (n.as_double()) * (m.as_double());
+        let m = T::from_double_width(x).wrapping_mul(a);
+        let nm = (n.as_double_width()) * (m.as_double_width());
         let (xnm, overflow) = x.overflowing_add_(nm); // x + n*m
         debug_assert_eq!(
-            xnm % (T::Double::one() << T::zero().count_zeros() as usize),
-            T::Double::zero()
+            xnm % (T::DoubleWidth::one() << T::zero().count_zeros() as usize),
+            T::DoubleWidth::zero()
         );
 
         // (x + n*m) / R
         // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-        let y = T::from_double(xnm >> t_bits)
+        let y = T::from_double_width(xnm >> t_bits)
             + if !overflow {
                 T::zero()
             } else {
@@ -131,15 +131,16 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     fn from_u64(&self, x: u64) -> Self::ModInt {
         // TODO: optimise!
         debug_assert!(x < self.n.as_u64());
-        let r = T::from_double(
-            ((T::Double::from_u64(x)) << T::zero().count_zeros() as usize) % self.n.as_double(),
+        let r = T::from_double_width(
+            ((T::DoubleWidth::from_u64(x)) << T::zero().count_zeros() as usize)
+                % self.n.as_double_width(),
         );
         debug_assert_eq!(x, self.to_u64(r));
         r
     }
 
     fn to_u64(&self, n: Self::ModInt) -> u64 {
-        self.reduce(n.as_double()).as_u64()
+        self.reduce(n.as_double_width()).as_u64()
     }
 
     fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
@@ -173,7 +174,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     }
 
     fn mul(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
-        let r = self.reduce(a.as_double() * b.as_double());
+        let r = self.reduce(a.as_double_width() * b.as_double_width());
 
         // Check that r (reduced back to the usual representation) equals
         // a*b % n
@@ -223,10 +224,10 @@ pub(crate) trait Int:
 }
 
 pub(crate) trait DoubleInt: Int {
-    type Double: Int;
+    type DoubleWidth: Int;
 
-    fn as_double(self) -> Self::Double;
-    fn from_double(n: Self::Double) -> Self;
+    fn as_double_width(self) -> Self::DoubleWidth;
+    fn from_double_width(n: Self::DoubleWidth) -> Self;
 }
 
 macro_rules! int {
@@ -253,12 +254,12 @@ macro_rules! double_int {
     ( $x:ty, $y:ty ) => {
         int!($x);
         impl DoubleInt for $x {
-            type Double = $y;
+            type DoubleWidth = $y;
 
-            fn as_double(self) -> $y {
+            fn as_double_width(self) -> $y {
                 self as _
             }
-            fn from_double(n: $y) -> $x {
+            fn from_double_width(n: $y) -> $x {
                 n as _
             }
         }
