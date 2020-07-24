@@ -11,12 +11,18 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
 
+[build-dependencies]
+num-traits = "0.2" # used in src/numerics.rs, which is included by build.rs
+
+
 [dependencies]
+num-traits = "0.2"
 rand = "0.5"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [dev-dependencies]
+paste = "0.1.18"
 quickcheck = "0.9.2"
 
 [[bin]]

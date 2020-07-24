@@ -6,6 +6,12 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
+use num_traits::{
+    identities::{One, Zero},
+    int::PrimInt,
+    ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
+};
+use std::fmt::{Debug, Display};
 use std::mem::swap;
 
 // This is incorrectly reported as dead code,
@@ -20,16 +26,17 @@ pub(crate) fn gcd(mut a: u64, mut b: u64) -> u64 {
 }
 
 pub(crate) trait Arithmetic: Copy + Sized {
-    type I: Copy + Sized + Eq;
+    // The type of integers mod m, in some opaque representation
+    type ModInt: Copy + Sized + Eq;
 
     fn new(m: u64) -> Self;
     fn modulus(&self) -> u64;
-    fn from_u64(&self, n: u64) -> Self::I;
-    fn to_u64(&self, n: Self::I) -> u64;
-    fn add(&self, a: Self::I, b: Self::I) -> Self::I;
-    fn mul(&self, a: Self::I, b: Self::I) -> Self::I;
+    fn from_u64(&self, n: u64) -> Self::ModInt;
+    fn to_u64(&self, n: Self::ModInt) -> u64;
+    fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt;
+    fn mul(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt;
 
-    fn pow(&self, mut a: Self::I, mut b: u64) -> Self::I {
+    fn pow(&self, mut a: Self::ModInt, mut b: u64) -> Self::ModInt {
         let (_a, _b) = (a, b);
         let mut result = self.one();
         while b > 0 {
@@ -54,75 +61,90 @@ pub(crate) trait Arithmetic: Copy + Sized {
         result
     }
 
-    fn one(&self) -> Self::I {
+    fn one(&self) -> Self::ModInt {
         self.from_u64(1)
     }
-    fn minus_one(&self) -> Self::I {
+    fn minus_one(&self) -> Self::ModInt {
         self.from_u64(self.modulus() - 1)
     }
-    fn zero(&self) -> Self::I {
+    fn zero(&self) -> Self::ModInt {
         self.from_u64(0)
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Montgomery {
-    a: u64,
-    n: u64,
+pub(crate) struct Montgomery<T: DoubleInt> {
+    a: T,
+    n: T,
 }
 
-impl Montgomery {
+impl<T: DoubleInt> Montgomery<T> {
     /// computes x/R mod n efficiently
-    fn reduce(&self, x: u128) -> u64 {
-        debug_assert!(x < (self.n as u128) << 64);
+    fn reduce(&self, x: T::DoubleWidth) -> T {
+        let t_bits = T::zero().count_zeros() as usize;
+
+        debug_assert!(x < (self.n.as_double_width()) << t_bits);
         // TODO: optimiiiiiiise
         let Montgomery { a, n } = self;
-        let m = (x as u64).wrapping_mul(*a);
-        let nm = (*n as u128) * (m as u128);
-        let (xnm, overflow) = (x as u128).overflowing_add(nm); // x + n*m
-        debug_assert_eq!(xnm % (1 << 64), 0);
+        let m = T::from_double_width(x).wrapping_mul(a);
+        let nm = (n.as_double_width()) * (m.as_double_width());
+        let (xnm, overflow) = x.overflowing_add_(nm); // x + n*m
+        debug_assert_eq!(
+            xnm % (T::DoubleWidth::one() << T::zero().count_zeros() as usize),
+            T::DoubleWidth::zero()
+        );
 
         // (x + n*m) / R
         // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
-        let y = (xnm >> 64) as u64 + if !overflow { 0 } else { n.wrapping_neg() };
+        let y = T::from_double_width(xnm >> t_bits)
+            + if !overflow {
+                T::zero()
+            } else {
+                n.wrapping_neg()
+            };
 
         if y >= *n {
-            y - n
+            y - *n
         } else {
             y
         }
     }
 }
 
-impl Arithmetic for Montgomery {
+impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     // Montgomery transform, R=2⁶⁴
     // Provides fast arithmetic mod n (n odd, u64)
-    type I = u64;
+    type ModInt = T;
 
     fn new(n: u64) -> Self {
-        let a = inv_mod_u64(n).wrapping_neg();
-        debug_assert_eq!(n.wrapping_mul(a), 1_u64.wrapping_neg());
+        debug_assert!(T::zero().count_zeros() >= 64 || n < (1 << T::zero().count_zeros() as usize));
+        let n = T::from_u64(n);
+        let a = modular_inverse(n).wrapping_neg();
+        debug_assert_eq!(n.wrapping_mul(&a), T::one().wrapping_neg());
         Montgomery { a, n }
     }
 
     fn modulus(&self) -> u64 {
-        self.n
+        self.n.as_u64()
     }
 
-    fn from_u64(&self, x: u64) -> Self::I {
+    fn from_u64(&self, x: u64) -> Self::ModInt {
         // TODO: optimise!
-        assert!(x < self.n);
-        let r = (((x as u128) << 64) % self.n as u128) as u64;
+        debug_assert!(x < self.n.as_u64());
+        let r = T::from_double_width(
+            ((T::DoubleWidth::from_u64(x)) << T::zero().count_zeros() as usize)
+                % self.n.as_double_width(),
+        );
         debug_assert_eq!(x, self.to_u64(r));
         r
     }
 
-    fn to_u64(&self, n: Self::I) -> u64 {
-        self.reduce(n as u128)
+    fn to_u64(&self, n: Self::ModInt) -> u64 {
+        self.reduce(n.as_double_width()).as_u64()
     }
 
-    fn add(&self, a: Self::I, b: Self::I) -> Self::I {
-        let (r, overflow) = a.overflowing_add(b);
+    fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
+        let (r, overflow) = a.overflowing_add_(b);
 
         // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
         let r = if !overflow {
@@ -138,10 +160,10 @@ impl Arithmetic for Montgomery {
         // a+b % n
         #[cfg(debug_assertions)]
         {
-            let a_r = self.to_u64(a);
-            let b_r = self.to_u64(b);
+            let a_r = self.to_u64(a) as u128;
+            let b_r = self.to_u64(b) as u128;
             let r_r = self.to_u64(r);
-            let r_2 = (((a_r as u128) + (b_r as u128)) % (self.n as u128)) as u64;
+            let r_2 = ((a_r + b_r) % self.n.as_u128()) as u64;
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} + {} = [{}] + [{}] mod {}; a = {}",
@@ -151,17 +173,17 @@ impl Arithmetic for Montgomery {
         r
     }
 
-    fn mul(&self, a: Self::I, b: Self::I) -> Self::I {
-        let r = self.reduce((a as u128) * (b as u128));
+    fn mul(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
+        let r = self.reduce(a.as_double_width() * b.as_double_width());
 
         // Check that r (reduced back to the usual representation) equals
         // a*b % n
         #[cfg(debug_assertions)]
         {
-            let a_r = self.to_u64(a);
-            let b_r = self.to_u64(b);
+            let a_r = self.to_u64(a) as u128;
+            let b_r = self.to_u64(b) as u128;
             let r_r = self.to_u64(r);
-            let r_2 = (((a_r as u128) * (b_r as u128)) % (self.n as u128)) as u64;
+            let r_2: u64 = ((a_r * b_r) % self.n.as_u128()) as u64;
             debug_assert_eq!(
                 r_r, r_2,
                 "[{}] = {} ≠ {} = {} * {} = [{}] * [{}] mod {}; a = {}",
@@ -172,35 +194,112 @@ impl Arithmetic for Montgomery {
     }
 }
 
+// NOTE: Trait can be removed once num-traits adds a similar one;
+//       see https://github.com/rust-num/num-traits/issues/168
+pub(crate) trait OverflowingAdd: Sized {
+    fn overflowing_add_(self, n: Self) -> (Self, bool);
+}
+macro_rules! overflowing {
+    ($x:ty) => {
+        impl OverflowingAdd for $x {
+            fn overflowing_add_(self, n: Self) -> (Self, bool) {
+                self.overflowing_add(n)
+            }
+        }
+    };
+}
+overflowing!(u32);
+overflowing!(u64);
+overflowing!(u128);
+
+pub(crate) trait Int:
+    Display + Debug + PrimInt + OverflowingAdd + WrappingNeg + WrappingSub + WrappingMul
+{
+    fn as_u64(&self) -> u64;
+    fn from_u64(n: u64) -> Self;
+
+    #[cfg(debug_assertions)]
+    fn as_u128(&self) -> u128;
+}
+
+pub(crate) trait DoubleInt: Int {
+    /// An integer type with twice the width of `Self`.
+    /// In particular, multiplications (of `Int` values) can be performed in
+    ///  `Self::DoubleWidth` without possibility of overflow.
+    type DoubleWidth: Int;
+
+    fn as_double_width(self) -> Self::DoubleWidth;
+    fn from_double_width(n: Self::DoubleWidth) -> Self;
+}
+
+macro_rules! int {
+    ( $x:ty ) => {
+        impl Int for $x {
+            fn as_u64(&self) -> u64 {
+                *self as u64
+            }
+            fn from_u64(n: u64) -> Self {
+                n as _
+            }
+            #[cfg(debug_assertions)]
+            fn as_u128(&self) -> u128 {
+                *self as u128
+            }
+        }
+    };
+}
+macro_rules! double_int {
+    ( $x:ty, $y:ty ) => {
+        int!($x);
+        impl DoubleInt for $x {
+            type DoubleWidth = $y;
+
+            fn as_double_width(self) -> $y {
+                self as _
+            }
+            fn from_double_width(n: $y) -> $x {
+                n as _
+            }
+        }
+    };
+}
+
+double_int!(u32, u64);
+double_int!(u64, u128);
+int!(u128);
+
 // extended Euclid algorithm
 // precondition: a is odd
-pub(crate) fn inv_mod_u64(a: u64) -> u64 {
-    assert!(a % 2 == 1, "{} is not odd", a);
-    let mut t = 0u64;
-    let mut newt = 1u64;
-    let mut r = 0u64;
+pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
+    let zero = T::zero();
+    let one = T::one();
+    debug_assert!(a % (one + one) == one, "{:?} is not odd", a);
+
+    let mut t = zero;
+    let mut newt = one;
+    let mut r = zero;
     let mut newr = a;
 
-    while newr != 0 {
-        let quot = if r == 0 {
+    while newr != zero {
+        let quot = if r == zero {
             // special case when we're just starting out
             // This works because we know that
             // a does not divide 2^64, so floor(2^64 / a) == floor((2^64-1) / a);
-            std::u64::MAX
+            T::max_value()
         } else {
             r
         } / newr;
 
-        let newtp = t.wrapping_sub(quot.wrapping_mul(newt));
+        let newtp = t.wrapping_sub(&quot.wrapping_mul(&newt));
         t = newt;
         newt = newtp;
 
-        let newrp = r.wrapping_sub(quot.wrapping_mul(newr));
+        let newrp = r.wrapping_sub(&quot.wrapping_mul(&newr));
         r = newr;
         newr = newrp;
     }
 
-    assert_eq!(r, 1);
+    debug_assert_eq!(r, one);
     t
 }
 
@@ -208,19 +307,37 @@ pub(crate) fn inv_mod_u64(a: u64) -> u64 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_inverter() {
-        // All odd integers from 1 to 20 000
-        let mut test_values = (0..10_000u64).map(|i| 2 * i + 1);
-
-        assert!(test_values.all(|x| x.wrapping_mul(inv_mod_u64(x)) == 1));
+    macro_rules! parametrized_check {
+        ( $f:ident ) => {
+            paste::item! {
+                #[test]
+                fn [< $f _ u32 >]() {
+                    $f::<u32>()
+                }
+                #[test]
+                fn [< $f _ u64 >]() {
+                    $f::<u64>()
+                }
+            }
+        };
     }
 
-    #[test]
-    fn test_montgomery_add() {
+    fn test_inverter<T: Int>() {
+        // All odd integers from 1 to 20 000
+        let one = T::from(1).unwrap();
+        let two = T::from(2).unwrap();
+        let mut test_values = (0..10_000)
+            .map(|i| T::from(i).unwrap())
+            .map(|i| two * i + one);
+
+        assert!(test_values.all(|x| x.wrapping_mul(&modular_inverse(x)) == one));
+    }
+    parametrized_check!(test_inverter);
+
+    fn test_add<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = Montgomery::new(n);
+            let m = Montgomery::<A>::new(n);
             for x in 0..n {
                 let m_x = m.from_u64(x);
                 for y in 0..=x {
@@ -231,12 +348,12 @@ mod tests {
             }
         }
     }
+    parametrized_check!(test_add);
 
-    #[test]
-    fn test_montgomery_mult() {
+    fn test_mult<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = Montgomery::new(n);
+            let m = Montgomery::<A>::new(n);
             for x in 0..n {
                 let m_x = m.from_u64(x);
                 for y in 0..=x {
@@ -246,16 +363,17 @@ mod tests {
             }
         }
     }
+    parametrized_check!(test_mult);
 
-    #[test]
-    fn test_montgomery_roundtrip() {
+    fn test_roundtrip<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
-            let m = Montgomery::new(n);
+            let m = Montgomery::<A>::new(n);
             for x in 0..n {
                 let x_ = m.from_u64(x);
                 assert_eq!(x, m.to_u64(x_));
             }
         }
     }
+    parametrized_check!(test_roundtrip);
 }

@@ -54,12 +54,16 @@ impl fmt::Display for Factors {
     }
 }
 
-fn _factor<A: Arithmetic>(num: u64, f: Factors) -> Factors {
+fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors {
     use miller_rabin::Result::*;
+
     // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
     let _factor = |n, f| {
-        // TODO: Optimise with 32 and 64b versions
-        _factor::<A>(n, f)
+        if n < (1 << 32) {
+            _factor::<Montgomery<u32>>(n, f)
+        } else {
+            _factor::<A>(n, f)
+        }
     };
 
     if num == 1 {
@@ -101,8 +105,11 @@ pub fn factor(mut n: u64) -> Factors {
 
     let (factors, n) = table::factor(n, factors);
 
-    // TODO: Optimise with 32 and 64b versions
-    _factor::<Montgomery>(n, factors)
+    if n < (1 << 32) {
+        _factor::<Montgomery<u32>>(n, factors)
+    } else {
+        _factor::<Montgomery<u64>>(n, factors)
+    }
 }
 
 #[cfg(test)]
