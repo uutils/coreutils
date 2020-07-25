@@ -16,7 +16,7 @@ mod factor;
 pub(crate) use factor::*;
 
 mod miller_rabin;
-mod numeric;
+pub mod numeric;
 mod rho;
 mod table;
 

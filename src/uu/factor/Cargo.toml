@@ -17,13 +17,19 @@ num-traits = "0.2" # used in src/numerics.rs, which is included by build.rs
 
 [dependencies]
 num-traits = "0.2"
-rand = "0.5"
+rand = { version="0.7", features=["small_rng"] }
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [dev-dependencies]
+criterion = "0.3"
 paste = "0.1.18"
 quickcheck = "0.9.2"
+rand_chacha = "0.2.2"
+
+[[bench]]
+name = "gcd"
+harness = false
 
 [[bin]]
 name = "factor"
