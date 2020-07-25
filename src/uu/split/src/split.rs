@@ -230,7 +230,7 @@ impl Splitter for ByteSplitter {
             self.bytes_to_write = self.saved_bytes_to_write;
             control.request_new_file = true;
             self.require_whole_line = false;
-            return line[0..0].to_owned();
+            return "".to_owned();
         }
         self.bytes_to_write -= n;
         if n == 0 {
