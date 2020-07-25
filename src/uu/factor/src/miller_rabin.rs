@@ -25,6 +25,7 @@ impl Basis for Montgomery<u32> {
 }
 
 #[derive(Eq, PartialEq)]
+#[must_use = "Ignoring the output of a primality test."]
 pub(crate) enum Result {
     Prime,
     Pseudoprime,
@@ -54,7 +55,7 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
     let one = m.one();
     let minus_one = m.minus_one();
 
-    for _a in A::BASIS.iter() {
+    'witness: for _a in A::BASIS.iter() {
         let _a = _a % n;
         if _a == 0 {
             continue;
@@ -65,33 +66,23 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
         // x = a^r mod n
         let mut x = m.pow(a, r);
 
-        {
-            // y = ((x²)²...)² i times = x ^ (2ⁱ) = a ^ (r 2ⁱ) = x ^ (n - 1)
-            let mut y = x;
-            for _ in 0..i {
-                y = m.mul(y, y)
-            }
-            if y != one {
-                return Pseudoprime;
-            };
-        }
-
         if x == one || x == minus_one {
             continue;
         }
 
-        loop {
+        for _ in 1..i {
             let y = m.mul(x, x);
             if y == one {
                 return Composite(gcd(m.to_u64(x) - 1, m.modulus()));
-            }
-            if y == minus_one {
+            } else if y == minus_one {
                 // This basis element is not a witness of `n` being composite.
                 // Keep looking.
-                break;
+                continue 'witness;
             }
             x = y;
         }
+
+        return Pseudoprime;
     }
 
     Prime
