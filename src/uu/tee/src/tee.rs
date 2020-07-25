@@ -44,7 +44,7 @@ fn options(args: &[String]) -> Result<Options> {
 
     opts.parse(&args[1..])
         .map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))
-        .and_then(|m| {
+        .map(|m| {
             let version = format!("{} {}", NAME, VERSION);
             let arguments = "[OPTION]... [FILE]...";
             let brief = "Copy standard input to each FILE, and also to standard output.";
@@ -65,13 +65,13 @@ fn options(args: &[String]) -> Result<Options> {
             } else {
                 None
             };
-            Ok(Options {
+            Options {
                 program: NAME.to_owned(),
                 append: m.opt_present("append"),
                 ignore_interrupts: m.opt_present("ignore-interrupts"),
                 print_and_exit: to_print,
                 files: names,
-            })
+            }
         })
         .map_err(|message| warn(format!("{}", message).as_ref()))
 }
