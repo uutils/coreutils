@@ -873,7 +873,7 @@ fn copy_source(
 }
 
 #[cfg(target_os = "windows")]
-fn adjust_canonicalization<'a>(p: &'a Path) -> Cow<'a, Path> {
+fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
     const VERBATIM_PREFIX: &str = r#"\\?"#;
