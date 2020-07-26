@@ -27,9 +27,11 @@ use self::sieve::Sieve;
 #[cfg(test)]
 use miller_rabin::is_prime;
 
-#[path = "src/numeric.rs"]
-mod numeric;
-use numeric::modular_inverse;
+#[path = "src/numeric/modular_inverse.rs"]
+mod modular_inverse;
+#[path = "src/numeric/traits.rs"]
+mod traits;
+use modular_inverse::modular_inverse;
 
 mod sieve;
 

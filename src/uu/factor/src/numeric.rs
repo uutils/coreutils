@@ -6,18 +6,10 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-use num_traits::{
-    identities::{One, Zero},
-    int::PrimInt,
-    ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
-};
+use num_traits::identities::{One, Zero};
 use std::cmp::min;
-use std::fmt::{Debug, Display};
 use std::mem::swap;
 
-// This is incorrectly reported as dead code,
-//  presumably when included in build.rs.
-#[allow(dead_code)]
 pub fn gcd(mut n: u64, mut m: u64) -> u64 {
     // Stein's binary GCD algorithm
     // Base cases: gcd(n, 0) = gcd(0, n) = n
@@ -223,118 +215,16 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     }
 }
 
-// NOTE: Trait can be removed once num-traits adds a similar one;
-//       see https://github.com/rust-num/num-traits/issues/168
-pub(crate) trait OverflowingAdd: Sized {
-    fn overflowing_add_(self, n: Self) -> (Self, bool);
-}
-macro_rules! overflowing {
-    ($x:ty) => {
-        impl OverflowingAdd for $x {
-            fn overflowing_add_(self, n: Self) -> (Self, bool) {
-                self.overflowing_add(n)
-            }
-        }
-    };
-}
-overflowing!(u32);
-overflowing!(u64);
-overflowing!(u128);
+mod traits;
+use traits::{DoubleInt, Int, OverflowingAdd};
 
-pub(crate) trait Int:
-    Display + Debug + PrimInt + OverflowingAdd + WrappingNeg + WrappingSub + WrappingMul
-{
-    fn as_u64(&self) -> u64;
-    fn from_u64(n: u64) -> Self;
-
-    #[cfg(debug_assertions)]
-    fn as_u128(&self) -> u128;
-}
-
-pub(crate) trait DoubleInt: Int {
-    /// An integer type with twice the width of `Self`.
-    /// In particular, multiplications (of `Int` values) can be performed in
-    ///  `Self::DoubleWidth` without possibility of overflow.
-    type DoubleWidth: Int;
-
-    fn as_double_width(self) -> Self::DoubleWidth;
-    fn from_double_width(n: Self::DoubleWidth) -> Self;
-}
-
-macro_rules! int {
-    ( $x:ty ) => {
-        impl Int for $x {
-            fn as_u64(&self) -> u64 {
-                *self as u64
-            }
-            fn from_u64(n: u64) -> Self {
-                n as _
-            }
-            #[cfg(debug_assertions)]
-            fn as_u128(&self) -> u128 {
-                *self as u128
-            }
-        }
-    };
-}
-macro_rules! double_int {
-    ( $x:ty, $y:ty ) => {
-        int!($x);
-        impl DoubleInt for $x {
-            type DoubleWidth = $y;
-
-            fn as_double_width(self) -> $y {
-                self as _
-            }
-            fn from_double_width(n: $y) -> $x {
-                n as _
-            }
-        }
-    };
-}
-
-double_int!(u32, u64);
-double_int!(u64, u128);
-int!(u128);
-
-// extended Euclid algorithm
-// precondition: a is odd
-pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
-    let zero = T::zero();
-    let one = T::one();
-    debug_assert!(a % (one + one) == one, "{:?} is not odd", a);
-
-    let mut t = zero;
-    let mut newt = one;
-    let mut r = zero;
-    let mut newr = a;
-
-    while newr != zero {
-        let quot = if r == zero {
-            // special case when we're just starting out
-            // This works because we know that
-            // a does not divide 2^64, so floor(2^64 / a) == floor((2^64-1) / a);
-            T::max_value()
-        } else {
-            r
-        } / newr;
-
-        let newtp = t.wrapping_sub(&quot.wrapping_mul(&newt));
-        t = newt;
-        newt = newtp;
-
-        let newrp = r.wrapping_sub(&quot.wrapping_mul(&newr));
-        r = newr;
-        newr = newrp;
-    }
-
-    debug_assert_eq!(r, one);
-    t
-}
+mod modular_inverse;
+pub(crate) use modular_inverse::modular_inverse;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parametrized_check;
     use quickcheck::quickcheck;
 
     quickcheck! {
@@ -351,33 +241,6 @@ mod tests {
             super::gcd(a, b) == g
         }
     }
-
-    macro_rules! parametrized_check {
-        ( $f:ident ) => {
-            paste::item! {
-                #[test]
-                fn [< $f _ u32 >]() {
-                    $f::<u32>()
-                }
-                #[test]
-                fn [< $f _ u64 >]() {
-                    $f::<u64>()
-                }
-            }
-        };
-    }
-
-    fn test_inverter<T: Int>() {
-        // All odd integers from 1 to 20 000
-        let one = T::from(1).unwrap();
-        let two = T::from(2).unwrap();
-        let mut test_values = (0..10_000)
-            .map(|i| T::from(i).unwrap())
-            .map(|i| two * i + one);
-
-        assert!(test_values.all(|x| x.wrapping_mul(&modular_inverse(x)) == one));
-    }
-    parametrized_check!(test_inverter);
 
     fn test_add<A: DoubleInt>() {
         for n in 0..100 {
