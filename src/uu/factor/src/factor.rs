@@ -7,6 +7,7 @@
 
 extern crate rand;
 
+use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::fmt;
 
@@ -16,11 +17,16 @@ use crate::{miller_rabin, rho, table};
 type Exponent = u8;
 
 #[derive(Clone, Debug)]
-struct Decomposition(Vec<(u64, Exponent)>);
+struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
+
+// The number of factors to inline directly into a `Decomposition` object.
+// As a consequence of the Erdős–Kac theorem, the average number of prime
+//  factors of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use that value.
+const NUM_FACTORS_INLINE: usize = 4;
 
 impl Decomposition {
     fn one() -> Decomposition {
-        Decomposition(Vec::new())
+        Decomposition(SmallVec::new())
     }
 
     fn add(&mut self, factor: u64, exp: Exponent) {
