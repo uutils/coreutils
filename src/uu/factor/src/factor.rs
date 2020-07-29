@@ -16,20 +16,38 @@ use crate::{miller_rabin, rho, table};
 type Exponent = u8;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors {
-    f: BTreeMap<u64, Exponent>,
+struct Decomposition(BTreeMap<u64, Exponent>);
+
+impl Decomposition {
+    fn one() -> Decomposition {
+        Decomposition(BTreeMap::new())
+    }
+
+    fn add(&mut self, factor: u64, exp: Exponent) {
+        debug_assert!(exp > 0);
+        let n = *self.0.get(&factor).unwrap_or(&0);
+        self.0.insert(factor, exp + n);
+    }
+
+    #[cfg(test)]
+    fn product(&self) -> u64 {
+        self.0
+            .iter()
+            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
+    }
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Factors(Decomposition);
 
 impl Factors {
     pub fn one() -> Factors {
-        Factors { f: BTreeMap::new() }
+        Factors(Decomposition::one())
     }
 
     pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
-        debug_assert!(exp > 0);
-        let n = *self.f.get(&prime).unwrap_or(&0);
-        self.f.insert(prime, exp + n);
+        self.0.add(prime, exp)
     }
 
     pub fn push(&mut self, prime: u64) {
@@ -38,15 +56,13 @@ impl Factors {
 
     #[cfg(test)]
     fn product(&self) -> u64 {
-        self.f
-            .iter()
-            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
+        self.0.product()
     }
 }
 
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (p, exp) in self.f.iter() {
+        for (p, exp) in (self.0).0.iter() {
             for _ in 0..*exp {
                 write!(f, " {}", p)?
             }
