@@ -166,8 +166,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
 
     let ignore_env = matches.is_present("ignore-environment");
     let null = matches.is_present("null");
-    let running_directory = matches
-        .value_of("chdir");
+    let running_directory = matches.value_of("chdir");
     let files = matches
         .values_of("file")
         .map(Iterator::collect)
@@ -189,8 +188,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
 
     // change directory
     if let Some(d) = opts.running_directory {
-        match env::set_current_dir(d)
-        {
+        match env::set_current_dir(d) {
             Ok(()) => d,
             Err(error) => {
                 eprintln!("env: cannot change directory to \"{}\": {}", d, error);
