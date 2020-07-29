@@ -61,6 +61,9 @@ impl PartialEq for Decomposition {
 
         true
     }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Factors {
+    f: BTreeMap<u64, Exponent>,
 }
 impl Eq for Decomposition {}
 
