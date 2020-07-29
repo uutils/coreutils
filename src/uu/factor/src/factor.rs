@@ -33,7 +33,14 @@ impl Decomposition {
         }
     }
 
-    #[cfg(test)]
+    fn is_one(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn pop(&mut self) -> Option<(u64, Exponent)> {
+        self.0.pop()
+    }
+
     fn product(&self) -> u64 {
         self.0
             .iter()
@@ -77,11 +84,11 @@ impl Factors {
         self.0.borrow_mut().add(prime, exp)
     }
 
+    #[cfg(test)]
     pub fn push(&mut self, prime: u64) {
         self.add(prime, 1)
     }
 
-    #[cfg(test)]
     fn product(&self) -> u64 {
         self.0.borrow().product()
     }
@@ -102,62 +109,70 @@ impl fmt::Display for Factors {
     }
 }
 
-fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors {
+fn _find_factor<A: Arithmetic + miller_rabin::Basis>(num: u64) -> Option<u64> {
     use miller_rabin::Result::*;
 
-    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
-    let _factor = |n, f| {
-        if n < (1 << 32) {
-            _factor::<Montgomery<u32>>(n, f)
-        } else {
-            _factor::<A>(n, f)
-        }
-    };
-
-    if num == 1 {
-        return f;
-    }
-
     let n = A::new(num);
-    let divisor = match miller_rabin::test::<A>(n) {
-        Prime => {
-            let mut r = f;
-            r.push(num);
-            return r;
-        }
-
-        Composite(d) => d,
-        Pseudoprime => rho::find_divisor::<A>(n),
-    };
-
-    let f = _factor(divisor, f);
-    _factor(num / divisor, f)
+    match miller_rabin::test::<A>(n) {
+        Prime => None,
+        Composite(d) => Some(d),
+        Pseudoprime => Some(rho::find_divisor::<A>(n)),
+    }
 }
 
-pub fn factor(mut n: u64) -> Factors {
+fn find_factor(num: u64) -> Option<u64> {
+    if num < (1 << 32) {
+        _find_factor::<Montgomery<u32>>(num)
+    } else {
+        _find_factor::<Montgomery<u64>>(num)
+    }
+}
+
+pub fn factor(num: u64) -> Factors {
     let mut factors = Factors::one();
 
-    if n < 2 {
+    if num < 2 {
         return factors;
     }
 
-    let z = n.trailing_zeros();
+    let mut n = num;
+    let z = num.trailing_zeros();
     if z > 0 {
         factors.add(2, z as Exponent);
         n >>= z;
     }
+    debug_assert_eq!(num, n * factors.product());
 
     if n == 1 {
         return factors;
     }
 
-    let (factors, n) = table::factor(n, factors);
+    table::factor(&mut n, &mut factors);
+    debug_assert_eq!(num, n * factors.product());
 
-    if n < (1 << 32) {
-        _factor::<Montgomery<u32>>(n, factors)
-    } else {
-        _factor::<Montgomery<u64>>(n, factors)
+    if n == 1 {
+        return factors;
     }
+
+    let mut dec = Decomposition::one();
+    dec.add(n, 1);
+
+    while !dec.is_one() {
+        // Check correctness invariant
+        debug_assert_eq!(num, factors.product() * dec.product());
+
+        let (f, e) = dec.pop().unwrap();
+
+        if let Some(d) = find_factor(f) {
+            dec.add(f / d, e);
+            dec.add(d, e);
+        } else {
+            // f is prime
+            factors.add(f, e);
+        }
+    }
+
+    factors
 }
 
 #[cfg(test)]
