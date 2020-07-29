@@ -1,3 +1,4 @@
+use std::path::Path;
 use crate::common::util::*;
 
 #[test]
@@ -149,4 +150,33 @@ fn test_unset_variable() {
 fn test_fail_null_with_program() {
     let out = new_ucmd!().arg("--null").arg("cd").fails().stderr;
     assert!(out.contains("cannot specify --null (-0) with command"));
+}
+
+#[test]
+fn test_change_directory() {
+    let scene = TestScenario::new(util_name!());
+
+    for directory in vec!["/".to_string(), "/tmp".to_string()] {
+        let out = scene.ucmd()
+            .arg("--chdir")
+            .arg(&directory)
+            .arg("pwd")
+            .run().stdout;
+        assert_eq!(out.trim(), directory)
+    }
+}
+
+#[test]
+fn test_fail_change_directory() {
+    let scene = TestScenario::new(util_name!());
+    let some_non_existing_path = "/some/nonexistent/path";
+    assert_eq!(Path::new(some_non_existing_path).is_dir(), false);
+
+    let out = scene.ucmd()
+        .arg("--chdir")
+        .arg(some_non_existing_path)
+        .arg("pwd")
+        .fails()
+        .stderr;
+    assert!(out.contains("env: cannot change directory to "));
 }
