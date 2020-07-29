@@ -7,7 +7,6 @@
 
 extern crate rand;
 
-use std::cell::RefCell;
 use std::fmt;
 
 use crate::numeric::{Arithmetic, Montgomery};
@@ -61,31 +60,8 @@ impl PartialEq for Decomposition {
 
         true
     }
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct Decomposition(BTreeMap<u64, Exponent>);
-
-impl Decomposition {
-    fn one() -> Decomposition {
-        Decomposition(BTreeMap::new())
-    }
-
-    fn add(&mut self, factor: u64, exp: Exponent) {
-        debug_assert!(exp > 0);
-        let n = *self.0.get(&factor).unwrap_or(&0);
-        self.0.insert(factor, exp + n);
-    }
-
-    #[cfg(test)]
-    fn product(&self) -> u64 {
-        self.0
-            .iter()
-            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
-    }
 }
 impl Eq for Decomposition {}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors(RefCell<Decomposition>);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Factors(Decomposition);
@@ -112,7 +88,10 @@ impl Factors {
 
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (p, exp) in (self.0).0.iter() {
+        let mut v = (self.0).0.clone();
+        v.sort_unstable();
+
+        for (p, exp) in v.iter() {
             for _ in 0..*exp {
                 write!(f, " {}", p)?
             }
