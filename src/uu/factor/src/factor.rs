@@ -13,9 +13,11 @@ use std::fmt;
 use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
+type Exponent = u8;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Factors {
-    f: BTreeMap<u64, u8>,
+    f: BTreeMap<u64, Exponent>,
 }
 
 impl Factors {
@@ -23,7 +25,7 @@ impl Factors {
         Factors { f: BTreeMap::new() }
     }
 
-    pub fn add(&mut self, prime: u64, exp: u8) {
+    pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
         debug_assert!(exp > 0);
         let n = *self.f.get(&prime).unwrap_or(&0);
@@ -95,7 +97,7 @@ pub fn factor(mut n: u64) -> Factors {
 
     let z = n.trailing_zeros();
     if z > 0 {
-        factors.add(2, z as u8);
+        factors.add(2, z as Exponent);
         n >>= z;
     }
 
