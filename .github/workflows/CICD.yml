@@ -322,7 +322,7 @@ jobs:
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Archive executable artifacts
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v2
       with:
         name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}
         path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
