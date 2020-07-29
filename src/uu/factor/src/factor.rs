@@ -62,22 +62,42 @@ impl PartialEq for Decomposition {
         true
     }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors {
-    f: BTreeMap<u64, Exponent>,
+struct Decomposition(BTreeMap<u64, Exponent>);
+
+impl Decomposition {
+    fn one() -> Decomposition {
+        Decomposition(BTreeMap::new())
+    }
+
+    fn add(&mut self, factor: u64, exp: Exponent) {
+        debug_assert!(exp > 0);
+        let n = *self.0.get(&factor).unwrap_or(&0);
+        self.0.insert(factor, exp + n);
+    }
+
+    #[cfg(test)]
+    fn product(&self) -> u64 {
+        self.0
+            .iter()
+            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
+    }
 }
 impl Eq for Decomposition {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Factors(RefCell<Decomposition>);
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Factors(Decomposition);
+
 impl Factors {
     pub fn one() -> Factors {
-        Factors(RefCell::new(Decomposition::one()))
+        Factors(Decomposition::one())
     }
 
     pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
-        self.0.borrow_mut().add(prime, exp)
+        self.0.add(prime, exp)
     }
 
     pub fn push(&mut self, prime: u64) {
@@ -86,16 +106,13 @@ impl Factors {
 
     #[cfg(test)]
     fn product(&self) -> u64 {
-        self.0.borrow().product()
+        self.0.product()
     }
 }
 
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let v = &mut (self.0).borrow_mut().0;
-        v.sort_unstable();
-
-        for (p, exp) in v.iter() {
+        for (p, exp) in (self.0).0.iter() {
             for _ in 0..*exp {
                 write!(f, " {}", p)?
             }
