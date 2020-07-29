@@ -7,6 +7,7 @@
 
 extern crate rand;
 
+use std::cell::RefCell;
 use std::fmt;
 
 use crate::numeric::{Arithmetic, Montgomery};
@@ -64,16 +65,16 @@ impl PartialEq for Decomposition {
 impl Eq for Decomposition {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors(Decomposition);
+pub struct Factors(RefCell<Decomposition>);
 
 impl Factors {
     pub fn one() -> Factors {
-        Factors(Decomposition::one())
+        Factors(RefCell::new(Decomposition::one()))
     }
 
     pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
-        self.0.add(prime, exp)
+        self.0.borrow_mut().add(prime, exp)
     }
 
     pub fn push(&mut self, prime: u64) {
@@ -82,13 +83,13 @@ impl Factors {
 
     #[cfg(test)]
     fn product(&self) -> u64 {
-        self.0.product()
+        self.0.borrow().product()
     }
 }
 
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut v = (self.0).0.clone();
+        let v = &mut (self.0).borrow_mut().0;
         v.sort_unstable();
 
         for (p, exp) in v.iter() {
