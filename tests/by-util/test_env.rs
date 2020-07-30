@@ -162,13 +162,19 @@ fn test_change_directory() {
         let temporary_path = temporary_directory.path();
         assert_ne!(env::current_dir().unwrap(), temporary_path);
 
+        // command to print out current working directory
+        #[cfg(windows)]
+        let pwd = "cd";
+        #[cfg(not(windows))]
+        let pwd = "pwd";
+
         let out = scene
-                .ucmd()
-                .arg("--chdir")
-                .arg(&temporary_path)
-                .arg("pwd")
-                .run()
-                .stdout;
+            .ucmd()
+            .arg("--chdir")
+            .arg(&temporary_path)
+            .arg(pwd)
+            .run()
+            .stdout;
         assert_eq!(out.trim(), temporary_path.as_os_str())
 }
 
