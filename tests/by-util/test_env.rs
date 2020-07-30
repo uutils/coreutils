@@ -1,5 +1,8 @@
 use std::path::Path;
+extern crate tempfile;
+use self::tempfile::tempdir;
 use crate::common::util::*;
+use std::env;
 
 #[test]
 fn test_env_help() {
@@ -154,29 +157,33 @@ fn test_fail_null_with_program() {
 
 #[test]
 fn test_change_directory() {
-    let scene = TestScenario::new(util_name!());
+        let scene = TestScenario::new(util_name!());
+        let temporary_directory = tempdir().unwrap();
+        let temporary_path = temporary_directory.path();
+        assert_ne!(env::current_dir().unwrap(), temporary_path);
 
-    for directory in vec!["/".to_string(), "/tmp".to_string()] {
-        let out = scene.ucmd()
-            .arg("--chdir")
-            .arg(&directory)
-            .arg("pwd")
-            .run().stdout;
-        assert_eq!(out.trim(), directory)
-    }
+        let out = scene
+                .ucmd()
+                .arg("--chdir")
+                .arg(&temporary_path)
+                .arg("pwd")
+                .run()
+                .stdout;
+        assert_eq!(out.trim(), temporary_path.as_os_str())
 }
 
 #[test]
 fn test_fail_change_directory() {
-    let scene = TestScenario::new(util_name!());
-    let some_non_existing_path = "/some/nonexistent/path";
-    assert_eq!(Path::new(some_non_existing_path).is_dir(), false);
+        let scene = TestScenario::new(util_name!());
+        let some_non_existing_path = "some_nonexistent_path";
+        assert_eq!(Path::new(some_non_existing_path).is_dir(), false);
 
-    let out = scene.ucmd()
-        .arg("--chdir")
-        .arg(some_non_existing_path)
-        .arg("pwd")
-        .fails()
-        .stderr;
-    assert!(out.contains("env: cannot change directory to "));
+        let out = scene
+                .ucmd()
+                .arg("--chdir")
+                .arg(some_non_existing_path)
+                .arg("pwd")
+                .fails()
+                .stderr;
+        assert!(out.contains("env: cannot change directory to "));
 }
