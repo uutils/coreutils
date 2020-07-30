@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 extern crate tempfile;
 use self::tempfile::tempdir;
@@ -159,7 +160,7 @@ fn test_fail_null_with_program() {
 fn test_change_directory() {
         let scene = TestScenario::new(util_name!());
         let temporary_directory = tempdir().unwrap();
-        let temporary_path = temporary_directory.path();
+        let temporary_path = fs::canonicalize(temporary_directory.path()).unwrap();
         assert_ne!(env::current_dir().unwrap(), temporary_path);
 
         // command to print out current working directory
