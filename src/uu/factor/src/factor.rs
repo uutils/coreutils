@@ -25,12 +25,10 @@ impl Decomposition {
 
     fn add(&mut self, factor: u64, exp: Exponent) {
         debug_assert!(exp > 0);
+        // Assert the factor doesn't already exist in the Decomposition object
+        debug_assert_eq!(self.0.iter_mut().find(|(f, _)| *f == factor), None);
 
-        if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
-            *e += exp;
-        } else {
-            self.0.push((factor, exp))
-        }
+        self.0.push((factor, exp))
     }
 
     fn is_one(&self) -> bool {
