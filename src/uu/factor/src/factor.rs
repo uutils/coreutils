@@ -10,7 +10,7 @@ extern crate rand;
 use std::cell::RefCell;
 use std::fmt;
 
-use crate::numeric::{Arithmetic, Montgomery};
+use crate::numeric::{gcd, Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
 type Exponent = u8;
@@ -164,8 +164,42 @@ pub fn factor(num: u64) -> Factors {
         let (f, e) = dec.pop().unwrap();
 
         if let Some(d) = find_factor(f) {
-            dec.add(f / d, e);
-            dec.add(d, e);
+            let mut gcd_queue = Decomposition::one();
+            gcd_queue.add(d, e);
+            gcd_queue.add(f / d, e);
+
+            let mut non_trivial_gcd = true;
+            while non_trivial_gcd {
+                debug_assert_eq!(f, gcd_queue.product());
+
+                let mut tmp = Decomposition::one();
+                non_trivial_gcd = false;
+                for i in 0..gcd_queue.0.len() - 1 {
+                    let (a, e_a) = gcd_queue.0[i];
+                    let (b, e_b) = gcd_queue.0[i + 1];
+
+                    let g = gcd(a, b);
+                    if g != 1 {
+                        non_trivial_gcd = true;
+                        tmp.add(a / g, e_a);
+                        tmp.add(g, e_a + e_b);
+                        if i + 1 == gcd_queue.0.len() {
+                            tmp.add(b / g, e_b)
+                        } else {
+                            gcd_queue.0[i + 1] = (b / g, e_b);
+                        }
+                    } else {
+                        tmp.add(a, e_a);
+                        if i + 1 == gcd_queue.0.len() - 1 {
+                            tmp.add(b, e_b)
+                        }
+                    }
+                }
+                gcd_queue = tmp;
+            }
+
+            debug_assert_eq!(f, gcd_queue.product());
+            dec.0.extend(gcd_queue.0);
         } else {
             // f is prime
             factors.add(f, e);
