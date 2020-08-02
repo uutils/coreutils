@@ -6,6 +6,7 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
+use super::traits::{DoubleInt, Int, OverflowingAdd};
 use super::*;
 use num_traits::identities::{One, Zero};
 
