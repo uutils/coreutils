@@ -13,7 +13,7 @@ use std::fmt;
 use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Factors {
     f: BTreeMap<u64, u8>,
 }
