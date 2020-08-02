@@ -157,7 +157,7 @@ mod tests {
 
 #[cfg(test)]
 impl quickcheck::Arbitrary for Factors {
-    fn arbitrary<G: quickcheck::Gen>(gen: &mut G) -> Self {
+    fn arbitrary(gen: &mut impl quickcheck::Gen) -> Self {
         use rand::Rng;
         let mut f = Factors::one();
         let mut g = 1u64;
