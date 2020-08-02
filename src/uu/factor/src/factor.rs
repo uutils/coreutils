@@ -114,7 +114,7 @@ pub fn factor(mut n: u64) -> Factors {
 
 #[cfg(test)]
 mod tests {
-    use super::factor;
+    use super::{factor, Factors};
     use quickcheck::quickcheck;
 
     #[test]
@@ -147,6 +147,10 @@ mod tests {
     quickcheck! {
         fn factor_recombines(i: u64) -> bool {
             i == 0 || factor(i).product() == i
+        }
+
+        fn recombines_factors(f: Factors) -> bool {
+            factor(f.product()) == f
         }
     }
 }
