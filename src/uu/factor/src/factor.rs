@@ -150,3 +150,34 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for Factors {
+    fn arbitrary<G: quickcheck::Gen>(gen: &mut G) -> Self {
+        use rand::Rng;
+        let mut f = Factors::one();
+        let mut g = 1u64;
+        let mut n = u64::MAX;
+
+        // Adam Kalai's algorithm for generating uniformly-distributed
+        // integers and their factorisation.
+        //
+        // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
+        'attempt: loop {
+            while n > 1 {
+                n = gen.gen_range(1, n);
+                if miller_rabin::is_prime(n) {
+                    if let Some(h) = g.checked_mul(n) {
+                        f.push(n);
+                        g = h;
+                    } else {
+                        // We are overflowing u64, retry
+                        continue 'attempt;
+                    }
+                }
+            }
+
+            return f;
+        }
+    }
+}
