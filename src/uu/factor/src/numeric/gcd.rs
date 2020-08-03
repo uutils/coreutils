@@ -9,39 +9,39 @@
 use std::cmp::min;
 use std::mem::swap;
 
-pub fn gcd(mut n: u64, mut m: u64) -> u64 {
+pub fn gcd(mut u: u64, mut v: u64) -> u64 {
     // Stein's binary GCD algorithm
     // Base cases: gcd(n, 0) = gcd(0, n) = n
-    if n == 0 {
-        return m;
-    } else if m == 0 {
-        return n;
+    if u == 0 {
+        return v;
+    } else if v == 0 {
+        return u;
     }
 
     // Extract common factor-2: gcd(2ⁱ n, 2ⁱ m) = 2ⁱ gcd(n, m)
     // and reducing until odd gcd(2ⁱ n, m) = gcd(n, m) if m is odd
     let k = {
-        let k_n = n.trailing_zeros();
-        let k_m = m.trailing_zeros();
-        n >>= k_n;
-        m >>= k_m;
-        min(k_n, k_m)
+        let i = u.trailing_zeros();
+        let j = v.trailing_zeros();
+        u >>= i;
+        v >>= j;
+        min(i, j)
     };
 
     loop {
-        // Invariant: n odd
-        debug_assert!(n % 2 == 1, "n = {} is even", n);
+        // Invariant: u odd
+        debug_assert!(u % 2 == 1, "u = {} is even", u);
 
-        if n > m {
-            swap(&mut n, &mut m);
+        if u > v {
+            swap(&mut u, &mut v);
         }
-        m -= n;
+        v -= u;
 
-        if m == 0 {
-            return n << k;
+        if v == 0 {
+            return u << k;
         }
 
-        m >>= m.trailing_zeros();
+        v >>= v.trailing_zeros();
     }
 }
 
