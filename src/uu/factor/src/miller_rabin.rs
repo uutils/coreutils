@@ -110,7 +110,8 @@ pub(crate) fn is_prime(n: u64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::numeric::{Arithmetic, Montgomery};
+    use crate::numeric::{traits::DoubleInt, Arithmetic, Montgomery};
+    use crate::parametrized_check;
     use quickcheck::quickcheck;
     use std::iter;
     const LARGEST_U64_PRIME: u64 = 0xFFFFFFFFFFFFFFC5;
@@ -144,25 +145,16 @@ mod tests {
         assert!(is_prime(2));
     }
 
-    // TODO: Deduplicate with macro in numeric.rs
-    macro_rules! parametrized_check {
-        ( $f:ident ) => {
-            paste::item! {
-                #[test]
-                fn [< $f _ u32 >]() {
-                    $f::<Montgomery<u32>>()
-                }
-                #[test]
-                fn [< $f _ u64 >]() {
-                    $f::<Montgomery<u64>>()
-                }
-            }
-        };
-    }
-
-    fn first_primes<A: Arithmetic + Basis>() {
+    fn first_primes<A: DoubleInt>()
+    where
+        Montgomery<A>: Basis,
+    {
         for p in odd_primes() {
-            assert!(test(A::new(p)).is_prime(), "{} reported composite", p);
+            assert!(
+                test(Montgomery::<A>::new(p)).is_prime(),
+                "{} reported composite",
+                p
+            );
         }
     }
     parametrized_check!(first_primes);
@@ -176,14 +168,14 @@ mod tests {
         assert!(!is_prime(0));
     }
 
-    fn first_composites<A: Arithmetic + Basis>() {
+    #[test]
+    fn first_composites() {
         for (p, q) in primes().zip(odd_primes()) {
             for i in p + 1..q {
                 assert!(!is_prime(i), "{} reported prime", i);
             }
         }
     }
-    parametrized_check!(first_composites);
 
     #[test]
     fn issue_1556() {
@@ -191,11 +183,14 @@ mod tests {
         assert!(!is_prime(10_425_511));
     }
 
-    fn small_semiprimes<A: Arithmetic + Basis>() {
+    fn small_semiprimes<A: DoubleInt>()
+    where
+        Montgomery<A>: Basis,
+    {
         for p in odd_primes() {
             for q in odd_primes().take_while(|q| *q <= p) {
                 let n = p * q;
-                let m = A::new(n);
+                let m = Montgomery::<A>::new(n);
                 assert!(!test(m).is_prime(), "{} = {} × {} reported prime", n, p, q);
             }
         }

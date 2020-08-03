@@ -8,7 +8,7 @@
 mod gcd;
 pub use gcd::gcd;
 
-mod traits;
+pub(crate) mod traits;
 
 mod modular_inverse;
 pub(crate) use modular_inverse::modular_inverse;
