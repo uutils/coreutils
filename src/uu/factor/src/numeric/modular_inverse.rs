@@ -47,8 +47,9 @@ pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
 mod tests {
     use super::{super::traits::Int, *};
     use crate::parametrized_check;
+    use quickcheck::quickcheck;
 
-    fn test_inverter<T: Int>() {
+    fn small_values<T: Int>() {
         // All odd integers from 1 to 20 000
         let one = T::from(1).unwrap();
         let two = T::from(2).unwrap();
@@ -58,5 +59,17 @@ mod tests {
 
         assert!(test_values.all(|x| x.wrapping_mul(&modular_inverse(x)) == one));
     }
-    parametrized_check!(test_inverter);
+    parametrized_check!(small_values);
+
+    quickcheck! {
+        fn random_values_u32(n: u32) -> bool {
+            let n = 2 * n + 1;
+            modular_inverse(n).wrapping_mul(n) == 1
+        }
+
+        fn random_values_u64(n: u64) -> bool {
+            let n = 2 * n + 1;
+            modular_inverse(n).wrapping_mul(n) == 1
+        }
+    }
 }
