@@ -18,8 +18,8 @@ pub fn gcd(mut u: u64, mut v: u64) -> u64 {
         return u;
     }
 
-    // Extract common factor-2: gcd(2ⁱ n, 2ⁱ m) = 2ⁱ gcd(n, m)
-    // and reducing until odd gcd(2ⁱ n, m) = gcd(n, m) if m is odd
+    // gcd(2ⁱ u, 2ʲ v) = 2ᵏ gcd(u, v) with u, v odd and k = min(i, j)
+    // 2ᵏ is the greatest power of two that divides both u and v
     let k = {
         let i = u.trailing_zeros();
         let j = v.trailing_zeros();
@@ -32,15 +32,18 @@ pub fn gcd(mut u: u64, mut v: u64) -> u64 {
         // Invariant: u odd
         debug_assert!(u % 2 == 1, "u = {} is even", u);
 
+        // gcd(u, v) = gcd(|u - v|, min(u, v))
         if u > v {
             swap(&mut u, &mut v);
         }
         v -= u;
 
         if v == 0 {
+            // Reached the base case; gcd is 2ᵏ u
             return u << k;
         }
 
+        // gcd(u, 2ʲ v) = gcd(u, v) as u is odd
         v >>= v.trailing_zeros();
     }
 }
