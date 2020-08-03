@@ -29,8 +29,9 @@ pub fn gcd(mut u: u64, mut v: u64) -> u64 {
     };
 
     loop {
-        // Invariant: u odd
+        // Loop invariant: u and v are odd
         debug_assert!(u % 2 == 1, "u = {} is even", u);
+        debug_assert!(v % 2 == 1, "v = {} is even", v);
 
         // gcd(u, v) = gcd(|u - v|, min(u, v))
         if u > v {
