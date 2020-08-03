@@ -63,5 +63,36 @@ mod tests {
             };
             gcd(a, b) == g
         }
+
+        fn one(a: u64) -> bool {
+            gcd(1, a) == 1
+        }
+
+        fn divisor(a: u64, b: u64) -> bool {
+            // Test that gcd(a, b) divides a and b
+            let g = gcd(a, b);
+            a % g == 0 && b % g == 0
+        }
+
+        fn commutative(a: u64, b: u64) -> bool {
+            gcd(a, b) == gcd(b, a)
+        }
+
+        fn associative(a: u64, b: u64, c: u64) -> bool {
+            gcd(a, gcd(b, c)) == gcd(gcd(a, b), c)
+        }
+
+        fn scalar_mult(a: u64, b: u64, k: u64) -> bool {
+            gcd(k * a, k * b) == k * gcd(a, b)
+        }
+
+        fn multiplicative(a: u64, b: u64, c: u64) -> bool {
+            // gcd(ab, c) = gcd(a, c) gcd(b, c) when a and b coprime
+            gcd(a, b) != 1 || gcd(a * b, c) == gcd(a, c) * gcd(b, c)
+        }
+
+        fn linearity(a: u64, b: u64, k: u64) -> bool {
+            gcd(a + k * b, b) == gcd(a, b)
+        }
     }
 }
