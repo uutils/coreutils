@@ -13,7 +13,7 @@ use std::fmt;
 use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Factors {
     f: BTreeMap<u64, u8>,
 }
@@ -114,7 +114,7 @@ pub fn factor(mut n: u64) -> Factors {
 
 #[cfg(test)]
 mod tests {
-    use super::factor;
+    use super::{factor, Factors};
     use quickcheck::quickcheck;
 
     #[test]
@@ -147,6 +147,41 @@ mod tests {
     quickcheck! {
         fn factor_recombines(i: u64) -> bool {
             i == 0 || factor(i).product() == i
+        }
+
+        fn recombines_factors(f: Factors) -> bool {
+            factor(f.product()) == f
+        }
+    }
+}
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for Factors {
+    fn arbitrary(gen: &mut impl quickcheck::Gen) -> Self {
+        use rand::Rng;
+        let mut f = Factors::one();
+        let mut g = 1u64;
+        let mut n = u64::MAX;
+
+        // Adam Kalai's algorithm for generating uniformly-distributed
+        // integers and their factorisation.
+        //
+        // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
+        'attempt: loop {
+            while n > 1 {
+                n = gen.gen_range(1, n);
+                if miller_rabin::is_prime(n) {
+                    if let Some(h) = g.checked_mul(n) {
+                        f.push(n);
+                        g = h;
+                    } else {
+                        // We are overflowing u64, retry
+                        continue 'attempt;
+                    }
+                }
+            }
+
+            return f;
         }
     }
 }
