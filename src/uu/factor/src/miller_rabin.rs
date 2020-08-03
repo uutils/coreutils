@@ -176,14 +176,14 @@ mod tests {
         assert!(!is_prime(0));
     }
 
-    fn first_composites<A: Arithmetic + Basis>() {
+    #[test]
+    fn first_composites() {
         for (p, q) in primes().zip(odd_primes()) {
             for i in p + 1..q {
                 assert!(!is_prime(i), "{} reported prime", i);
             }
         }
     }
-    parametrized_check!(first_composites);
 
     #[test]
     fn issue_1556() {
