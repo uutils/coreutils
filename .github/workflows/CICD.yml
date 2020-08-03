@@ -309,6 +309,16 @@ jobs:
         target: ${{ matrix.job.target }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: Initialize toolchain-dependent workflow variables
+      id: dep_vars
+      shell: bash
+      run: |
+        ## Dependent VARs setup
+        # * determine sub-crate utility list
+        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
+        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
+        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
     - name: Install `cargo-tree` # for dependency information
       uses: actions-rs/install@v0.1
       with:
@@ -352,6 +362,12 @@ jobs:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+    - name: Test individual utilities
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
+        command: test
+        args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
     - name: Archive executable artifacts
       uses: actions/upload-artifact@v2
       with:
