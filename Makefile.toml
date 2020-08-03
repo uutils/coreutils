@@ -260,7 +260,11 @@ dependencies = [
 ]
 
 [tasks.uutil]
-alias = "utils"
+description = "hidden alias for 'util'"
+category = "[project]"
+dependencies = [
+	"util",
+]
 
 [tasks.uutils]
 description = "hidden plural-form alias for 'util'"
