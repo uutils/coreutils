@@ -51,7 +51,7 @@ mod tests {
     use quickcheck::quickcheck;
 
     quickcheck! {
-        fn gcd(a: u64, b: u64) -> bool {
+        fn euclidean(a: u64, b: u64) -> bool {
             // Test against the Euclidean algorithm
             let g = {
                 let (mut a, mut b) = (a, b);
@@ -61,7 +61,7 @@ mod tests {
                 }
                 a
             };
-            super::gcd(a, b) == g
+            gcd(a, b) == g
         }
     }
 }
