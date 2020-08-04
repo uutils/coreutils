@@ -8,8 +8,16 @@ use std::os::unix::fs;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 
+#[cfg(target_os = "linux")]
+use filetime::FileTime;
 #[cfg(not(windows))]
 use std::env;
+#[cfg(target_os = "linux")]
+use std::fs as std_fs;
+#[cfg(target_os = "linux")]
+use std::thread::sleep;
+#[cfg(target_os = "linux")]
+use std::time::Duration;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -209,7 +217,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(target_os = "unix")]
+#[cfg(target_os = "linux")]
 fn test_cp_arg_link() {
     use std::os::linux::fs::MetadataExt;
 
@@ -490,4 +498,221 @@ fn test_cp_no_deref_folder_to_folder() {
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
     assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_archive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::now().to_timespec();
+    let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
+    // set the file creation/modif an hour ago
+    filetime::set_file_times(
+        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
+        previous,
+        previous,
+    )
+    .unwrap();
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--archive")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .run();
+
+    assert!(result.success);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+
+    let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
+    let creation = metadata.modified().unwrap();
+
+    let metadata2 = std_fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
+    let creation2 = metadata2.modified().unwrap();
+
+    let scene2 = TestScenario::new("ls");
+    let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
+
+    println!("ls dest {}", result.stdout);
+    assert_eq!(creation, creation2);
+    assert!(result.success);
+}
+
+#[test]
+#[cfg(target_os = "unix")]
+fn test_cp_archive_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let cwd = env::current_dir().unwrap();
+
+    // creates
+    // dir/1
+    // dir/1.link => dir/1
+    // dir/2
+    // dir/2.link => dir/2
+
+    let file_1 = at.subdir.join(TEST_COPY_TO_FOLDER).join("1");
+    let file_1_link = at.subdir.join(TEST_COPY_TO_FOLDER).join("1.link");
+    let file_2 = at.subdir.join(TEST_COPY_TO_FOLDER).join("2");
+    let file_2_link = at.subdir.join(TEST_COPY_TO_FOLDER).join("2.link");
+
+    at.touch(&file_1.to_string_lossy());
+    at.touch(&file_2.to_string_lossy());
+
+    // Change the cwd to have a correct symlink
+    assert!(env::set_current_dir(&at.subdir.join(TEST_COPY_TO_FOLDER)).is_ok());
+
+    #[cfg(not(windows))]
+    {
+        let _r = fs::symlink("1", &file_1_link);
+        let _r = fs::symlink("2", &file_2_link);
+    }
+    #[cfg(windows)]
+    {
+        let _r = symlink_file("1", &file_1_link);
+        let _r = symlink_file("2", &file_2_link);
+    }
+    // Back to the initial cwd (breaks the other tests)
+    assert!(env::set_current_dir(&cwd).is_ok());
+
+    let resultg = ucmd
+        .arg("--archive")
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .run();
+
+    let scene2 = TestScenario::new("ls");
+    let result = scene2
+        .cmd("ls")
+        .arg("-al")
+        .arg(&at.subdir.join(TEST_COPY_TO_FOLDER))
+        .run();
+
+    println!("ls dest {}", result.stdout);
+
+    let scene2 = TestScenario::new("ls");
+    let result = scene2
+        .cmd("ls")
+        .arg("-al")
+        .arg(&at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
+        .run();
+
+    println!("ls dest {}", result.stdout);
+    assert!(at.file_exists(
+        &at.subdir
+            .join(TEST_COPY_TO_FOLDER_NEW)
+            .join("1.link")
+            .to_string_lossy()
+    ));
+    assert!(at.file_exists(
+        &at.subdir
+            .join(TEST_COPY_TO_FOLDER_NEW)
+            .join("2.link")
+            .to_string_lossy()
+    ));
+    assert!(at.file_exists(
+        &at.subdir
+            .join(TEST_COPY_TO_FOLDER_NEW)
+            .join("1")
+            .to_string_lossy()
+    ));
+    assert!(at.file_exists(
+        &at.subdir
+            .join(TEST_COPY_TO_FOLDER_NEW)
+            .join("2")
+            .to_string_lossy()
+    ));
+
+    assert!(at.is_symlink(
+        &at.subdir
+            .join(TEST_COPY_TO_FOLDER_NEW)
+            .join("1.link")
+            .to_string_lossy()
+    ));
+    assert!(at.is_symlink(
+        &at.subdir
+            .join(TEST_COPY_TO_FOLDER_NEW)
+            .join("2.link")
+            .to_string_lossy()
+    ));
+
+    // fails for now
+    assert!(resultg.success);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_preserve_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::now().to_timespec();
+    let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
+    // set the file creation/modif an hour ago
+    filetime::set_file_times(
+        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
+        previous,
+        previous,
+    )
+    .unwrap();
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--preserve=timestamps")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .run();
+
+    assert!(result.success);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+
+    let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
+    let creation = metadata.modified().unwrap();
+
+    let metadata2 = std_fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
+    let creation2 = metadata2.modified().unwrap();
+
+    let scene2 = TestScenario::new("ls");
+    let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
+
+    println!("ls dest {}", result.stdout);
+    assert_eq!(creation, creation2);
+    assert!(result.success);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_dont_preserve_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::now().to_timespec();
+    let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
+    // set the file creation/modif an hour ago
+    filetime::set_file_times(
+        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
+        previous,
+        previous,
+    )
+    .unwrap();
+    sleep(Duration::from_secs(3));
+
+    let result = ucmd
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--no-preserve=timestamps")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .run();
+
+    assert!(result.success);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+
+    let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
+    let creation = metadata.modified().unwrap();
+
+    let metadata2 = std_fs::metadata(at.subdir.join(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
+    let creation2 = metadata2.modified().unwrap();
+
+    let scene2 = TestScenario::new("ls");
+    let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
+
+    println!("ls dest {}", result.stdout);
+    println!("creation {:?} / {:?}", creation, creation2);
+
+    assert_ne!(creation, creation2);
+    let res = creation.elapsed().unwrap() - creation2.elapsed().unwrap();
+    // Some margins with time check
+    assert!(res.as_secs() > 3595);
+    assert!(res.as_secs() < 3605);
+    assert!(result.success);
 }
