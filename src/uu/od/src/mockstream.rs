@@ -87,7 +87,7 @@ fn test_failing_mock_stream_read() {
     let mut v = [0; 4];
     let error = s.read(v.as_mut()).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::BrokenPipe);
-    assert_eq!(error.description(), "The dog ate the ethernet cable");
+    assert_eq!(error.to_string(), "The dog ate the ethernet cable");
     // after a single error, it will return Ok(0)
     assert_eq!(s.read(v.as_mut()).unwrap(), 0);
 }
