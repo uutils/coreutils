@@ -470,11 +470,31 @@ jobs:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: Initialize toolchain-dependent workflow variables
+      id: dep_vars
+      shell: bash
+      run: |
+        ## Dependent VARs setup
+        # * determine sub-crate utility list
+        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
+        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
+        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
     - name: Test
       uses: actions-rs/cargo@v1
       with:
         command: test
         args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
+      env:
+        CARGO_INCREMENTAL: '0'
+        RUSTC_WRAPPER: ''
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+    - name: Test individual utilities
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         CARGO_INCREMENTAL: '0'
         RUSTC_WRAPPER: ''
