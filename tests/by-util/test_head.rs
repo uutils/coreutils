@@ -88,10 +88,7 @@ fn test_verbose() {
 
 #[test]
 fn test_spams_newline() {
-    new_ucmd!()
-        .pipe_in("a")
-        .succeeds()
-        .stdout_is("a\n");   
+    new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
 }
 
 #[test]
@@ -102,7 +99,7 @@ fn test_unsupported_byte_syntax() {
         .fails()
         //GNU head returns "a"
         .stdout_is("")
-        .stderr_is("head: error: Unrecognized option: \'1\'");     
+        .stderr_is("head: error: Unrecognized option: \'1\'");
 }
 
 #[test]
@@ -113,7 +110,7 @@ fn test_unsupported_line_syntax() {
         .fails()
         //.stdout_is("a\n");  What GNU head returns.
         .stdout_is("")
-        .stderr_is("head: error: invalid line count \'2048m\': invalid digit found in string");     
+        .stderr_is("head: error: invalid line count \'2048m\': invalid digit found in string");
 }
 
 #[test]
@@ -123,7 +120,7 @@ fn test_unsupported_zero_terminated_syntax() {
         .pipe_in("x\0y")
         .fails()
         //GNU Head returns "x\0"
-        .stderr_is("head: error: Unrecognized option: \'z\'");     
+        .stderr_is("head: error: Unrecognized option: \'z\'");
 }
 
 #[test]
@@ -133,9 +130,8 @@ fn test_unsupported_zero_terminated_syntax_2() {
         .pipe_in("x\0y")
         .fails()
         //GNU Head returns "x\0y"
-        .stderr_is("head: error: Unrecognized option: \'z\'");     
+        .stderr_is("head: error: Unrecognized option: \'z\'");
 }
-
 
 #[test]
 fn test_unsupported_negative_byte_syntax() {
@@ -144,7 +140,7 @@ fn test_unsupported_negative_byte_syntax() {
         .pipe_in("a\n")
         .fails()
         //GNU Head returns ""
-        .stderr_is("head: error: invalid byte count \'-2\': invalid digit found in string");     
+        .stderr_is("head: error: invalid byte count \'-2\': invalid digit found in string");
 }
 
 #[test]
@@ -154,5 +150,5 @@ fn test_bug_in_negative_zero_lines() {
         .pipe_in("a\nb\n")
         .succeeds()
         //GNU Head returns "a\nb\n"
-        .stdout_is("");     
+        .stdout_is("");
 }
