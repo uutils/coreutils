@@ -211,7 +211,7 @@ fn test_format_flo16() {
     assert_eq!(format_flo16(f16::from_f32(-0.2)), "  -0.2000");
     assert_eq!(format_flo16(f16::from_f32(-0.02)), "-2.000e-2");
 
-    assert_eq!(format_flo16(f16::MIN_POSITIVE_SUBNORMAL), " 5.966e-8");
+    assert_eq!(format_flo16(f16::MIN_POSITIVE_SUBNORMAL), " 5.960e-8");
     assert_eq!(format_flo16(f16::MIN), " -6.550e4");
     assert_eq!(format_flo16(f16::NAN), "      NaN");
     assert_eq!(format_flo16(f16::INFINITY), "      inf");
