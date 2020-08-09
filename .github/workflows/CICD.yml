@@ -25,6 +25,47 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest   , features: unix }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+        components: rustfmt
+    - name: "`fmt` testing"
+      shell: bash
+      run: |
+        # `fmt` testing
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+    - name: "`fmt` testing of tests"
+      shell: bash
+      run: |
+        # `fmt` testing of tests
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+
+  clippy:
+    name: Clippy
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest   , features: unix }
           - { os: macos-latest    , features: macos }
           - { os: windows-latest  , features: windows }
     steps:
@@ -46,19 +87,7 @@ jobs:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt, clippy
-    - name: "`fmt` testing"
-      shell: bash
-      run: |
-        # `fmt` testing
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
-    - name: "`fmt` testing of tests"
-      shell: bash
-      run: |
-        # `fmt` testing of tests
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        components: clippy
     - name: "`clippy` testing"
       if: success() || failure() # run regardless of prior step success/failure
       shell: bash
