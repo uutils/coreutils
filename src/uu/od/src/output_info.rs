@@ -99,7 +99,7 @@ impl OutputInfo {
     ///
     /// Multiple representations of the same data, will be right-aligned for easy reading.
     /// For example a 64 bit octal and a 32-bit decimal with a 16-bit hexadecimal looks like this:
-    /// ```
+    /// ```ignore
     /// 1777777777777777777777 1777777777777777777777
     ///  4294967295 4294967295  4294967295 4294967295
     ///   ffff ffff  ffff ffff   ffff ffff  ffff ffff
@@ -131,7 +131,7 @@ impl OutputInfo {
     ///
     /// Here is another example showing the alignment of 64-bit unsigned decimal numbers,
     /// 32-bit hexadecimal number, 16-bit octal numbers and 8-bit hexadecimal numbers:
-    /// ```
+    /// ```ignore
     ///        18446744073709551615        18446744073709551615
     ///      ffffffff      ffffffff      ffffffff      ffffffff
     /// 177777 177777 177777 177777 177777 177777 177777 177777
