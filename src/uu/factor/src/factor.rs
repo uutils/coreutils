@@ -173,24 +173,30 @@ pub fn factor(num: u64) -> Factors {
                 let mut tmp = Decomposition::one();
                 non_trivial_gcd = false;
                 for i in 0..gcd_queue.0.len() - 1 {
-                    let (a, e_a) = gcd_queue.0[i];
-                    let (b, e_b) = gcd_queue.0[i + 1];
+                    let (mut a, e_a) = gcd_queue.0[i];
+                    let (mut b, e_b) = gcd_queue.0[i + 1];
+
+                    if a == 1 {
+                        continue;
+                    }
 
                     let g = gcd(a, b);
                     if g != 1 {
                         non_trivial_gcd = true;
-                        tmp.add(a / g, e_a);
-                        tmp.add(g, e_a + e_b);
-                        if i + 1 == gcd_queue.0.len() {
-                            tmp.add(b / g, e_b)
-                        } else {
-                            gcd_queue.0[i + 1] = (b / g, e_b);
-                        }
-                    } else {
+                        a /= g;
+                        b /= g;
+                    }
+                    if a != 1 {
                         tmp.add(a, e_a);
-                        if i + 1 == gcd_queue.0.len() - 1 {
-                            tmp.add(b, e_b)
-                        }
+                    }
+                    if g != 1 {
+                        tmp.add(g, e_a + e_b);
+                    }
+
+                    if i + 1 != gcd_queue.0.len() - 1 {
+                        gcd_queue.0[i + 1].0 = b;
+                    } else if b != 1 {
+                        tmp.add(b, e_b);
                     }
                 }
                 gcd_queue = tmp;
