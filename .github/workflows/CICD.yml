@@ -144,6 +144,8 @@ jobs:
       with:
         command: test
         args: --features "feat_os_unix"
+      env:
+        RUSTFLAGS: '-Awarnings'
 
   build:
     name: Build
