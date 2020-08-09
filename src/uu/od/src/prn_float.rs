@@ -197,8 +197,6 @@ fn test_format_flo64() {
 
 #[test]
 fn test_format_flo16() {
-    use half::consts::*;
-
     assert_eq!(format_flo16(f16::from_bits(0x8400u16)), "-6.104e-5");
     assert_eq!(format_flo16(f16::from_bits(0x8401u16)), "-6.109e-5");
     assert_eq!(format_flo16(f16::from_bits(0x8402u16)), "-6.115e-5");
@@ -213,11 +211,11 @@ fn test_format_flo16() {
     assert_eq!(format_flo16(f16::from_f32(-0.2)), "  -0.2000");
     assert_eq!(format_flo16(f16::from_f32(-0.02)), "-2.000e-2");
 
-    assert_eq!(format_flo16(MIN_POSITIVE_SUBNORMAL), " 5.966e-8");
-    assert_eq!(format_flo16(MIN), " -6.550e4");
-    assert_eq!(format_flo16(NAN), "      NaN");
-    assert_eq!(format_flo16(INFINITY), "      inf");
-    assert_eq!(format_flo16(NEG_INFINITY), "     -inf");
-    assert_eq!(format_flo16(NEG_ZERO), "       -0");
-    assert_eq!(format_flo16(ZERO), "        0");
+    assert_eq!(format_flo16(f16::MIN_POSITIVE_SUBNORMAL), " 5.966e-8");
+    assert_eq!(format_flo16(f16::MIN), " -6.550e4");
+    assert_eq!(format_flo16(f16::NAN), "      NaN");
+    assert_eq!(format_flo16(f16::INFINITY), "      inf");
+    assert_eq!(format_flo16(f16::NEG_INFINITY), "     -inf");
+    assert_eq!(format_flo16(f16::NEG_ZERO), "       -0");
+    assert_eq!(format_flo16(f16::ZERO), "        0");
 }
