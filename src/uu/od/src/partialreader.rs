@@ -76,7 +76,7 @@ impl<R: HasError> HasError for PartialReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockstream::*;
+    use crate::mockstream::*;
     use std::io::{Cursor, ErrorKind, Read};
 
     #[test]

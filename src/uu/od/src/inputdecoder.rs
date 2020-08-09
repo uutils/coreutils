@@ -159,8 +159,8 @@ impl<'a> MemoryDecoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use byteorder_io::ByteOrder;
-    use peekreader::PeekReader;
+    use crate::byteorder_io::ByteOrder;
+    use crate::peekreader::PeekReader;
     use std::io::Cursor;
 
     #[test]
