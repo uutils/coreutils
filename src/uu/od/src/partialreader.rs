@@ -77,7 +77,6 @@ impl<R: HasError> HasError for PartialReader<R> {
 mod tests {
     use super::*;
     use mockstream::*;
-    use std::error::Error;
     use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
