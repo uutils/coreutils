@@ -1,18 +1,18 @@
 name: CICD
 
 # spell-checker:ignore (acronyms) CICD MSVC musl
-# spell-checker:ignore (env/flags) Ccodegen Coverflow RUSTFLAGS
+# spell-checker:ignore (env/flags) Ccodegen Coverflow Cpanic RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
+# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile uutils
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
   RUST_MIN_SRV: "1.32.0" ## v1.32.0 - minimum version for half, tempfile, etc
-  RUST_COV_SRV: "2020-04-29" ## (~v1.45.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
+  RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
 
@@ -488,7 +488,8 @@ jobs:
       env:
         CARGO_INCREMENTAL: '0'
         RUSTC_WRAPPER: ''
-        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        RUSTDOCFLAGS: '-Cpanic=abort'
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
       uses: actions-rs/cargo@v1
@@ -498,7 +499,8 @@ jobs:
       env:
         CARGO_INCREMENTAL: '0'
         RUSTC_WRAPPER: ''
-        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        RUSTDOCFLAGS: '-Cpanic=abort'
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: "`grcov` ~ install"
       uses: actions-rs/install@v0.1
@@ -511,25 +513,25 @@ jobs:
       run: |
         # display coverage files (per `grcov`)
         grcov . --output-type files | sort --unique
-    - name: "`grcov` ~ configure + fixups" ## note: fixups, when needed, must be done *after* testing so that coverage files exist for renaming
-      shell: bash
-      run: |
-        # create `grcov` configuration file
-        GRCOV_CONFIG_DIR="${GITHUB_WORKSPACE}/.github/actions-rs"
-        mkdir -p "${GRCOV_CONFIG_DIR}"
-        GRCOV_CONFIG_FILE="${GRCOV_CONFIG_DIR}/grcov.yml"
-        echo "branch: true" >> "${GRCOV_CONFIG_FILE}"
-        echo "ignore:" >> "${GRCOV_CONFIG_FILE}"
-        echo "- \"build.rs\"" >> "${GRCOV_CONFIG_FILE}"
-        echo "- \"/*\"" >> "${GRCOV_CONFIG_FILE}"
-        echo "- \"[a-zA-Z]:/*\"" >> "${GRCOV_CONFIG_FILE}"
-        cat "${GRCOV_CONFIG_FILE}"
-        # ## 'actions-rs/grcov@v0.1' expects coverage files (*.gc*) to be prefixed with the crate name (using '_' in place of '-')
-        # ## * uutils workspace packages
-        # prefix="uu_"
-        # for f in "target/debug/deps/uu_"*-*.gc* ; do to="${f/uu_/${PROJECT_NAME}-uu_}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
-        # ## * tests
-        # for f in "target/debug/deps/tests"-*.gc* ; do to="${f/tests/${PROJECT_NAME}-tests}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
+    # - name: "`grcov` ~ configure + fixups" ## note: fixups, when needed, must be done *after* testing so that coverage files exist for renaming
+    #   shell: bash
+    #   run: |
+    #     # create `grcov` configuration file
+    #     GRCOV_CONFIG_DIR="${GITHUB_WORKSPACE}/.github/actions-rs"
+    #     mkdir -p "${GRCOV_CONFIG_DIR}"
+    #     GRCOV_CONFIG_FILE="${GRCOV_CONFIG_DIR}/grcov.yml"
+    #     echo "branch: true" >> "${GRCOV_CONFIG_FILE}"
+    #     echo "ignore:" >> "${GRCOV_CONFIG_FILE}"
+    #     echo "- \"build.rs\"" >> "${GRCOV_CONFIG_FILE}"
+    #     echo "- \"/*\"" >> "${GRCOV_CONFIG_FILE}"
+    #     echo "- \"[a-zA-Z]:/*\"" >> "${GRCOV_CONFIG_FILE}"
+    #     cat "${GRCOV_CONFIG_FILE}"
+    #     # ## 'actions-rs/grcov@v0.1' expects coverage files (*.gc*) to be prefixed with the crate name (using '_' in place of '-')
+    #     # ## * uutils workspace packages
+    #     # prefix="uu_"
+    #     # for f in "target/debug/deps/uu_"*-*.gc* ; do to="${f/uu_/${PROJECT_NAME}-uu_}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
+    #     # ## * tests
+    #     # for f in "target/debug/deps/tests"-*.gc* ; do to="${f/tests/${PROJECT_NAME}-tests}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
     # - name: Generate coverage data (via `grcov`)
     #   id: coverage
     #   uses: actions-rs/grcov@v0.1
@@ -540,8 +542,10 @@ jobs:
         # generate coverage data
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
+        GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"'
+        GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"'
         mkdir -p "${COVERAGE_REPORT_DIR}"
-        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"
+        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} ${GRCOV_EXCLUDE_OPTION}
         echo ::set-output name=report::${COVERAGE_REPORT_FILE}
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v1
