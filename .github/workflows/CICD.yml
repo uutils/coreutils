@@ -17,14 +17,14 @@ env:
 on: [push, pull_request]
 
 jobs:
-  style:
-    name: Style
+  code_format:
+    name: Style/format
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest   , features: unix }
+          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v1
     - name: Initialize workflow variables
@@ -58,16 +58,16 @@ jobs:
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
 
-  clippy:
-    name: Clippy
+  code_warnings:
+    name: Style/warnings
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest   , features: unix }
-          - { os: macos-latest    , features: macos }
-          - { os: windows-latest  , features: windows }
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v1
     - name: Initialize workflow variables
