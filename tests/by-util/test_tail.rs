@@ -4,9 +4,6 @@ use self::tail::parse_size;
 use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
-use std::process::{Command, Stdio};
-use std::thread::sleep;
-use std::time::Duration;
 
 static FOOBAR_TXT: &'static str = "foobar.txt";
 static FOOBAR_2_TXT: &'static str = "foobar2.txt";
@@ -98,8 +95,14 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')
+#[cfg(not(windows))]
 #[test]
 fn test_follow_with_pid() {
+    use std::process::{Command, Stdio};
+    use std::thread::sleep;
+    use std::time::Duration;
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     #[cfg(unix)]
