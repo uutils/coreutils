@@ -508,11 +508,11 @@ jobs:
         crate: grcov
         version: latest
         use-tool-cache: true
-    - name: "`grcov` ~ display coverage files" ## (for debugging)
-      shell: bash
-      run: |
-        # display coverage files (per `grcov`)
-        grcov . --output-type files | sort --unique
+    # - name: "`grcov` ~ display coverage files" ## (for debugging)
+    #   shell: bash
+    #   run: |
+    #     # display coverage files (per `grcov`)
+    #     grcov . --output-type files | sort --unique
     # - name: "`grcov` ~ configure + fixups" ## note: fixups, when needed, must be done *after* testing so that coverage files exist for renaming
     #   shell: bash
     #   run: |
@@ -525,6 +525,7 @@ jobs:
     #     echo "- \"build.rs\"" >> "${GRCOV_CONFIG_FILE}"
     #     echo "- \"/*\"" >> "${GRCOV_CONFIG_FILE}"
     #     echo "- \"[a-zA-Z]:/*\"" >> "${GRCOV_CONFIG_FILE}"
+    #     echo "excl-br-line: \"^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()\"" >> "${GRCOV_CONFIG_FILE}"
     #     cat "${GRCOV_CONFIG_FILE}"
     #     # ## 'actions-rs/grcov@v0.1' expects coverage files (*.gc*) to be prefixed with the crate name (using '_' in place of '-')
     #     # ## * uutils workspace packages
@@ -542,10 +543,13 @@ jobs:
         # generate coverage data
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
-        GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"'
-        GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"'
+        # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)
+        # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
         mkdir -p "${COVERAGE_REPORT_DIR}"
-        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} ${GRCOV_EXCLUDE_OPTION}
+        # display coverage files
+        grcov . --output-type files --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        # generate coverage report
+        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo ::set-output name=report::${COVERAGE_REPORT_FILE}
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v1
