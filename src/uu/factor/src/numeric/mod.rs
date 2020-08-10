@@ -9,6 +9,7 @@ mod gcd;
 pub use gcd::gcd;
 
 pub(crate) mod traits;
+use traits::{DoubleInt, Int, OverflowingAdd};
 
 mod modular_inverse;
 pub(crate) use modular_inverse::modular_inverse;
