@@ -41,7 +41,10 @@ mod test {
     #[test]
     fn symbolic_modes() {
         assert_eq!(super::parse_mode(Some("u+x".to_owned())).unwrap(), 0o766);
-        assert_eq!(super::parse_mode(Some("+x".to_owned())).unwrap(), if !is_wsl() { 0o777 } else {0o776});
+        assert_eq!(
+            super::parse_mode(Some("+x".to_owned())).unwrap(),
+            if !is_wsl() { 0o777 } else { 0o776 }
+        );
         assert_eq!(super::parse_mode(Some("a-w".to_owned())).unwrap(), 0o444);
         assert_eq!(super::parse_mode(Some("g-r".to_owned())).unwrap(), 0o626);
     }
