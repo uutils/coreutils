@@ -508,34 +508,6 @@ jobs:
         crate: grcov
         version: latest
         use-tool-cache: true
-    # - name: "`grcov` ~ display coverage files" ## (for debugging)
-    #   shell: bash
-    #   run: |
-    #     # display coverage files (per `grcov`)
-    #     grcov . --output-type files | sort --unique
-    # - name: "`grcov` ~ configure + fixups" ## note: fixups, when needed, must be done *after* testing so that coverage files exist for renaming
-    #   shell: bash
-    #   run: |
-    #     # create `grcov` configuration file
-    #     GRCOV_CONFIG_DIR="${GITHUB_WORKSPACE}/.github/actions-rs"
-    #     mkdir -p "${GRCOV_CONFIG_DIR}"
-    #     GRCOV_CONFIG_FILE="${GRCOV_CONFIG_DIR}/grcov.yml"
-    #     echo "branch: true" >> "${GRCOV_CONFIG_FILE}"
-    #     echo "ignore:" >> "${GRCOV_CONFIG_FILE}"
-    #     echo "- \"build.rs\"" >> "${GRCOV_CONFIG_FILE}"
-    #     echo "- \"/*\"" >> "${GRCOV_CONFIG_FILE}"
-    #     echo "- \"[a-zA-Z]:/*\"" >> "${GRCOV_CONFIG_FILE}"
-    #     echo "excl-br-line: \"^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()\"" >> "${GRCOV_CONFIG_FILE}"
-    #     cat "${GRCOV_CONFIG_FILE}"
-    #     # ## 'actions-rs/grcov@v0.1' expects coverage files (*.gc*) to be prefixed with the crate name (using '_' in place of '-')
-    #     # ## * uutils workspace packages
-    #     # prefix="uu_"
-    #     # for f in "target/debug/deps/uu_"*-*.gc* ; do to="${f/uu_/${PROJECT_NAME}-uu_}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
-    #     # ## * tests
-    #     # for f in "target/debug/deps/tests"-*.gc* ; do to="${f/tests/${PROJECT_NAME}-tests}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
-    # - name: Generate coverage data (via `grcov`)
-    #   id: coverage
-    #   uses: actions-rs/grcov@v0.1
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
