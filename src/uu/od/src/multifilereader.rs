@@ -126,7 +126,7 @@ impl<'b> HasError for MultifileReader<'b> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockstream::*;
+    use crate::mockstream::*;
     use std::io::{Cursor, ErrorKind, Read};
 
     #[test]

@@ -337,7 +337,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 pub fn parse_format_flags_str(
     args_str: &Vec<&'static str>,
 ) -> Result<Vec<FormatterItemInfo>, String> {
-    let args = args_str.iter().map(|s| s.to_string()).collect();
+    let args: Vec<String> = args_str.iter().map(|s| s.to_string()).collect();
     match parse_format_flags(&args) {
         Err(e) => Err(e),
         Ok(v) => {

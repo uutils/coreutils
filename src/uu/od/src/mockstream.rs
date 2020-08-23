@@ -1,6 +1,5 @@
 // https://github.com/lazy-bitfield/rust-mockstream/pull/2
 
-use std::error::Error as errorError;
 use std::io::{Cursor, Error, ErrorKind, Read, Result};
 
 /// `FailingMockStream` mocks a stream which will fail upon read or write
@@ -87,7 +86,7 @@ fn test_failing_mock_stream_read() {
     let mut v = [0; 4];
     let error = s.read(v.as_mut()).unwrap_err();
     assert_eq!(error.kind(), ErrorKind::BrokenPipe);
-    assert_eq!(error.description(), "The dog ate the ethernet cable");
+    assert_eq!(error.to_string(), "The dog ate the ethernet cable");
     // after a single error, it will return Ok(0)
     assert_eq!(s.read(v.as_mut()).unwrap(), 0);
 }
