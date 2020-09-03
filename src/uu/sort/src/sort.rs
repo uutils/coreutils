@@ -311,7 +311,7 @@ With no FILE, or when FILE is -, read standard input.",
                 Some(_) => {
                     crash!(
                         1,
-                        "Invalid options\n{}",
+                        "Conflicting options\n{}",
                         "--head and --tail cannot be both specified"
                     );
                 }
