@@ -390,19 +390,21 @@ fn head(files: Vec<String>, settings: &Settings) -> i32 {
             }
         }
     }
-    let mut revlines = Vec::new();
+    // Extract the lines from the heap, in their order,
+    // and use print_sorted() to output them.
+    let mut lines_to_output = Vec::new();
     while !lines.heap.is_empty() {
         match lines.heap.pop() {
             None => {}
             Some(line) => {
-                revlines.push(line.current_line);
+                lines_to_output.push(line.current_line);
             }
         }
     }
     if !settings.is_tail {
-        revlines.reverse();
+        lines_to_output.reverse();
     }
-    print_sorted(revlines.iter(), &settings.outfile);
+    print_sorted(lines_to_output.iter(), &settings.outfile);
     0
 }
 
