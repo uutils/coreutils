@@ -76,8 +76,7 @@ impl<R: HasError> HasError for PartialReader<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockstream::*;
-    use std::error::Error;
+    use crate::mockstream::*;
     use std::io::{Cursor, ErrorKind, Read};
 
     #[test]
@@ -97,7 +96,7 @@ mod tests {
 
         let error = sut.read(v.as_mut()).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::PermissionDenied);
-        assert_eq!(error.description(), "No access");
+        assert_eq!(error.to_string(), "No access");
     }
 
     #[test]
@@ -126,7 +125,7 @@ mod tests {
 
         let error = sut.read(v.as_mut()).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::PermissionDenied);
-        assert_eq!(error.description(), "No access");
+        assert_eq!(error.to_string(), "No access");
     }
 
     #[test]
@@ -173,7 +172,7 @@ mod tests {
 
         let error = sut.read(v.as_mut()).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::PermissionDenied);
-        assert_eq!(error.description(), "No access");
+        assert_eq!(error.to_string(), "No access");
     }
 
     #[test]

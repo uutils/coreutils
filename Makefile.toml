@@ -208,6 +208,34 @@ dependencies = [
 	"core::post-test",
 ]
 
+[tasks.test-util]
+description = "## Test (individual) utilities; usage: `cargo make (test-util | test-uutil) [UTIL_NAME...]`"
+category = "[project]"
+dependencies = [
+	"action-test-utils",
+]
+
+[tasks.test-utils]
+description = "hidden plural-form alias for 'test-util'"
+category = "[project]"
+dependencies = [
+	"test-util",
+]
+
+[tasks.test-uutil]
+description = "hidden alias for 'test-util'"
+category = "[project]"
+dependencies = [
+	"test-util",
+]
+
+[tasks.test-uutils]
+description = "hidden alias for 'test-util'"
+category = "[project]"
+dependencies = [
+	"test-util",
+]
+
 [tasks.uninstall]
 description = "## Remove project binary (from $HOME/.cargo/bin)"
 category = "[project]"
@@ -232,7 +260,11 @@ dependencies = [
 ]
 
 [tasks.uutil]
-alias = "utils"
+description = "hidden alias for 'util'"
+category = "[project]"
+dependencies = [
+	"util",
+]
 
 [tasks.uutils]
 description = "hidden plural-form alias for 'util'"
@@ -350,6 +382,15 @@ args = ["fmt", "--", "--check"]
 description = "`codespell` spellcheck repository"
 command = "codespell" # (from `pip install codespell`)
 args = [".", "--skip=*/.git,./target,./tests/fixtures", "--ignore-words-list=mut,od"]
+
+[tasks.action-test-utils]
+description = "Build individual utilities"
+dependencies = [
+	"action-determine-utils",
+]
+command = "cargo"
+# args = ["build", "@@remove-empty(CARGO_MAKE_TASK_BUILD_UTILS_ARGS)" ]
+args = ["test", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )" ]
 
 [tasks.action-test_quiet]
 description = "Test (in `--quiet` mode)"

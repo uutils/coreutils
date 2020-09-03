@@ -1,30 +1,30 @@
 name: CICD
 
 # spell-checker:ignore (acronyms) CICD MSVC musl
-# spell-checker:ignore (env/flags) Ccodegen Coverflow RUSTFLAGS
+# spell-checker:ignore (env/flags) Ccodegen Coverflow Cpanic RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend uutils
+# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile uutils
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
   RUST_MIN_SRV: "1.32.0" ## v1.32.0 - minimum version for half, tempfile, etc
-  RUST_COV_SRV: "2020-04-29" ## (~v1.45.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
+  RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
 
 jobs:
-  style:
-    name: Style
+  code_format:
+    name: Style/format
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest   , features: unix }
+          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v1
     - name: Initialize workflow variables
@@ -58,16 +58,16 @@ jobs:
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
 
-  clippy:
-    name: Clippy
+  code_warnings:
+    name: Style/warnings
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest   , features: unix }
-          - { os: macos-latest    , features: macos }
-          - { os: windows-latest  , features: windows }
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v1
     - name: Initialize workflow variables
@@ -309,6 +309,16 @@ jobs:
         target: ${{ matrix.job.target }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: Initialize toolchain-dependent workflow variables
+      id: dep_vars
+      shell: bash
+      run: |
+        ## Dependent VARs setup
+        # * determine sub-crate utility list
+        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
+        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
+        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
     - name: Install `cargo-tree` # for dependency information
       uses: actions-rs/install@v0.1
       with:
@@ -352,6 +362,12 @@ jobs:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+    - name: Test individual utilities
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
+        command: test
+        args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
     - name: Archive executable artifacts
       uses: actions/upload-artifact@v2
       with:
@@ -454,6 +470,16 @@ jobs:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: Initialize toolchain-dependent workflow variables
+      id: dep_vars
+      shell: bash
+      run: |
+        ## Dependent VARs setup
+        # * determine sub-crate utility list
+        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
+        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
+        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -462,7 +488,19 @@ jobs:
       env:
         CARGO_INCREMENTAL: '0'
         RUSTC_WRAPPER: ''
-        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads'
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        RUSTDOCFLAGS: '-Cpanic=abort'
+        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+    - name: Test individual utilities
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+      env:
+        CARGO_INCREMENTAL: '0'
+        RUSTC_WRAPPER: ''
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        RUSTDOCFLAGS: '-Cpanic=abort'
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: "`grcov` ~ install"
       uses: actions-rs/install@v0.1
@@ -470,33 +508,6 @@ jobs:
         crate: grcov
         version: latest
         use-tool-cache: true
-    - name: "`grcov` ~ display coverage files" ## (for debugging)
-      shell: bash
-      run: |
-        # display coverage files (per `grcov`)
-        grcov . --output-type files | sort --unique
-    - name: "`grcov` ~ configure + fixups" ## note: fixups, when needed, must be done *after* testing so that coverage files exist for renaming
-      shell: bash
-      run: |
-        # create `grcov` configuration file
-        GRCOV_CONFIG_DIR="${GITHUB_WORKSPACE}/.github/actions-rs"
-        mkdir -p "${GRCOV_CONFIG_DIR}"
-        GRCOV_CONFIG_FILE="${GRCOV_CONFIG_DIR}/grcov.yml"
-        echo "branch: true" >> "${GRCOV_CONFIG_FILE}"
-        echo "ignore:" >> "${GRCOV_CONFIG_FILE}"
-        echo "- \"build.rs\"" >> "${GRCOV_CONFIG_FILE}"
-        echo "- \"/*\"" >> "${GRCOV_CONFIG_FILE}"
-        echo "- \"[a-zA-Z]:/*\"" >> "${GRCOV_CONFIG_FILE}"
-        cat "${GRCOV_CONFIG_FILE}"
-        # ## 'actions-rs/grcov@v0.1' expects coverage files (*.gc*) to be prefixed with the crate name (using '_' in place of '-')
-        # ## * uutils workspace packages
-        # prefix="uu_"
-        # for f in "target/debug/deps/uu_"*-*.gc* ; do to="${f/uu_/${PROJECT_NAME}-uu_}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
-        # ## * tests
-        # for f in "target/debug/deps/tests"-*.gc* ; do to="${f/tests/${PROJECT_NAME}-tests}" ; mv "$f" "$to" ; echo "mv $f $to" ; done
-    # - name: Generate coverage data (via `grcov`)
-    #   id: coverage
-    #   uses: actions-rs/grcov@v0.1
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
@@ -504,8 +515,13 @@ jobs:
         # generate coverage data
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
+        # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)
+        # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
         mkdir -p "${COVERAGE_REPORT_DIR}"
-        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch ${GRCOV_IGNORE_OPTION} --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"
+        # display coverage files
+        grcov . --output-type files --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        # generate coverage report
+        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo ::set-output name=report::${COVERAGE_REPORT_FILE}
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v1

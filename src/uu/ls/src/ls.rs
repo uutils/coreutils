@@ -271,14 +271,6 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     }
 }
 
-fn max(lhs: usize, rhs: usize) -> usize {
-    if lhs > rhs {
-        lhs
-    } else {
-        rhs
-    }
-}
-
 fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
@@ -350,8 +342,8 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Mat
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
             let (links, size) = display_dir_entry_size(item, options);
-            max_links = max(links, max_links);
-            max_size = max(size, max_size);
+            max_links = links.max(max_links);
+            max_size = size.max(max_size);
         }
         for item in items {
             display_item_long(item, strip, max_links, max_size, options);
