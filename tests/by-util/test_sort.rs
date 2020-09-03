@@ -31,6 +31,16 @@ fn test_numeric_unsorted_ints() {
 }
 
 #[test]
+fn test_numeric_unsorted_ints_with_larger_than_input_head() {
+    test_head_helper("numeric_unsorted_ints", "-n", "--head", "20000");
+}
+
+#[test]
+fn test_numeric_unsorted_ints_with_larger_than_input_tail() {
+    test_head_helper("numeric_unsorted_ints", "-n", "--tail", "20000");
+}
+
+#[test]
 fn test_numeric_unsorted_head_ints() {
     test_head_helper("numeric_unsorted_head_ints", "-n", "--head", "5");
 }
