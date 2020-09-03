@@ -358,7 +358,7 @@ With no FILE, or when FILE is -, read standard input.",
     exec(files, &settings)
 }
 
-fn exec_head(files: Vec<String>, settings: &Settings) -> i32 {
+fn head(files: Vec<String>, settings: &Settings) -> i32 {
     let mut lines = HeadHeap::new(&settings);
     let mut file_merger = FileMerger::new(&settings);
 
@@ -408,7 +408,7 @@ fn exec_head(files: Vec<String>, settings: &Settings) -> i32 {
 
 fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     if is_head_mode(settings) {
-        return exec_head(files, settings);
+        return head(files, settings);
     }
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
