@@ -40,6 +40,14 @@ fn test_numeric_unsorted_tail_ints() {
     test_head_helper("numeric_unsorted_tail_ints", "-n", "--tail", "5");
 }
 
+fn expect_error(input: Vec<&str>) {
+    assert!(new_ucmd!().args(&input).fails().no_stdout().stderr.len() > 0);
+}
+
+#[test]
+fn test_conflicting_options() {
+    expect_error(vec!["--head", "5", "--tail", "5"]);
+}
 #[test]
 fn test_human_block_sizes() {
     test_helper("human_block_sizes", "-h");
