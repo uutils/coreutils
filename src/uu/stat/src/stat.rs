@@ -485,7 +485,8 @@ impl Stater {
                 .filter_map(|line| line.split_whitespace().nth(1).map(ToOwned::to_owned))
                 .collect::<Vec<String>>();
             // Reverse sort. The longer comes first.
-            mount_list.sort_by(|a, b| b.cmp(a));
+            mount_list.sort();
+            mount_list.reverse();
             Some(mount_list)
         };
 
