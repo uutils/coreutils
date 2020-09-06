@@ -16,7 +16,7 @@ extern crate time;
 extern crate uucore;
 
 use filetime::*;
-use std::fs::{self, File};
+use std::fs::{self};
 use std::io::Error;
 use std::path::Path;
 
@@ -148,7 +148,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 continue;
             }
 
-            if let Err(e) = File::create(path) {
+            if let Err(e) = std::fs::OpenOptions::new().write(true).create(true).open(path) {
                 show_warning!("cannot touch '{}': {}", path, e);
                 continue;
             };
