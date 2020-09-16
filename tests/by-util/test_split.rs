@@ -145,3 +145,15 @@ fn test_split_str_prefixed_chunks_by_lines() {
     assert_eq!(glob.count(), 10);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
+
+#[test]
+fn test_split_additional_suffix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_additional_suffix";
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]].txt$");
+    RandomFile::new(&at, name).add_lines(2000);
+    ucmd.args(&["--additional-suffix", ".txt", name]).succeeds();
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read(name).into_bytes());
+}
+

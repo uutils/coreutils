@@ -43,6 +43,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         "numeric-suffixes",
         "use numeric suffixes instead of alphabetic",
     );
+    opts.optopt(
+        "",
+        "additional-suffix",
+        "additional suffix to append to output file names",
+        "SUFFIX",
+    );
     opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
     opts.optflag(
         "",
@@ -86,6 +92,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         prefix: "".to_owned(),
         numeric_suffix: false,
         suffix_length: 0,
+        additional_suffix: "".to_owned(), 
         input: "".to_owned(),
         strategy: "".to_owned(),
         strategy_param: "".to_owned(),
@@ -100,6 +107,12 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
             Err(e) => crash!(1, "cannot parse num: {}", e),
         },
         None => 2,
+    };
+
+    settings.additional_suffix = if matches.opt_present("additional-suffix") {
+        matches.opt_str("additional-suffix").unwrap()
+    } else {
+        "".to_owned()
     };
 
     settings.verbose = matches.opt_present("verbose");
@@ -134,6 +147,7 @@ struct Settings {
     prefix: String,
     numeric_suffix: bool,
     suffix_length: usize,
+    additional_suffix: String,
     input: String,
     strategy: String,
     strategy_param: String,
@@ -316,11 +330,14 @@ fn split(settings: &Settings) -> i32 {
             let mut filename = settings.prefix.clone();
             filename.push_str(
                 if settings.numeric_suffix {
-                    num_prefix(fileno, settings.suffix_length)
+                    num_prefix(fileno, settings.suffix_length) 
                 } else {
                     str_prefix(fileno, settings.suffix_length)
-                }
-                .as_ref(),
+                }.as_ref(),
+            );
+            filename.push_str(
+                settings.additional_suffix
+                .as_ref()
             );
 
             if fileno != 0 {
