@@ -330,7 +330,7 @@ fn split(settings: &Settings) -> i32 {
             let mut filename = settings.prefix.clone();
             filename.push_str(
                 if settings.numeric_suffix {
-                    num_prefix(fileno, settings.suffix_length) 
+                    num_prefix(fileno, settings.suffix_length)
                 } else {
                     str_prefix(fileno, settings.suffix_length)
                 }.as_ref(),
