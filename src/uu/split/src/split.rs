@@ -92,7 +92,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         prefix: "".to_owned(),
         numeric_suffix: false,
         suffix_length: 0,
-        additional_suffix: "".to_owned(), 
+        additional_suffix: "".to_owned(),
         input: "".to_owned(),
         strategy: "".to_owned(),
         strategy_param: "".to_owned(),
@@ -333,12 +333,10 @@ fn split(settings: &Settings) -> i32 {
                     num_prefix(fileno, settings.suffix_length)
                 } else {
                     str_prefix(fileno, settings.suffix_length)
-                }.as_ref(),
+                }
+                .as_ref(),
             );
-            filename.push_str(
-                settings.additional_suffix
-                .as_ref()
-            );
+            filename.push_str(settings.additional_suffix.as_ref());
 
             if fileno != 0 {
                 crash_if_err!(1, writer.flush());

@@ -156,4 +156,3 @@ fn test_split_additional_suffix() {
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
-
