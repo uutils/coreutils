@@ -7,27 +7,74 @@
 
 extern crate rand;
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
 use std::fmt;
 
 use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors {
-    f: BTreeMap<u64, u8>,
+type Exponent = u8;
+
+#[derive(Clone, Debug)]
+struct Decomposition(Vec<(u64, Exponent)>);
+
+impl Decomposition {
+    fn one() -> Decomposition {
+        Decomposition(Vec::new())
+    }
+
+    fn add(&mut self, factor: u64, exp: Exponent) {
+        debug_assert!(exp > 0);
+
+        if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
+            *e += exp;
+        } else {
+            self.0.push((factor, exp))
+        }
+    }
+
+    #[cfg(test)]
+    fn product(&self) -> u64 {
+        self.0
+            .iter()
+            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
+    }
+
+    fn get(&self, p: u64) -> Option<&(u64, u8)> {
+        self.0.iter().find(|(q, _)| *q == p)
+    }
 }
+
+impl PartialEq for Decomposition {
+    fn eq(&self, other: &Decomposition) -> bool {
+        for p in &self.0 {
+            if other.get(p.0) != Some(p) {
+                return false;
+            }
+        }
+
+        for p in &other.0 {
+            if self.get(p.0) != Some(p) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+impl Eq for Decomposition {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Factors(RefCell<Decomposition>);
 
 impl Factors {
     pub fn one() -> Factors {
-        Factors { f: BTreeMap::new() }
+        Factors(RefCell::new(Decomposition::one()))
     }
 
-    pub fn add(&mut self, prime: u64, exp: u8) {
+    pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
-        debug_assert!(exp > 0);
-        let n = *self.f.get(&prime).unwrap_or(&0);
-        self.f.insert(prime, exp + n);
+        self.0.borrow_mut().add(prime, exp)
     }
 
     pub fn push(&mut self, prime: u64) {
@@ -36,15 +83,16 @@ impl Factors {
 
     #[cfg(test)]
     fn product(&self) -> u64 {
-        self.f
-            .iter()
-            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
+        self.0.borrow().product()
     }
 }
 
 impl fmt::Display for Factors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (p, exp) in self.f.iter() {
+        let v = &mut (self.0).borrow_mut().0;
+        v.sort_unstable();
+
+        for (p, exp) in v.iter() {
             for _ in 0..*exp {
                 write!(f, " {}", p)?
             }
@@ -95,7 +143,7 @@ pub fn factor(mut n: u64) -> Factors {
 
     let z = n.trailing_zeros();
     if z > 0 {
-        factors.add(2, z as u8);
+        factors.add(2, z as Exponent);
         n >>= z;
     }
 
@@ -150,7 +198,8 @@ mod tests {
         }
 
         fn recombines_factors(f: Factors) -> bool {
-            factor(f.product()) == f
+            assert_eq!(factor(f.product()), f);
+            true
         }
     }
 }
