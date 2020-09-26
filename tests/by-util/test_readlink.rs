@@ -38,7 +38,7 @@ fn test_long_redirection_to_current_dir() {
     // Create a 256-character path to current directory
     let dir = path_concat!(".", ..128);
     let actual = ucmd.arg("-n").arg("-m").arg(dir).run().stdout;
-    let expect = at.root_dir_resolved();
+    let expect = at.root_dir_resolved() + "\n";
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
     assert_eq!(actual, expect);
@@ -49,7 +49,7 @@ fn test_long_redirection_to_root() {
     // Create a 255-character path to root
     let dir = path_concat!("..", ..85);
     let actual = new_ucmd!().arg("-n").arg("-m").arg(dir).run().stdout;
-    let expect = get_root_path();
+    let expect = get_root_path().to_owned() + "\n";
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
     assert_eq!(actual, expect);
