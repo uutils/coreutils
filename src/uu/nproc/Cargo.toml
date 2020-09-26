@@ -15,7 +15,6 @@ edition = "2018"
 path = "src/nproc.rs"
 
 [dependencies]
-getopts = "0.2.18"
 libc = "0.2.42"
 num_cpus = "1.10"
 clap = "2.33"
