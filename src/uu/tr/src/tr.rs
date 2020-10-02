@@ -218,16 +218,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    if matches.free.is_empty() {
-        usage(&opts);
-        return 1;
-    }
-
     let dflag = matches.opt_present("d");
     let cflag = matches.opts_present(&["c".to_owned(), "C".to_owned()]);
     let sflag = matches.opt_present("s");
     let tflag = matches.opt_present("t");
     let sets = matches.free;
+
+    if sets.is_empty() {
+        show_error!(
+            "missing operand\nTry `{} --help` for more information.",
+            NAME
+        );
+        return 1;
+    }
+
+    if !(dflag || sflag) && sets.len() < 2 {
+        show_error!(
+            "missing operand after ‘{}’\nTry `{} --help` for more information.",
+            sets[0],
+            NAME
+        );
+        return 1;
+    }
 
     if cflag && !dflag && !sflag {
         show_error!("-c is only supported with -d or -s");
