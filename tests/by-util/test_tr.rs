@@ -116,3 +116,23 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .run()
         .stdout_is("xycde");
 }
+
+#[test]
+fn missing_args_fails() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.run();
+
+    assert!(!result.success);
+    assert!(result.stderr.contains("missing operand"));
+}
+
+#[test]
+fn missing_required_second_arg_fails() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["foo"])
+        .run();
+
+    assert!(!result.success);
+    assert!(result.stderr.contains("missing operand after"));
+}
