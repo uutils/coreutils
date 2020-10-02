@@ -129,9 +129,7 @@ fn missing_args_fails() {
 #[test]
 fn missing_required_second_arg_fails() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .args(&["foo"])
-        .run();
+    let result = ucmd.args(&["foo"]).run();
 
     assert!(!result.success);
     assert!(result.stderr.contains("missing operand after"));
