@@ -140,10 +140,10 @@ pub fn factor(num: u64) -> Factors {
     }
 
     let mut n = num;
-    let z = num.trailing_zeros();
-    if z > 0 {
-        factors.add(2, z as Exponent);
-        n >>= z;
+    let n_zeros = num.trailing_zeros();
+    if n_zeros > 0 {
+        factors.add(2, n_zeros as Exponent);
+        n >>= n_zeros;
     }
     debug_assert_eq!(num, n * factors.product());
 
@@ -165,22 +165,22 @@ pub fn factor(num: u64) -> Factors {
         // Check correctness invariant
         debug_assert_eq!(num, factors.product() * dec.product());
 
-        let (f, e) = dec.pop().unwrap();
+        let (factor, exp) = dec.pop().unwrap();
 
-        if let Some(d) = find_factor(f) {
+        if let Some(divisor) = find_factor(factor) {
             let mut gcd_queue = Decomposition::one();
-            gcd_queue.add(d, e);
-            gcd_queue.add(f / d, e);
+            gcd_queue.add(divisor, exp);
+            gcd_queue.add(factor / divisor, exp);
 
             let mut non_trivial_gcd = true;
             while non_trivial_gcd {
-                debug_assert_eq!(f, gcd_queue.product());
+                debug_assert_eq!(factor, gcd_queue.product());
 
                 let mut tmp = Decomposition::one();
                 non_trivial_gcd = false;
                 for i in 0..gcd_queue.0.len() - 1 {
-                    let (mut a, e_a) = gcd_queue.0[i];
-                    let (mut b, e_b) = gcd_queue.0[i + 1];
+                    let (mut a, exp_a) = gcd_queue.0[i];
+                    let (mut b, exp_b) = gcd_queue.0[i + 1];
 
                     if a == 1 {
                         continue;
@@ -193,26 +193,26 @@ pub fn factor(num: u64) -> Factors {
                         b /= g;
                     }
                     if a != 1 {
-                        tmp.add(a, e_a);
+                        tmp.add(a, exp_a);
                     }
                     if g != 1 {
-                        tmp.add(g, e_a + e_b);
+                        tmp.add(g, exp_a + exp_b);
                     }
 
                     if i + 1 != gcd_queue.0.len() - 1 {
                         gcd_queue.0[i + 1].0 = b;
                     } else if b != 1 {
-                        tmp.add(b, e_b);
+                        tmp.add(b, exp_b);
                     }
                 }
                 gcd_queue = tmp;
             }
 
-            debug_assert_eq!(f, gcd_queue.product());
+            debug_assert_eq!(factor, gcd_queue.product());
             dec.0.extend(gcd_queue.0);
         } else {
-            // f is prime
-            factors.add(f, e);
+            // factor is prime
+            factors.add(factor, exp);
         }
     }
 
