@@ -6,6 +6,7 @@
 // that was distributed with this source code.
 
 use crate::common::util::*;
+use std::time::SystemTime;
 
 #[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
@@ -13,7 +14,7 @@ use self::sieve::Sieve;
 
 extern crate rand;
 use self::rand::distributions::{Distribution, Uniform};
-use self::rand::{rngs::SmallRng, FromEntropy, Rng};
+use self::rand::{rngs::SmallRng, Rng, SeedableRng};
 
 const NUM_PRIMES: usize = 10000;
 const LOG_PRIMES: f64 = 14.0; // ceil(log2(NUM_PRIMES))
@@ -24,8 +25,13 @@ const NUM_TESTS: usize = 100;
 fn test_random() {
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
-    let mut rng = SmallRng::from_entropy();
-    println!("(seed) rng={:?}", rng);
+    let rng_seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    println!("rng_seed={:?}", rng_seed);
+
+    let mut rng = SmallRng::seed_from_u64(rng_seed);
     let mut rand_gt = move |min: u64| {
         let mut product = 1u64;
         let mut factors = Vec::new();
@@ -73,8 +79,12 @@ fn test_random() {
 
 #[test]
 fn test_random_big() {
-    let mut rng = SmallRng::from_entropy();
-    println!("(seed) rng={:?}", rng);
+    let rng_seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    println!("rng_seed={:?}", rng_seed);
+    let mut rng = SmallRng::seed_from_u64(rng_seed);
     let bitrange_1 = Uniform::new(14usize, 51);
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
@@ -161,6 +171,8 @@ fn test_big_primes() {
 }
 
 fn run(instring: &[u8], outstring: &[u8]) {
+    println!("STDIN='{}'", String::from_utf8_lossy(instring));
+    println!("STDOUT(expected)='{}'", String::from_utf8_lossy(outstring));
     // now run factor
     new_ucmd!()
         .pipe_in(instring)
