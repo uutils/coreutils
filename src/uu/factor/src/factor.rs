@@ -171,19 +171,19 @@ pub fn factor(num: u64) -> Factors {
             let mut gcd_queue = Decomposition::one();
 
             let quotient = factor / divisor;
-            if quotient == divisor {
+            let mut trivial_gcd = quotient == divisor;
+            if trivial_gcd {
                 gcd_queue.add(divisor, exp + 1);
             } else {
                 gcd_queue.add(divisor, exp);
                 gcd_queue.add(quotient, exp);
             }
 
-            let mut non_trivial_gcd = quotient != divisor;
-            while non_trivial_gcd {
+            while !trivial_gcd {
                 debug_assert_eq!(factor, gcd_queue.product());
 
                 let mut tmp = Decomposition::one();
-                non_trivial_gcd = false;
+                trivial_gcd = true;
                 for i in 0..gcd_queue.0.len() - 1 {
                     let (mut a, exp_a) = gcd_queue.0[i];
                     let (mut b, exp_b) = gcd_queue.0[i + 1];
@@ -194,7 +194,7 @@ pub fn factor(num: u64) -> Factors {
 
                     let g = gcd(a, b);
                     if g != 1 {
-                        non_trivial_gcd = true;
+                        trivial_gcd = false;
                         a /= g;
                         b /= g;
                     }
