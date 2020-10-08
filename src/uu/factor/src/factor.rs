@@ -169,10 +169,16 @@ pub fn factor(num: u64) -> Factors {
 
         if let Some(divisor) = find_factor(factor) {
             let mut gcd_queue = Decomposition::one();
-            gcd_queue.add(divisor, exp);
-            gcd_queue.add(factor / divisor, exp);
 
-            let mut non_trivial_gcd = true;
+            let quotient = factor / divisor;
+            if quotient == divisor {
+                gcd_queue.add(divisor, exp + 1);
+            } else {
+                gcd_queue.add(divisor, exp);
+                gcd_queue.add(quotient, exp);
+            }
+
+            let mut non_trivial_gcd = quotient != divisor;
             while non_trivial_gcd {
                 debug_assert_eq!(factor, gcd_queue.product());
 
