@@ -225,9 +225,31 @@ mod tests {
     use quickcheck::quickcheck;
 
     #[test]
+    fn factor_correctly_recombines_prior_test_failures() {
+        let prior_failures = [
+            // * integers with duplicate factors (ie, N.pow(M))
+            4566769_u64, // == 2137.pow(2)
+            2044854919485649_u64,
+            18446739546814299361_u64,
+            18446738440860217487_u64,
+            18446736729316206481_u64,
+        ];
+        assert!(prior_failures.iter().all(|i| factor(*i).product() == *i));
+    }
+
+    #[test]
     fn factor_recombines_small() {
         assert!((1..10_000)
             .map(|i| 2 * i + 1)
+            .all(|i| factor(i).product() == i));
+    }
+
+    #[test]
+    fn factor_recombines_small_squares() {
+        // factor(18446736729316206481) == 4294966441 ** 2 ; causes debug_assert fault for repeated decomposition factor in add()
+        // ToDO: explain/combine with factor_18446736729316206481 and factor_18446739546814299361 tests
+        assert!((1..10_000)
+            .map(|i| (2 * i + 1) * (2 * i + 1))
             .all(|i| factor(i).product() == i));
     }
 
