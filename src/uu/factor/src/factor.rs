@@ -20,9 +20,9 @@ type Exponent = u8;
 struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
 
 // The number of factors to inline directly into a `Decomposition` object.
-// As a consequence of the Erdős–Kac theorem, the average number of prime
-//  factors of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use that value.
-const NUM_FACTORS_INLINE: usize = 4;
+// As a consequence of the Erdős–Kac theorem, the average number of prime factors
+// of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use a slightly higher value.
+const NUM_FACTORS_INLINE: usize = 5;
 
 impl Decomposition {
     fn one() -> Decomposition {
