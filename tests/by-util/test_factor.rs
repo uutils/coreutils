@@ -22,6 +22,27 @@ const LOG_PRIMES: f64 = 14.0; // ceil(log2(NUM_PRIMES))
 const NUM_TESTS: usize = 100;
 
 #[test]
+fn test_first_100000_integers() {
+    extern crate sha1;
+
+    let n_integers = 100_000;
+    let mut instring = String::new();
+    for i in 0..=n_integers {
+        instring.push_str(&(format!("{} ", i))[..]);
+    }
+
+    println!("STDIN='{}'", instring);
+    let result = new_ucmd!().pipe_in(instring.as_bytes()).run();
+    let stdout = result.stdout;
+
+    assert!(result.success);
+
+    // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
+    let hash_check = sha1::Sha1::from(stdout.as_bytes()).hexdigest();
+    assert_eq!(hash_check, "4ed2d8403934fa1c76fe4b84c5d4b8850299c359");
+}
+
+#[test]
 fn test_random() {
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
