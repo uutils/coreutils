@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn factor_recombines_strong_pseudoprime() {
         // This is a strong pseudoprime (wrt. miller_rabin::BASIS)
-        //  and triggered a bug in rho::factor's codepath handling
+        //  and triggered a bug in rho::factor's code path handling
         //  miller_rabbin::Result::Composite
         let pseudoprime = 17179869183;
         for _ in 0..20 {
@@ -300,7 +300,7 @@ impl quickcheck::Arbitrary for Factors {
         let mut n = u64::MAX;
 
         // Adam Kalai's algorithm for generating uniformly-distributed
-        // integers and their factorisation.
+        // integers and their factorization.
         //
         // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
         'attempt: loop {
