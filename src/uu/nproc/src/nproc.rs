@@ -8,7 +8,6 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
 extern crate clap;
-extern crate getopts;
 extern crate num_cpus;
 
 #[cfg(unix)]
@@ -48,13 +47,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_ALL)
                 .short("")
-                .long("all")
+                .long(OPT_ALL)
                 .help("print the number of cores available to the system"),
         )
         .arg(
             Arg::with_name(OPT_IGNORE)
                 .short("")
-                .long("ignore")
+                .long(OPT_IGNORE)
                 .takes_value(true)
                 .help("ignore up to N cores"),
         )
