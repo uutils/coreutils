@@ -69,10 +69,7 @@ struct FilenameGenerator {
 
 impl FilenameGenerator {
     fn new(name_len: usize) -> FilenameGenerator {
-        let mut indices: Vec<usize> = Vec::new();
-        for _ in 0..name_len {
-            indices.push(0);
-        }
+        let indices: Vec<usize> = vec![0; name_len];
         FilenameGenerator {
             name_len,
             nameset_indices: RefCell::new(indices),
