@@ -182,8 +182,16 @@ fn get_config(matches: &Matches) -> Config {
     config
 }
 
-fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<String>, usize)> {
-    let mut file_map: HashMap<String, (Vec<String>, usize)> = HashMap::new();
+struct FileContent {
+    lines: Vec<String>,
+    chars_lines: Vec<Vec<char>>,
+    offset: usize,
+}
+
+type FileMap = HashMap<String, FileContent>;
+
+fn read_input(input_files: &[String], config: &Config) -> FileMap {
+    let mut file_map: FileMap = HashMap::new();
     let mut files = Vec::new();
     if input_files.is_empty() {
         files.push("-");
@@ -194,7 +202,7 @@ fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<S
     } else {
         files.push(&input_files[0]);
     }
-    let mut lines_so_far: usize = 0;
+    let mut offset: usize = 0;
     for filename in files {
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
@@ -203,25 +211,33 @@ fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<S
             Box::new(file)
         });
         let lines: Vec<String> = reader.lines().map(|x| crash_if_err!(1, x)).collect();
+        let ws_reg = Regex::new(r"[\t\n\v\f\r]").unwrap();
+        let chars_lines: Vec<Vec<char>> = lines
+            .iter()
+            .map(|x| ws_reg.replace_all(x, " ").chars().collect())
+            .collect();
         let size = lines.len();
-        file_map.insert(filename.to_owned(), (lines, lines_so_far));
-        lines_so_far += size
+        file_map.insert(
+            filename.to_owned(),
+            FileContent {
+                lines,
+                chars_lines,
+                offset,
+            },
+        );
+        offset += size
     }
     file_map
 }
 
-fn create_word_set(
-    config: &Config,
-    filter: &WordFilter,
-    file_map: &HashMap<String, (Vec<String>, usize)>,
-) -> BTreeSet<WordRef> {
+fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
     let reg = Regex::new(&filter.word_regex).unwrap();
     let ref_reg = Regex::new(&config.context_regex).unwrap();
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map.iter() {
         let mut count: usize = 0;
-        let offs = lines.1;
-        for line in &lines.0 {
+        let offs = lines.offset;
+        for line in &lines.lines {
             // if -r, exclude reference from word set
             let (ref_beg, ref_end) = match ref_reg.find(line) {
                 Some(x) => (x.start(), x.end()),
@@ -316,57 +332,73 @@ fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
 }
 
 fn get_output_chunks(
-    all_before: &str,
+    all_before: &[char],
     keyword: &str,
-    all_after: &str,
+    all_after: &[char],
     config: &Config,
 ) -> (String, String, String, String) {
-    assert_eq!(all_before.trim(), all_before);
-    assert_eq!(keyword.trim(), keyword);
-    assert_eq!(all_after.trim(), all_after);
-    let mut head = String::new();
-    let mut before = String::new();
-    let mut after = String::new();
-    let mut tail = String::new();
-
-    let half_line_size = cmp::max(
-        (config.line_width / 2) as isize - (2 * config.trunc_str.len()) as isize,
+    let half_line_size = (config.line_width / 2) as usize;
+    let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
+    let max_after_size = cmp::max(
+        half_line_size as isize
+            - (2 * config.trunc_str.len()) as isize
+            - keyword.len() as isize
+            - 1,
         0,
     ) as usize;
-    let max_after_size = cmp::max(half_line_size as isize - keyword.len() as isize - 1, 0) as usize;
-    let max_before_size = half_line_size;
-    let all_before_vec: Vec<char> = all_before.chars().collect();
-    let all_after_vec: Vec<char> = all_after.chars().collect();
+
+    let mut head = String::with_capacity(half_line_size);
+    let mut before = String::with_capacity(half_line_size);
+    let mut after = String::with_capacity(half_line_size);
+    let mut tail = String::with_capacity(half_line_size);
 
     // get before
-    let mut bb_tmp = cmp::max(all_before.len() as isize - max_before_size as isize, 0) as usize;
-    bb_tmp = trim_broken_word_left(&all_before_vec, bb_tmp, all_before.len());
-    let (before_beg, before_end) = trim_idx(&all_before_vec, bb_tmp, all_before.len());
-    before.push_str(&all_before[before_beg..before_end]);
+    let (_, be) = trim_idx(all_before, 0, all_before.len());
+    let mut bb_tmp = cmp::max(be as isize - max_before_size as isize, 0) as usize;
+    bb_tmp = trim_broken_word_left(all_before, bb_tmp, be);
+    let (before_beg, before_end) = trim_idx(all_before, bb_tmp, be);
+    let before_str: String = all_before[before_beg..before_end].iter().collect();
+    before.push_str(&before_str);
     assert!(max_before_size >= before.len());
 
     // get after
     let mut ae_tmp = cmp::min(max_after_size, all_after.len());
-    ae_tmp = trim_broken_word_right(&all_after_vec, 0, ae_tmp);
-    let (after_beg, after_end) = trim_idx(&all_after_vec, 0, ae_tmp);
-    after.push_str(&all_after[after_beg..after_end]);
+    ae_tmp = trim_broken_word_right(all_after, 0, ae_tmp);
+    let (_, after_end) = trim_idx(all_after, 0, ae_tmp);
+    let after_str: String = all_after[0..after_end].iter().collect();
+    after.push_str(&after_str);
     assert!(max_after_size >= after.len());
 
     // get tail
-    let max_tail_size = max_before_size - before.len();
-    let (tb, _) = trim_idx(&all_after_vec, after_end, all_after.len());
-    let mut te_tmp = cmp::min(tb + max_tail_size, all_after.len());
-    te_tmp = trim_broken_word_right(&all_after_vec, tb, te_tmp);
-    let (tail_beg, tail_end) = trim_idx(&all_after_vec, tb, te_tmp);
-    tail.push_str(&all_after[tail_beg..tail_end]);
+    let max_tail_size = cmp::max(
+        max_before_size as isize - before.len() as isize - config.gap_size as isize,
+        0,
+    ) as usize;
+    let (tb, _) = trim_idx(all_after, after_end, all_after.len());
+    let mut te_tmp = cmp::min(all_after.len(), tb + max_tail_size) as usize;
+    te_tmp = trim_broken_word_right(
+        all_after,
+        tb,
+        cmp::max(te_tmp as isize - 1, tb as isize) as usize,
+    );
+    let (tail_beg, tail_end) = trim_idx(all_after, tb, te_tmp);
+    let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
+    tail.push_str(&tail_str);
 
     // get head
-    let max_head_size = max_after_size - after.len();
-    let (_, he) = trim_idx(&all_before_vec, 0, before_beg);
-    let mut hb_tmp = cmp::max(he as isize - max_head_size as isize, 0) as usize;
-    hb_tmp = trim_broken_word_left(&all_before_vec, hb_tmp, he);
-    let (head_beg, head_end) = trim_idx(&all_before_vec, hb_tmp, he);
-    head.push_str(&all_before[head_beg..head_end]);
+    let max_head_size = cmp::max(
+        max_after_size as isize - after.len() as isize - config.gap_size as isize,
+        0,
+    ) as usize;
+    let (_, he) = trim_idx(all_before, 0, before_beg);
+    let hb_tmp = trim_broken_word_left(
+        all_before,
+        cmp::max(he as isize - max_head_size as isize, 0) as usize,
+        he,
+    );
+    let (head_beg, head_end) = trim_idx(all_before, hb_tmp, he);
+    let head_str: String = all_before[head_beg..head_end].iter().collect();
+    head.push_str(&head_str);
 
     // put right context truncation string if needed
     if after_end != all_after.len() && tail_beg == tail_end {
@@ -382,11 +414,6 @@ fn get_output_chunks(
         head = format!("{}{}", config.trunc_str, head);
     }
 
-    // add space before "after" if needed
-    if !after.is_empty() {
-        after = format!(" {}", after);
-    }
-
     (tail, before, after, head)
 }
 
@@ -399,70 +426,94 @@ fn tex_mapper(x: char) -> String {
     }
 }
 
-fn adjust_tex_str(context: &str) -> String {
-    let ws_reg = Regex::new(r"[\t\n\v\f\r ]").unwrap();
-    let mut fix: String = ws_reg.replace_all(context, " ").trim().to_owned();
-    let mapped_chunks: Vec<String> = fix.chars().map(tex_mapper).collect();
-    fix = mapped_chunks.join("");
-    fix
+fn format_tex_field(s: &str) -> String {
+    let mapped_chunks: Vec<String> = s.chars().map(tex_mapper).collect();
+    mapped_chunks.join("")
 }
 
-fn format_tex_line(config: &Config, word_ref: &WordRef, line: &str, reference: &str) -> String {
+fn format_tex_line(
+    config: &Config,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    reference: &str,
+) -> String {
     let mut output = String::new();
     output.push_str(&format!("\\{} ", config.macro_name));
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
-        adjust_tex_str(before.trim().trim_start_matches(reference))
+        let before_start_trimoff =
+            word_ref.position - before.trim_start_matches(reference).trim_start().len();
+        let before_end_index = before.len();
+        &chars_line[before_start_trimoff..cmp::max(before_end_index, before_start_trimoff)]
     } else {
-        adjust_tex_str(&line[0..word_ref.position])
+        let before_chars_trim_idx = (0, word_ref.position);
+        &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
     };
-    let keyword = adjust_tex_str(&line[word_ref.position..word_ref.position_end]);
-    let all_after = adjust_tex_str(&line[word_ref.position_end..line.len()]);
+    let keyword = &line[word_ref.position..word_ref.position_end];
+    let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
+    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
     let (tail, before, after, head) = get_output_chunks(&all_before, &keyword, &all_after, &config);
     output.push_str(&format!(
         "{5}{0}{6}{5}{1}{6}{5}{2}{6}{5}{3}{6}{5}{4}{6}",
-        tail, before, keyword, after, head, "{", "}"
+        format_tex_field(&tail),
+        format_tex_field(&before),
+        format_tex_field(keyword),
+        format_tex_field(&after),
+        format_tex_field(&head),
+        "{",
+        "}"
     ));
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!("{}{}{}", "{", adjust_tex_str(&reference), "}"));
+        output.push_str(&format!("{}{}{}", "{", format_tex_field(&reference), "}"));
     }
     output
 }
 
-fn adjust_roff_str(context: &str) -> String {
-    let ws_reg = Regex::new(r"[\t\n\v\f\r]").unwrap();
-    ws_reg
-        .replace_all(context, " ")
-        .replace("\"", "\"\"")
-        .trim()
-        .to_owned()
+fn format_roff_field(s: &str) -> String {
+    s.replace("\"", "\"\"")
 }
 
-fn format_roff_line(config: &Config, word_ref: &WordRef, line: &str, reference: &str) -> String {
+fn format_roff_line(
+    config: &Config,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    reference: &str,
+) -> String {
     let mut output = String::new();
     output.push_str(&format!(".{}", config.macro_name));
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
-        adjust_roff_str(before.trim().trim_start_matches(reference))
+        let before_start_trimoff =
+            word_ref.position - before.trim_start_matches(reference).trim_start().len();
+        let before_end_index = before.len();
+        &chars_line[before_start_trimoff..cmp::max(before_end_index, before_start_trimoff)]
     } else {
-        adjust_roff_str(&line[0..word_ref.position])
+        let before_chars_trim_idx = (0, word_ref.position);
+        &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
     };
-    let keyword = adjust_roff_str(&line[word_ref.position..word_ref.position_end]);
-    let all_after = adjust_roff_str(&line[word_ref.position_end..line.len()]);
+    let keyword = &line[word_ref.position..word_ref.position_end];
+    let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
+    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
     let (tail, before, after, head) = get_output_chunks(&all_before, &keyword, &all_after, &config);
     output.push_str(&format!(
         " \"{}\" \"{}\" \"{}{}\" \"{}\"",
-        tail, before, keyword, after, head
+        format_roff_field(&tail),
+        format_roff_field(&before),
+        format_roff_field(keyword),
+        format_roff_field(&after),
+        format_roff_field(&head)
     ));
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!(" \"{}\"", adjust_roff_str(&reference)));
+        output.push_str(&format!(" \"{}\"", format_roff_field(&reference)));
     }
     output
 }
 
 fn write_traditional_output(
     config: &Config,
-    file_map: &HashMap<String, (Vec<String>, usize)>,
+    file_map: &FileMap,
     words: &BTreeSet<WordRef>,
     output_filename: &str,
 ) {
@@ -472,19 +523,36 @@ fn write_traditional_output(
         let file = crash_if_err!(1, File::create(output_filename));
         Box::new(file)
     });
+
     for word_ref in words.iter() {
-        let file_map_value: &(Vec<String>, usize) = file_map
+        let file_map_value: &FileContent = file_map
             .get(&(word_ref.filename))
             .expect("Missing file in file map");
-        let (ref lines, _) = *(file_map_value);
-        let reference = get_reference(config, word_ref, &lines[word_ref.local_line_nr]);
+        let FileContent {
+            ref lines,
+            ref chars_lines,
+            offset: _,
+        } = *(file_map_value);
+        let reference = get_reference(
+            config,
+            word_ref,
+            &lines[word_ref.local_line_nr],
+        );
         let output_line: String = match config.format {
-            OutFormat::Tex => {
-                format_tex_line(config, word_ref, &lines[word_ref.local_line_nr], &reference)
-            }
-            OutFormat::Roff => {
-                format_roff_line(config, word_ref, &lines[word_ref.local_line_nr], &reference)
-            }
+            OutFormat::Tex => format_tex_line(
+                config,
+                word_ref,
+                &lines[word_ref.local_line_nr],
+                &chars_lines[word_ref.local_line_nr],
+                &reference,
+            ),
+            OutFormat::Roff => format_roff_line(
+                config,
+                word_ref,
+                &lines[word_ref.local_line_nr],
+                &chars_lines[word_ref.local_line_nr],
+                &reference,
+            ),
             OutFormat::Dumb => crash!(1, "There is no dumb format with GNU extensions disabled"),
         };
         crash_if_err!(1, writeln!(writer, "{}", output_line));
