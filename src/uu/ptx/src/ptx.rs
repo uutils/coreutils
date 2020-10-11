@@ -211,11 +211,7 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
             Box::new(file)
         });
         let lines: Vec<String> = reader.lines().map(|x| crash_if_err!(1, x)).collect();
-        let ws_reg = Regex::new(r"[\t\n\v\f\r]").unwrap();
-        let chars_lines: Vec<Vec<char>> = lines
-            .iter()
-            .map(|x| ws_reg.replace_all(x, " ").chars().collect())
-            .collect();
+        let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
         file_map.insert(
             filename.to_owned(),
@@ -274,12 +270,11 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
     word_set
 }
 
-fn get_reference(config: &Config, word_ref: &WordRef, line: &str) -> String {
+fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
     if config.auto_ref {
         format!("{}:{}", word_ref.filename, word_ref.local_line_nr + 1)
     } else if config.input_ref {
-        let reg = Regex::new(&config.context_regex).unwrap();
-        let (beg, end) = match reg.find(line) {
+        let (beg, end) = match context_reg.find(line) {
             Some(x) => (x.start(), x.end()),
             None => (0, 0),
         };
@@ -524,6 +519,8 @@ fn write_traditional_output(
         Box::new(file)
     });
 
+    let context_reg = Regex::new(&config.context_regex).unwrap();
+
     for word_ref in words.iter() {
         let file_map_value: &FileContent = file_map
             .get(&(word_ref.filename))
@@ -537,6 +534,7 @@ fn write_traditional_output(
             config,
             word_ref,
             &lines[word_ref.local_line_nr],
+            &context_reg,
         );
         let output_line: String = match config.format {
             OutFormat::Tex => format_tex_line(
