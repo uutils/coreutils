@@ -57,6 +57,8 @@ struct Options {
 }
 
 fn is_custom_binary(program: &str) -> bool {
+    #[allow(clippy::match_like_matches_macro)]
+    // `matches!(...)` macro not stabilized until rust v1.42
     match program {
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
         | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"

@@ -29,7 +29,7 @@ static LONG_HELP: &str = "";
 static DEFAULT_TABSTOP: usize = 8;
 
 fn tabstops_parse(s: String) -> Vec<usize> {
-    let words = s.split(',').collect::<Vec<&str>>();
+    let words = s.split(',');
 
     let nums = words
         .into_iter()
