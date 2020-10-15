@@ -136,9 +136,9 @@ jobs:
         cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
+        cargo fetch --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo fetch --quiet
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
