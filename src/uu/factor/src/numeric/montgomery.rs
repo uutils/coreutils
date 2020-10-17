@@ -7,7 +7,9 @@
 // * that was distributed with this source code.
 
 use super::*;
+
 use num_traits::identities::{One, Zero};
+use traits::{DoubleInt, Int, OverflowingAdd};
 
 pub(crate) trait Arithmetic: Copy + Sized {
     // The type of integers mod m, in some opaque representation
