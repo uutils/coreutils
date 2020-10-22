@@ -27,25 +27,27 @@ use std::path::Path;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
-static ABOUT: &str = "sort lines of text files";
+static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const OPT_NUMERIC_SORT: &str = "numeric-sort";
-const OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
-const OPT_MONTH_SORT: &str = "month-sort";
-const OPT_VERSION_SORT: &str = "version-sort";
-const OPT_OUTPUT: &str = "output";
-const OPT_FILES: &str = "files";
-const OPT_MERGE: &str = "merge";
-const OPT_REVERSE: &str = "reverse";
-const OPT_STABLE: &str = "stable";
-const OPT_UNIQUE: &str = "unique";
-const OPT_CHECK: &str = "check";
-const OPT_DICTIONARY_ORDER: &str = "dictionary-order";
-const OPT_IGNORE_CASE: &str = "ignore-case";
+static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
+static OPT_MONTH_SORT: &str = "month-sort";
+static OPT_NUMERIC_SORT: &str = "numeric-sort";
+static OPT_VERSION_SORT: &str = "version-sort";
 
-const DECIMAL_PT: char = '.';
-const THOUSANDS_SEP: char = ',';
+static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
+static OPT_MERGE: &str = "merge";
+static OPT_CHECK: &str = "check";
+static OPT_IGNORE_CASE: &str = "ignore-case";
+static OPT_OUTPUT: &str = "output";
+static OPT_REVERSE: &str = "reverse";
+static OPT_STABLE: &str = "stable";
+static OPT_UNIQUE: &str = "unique";
+
+static ARG_FILES: &str = "files";
+
+static DECIMAL_PT: char = '.';
+static THOUSANDS_SEP: char = ',';
 
 enum SortMode {
     Numeric,
@@ -184,24 +186,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_DICTIONARY_ORDER)
-                .short("d")
-                .long(OPT_DICTIONARY_ORDER)
-                .help("consider only blanks and alphanumeric characters"),
-        )
-        .arg(
-            Arg::with_name(OPT_IGNORE_CASE)
-                .short("f")
-                .long(OPT_IGNORE_CASE)
-                .help("fold lower case to upper case characters"),
-        )
-        .arg(
-            Arg::with_name(OPT_NUMERIC_SORT)
-                .short("n")
-                .long(OPT_NUMERIC_SORT)
-                .help("compare according to string numerical value"),
-        )
-        .arg(
             Arg::with_name(OPT_HUMAN_NUMERIC_SORT)
                 .short("h")
                 .long(OPT_HUMAN_NUMERIC_SORT)
@@ -214,20 +198,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("compare according to month name abbreviation"),
         )
         .arg(
-            Arg::with_name(OPT_REVERSE)
-                .short("r")
-                .long(OPT_REVERSE)
-                .help("reverse the output"),
+            Arg::with_name(OPT_NUMERIC_SORT)
+                .short("n")
+                .long(OPT_NUMERIC_SORT)
+                .help("compare according to string numerical value"),
         )
         .arg(
-            Arg::with_name("h")
-                .long("help")
-                .help("display this help and exit"),
+            Arg::with_name(OPT_VERSION_SORT)
+                .short("V")
+                .long(OPT_VERSION_SORT)
+                .help("Sort by SemVer version number, eg 1.12.2 > 1.1.2"),
         )
         .arg(
-            Arg::with_name("version")
-                .long("version")
-                .help("output version information and exit"),
+            Arg::with_name(OPT_DICTIONARY_ORDER)
+                .short("d")
+                .long(OPT_DICTIONARY_ORDER)
+                .help("consider only blanks and alphanumeric characters"),
         )
         .arg(
             Arg::with_name(OPT_MERGE)
@@ -236,12 +222,30 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("merge already sorted files; do not sort"),
         )
         .arg(
+            Arg::with_name(OPT_CHECK)
+                .short("c")
+                .long(OPT_CHECK)
+                .help("check for sorted input; do not sort"),
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORE_CASE)
+                .short("f")
+                .long(OPT_IGNORE_CASE)
+                .help("fold lower case to upper case characters"),
+        )
+        .arg(
             Arg::with_name(OPT_OUTPUT)
                 .short("o")
                 .long(OPT_OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
                 .value_name("FILENAME"),
+        )
+        .arg(
+            Arg::with_name(OPT_REVERSE)
+                .short("r")
+                .long(OPT_REVERSE)
+                .help("reverse the output"),
         )
         .arg(
             Arg::with_name(OPT_STABLE)
@@ -255,51 +259,41 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_UNIQUE)
                 .help("output only the first of an equal run"),
         )
-        .arg(
-            Arg::with_name(OPT_VERSION_SORT)
-                .short("V")
-                .long(OPT_VERSION_SORT)
-                .help("Sort by SemVer version number, eg 1.12.2 > 1.1.2"),
-        )
-        .arg(
-            Arg::with_name(OPT_CHECK)
-                .short("c")
-                .long(OPT_CHECK)
-                .help("check for sorted input; do not sort"),
-        )
-        .arg(Arg::with_name(OPT_FILES).multiple(true).takes_value(true))
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
     let mut files: Vec<String> = matches
-        .values_of(OPT_FILES)
+        .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    settings.mode = if matches.is_present(OPT_NUMERIC_SORT) {
-        SortMode::Numeric
-    } else if matches.is_present(OPT_HUMAN_NUMERIC_SORT) {
+    settings.mode = if matches.is_present(OPT_HUMAN_NUMERIC_SORT) {
         SortMode::HumanNumeric
     } else if matches.is_present(OPT_MONTH_SORT) {
         SortMode::Month
+    } else if matches.is_present(OPT_NUMERIC_SORT) {
+        SortMode::Numeric
     } else if matches.is_present(OPT_VERSION_SORT) {
         SortMode::Version
     } else {
         SortMode::Default
     };
 
-    settings.merge = matches.is_present(OPT_MERGE);
-    settings.reverse = matches.is_present(OPT_REVERSE);
-    settings.outfile = matches.value_of(OPT_OUTPUT).map(String::from);
-    settings.stable = matches.is_present(OPT_STABLE);
-    settings.unique = matches.is_present(OPT_UNIQUE);
-    settings.check = matches.is_present(OPT_CHECK);
-
     if matches.is_present(OPT_DICTIONARY_ORDER) {
         settings.transform_fns.push(remove_nondictionary_chars);
     }
+
+    settings.merge = matches.is_present(OPT_MERGE);
+    settings.check = matches.is_present(OPT_CHECK);
+
     if matches.is_present(OPT_IGNORE_CASE) {
         settings.transform_fns.push(|s| s.to_uppercase());
     }
+
+    settings.outfile = matches.value_of(OPT_OUTPUT).map(String::from);
+    settings.reverse = matches.is_present(OPT_REVERSE);
+    settings.stable = matches.is_present(OPT_STABLE);
+    settings.unique = matches.is_present(OPT_UNIQUE);
 
     //let mut files = matches.free;
     if files.is_empty() {
