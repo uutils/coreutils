@@ -119,6 +119,19 @@ fn test_merge_reversed() {
 }
 
 #[test]
+fn test_pipe() {
+    // TODO: issue 1608 reports a panic when we attempt to read from stdin,
+    // which was closed by the other side of the pipe. This test does not
+    // protect against regressions in that case; we should add one at some
+    // point.
+    new_ucmd!()
+        .pipe_in("one\ntwo\nfour")
+        .succeeds()
+        .stdout_is("four\none\ntwo\n")
+        .stderr_is("");
+}
+
+#[test]
 fn test_check() {
     new_ucmd!()
         .arg("-c")

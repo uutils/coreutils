@@ -550,10 +550,7 @@ where
 
     for line in iter {
         let str = format!("{}\n", line);
-        if let Err(e) = file.write_all(str.as_bytes()) {
-            show_error!("sort: {0}", e.to_string());
-            panic!("Write failed");
-        }
+        crash_if_err!(1, file.write_all(str.as_bytes()))
     }
 }
 
