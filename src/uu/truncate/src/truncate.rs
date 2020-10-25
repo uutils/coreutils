@@ -31,9 +31,9 @@ enum TruncateMode {
 static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
+static OPT_IO_BLOCKS: &str = "io-blocks";
 static OPT_NO_CREATE: &str = "no-create";
 static OPT_REFERENCE: &str = "reference";
-static OPT_IO_BLOCKS: &str = "io-blocks";
 static OPT_SIZE: &str = "size";
 
 static ARG_FILES: &str = "files";
@@ -78,16 +78,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(&long_usage[..])
         .arg(
-            Arg::with_name(OPT_NO_CREATE)
-            .short("c")
-            .long(OPT_NO_CREATE)
-            .help("do not create files that do not exist")
-        )
-        .arg(
             Arg::with_name(OPT_IO_BLOCKS)
             .short("o")
             .long(OPT_IO_BLOCKS)
             .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
+        )
+        .arg(
+            Arg::with_name(OPT_NO_CREATE)
+            .short("c")
+            .long(OPT_NO_CREATE)
+            .help("do not create files that do not exist")
         )
         .arg(
             Arg::with_name(OPT_REFERENCE)
@@ -115,8 +115,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!("Missing an argument");
         return 1;
     } else {
-        let no_create = matches.is_present(OPT_NO_CREATE);
         let io_blocks = matches.is_present(OPT_IO_BLOCKS);
+        let no_create = matches.is_present(OPT_NO_CREATE);
         let reference = matches.value_of(OPT_REFERENCE).map(String::from);
         let size = matches.value_of(OPT_SIZE).map(String::from);
         if reference.is_none() && size.is_none() {
