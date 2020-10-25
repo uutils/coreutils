@@ -7,12 +7,11 @@
 
 // spell-checker:ignore (ToDO) fpath
 
-extern crate getopts;
-
+extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use getopts::{Matches, Options};
+use clap::{App, Arg, ArgMatches};
 
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
@@ -29,13 +28,13 @@ struct Settings {
 }
 
 impl Settings {
-    fn new(matches: &Matches) -> Settings {
+    fn new(matches: &ArgMatches) -> Settings {
         let settings = Settings {
-            show_bytes: matches.opt_present("bytes"),
-            show_chars: matches.opt_present("chars"),
-            show_lines: matches.opt_present("lines"),
-            show_words: matches.opt_present("words"),
-            show_max_line_length: matches.opt_present("L"),
+            show_bytes: matches.is_present(OPT_BYTES),
+            show_chars: matches.is_present(OPT_CHAR),
+            show_lines: matches.is_present(OPT_LINES),
+            show_words: matches.is_present(OPT_WORDS),
+            show_max_line_length: matches.is_present(OPT_MAX_LINE_LENGTH),
         };
 
         if settings.show_bytes
@@ -66,57 +65,77 @@ struct Result {
     max_line_length: usize,
 }
 
-static NAME: &str = "wc";
+static ABOUT: &str = "print newline, word, and byte counts for each file.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
+static OPT_BYTES: &str = "bytes";
+static OPT_CHAR: &str = "chars";
+static OPT_LINES: &str = "lines";
+static OPT_MAX_LINE_LENGTH: &str = "max-line-length";
+static OPT_WORDS: &str = "words";
+
+static ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!(
+        "{0} [OPTION]... [FILE]...
+ With no FILE, or when FILE is -, read standard input.",
+        executable!()
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_BYTES)
+                .short("c")
+                .long(OPT_BYTES)
+                .help("print the byte counts"),
+        )
+        .arg(
+            Arg::with_name(OPT_CHAR)
+                .short("m")
+                .long(OPT_CHAR)
+                .help("print the character counts"),
+        )
+        .arg(
+            Arg::with_name(OPT_LINES)
+                .short("l")
+                .long(OPT_LINES)
+                .help("print the newline counts"),
+        )
+        .arg(
+            Arg::with_name(OPT_MAX_LINE_LENGTH)
+                .short("L")
+                .long(OPT_MAX_LINE_LENGTH)
+                .help("print the length of the longest line"),
+        )
+        .arg(
+            Arg::with_name(OPT_WORDS)
+                .short("w")
+                .long(OPT_WORDS)
+                .help("print the word counts"),
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .get_matches_from(args);
 
-    opts.optflag("c", "bytes", "print the byte counts");
-    opts.optflag("m", "chars", "print the character counts");
-    opts.optflag("l", "lines", "print the newline counts");
-    opts.optflag(
-        "L",
-        "max-line-length",
-        "print the length of the longest line",
-    );
-    opts.optflag("w", "words", "print the word counts");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let mut files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let mut matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!();
-        println!(
-            "{}",
-            opts.usage("Print newline, word and byte counts for each FILE")
-        );
-        println!("With no FILE, or when FILE is -, read standard input.");
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    if matches.free.is_empty() {
-        matches.free.push("-".to_owned());
+    if files.is_empty() {
+        files.push("-".to_owned());
     }
 
     let settings = Settings::new(&matches);
 
-    match wc(matches.free, &settings) {
+    match wc(files, &settings) {
         Ok(()) => ( /* pass */ ),
         Err(e) => return e,
     }
