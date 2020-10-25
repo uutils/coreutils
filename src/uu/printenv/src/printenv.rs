@@ -7,69 +7,67 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::env;
 
-static NAME: &str = "printenv";
+static ABOUT: &str = "Prints the given environment VARIABLE(s), otherwise prints them all.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+static OPT_NULL: &str = "null";
 
-    let mut opts = getopts::Options::new();
-    opts.optflag(
-        "0",
-        "null",
-        "end each output line with 0 byte rather than newline",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
+static ARG_VARIABLES: &str = "variables";
 
-Usage:
-  {0} [VARIABLE]... [OPTION]...
-
-Prints the given environment VARIABLE(s), otherwise prints them all.",
-            NAME, VERSION
-        );
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-    let mut separator = "\n";
-    if matches.opt_present("null") {
-        separator = "\x00";
-    };
-
-    exec(matches.free, separator);
-
-    0
+fn get_usage() -> String {
+    format!("{0} [VARIABLE]... [OPTION]...", executable!())
 }
 
-pub fn exec(args: Vec<String>, separator: &str) {
-    if args.is_empty() {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_NULL)
+                .short("0")
+                .long(OPT_NULL)
+                .help("end each output line with 0 byte rather than newline"),
+        )
+        .arg(
+            Arg::with_name(ARG_VARIABLES)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
+        )
+        .get_matches_from(args);
+
+    let variables: Vec<String> = matches
+        .values_of(ARG_VARIABLES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let mut separator = "\n";
+    if matches.is_present(OPT_NULL) {
+        separator = "\x00";
+    }
+
+    if variables.is_empty() {
         for (env_var, value) in env::vars() {
             print!("{}={}{}", env_var, value, separator);
         }
-        return;
+        return 0;
     }
 
-    for env_var in &args {
+    for env_var in variables {
         if let Ok(var) = env::var(env_var) {
             print!("{}{}", var, separator);
         }
     }
+    0
 }
