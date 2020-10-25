@@ -10,59 +10,44 @@
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #![allow(dead_code)]
 
-extern crate getopts;
+extern crate clap;
+#[macro_use]
 extern crate uucore;
 
 use uucore::utmpx::*;
 
-use getopts::Options;
+use clap::{App, Arg};
 
-static NAME: &str = "users";
+static ABOUT: &str = "Output who is currently logged in according to FILE.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
+static ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!("{0} [FILE]...", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))
+        .get_matches_from(args);
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => panic!("{}", f),
-    };
-
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {} [OPTION]... [FILE]", NAME);
-        println!();
-        println!(
-            "{}",
-            opts.usage("Output who is currently logged in according to FILE.")
-        );
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    let filename = if !matches.free.is_empty() {
-        matches.free[0].as_ref()
+    let filename = if !files.is_empty() {
+        files[0].as_ref()
     } else {
         DEFAULT_FILE
     };
 
-    exec(filename);
-
-    0
-}
-
-fn exec(filename: &str) {
     let mut users = Utmpx::iter_all_records()
         .read_from(filename)
         .filter(Utmpx::is_user_process)
@@ -73,4 +58,6 @@ fn exec(filename: &str) {
         users.sort();
         println!("{}", users.join(" "));
     }
+
+    0
 }
