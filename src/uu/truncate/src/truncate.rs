@@ -35,7 +35,8 @@ static OPT_NO_CREATE: &str = "no-create";
 static OPT_REFERENCE: &str = "reference";
 static OPT_IO_BLOCKS: &str = "io-blocks";
 static OPT_SIZE: &str = "size";
-static OPT_FILES: &str = "files";
+
+static ARG_FILES: &str = "files";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -102,11 +103,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
             .value_name("SIZE")
         )
-        .arg(Arg::with_name(OPT_FILES).multiple(true).takes_value(true).min_values(1))
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
-        .values_of(OPT_FILES)
+        .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
