@@ -31,3 +31,8 @@ fn test_equalize_widths() {
         .run()
         .stdout_is("05\n06\n07\n08\n09\n10\n");
 }
+
+#[test]
+fn test_seq_wrong_arg() {
+    new_ucmd!().args(&["-w", "5", "10", "33", "32"]).fails();
+}
