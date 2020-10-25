@@ -13,14 +13,20 @@ use std::cmp;
 use std::io::{stdout, Write};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static ABOUT: &str = "Print sequences of numbers";
+static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_TERMINATOR: &str = "terminator";
 static OPT_WIDTHS: &str = "widths";
-static OPT_NUMBERS: &str = "numbers";
+
+static ARG_NUMBERS: &str = "numbers";
 
 fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!(
+        "{0} [OPTION]... LAST
+    {0} [OPTION]... FIRST LAST
+    {0} [OPTION]... FIRST INCREMENT LAST",
+        executable!()
+    )
 }
 #[derive(Clone)]
 struct SeqOptions {
@@ -75,14 +81,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Equalize widths of all numbers by padding with zeros"),
         )
         .arg(
-            Arg::with_name(OPT_NUMBERS)
+            Arg::with_name(ARG_NUMBERS)
                 .multiple(true)
                 .takes_value(true)
                 .max_values(3),
         )
         .get_matches_from(args);
 
-    let numbers = matches.values_of(OPT_NUMBERS).unwrap().collect::<Vec<_>>();
+    let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
 
     let mut options = SeqOptions {
         separator: "\n".to_owned(),
@@ -111,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         1.0
     };
-    let step = if numbers.len() > 2 {
+    let increment = if numbers.len() > 2 {
         let slice = &numbers[1][..];
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
@@ -148,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
     print_seq(
         first,
-        step,
+        increment,
         last,
         largest_dec,
         separator,
@@ -160,8 +166,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     0
 }
 
-fn done_printing(next: f64, step: f64, last: f64) -> bool {
-    if step >= 0f64 {
+fn done_printing(next: f64, increment: f64, last: f64) -> bool {
+    if increment >= 0f64 {
         next > last
     } else {
         next < last
@@ -171,7 +177,7 @@ fn done_printing(next: f64, step: f64, last: f64) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn print_seq(
     first: f64,
-    step: f64,
+    increment: f64,
     last: f64,
     largest_dec: usize,
     separator: String,
@@ -180,8 +186,8 @@ fn print_seq(
     padding: usize,
 ) {
     let mut i = 0isize;
-    let mut value = first + i as f64 * step;
-    while !done_printing(value, step, last) {
+    let mut value = first + i as f64 * increment;
+    while !done_printing(value, increment, last) {
         let istr = format!("{:.*}", largest_dec, value);
         let ilen = istr.len();
         let before_dec = istr.find('.').unwrap_or(ilen);
@@ -192,12 +198,12 @@ fn print_seq(
         }
         print!("{}", istr);
         i += 1;
-        value = first + i as f64 * step;
-        if !done_printing(value, step, last) {
+        value = first + i as f64 * increment;
+        if !done_printing(value, increment, last) {
             print!("{}", separator);
         }
     }
-    if (first >= last && step < 0f64) || (first <= last && step > 0f64) {
+    if (first >= last && increment < 0f64) || (first <= last && increment > 0f64) {
         print!("{}", terminator);
     }
     crash_if_err!(1, stdout().flush());
