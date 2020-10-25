@@ -119,6 +119,12 @@ jobs:
         use-tool-cache: true
       env:
         RUSTUP_TOOLCHAIN: stable
+    - name: Confirm compatible 'Cargo.lock'
+      shell: bash
+      run: |
+        # Confirm compatible 'Cargo.lock'
+        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
+        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible 'Cargo.lock' format; try \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
     - name: Info
       shell: bash
       run: |
@@ -136,9 +142,14 @@ jobs:
         cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
-        cargo fetch --quiet
+        cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+    - name: Info
+      shell: bash
+      run: |
+        # Info
+
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -348,7 +359,7 @@ jobs:
         cargo-tree tree -V
         ## dependencies
         echo "## dependency list"
-        cargo fetch --quiet
+        cargo fetch --locked --quiet
         cargo-tree tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
