@@ -676,7 +676,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
                 #[allow(clippy::map_entry)]
                 {
                     if acc.contains_key(&id) {
-                        let seen = acc.get(&id).unwrap().replace(mi.clone());
+                        let seen = acc[&id].replace(mi.clone());
                         let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
                         // With bind mounts, prefer items nearer the root of the source
                         let source_below_root = !seen.mount_root.is_empty()
@@ -694,7 +694,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
                             environments for example.  */
                             || seen.mount_dir != mi.mount_dir)
                         {
-                            acc.get(&id).unwrap().replace(seen);
+                            acc[&id].replace(seen);
                         }
                     } else {
                         acc.insert(id, Cell::new(mi));

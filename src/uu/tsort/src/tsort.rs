@@ -131,7 +131,7 @@ impl Graph {
     }
 
     fn has_edge(&self, from: &str, to: &str) -> bool {
-        self.in_edges.get(to).unwrap().contains(from)
+        self.in_edges[to].contains(from)
     }
 
     fn init_node(&mut self, n: &str) {
