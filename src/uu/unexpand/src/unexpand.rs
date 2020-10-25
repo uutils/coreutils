@@ -29,7 +29,6 @@ fn tabstops_parse(s: String) -> Vec<usize> {
     let words = s.split(',');
 
     let nums = words
-        .into_iter()
         .map(|sn| {
             sn.parse()
                 .unwrap_or_else(|_| crash!(1, "{}\n", "tab size contains invalid character(s)"))
