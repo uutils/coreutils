@@ -20,16 +20,17 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 
 const NAME: &str = "readlink";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const ABOUT: &str = "Print value of a symbolic link or canonical file name";
+const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
-const OPT_ZERO: &str = "zero";
 const OPT_NO_NEWLINE: &str = "no-newline";
 const OPT_QUIET: &str = "quiet";
 const OPT_SILENT: &str = "silent";
 const OPT_VERBOSE: &str = "verbose";
-const OPT_FILES: &str = "files";
+const OPT_ZERO: &str = "zero";
+
+const ARG_FILES: &str = "files";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -98,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_ZERO)
                 .help("separate output with NUL rather than newline"),
         )
-        .arg(Arg::with_name(OPT_FILES).multiple(true).takes_value(true))
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
     let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
@@ -117,7 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let files: Vec<String> = matches
-        .values_of(OPT_FILES)
+        .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
     if files.is_empty() {
