@@ -7,11 +7,12 @@
 
 // spell-checker:ignore (ToDO) errno
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::PathBuf;
@@ -19,68 +20,107 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 
 const NAME: &str = "readlink";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
+const OPT_CANONICALIZE: &str = "canonicalize";
+const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
+const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
+const OPT_NO_NEWLINE: &str = "no-newline";
+const OPT_QUIET: &str = "quiet";
+const OPT_SILENT: &str = "silent";
+const OPT_VERBOSE: &str = "verbose";
+const OPT_ZERO: &str = "zero";
+
+const ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = getopts::Options::new();
-
-    opts.optflag(
-        "f",
-        "canonicalize",
-        "canonicalize by following every symlink in every component of the \
-         given name recursively; all but the last component must exist",
-    );
-    opts.optflag(
-        "e",
-        "canonicalize-existing",
-        "canonicalize by following every symlink in every component of the \
+    let usage = get_usage();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE)
+                .short("f")
+                .long(OPT_CANONICALIZE)
+                .help(
+                    "canonicalize by following every symlink in every component of the \
+            given name recursively; all but the last component must exist",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE_EXISTING)
+                .short("e")
+                .long("canonicalize-existing")
+                .help(
+                    "canonicalize by following every symlink in every component of the \
          given name recursively, all components must exist",
-    );
-    opts.optflag(
-        "m",
-        "canonicalize-missing",
-        "canonicalize by following every symlink in every component of the \
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE_MISSING)
+                .short("m")
+                .long(OPT_CANONICALIZE_MISSING)
+                .help(
+                    "canonicalize by following every symlink in every component of the \
          given name recursively, without requirements on components existence",
-    );
-    opts.optflag("n", "no-newline", "do not output the trailing delimiter");
-    opts.optflag("q", "quiet", "suppress most error messages");
-    opts.optflag("s", "silent", "suppress most error messages");
-    opts.optflag("v", "verbose", "report error message");
-    opts.optflag("z", "zero", "separate output with NUL rather than newline");
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_NO_NEWLINE)
+                .short("n")
+                .long(OPT_NO_NEWLINE)
+                .help("do not output the trailing delimiter"),
+        )
+        .arg(
+            Arg::with_name(OPT_QUIET)
+                .short("q")
+                .long(OPT_QUIET)
+                .help("suppress most error messages"),
+        )
+        .arg(
+            Arg::with_name(OPT_SILENT)
+                .short("s")
+                .long(OPT_SILENT)
+                .help("suppress most error messages"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("report error message"),
+        )
+        .arg(
+            Arg::with_name(OPT_ZERO)
+                .short("z")
+                .long(OPT_ZERO)
+                .help("separate output with NUL rather than newline"),
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .get_matches_from(args);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-    if matches.opt_present("help") {
-        show_usage(&opts);
-        return 0;
-    }
+    let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
+    let use_zero = matches.is_present(OPT_ZERO);
+    let silent = matches.is_present(OPT_SILENT) || matches.is_present(OPT_QUIET);
+    let verbose = matches.is_present(OPT_VERBOSE);
 
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    let mut no_newline = matches.opt_present("no-newline");
-    let use_zero = matches.opt_present("zero");
-    let silent = matches.opt_present("silent") || matches.opt_present("quiet");
-    let verbose = matches.opt_present("verbose");
-
-    let can_mode = if matches.opt_present("canonicalize") {
+    let can_mode = if matches.is_present(OPT_CANONICALIZE) {
         CanonicalizeMode::Normal
-    } else if matches.opt_present("canonicalize-existing") {
+    } else if matches.is_present(OPT_CANONICALIZE_EXISTING) {
         CanonicalizeMode::Existing
-    } else if matches.opt_present("canonicalize-missing") {
+    } else if matches.is_present(OPT_CANONICALIZE_MISSING) {
         CanonicalizeMode::Missing
     } else {
         CanonicalizeMode::None
     };
 
-    let files = matches.free;
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
     if files.is_empty() {
         crash!(
             1,
@@ -132,12 +172,4 @@ fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
         println!("{}", path);
     }
     crash_if_err!(1, stdout().flush());
-}
-
-fn show_usage(opts: &getopts::Options) {
-    println!("{} {}", NAME, VERSION);
-    println!();
-    println!("Usage: {0} [OPTION]... [FILE]...", NAME);
-    print!("Print value of a symbolic link or canonical file name");
-    print!("{}", opts.usage(""));
 }
