@@ -18,7 +18,7 @@ use uucore::utmpx::*;
 
 use clap::{App, Arg};
 
-static ABOUT: &str = "Output who is currently logged in according to FILE.";
+static ABOUT: &str = "Display who is currently logged in, according to FILE.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static ARG_FILES: &str = "files";
