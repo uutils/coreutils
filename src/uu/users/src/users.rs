@@ -24,7 +24,7 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ARG_FILES: &str = "files";
 
 fn get_usage() -> String {
-    format!("{0} [FILE]...", executable!())
+    format!("{0} [FILE]", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
