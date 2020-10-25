@@ -43,7 +43,7 @@ fn get_usage() -> String {
 }
 
 fn get_long_usage() -> String {
-    format!(
+    String::from(
         "
     SIZE is an integer with an optional prefix and optional unit.
     The available units (K, M, G, T, P, E, Z, and Y) use the following format:
@@ -60,7 +60,7 @@ fn get_long_usage() -> String {
         '<'  => at most
         '>'  => at least
         '/'  => round down to multiple of
-        '%'  => round up to multiple of"
+        '%'  => round up to multiple of",
     )
 }
 
