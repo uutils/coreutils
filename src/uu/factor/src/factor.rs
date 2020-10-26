@@ -7,33 +7,44 @@
 
 extern crate rand;
 
+use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::fmt;
 
-use crate::numeric::{Arithmetic, Montgomery};
+use crate::numeric::{gcd, Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
 type Exponent = u8;
 
 #[derive(Clone, Debug)]
-struct Decomposition(Vec<(u64, Exponent)>);
+struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
+
+// The number of factors to inline directly into a `Decomposition` object.
+// As a consequence of the Erdős–Kac theorem, the average number of prime factors
+// of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use a slightly higher value.
+const NUM_FACTORS_INLINE: usize = 5;
 
 impl Decomposition {
     fn one() -> Decomposition {
-        Decomposition(Vec::new())
+        Decomposition(SmallVec::new())
     }
 
     fn add(&mut self, factor: u64, exp: Exponent) {
         debug_assert!(exp > 0);
+        // Assert the factor doesn't already exist in the Decomposition object
+        debug_assert_eq!(self.0.iter_mut().find(|(f, _)| *f == factor), None);
 
-        if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
-            *e += exp;
-        } else {
-            self.0.push((factor, exp))
-        }
+        self.0.push((factor, exp))
     }
 
-    #[cfg(test)]
+    fn is_one(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn pop(&mut self) -> Option<(u64, Exponent)> {
+        self.0.pop()
+    }
+
     fn product(&self) -> u64 {
         self.0
             .iter()
@@ -77,11 +88,11 @@ impl Factors {
         self.0.borrow_mut().add(prime, exp)
     }
 
+    #[cfg(test)]
     pub fn push(&mut self, prime: u64) {
         self.add(prime, 1)
     }
 
-    #[cfg(test)]
     fn product(&self) -> u64 {
         self.0.borrow().product()
     }
@@ -102,62 +113,116 @@ impl fmt::Display for Factors {
     }
 }
 
-fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors {
+fn _find_factor<A: Arithmetic + miller_rabin::Basis>(num: u64) -> Option<u64> {
     use miller_rabin::Result::*;
 
-    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
-    let _factor = |n, f| {
-        if n < (1 << 32) {
-            _factor::<Montgomery<u32>>(n, f)
-        } else {
-            _factor::<A>(n, f)
-        }
-    };
-
-    if num == 1 {
-        return f;
-    }
-
     let n = A::new(num);
-    let divisor = match miller_rabin::test::<A>(n) {
-        Prime => {
-            let mut r = f;
-            r.push(num);
-            return r;
-        }
-
-        Composite(d) => d,
-        Pseudoprime => rho::find_divisor::<A>(n),
-    };
-
-    let f = _factor(divisor, f);
-    _factor(num / divisor, f)
+    match miller_rabin::test::<A>(n) {
+        Prime => None,
+        Composite(d) => Some(d),
+        Pseudoprime => Some(rho::find_divisor::<A>(n)),
+    }
 }
 
-pub fn factor(mut n: u64) -> Factors {
+fn find_factor(num: u64) -> Option<u64> {
+    if num < (1 << 32) {
+        _find_factor::<Montgomery<u32>>(num)
+    } else {
+        _find_factor::<Montgomery<u64>>(num)
+    }
+}
+
+pub fn factor(num: u64) -> Factors {
     let mut factors = Factors::one();
 
-    if n < 2 {
+    if num < 2 {
         return factors;
     }
 
-    let z = n.trailing_zeros();
-    if z > 0 {
-        factors.add(2, z as Exponent);
-        n >>= z;
+    let mut n = num;
+    let n_zeros = num.trailing_zeros();
+    if n_zeros > 0 {
+        factors.add(2, n_zeros as Exponent);
+        n >>= n_zeros;
     }
+    debug_assert_eq!(num, n * factors.product());
 
     if n == 1 {
         return factors;
     }
 
-    let (factors, n) = table::factor(n, factors);
+    table::factor(&mut n, &mut factors);
+    debug_assert_eq!(num, n * factors.product());
 
-    if n < (1 << 32) {
-        _factor::<Montgomery<u32>>(n, factors)
-    } else {
-        _factor::<Montgomery<u64>>(n, factors)
+    if n == 1 {
+        return factors;
     }
+
+    let mut dec = Decomposition::one();
+    dec.add(n, 1);
+
+    while !dec.is_one() {
+        // Check correctness invariant
+        debug_assert_eq!(num, factors.product() * dec.product());
+
+        let (factor, exp) = dec.pop().unwrap();
+
+        if let Some(divisor) = find_factor(factor) {
+            let mut gcd_queue = Decomposition::one();
+
+            let quotient = factor / divisor;
+            let mut trivial_gcd = quotient == divisor;
+            if trivial_gcd {
+                gcd_queue.add(divisor, exp + 1);
+            } else {
+                gcd_queue.add(divisor, exp);
+                gcd_queue.add(quotient, exp);
+            }
+
+            while !trivial_gcd {
+                debug_assert_eq!(factor, gcd_queue.product());
+
+                let mut tmp = Decomposition::one();
+                trivial_gcd = true;
+                for i in 0..gcd_queue.0.len() - 1 {
+                    let (mut a, exp_a) = gcd_queue.0[i];
+                    let (mut b, exp_b) = gcd_queue.0[i + 1];
+
+                    if a == 1 {
+                        continue;
+                    }
+
+                    let g = gcd(a, b);
+                    if g != 1 {
+                        trivial_gcd = false;
+                        a /= g;
+                        b /= g;
+                    }
+                    if a != 1 {
+                        tmp.add(a, exp_a);
+                    }
+                    if g != 1 {
+                        tmp.add(g, exp_a + exp_b);
+                    }
+
+                    if i + 1 != gcd_queue.0.len() - 1 {
+                        gcd_queue.0[i + 1].0 = b;
+                    } else if b != 1 {
+                        tmp.add(b, exp_b);
+                    }
+                }
+                gcd_queue = tmp;
+            }
+
+            debug_assert_eq!(factor, gcd_queue.product());
+            dec.0.extend(gcd_queue.0);
+        } else {
+            // factor is prime
+            factors.add(factor, exp);
+        }
+    }
+
+    factors
 }
 
 #[cfg(test)]
@@ -166,9 +231,31 @@ mod tests {
     use quickcheck::quickcheck;
 
     #[test]
+    fn factor_correctly_recombines_prior_test_failures() {
+        let prior_failures = [
+            // * integers with duplicate factors (ie, N.pow(M))
+            4566769_u64, // == 2137.pow(2)
+            2044854919485649_u64,
+            18446739546814299361_u64,
+            18446738440860217487_u64,
+            18446736729316206481_u64,
+        ];
+        assert!(prior_failures.iter().all(|i| factor(*i).product() == *i));
+    }
+
+    #[test]
     fn factor_recombines_small() {
         assert!((1..10_000)
             .map(|i| 2 * i + 1)
+            .all(|i| factor(i).product() == i));
+    }
+
+    #[test]
+    fn factor_recombines_small_squares() {
+        // factor(18446736729316206481) == 4294966441 ** 2 ; causes debug_assert fault for repeated decomposition factor in add()
+        // ToDO: explain/combine with factor_18446736729316206481 and factor_18446739546814299361 tests
+        assert!((1..10_000)
+            .map(|i| (2 * i + 1) * (2 * i + 1))
             .all(|i| factor(i).product() == i));
     }
 
@@ -182,7 +269,7 @@ mod tests {
     #[test]
     fn factor_recombines_strong_pseudoprime() {
         // This is a strong pseudoprime (wrt. miller_rabin::BASIS)
-        //  and triggered a bug in rho::factor's codepath handling
+        //  and triggered a bug in rho::factor's code path handling
         //  miller_rabbin::Result::Composite
         let pseudoprime = 17179869183;
         for _ in 0..20 {
@@ -213,7 +300,7 @@ impl quickcheck::Arbitrary for Factors {
         let mut n = u64::MAX;
 
         // Adam Kalai's algorithm for generating uniformly-distributed
-        // integers and their factorisation.
+        // integers and their factorization.
         //
         // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
         'attempt: loop {
