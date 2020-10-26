@@ -7,8 +7,7 @@
 
 // spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
 
-extern crate getopts;
-use getopts::Options;
+extern crate clap;
 
 #[macro_use]
 mod fsext;
@@ -18,6 +17,7 @@ pub use crate::fsext::*;
 extern crate uucore;
 use uucore::entries;
 
+use clap::{App, Arg, ArgMatches};
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::fs::File;
@@ -86,8 +86,16 @@ macro_rules! print_adjusted {
     };
 }
 
-static NAME: &str = "stat";
+static ABOUT: &str = "Display file or file system status.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_DEREFERENCE: &str = "dereference";
+static OPT_FILE_SYSTEM: &str = "file-system";
+static OPT_FORMAT: &str = "format";
+static OPT_PRINTF: &str = "printf";
+static OPT_TERSE: &str = "terse";
+
+static ARG_FILES: &str = "files";
 
 const MOUNT_INFO: &str = "/etc/mtab";
 pub const F_ALTER: u8 = 1;
@@ -332,7 +340,6 @@ impl Stater {
         let mut tokens = Vec::new();
         let bound = fmtstr.len();
         let chars = fmtstr.chars().collect::<Vec<char>>();
-
         let mut i = 0_usize;
         while i < bound {
             match chars[i] {
@@ -453,16 +460,21 @@ impl Stater {
         Ok(tokens)
     }
 
-    fn new(matches: getopts::Matches) -> Result<Stater, String> {
-        let fmtstr = if matches.opt_present("printf") {
-            matches.opt_str("printf").expect("Invalid format string")
+    fn new(matches: ArgMatches) -> Result<Stater, String> {
+        let files: Vec<String> = matches
+            .values_of(ARG_FILES)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default();
+
+        let fmtstr = if matches.is_present(OPT_PRINTF) {
+            matches.value_of(OPT_PRINTF).expect("Invalid format string")
         } else {
-            matches.opt_str("format").unwrap_or_else(|| "".to_owned())
+            matches.value_of(OPT_FORMAT).unwrap_or_else(|| "")
         };
 
-        let use_printf = matches.opt_present("printf");
-        let terse = matches.opt_present("terse");
-        let showfs = matches.opt_present("file-system");
+        let use_printf = matches.is_present(OPT_PRINTF);
+        let terse = matches.is_present(OPT_TERSE);
+        let showfs = matches.is_present(OPT_FILE_SYSTEM);
 
         let default_tokens = if fmtstr.is_empty() {
             Stater::generate_tokens(&Stater::default_fmt(showfs, terse, false), use_printf).unwrap()
@@ -491,10 +503,10 @@ impl Stater {
         };
 
         Ok(Stater {
-            follow: matches.opt_present("dereference"),
+            follow: matches.is_present(OPT_DEREFERENCE),
             showfs,
             from_user: !fmtstr.is_empty(),
-            files: matches.free,
+            files,
             default_tokens,
             default_dev_tokens,
             mount_list,
@@ -873,76 +885,13 @@ impl Stater {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
-
-    opts.optflag("L", "dereference", "follow links");
-    opts.optflag(
-        "f",
-        "file-system",
-        "display file system status instead of file status",
-    );
-    opts.optflag("t", "terse", "print the information in terse form");
-
-    // Omit the unused description as they are too long
-    opts.optopt("c", "format", "", "FORMAT");
-    opts.optopt("", "printf", "", "FORMAT");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_usage_error!("{}", f);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("help") {
-        return help();
-    } else if matches.opt_present("version") {
-        return version();
-    }
-
-    if matches.free.is_empty() {
-        show_usage_error!("missing operand");
-        return 1;
-    }
-
-    match Stater::new(matches) {
-        Ok(stater) => stater.exec(),
-        Err(e) => {
-            show_info!("{}", e);
-            1
-        }
-    }
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE...", executable!())
 }
 
-fn version() -> i32 {
-    println!("{} {}", NAME, VERSION);
-    0
-}
-
-fn help() -> i32 {
-    let msg = format!(
-        r#"Usage: {} [OPTION]... FILE...
-Display file or file system status.
-
-Mandatory arguments to long options are mandatory for short options too.
-  -L, --dereference     follow links
-  -f, --file-system     display file system status instead of file status
-  -c  --format=FORMAT   use the specified FORMAT instead of the default;
-                          output a newline after each use of FORMAT
-      --printf=FORMAT   like --format, but interpret backslash escapes,
-                          and do not output a mandatory trailing newline;
-                          if you want a newline, include \n in FORMAT
-  -t, --terse           print the information in terse form
-      --help     display this help and exit
-      --version  output version information and exit
-
+fn get_long_usage() -> String {
+    String::from(
+        "
 The valid format sequences for files (without --file-system):
 
   %a   access rights in octal (note '#' and '0' printf flags)
@@ -993,9 +942,71 @@ Valid format sequences for file systems:
 
 NOTE: your shell may have its own version of stat, which usually supersedes
 the version described here.  Please refer to your shell's documentation
-for details about the options it supports."#,
-        NAME
-    );
-    println!("{}", msg);
-    0
+for details about the options it supports.
+",
+    )
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let long_usage = get_long_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&long_usage[..])
+        .arg(
+            Arg::with_name(OPT_DEREFERENCE)
+                .short("L")
+                .long(OPT_DEREFERENCE)
+                .help("follow links"),
+        )
+        .arg(
+            Arg::with_name(OPT_FILE_SYSTEM)
+                .short("f")
+                .long(OPT_FILE_SYSTEM)
+                .help("display file system status instead of file status"),
+        )
+        .arg(
+            Arg::with_name(OPT_TERSE)
+                .short("t")
+                .long(OPT_TERSE)
+                .help("print the information in terse form"),
+        )
+        .arg(
+            Arg::with_name(OPT_FORMAT)
+                .short("c")
+                .long(OPT_FORMAT)
+                .help(
+                    "use the specified FORMAT instead of the default;
+ output a newline after each use of FORMAT",
+                )
+                .value_name("FORMAT"),
+        )
+        .arg(
+            Arg::with_name(OPT_PRINTF)
+                .long(OPT_PRINTF)
+                .value_name("FORMAT")
+                .help(
+                    "like --format, but interpret backslash escapes,
+            and do not output a mandatory trailing newline;
+            if you want a newline, include \n in FORMAT",
+                ),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
+        )
+        .get_matches_from(args);
+
+    match Stater::new(matches) {
+        Ok(stater) => stater.exec(),
+        Err(e) => {
+            show_info!("{}", e);
+            1
+        }
+    }
 }

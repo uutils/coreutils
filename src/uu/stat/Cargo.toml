@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/stat.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 time = "0.1.40"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries", "libc"] }
 uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
