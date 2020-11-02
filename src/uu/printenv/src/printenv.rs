@@ -15,7 +15,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use std::env;
 
-static ABOUT: &str = "Prints the given environment VARIABLE(s), otherwise prints them all.";
+static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_NULL: &str = "null";
