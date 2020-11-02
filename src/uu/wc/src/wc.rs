@@ -65,7 +65,8 @@ struct Result {
     max_line_length: usize,
 }
 
-static ABOUT: &str = "print newline, word, and byte counts for each file.";
+static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
+more than one FILE is specified.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_BYTES: &str = "bytes";
