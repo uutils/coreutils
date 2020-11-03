@@ -5,69 +5,75 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs;
 use std::path::Path;
 
-static NAME: &str = "rmdir";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
+static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
+static OPT_PARENTS: &str = "parents";
+static OPT_VERBOSE: &str = "verbose";
+
+static ARG_DIRS: &str = "dirs";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... DIRECTORY...", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_IGNORE_FAIL_NON_EMPTY)
+                .long(OPT_IGNORE_FAIL_NON_EMPTY)
+                .help("ignore each failure that is solely because a directory is non-empty"),
+        )
+        .arg(
+            Arg::with_name(OPT_PARENTS)
+                .short("p")
+                .long(OPT_PARENTS)
+                .help(
+                    "remove DIRECTORY and its ancestors; e.g.,
+                  'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("output a diagnostic for every directory processed"),
+        )
+        .arg(
+            Arg::with_name(ARG_DIRS)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1)
+                .required(true),
+        )
+        .get_matches_from(args);
 
-    opts.optflag(
-        "",
-        "ignore-fail-on-non-empty",
-        "ignore each failure that is solely because a directory is non-empty",
-    );
-    opts.optflag("p", "parents", "remove DIRECTORY and its ancestors; e.g., 'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a");
-    opts.optflag(
-        "v",
-        "verbose",
-        "output a diagnostic for every directory processed",
-    );
-    opts.optflag("h", "help", "print this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let dirs: Vec<String> = matches
+        .values_of(ARG_DIRS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f);
-            return 1;
-        }
-    };
+    let ignore = matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY);
+    let parents = matches.is_present(OPT_PARENTS);
+    let verbose = matches.is_present(OPT_VERBOSE);
 
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]... DIRECTORY...
-
-Remove the DIRECTORY(ies), if they are empty.",
-            NAME, VERSION
-        );
-        print!("{}", opts.usage(&msg));
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() {
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", NAME);
-        return 1;
-    } else {
-        let ignore = matches.opt_present("ignore-fail-on-non-empty");
-        let parents = matches.opt_present("parents");
-        let verbose = matches.opt_present("verbose");
-        match remove(matches.free, ignore, parents, verbose) {
-            Ok(()) => ( /* pass */ ),
-            Err(e) => return e,
-        }
+    match remove(dirs, ignore, parents, verbose) {
+        Ok(()) => ( /* pass */ ),
+        Err(e) => return e,
     }
 
     0
@@ -115,7 +121,7 @@ fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
                 show_error!("removing directory '{}': {}", path.display(), e);
                 r = Err(1);
             }
-            Ok(_) if verbose => println!("Removed directory '{}'", path.display()),
+            Ok(_) if verbose => println!("removing directory, '{}'", path.display()),
             _ => (),
         }
     } else if !ignore {
