@@ -18,7 +18,6 @@ path = "src/expand.rs"
 getopts = "0.2.18"
 unicode-width = "0.1.5"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "expand"

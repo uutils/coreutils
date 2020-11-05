@@ -19,7 +19,6 @@ getopts = "0.2.18"
 rand = "0.5"
 tempfile = "3.0"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "mktemp"

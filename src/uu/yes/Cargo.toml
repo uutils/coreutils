@@ -17,7 +17,6 @@ path = "src/yes.rs"
 [dependencies]
 clap = "2.32"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["zero-copy"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [features]
 default = []

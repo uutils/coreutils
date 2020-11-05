@@ -26,7 +26,6 @@ sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "hashsum"

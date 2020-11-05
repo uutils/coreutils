@@ -16,7 +16,6 @@ path = "src/false.rs"
 
 [dependencies]
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [[bin]]
 name = "false"

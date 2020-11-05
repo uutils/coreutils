@@ -20,7 +20,6 @@ num-traits = "0.2"
 rand = { version="0.7", features=["small_rng"] }
 smallvec = { version="0.6.13, < 1.0" }
 uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
 
 [dev-dependencies]
 criterion = "0.3"
