@@ -18,8 +18,8 @@ path = "src/sort.rs"
 clap = "2.33"
 itertools = "0.8.0"
 semver = "0.9.0"
-uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "sort"

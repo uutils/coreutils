@@ -17,8 +17,8 @@ path = "src/mv.rs"
 [dependencies]
 getopts = "0.2.18"
 fs_extra = "1.1.0"
-uucore = { version="0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "mv"

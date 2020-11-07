@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/who.rs"
 
 [dependencies]
-uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["utmpx"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["utmpx"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "who"

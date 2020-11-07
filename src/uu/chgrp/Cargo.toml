@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/chgrp.rs"
 
 [dependencies]
-uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["entries", "fs"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["entries", "fs"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2.8"
 
 [[bin]]

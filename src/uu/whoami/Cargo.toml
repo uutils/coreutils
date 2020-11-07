@@ -17,8 +17,8 @@ path = "src/whoami.rs"
 [dependencies]
 advapi32-sys = "0.2.0"
 clap = "2.32"
-uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["entries", "wide"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["entries", "wide"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version = "0.3", features = ["lmcons"] }
 
 [[bin]]

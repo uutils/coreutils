@@ -16,8 +16,8 @@ path = "src/cat.rs"
 
 [dependencies]
 quick-error = "1.2.3"
-uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(unix)'.dependencies]
 unix_socket = "0.5.0"

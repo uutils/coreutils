@@ -18,8 +18,8 @@ path = "src/df.rs"
 clap = "2.32"
 libc = "0.2"
 number_prefix = "0.2"
-uucore = { version="0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "winerror"] }

@@ -19,8 +19,8 @@ num-traits = "0.2" # used in src/numerics.rs, which is included by build.rs
 num-traits = "0.2"
 rand = { version="0.7", features=["small_rng"] }
 smallvec = { version="0.6.13, < 1.0" }
-uucore = { version="0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [dev-dependencies]
 criterion = "0.3"
