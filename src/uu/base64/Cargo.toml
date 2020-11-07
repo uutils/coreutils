@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/base64.rs"
 
 [dependencies]
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features = ["encoding"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version="0.0.4", package="uucore", path="../../uucore", features = ["encoding"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "base64"

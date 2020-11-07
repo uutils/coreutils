@@ -20,8 +20,8 @@ path = "src/install.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = ">= 0.2"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["mode"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version="0.0.4", package="uucore", path="../../uucore", features=["mode"] }
+uucore_procs = { version="0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [dev-dependencies]
 time = "0.1.40"
