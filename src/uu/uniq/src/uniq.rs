@@ -30,14 +30,13 @@ static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 
 static ARG_FILES: &str = "files";
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq)]
 enum Delimiters {
     Prepend,
     Separate,
     None,
 }
 
-#[derive(Debug)]
 struct Uniq {
     repeats_only: bool,
     uniques_only: bool,
