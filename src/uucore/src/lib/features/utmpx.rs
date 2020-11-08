@@ -190,7 +190,7 @@ impl Utmpx {
     pub fn canon_host(&self) -> IOResult<String> {
         const AI_CANONNAME: libc::c_int = 0x2;
         let host = self.host();
-        let host = host.split(':').nth(0).unwrap();
+        let host = host.split(':').next().unwrap();
         let hints = libc::addrinfo {
             ai_flags: AI_CANONNAME,
             ai_family: 0,
