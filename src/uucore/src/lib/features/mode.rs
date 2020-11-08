@@ -46,7 +46,7 @@ pub fn parse_symbolic(
     let respect_umask = pos == 0;
     let last_umask = unsafe { umask(0) };
     mode = &mode[pos..];
-    while mode.len() > 0 {
+    while !mode.is_empty() {
         let (op, pos) = parse_op(mode, None)?;
         mode = &mode[pos..];
         let (mut srwx, pos) = parse_change(mode, fperm, considering_dir);
