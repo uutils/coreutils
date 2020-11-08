@@ -9,6 +9,8 @@ pub trait AsRawObject {
 }
 
 pub trait FromRawObject: Sized {
+    /// # Safety
+    /// ToDO ...
     unsafe fn from_raw_object(obj: RawObject) -> Option<Self>;
 }
 
