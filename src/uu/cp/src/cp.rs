@@ -231,11 +231,6 @@ static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
-/// Prints the version
-fn print_version() {
-    println!("{} {}", executable!(), VERSION);
-}
-
 fn get_usage() -> String {
     format!(
         "{0} [OPTION]... [-T] SOURCE DEST
@@ -277,7 +272,6 @@ static OPT_SYMBOLIC_LINK: &str = "symbolic-link";
 static OPT_TARGET_DIRECTORY: &str = "target-directory";
 static OPT_UPDATE: &str = "update";
 static OPT_VERBOSE: &str = "verbose";
-static OPT_VERSION: &str = "version";
 
 #[cfg(unix)]
 static PRESERVABLE_ATTRIBUTES: &[&str] = &[
@@ -325,10 +319,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .long(OPT_NO_TARGET_DIRECTORY)
              .conflicts_with(OPT_TARGET_DIRECTORY)
              .help("Treat DEST as a regular file and not a directory"))
-        .arg(Arg::with_name(OPT_VERSION)
-             .short("V")
-             .long(OPT_VERSION)
-             .help("output version information and exit"))
         .arg(Arg::with_name(OPT_INTERACTIVE)
              .short("i")
              .long(OPT_INTERACTIVE)
@@ -471,11 +461,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(OPT_PATHS)
              .multiple(true))
         .get_matches_from(args);
-
-    if matches.is_present(OPT_VERSION) {
-        print_version();
-        return EXIT_OK;
-    }
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
     let paths: Vec<String> = matches
