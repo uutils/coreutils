@@ -22,6 +22,7 @@ pub struct PlatformZeroCopyWriter {
     raw_obj: RawObject,
     read_pipe: RawFd,
     write_pipe: RawFd,
+    #[allow(clippy::type_complexity)]
     write_fn: fn(&mut PlatformZeroCopyWriter, &[IoVec<&[u8]>], usize) -> io::Result<usize>,
 }
 
