@@ -145,10 +145,6 @@ jobs:
         cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
-    - name: Info
-      shell: bash
-      run: |
-        # Info
 
     - name: Test
       uses: actions-rs/cargo@v1
