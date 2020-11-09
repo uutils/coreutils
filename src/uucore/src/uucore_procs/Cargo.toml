@@ -1,0 +1,26 @@
+[package]
+name = "uucore_procs"
+version = "0.0.4"
+authors = ["Roy Ivy III <rivy.dev@gmail.com>"]
+license = "MIT"
+description = "uutils ~ 'uucore' proc-macros"
+
+homepage = "https://github.com/uutils/uucore/uucore_procs"
+repository = "https://github.com/uutils/uucore/uucore_procs"
+# readme = "README.md"
+keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
+# categories = ["os"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version="1.0" }
+
+[features]
+default = []
+## non-default features
+debug = ["syn/extra-traits"] ## add Debug traits to syn structs (for `println!("{:?}", ...)`)
