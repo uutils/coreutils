@@ -7,17 +7,14 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-extern crate getopts;
+extern crate clap;
 extern crate libc;
 
-#[cfg(windows)]
 #[macro_use]
 extern crate uucore;
 
-#[cfg(not(windows))]
-extern crate uucore;
-
-static NAME: &str = "sync";
+use clap::App;
+static ABOUT: &str = "Synchronize cached writes to persistent storage";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(unix)]
@@ -118,55 +115,21 @@ mod platform {
     }
 }
 
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE...", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        _ => {
-            help(&opts);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("h") {
-        help(&opts);
-        return 0;
-    }
-
-    if matches.opt_present("V") {
-        version();
-        return 0;
-    }
+    let _matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .get_matches_from(args);
 
     sync();
     0
-}
-
-fn version() {
-    println!("{} (uutils) {}", NAME, VERSION);
-    println!("The MIT License");
-    println!();
-    println!("Author -- Alexander Fomin.");
-}
-
-fn help(opts: &getopts::Options) {
-    let msg = format!(
-        "{0} {1}
-
-Usage:
-  {0} [OPTION]
-
-Force changed blocks to disk, update the super block.",
-        NAME, VERSION
-    );
-
-    print!("{}", opts.usage(&msg));
 }
 
 fn sync() -> isize {
