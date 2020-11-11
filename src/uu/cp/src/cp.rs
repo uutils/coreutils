@@ -418,6 +418,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .conflicts_with(OPT_DEREFERENCE)
              // -d sets this option
              .help("never follow symbolic links in SOURCE"))
+        .arg(Arg::with_name(OPT_DEREFERENCE)
+             .short("L")
+             .long(OPT_DEREFERENCE)
+             .conflicts_with(OPT_NO_DEREFERENCE)
+             .help("always follow symbolic links in SOURCE"))
         .arg(Arg::with_name(OPT_ARCHIVE)
              .short("a")
              .long(OPT_ARCHIVE)
@@ -432,11 +437,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .long(OPT_COPY_CONTENTS)
              .conflicts_with(OPT_ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::with_name(OPT_DEREFERENCE)
-             .short("L")
-             .long(OPT_DEREFERENCE)
-             .conflicts_with(OPT_NO_DEREFERENCE)
-             .help("NotImplemented: always follow symbolic links in SOURCE"))
         .arg(Arg::with_name(OPT_PARENTS)
              .long(OPT_PARENTS)
              .help("NotImplemented: use full source file name under DIRECTORY"))
@@ -546,7 +546,7 @@ impl FromStr for Attribute {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute '{}'",
                     value
-                )))
+                )));
             }
         })
     }
@@ -568,7 +568,6 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts = vec![
             OPT_COPY_CONTENTS,
-            OPT_DEREFERENCE,
             OPT_PARENTS,
             OPT_SPARSE,
             OPT_STRIP_TRAILING_SLASHES,
@@ -649,7 +648,7 @@ impl Options {
                             return Err(Error::InvalidArgument(format!(
                                 "invalid argument '{}' for \'reflink\'",
                                 value
-                            )))
+                            )));
                         }
                     }
                 } else {
@@ -927,7 +926,7 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
     for path in WalkDir::new(root) {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
-        let path = if options.no_dereference && is_symlink {
+        let path = if (options.no_dereference || options.dereference) && is_symlink {
             // we are dealing with a symlink. Don't follow it
             match env::current_dir() {
                 Ok(cwd) => cwd.join(resolve_relative_path(p.path())),

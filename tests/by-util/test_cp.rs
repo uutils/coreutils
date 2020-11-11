@@ -352,6 +352,60 @@ fn test_cp_arg_suffix() {
 }
 
 #[test]
+fn test_cp_deref_conflicting_options() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("-LP")
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .fails();
+}
+
+#[test]
+fn test_cp_deref() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    let _r = fs::symlink(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+    #[cfg(windows)]
+    let _r = symlink_file(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+    //using -L option
+    let result = scene
+        .ucmd()
+        .arg("-L")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE_SYMLINK)
+        .arg(TEST_COPY_TO_FOLDER)
+        .run();
+
+    // Check that the exit code represents a successful copy.
+    let exit_success = result.success;
+    assert!(exit_success);
+    let path_to_new_symlink = at
+        .subdir
+        .join(TEST_COPY_TO_FOLDER)
+        .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
+    // unlike -P/--no-deref, we expect a file, not a link
+    assert!(at.file_exists(
+        &path_to_new_symlink
+            .clone()
+            .into_os_string()
+            .into_string()
+            .unwrap()
+    ));
+    // Check the content of the destination file that was copied.
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    let path_to_check = path_to_new_symlink.to_str().unwrap();
+    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+}
+#[test]
 fn test_cp_no_deref() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -391,6 +445,111 @@ fn test_cp_no_deref() {
     ));
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    let path_to_check = path_to_new_symlink.to_str().unwrap();
+    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+}
+
+#[test]
+// For now, disable the test on Windows. Symlinks aren't well support on Windows.
+// It works on Unix for now and it works locally when run from a powershell
+#[cfg(not(windows))]
+fn test_cp_deref_folder_to_folder() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let cwd = env::current_dir().unwrap();
+
+    let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
+
+    // Change the cwd to have a correct symlink
+    assert!(env::set_current_dir(&path_to_new_symlink).is_ok());
+
+    #[cfg(not(windows))]
+    let _r = fs::symlink(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_SOURCE_SYMLINK);
+    #[cfg(windows)]
+    let _r = symlink_file(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_SOURCE_SYMLINK);
+
+    // Back to the initial cwd (breaks the other tests)
+    assert!(env::set_current_dir(&cwd).is_ok());
+
+    //using -P -R option
+    let result = scene
+        .ucmd()
+        .arg("-L")
+        .arg("-R")
+        .arg("-v")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .run();
+    println!("cp output {}", result.stdout);
+
+    // Check that the exit code represents a successful copy.
+    let exit_success = result.success;
+    assert!(exit_success);
+
+    #[cfg(not(windows))]
+    {
+        let scene2 = TestScenario::new("ls");
+        let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
+        println!("ls source {}", result.stdout);
+
+        let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
+
+        let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
+        println!("ls dest {}", result.stdout);
+    }
+
+    #[cfg(windows)]
+    {
+        // No action as this test is disabled but kept in case we want to
+        // try to make it work in the future.
+        let a = Command::new("cmd").args(&["/C", "dir"]).output();
+        println!("output {:#?}", a);
+
+        let a = Command::new("cmd")
+            .args(&["/C", "dir", &at.as_string()])
+            .output();
+        println!("output {:#?}", a);
+
+        let a = Command::new("cmd")
+            .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
+            .output();
+        println!("output {:#?}", a);
+
+        let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
+
+        let a = Command::new("cmd")
+            .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
+            .output();
+        println!("output {:#?}", a);
+
+        let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
+
+        let a = Command::new("cmd")
+            .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
+            .output();
+        println!("output {:#?}", a);
+    }
+
+    let path_to_new_symlink = at
+        .subdir
+        .join(TEST_COPY_TO_FOLDER_NEW)
+        .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
+    assert!(at.file_exists(
+        &path_to_new_symlink
+            .clone()
+            .into_os_string()
+            .into_string()
+            .unwrap()
+    ));
+
+    let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
+
+    // Check the content of the destination file that was copied.
+    let path_to_check = path_to_new.to_str().unwrap();
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
+
+    // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
     assert_eq!(at.read(&path_to_check), "Hello, World!\n");
 }
