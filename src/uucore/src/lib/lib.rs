@@ -53,6 +53,8 @@ pub use crate::features::mode;
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub use crate::features::entries;
+#[cfg(all(unix, feature = "perms"))]
+pub use crate::features::perms;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
