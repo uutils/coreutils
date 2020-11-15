@@ -342,7 +342,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         main_function,
         specified_mode,
         suffix: backup_suffix.to_string(),
-        verbose: matches.is_present("v"),
+        verbose: matches.is_present(OPT_VERBOSE),
     })
 }
 
