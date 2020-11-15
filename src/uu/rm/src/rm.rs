@@ -14,7 +14,7 @@ extern crate walkdir;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
@@ -43,15 +43,15 @@ struct Options {
 
 static ABOUT: &str = "Remove (unlink) the FILE(s)";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_DIR: &str = "dir";
+static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
+static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
+static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
+static OPT_PRESERVE_ROOT: &str = "preserve-root";
 static OPT_PROMPT: &str = "prompt";
 static OPT_PROMPT_MORE: &str = "prompt-more";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
-static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
-static OPT_PRESERVE_ROOT: &str = "preserve-root";
 static OPT_RECURSIVE: &str = "recursive";
-static OPT_DIR: &str = "dir";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_FILES: &str = "files";
