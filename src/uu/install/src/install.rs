@@ -217,7 +217,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
-    let mut paths: Vec<String> = matches
+    let paths: Vec<String> = matches
         .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
