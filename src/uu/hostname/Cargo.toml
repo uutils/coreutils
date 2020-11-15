@@ -18,8 +18,8 @@ path = "src/hostname.rs"
 clap = "2.32"
 libc = "0.2.42"
 hostname = { version = "0.3", features = ["set"] }
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["wide"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["wide"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version="0.3", features=["sysinfoapi", "winsock2"] }
 
 [[bin]]
