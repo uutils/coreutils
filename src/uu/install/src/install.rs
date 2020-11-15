@@ -94,8 +94,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("(unimplemented) make a backup of each existing destination file")
                 .value_name("CONTROL")
         )
-    // TODO implement flag
         .arg(
+            // TODO implement flag
             Arg::with_name(OPT_BACKUP_2)
             .short("b")
             .help("(unimplemented) like --backup but does not accept an argument")
