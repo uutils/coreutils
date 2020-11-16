@@ -1,5 +1,6 @@
 use crate::common::util::*;
 use std::os::unix::fs::PermissionsExt;
+use rust_users::*;
 
 #[test]
 fn test_install_help() {
@@ -205,6 +206,27 @@ fn test_install_target_new_file() {
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }
+
+#[test]
+fn test_install_target_new_file_with_group() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_install_target_new_filer_file_j";
+    let dir = "test_install_target_new_file_dir_j";
+    let gid = get_effective_gid();
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg(file)
+        .arg("--group")
+        .arg(gid.to_string())
+        .arg(format!("{}/{}", dir, file))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(&format!("{}/{}", dir, file)));
+}
+
 
 #[test]
 fn test_install_target_new_file_failing_nonexistent_parent() {

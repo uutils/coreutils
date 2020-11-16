@@ -16,6 +16,9 @@ mod mode;
 extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
+use uucore::perms::{wrap_chgrp, Verbosity};
+use uucore::entries::grp2gid;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
@@ -27,6 +30,7 @@ pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
     suffix: String,
+    group: String,
     verbose: bool,
 }
 
@@ -126,12 +130,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("(unimplemented) create all leading components of DEST except the last, then copy SOURCE to DEST")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_GROUP)
                 .short("g")
                 .long(OPT_GROUP)
-                .help("(unimplemented) set group ownership, instead of process's current group")
+                .help("set group ownership, instead of process's current group")
                 .value_name("GROUP")
+                .takes_value(true)
         )
         .arg(
             Arg::with_name(OPT_MODE)
@@ -139,6 +143,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_MODE)
                 .help("set permission mode (as in chmod), instead of rwxr-xr-x")
                 .value_name("MODE")
+                .takes_value(true)
+                .min_values(1)
         )
         .arg(
             // TODO implement flag
@@ -176,6 +182,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_SUFFIX)
                 .help("(unimplemented) override the usual backup suffix")
                 .value_name("SUFFIX")
+                .takes_value(true)
+                .min_values(1)
         )
         .arg(
             // TODO implement flag
@@ -214,7 +222,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("(unimplemented) set security context of files and directories")
                 .value_name("CONTEXT")
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
         .get_matches_from(args);
 
     let paths: Vec<String> = matches
@@ -258,8 +266,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--compare, -C")
     } else if matches.is_present(OPT_CREATED) {
         Err("-D")
-    } else if matches.is_present(OPT_GROUP) {
-        Err("--group, -g")
     } else if matches.is_present(OPT_OWNER) {
         Err("--owner, -o")
     } else if matches.is_present(OPT_PRESERVE_TIMESTAMPS) {
@@ -292,7 +298,7 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
 /// In event of failure, returns an integer intended as a program return code.
 ///
 fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
-    let main_function = if matches.is_present("directory") {
+    let main_function = if matches.is_present(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
         MainFunction::Standard
@@ -310,11 +316,6 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
                 }
             },
             None => {
-                show_error!(
-                    "option '--mode' requires an argument\n \
-                     Try '{} --help' for more information.",
-                    executable!()
-                );
                 return Err(1);
             }
         }
@@ -326,11 +327,6 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         match matches.value_of(OPT_SUFFIX) {
             Some(x) => x,
             None => {
-                show_error!(
-                    "option '--suffix' requires an argument\n\
-                     Try '{} --help' for more information.",
-                    executable!()
-                );
                 return Err(1);
             }
         }
@@ -338,10 +334,13 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         "~"
     };
 
+    let group = matches.value_of(OPT_GROUP).unwrap_or_else(|| "");
+
     Ok(Behavior {
         main_function,
         specified_mode,
         suffix: backup_suffix.to_string(),
+        group: group.to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
     })
 }
@@ -400,22 +399,16 @@ fn is_new_file_path(path: &Path) -> bool {
 /// Returns an integer intended as a program return code.
 ///
 fn standard(paths: Vec<String>, b: Behavior) -> i32 {
-    if paths.len() < 2 {
-        println!("{} requires at least 2 arguments.", executable!());
-        1
-    } else {
-        let sources = &paths[0..paths.len() - 1]
-            .iter()
-            .map(PathBuf::from)
-            .collect::<Vec<_>>();
-        let target = Path::new(paths.last().unwrap());
+    let sources = &paths[0..paths.len() - 1]
+        .iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    let target = Path::new(paths.last().unwrap());
 
-        if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
-            /* If the target already exist or directly creatable */
-            copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
-        } else {
-            copy_files_into_dir(sources, &target.to_path_buf(), &b)
-        }
+    if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
+        copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+    } else {
+        copy_files_into_dir(sources, &target.to_path_buf(), &b)
     }
 }
 
@@ -495,7 +488,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
 
     if let Err(err) = io_result {
         show_error!(
-            "install: cannot install ‘{}’ to ‘{}’: {}",
+            "cannot install ‘{}’ to ‘{}’: {}",
             from.display(),
             to.display(),
             err
@@ -505,6 +498,20 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
 
     if mode::chmod(&to, b.mode()).is_err() {
         return Err(());
+    }
+
+    if b.group != "" {
+        let meta = match fs::metadata(to) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let group_id = match grp2gid(&b.group) {
+            Ok(g) => g,
+            _ => crash!(1, "no such group: {}", b.group),
+        };
+        wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal);
+
     }
 
     if b.verbose {
