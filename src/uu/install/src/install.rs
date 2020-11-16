@@ -20,7 +20,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
-const DEFAULT_MODE: u32 = 755;
+const DEFAULT_MODE: u32 = 0o755;
 
 #[allow(dead_code)]
 pub struct Behavior {
