@@ -13,6 +13,14 @@ fn test_rm_one_file() {
 }
 
 #[test]
+fn test_rm_failed() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_one_file";
+
+    ucmd.arg(file).fails(); // Doesn't exist
+}
+
+#[test]
 fn test_rm_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_multiple_file_a";

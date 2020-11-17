@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/rm.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 walkdir = "2.2.8"
 remove_dir_all = "0.5.1"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
