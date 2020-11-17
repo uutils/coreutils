@@ -1,7 +1,7 @@
 use crate::common::util::*;
+use rust_users::*;
 
 extern crate chown;
-// pub use self::uu_chown::*;
 
 #[cfg(test)]
 mod test_passgrp {
@@ -378,4 +378,17 @@ fn test_root_preserve() {
     assert!(result
         .stderr
         .contains("chown: it is dangerous to operate recursively"));
+
+#[cfg(target_os = "linux")]
+fn test_big_p() {
+    if get_effective_uid() != 0 {
+        new_ucmd!()
+            .arg("-RP")
+            .arg("bin")
+            .arg("/proc/self/cwd")
+            .fails()
+            .stderr_is(
+                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+            );
+    }
 }

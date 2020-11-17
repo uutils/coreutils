@@ -11,7 +11,8 @@
 extern crate uucore;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
-use uucore::libc::{self, gid_t, lchown, uid_t};
+use uucore::libc::{gid_t, uid_t};
+use uucore::perms::{wrap_chown, Verbosity};
 
 extern crate clap;
 use clap::{App, Arg};
@@ -21,9 +22,6 @@ use walkdir::WalkDir;
 
 use std::fs::{self, Metadata};
 use std::os::unix::fs::MetadataExt;
-
-use std::io;
-use std::io::Result as IOResult;
 
 use std::convert::AsRef;
 use std::path::Path;
@@ -304,14 +302,6 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     }
 }
 
-#[derive(PartialEq, Debug)]
-enum Verbosity {
-    Silent,
-    Changes,
-    Verbose,
-    Normal,
-}
-
 enum IfFrom {
     All,
     User(u32),
@@ -347,29 +337,6 @@ impl Chowner {
             ret |= self.traverse(f);
         }
         ret
-    }
-
-    fn chown<P: AsRef<Path>>(
-        &self,
-        path: P,
-        duid: uid_t,
-        dgid: gid_t,
-        follow: bool,
-    ) -> IOResult<()> {
-        let path = path.as_ref();
-        let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let ret = unsafe {
-            if follow {
-                libc::chown(s.as_ptr(), duid, dgid)
-            } else {
-                lchown(s.as_ptr(), duid, dgid)
-            }
-        };
-        if ret == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
     }
 
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
@@ -408,7 +375,14 @@ impl Chowner {
         }
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
-            self.wrap_chown(path, &meta, follow_arg)
+            wrap_chown(
+                path,
+                &meta,
+                self.dest_uid,
+                self.dest_gid,
+                follow_arg,
+                self.verbosity.clone(),
+            )
         } else {
             0
         };
@@ -443,7 +417,14 @@ impl Chowner {
                 continue;
             }
 
-            ret = self.wrap_chown(path, &meta, follow);
+            ret = wrap_chown(
+                path,
+                &meta,
+                self.dest_uid,
+                self.dest_gid,
+                follow,
+                self.verbosity.clone(),
+            )
         }
         ret
     }
@@ -469,58 +450,6 @@ impl Chowner {
             })
         };
         Some(meta)
-    }
-
-    fn wrap_chown<P: AsRef<Path>>(&self, path: P, meta: &Metadata, follow: bool) -> i32 {
-        use self::Verbosity::*;
-        let mut ret = 0;
-        let dest_uid = self.dest_uid.unwrap_or_else(|| meta.uid());
-        let dest_gid = self.dest_gid.unwrap_or_else(|| meta.gid());
-        let path = path.as_ref();
-        if let Err(e) = self.chown(path, dest_uid, dest_gid, follow) {
-            match self.verbosity {
-                Silent => (),
-                _ => {
-                    show_info!("changing ownership of '{}': {}", path.display(), e);
-                    if self.verbosity == Verbose {
-                        println!(
-                            "failed to change ownership of {} from {}:{} to {}:{}",
-                            path.display(),
-                            entries::uid2usr(meta.uid()).unwrap(),
-                            entries::gid2grp(meta.gid()).unwrap(),
-                            entries::uid2usr(dest_uid).unwrap(),
-                            entries::gid2grp(dest_gid).unwrap()
-                        );
-                    };
-                }
-            }
-            ret = 1;
-        } else {
-            let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
-            if changed {
-                match self.verbosity {
-                    Changes | Verbose => {
-                        println!(
-                            "changed ownership of {} from {}:{} to {}:{}",
-                            path.display(),
-                            entries::uid2usr(meta.uid()).unwrap(),
-                            entries::gid2grp(meta.gid()).unwrap(),
-                            entries::uid2usr(dest_uid).unwrap(),
-                            entries::gid2grp(dest_gid).unwrap()
-                        );
-                    }
-                    _ => (),
-                };
-            } else if self.verbosity == Verbose {
-                println!(
-                    "ownership of {} retained as {}:{}",
-                    path.display(),
-                    entries::uid2usr(dest_uid).unwrap(),
-                    entries::gid2grp(dest_gid).unwrap()
-                );
-            }
-        }
-        ret
     }
 
     #[inline]

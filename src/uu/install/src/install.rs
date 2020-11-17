@@ -16,10 +16,11 @@ mod mode;
 extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
-use uucore::perms::{wrap_chgrp, Verbosity};
-use uucore::entries::grp2gid;
+use uucore::entries::{grp2gid, usr2uid};
+use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
@@ -30,6 +31,7 @@ pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
     suffix: String,
+    owner: String,
     group: String,
     verbose: bool,
 }
@@ -147,12 +149,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .min_values(1)
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_OWNER)
                 .short("o")
                 .long(OPT_OWNER)
-                .help("(unimplemented) set ownership (super-user only)")
+                .help("set ownership (super-user only)")
                 .value_name("OWNER")
+                .takes_value(true)
         )
         .arg(
             // TODO implement flag
@@ -266,8 +268,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--compare, -C")
     } else if matches.is_present(OPT_CREATED) {
         Err("-D")
-    } else if matches.is_present(OPT_OWNER) {
-        Err("--owner, -o")
     } else if matches.is_present(OPT_PRESERVE_TIMESTAMPS) {
         Err("--preserve-timestamps, -p")
     } else if matches.is_present(OPT_STRIP) {
@@ -334,13 +334,18 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         "~"
     };
 
-    let group = matches.value_of(OPT_GROUP).unwrap_or_else(|| "");
-
     Ok(Behavior {
         main_function,
         specified_mode,
         suffix: backup_suffix.to_string(),
-        group: group.to_string(),
+        owner: matches
+            .value_of(OPT_OWNER)
+            .unwrap_or_else(|| "")
+            .to_string(),
+        group: matches
+            .value_of(OPT_GROUP)
+            .unwrap_or_else(|| "")
+            .to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
     })
 }
@@ -500,6 +505,27 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         return Err(());
     }
 
+    if b.owner != "" {
+        let meta = match fs::metadata(to) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let owner_id = match usr2uid(&b.owner) {
+            Ok(g) => g,
+            _ => crash!(1, "no such user: {}", b.owner),
+        };
+        let gid = meta.gid();
+        wrap_chown(
+            to.as_path(),
+            &meta,
+            Some(owner_id),
+            Some(gid),
+            false,
+            Verbosity::Normal,
+        );
+    }
+
     if b.group != "" {
         let meta = match fs::metadata(to) {
             Ok(meta) => meta,
@@ -511,7 +537,6 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             _ => crash!(1, "no such group: {}", b.group),
         };
         wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal);
-
     }
 
     if b.verbose {
