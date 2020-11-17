@@ -18,7 +18,7 @@ edition = "2018"
 path = "src/install.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 libc = ">= 0.2"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["mode"] }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
