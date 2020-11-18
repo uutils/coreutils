@@ -239,13 +239,24 @@ impl Chgrper {
             }
         }
 
-        let ret = wrap_chgrp(
+        let ret = match wrap_chgrp(
             path,
             &meta,
             self.dest_gid,
             follow_arg,
             self.verbosity.clone(),
-        );
+        ) {
+            Ok(n) => {
+                show_info!("{}", n);
+                0
+            }
+            Err(e) => {
+                if self.verbosity != Verbosity::Silent {
+                    show_info!("{}", e);
+                }
+                1
+            }
+        };
 
         if !self.recursive {
             ret
@@ -273,8 +284,22 @@ impl Chgrper {
                 }
             };
 
-            ret = wrap_chgrp(path, &meta, self.dest_gid, follow, self.verbosity.clone());
+            ret = match wrap_chgrp(path, &meta, self.dest_gid, follow, self.verbosity.clone()) {
+                Ok(n) => {
+                    if n != "" {
+                        show_info!("{}", n);
+                    }
+                    0
+                }
+                Err(e) => {
+                    if self.verbosity != Verbosity::Silent {
+                        show_info!("{}", e);
+                    }
+                    1
+                }
+            }
         }
+
         ret
     }
 

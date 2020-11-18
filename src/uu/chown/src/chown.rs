@@ -375,14 +375,28 @@ impl Chowner {
         }
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
-            wrap_chown(
+            match wrap_chown(
                 path,
                 &meta,
                 self.dest_uid,
                 self.dest_gid,
                 follow_arg,
                 self.verbosity.clone(),
-            )
+            ) {
+                Ok(n) => {
+                    if n != "" {
+                        show_info!("{}", n);
+                    }
+                    0
+                }
+                Err(e) => {
+
+                    if self.verbosity != Verbosity::Silent {
+                        show_info!("{}", e);
+                    }
+                    1
+                }
+            }
         } else {
             0
         };
@@ -417,14 +431,27 @@ impl Chowner {
                 continue;
             }
 
-            ret = wrap_chown(
+            ret = match wrap_chown(
                 path,
                 &meta,
                 self.dest_uid,
                 self.dest_gid,
                 follow,
                 self.verbosity.clone(),
-            )
+            ) {
+                Ok(n) => {
+                    if n != "" {
+                        show_info!("{}", n);
+                    }
+                    0
+                }
+                Err(e) => {
+                    if self.verbosity != Verbosity::Silent {
+                        show_info!("{}", e);
+                    }
+                    1
+                }
+            }
         }
         ret
     }

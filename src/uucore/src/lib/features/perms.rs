@@ -19,6 +19,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
+//type PermResult<T> = Result<T, IOError>;
+
 #[derive(PartialEq, Clone, Debug)]
 pub enum Verbosity {
     Silent,
@@ -50,18 +52,20 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
     dest_gid: gid_t,
     follow: bool,
     verbosity: Verbosity,
-) -> i32 {
+) -> Result<String, String> {
     use self::Verbosity::*;
-    let mut ret = 0;
     let path = path.as_ref();
+    let mut out: String = String::new();
+
     if let Err(e) = chgrp(path, dest_gid, follow) {
         match verbosity {
             Silent => (),
             _ => {
-                show_info!("changing group of '{}': {}", path.display(), e);
+                out = format!("changing group of '{}': {}", path.display(), e);
                 if verbosity == Verbose {
-                    println!(
-                        "failed to change group of {} from {} to {}",
+                    out = format!(
+                        "{}\nfailed to change group of {} from {} to {}",
+                        out,
                         path.display(),
                         entries::gid2grp(meta.gid()).unwrap(),
                         entries::gid2grp(dest_gid).unwrap()
@@ -69,13 +73,13 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
                 };
             }
         }
-        ret = 1;
+        return Err(out);
     } else {
         let changed = dest_gid != meta.gid();
         if changed {
             match verbosity {
                 Changes | Verbose => {
-                    println!(
+                    out = format!(
                         "changed group of {} from {} to {}",
                         path.display(),
                         entries::gid2grp(meta.gid()).unwrap(),
@@ -85,14 +89,14 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
                 _ => (),
             };
         } else if verbosity == Verbose {
-            println!(
+            out = format!(
                 "group of {} retained as {}",
                 path.display(),
                 entries::gid2grp(dest_gid).unwrap()
             );
         }
     }
-    ret
+    Ok(out)
 }
 
 fn chown<P: AsRef<Path>>(path: P, duid: uid_t, dgid: gid_t, follow: bool) -> IOResult<()> {
@@ -119,20 +123,22 @@ pub fn wrap_chown<P: AsRef<Path>>(
     dest_gid: Option<u32>,
     follow: bool,
     verbosity: Verbosity,
-) -> i32 {
+) -> Result<String, String> {
     use self::Verbosity::*;
-    let mut ret = 0;
     let dest_uid = dest_uid.unwrap_or_else(|| meta.uid());
     let dest_gid = dest_gid.unwrap_or_else(|| meta.gid());
     let path = path.as_ref();
+    let mut out: String = String::new();
+
     if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
         match verbosity {
             Silent => (),
             _ => {
-                show_info!("changing ownership of '{}': {}", path.display(), e);
+                out = format!("changing ownership of '{}': {}", path.display(), e);
                 if verbosity == Verbose {
-                    println!(
-                        "failed to change ownership of {} from {}:{} to {}:{}",
+                    out = format!(
+                        "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
+                        out,
                         path.display(),
                         entries::uid2usr(meta.uid()).unwrap(),
                         entries::gid2grp(meta.gid()).unwrap(),
@@ -142,13 +148,13 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 };
             }
         }
-        ret = 1;
+        return Err(out);
     } else {
         let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
         if changed {
             match verbosity {
                 Changes | Verbose => {
-                    println!(
+                    out = format!(
                         "changed ownership of {} from {}:{} to {}:{}",
                         path.display(),
                         entries::uid2usr(meta.uid()).unwrap(),
@@ -160,7 +166,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 _ => (),
             };
         } else if verbosity == Verbose {
-            println!(
+            out = format!(
                 "ownership of {} retained as {}:{}",
                 path.display(),
                 entries::uid2usr(dest_uid).unwrap(),
@@ -168,5 +174,5 @@ pub fn wrap_chown<P: AsRef<Path>>(
             );
         }
     }
-    ret
+    Ok(out)
 }

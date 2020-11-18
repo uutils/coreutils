@@ -516,14 +516,21 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             _ => crash!(1, "no such user: {}", b.owner),
         };
         let gid = meta.gid();
-        wrap_chown(
+        match wrap_chown(
             to.as_path(),
             &meta,
             Some(owner_id),
             Some(gid),
             false,
             Verbosity::Normal,
-        );
+        ) {
+            Ok(n) => {
+                if n != "" {
+                    show_info!("{}", n);
+                }
+            }
+            Err(e) => show_info!("{}", e),
+        }
     }
 
     if b.group != "" {
@@ -536,7 +543,14 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             Ok(g) => g,
             _ => crash!(1, "no such group: {}", b.group),
         };
-        wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal);
+        match wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal) {
+            Ok(n) => {
+                if n != "" {
+                    show_info!("{}", n);
+                }
+            }
+            Err(e) => show_info!("{}", e),
+        }
     }
 
     if b.verbose {
