@@ -10,7 +10,7 @@ fn test_install_help() {
         .succeeds()
         .no_stderr()
         .stdout
-        .contains("Options:"));
+        .contains("FLAGS:"));
 }
 
 #[test]

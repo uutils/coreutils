@@ -1,7 +1,7 @@
 name: CICD
 
 # spell-checker:ignore (acronyms) CICD MSVC musl
-# spell-checker:ignore (env/flags) Ccodegen Coverflow Cpanic RUSTDOCFLAGS RUSTFLAGS Zpanic
+# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
@@ -145,10 +145,6 @@ jobs:
         cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
-    - name: Info
-      shell: bash
-      run: |
-        # Info
 
     - name: Test
       uses: actions-rs/cargo@v1
