@@ -26,9 +26,6 @@ use std::os::unix::fs::MetadataExt;
 use std::convert::AsRef;
 use std::path::Path;
 
-use std::ffi::CString;
-use std::os::unix::ffi::OsStrExt;
-
 static ABOUT: &str = "change file owner and group";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -390,7 +387,6 @@ impl Chowner {
                     0
                 }
                 Err(e) => {
-
                     if self.verbosity != Verbosity::Silent {
                         show_info!("{}", e);
                     }

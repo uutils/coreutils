@@ -338,14 +338,8 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         main_function,
         specified_mode,
         suffix: backup_suffix.to_string(),
-        owner: matches
-            .value_of(OPT_OWNER)
-            .unwrap_or_else(|| "")
-            .to_string(),
-        group: matches
-            .value_of(OPT_GROUP)
-            .unwrap_or_else(|| "")
-            .to_string(),
+        owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
+        group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
     })
 }

@@ -6,9 +6,6 @@
 pub use crate::features::entries;
 use libc::{self, gid_t, lchown, uid_t};
 
-#[macro_use]
-pub use crate::*;
-
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
 
@@ -18,8 +15,6 @@ use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-
-//type PermResult<T> = Result<T, IOError>;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Verbosity {
@@ -64,7 +59,7 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
                 out = format!("changing group of '{}': {}", path.display(), e);
                 if verbosity == Verbose {
                     out = format!(
-                        "{}\nfailed to change group of {} from {} to {}",
+                        "{}\nfailed to change group of '{}' from {} to {}",
                         out,
                         path.display(),
                         entries::gid2grp(meta.gid()).unwrap(),
@@ -80,7 +75,7 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
             match verbosity {
                 Changes | Verbose => {
                     out = format!(
-                        "changed group of {} from {} to {}",
+                        "changed group of '{}' from {} to {}",
                         path.display(),
                         entries::gid2grp(meta.gid()).unwrap(),
                         entries::gid2grp(dest_gid).unwrap()
@@ -90,7 +85,7 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
             };
         } else if verbosity == Verbose {
             out = format!(
-                "group of {} retained as {}",
+                "group of '{}' retained as {}",
                 path.display(),
                 entries::gid2grp(dest_gid).unwrap()
             );
@@ -137,7 +132,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 out = format!("changing ownership of '{}': {}", path.display(), e);
                 if verbosity == Verbose {
                     out = format!(
-                        "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
+                        "{}\nfailed to change ownership of '{}' from {}:{} to {}:{}",
                         out,
                         path.display(),
                         entries::uid2usr(meta.uid()).unwrap(),
@@ -155,7 +150,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
             match verbosity {
                 Changes | Verbose => {
                     out = format!(
-                        "changed ownership of {} from {}:{} to {}:{}",
+                        "changed ownership of '{}' from {}:{} to {}:{}",
                         path.display(),
                         entries::uid2usr(meta.uid()).unwrap(),
                         entries::gid2grp(meta.gid()).unwrap(),
@@ -167,7 +162,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
             };
         } else if verbosity == Verbose {
             out = format!(
-                "ownership of {} retained as {}:{}",
+                "ownership of '{}' retained as {}:{}",
                 path.display(),
                 entries::uid2usr(dest_uid).unwrap(),
                 entries::gid2grp(dest_gid).unwrap()
