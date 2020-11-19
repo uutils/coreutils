@@ -123,7 +123,7 @@ fn display_hostname(matches: &ArgMatches) -> i32 {
                             ip.truncate(len - 2);
                         }
                         output.push_str(&ip);
-                        output.push_str(" ");
+                        output.push(' ');
                         hashset.insert(addr);
                     }
                 }
