@@ -5,53 +5,78 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs;
 use std::path::Path;
 
-static NAME: &str = "mkdir";
+static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_MODE: &str = "mode";
+static OPT_PARENTS: &str = "parents";
+static OPT_VERBOSE: &str = "verbose";
+
+static ARG_DIRS: &str = "dirs";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [USER]", executable!())
+}
 
 /**
  * Handles option parsing
  */
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = getopts::Options::new();
+    let usage = get_usage();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    opts.optopt("m", "mode", "set file mode", "755");
-    opts.optflag("p", "parents", "make parent directories as needed");
-    opts.optflag("v", "verbose", "print a message for each printed directory");
-    opts.optflag("h", "help", "display this help");
-    opts.optflag("V", "version", "display this version");
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_MODE)
+                .short("m")
+                .long(OPT_MODE)
+                .help("set file mode")
+                .default_value("755"),
+        )
+        .arg(
+            Arg::with_name(OPT_PARENTS)
+                .short("p")
+                .long(OPT_PARENTS)
+                .help("make parent directories as needed"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("print a message for each printed directory"),
+        )
+        .arg(
+            Arg::with_name(ARG_DIRS)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
+        )
+        .get_matches_from(args);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
+    let dirs: Vec<String> = matches
+        .values_of(ARG_DIRS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    if args.len() == 1 || matches.opt_present("help") {
-        print_help(&opts);
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-    let verbose = matches.opt_present("verbose");
-    let recursive = matches.opt_present("parents");
+    let verbose = matches.is_present(OPT_VERBOSE);
+    let recursive = matches.is_present(OPT_PARENTS);
 
     // Translate a ~str in octal form to u16, default to 755
     // Not tested on Windows
-    let mode_match = matches.opts_str(&["mode".to_owned()]);
+    let mode_match = matches.value_of(OPT_MODE);
     let mode: u16 = match mode_match {
         Some(m) => {
             let res: Option<u16> = u16::from_str_radix(&m, 8).ok();
@@ -63,21 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         _ => 0o755 as u16,
     };
 
-    let dirs = matches.free;
-    if dirs.is_empty() {
-        crash!(1, "missing operand");
-    }
     exec(dirs, recursive, mode, verbose)
-}
-
-fn print_help(opts: &getopts::Options) {
-    println!("{} {}", NAME, VERSION);
-    println!();
-    println!("Usage:");
-    print!(
-        "{}",
-        opts.usage("Create the given DIRECTORY(ies) if they do not exist")
-    );
 }
 
 /**
@@ -120,7 +131,7 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
     }
 
     if verbose {
-        show_info!("created directory '{}'", path.display());
+        println!("{}: created directory '{}'", executable!(), path.display());
     }
 
     #[cfg(any(unix, target_os = "redox"))]

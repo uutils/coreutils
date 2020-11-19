@@ -1,0 +1,51 @@
+[package]
+name = "uucore"
+version = "0.0.4"
+authors = ["uutils developers"]
+license = "MIT"
+description = "uutils ~ 'core' uutils code library (cross-platform)"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/arch"
+# readme = "README.md"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
+
+[lib]
+path="src/lib/lib.rs"
+
+[dependencies]
+dunce = "1.0.0"
+getopts = "<= 0.2.21"
+wild = "2.0.4"
+# * optional
+failure = { version="<= 0.1.1", optional=true }
+failure_derive = { version="<= 0.1.1", optional=true }
+lazy_static = { version="1.3", optional=true }
+nix = { version="<= 0.13", optional=true }
+platform-info = { version="<= 0.0.1", optional=true }
+time = { version="<= 0.1.42", optional=true }
+# * "problem" dependencies (pinned)
+data-encoding = { version="~2.1", optional=true } ## data-encoding: require v2.1; but v2.2.0 breaks the build for MinSRV v1.31.0
+libc = { version="0.2.15, <= 0.2.66", optional=true } ## libc: initial utmp support added in v0.2.15; but v0.2.68 breaks the build for MinSRV v1.31.0
+# * pinned transitive dependencies
+pin_backtrace = { version=">= 0.3.3, <= 0.3.30", package="backtrace" } ## backtrace: transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
+
+[target.'cfg(target_os = "redox")'.dependencies]
+termion = "1.5"
+
+[features]
+default = []
+# * non-default features
+encoding = ["data-encoding", "failure", "failure_derive"]
+entries = ["libc"]
+fs = ["libc"]
+mode = ["libc"]
+parse_time = []
+process = ["libc"]
+signals = []
+utf8 = []
+utmpx = ["time", "libc"]
+wide = []
+zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
