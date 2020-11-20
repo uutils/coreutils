@@ -106,7 +106,6 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
-static OPT_VERSION: &str = "version";
 
 static MOUNT_OPT_BIND: &str = "bind";
 
@@ -854,20 +853,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .use_delimiter(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
-        .arg(
-            Arg::with_name(OPT_VERSION)
-                .short("v")
-                .long("version")
-                .help("output version information and exit"),
-        )
         .arg(Arg::with_name(OPT_PATHS).multiple(true))
         .help("Filesystem(s) to list")
         .get_matches_from(args);
-
-    if matches.is_present(OPT_VERSION) {
-        println!("{} {}", executable!(), VERSION);
-        return EXIT_OK;
-    }
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
