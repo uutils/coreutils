@@ -76,13 +76,13 @@ static ABOUT: &str = "Display user and group information for the specified USER,
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_AUDIT: &str = "audit";
-static OPT_GROUPS: &str = "groups";
+static OPT_EFFECTIVE_USER: &str = "effective-user";
 static OPT_GROUP: &str = "group";
+static OPT_GROUPS: &str = "groups";
+static OPT_HUMAN_READABLE: &str = "human-readable";
 static OPT_NAME: &str = "name";
 static OPT_PASSWORD: &str = "password";
-static OPT_HUMAN_READABLE: &str = "human-readable";
 static OPT_REAL_ID: &str = "real-id";
-static OPT_EFFECTIVE_USER: &str = "effective-user";
 
 static ARG_USERS: &str = "users";
 
@@ -103,16 +103,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Display the process audit (not available on Linux)"),
         )
         .arg(
-            Arg::with_name(OPT_GROUPS)
-                .short("G")
-                .long(OPT_GROUPS)
-                .help("Display the different group IDs"),
+            Arg::with_name(OPT_EFFECTIVE_USER)
+                .short("u")
+                .long("user")
+                .help("Display the effective user ID as a number"),
         )
         .arg(
             Arg::with_name(OPT_GROUP)
                 .short("g")
                 .long(OPT_GROUP)
                 .help("Display the effective group ID as a number"),
+        )
+        .arg(
+            Arg::with_name(OPT_GROUPS)
+                .short("G")
+                .long(OPT_GROUPS)
+                .help("Display the different group IDs"),
+        )
+        .arg(
+            Arg::with_name(OPT_HUMAN_READABLE)
+                .short("p")
+                .help("Make the output human-readable"),
         )
         .arg(
             Arg::with_name(OPT_NAME)
@@ -125,20 +136,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Display the id as a password file entry"),
         )
         .arg(
-            Arg::with_name(OPT_HUMAN_READABLE)
-                .short("p")
-                .help("Make the output human-readable"),
-        )
-        .arg(
             Arg::with_name(OPT_REAL_ID)
                 .short("r")
                 .help("Display the real ID for the -g and -u options"),
-        )
-        .arg(
-            Arg::with_name(OPT_EFFECTIVE_USER)
-                .short("u")
-                .long("user")
-                .help("Display the effective user ID as a number"),
         )
         .arg(Arg::with_name(ARG_USERS).multiple(true).takes_value(true))
         .get_matches_from(args);
