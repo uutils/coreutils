@@ -28,3 +28,9 @@ fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
     assert!(re.is_match(&result.stdout.trim()));
 }
+
+#[test]
+fn test_failed() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("willfail").fails();
+}

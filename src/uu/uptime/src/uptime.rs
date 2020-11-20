@@ -27,7 +27,7 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
 the number of users on the system, and the average number of jobs\n\
 in the run queue over the last 1, 5 and 15 minutes.";
-static OPT_SINCE: &str = "SINCE";
+static OPT_SINCE: &str = "since";
 
 #[cfg(unix)]
 use uucore::libc::getloadavg;
@@ -50,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_SINCE)
                 .short("s")
-                .long("since")
+                .long(OPT_SINCE)
                 .help("system up since"),
         )
         .get_matches_from(args);
