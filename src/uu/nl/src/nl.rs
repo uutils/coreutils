@@ -310,7 +310,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
             continue;
         }
         // From this point on we format and print a "regular" line.
-        if line == "" {
+        if line.is_empty() {
             // The line is empty, which means that we have to care
             // about the --join-blank-lines parameter.
             empty_line_count += 1;

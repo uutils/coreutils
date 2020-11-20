@@ -478,10 +478,7 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 fn human_numeric_convert(a: &str) -> f64 {
     let int_str: String = a.chars().take_while(|c| c.is_numeric()).collect();
     let suffix = a.chars().find(|c| !c.is_numeric());
-    let int_part = match int_str.parse::<f64>() {
-        Ok(i) => i,
-        Err(_) => -1f64,
-    } as f64;
+    let int_part = int_str.parse::<f64>().unwrap_or(-1f64) as f64;
     let suffix: f64 = match suffix.unwrap_or('\0') {
         'K' => 1000f64,
         'M' => 1E6,

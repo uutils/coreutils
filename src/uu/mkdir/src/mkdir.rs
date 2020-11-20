@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 _ => crash!(1, "no mode given"),
             }
         }
-        _ => 0o755 as u16,
+        _ => 0o755_u16,
     };
 
     exec(dirs, recursive, mode, verbose)

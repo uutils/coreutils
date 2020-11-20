@@ -96,7 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let (prefix, rand, suffix) = match parse_template(template) {
         Some((p, r, s)) => match suffix_opt {
             Some(suf) => {
-                if s == "" {
+                if s.is_empty() {
                     (p, r, suf)
                 } else {
                     crash!(

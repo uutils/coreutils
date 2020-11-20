@@ -148,8 +148,8 @@ const CR: u8 = b'\r';
 const LF: u8 = b'\n';
 const SPACE: u8 = b' ';
 const TAB: u8 = b'\t';
-const SYN: u8 = 0x16 as u8;
-const FF: u8 = 0x0C as u8;
+const SYN: u8 = 0x16_u8;
+const FF: u8 = 0x0C_u8;
 
 #[inline(always)]
 fn is_word_separator(byte: u8) -> bool {

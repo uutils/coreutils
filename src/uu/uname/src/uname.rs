@@ -111,28 +111,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if kernelname || all || none {
         output.push_str(&uname.sysname());
-        output.push_str(" ");
+        output.push(' ');
     }
 
     if nodename || all {
         output.push_str(&uname.nodename());
-        output.push_str(" ");
+        output.push(' ');
     }
     if kernelrelease || all {
         output.push_str(&uname.release());
-        output.push_str(" ");
+        output.push(' ');
     }
     if kernelversion || all {
         output.push_str(&uname.version());
-        output.push_str(" ");
+        output.push(' ');
     }
     if machine || all {
         output.push_str(&uname.machine());
-        output.push_str(" ");
+        output.push(' ');
     }
     if os || all {
         output.push_str(HOST_OS);
-        output.push_str(" ");
+        output.push(' ');
     }
     println!("{}", output.trim_end());
 

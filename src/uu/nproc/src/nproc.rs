@@ -73,10 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if !matches.is_present(OPT_ALL) {
         // OMP_NUM_THREADS doesn't have an impact on --all
         ignore += match env::var("OMP_NUM_THREADS") {
-            Ok(threadstr) => match threadstr.parse() {
-                Ok(num) => num,
-                Err(_) => 0,
-            },
+            Ok(threadstr) => threadstr.parse().unwrap_or(0),
             Err(_) => 0,
         };
     }

@@ -17,7 +17,6 @@ use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 
 use std::ffi::CString;
 use std::io::Error;
-use std::iter::FromIterator;
 use std::path::Path;
 use std::process::Command;
 
@@ -96,10 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if pstatus.success() {
         0
     } else {
-        match pstatus.code() {
-            Some(i) => i,
-            None => -1,
-        }
+        pstatus.code().unwrap_or(-1)
     }
 }
 
@@ -182,11 +178,13 @@ fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
 
 fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
-        let groups_vec: Vec<libc::gid_t> =
-            FromIterator::from_iter(groups.split(',').map(|x| match entries::grp2gid(x) {
+        let groups_vec: Vec<libc::gid_t> = groups
+            .split(',')
+            .map(|x| match entries::grp2gid(x) {
                 Ok(g) => g,
                 _ => crash!(1, "no such group: {}", x),
-            }));
+            })
+            .collect();
         let err = set_groups(groups_vec);
         if err != 0 {
             crash!(1, "cannot set groups: {}", Error::last_os_error())
