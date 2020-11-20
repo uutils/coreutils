@@ -5,17 +5,20 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
 
-static NAME: &str = "pwd";
+static ABOUT: &str = "Display the full filename of the current working directory.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_LOGICAL: &str = "logical";
+static OPT_PHYSICAL: &str = "physical";
 
 pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     let path_buf = path.canonicalize()?;
@@ -32,53 +35,44 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     Ok(path_buf)
 }
 
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE...", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_LOGICAL)
+                .short("L")
+                .long(OPT_LOGICAL)
+                .help("use PWD from environment, even if it contains symlinks"),
+        )
+        .arg(
+            Arg::with_name(OPT_PHYSICAL)
+                .short("P")
+                .long(OPT_PHYSICAL)
+                .help("avoid all symlinks"),
+        )
+        .get_matches_from(args);
 
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
-    opts.optflag(
-        "L",
-        "logical",
-        "use PWD from environment, even if it contains symlinks",
-    );
-    opts.optflag("P", "physical", "avoid all symlinks");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]...
-
-Print the full filename of the current working directory.",
-            NAME, VERSION
-        );
-        print!("{}", opts.usage(&msg));
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        match env::current_dir() {
-            Ok(logical_path) => {
-                if matches.opt_present("logical") {
-                    println!("{}", logical_path.display());
-                } else {
-                    match absolute_path(&logical_path) {
-                        Ok(physical_path) => println!("{}", physical_path.display()),
-                        Err(e) => crash!(1, "failed to get absolute path {}", e),
-                    };
-                }
+    match env::current_dir() {
+        Ok(logical_path) => {
+            if matches.is_present(OPT_LOGICAL) {
+                println!("{}", logical_path.display());
+            } else {
+                match absolute_path(&logical_path) {
+                    Ok(physical_path) => println!("{}", physical_path.display()),
+                    Err(e) => crash!(1, "failed to get absolute path {}", e),
+                };
             }
-            Err(e) => crash!(1, "failed to get current directory {}", e),
-        };
-    }
+        }
+        Err(e) => crash!(1, "failed to get current directory {}", e),
+    };
 
     0
 }
