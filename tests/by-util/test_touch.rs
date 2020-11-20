@@ -196,6 +196,14 @@ fn test_touch_set_only_atime() {
 }
 
 #[test]
+fn test_touch_set_only_mtime_failed() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_only_mtime";
+
+    ucmd.args(&["-t", "2015010112342", "-m", file]).fails();
+}
+
+#[test]
 fn test_touch_set_only_mtime() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_only_mtime";

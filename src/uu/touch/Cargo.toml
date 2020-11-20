@@ -16,7 +16,7 @@ path = "src/touch.rs"
 
 [dependencies]
 filetime = "0.2.1"
-getopts = "0.2.18"
+clap = "2.33"
 time = "0.1.40"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["libc"] }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
