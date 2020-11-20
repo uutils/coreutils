@@ -18,13 +18,13 @@ use std::str::FromStr;
 
 static ABOUT: &str = "Report or omit repeated lines.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static OPT_COUNT: &str = "count";
-static OPT_REPEATED: &str = "repeated";
 static OPT_ALL_REPEATED: &str = "all-repeated";
+static OPT_CHECK_CHARS: &str = "check-chars";
+static OPT_COUNT: &str = "count";
+static OPT_IGNORE_CASE: &str = "ignore-case";
+static OPT_REPEATED: &str = "repeated";
 static OPT_SKIP_FIELDS: &str = "skip-fields";
 static OPT_SKIP_CHARS: &str = "skip-chars";
-static OPT_CHECK_CHARS: &str = "check-chars";
-static OPT_IGNORE_CASE: &str = "ignore-case";
 static OPT_UNIQUE: &str = "unique";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 
@@ -236,18 +236,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(&long_usage[..])
         .arg(
-            Arg::with_name(OPT_COUNT)
-                .short("c")
-                .long(OPT_COUNT)
-                .help("prefix lines by the number of occurrences"),
-        )
-        .arg(
-            Arg::with_name(OPT_REPEATED)
-                .short("d")
-                .long(OPT_REPEATED)
-                .help("only print duplicate lines"),
-        )
-        .arg(
             Arg::with_name(OPT_ALL_REPEATED)
                 .short("D")
                 .long(OPT_ALL_REPEATED)
@@ -257,11 +245,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .default_value("none"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_FIELDS)
-                .short("f")
-                .long(OPT_SKIP_FIELDS)
-                .help("avoid comparing the first N fields")
+            Arg::with_name(OPT_CHECK_CHARS)
+                .short("w")
+                .long(OPT_CHECK_CHARS)
+                .help("compare no more than N characters in lines")
                 .value_name("N"),
+        )
+        .arg(
+            Arg::with_name(OPT_COUNT)
+                .short("c")
+                .long(OPT_COUNT)
+                .help("prefix lines by the number of occurrences"),
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORE_CASE)
+                .short("i")
+                .long(OPT_IGNORE_CASE)
+                .help("ignore differences in case when comparing"),
+        )
+        .arg(
+            Arg::with_name(OPT_REPEATED)
+                .short("d")
+                .long(OPT_REPEATED)
+                .help("only print duplicate lines"),
         )
         .arg(
             Arg::with_name(OPT_SKIP_CHARS)
@@ -271,17 +277,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_CHECK_CHARS)
-                .short("w")
-                .long(OPT_CHECK_CHARS)
-                .help("compare no more than N characters in lines")
+            Arg::with_name(OPT_SKIP_FIELDS)
+                .short("f")
+                .long(OPT_SKIP_FIELDS)
+                .help("avoid comparing the first N fields")
                 .value_name("N"),
-        )
-        .arg(
-            Arg::with_name(OPT_IGNORE_CASE)
-                .short("i")
-                .long(OPT_IGNORE_CASE)
-                .help("ignore differences in case when comparing"),
         )
         .arg(
             Arg::with_name(OPT_UNIQUE)
