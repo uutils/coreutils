@@ -69,7 +69,6 @@ impl Uniq {
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
                 lines.truncate(0);
             }
-            //println!("line {:?}", line);
             lines.push(line);
         }
         if !lines.is_empty() {
@@ -318,8 +317,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    //println!("in_file_name {}", in_file_name);
-    //println!("out_file_name {}", out_file_name);
     let uniq = Uniq {
         repeats_only: matches.is_present(OPT_REPEATED)
             || matches.occurrences_of(OPT_ALL_REPEATED) > 0,
