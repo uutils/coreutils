@@ -15,8 +15,12 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
+extern crate clap;
+
 #[macro_use]
 extern crate uucore;
+
+use clap::{App, Arg};
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
@@ -68,50 +72,100 @@ mod audit {
     }
 }
 
-static SYNTAX: &str = "[OPTION]... [USER]";
-static SUMMARY: &str = "Print user and group information for the specified USER,\n or (when USER omitted) for the current user.";
+static ABOUT: &str = "Display user and group information for the specified USER,\n or (when USER omitted) for the current user.";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_AUDIT: &str = "audit";
+static OPT_EFFECTIVE_USER: &str = "effective-user";
+static OPT_GROUP: &str = "group";
+static OPT_GROUPS: &str = "groups";
+static OPT_HUMAN_READABLE: &str = "human-readable";
+static OPT_NAME: &str = "name";
+static OPT_PASSWORD: &str = "password";
+static OPT_REAL_ID: &str = "real-id";
+
+static ARG_USERS: &str = "users";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [USER]", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = app!(SYNTAX, SUMMARY, "");
-    opts.optflag(
-        "A",
-        "",
-        "Display the process audit (not available on Linux)",
-    );
-    opts.optflag("G", "groups", "Display the different group IDs");
-    opts.optflag("g", "group", "Display the effective group ID as a number");
-    opts.optflag(
-        "n",
-        "",
-        "Display the name of the user or group ID for the -G, -g and -u options",
-    );
-    opts.optflag("P", "", "Display the id as a password file entry");
-    opts.optflag("p", "", "Make the output human-readable");
-    opts.optflag("r", "", "Display the real ID for the -g and -u options");
-    opts.optflag("u", "user", "Display the effective user ID as a number");
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_AUDIT)
+                .short("A")
+                .help("Display the process audit (not available on Linux)"),
+        )
+        .arg(
+            Arg::with_name(OPT_EFFECTIVE_USER)
+                .short("u")
+                .long("user")
+                .help("Display the effective user ID as a number"),
+        )
+        .arg(
+            Arg::with_name(OPT_GROUP)
+                .short("g")
+                .long(OPT_GROUP)
+                .help("Display the effective group ID as a number"),
+        )
+        .arg(
+            Arg::with_name(OPT_GROUPS)
+                .short("G")
+                .long(OPT_GROUPS)
+                .help("Display the different group IDs"),
+        )
+        .arg(
+            Arg::with_name(OPT_HUMAN_READABLE)
+                .short("p")
+                .help("Make the output human-readable"),
+        )
+        .arg(
+            Arg::with_name(OPT_NAME)
+                .short("n")
+                .help("Display the name of the user or group ID for the -G, -g and -u options"),
+        )
+        .arg(
+            Arg::with_name(OPT_PASSWORD)
+                .short("P")
+                .help("Display the id as a password file entry"),
+        )
+        .arg(
+            Arg::with_name(OPT_REAL_ID)
+                .short("r")
+                .help("Display the real ID for the -g and -u options"),
+        )
+        .arg(Arg::with_name(ARG_USERS).multiple(true).takes_value(true))
+        .get_matches_from(args);
 
-    let matches = opts.parse(args);
+    let users: Vec<String> = matches
+        .values_of(ARG_USERS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    if matches.opt_present("A") {
+    if matches.is_present(OPT_AUDIT) {
         auditid();
         return 0;
     }
 
-    let possible_pw = if matches.free.is_empty() {
+    let possible_pw = if users.is_empty() {
         None
     } else {
-        match Passwd::locate(matches.free[0].as_str()) {
+        match Passwd::locate(users[0].as_str()) {
             Ok(p) => Some(p),
-            Err(_) => crash!(1, "No such user/group: {}", matches.free[0]),
+            Err(_) => crash!(1, "No such user/group: {}", users[0]),
         }
     };
 
-    let nflag = matches.opt_present("n");
-    let uflag = matches.opt_present("u");
-    let gflag = matches.opt_present("g");
-    let rflag = matches.opt_present("r");
+    let nflag = matches.is_present(OPT_NAME);
+    let uflag = matches.is_present(OPT_EFFECTIVE_USER);
+    let gflag = matches.is_present(OPT_GROUP);
+    let rflag = matches.is_present(OPT_REAL_ID);
 
     if gflag {
         let id = possible_pw
@@ -143,7 +197,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    if matches.opt_present("G") {
+    if matches.is_present(OPT_GROUPS) {
         println!(
             "{}",
             if nflag {
@@ -167,12 +221,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    if matches.opt_present("P") {
+    if matches.is_present(OPT_PASSWORD) {
         pline(possible_pw.map(|v| v.uid()));
         return 0;
     };
 
-    if matches.opt_present("p") {
+    if matches.is_present(OPT_HUMAN_READABLE) {
         pretty(possible_pw);
         return 0;
     }
