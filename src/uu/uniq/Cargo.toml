@@ -19,7 +19,6 @@ clap = "2.33"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
-
 [[bin]]
 name = "uniq"
 path = "src/main.rs"
