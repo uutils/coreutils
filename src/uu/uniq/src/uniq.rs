@@ -5,19 +5,30 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
+extern crate clap;
 
 #[macro_use]
 extern crate uucore;
 
-use getopts::{Matches, Options};
+use clap::{App, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 
-static NAME: &str = "uniq";
+static ABOUT: &str = "Report or omit repeated lines.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_ALL_REPEATED: &str = "all-repeated";
+static OPT_CHECK_CHARS: &str = "check-chars";
+static OPT_COUNT: &str = "count";
+static OPT_IGNORE_CASE: &str = "ignore-case";
+static OPT_REPEATED: &str = "repeated";
+static OPT_SKIP_FIELDS: &str = "skip-fields";
+static OPT_SKIP_CHARS: &str = "skip-chars";
+static OPT_UNIQUE: &str = "unique";
+static OPT_ZERO_TERMINATED: &str = "zero-terminated";
+
+static ARG_FILES: &str = "files";
 
 #[derive(PartialEq)]
 enum Delimiters {
@@ -194,113 +205,143 @@ impl Uniq {
     }
 }
 
-fn opt_parsed<T: FromStr>(opt_name: &str, matches: &Matches) -> Option<T> {
-    matches.opt_str(opt_name).map(|arg_str| {
+fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
+    matches.value_of(opt_name).map(|arg_str| {
         let opt_val: Option<T> = arg_str.parse().ok();
         opt_val.unwrap_or_else(|| crash!(1, "Invalid argument for {}: {}", opt_name, arg_str))
     })
 }
 
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [INPUT [OUTPUT]]...", executable!())
+}
+
+fn get_long_usage() -> String {
+    String::from(
+        "Filter adjacent matching lines from INPUT (or standard input),\n\
+        writing to OUTPUT (or standard output).
+        Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
+        You may want to sort the input first, or use 'sort -u' without 'uniq'.\n",
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
+    let long_usage = get_long_usage();
 
-    let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&long_usage[..])
+        .arg(
+            Arg::with_name(OPT_ALL_REPEATED)
+                .short("D")
+                .long(OPT_ALL_REPEATED)
+                .possible_values(&["none", "prepend", "separate"])
+                .help("print all duplicate lines. Delimiting is done with blank lines")
+                .value_name("delimit-method")
+                .default_value("none"),
+        )
+        .arg(
+            Arg::with_name(OPT_CHECK_CHARS)
+                .short("w")
+                .long(OPT_CHECK_CHARS)
+                .help("compare no more than N characters in lines")
+                .value_name("N"),
+        )
+        .arg(
+            Arg::with_name(OPT_COUNT)
+                .short("c")
+                .long(OPT_COUNT)
+                .help("prefix lines by the number of occurrences"),
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORE_CASE)
+                .short("i")
+                .long(OPT_IGNORE_CASE)
+                .help("ignore differences in case when comparing"),
+        )
+        .arg(
+            Arg::with_name(OPT_REPEATED)
+                .short("d")
+                .long(OPT_REPEATED)
+                .help("only print duplicate lines"),
+        )
+        .arg(
+            Arg::with_name(OPT_SKIP_CHARS)
+                .short("s")
+                .long(OPT_SKIP_CHARS)
+                .help("avoid comparing the first N characters")
+                .value_name("N"),
+        )
+        .arg(
+            Arg::with_name(OPT_SKIP_FIELDS)
+                .short("f")
+                .long(OPT_SKIP_FIELDS)
+                .help("avoid comparing the first N fields")
+                .value_name("N"),
+        )
+        .arg(
+            Arg::with_name(OPT_UNIQUE)
+                .short("u")
+                .long(OPT_UNIQUE)
+                .help("only print unique lines"),
+        )
+        .arg(
+            Arg::with_name(OPT_ZERO_TERMINATED)
+                .short("z")
+                .long(OPT_ZERO_TERMINATED)
+                .help("end lines with 0 byte, not newline"),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .max_values(2),
+        )
+        .get_matches_from(args);
 
-    opts.optflag("c", "count", "prefix lines by the number of occurrences");
-    opts.optflag("d", "repeated", "only print duplicate lines");
-    opts.optflagopt(
-        "D",
-        "all-repeated",
-        "print all duplicate lines delimit-method={none(default),prepend,separate} Delimiting is done with blank lines",
-        "delimit-method"
-    );
-    opts.optopt(
-        "f",
-        "skip-fields",
-        "avoid comparing the first N fields",
-        "N",
-    );
-    opts.optopt(
-        "s",
-        "skip-chars",
-        "avoid comparing the first N characters",
-        "N",
-    );
-    opts.optopt(
-        "w",
-        "check-chars",
-        "compare no more than N characters in lines",
-        "N",
-    );
-    opts.optflag(
-        "i",
-        "ignore-case",
-        "ignore differences in case when comparing",
-    );
-    opts.optflag("u", "unique", "only print unique lines");
-    opts.optflag("z", "zero-terminated", "end lines with 0 byte, not newline");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
+    let (in_file_name, out_file_name) = match files.len() {
+        0 => ("-".to_owned(), "-".to_owned()),
+        1 => (files[0].clone(), "-".to_owned()),
+        2 => (files[0].clone(), files[1].clone()),
+        _ => {
+            // Cannot happen as clap will fail earlier
+            crash!(1, "Extra operand: {}", files[2]);
+        }
     };
 
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {0} [OPTION]... [FILE]...", NAME);
-        println!();
-        print!(
-            "{}",
-            opts.usage(
-                "Filter adjacent matching lines from INPUT (or standard input),\n\
-                 writing to OUTPUT (or standard output)."
-            )
-        );
-        println!();
-        println!(
-            "Note: '{0}' does not detect repeated lines unless they are adjacent.\n\
-             You may want to sort the input first, or use 'sort -u' without '{0}'.\n",
-            NAME
-        );
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        let (in_file_name, out_file_name) = match matches.free.len() {
-            0 => ("-".to_owned(), "-".to_owned()),
-            1 => (matches.free[0].clone(), "-".to_owned()),
-            2 => (matches.free[0].clone(), matches.free[1].clone()),
-            _ => {
-                crash!(1, "Extra operand: {}", matches.free[2]);
-            }
-        };
-        let uniq = Uniq {
-            repeats_only: matches.opt_present("repeated") || matches.opt_present("all-repeated"),
-            uniques_only: matches.opt_present("unique"),
-            all_repeated: matches.opt_present("all-repeated"),
-            delimiters: match matches.opt_default("all-repeated", "none") {
-                Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
-                    "prepend" => Delimiters::Prepend,
-                    "separate" => Delimiters::Separate,
-                    _ => crash!(1, "Incorrect argument for all-repeated: {}", opt_arg),
-                },
-                _ => Delimiters::None,
+    let uniq = Uniq {
+        repeats_only: matches.is_present(OPT_REPEATED)
+            || matches.occurrences_of(OPT_ALL_REPEATED) > 0,
+        uniques_only: matches.is_present(OPT_UNIQUE),
+        all_repeated: matches.occurrences_of(OPT_ALL_REPEATED) > 0,
+        delimiters: match matches.value_of(OPT_ALL_REPEATED).map(String::from) {
+            Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
+                "prepend" => Delimiters::Prepend,
+                "separate" => Delimiters::Separate,
+                _ => crash!(1, "Incorrect argument for all-repeated: {}", opt_arg),
             },
-            show_counts: matches.opt_present("count"),
-            skip_fields: opt_parsed("skip-fields", &matches),
-            slice_start: opt_parsed("skip-chars", &matches),
-            slice_stop: opt_parsed("check-chars", &matches),
-            ignore_case: matches.opt_present("ignore-case"),
-            zero_terminated: matches.opt_present("zero-terminated"),
-        };
-        uniq.print_uniq(
-            &mut open_input_file(in_file_name),
-            &mut open_output_file(out_file_name),
-        );
-    }
+            _ => Delimiters::None,
+        },
+        show_counts: matches.is_present(OPT_COUNT),
+        skip_fields: opt_parsed(OPT_SKIP_FIELDS, &matches),
+        slice_start: opt_parsed(OPT_SKIP_CHARS, &matches),
+        slice_stop: opt_parsed(OPT_CHECK_CHARS, &matches),
+        ignore_case: matches.is_present(OPT_IGNORE_CASE),
+        zero_terminated: matches.is_present(OPT_ZERO_TERMINATED),
+    };
+    uniq.print_uniq(
+        &mut open_input_file(in_file_name),
+        &mut open_output_file(out_file_name),
+    );
+
     0
 }
 

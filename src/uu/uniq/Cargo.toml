@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/uniq.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
