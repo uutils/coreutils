@@ -389,7 +389,7 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
     }
 }
 
-/// Test if the path is a a new file path that can be
+/// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
     path.is_file() || !path.exists() && path.parent().map(Path::is_dir).unwrap_or(true)
