@@ -224,7 +224,6 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
     assert!(err.contains("not a directory"))
 }
 
-
 // These two tests are failing but should work
 #[test]
 fn test_install_copy_file() {
@@ -233,13 +232,10 @@ fn test_install_copy_file() {
     let file2 = "test_install_target_dir_file_a2";
 
     at.touch(file1);
-    ucmd.arg(file1).arg(file2).fails();
-
-/*  Uncomment when fixed
     ucmd.arg(file1).arg(file2).succeeds().no_stderr();
 
     assert!(at.file_exists(file1));
-    assert!(at.file_exists(file2));*/
+    assert!(at.file_exists(file2));
 }
 
 #[test]

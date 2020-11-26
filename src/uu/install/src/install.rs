@@ -390,7 +390,9 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
 /// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
-    !path.exists() && path.parent().map(Path::is_dir).unwrap_or(true)
+    !path.exists()
+        && (path.parent().map(Path::is_dir).unwrap_or(true)
+            || path.parent().unwrap().to_string_lossy().is_empty()) // In case of a simple file
 }
 
 /// Perform an install, given a list of paths and behavior.
