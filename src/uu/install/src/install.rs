@@ -432,7 +432,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
-        show_error!("target ‘{}’ is not a directory", target_dir.display());
+        show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
     }
 
@@ -442,7 +442,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
             Some(name) => target_dir.join(name),
             None => {
                 show_error!(
-                    "cannot stat ‘{}’: No such file or directory",
+                    "cannot stat '{}': No such file or directory",
                     sourcepath.display()
                 );
 
@@ -498,7 +498,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
          */
         if let Err(err) = File::create(to) {
             show_error!(
-                "install: cannot install ‘{}’ to ‘{}’: {}",
+                "install: cannot install '{}' to '{}': {}",
                 from.display(),
                 to.display(),
                 err
@@ -508,7 +508,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
     } else {
         if let Err(err) = fs::copy(from, to) {
             show_error!(
-                "install: cannot install ‘{}’ to ‘{}’: {}",
+                "install: cannot install '{}' to '{}': {}",
                 from.display(),
                 to.display(),
                 err
