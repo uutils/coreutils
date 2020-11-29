@@ -390,7 +390,9 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
 /// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
-    path.is_file() || !path.exists() && path.parent().map(Path::is_dir).unwrap_or(true)
+    !path.exists()
+        && (path.parent().map(Path::is_dir).unwrap_or(true)
+            || path.parent().unwrap().to_string_lossy().is_empty()) // In case of a simple file
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -409,6 +411,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
         let target = Path::new(paths.last().unwrap());
 
         if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
+            /* If the target already exist or directly creatable */
             copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
         } else {
             copy_files_into_dir(sources, &target.to_path_buf(), &b)
