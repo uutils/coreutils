@@ -363,14 +363,12 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
         for directory in paths.iter() {
             let path = Path::new(directory);
 
-            if path.exists() {
-                show_info!("cannot create directory '{}': File exists", path.display());
-                all_successful = false;
-            }
-
-            if let Err(e) = fs::create_dir(directory) {
-                show_info!("{}: {}", path.display(), e.to_string());
-                all_successful = false;
+            // if the path already exist, don't try to create it again
+            if !path.exists() {
+                if let Err(e) = fs::create_dir(directory) {
+                    show_info!("{}: {}", path.display(), e.to_string());
+                    all_successful = false;
+                }
             }
 
             if mode::chmod(&path, b.mode()).is_err() {

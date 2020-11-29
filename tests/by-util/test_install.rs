@@ -32,6 +32,18 @@ fn test_install_basic() {
 }
 
 #[test]
+fn test_install_twice_dir() {
+    let dir = "test_install_target_dir_dir_a";
+    let scene = TestScenario::new(util_name!());
+
+    scene.ucmd().arg("-d").arg(dir).succeeds();
+    scene.ucmd().arg("-d").arg(dir).succeeds();
+    let at = &scene.fixtures;
+
+    assert!(at.dir_exists(dir));
+}
+
+#[test]
 fn test_install_failing_not_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
@@ -85,21 +97,6 @@ fn test_install_component_directories() {
     assert!(at.dir_exists(component1));
     assert!(at.dir_exists(component2));
     assert!(at.dir_exists(component3));
-}
-
-#[test]
-fn test_install_component_directories_failing() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let component = "test_install_target_dir_component_d1";
-    let directories_arg = "-d";
-
-    at.mkdir(component);
-    assert!(ucmd
-        .arg(directories_arg)
-        .arg(component)
-        .fails()
-        .stderr
-        .contains("File exists"));
 }
 
 #[test]
