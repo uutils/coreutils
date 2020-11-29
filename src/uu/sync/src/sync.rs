@@ -13,20 +13,46 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use clap::App;
+use clap::{App, Arg};
+use std::path::Path;
+
+static EXIT_ERR: i32 = 1;
+
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_FILE_SYSTEM: &str = "file-system";
+static OPT_DATA: &str = "data";
+
+static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
     use super::libc;
-
-    extern "C" {
-        fn sync() -> libc::c_void;
-    }
+    use std::fs::File;
+    use std::os::unix::io::AsRawFd;
 
     pub unsafe fn do_sync() -> isize {
-        sync();
+        libc::sync();
+        0
+    }
+
+    #[cfg(target_os = "linux")]
+    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+        for path in files {
+            let f = File::open(&path).unwrap();
+            let fd = f.as_raw_fd();
+            libc::syscall(libc::SYS_syncfs, fd);
+        }
+        0
+    }
+
+    #[cfg(target_os = "linux")]
+    pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
+        for path in files {
+            let f = File::open(&path).unwrap();
+            let fd = f.as_raw_fd();
+            libc::syscall(libc::SYS_fdatasync, fd);
+        }
         0
     }
 }
@@ -42,6 +68,7 @@ mod platform {
     use std::fs::OpenOptions;
     use std::mem;
     use std::os::windows::prelude::*;
+    use std::path::Path;
     use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
@@ -113,6 +140,21 @@ mod platform {
         }
         0
     }
+
+    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+        for path in files {
+            flush_volume(
+                Path::new(&path)
+                    .components()
+                    .next()
+                    .unwrap()
+                    .as_os_str()
+                    .to_str()
+                    .unwrap(),
+            );
+        }
+        0
+    }
 }
 
 fn get_usage() -> String {
@@ -122,16 +164,60 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let _matches = App::new(executable!())
+    let matches = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_FILE_SYSTEM)
+                .short("f")
+                .long(OPT_FILE_SYSTEM)
+                .conflicts_with(OPT_DATA)
+                .help("sync the file systems that contain the files (Linux and Windows only)"),
+        )
+        .arg(
+            Arg::with_name(OPT_DATA)
+                .short("d")
+                .long(OPT_DATA)
+                .conflicts_with(OPT_FILE_SYSTEM)
+                .help("sync only file data, no unneeded metadata (Linux only)"),
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
-    sync();
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    for f in &files {
+        if !Path::new(&f).exists() {
+            crash!(EXIT_ERR, "cannot stat '{}': No such file or directory", f);
+        }
+    }
+
+    if matches.is_present(OPT_FILE_SYSTEM) {
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        syncfs(files);
+    } else if matches.is_present(OPT_DATA) {
+        #[cfg(target_os = "linux")]
+        fdatasync(files);
+    } else {
+        sync();
+    }
     0
 }
 
 fn sync() -> isize {
     unsafe { platform::do_sync() }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn syncfs(files: Vec<String>) -> isize {
+    unsafe { platform::do_syncfs(files) }
+}
+
+#[cfg(target_os = "linux")]
+fn fdatasync(files: Vec<String>) -> isize {
+    unsafe { platform::do_fdatasync(files) }
 }
