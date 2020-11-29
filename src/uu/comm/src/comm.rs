@@ -41,7 +41,7 @@ fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
 fn ensure_nl(line: &mut String) {
     match line.chars().last() {
         Some('\n') => (),
-        _ => line.push_str("\n"),
+        _ => line.push('\n'),
     }
 }
 

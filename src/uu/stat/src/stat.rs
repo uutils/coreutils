@@ -469,7 +469,7 @@ impl Stater {
         let fmtstr = if matches.is_present(OPT_PRINTF) {
             matches.value_of(OPT_PRINTF).expect("Invalid format string")
         } else {
-            matches.value_of(OPT_FORMAT).unwrap_or_else(|| "")
+            matches.value_of(OPT_FORMAT).unwrap_or("")
         };
 
         let use_printf = matches.is_present(OPT_PRINTF);

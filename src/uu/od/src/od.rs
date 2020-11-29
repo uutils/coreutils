@@ -229,10 +229,7 @@ impl OdOptions {
 
         let mut line_bytes = match matches.opt_default("w", "32") {
             None => 16,
-            Some(s) => match s.parse::<usize>() {
-                Ok(i) => i,
-                Err(_) => 0,
-            },
+            Some(s) => s.parse::<usize>().unwrap_or(0),
         };
         let min_bytes = formats.iter().fold(1, |max, next| {
             cmp::max(max, next.formatter_item_info.byte_size)

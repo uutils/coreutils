@@ -64,7 +64,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                             None => {
                                 let so_far = (qchar as u8 as char).to_string();
                                 warn_expected_numeric(&so_far);
-                                0 as u8
+                                0_u8
                             }
                         })
                     }
@@ -72,7 +72,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                     _ => None, // no first byte
                 }
             } else {
-                Some(0 as u8)
+                Some(0_u8)
             }
         }
         None => Some(0),

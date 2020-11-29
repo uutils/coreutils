@@ -103,7 +103,7 @@ process).",
                 println!("{}", niceness);
                 return 0;
             }
-            10 as c_int
+            10_i32
         }
     };
 

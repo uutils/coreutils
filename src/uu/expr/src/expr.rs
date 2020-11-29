@@ -41,7 +41,7 @@ fn process_expr(token_strings: &[String]) -> Result<String, String> {
 
 fn print_expr_ok(expr_result: &str) -> i32 {
     println!("{}", expr_result);
-    if expr_result == "0" || expr_result == "" {
+    if expr_result == "0" || expr_result.is_empty() {
         1
     } else {
         0
