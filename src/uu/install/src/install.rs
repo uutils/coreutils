@@ -17,6 +17,7 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
@@ -491,16 +492,29 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
-    let io_result = fs::copy(from, to);
-
-    if let Err(err) = io_result {
-        show_error!(
-            "install: cannot install ‘{}’ to ‘{}’: {}",
-            from.display(),
-            to.display(),
-            err
-        );
-        return Err(());
+    if from.to_string_lossy() == "/dev/null" {
+        /* workaround a limitation of fs::copy
+         * https://github.com/rust-lang/rust/issues/79390
+         */
+        if let Err(err) = File::create(to) {
+            show_error!(
+                "install: cannot install ‘{}’ to ‘{}’: {}",
+                from.display(),
+                to.display(),
+                err
+            );
+            return Err(());
+        }
+    } else {
+        if let Err(err) = fs::copy(from, to) {
+            show_error!(
+                "install: cannot install ‘{}’ to ‘{}’: {}",
+                from.display(),
+                to.display(),
+                err
+            );
+            return Err(());
+        }
     }
 
     if mode::chmod(&to, b.mode()).is_err() {
