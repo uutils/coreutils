@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/df.rs"
 
 [dependencies]
-clap = "2.32"
+clap = "2.33"
 libc = "0.2"
 number_prefix = "0.2"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }

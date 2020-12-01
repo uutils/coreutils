@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/yes.rs"
 
 [dependencies]
-clap = "2.32"
+clap = "2.33"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["zero-copy"] }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
