@@ -13,6 +13,9 @@ pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
 use uucore::libc::{self, gid_t, lchown, uid_t};
 
+extern crate clap;
+use clap::{App, Arg};
+
 extern crate walkdir;
 use walkdir::WalkDir;
 
@@ -28,77 +31,165 @@ use std::path::Path;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 
-static SYNTAX: &str =
-    "[OPTION]... [OWNER][:[GROUP]] FILE...\n chown [OPTION]... --reference=RFILE FILE...";
-static SUMMARY: &str = "change file owner and group";
+static ABOUT: &str = "change file owner and group";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_CHANGES: &str = "changes";
+static OPT_DEREFERENCE: &str = "dereference";
+static OPT_NO_DEREFERENCE: &str = "no-dereference";
+static OPT_FROM: &str = "from";
+static OPT_PRESERVE_ROOT: &str = "preserve-root";
+static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
+static OPT_QUIET: &str = "quiet";
+static OPT_RECURSIVE: &str = "recursive";
+static OPT_REFERENCE: &str = "reference";
+static OPT_SILENT: &str = "silent";
+static OPT_TRAVERSE: &str = "H";
+static OPT_NO_TRAVERSE: &str = "P";
+static OPT_TRAVERSE_EVERY: &str = "L";
+static OPT_VERBOSE: &str = "verbose";
+
+static ARG_OWNER: &str = "owner";
+static ARG_FILES: &str = "files";
 
 const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
+fn get_usage() -> String {
+    format!(
+        "{0} [OPTION]... [OWNER][:[GROUP]] FILE...\n{0} [OPTION]... --reference=RFILE FILE...",
+        executable!()
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let mut opts = app!(SYNTAX, SUMMARY, "");
-    opts.optflag("c",
-                 "changes",
-                 "like verbose but report only when a change is made")
-        .optflag("f", "silent", "")
-        .optflag("", "quiet", "suppress most error messages")
-        .optflag("v",
-                 "verbose",
-                 "output a diagnostic for every file processed")
-        .optflag("", "dereference", "affect the referent of each symbolic link (this is the default), rather than the symbolic link itself")
-        .optflag("h", "no-dereference", "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)")
+    let usage = get_usage();
 
-        .optopt("", "from", "change the owner and/or group of each file only if its current owner and/or group match those specified here. Either may be omitted, in which case a match is not required for the omitted attribute", "CURRENT_OWNER:CURRENT_GROUP")
-        .optopt("",
-                "reference",
-                "use RFILE's owner and group rather than specifying OWNER:GROUP values",
-                "RFILE")
-        .optflag("",
-                 "no-preserve-root",
-                 "do not treat '/' specially (the default)")
-        .optflag("", "preserve-root", "fail to operate recursively on '/'")
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_CHANGES)
+                .short("c")
+                .long(OPT_CHANGES)
+                .help("like verbose but report only when a change is made"),
+        )
+        .arg(Arg::with_name(OPT_DEREFERENCE).long(OPT_DEREFERENCE).help(
+            "affect the referent of each symbolic link (this is the default), rather than the symbolic link itself",
+        ))
+        .arg(
+            Arg::with_name(OPT_NO_DEREFERENCE)
+                .short("h")
+                .long(OPT_NO_DEREFERENCE)
+                .help(
+                    "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_FROM)
+                .long(OPT_FROM)
+                .help(
+                    "change the owner and/or group of each file only if its current owner and/or group match those specified here. Either may be omitted, in which case a match is not required for the omitted attribute",
+                )
+                .value_name("CURRENT_OWNER:CURRENT_GROUP"),
+        )
+        .arg(
+            Arg::with_name(OPT_PRESERVE_ROOT)
+                .long(OPT_PRESERVE_ROOT)
+                .help("fail to operate recursively on '/'"),
+        )
+        .arg(
+            Arg::with_name(OPT_NO_PRESERVE_ROOT)
+                .long(OPT_NO_PRESERVE_ROOT)
+                .help("do not treat '/' specially (the default)"),
+        )
+        .arg(
+            Arg::with_name(OPT_QUIET)
+                .long(OPT_QUIET)
+                .help("suppress most error messages"),
+        )
+        .arg(
+            Arg::with_name(OPT_RECURSIVE)
+                .short("R")
+                .long(OPT_RECURSIVE)
+                .help("operate on files and directories recursively"),
+        )
+        .arg(
+            Arg::with_name(OPT_REFERENCE)
+                .long(OPT_REFERENCE)
+                .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
+                .value_name("RFILE")
+                .min_values(1),
+        )
+        .arg(Arg::with_name(OPT_SILENT).short("f").long(OPT_SILENT))
+        .arg(
+            Arg::with_name(OPT_TRAVERSE)
+                .short(OPT_TRAVERSE)
+                .help("if a command line argument is a symbolic link to a directory, traverse it")
+                .overrides_with_all(&[OPT_TRAVERSE_EVERY, OPT_NO_TRAVERSE]),
+        )
+        .arg(
+            Arg::with_name(OPT_TRAVERSE_EVERY)
+                .short(OPT_TRAVERSE_EVERY)
+                .help("traverse every symbolic link to a directory encountered")
+                .overrides_with_all(&[OPT_TRAVERSE, OPT_NO_TRAVERSE]),
+        )
+        .arg(
+            Arg::with_name(OPT_NO_TRAVERSE)
+                .short(OPT_NO_TRAVERSE)
+                .help("do not traverse any symbolic links (default)")
+                .overrides_with_all(&[OPT_TRAVERSE, OPT_TRAVERSE_EVERY]),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .long(OPT_VERBOSE)
+                .help("output a diagnostic for every file processed"),
+        )
+        .arg(
+            Arg::with_name(ARG_OWNER)
+                .multiple(false)
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .required(true)
+                .min_values(1),
+        )
+        .get_matches_from(args);
 
-        .optflag("R",
-                 "recursive",
-                 "operate on files and directories recursively")
-        .optflag("H",
-                 "",
-                 "if a command line argument is a symbolic link to a directory, traverse it")
-        .optflag("L",
-                 "",
-                 "traverse every symbolic link to a directory encountered")
-        .optflag("P", "", "do not traverse any symbolic links (default)");
+    /* First arg is the owner/group */
+    let owner = matches.value_of(ARG_OWNER).unwrap();
 
-    let mut bit_flag = FTS_PHYSICAL;
-    let mut preserve_root = false;
-    let mut derefer = -1;
-    let flags: &[char] = &['H', 'L', 'P'];
-    for opt in &args {
-        match opt.as_str() {
-            // If more than one is specified, only the final one takes effect.
-            s if s.contains(flags) => {
-                if let Some(idx) = s.rfind(flags) {
-                    match s.chars().nth(idx).unwrap() {
-                        'H' => bit_flag = FTS_COMFOLLOW | FTS_PHYSICAL,
-                        'L' => bit_flag = FTS_LOGICAL,
-                        'P' => bit_flag = FTS_PHYSICAL,
-                        _ => (),
-                    }
-                }
-            }
-            "--no-preserve-root" => preserve_root = false,
-            "--preserve-root" => preserve_root = true,
-            "--dereference" => derefer = 1,
-            "--no-dereference" => derefer = 0,
-            _ => (),
-        }
-    }
+    /* Then the list of files */
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let matches = opts.parse(args);
-    let recursive = matches.opt_present("recursive");
+    let preserve_root = matches.is_present(OPT_PRESERVE_ROOT);
+
+    let mut derefer = if matches.is_present(OPT_NO_DEREFERENCE) {
+        1
+    } else {
+        0
+    };
+
+    let mut bit_flag = if matches.is_present(OPT_TRAVERSE) {
+        FTS_COMFOLLOW | FTS_PHYSICAL
+    } else if matches.is_present(OPT_TRAVERSE_EVERY) {
+        FTS_LOGICAL
+    } else {
+        FTS_PHYSICAL
+    };
+
+    let recursive = matches.is_present(OPT_RECURSIVE);
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
@@ -111,17 +202,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         bit_flag = FTS_PHYSICAL;
     }
 
-    let verbosity = if matches.opt_present("changes") {
+    let verbosity = if matches.is_present(OPT_CHANGES) {
         Verbosity::Changes
-    } else if matches.opt_present("silent") || matches.opt_present("quiet") {
+    } else if matches.is_present(OPT_SILENT) || matches.is_present(OPT_QUIET) {
         Verbosity::Silent
-    } else if matches.opt_present("verbose") {
+    } else if matches.is_present(OPT_VERBOSE) {
         Verbosity::Verbose
     } else {
         Verbosity::Normal
     };
 
-    let filter = if let Some(spec) = matches.opt_str("from") {
+    let filter = if let Some(spec) = matches.value_of(OPT_FROM) {
         match parse_spec(&spec) {
             Ok((Some(uid), None)) => IfFrom::User(uid),
             Ok((None, Some(gid))) => IfFrom::Group(gid),
@@ -136,18 +227,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         IfFrom::All
     };
 
-    if matches.free.is_empty() {
-        show_usage_error!("missing operand");
-        return 1;
-    } else if matches.free.len() < 2 && !matches.opt_present("reference") {
-        show_usage_error!("missing operand after ‘{}’", matches.free[0]);
-        return 1;
-    }
-
-    let mut files;
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
-    if let Some(file) = matches.opt_str("reference") {
+    if let Some(file) = matches.value_of(OPT_REFERENCE) {
         match fs::metadata(&file) {
             Ok(meta) => {
                 dest_gid = Some(meta.gid());
@@ -158,9 +240,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 return 1;
             }
         }
-        files = matches.free;
     } else {
-        match parse_spec(&matches.free[0]) {
+        match parse_spec(&owner) {
             Ok((u, g)) => {
                 dest_uid = u;
                 dest_gid = g;
@@ -170,8 +251,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 return 1;
             }
         }
-        files = matches.free;
-        files.remove(0);
     }
     let executor = Chowner {
         bit_flag,
@@ -197,7 +276,7 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
         Ok((
             Some(match Passwd::locate(args[0]) {
                 Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
+                _ => return Err(format!("invalid user: '{}'", spec)),
             }),
             None,
         ))
@@ -206,18 +285,18 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
             None,
             Some(match Group::locate(args[1]) {
                 Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
+                _ => return Err(format!("invalid group: '{}'", spec)),
             }),
         ))
     } else if usr_grp {
         Ok((
             Some(match Passwd::locate(args[0]) {
                 Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
+                _ => return Err(format!("invalid user: '{}'", spec)),
             }),
             Some(match Group::locate(args[1]) {
                 Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
+                _ => return Err(format!("invalid group: '{}'", spec)),
             }),
         ))
     } else {
