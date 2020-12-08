@@ -18,6 +18,7 @@ extern crate regex_syntax;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
+extern crate blake2_rfc;
 
 #[macro_use]
 extern crate uucore;
@@ -33,6 +34,7 @@ use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
+use blake2_rfc::blake2b::Blake2b;
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -62,7 +64,7 @@ fn is_custom_binary(program: &str) -> bool {
     match program {
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
         | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" => true,
+        | "shake128sum" | "shake256sum" | "b2sum" => true,
         _ => false,
     }
 }
@@ -82,6 +84,7 @@ fn detect_algo<'a>(
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
+        "b2sum" => ("BLAKE2", Box::new(Blake2b::new(64)) as Box<dyn Digest>, 512),
         "sha3sum" => match matches.value_of("bits") {
             Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
                 Ok(224) => (
@@ -181,6 +184,9 @@ fn detect_algo<'a>(
                 }
                 if matches.is_present("sha512") {
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512)
+                }
+                if matches.is_present("b2sum") {
+                    set_or_crash("BLAKE2", Box::new(Blake2b::new(64)), 512)
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {
@@ -383,6 +389,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
                 "shake256",
                 "work with SHAKE256 using BITS for the output size",
             ),
+            ("b2sum", "work with BLAKE2")
         ];
 
         for (name, desc) in algos {

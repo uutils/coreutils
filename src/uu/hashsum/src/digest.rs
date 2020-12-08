@@ -3,6 +3,7 @@ extern crate md5;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
+extern crate blake2_rfc;
 
 use hex::ToHex;
 
@@ -45,6 +46,29 @@ impl Digest for md5::Context {
 
     fn output_bits(&self) -> usize {
         128
+    }
+}
+
+impl Digest for blake2_rfc::blake2b::Blake2b {
+    fn new() -> Self {
+        blake2_rfc::blake2b::Blake2b::new(64)
+    }
+
+    fn input(&mut self, input: &[u8]) {
+        self.update(input);
+    }
+
+    fn result(&mut self, out: &mut [u8]) {
+        let hash_result = &self.clone().finalize();
+        out.copy_from_slice(&hash_result.as_bytes());
+    }
+
+    fn reset(&mut self) {
+        *self = blake2_rfc::blake2b::Blake2b::new(64);
+    }
+
+    fn output_bits(&self) -> usize {
+        512
     }
 }
 
