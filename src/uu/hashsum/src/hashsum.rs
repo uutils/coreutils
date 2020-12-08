@@ -11,6 +11,7 @@
 
 #[macro_use]
 extern crate clap;
+extern crate blake2_rfc;
 extern crate hex;
 extern crate md5;
 extern crate regex;
@@ -18,7 +19,6 @@ extern crate regex_syntax;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
-extern crate blake2_rfc;
 
 #[macro_use]
 extern crate uucore;
@@ -27,6 +27,7 @@ mod digest;
 
 use self::digest::Digest;
 
+use blake2_rfc::blake2b::Blake2b;
 use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
@@ -34,7 +35,6 @@ use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
-use blake2_rfc::blake2b::Blake2b;
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -389,7 +389,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
                 "shake256",
                 "work with SHAKE256 using BITS for the output size",
             ),
-            ("b2sum", "work with BLAKE2")
+            ("b2sum", "work with BLAKE2"),
         ];
 
         for (name, desc) in algos {

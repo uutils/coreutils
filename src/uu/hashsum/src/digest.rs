@@ -1,9 +1,9 @@
+extern crate blake2_rfc;
 extern crate digest;
 extern crate md5;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
-extern crate blake2_rfc;
 
 use hex::ToHex;
 
