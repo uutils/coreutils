@@ -468,7 +468,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
     let paths: Vec<String> = matches
-        .values_of("paths")
+        .values_of(OPT_PATHS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
