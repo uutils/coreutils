@@ -471,6 +471,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "cfg-if 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "const_fn 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "const_fn 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-utils 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1435,7 +1436,7 @@ dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
- "walker 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2382,11 +2383,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "walker"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
 name = "wasi"
 version = "0.9.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2664,7 +2660,6 @@ dependencies = [
 "checksum vec_map 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 "checksum void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 "checksum walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "777182bc735b6424e1a57516d35ed72cb8019d85c8c9bf536dccb3445c1a2f7d"
-"checksum walker 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "44971d5e5ae4f7904dffb6260ebd3910e7bcae104a94730e04a24cb6af40646b"
 "checksum wasi 0.9.0+wasi-snapshot-preview1 (registry+https://github.com/rust-lang/crates.io-index)" = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 "checksum wasm-bindgen 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)" = "3cd364751395ca0f68cafb17666eee36b63077fb5ecd972bbcd74c90c4bf736e"
 "checksum wasm-bindgen-backend 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)" = "1114f89ab1f4106e5b55e688b828c0ab0ea593a1ea7c094b141b14cbaaec2d62"
