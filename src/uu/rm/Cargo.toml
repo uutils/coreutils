@@ -16,7 +16,7 @@ path = "src/rm.rs"
 
 [dependencies]
 clap = "2.33"
-walkdir = "2.2.8"
+walkdir = "2.2"
 remove_dir_all = "0.5.1"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }

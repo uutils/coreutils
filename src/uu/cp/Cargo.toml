@@ -25,7 +25,7 @@ libc = "0.2.42"
 quick-error = "1.2.3"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
-walkdir = "2.2.8"
+walkdir = "2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
