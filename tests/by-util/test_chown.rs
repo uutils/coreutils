@@ -1,7 +1,8 @@
 use crate::common::util::*;
+#[cfg(target_os = "linux")]
+use rust_users::get_effective_uid;
 
 extern crate chown;
-// pub use self::uu_chown::*;
 
 #[cfg(test)]
 mod test_passgrp {
@@ -345,7 +346,9 @@ fn test_chown_recursive() {
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    assert!(result.stdout.contains("ownership of a/a retained as"));
+
+    assert!(result.stderr.contains("ownership of 'a/a' retained as"));
+    assert!(result.stderr.contains("ownership of 'z/y' retained as"));
     assert!(result.success);
 }
 
@@ -378,4 +381,18 @@ fn test_root_preserve() {
     assert!(result
         .stderr
         .contains("chown: it is dangerous to operate recursively"));
+}
+
+#[cfg(target_os = "linux")]
+fn test_big_p() {
+    if get_effective_uid() != 0 {
+        new_ucmd!()
+            .arg("-RP")
+            .arg("bin")
+            .arg("/proc/self/cwd")
+            .fails()
+            .stderr_is(
+                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+            );
+    }
 }

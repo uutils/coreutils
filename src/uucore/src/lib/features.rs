@@ -13,11 +13,15 @@ pub mod zero_copy;
 // ** non-windows
 #[cfg(all(not(windows), feature = "mode"))]
 pub mod mode;
+
 // ** unix-only
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
+#[cfg(all(unix, feature = "perms"))]
+pub mod perms;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
+
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
 #[cfg(all(
