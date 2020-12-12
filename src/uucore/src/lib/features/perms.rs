@@ -16,6 +16,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
+/// The various level of verbosity
 #[derive(PartialEq, Clone, Debug)]
 pub enum Verbosity {
     Silent,
@@ -24,6 +25,7 @@ pub enum Verbosity {
     Normal,
 }
 
+/// Actually perform the change of group on a path
 fn chgrp<P: AsRef<Path>>(path: P, dgid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
     let s = CString::new(path.as_os_str().as_bytes()).unwrap();
@@ -41,6 +43,9 @@ fn chgrp<P: AsRef<Path>>(path: P, dgid: gid_t, follow: bool) -> IOResult<()> {
     }
 }
 
+/// Perform the change of group on a path
+/// with the various options
+/// and error messages management
 pub fn wrap_chgrp<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
@@ -94,6 +99,7 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
     Ok(out)
 }
 
+/// Actually perform the change of owner on a path
 fn chown<P: AsRef<Path>>(path: P, duid: uid_t, dgid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
     let s = CString::new(path.as_os_str().as_bytes()).unwrap();
@@ -111,6 +117,9 @@ fn chown<P: AsRef<Path>>(path: P, duid: uid_t, dgid: gid_t, follow: bool) -> IOR
     }
 }
 
+/// Perform the change of owner on a path
+/// with the various options
+/// and error messages management
 pub fn wrap_chown<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
