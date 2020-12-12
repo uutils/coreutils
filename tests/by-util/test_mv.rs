@@ -18,6 +18,16 @@ fn test_mv_rename_dir() {
 }
 
 #[test]
+fn test_mv_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir1 = "test_mv_rename_dir";
+
+    at.mkdir(dir1);
+
+    ucmd.arg(dir1).fails();
+}
+
+#[test]
 fn test_mv_rename_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_mv_rename_file";
@@ -302,6 +312,63 @@ fn test_mv_backup_numbering() {
 }
 
 #[test]
+fn test_mv_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup=existing")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_mv_backup_simple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup=simple")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_mv_backup_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup=none")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(!at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
 fn test_mv_existing_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_existing_backup_file_a";
@@ -459,17 +526,15 @@ fn test_mv_errors() {
 
     // $ mv -T -t a b
     // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    scene
+    let result = scene
         .ucmd()
         .arg("-T")
         .arg("-t")
         .arg(dir)
         .arg(file_a)
         .arg(file_b)
-        .fails()
-        .stderr_is(
-            "mv: error: cannot combine --target-directory (-t) and --no-target-directory (-T)\n",
-        );
+        .fails();
+    assert!(result.stderr.contains("cannot be used with"));
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir

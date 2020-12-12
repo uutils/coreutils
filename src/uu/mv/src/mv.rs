@@ -8,12 +8,13 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath
 
+extern crate clap;
 extern crate fs_extra;
-extern crate getopts;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg, ArgMatches};
 use std::env;
 use std::fs;
 use std::io::{self, stdin};
@@ -24,9 +25,6 @@ use std::os::windows;
 use std::path::{Path, PathBuf};
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
-
-static NAME: &str = "mv";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct Behavior {
     overwrite: OverwriteMode,
@@ -53,54 +51,128 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
+static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_BACKUP: &str = "backup";
+static OPT_BACKUP_NO_ARG: &str = "b";
+static OPT_FORCE: &str = "force";
+static OPT_INTERACTIVE: &str = "interactive";
+static OPT_NO_CLOBBER: &str = "no-clobber";
+static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
+static OPT_SUFFIX: &str = "suffix";
+static OPT_TARGET_DIRECTORY: &str = "target-directory";
+static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
+static OPT_UPDATE: &str = "update";
+static OPT_VERBOSE: &str = "verbose";
+
+static ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!(
+        "{0} [OPTION]... [-T] SOURCE DEST
+{0} [OPTION]... SOURCE... DIRECTORY
+{0} [OPTION]... -t DIRECTORY SOURCE...",
+        executable!()
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+    .arg(
+            Arg::with_name(OPT_BACKUP)
+            .long(OPT_BACKUP)
+            .help("make a backup of each existing destination file")
+            .takes_value(true)
+            .possible_value("simple")
+            .possible_value("never")
+            .possible_value("numbered")
+            .possible_value("t")
+            .possible_value("existing")
+            .possible_value("nil")
+            .possible_value("none")
+            .possible_value("off")
+            .value_name("CONTROL")
+    )
+    .arg(
+            Arg::with_name(OPT_BACKUP_NO_ARG)
+            .short(OPT_BACKUP_NO_ARG)
+            .help("like --backup but does not accept an argument")
+    )
+    .arg(
+            Arg::with_name(OPT_FORCE)
+            .short("f")
+            .long(OPT_FORCE)
+            .help("do not prompt before overwriting")
+    )
+    .arg(
+            Arg::with_name(OPT_INTERACTIVE)
+            .short("i")
+            .long(OPT_INTERACTIVE)
+            .help("prompt before override")
+    )
+    .arg(
+            Arg::with_name(OPT_NO_CLOBBER).short("n")
+            .long(OPT_NO_CLOBBER)
+            .help("do not overwrite an existing file")
+    )
+    .arg(
+            Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
+            .long(OPT_STRIP_TRAILING_SLASHES)
+            .help("remove any trailing slashes from each SOURCE argument")
+    )
+    .arg(
+            Arg::with_name(OPT_SUFFIX)
+            .short("S")
+            .long(OPT_SUFFIX)
+            .help("override the usual backup suffix")
+            .takes_value(true)
+            .value_name("SUFFIX")
+    )
+    .arg(
+        Arg::with_name(OPT_TARGET_DIRECTORY)
+        .short("t")
+        .long(OPT_TARGET_DIRECTORY)
+        .help("move all SOURCE arguments into DIRECTORY")
+        .takes_value(true)
+        .value_name("DIRECTORY")
+        .conflicts_with(OPT_NO_TARGET_DIRECTORY)
+    )
+    .arg(
+            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+            .short("T")
+            .long(OPT_NO_TARGET_DIRECTORY).
+            help("treat DEST as a normal file")
+    )
+    .arg(
+            Arg::with_name(OPT_UPDATE)
+            .short("u")
+            .long(OPT_UPDATE)
+            .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
+    )
+    .arg(
+            Arg::with_name(OPT_VERBOSE)
+            .short("v")
+            .long(OPT_VERBOSE).help("explain what is being done")
+    )
+    .arg(
+        Arg::with_name(ARG_FILES)
+            .multiple(true)
+            .takes_value(true)
+            .min_values(2)
+            .required(true)
+        )
+    .get_matches_from(args);
 
-    opts.optflagopt(
-        "",
-        "backup",
-        "make a backup of each existing destination file",
-        "CONTROL",
-    );
-    opts.optflag("b", "", "like --backup but does not accept an argument");
-    opts.optflag("f", "force", "do not prompt before overwriting");
-    opts.optflag("i", "interactive", "prompt before override");
-    opts.optflag("n", "no-clobber", "do not overwrite an existing file");
-    opts.optflag(
-        "",
-        "strip-trailing-slashes",
-        "remove any trailing slashes from each SOURCE\n \
-         argument",
-    );
-    opts.optopt("S", "suffix", "override the usual backup suffix", "SUFFIX");
-    opts.optopt(
-        "t",
-        "target-directory",
-        "move all SOURCE arguments into DIRECTORY",
-        "DIRECTORY",
-    );
-    opts.optflag("T", "no-target-directory", "treat DEST as a normal file");
-    opts.optflag(
-        "u",
-        "update",
-        "move only when the SOURCE file is newer\n \
-         than the destination file or when the\n \
-         destination file is missing",
-    );
-    opts.optflag("v", "verbose", "explain what is being done");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("Invalid options\n{}", f);
-            return 1;
-        }
-    };
-    let usage = opts.usage("Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.");
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
     let backup_mode = determine_backup_mode(&matches);
@@ -109,26 +181,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "options --backup and --no-clobber are mutually exclusive\n\
              Try '{} --help' for more information.",
-            NAME
+            executable!()
         );
         return 1;
     }
 
     let backup_suffix = determine_backup_suffix(backup_mode, &matches);
 
-    if matches.opt_present("T") && matches.opt_present("t") {
-        show_error!("cannot combine --target-directory (-t) and --no-target-directory (-T)");
-        return 1;
-    }
-
     let behavior = Behavior {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
-        update: matches.opt_present("u"),
-        target_dir: matches.opt_str("t"),
-        no_target_dir: matches.opt_present("T"),
-        verbose: matches.opt_present("v"),
+        update: matches.is_present(OPT_UPDATE),
+        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
+        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
+        verbose: matches.is_present(OPT_VERBOSE),
     };
 
     let paths: Vec<PathBuf> = {
@@ -136,60 +203,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             p.components().as_path()
         }
         let to_owned = |p: &Path| p.to_owned();
-        let arguments = matches.free.iter().map(Path::new);
-        if matches.opt_present("strip-trailing-slashes") {
-            arguments.map(strip_slashes).map(to_owned).collect()
+        let paths = files.iter().map(Path::new);
+
+        if matches.is_present(OPT_STRIP_TRAILING_SLASHES) {
+            paths.map(strip_slashes).map(to_owned).collect()
         } else {
-            arguments.map(to_owned).collect()
+            paths.map(to_owned).collect()
         }
     };
 
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        0
-    } else if matches.opt_present("help") {
-        help(&usage);
-        0
-    } else {
-        exec(&paths[..], behavior)
-    }
+    exec(&paths[..], behavior)
 }
 
-fn determine_overwrite_mode(matches: &getopts::Matches) -> OverwriteMode {
+fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     // This does not exactly match the GNU implementation:
     // The GNU mv defaults to Force, but if more than one of the
     // overwrite options are supplied, only the last takes effect.
     // To default to no-clobber in that situation seems safer:
     //
-    if matches.opt_present("no-clobber") {
+    if matches.is_present(OPT_NO_CLOBBER) {
         OverwriteMode::NoClobber
-    } else if matches.opt_present("interactive") {
+    } else if matches.is_present(OPT_INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::Force
     }
 }
 
-fn determine_backup_mode(matches: &getopts::Matches) -> BackupMode {
-    if matches.opt_present("b") {
+fn determine_backup_mode(matches: &ArgMatches) -> BackupMode {
+    if matches.is_present(OPT_BACKUP_NO_ARG) {
         BackupMode::SimpleBackup
-    } else if matches.opt_present("backup") {
-        match matches.opt_str("backup") {
+    } else if matches.is_present(OPT_BACKUP) {
+        match matches.value_of(OPT_BACKUP).map(String::from) {
             None => BackupMode::SimpleBackup,
             Some(mode) => match &mode[..] {
                 "simple" | "never" => BackupMode::SimpleBackup,
                 "numbered" | "t" => BackupMode::NumberedBackup,
                 "existing" | "nil" => BackupMode::ExistingBackup,
                 "none" | "off" => BackupMode::NoBackup,
-                x => {
-                    crash!(
-                        1,
-                        "invalid argument ‘{}’ for ‘backup type’\n\
-                         Try '{} --help' for more information.",
-                        x,
-                        NAME
-                    );
-                }
+                _ => panic!(), // cannot happen as it is managed by clap
             },
         }
     } else {
@@ -197,19 +249,9 @@ fn determine_backup_mode(matches: &getopts::Matches) -> BackupMode {
     }
 }
 
-fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) -> String {
-    if matches.opt_present("suffix") {
-        match matches.opt_str("suffix") {
-            Some(x) => x,
-            None => {
-                crash!(
-                    1,
-                    "option '--suffix' requires an argument\n\
-                     Try '{} --help' for more information.",
-                    NAME
-                );
-            }
-        }
+fn determine_backup_suffix(backup_mode: BackupMode, matches: &ArgMatches) -> String {
+    if matches.is_present(OPT_SUFFIX) {
+        matches.value_of(OPT_SUFFIX).map(String::from).unwrap()
     } else if let (Ok(s), BackupMode::SimpleBackup) =
         (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode)
     {
@@ -219,29 +261,12 @@ fn determine_backup_suffix(backup_mode: BackupMode, matches: &getopts::Matches) 
     }
 }
 
-fn help(usage: &str) {
-    println!(
-        "{0} {1}\n\n\
-         Usage: {0} SOURCE DEST\n   \
-         or: {0} SOURCE... DIRECTORY\n\n\
-         {2}",
-        NAME, VERSION, usage
-    );
-}
-
 fn exec(files: &[PathBuf], b: Behavior) -> i32 {
     if let Some(ref name) = b.target_dir {
         return move_files_into_dir(files, &PathBuf::from(name), &b);
     }
     match files.len() {
-        0 | 1 => {
-            show_error!(
-                "missing file operand\n\
-                 Try '{} --help' for more information.",
-                NAME
-            );
-            return 1;
-        }
+        /* case 0/1 are not possible thanks to clap */
         2 => {
             let source = &files[0];
             let target = &files[1];
@@ -302,7 +327,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                     "mv: extra operand ‘{}’\n\
                      Try '{} --help' for more information.",
                     files[2].display(),
-                    NAME
+                    executable!()
                 );
                 return 1;
             }
@@ -358,7 +383,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                print!("{}: overwrite ‘{}’? ", NAME, to.display());
+                print!("{}: overwrite ‘{}’? ", executable!(), to.display());
                 if !read_yes() {
                     return Ok(());
                 }

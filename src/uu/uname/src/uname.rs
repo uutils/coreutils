@@ -27,6 +27,8 @@ const OPT_NODENAME: &str = "nodename";
 const OPT_KERNELVERSION: &str = "kernel-version";
 const OPT_KERNELRELEASE: &str = "kernel-release";
 const OPT_MACHINE: &str = "machine";
+const OPT_PROCESSOR: &str = "processor";
+const OPT_HWPLATFORM: &str = "hardware-platform";
 
 //FIXME: unimplemented options
 //const OPT_PROCESSOR: &'static str = "processor";
@@ -76,20 +78,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .short("v")
             .long(OPT_KERNELVERSION)
             .help("print the operating system version."))
-
-        //FIXME: unimplemented options
-        // .arg(Arg::with_name(OPT_PROCESSOR)
-        //     .short("p")
-        //     .long(OPT_PROCESSOR)
-        //     .help("print the processor type (non-portable)"))
-        // .arg(Arg::with_name(OPT_HWPLATFORM)
-        //     .short("i")
-        //     .long(OPT_HWPLATFORM)
-        //     .help("print the hardware platform (non-portable)"))
+        .arg(Arg::with_name(OPT_HWPLATFORM)
+            .short("i")
+            .long(OPT_HWPLATFORM)
+            .help("print the hardware platform (non-portable)"))
         .arg(Arg::with_name(OPT_MACHINE)
             .short("m")
             .long(OPT_MACHINE)
             .help("print the machine hardware name."))
+        .arg(Arg::with_name(OPT_PROCESSOR)
+            .short("p")
+            .long(OPT_PROCESSOR)
+            .help("print the processor type (non-portable)"))
         .arg(Arg::with_name(OPT_OS)
             .short("o")
             .long(OPT_OS)
@@ -105,9 +105,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let kernelrelease = matches.is_present(OPT_KERNELRELEASE);
     let kernelversion = matches.is_present(OPT_KERNELVERSION);
     let machine = matches.is_present(OPT_MACHINE);
+    let processor = matches.is_present(OPT_PROCESSOR);
+    let hwplatform = matches.is_present(OPT_HWPLATFORM);
     let os = matches.is_present(OPT_OS);
 
-    let none = !(all || kernelname || nodename || kernelrelease || kernelversion || machine || os);
+    let none = !(all
+        || kernelname
+        || nodename
+        || kernelrelease
+        || kernelversion
+        || machine
+        || os
+        || processor
+        || hwplatform);
 
     if kernelname || all || none {
         output.push_str(&uname.sysname());
@@ -128,6 +138,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     if machine || all {
         output.push_str(&uname.machine());
+        output.push(' ');
+    }
+    if processor || all {
+        // According to https://stackoverflow.com/posts/394271/revisions
+        // Most of the time, it returns unknown
+        output.push_str("unknown");
+        output.push(' ');
+    }
+    if hwplatform || all {
+        // According to https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+        // Most of the time, it returns unknown
+        output.push_str("unknown");
         output.push(' ');
     }
     if os || all {
