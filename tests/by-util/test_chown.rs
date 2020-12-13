@@ -384,6 +384,7 @@ fn test_root_preserve() {
 }
 
 #[cfg(target_os = "linux")]
+#[test]
 fn test_big_p() {
     if get_effective_uid() != 0 {
         new_ucmd!()

@@ -42,8 +42,7 @@ fn test_cp_cp() {
         .run();
 
     // Check that the exit code represents a successful copy.
-    let exit_success = result.success;
-    assert!(exit_success);
+    assert!(result.success);
 
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
@@ -386,8 +385,7 @@ fn test_cp_deref() {
         .run();
 
     // Check that the exit code represents a successful copy.
-    let exit_success = result.success;
-    assert!(exit_success);
+    assert!(result.success);
     let path_to_new_symlink = at
         .subdir
         .join(TEST_COPY_TO_FOLDER)
@@ -430,8 +428,7 @@ fn test_cp_no_deref() {
         .run();
 
     // Check that the exit code represents a successful copy.
-    let exit_success = result.success;
-    assert!(exit_success);
+    assert!(result.success);
     let path_to_new_symlink = at
         .subdir
         .join(TEST_COPY_TO_FOLDER)
@@ -484,8 +481,7 @@ fn test_cp_deref_folder_to_folder() {
     println!("cp output {}", result.stdout);
 
     // Check that the exit code represents a successful copy.
-    let exit_success = result.success;
-    assert!(exit_success);
+    assert!(result.success);
 
     #[cfg(not(windows))]
     {
@@ -589,8 +585,7 @@ fn test_cp_no_deref_folder_to_folder() {
     println!("cp output {}", result.stdout);
 
     // Check that the exit code represents a successful copy.
-    let exit_success = result.success;
-    assert!(exit_success);
+    assert!(result.success);
 
     #[cfg(not(windows))]
     {
