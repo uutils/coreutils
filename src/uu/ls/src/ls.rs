@@ -367,7 +367,7 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Mat
                 match md {
                     Err(e) => {
                         let filename = get_file_name(i, strip);
-                        show_error!("{}: {}", filename, e);
+                        show_error!("'{}': {}", filename, e);
                         None
                     }
                     Ok(md) => Some(display_file_name(&i, strip, &md, options)),
