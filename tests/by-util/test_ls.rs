@@ -46,6 +46,36 @@ fn test_ls_files_dirs() {
 }
 
 #[test]
+fn test_ls_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+    at.mkdir("z");
+    at.touch(&at.plus_as_string("a/a"));
+    at.touch(&at.plus_as_string("a/b/b"));
+
+    scene.ucmd().arg("a").succeeds();
+    scene.ucmd().arg("a/a").succeeds();
+    let result = scene
+        .ucmd()
+        .arg("--color=never")
+        .arg("-R")
+        .arg("a")
+        .arg("z")
+        .succeeds();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    if cfg!(target_os = "windows") {
+        assert!(result.stdout.contains("a\\b:\nb"));
+    } else {
+        assert!(result.stdout.contains("a/b:\nb"));
+    }
+}
+
+#[test]
 fn test_ls_ls_color() {
     new_ucmd!().arg("--color").succeeds();
     new_ucmd!().arg("--color=always").succeeds();
