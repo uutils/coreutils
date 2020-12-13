@@ -168,11 +168,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .parse(args);
 
-    list(matches);
-    0
+    list(matches)
 }
 
-fn list(options: getopts::Matches) {
+fn list(options: getopts::Matches) -> i32 {
     let locs: Vec<String> = if options.free.is_empty() {
         vec![String::from(".")]
     } else {
@@ -181,8 +180,16 @@ fn list(options: getopts::Matches) {
 
     let mut files = Vec::<PathBuf>::new();
     let mut dirs = Vec::<PathBuf>::new();
+    let mut has_failed = false;
     for loc in locs {
         let p = PathBuf::from(&loc);
+        if !p.exists() {
+            show_error!("'{}': {}", &loc, "No such file or directory");
+            // We found an error, the return code of ls should not be 0
+            // And no need to continue the execution
+            has_failed = true;
+            continue;
+        }
         let mut dir = false;
 
         if p.is_dir() && !options.opt_present("d") {
@@ -210,6 +217,11 @@ fn list(options: getopts::Matches) {
             println!("\n{}:", dir.to_string_lossy());
         }
         enter_directory(&dir, &options);
+    }
+    if has_failed {
+        1
+    } else {
+        0
     }
 }
 
@@ -355,7 +367,7 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &getopts::Mat
                 match md {
                     Err(e) => {
                         let filename = get_file_name(i, strip);
-                        show_error!("{}: {}", filename, e);
+                        show_error!("'{}': {}", filename, e);
                         None
                     }
                     Ok(md) => Some(display_file_name(&i, strip, &md, options)),
