@@ -60,7 +60,7 @@ fn test_ls_a() {
 #[test]
 fn test_ls_long() {
     #[cfg(not(windows))]
-    let mut last;
+    let last;
     #[cfg(not(windows))]
     {
         let _guard = UMASK_MUTEX.lock();
@@ -263,6 +263,7 @@ fn test_ls_recursive() {
 
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
     #[cfg(not(windows))]
     assert!(result.stdout.contains("a/b:\nb"));
     #[cfg(windows)]
@@ -282,4 +283,27 @@ fn test_ls_ls_color() {
     scene.ucmd().arg("--color").arg("a").succeeds();
     scene.ucmd().arg("--color=always").arg("a/a").succeeds();
     scene.ucmd().arg("--color=never").arg("z").succeeds();
+}
+
+#[cfg(not(target_os = "macos"))] // Truncate not available on mac
+#[test]
+fn test_ls_human() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "test_human";
+    let result = scene.cmd("truncate").arg("-s").arg("+1000").arg(file).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    let result = scene.ucmd().arg("-hl").arg(file).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains("1.00K"));
+    let result = scene.cmd("truncate").arg("-s").arg("+1000k").arg(file).run();
+    let result = scene.ucmd().arg("-hl").arg(file).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains("1.02M"));
 }
