@@ -289,18 +289,21 @@ fn test_ls_ls_color() {
 #[test]
 fn test_ls_human() {
     let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
     let file = "test_human";
     let result = scene.cmd("truncate").arg("-s").arg("+1000").arg(file).run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
     let result = scene.ucmd().arg("-hl").arg(file).run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     assert!(result.stdout.contains("1.00K"));
-    let result = scene.cmd("truncate").arg("-s").arg("+1000k").arg(file).run();
+    scene
+        .cmd("truncate")
+        .arg("-s")
+        .arg("+1000k")
+        .arg(file)
+        .run();
     let result = scene.ucmd().arg("-hl").arg(file).run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
