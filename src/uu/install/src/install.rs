@@ -146,7 +146,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("set permission mode (as in chmod), instead of rwxr-xr-x")
                 .value_name("MODE")
                 .takes_value(true)
-                .min_values(1)
         )
         .arg(
             Arg::with_name(OPT_OWNER)
