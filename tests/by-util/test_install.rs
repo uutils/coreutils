@@ -102,16 +102,40 @@ fn test_install_component_directories() {
 
 #[test]
 fn test_install_mode_numeric() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     let dir = "test_install_target_dir_dir_e";
+    let dir2 = "test_install_target_dir_dir_e2";
+
     let file = "test_install_target_dir_file_e";
     let mode_arg = "--mode=333";
 
     at.touch(file);
     at.mkdir(dir);
-    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .succeeds()
+        .no_stderr();
 
     let dest_file = &format!("{}/{}", dir, file);
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o100333 as u32, PermissionsExt::mode(&permissions));
+
+    let mode_arg = "-m 0333";
+    at.mkdir(dir2);
+
+    let result = scene.ucmd().arg(mode_arg).arg(file).arg(dir2).run();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert!(result.success);
+    let dest_file = &format!("{}/{}", dir2, file);
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
