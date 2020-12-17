@@ -255,7 +255,40 @@ fn test_cp_arg_no_clobber() {
 
     assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
-    assert!(result.stderr.contains("Not overwriting"));
+}
+
+#[test]
+fn test_cp_arg_no_clobber_twice() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("source.txt");
+    let result = scene
+        .ucmd()
+        .arg("--no-clobber")
+        .arg("source.txt")
+        .arg("dest.txt")
+        .run();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stderr.is_empty());
+    assert_eq!(at.read("source.txt"), "");
+
+    at.append("source.txt", "some-content");
+    let result = scene
+        .ucmd()
+        .arg("--no-clobber")
+        .arg("source.txt")
+        .arg("dest.txt")
+        .run();
+
+    assert!(result.success);
+    assert_eq!(at.read("source.txt"), "some-content");
+    // Should be empty as the "no-clobber" should keep
+    // the previous version
+    assert_eq!(at.read("dest.txt"), "");
+    assert!(!result.stderr.contains("Not overwriting"));
 }
 
 #[test]

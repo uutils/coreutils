@@ -814,10 +814,17 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
             }
             if !found_hard_link {
                 if let Err(error) = copy_source(source, target, &target_type, options) {
-                    show_error!("{}", error);
                     match error {
-                        Error::Skipped(_) => (),
-                        _ => non_fatal_errors = true,
+                        // When using --no-clobber, we don't want to show
+                        // an error message
+                        Error::NotAllFilesCopied => (),
+                        Error::Skipped(_) => {
+                            show_error!("{}", error);
+                        }
+                        _ => {
+                            show_error!("{}", error);
+                            non_fatal_errors = true
+                        }
                     }
                 }
             }
@@ -993,11 +1000,7 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
-            OverwriteMode::NoClobber => Err(Error::Skipped(format!(
-                "Not overwriting {} because of option '{}'",
-                path.display(),
-                OPT_NO_CLOBBER
-            ))),
+            OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
             OverwriteMode::Interactive(_) => {
                 if prompt_yes!("{}: overwrite {}? ", executable!(), path.display()) {
                     Ok(())
