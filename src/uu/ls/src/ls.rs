@@ -255,14 +255,20 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     }
 }
 
+#[cfg(windows)]
+fn ntfs_hidden(path: &DirEntry) -> std::io::Result<bool> {
+    let metadata = fs::metadata(path.path())?;
+    let attr = metadata.file_attributes();
+    return Ok((attr & 0x2) > 0);
+}
+
 fn is_hidden(file_path: &DirEntry) -> std::io::Result<bool> {
-    #[cfg(unix)]
-    return Ok(file_path.file_name().to_string_lossy().starts_with('.'));
+    if file_path.file_name().to_string_lossy().starts_with('.') {
+        return Ok(true);
+    }
 
     #[cfg(windows)]
-    let metadata = fs::metadata(file_path.path())?;
-    let attr = metadata.file_attributes();
-    return Ok(((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.'));
+    return ntfs_hidden(file_path);
 }
 
 #[cfg(windows)]
@@ -292,7 +298,6 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
         entries.reverse();
     }
 }
-
 
 fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
