@@ -256,14 +256,12 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
 }
 
 fn is_hidden(file_path: &DirEntry) -> std::io::Result<bool> {
-    let metadata = fs::metadata(file_path.path())?;
-    let attr = metadata.file_attributes();
-
-
     #[cfg(unix)]
     return Ok(file_path.file_name().to_string_lossy().starts_with('.'));
 
     #[cfg(windows)]
+    let metadata = fs::metadata(file_path.path())?;
+    let attr = metadata.file_attributes();
     return Ok(((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.'));
 }
 
