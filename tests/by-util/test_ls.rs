@@ -160,7 +160,7 @@ fn test_ls_order_size() {
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-1\ntest-2\ntest-3\ntest-4\n");
+    assert_eq!(result.stdout, "test-1\ntest-2\ntest-3\ntest-4\tp");
     #[cfg(windows)]
     assert_eq!(result.stdout, "test-1  test-2  test-3  test-4\n");
 }
@@ -309,4 +309,24 @@ fn test_ls_human() {
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     assert!(result.stdout.contains("1.02M"));
+}
+
+#[cfg(windows)]
+#[test]
+fn test_ls_hidden_windows() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "hiddenWindowsFileNoDot";
+    at.touch(file);
+    // hide the file
+    scene.cmd("attrib").arg("+h").arg("+S").arg("+r").arg(file).run();
+    let result = scene.ucmd().run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    let result = scene.ucmd().arg("-a").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains(file));
 }
