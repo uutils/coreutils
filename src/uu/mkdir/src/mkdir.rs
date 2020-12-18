@@ -50,6 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_PARENTS)
                 .short("p")
                 .long(OPT_PARENTS)
+                .alias("parent")
                 .help("make parent directories as needed"),
         )
         .arg(

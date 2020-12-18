@@ -40,6 +40,8 @@ fn test_mkdir_parent() {
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
     scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
+    scene.ucmd().arg("--parent").arg(TEST_DIR4).succeeds();
+    scene.ucmd().arg("--parents").arg(TEST_DIR4).succeeds();
 }
 
 #[test]
