@@ -260,11 +260,7 @@ fn is_hidden(file_path: &std::path::PathBuf) -> std::io::Result<bool> {
     let metadata = fs::metadata(file_path)?;
     let attr = metadata.file_attributes();
 
-    if (attr & 0x2) > 0 {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    Ok((attr & 0x2) > 0)
 }
 
 #[cfg(windows)]
