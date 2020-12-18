@@ -296,13 +296,15 @@ fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
     let hidden_by_ntfs = is_hidden(&entry.path()).unwrap();
-    if !options.opt_present("a") && !options.opt_present("A") && name.starts_with('.') || hidden_by_ntfs {
+    if !options.opt_present("a") && !options.opt_present("A") && name.starts_with('.')
+        || hidden_by_ntfs
+    {
         return false;
     }
     if options.opt_present("B") && name.ends_with('~') {
         return false;
     }
-    return true
+    return true;
 }
 
 #[cfg(unix)]
@@ -315,7 +317,7 @@ fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     if options.opt_present("B") && name.ends_with('~') {
         return false;
     }
-    return true
+    return true;
 }
 
 fn enter_directory(dir: &PathBuf, options: &getopts::Matches) {
