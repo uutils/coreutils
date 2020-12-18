@@ -160,7 +160,7 @@ fn test_ls_order_size() {
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-1\ntest-2\ntest-3\ntest-4\tp");
+    assert_eq!(result.stdout, "test-1\ntest-2\ntest-3\ntest-4\n");
     #[cfg(windows)]
     assert_eq!(result.stdout, "test-1  test-2  test-3  test-4\n");
 }
