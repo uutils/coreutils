@@ -8,7 +8,7 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use std::cmp;
 use std::io::{stdout, Write};
 
@@ -55,6 +55,7 @@ fn escape_sequences(s: &str) -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
+        .setting(AppSettings::AllowLeadingHyphen)
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
@@ -84,6 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(ARG_NUMBERS)
                 .multiple(true)
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .max_values(3),
         )
         .get_matches_from(args);
