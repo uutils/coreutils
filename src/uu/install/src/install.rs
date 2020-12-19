@@ -496,16 +496,14 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             );
             return Err(());
         }
-    } else {
-        if let Err(err) = fs::copy(from, to) {
-            show_error!(
-                "cannot install '{}' to '{}': {}",
-                from.display(),
-                to.display(),
-                err
-            );
-            return Err(());
-        }
+    } else if let Err(err) = fs::copy(from, to) {
+        show_error!(
+            "cannot install '{}' to '{}': {}",
+            from.display(),
+            to.display(),
+            err
+        );
+        return Err(());
     }
 
     if mode::chmod(&to, b.mode()).is_err() {
