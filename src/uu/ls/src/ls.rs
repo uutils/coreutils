@@ -256,6 +256,18 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
 }
 
 #[cfg(windows)]
+fn is_hidden(file_path: &DirEntry) -> std::io::Result<bool> {
+    let metadata = fs::metadata(file_path.path())?;
+    let attr = metadata.file_attributes();
+    Ok(((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.'))
+}
+
+#[cfg(unix)]
+fn is_hidden(file_path: &DirEntry) -> std::io::Result<bool> {
+    Ok(file_path.file_name().to_string_lossy().starts_with('.'))
+}
+
+#[cfg(windows)]
 fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
     let mut reverse = options.opt_present("r");
     if options.opt_present("t") {
@@ -286,7 +298,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, options: &getopts::Matches) {
 fn should_display(entry: &DirEntry, options: &getopts::Matches) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
-    if !options.opt_present("a") && !options.opt_present("A") && name.starts_with('.') {
+    if !options.opt_present("a") && !options.opt_present("A") && is_hidden(entry).unwrap() {
         return false;
     }
     if options.opt_present("B") && name.ends_with('~') {

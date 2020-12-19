@@ -310,3 +310,29 @@ fn test_ls_human() {
     assert!(result.success);
     assert!(result.stdout.contains("1.02M"));
 }
+
+#[cfg(windows)]
+#[test]
+fn test_ls_hidden_windows() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "hiddenWindowsFileNoDot";
+    at.touch(file);
+    // hide the file
+    scene
+        .cmd("attrib")
+        .arg("+h")
+        .arg("+S")
+        .arg("+r")
+        .arg(file)
+        .run();
+    let result = scene.ucmd().run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    let result = scene.ucmd().arg("-a").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains(file));
+}
