@@ -279,3 +279,70 @@ fn test_chmod_reference_file() {
     mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
     run_single_test(&tests[0], at, ucmd);
 }
+
+#[test]
+fn test_chmod_recursive() {
+    let _guard = UMASK_MUTEX.lock();
+
+    let original_umask = unsafe { umask(0) };
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+    at.mkdir("z");
+    mkfile(&at.plus_as_string("a/a"), 0o100444);
+    mkfile(&at.plus_as_string("a/b/b"), 0o100444);
+    mkfile(&at.plus_as_string("a/b/c/c"), 0o100444);
+    mkfile(&at.plus_as_string("z/y"), 0o100444);
+
+    let result = ucmd
+        .arg("-R")
+        .arg("--verbose")
+        .arg("-r,a+w")
+        .arg("a")
+        .arg("z")
+        .succeeds();
+
+    assert_eq!(at.metadata("z/y").permissions().mode(), 0o100222);
+    assert_eq!(at.metadata("a/a").permissions().mode(), 0o100222);
+    assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100222);
+    assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100222);
+    println!("mode {:o}", at.metadata("a").permissions().mode());
+    assert_eq!(at.metadata("a").permissions().mode(), 0o40333);
+    assert_eq!(at.metadata("z").permissions().mode(), 0o40333);
+    assert!(result.stderr.contains("to 333 (-wx-wx-wx)"));
+    assert!(result.stderr.contains("to 222 (-w--w--w-)"));
+
+    unsafe {
+        umask(original_umask);
+    }
+}
+
+#[test]
+fn test_chmod_non_existing_file() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .arg("-R")
+        .arg("--verbose")
+        .arg("-r,a+w")
+        .arg("dont-exist")
+        .fails();
+    assert_eq!(
+        result.stderr,
+        "chmod: error: no such file or directory 'dont-exist'\n"
+    );
+}
+
+#[test]
+fn test_chmod_preserve_root() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .arg("-R")
+        .arg("--preserve-root")
+        .arg("755")
+        .arg("/")
+        .fails();
+    assert!(result
+        .stderr
+        .contains("chmod: error: it is dangerous to operate recursively on '/'"));
+}

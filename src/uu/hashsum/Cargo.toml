@@ -16,7 +16,7 @@ path = "src/hashsum.rs"
 
 [dependencies]
 digest = "0.6.2"
-clap = "2"
+clap = "2.33"
 hex = "0.2.0"
 libc = "0.2.42"
 md5 = "0.3.5"
@@ -25,6 +25,7 @@ regex-syntax = "0.6.7"
 sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
+blake2-rfc = "0.2.18"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 

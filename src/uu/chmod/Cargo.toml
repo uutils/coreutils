@@ -18,7 +18,7 @@ path = "src/chmod.rs"
 libc = "0.2.42"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs", "mode"] }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
-walker = "1.0.0"
+walkdir = "2.2"
 
 [[bin]]
 name = "chmod"

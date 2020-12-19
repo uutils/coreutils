@@ -13,6 +13,9 @@ use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use uucore::libc;
+
 static NAME: &str = "tee";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -38,7 +41,11 @@ fn options(args: &[String]) -> Result<Options> {
     let mut opts = getopts::Options::new();
 
     opts.optflag("a", "append", "append to the given FILEs, do not overwrite");
-    opts.optflag("i", "ignore-interrupts", "ignore interrupt signals");
+    opts.optflag(
+        "i",
+        "ignore-interrupts",
+        "ignore interrupt signals (ignored on non-Unix platforms)",
+    );
     opts.optflag("h", "help", "display this help and exit");
     opts.optflag("V", "version", "output version information and exit");
 
@@ -86,7 +93,25 @@ fn exec(options: Options) -> Result<()> {
     }
 }
 
+#[cfg(unix)]
+fn ignore_interrupts() -> Result<()> {
+    let ret = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+    if ret == libc::SIG_ERR {
+        return Err(Error::new(ErrorKind::Other, ""));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ignore_interrupts() -> Result<()> {
+    // Do nothing.
+    Ok(())
+}
+
 fn tee(options: Options) -> Result<()> {
+    if options.ignore_interrupts {
+        ignore_interrupts()?
+    }
     let mut writers: Vec<Box<dyn Write>> = options
         .files
         .clone()

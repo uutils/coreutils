@@ -9,7 +9,7 @@
 
 #[cfg(unix)]
 extern crate libc;
-extern crate walker;
+extern crate walkdir;
 
 #[macro_use]
 extern crate uucore;
@@ -20,7 +20,7 @@ use std::path::Path;
 use uucore::fs::display_permissions_unix;
 #[cfg(not(windows))]
 use uucore::mode;
-use walker::Walker;
+use walkdir::WalkDir;
 
 const NAME: &str = "chmod";
 static SUMMARY: &str = "Change the mode of each FILE to MODE.
@@ -150,62 +150,39 @@ impl Chmoder {
         for filename in &files {
             let filename = &filename[..];
             let file = Path::new(filename);
-            if file.exists() {
-                if file.is_dir() {
-                    if !self.preserve_root || filename != "/" {
-                        if self.recursive {
-                            let walk_dir = match Walker::new(&file) {
-                                Ok(m) => m,
-                                Err(f) => {
-                                    crash!(1, "{}", f.to_string());
-                                }
-                            };
-                            // XXX: here (and elsewhere) we see that this impl will have issues
-                            // with non-UTF-8 filenames. Using OsString won't fix this because
-                            // on Windows OsStrings cannot be built out of non-UTF-8 chars. One
-                            // possible fix is to use CStrings rather than Strings in the args
-                            // to chmod() and chmod_file().
-                            r = self
-                                .chmod(
-                                    walk_dir
-                                        .filter_map(|x| match x {
-                                            Ok(o) => match o.path().into_os_string().to_str() {
-                                                Some(s) => Some(s.to_owned()),
-                                                None => None,
-                                            },
-                                            Err(_) => None,
-                                        })
-                                        .collect(),
-                                )
-                                .and(r);
-                            r = self.chmod_file(&file, filename).and(r);
-                        }
-                    } else {
-                        show_error!("could not change permissions of directory '{}'", filename);
-                        r = Err(1);
-                    }
-                } else {
-                    r = self.chmod_file(&file, filename).and(r);
-                }
-            } else {
+            if !file.exists() {
                 show_error!("no such file or directory '{}'", filename);
-                r = Err(1);
+                return Err(1);
+            }
+            if self.recursive && self.preserve_root && filename == "/" {
+                show_error!(
+                    "it is dangerous to operate recursively on '{}'\nuse --no-preserve-root to override this failsafe",
+                    filename
+                );
+                return Err(1);
+            }
+            if !self.recursive {
+                r = self.chmod_file(&file).and(r);
+            } else {
+                for entry in WalkDir::new(&filename).into_iter().filter_map(|e| e.ok()) {
+                    let file = entry.path();
+                    r = self.chmod_file(&file).and(r);
+                }
             }
         }
-
         r
     }
 
     #[cfg(windows)]
-    fn chmod_file(&self, file: &Path, name: &str) -> Result<(), i32> {
+    fn chmod_file(&self, file: &Path) -> Result<(), i32> {
         // chmod is useless on Windows
         // it doesn't set any permissions at all
         // instead it just sets the readonly attribute on the file
         Err(0)
     }
     #[cfg(any(unix, target_os = "redox"))]
-    fn chmod_file(&self, file: &Path, name: &str) -> Result<(), i32> {
-        let mut fperm = match fs::metadata(name) {
+    fn chmod_file(&self, file: &Path) -> Result<(), i32> {
+        let mut fperm = match fs::metadata(file) {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 if !self.quiet {
@@ -215,7 +192,7 @@ impl Chmoder {
             }
         };
         match self.fmode {
-            Some(mode) => self.change_file(fperm, mode, file, name)?,
+            Some(mode) => self.change_file(fperm, mode, file)?,
             None => {
                 let cmode_unwrapped = self.cmode.clone().unwrap();
                 for mode in cmode_unwrapped.split(',') {
@@ -228,7 +205,7 @@ impl Chmoder {
                     };
                     match result {
                         Ok(mode) => {
-                            self.change_file(fperm, mode, file, name)?;
+                            self.change_file(fperm, mode, file)?;
                             fperm = mode;
                         }
                         Err(f) => {
@@ -246,7 +223,7 @@ impl Chmoder {
     }
 
     #[cfg(unix)]
-    fn change_file(&self, fperm: u32, mode: u32, file: &Path, path: &str) -> Result<(), i32> {
+    fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
         if fperm == mode {
             if self.verbose && !self.changes {
                 show_info!(
@@ -257,9 +234,7 @@ impl Chmoder {
                 );
             }
             Ok(())
-        } else if let Err(err) =
-            fs::set_permissions(Path::new(path), fs::Permissions::from_mode(mode))
-        {
+        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
                 show_error!("{}", err);
             }

@@ -1,4 +1,5 @@
 use crate::common::util::*;
+use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
 
 #[test]
@@ -101,16 +102,40 @@ fn test_install_component_directories() {
 
 #[test]
 fn test_install_mode_numeric() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     let dir = "test_install_target_dir_dir_e";
+    let dir2 = "test_install_target_dir_dir_e2";
+
     let file = "test_install_target_dir_file_e";
     let mode_arg = "--mode=333";
 
     at.touch(file);
     at.mkdir(dir);
-    ucmd.arg(file).arg(dir).arg(mode_arg).succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg(file)
+        .arg(dir)
+        .arg(mode_arg)
+        .succeeds()
+        .no_stderr();
 
     let dest_file = &format!("{}/{}", dir, file);
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(dest_file));
+    let permissions = at.metadata(dest_file).permissions();
+    assert_eq!(0o100333 as u32, PermissionsExt::mode(&permissions));
+
+    let mode_arg = "-m 0333";
+    at.mkdir(dir2);
+
+    let result = scene.ucmd().arg(mode_arg).arg(file).arg(dir2).run();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert!(result.success);
+    let dest_file = &format!("{}/{}", dir2, file);
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
@@ -202,6 +227,66 @@ fn test_install_target_new_file() {
         .succeeds()
         .no_stderr();
 
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(&format!("{}/{}", dir, file)));
+}
+
+#[test]
+fn test_install_target_new_file_with_group() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_install_target_new_filer_file_j";
+    let dir = "test_install_target_new_file_dir_j";
+    let gid = get_effective_gid();
+
+    at.touch(file);
+    at.mkdir(dir);
+    let result = ucmd
+        .arg(file)
+        .arg("--group")
+        .arg(gid.to_string())
+        .arg(format!("{}/{}", dir, file))
+        .run();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    if is_ci() && result.stderr.contains("error: no such group:") {
+        // In the CI, some server are failing to return the group.
+        // As seems to be a configuration issue, ignoring it
+        return;
+    }
+
+    assert!(result.success);
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(&format!("{}/{}", dir, file)));
+}
+
+#[test]
+fn test_install_target_new_file_with_owner() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_install_target_new_filer_file_j";
+    let dir = "test_install_target_new_file_dir_j";
+    let uid = get_effective_uid();
+
+    at.touch(file);
+    at.mkdir(dir);
+    let result = ucmd
+        .arg(file)
+        .arg("--owner")
+        .arg(uid.to_string())
+        .arg(format!("{}/{}", dir, file))
+        .run();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    if is_ci() && result.stderr.contains("error: no such user:") {
+        // In the CI, some server are failing to return the user id.
+        // As seems to be a configuration issue, ignoring it
+        return;
+    }
+
+    assert!(result.success);
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }

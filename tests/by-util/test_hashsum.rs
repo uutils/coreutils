@@ -43,4 +43,5 @@ test_digest! {
     sha3_512 sha3 512
     shake128_256 shake128 256
     shake256_512 shake256 512
+    b2sum b2sum 512
 }

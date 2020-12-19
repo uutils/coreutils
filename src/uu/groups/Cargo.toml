@@ -17,7 +17,7 @@ path = "src/groups.rs"
 [dependencies]
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["entries"] }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
-clap = "2.32"
+clap = "2.33"
 
 [[bin]]
 name = "groups"

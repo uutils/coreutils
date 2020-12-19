@@ -28,7 +28,9 @@ static ARG_FILES: &str = "files";
 #[cfg(unix)]
 mod platform {
     use super::libc;
+    #[cfg(target_os = "linux")]
     use std::fs::File;
+    #[cfg(target_os = "linux")]
     use std::os::unix::io::AsRawFd;
 
     pub unsafe fn do_sync() -> isize {

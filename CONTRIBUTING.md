@@ -5,15 +5,23 @@ standard libraries are stabilized. You may *claim* an item on the to-do list by
 following these steps:
 
 1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement ls"
-2. State that you are working on this utility.
-3. Develop the utility.
-4. Add integration tests.
-5. Add the reference to your utility into Cargo.toml and Makefile.
-6. Remove utility from the to-do list in the README.
-7. Submit a pull request and close the issue.
+1. State that you are working on this utility.
+1. Develop the utility
+1. Add integration tests.
+1. Add the reference to your utility into Cargo.toml and Makefile.
+1. Remove utility from the to-do list in the README.
+1. Submit a pull request and close the issue.
 
 The steps above imply that, before starting to work on a utility, you should
 search the issues to make sure no one else is working on it.
+
+## Best practices
+
+1. Follow what GNU is doing in term of options and behavior.
+1. Use clap for argument management.
+1. Make sure that the code coverage is covering all of the cases, including errors.     
+1. The code must be clippy-warning-free and rustfmt-compliant.
+1. Don't hesitate to move common functions into uucore if they can be reused by other binaries.
 
 ## Commit messages
 
