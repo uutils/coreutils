@@ -619,7 +619,7 @@ fn display_file_name(
     let mut width = UnicodeWidthStr::width(&*name);
 
     let color = match options.opt_str("color") {
-        None => true,
+        None => stdout_isatty(),
         Some(val) => match val.as_ref() {
             "always" | "yes" | "force" => true,
             "auto" | "tty" | "if-tty" => stdout_isatty(),
