@@ -236,18 +236,6 @@ ifeq (${MULTICALL}, y)
 INSTALLEES  := ${INSTALLEES} uutils
 endif
 
-# Shared library extension
-SYSTEM := $(shell uname)
-DYLIB_EXT :=
-ifeq ($(SYSTEM),Linux)
-	DYLIB_EXT    := so
-	DYLIB_FLAGS  := -shared
-endif
-ifeq ($(SYSTEM),Darwin)
-	DYLIB_EXT    := dylib
-	DYLIB_FLAGS  := -dynamiclib -undefined dynamic_lookup
-endif
-
 all: build
 
 do_install = $(INSTALL) ${1}
