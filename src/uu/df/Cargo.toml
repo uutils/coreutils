@@ -17,7 +17,7 @@ path = "src/df.rs"
 [dependencies]
 clap = "2.33"
 libc = "0.2"
-number_prefix = "0.2"
+number_prefix = "0.4"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 

@@ -24,7 +24,7 @@ extern crate uucore;
 
 #[cfg(unix)]
 use isatty::stdout_isatty;
-use number_prefix::{decimal_prefix, Prefixed, Standalone};
+use number_prefix::NumberPrefix;
 use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
@@ -525,9 +525,11 @@ fn display_date(metadata: &Metadata, options: &getopts::Matches) -> String {
 
 fn display_file_size(metadata: &Metadata, options: &getopts::Matches) -> String {
     if options.opt_present("human-readable") {
-        match decimal_prefix(metadata.len() as f64) {
-            Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.2}{}", bytes, prefix).to_uppercase(),
+        match NumberPrefix::decimal(metadata.len() as f64) {
+            NumberPrefix::Standalone(bytes) => bytes.to_string(),
+            NumberPrefix::Prefixed(prefix, bytes) => {
+                format!("{:.2}{}", bytes, prefix).to_uppercase()
+            }
         }
     } else {
         metadata.len().to_string()

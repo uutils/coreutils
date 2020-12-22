@@ -28,7 +28,7 @@ use winapi::um::fileapi::{
     GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 
-use number_prefix::{binary_prefix, decimal_prefix, PrefixNames, Prefixed, Standalone};
+use number_prefix::NumberPrefix;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -716,14 +716,14 @@ fn human_readable(value: u64, base: i64) -> String {
 
         // ref: [Binary prefix](https://en.wikipedia.org/wiki/Binary_prefix) @@ <https://archive.is/cnwmF>
         // ref: [SI/metric prefix](https://en.wikipedia.org/wiki/Metric_prefix) @@ <https://archive.is/QIuLj>
-        1000 => match decimal_prefix(value as f64) {
-            Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
+        1000 => match NumberPrefix::decimal(value as f64) {
+            NumberPrefix::Standalone(bytes) => bytes.to_string(),
+            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
-        1024 => match binary_prefix(value as f64) {
-            Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
+        1024 => match NumberPrefix::binary(value as f64) {
+            NumberPrefix::Standalone(bytes) => bytes.to_string(),
+            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
         _ => crash!(EXIT_ERR, "Internal error: Unknown base value {}", base),
