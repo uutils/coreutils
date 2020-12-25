@@ -86,6 +86,24 @@ fn test_rm_force() {
 }
 
 #[test]
+fn test_rm_force_multiple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_rm_force_a";
+    let file_b = "test_rm_force_b";
+
+    ucmd.arg("-f")
+        .arg("-f")
+        .arg("-f")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(!at.file_exists(file_b));
+}
+
+#[test]
 fn test_rm_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_empty_directory";
