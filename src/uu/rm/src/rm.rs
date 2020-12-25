@@ -92,6 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_FORCE)
             .short("f")
             .long(OPT_FORCE)
+            .multiple(true)
             .help("ignore nonexistent files and arguments, never prompt")
         )
         .arg(
