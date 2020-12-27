@@ -16,26 +16,26 @@ mod patterns;
 */
 mod splitname;
 mod patterns;
-mod csplitError;
+mod csplit_error;
 
 use crate::splitname::SplitName;
-use crate::csplitError::CsplitError;
+use crate::csplit_error::CsplitError;
 //mod split_name;
 
 
 //mod csplit;
 
-static SYNTAX: &'static str = "[OPTION]... FILE PATTERN...";
-static SUMMARY: &'static str = "split a file into sections determined by context lines";
-static LONG_HELP: &'static str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
+static SYNTAX: &str = "[OPTION]... FILE PATTERN...";
+static SUMMARY: &str = "split a file into sections determined by context lines";
+static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 
-static SUFFIX_FORMAT_OPT: &'static str = "suffix-format";
-static SUPPRESS_MATCHED_OPT: &'static str = "suppress-matched";
-static DIGITS_OPT: &'static str = "digits";
-static PREFIX_OPT: &'static str = "prefix";
-static KEEP_FILES_OPT: &'static str = "keep-files";
-static QUIET_OPT: &'static str = "quiet";
-static ELIDE_EMPTY_FILES_OPT: &'static str = "elide-empty-files";
+static SUFFIX_FORMAT_OPT: &str = "suffix-format";
+static SUPPRESS_MATCHED_OPT: &str = "suppress-matched";
+static DIGITS_OPT: &str = "digits";
+static PREFIX_OPT: &str = "prefix";
+static KEEP_FILES_OPT: &str = "keep-files";
+static QUIET_OPT: &str = "quiet";
+static ELIDE_EMPTY_FILES_OPT: &str = "elide-empty-files";
 
 /// Command line options for csplit.
 pub struct CsplitOptions {
@@ -250,7 +250,7 @@ impl<'a> SplitWriter<'a> {
                 Some(ref mut current_writer) => {
                     let bytes = line.as_bytes();
                     current_writer.write_all(bytes)?;
-                    current_writer.write(b"\n")?;
+                    current_writer.write_all(b"\n")?;
                     self.size += bytes.len() + 1;
                 }
                 None => panic!("trying to write to a split that was not created"),
@@ -274,7 +274,7 @@ impl<'a> SplitWriter<'a> {
                 println!("{}", self.size);
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     /// Removes all the split files that were created.
@@ -325,10 +325,8 @@ impl<'a> SplitWriter<'a> {
                 ret = Ok(());
                 break;
             } else if ln + 1 == n {
-                if !self.options.suppress_matched {
-                    if input_iter.add_line_to_buffer(ln, l).is_some() {
-                        panic!("the buffer is big enough to contain 1 line");
-                    }
+                if !self.options.suppress_matched && input_iter.add_line_to_buffer(ln, l).is_some() {
+                    panic!("the buffer is big enough to contain 1 line");
                 }
                 ret = Ok(());
                 break;

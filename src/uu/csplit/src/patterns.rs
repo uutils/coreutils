@@ -1,5 +1,5 @@
 use regex::Regex;
-use crate::csplitError::CsplitError;
+use crate::csplit_error::CsplitError;
 
 /// The definition of a pattern to match on a line.
 #[derive(Debug)]
@@ -147,7 +147,7 @@ fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
                 };
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
-        } else if let Some(line_number) = arg.parse::<usize>().ok() {
+        } else if let Ok(line_number) = arg.parse::<usize>() {
             patterns.push(Pattern::UpToLine(line_number, execute_ntimes));
         } else {
             return Err(CsplitError::InvalidPattern(arg.to_string()));
@@ -319,7 +319,7 @@ mod tests {
     fn line_number_zero() {
         let patterns = vec![Pattern::UpToLine(0, ExecutePattern::Times(1))];
         match validate_line_numbers(&patterns) {
-            Err(::CsplitError::LineNumberIsZero) => (),
+            Err(CsplitError::LineNumberIsZero) => (),
             _ => panic!("expected LineNumberIsZero error"),
         }
     }
@@ -328,7 +328,7 @@ mod tests {
     fn line_number_smaller_than_previous() {
         let input: Vec<String> = vec!["10".to_string(), "5".to_string()];
         match get_patterns(input.as_slice()) {
-            Err(::CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
+            Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
     }
@@ -337,7 +337,7 @@ mod tests {
     fn line_number_smaller_than_previous_separate() {
         let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "5".to_string()];
         match get_patterns(input.as_slice()) {
-            Err(::CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
+            Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
     }
@@ -346,7 +346,7 @@ mod tests {
     fn line_number_zero_separate() {
         let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "0".to_string()];
         match get_patterns(input.as_slice()) {
-            Err(::CsplitError::LineNumberIsZero) => (),
+            Err(CsplitError::LineNumberIsZero) => (),
             _ => panic!("expected LineNumberIsZero error"),
         }
     }

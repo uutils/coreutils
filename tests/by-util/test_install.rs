@@ -323,8 +323,8 @@ fn test_install_copy_file() {
     assert!(at.file_exists(file2));
 }
 
-#[test]
-#[cfg(target_os = "linux")]
+/*#[test]
+#[cfg(target_os = "linux")]*/
 fn test_install_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "/dev/null";

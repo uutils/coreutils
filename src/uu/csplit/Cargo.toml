@@ -21,6 +21,7 @@ failure_derive = "0.1.1"
 regex = "1.0.0"
 glob = "0.2.11"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["entries", "fs"] }
+uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "csplit"

@@ -1,7 +1,6 @@
 use regex::Regex;
 
-//mod csplit;
-use crate::CsplitError;
+use crate::csplit_error::CsplitError;
 
 /// Computes the filename of a split, taking into consideration a possible user-defined suffix
 /// format.
