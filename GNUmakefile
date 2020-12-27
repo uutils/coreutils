@@ -53,6 +53,7 @@ PROGS       := \
 	cksum \
 	comm \
 	cp \
+	csplit \
 	cut \
 	df \
 	dircolors \
@@ -160,6 +161,7 @@ TEST_PROGS  := \
 	cksum \
 	comm \
 	cp \
+	csplit \
 	cut \
 	dircolors \
 	dirname \
