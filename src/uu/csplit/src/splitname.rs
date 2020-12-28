@@ -44,9 +44,9 @@ impl SplitName {
                 format!("{}{:0width$}", prefix, n, width = n_digits)
             }),
             Some(custom) => {
-                let spec = Regex::new(
-                    r"(?P<ALL>%(?P<FLAG>[0#-])(?P<WIDTH>\d+)?(?P<TYPE>[diuoxX]))",
-                ).unwrap();
+                let spec =
+                    Regex::new(r"(?P<ALL>%(?P<FLAG>[0#-])(?P<WIDTH>\d+)?(?P<TYPE>[diuoxX]))")
+                        .unwrap();
                 let mut captures_iter = spec.captures_iter(&custom);
                 let custom_fn: Box<dyn Fn(usize) -> String> = match captures_iter.next() {
                     Some(captures) => {
@@ -63,7 +63,6 @@ impl SplitName {
                                     /*
                                      * zero padding
                                      */
-
                                     // decimal
                                     ("0", "d") | ("0", "i") | ("0", "u") => {
                                         Box::new(move |n: usize| -> String {
@@ -114,7 +113,6 @@ impl SplitName {
                                     /*
                                      * Alternate form
                                      */
-
                                     // octal
                                     ("#", "o") => Box::new(move |n: usize| -> String {
                                         format!(
@@ -152,7 +150,6 @@ impl SplitName {
                                     /*
                                      * Left adjusted
                                      */
-
                                     // decimal
                                     ("-", "d") | ("-", "i") | ("-", "u") => {
                                         Box::new(move |n: usize| -> String {
@@ -287,7 +284,8 @@ mod tests {
             Some(String::from("pre-")),
             Some(String::from("cst-%03d-post")),
             None,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(split_name.get(2), "pre-cst-002-post");
     }
 
@@ -297,7 +295,8 @@ mod tests {
             None,
             Some(String::from("cst-%03d-")),
             Some(String::from("42")),
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(split_name.get(2), "xxcst-002-");
     }
 

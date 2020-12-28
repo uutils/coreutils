@@ -1,5 +1,5 @@
-use regex::Regex;
 use crate::csplit_error::CsplitError;
+use regex::Regex;
 
 /// The definition of a pattern to match on a line.
 #[derive(Debug)]
@@ -221,9 +221,10 @@ mod tests {
             "{4}",
             "/test4.*end$/+3",
             "/test5.*end$/-3",
-        ].into_iter()
-            .map(|v| v.to_string())
-            .collect();
+        ]
+        .into_iter()
+        .map(|v| v.to_string())
+        .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 5);
         match patterns.get(0) {
@@ -273,9 +274,10 @@ mod tests {
             "{4}",
             "%test4.*end$%+3",
             "%test5.*end$%-3",
-        ].into_iter()
-            .map(|v| v.to_string())
-            .collect();
+        ]
+        .into_iter()
+        .map(|v| v.to_string())
+        .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 5);
         match patterns.get(0) {

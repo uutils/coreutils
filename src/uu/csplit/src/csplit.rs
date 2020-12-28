@@ -6,24 +6,20 @@ extern crate failure;
 extern crate uucore;
 extern crate getopts;
 extern crate regex;
-use std::{fs::{File, remove_file}, io::{BufRead, BufWriter, Write}};
-use std::io::{self, BufReader};
 use getopts::Matches;
 use regex::Regex;
-/*
-mod split_name;
-mod patterns;
-*/
-mod splitname;
-mod patterns;
+use std::io::{self, BufReader};
+use std::{
+    fs::{remove_file, File},
+    io::{BufRead, BufWriter, Write},
+};
+
 mod csplit_error;
+mod patterns;
+mod splitname;
 
-use crate::splitname::SplitName;
 use crate::csplit_error::CsplitError;
-//mod split_name;
-
-
-//mod csplit;
+use crate::splitname::SplitName;
 
 static SYNTAX: &str = "[OPTION]... FILE PATTERN...";
 static SUMMARY: &str = "split a file into sections determined by context lines";
@@ -325,7 +321,8 @@ impl<'a> SplitWriter<'a> {
                 ret = Ok(());
                 break;
             } else if ln + 1 == n {
-                if !self.options.suppress_matched && input_iter.add_line_to_buffer(ln, l).is_some() {
+                if !self.options.suppress_matched && input_iter.add_line_to_buffer(ln, l).is_some()
+                {
                     panic!("the buffer is big enough to contain 1 line");
                 }
                 ret = Ok(());
