@@ -8,6 +8,7 @@ extern crate getopts;
 extern crate regex;
 use getopts::Matches;
 use regex::Regex;
+use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
     fs::{remove_file, File},
@@ -87,7 +88,7 @@ where
     T: BufRead,
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
-    let mut split_writer = SplitWriter::new(&options)?;
+    let mut split_writer = SplitWriter::new(&options);
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
     // consume the rest
@@ -98,7 +99,7 @@ where
         for (_, line) in input_iter {
             split_writer.writeln(line?)?;
         }
-        split_writer.finish_split()?;
+        split_writer.finish_split();
     }
     // delete files on error by default
     if ret.is_err() && !options.keep_files {
@@ -118,6 +119,7 @@ where
     // split the file based on patterns
     for pattern in patterns.into_iter() {
         let pattern_as_str = pattern.to_string();
+        #[allow(clippy::match_like_matches_macro)]
         let is_skip = if let patterns::Pattern::SkipToMatch(_, _, _) = pattern {
             true
         } else {
@@ -204,14 +206,14 @@ impl<'a> Drop for SplitWriter<'a> {
 }
 
 impl<'a> SplitWriter<'a> {
-    fn new(options: &CsplitOptions) -> io::Result<SplitWriter> {
-        Ok(SplitWriter {
+    fn new(options: &CsplitOptions) -> SplitWriter {
+        SplitWriter {
             options,
             counter: 0,
             current_writer: None,
             size: 0,
             dev_null: false,
-        })
+        }
     }
 
     /// Creates a new split and returns its filename.
@@ -262,7 +264,7 @@ impl<'a> SplitWriter<'a> {
     /// # Errors
     ///
     /// Some [`io::Error`] if the split could not be removed in case it should be elided.
-    fn finish_split(&mut self) -> io::Result<()> {
+    fn finish_split(&mut self) {
         if !self.dev_null {
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
@@ -270,7 +272,6 @@ impl<'a> SplitWriter<'a> {
                 println!("{}", self.size);
             }
         }
-        Ok(())
     }
 
     /// Removes all the split files that were created.
@@ -314,23 +315,28 @@ impl<'a> SplitWriter<'a> {
         let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
         while let Some((ln, line)) = input_iter.next() {
             let l = line?;
-            if ln + 1 > n {
-                if input_iter.add_line_to_buffer(ln, l).is_some() {
-                    panic!("the buffer is big enough to contain 1 line");
+            match n.cmp(&(&ln + 1)) {
+                Ordering::Less => {
+                    if input_iter.add_line_to_buffer(ln, l).is_some() {
+                        panic!("the buffer is big enough to contain 1 line");
+                    }
+                    ret = Ok(());
+                    break;
                 }
-                ret = Ok(());
-                break;
-            } else if ln + 1 == n {
-                if !self.options.suppress_matched && input_iter.add_line_to_buffer(ln, l).is_some()
-                {
-                    panic!("the buffer is big enough to contain 1 line");
+                Ordering::Equal => {
+                    if !self.options.suppress_matched
+                        && input_iter.add_line_to_buffer(ln, l).is_some()
+                    {
+                        panic!("the buffer is big enough to contain 1 line");
+                    }
+                    ret = Ok(());
+                    break;
                 }
-                ret = Ok(());
-                break;
+                Ordering::Greater => (),
             }
             self.writeln(l)?;
         }
-        self.finish_split()?;
+        self.finish_split();
         ret
     }
 
@@ -386,7 +392,7 @@ impl<'a> SplitWriter<'a> {
                                 self.writeln(line?)?;
                             }
                             None => {
-                                self.finish_split()?;
+                                self.finish_split();
                                 return Err(CsplitError::LineOutOfRange(
                                     pattern_as_str.to_string(),
                                 ));
@@ -394,7 +400,7 @@ impl<'a> SplitWriter<'a> {
                         };
                         offset -= 1;
                     }
-                    self.finish_split()?;
+                    self.finish_split();
                     return Ok(());
                 }
                 self.writeln(l)?;
@@ -420,7 +426,7 @@ impl<'a> SplitWriter<'a> {
                             panic!("should be big enough to hold every lines");
                         }
                     }
-                    self.finish_split()?;
+                    self.finish_split();
                     if input_iter.buffer_len() < offset_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                     }
@@ -436,7 +442,7 @@ impl<'a> SplitWriter<'a> {
             }
         }
 
-        self.finish_split()?;
+        self.finish_split();
         Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
     }
 }

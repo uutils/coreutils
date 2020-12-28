@@ -29,7 +29,7 @@ impl SplitName {
         n_digits_opt: Option<String>,
     ) -> Result<SplitName, CsplitError> {
         // get the prefix
-        let prefix = prefix_opt.unwrap_or("xx".to_string());
+        let prefix = prefix_opt.unwrap_or_else(|| "xx".to_string());
         // the width for the split offset
         let n_digits = match n_digits_opt {
             None => 2,
