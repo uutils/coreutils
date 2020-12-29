@@ -8,10 +8,6 @@
 
 // spell-checker:ignore (ToDO) tempfile tempdir SUFF TMPDIR tmpname
 
-extern crate getopts;
-extern crate rand;
-extern crate tempfile;
-
 #[macro_use]
 extern crate uucore;
 

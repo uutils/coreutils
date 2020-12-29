@@ -8,8 +8,6 @@
 
 // spell-checker:ignore (ToDO) NEWROOT Userspec pstatus
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 use uucore::entries;

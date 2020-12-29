@@ -3,8 +3,6 @@
 
 // spell-checker:ignore (ToDO) istr chiter argptr ilen
 
-extern crate clap;
-
 #[macro_use]
 extern crate uucore;
 

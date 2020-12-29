@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
 
-extern crate clap;
-
 #[macro_use]
 mod fsext;
 pub use crate::fsext::*;

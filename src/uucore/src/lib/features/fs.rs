@@ -6,11 +6,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(windows)]
-extern crate dunce;
-#[cfg(target_os = "redox")]
-extern crate termion;
-
 #[cfg(unix)]
 use libc::{
     mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,

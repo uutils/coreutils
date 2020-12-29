@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) BLOCKSIZE inode inodes ment strs
 
-extern crate time;
-
 #[macro_use]
 extern crate uucore;
 

@@ -7,10 +7,6 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-#[cfg(unix)]
-extern crate libc;
-extern crate walkdir;
-
 #[macro_use]
 extern crate uucore;
 

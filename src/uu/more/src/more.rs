@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) lflag ICANON tcgetattr tcsetattr TCSADRAIN
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 

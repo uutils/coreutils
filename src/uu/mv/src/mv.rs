@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath
 
-extern crate clap;
-extern crate fs_extra;
-
 #[macro_use]
 extern crate uucore;
 

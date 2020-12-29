@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros makenod newmode perror IFBLK IFCHR IFIFO
 
-extern crate getopts;
-extern crate libc;
-
 mod parsemode;
 
 #[macro_use]

@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
-extern crate unicode_width;
-
 #[macro_use]
 extern crate uucore;
 

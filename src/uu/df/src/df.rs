@@ -9,17 +9,11 @@
 // spell-checker:ignore (ToDO) mountinfo mtab BLOCKSIZE getmntinfo fobj mptr noatime Iused overmounted
 // spell-checker:ignore (libc/fs) asyncreads asyncwrites autofs bavail bfree bsize charspare cifs debugfs devfs devpts ffree frsize fsid fstypename fusectl inode inodes iosize kernfs mntbufp mntfromname mntonname mqueue namemax pipefs smbfs statfs statvfs subfs syncreads syncwrites sysfs wcslen
 
-extern crate clap;
-extern crate libc;
-extern crate number_prefix;
-
 #[macro_use]
 extern crate uucore;
 
 use clap::{App, Arg};
 
-#[cfg(windows)]
-extern crate winapi;
 #[cfg(windows)]
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(windows)]

@@ -10,10 +10,6 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
-extern crate bit_set;
-extern crate fnv;
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 

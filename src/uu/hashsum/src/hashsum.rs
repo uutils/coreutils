@@ -11,14 +11,6 @@
 
 #[macro_use]
 extern crate clap;
-extern crate blake2_rfc;
-extern crate hex;
-extern crate md5;
-extern crate regex;
-extern crate regex_syntax;
-extern crate sha1;
-extern crate sha2;
-extern crate sha3;
 
 #[macro_use]
 extern crate uucore;

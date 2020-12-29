@@ -7,11 +7,6 @@
 #![allow(dead_code)]
 
 // spell-checker:ignore (ToDO) outfile nondictionary
-
-extern crate clap;
-extern crate semver;
-
-extern crate itertools;
 #[macro_use]
 extern crate uucore;
 

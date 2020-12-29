@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) sbytes slen
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 

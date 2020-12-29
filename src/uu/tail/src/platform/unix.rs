@@ -9,8 +9,6 @@
 
 // spell-checker:ignore (ToDO) errno EPERM ENOSYS
 
-extern crate libc;
-
 use std::io::Error;
 
 pub type Pid = libc::pid_t;

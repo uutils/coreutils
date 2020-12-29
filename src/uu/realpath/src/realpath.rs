@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 

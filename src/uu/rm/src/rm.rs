@@ -7,10 +7,6 @@
 
 // spell-checker:ignore (ToDO) bitor ulong
 
-extern crate clap;
-extern crate remove_dir_all;
-extern crate walkdir;
-
 #[macro_use]
 extern crate uucore;
 

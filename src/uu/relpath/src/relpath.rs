@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) subpath absto absfrom absbase
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 

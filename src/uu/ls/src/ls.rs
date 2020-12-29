@@ -7,15 +7,6 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
 
-extern crate getopts;
-#[cfg(unix)]
-extern crate isatty;
-extern crate number_prefix;
-extern crate term_grid;
-extern crate termsize;
-extern crate time;
-extern crate unicode_width;
-
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;

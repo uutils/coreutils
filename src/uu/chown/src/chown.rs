@@ -14,10 +14,8 @@ use uucore::fs::resolve_relative_path;
 use uucore::libc::{gid_t, uid_t};
 use uucore::perms::{wrap_chown, Verbosity};
 
-extern crate clap;
 use clap::{App, Arg};
 
-extern crate walkdir;
 use walkdir::WalkDir;
 
 use std::fs::{self, Metadata};

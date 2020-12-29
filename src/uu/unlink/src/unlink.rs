@@ -9,9 +9,6 @@
 
 // spell-checker:ignore (ToDO) lstat IFLNK IFMT IFREG
 
-extern crate getopts;
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

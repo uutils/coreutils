@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) errno
 
-extern crate clap;
-
 #[macro_use]
 extern crate uucore;
 

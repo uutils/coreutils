@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-extern crate getopts;
-extern crate rand;
-
 #[macro_use]
 extern crate uucore;
 

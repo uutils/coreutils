@@ -9,9 +9,6 @@
 // spell-checker:ignore (format) MMDDhhmm
 // spell-checker:ignore (ToDO) DATEFILE
 
-extern crate chrono;
-
-extern crate clap;
 #[macro_use]
 extern crate uucore;
 

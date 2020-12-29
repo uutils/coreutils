@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (ToDO) NAMESET FILESIZE fstab coeff journaling writeback REiser journaled
 
-extern crate getopts;
-extern crate rand;
-
 use rand::{Rng, ThreadRng};
 use std::cell::{Cell, RefCell};
 use std::fs;

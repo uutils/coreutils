@@ -10,7 +10,6 @@
 // Allow dead code here in order to keep all fields, constants here, for consistency.
 #![allow(dead_code)]
 
-extern crate clap;
 #[macro_use]
 extern crate uucore;
 

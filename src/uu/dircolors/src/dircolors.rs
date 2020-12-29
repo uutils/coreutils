@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid
 
-extern crate glob;
-
 #[macro_use]
 extern crate uucore;
 

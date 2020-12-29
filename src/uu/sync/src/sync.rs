@@ -7,7 +7,6 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-extern crate clap;
 extern crate libc;
 
 #[macro_use]

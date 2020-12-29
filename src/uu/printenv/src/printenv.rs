@@ -7,8 +7,6 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
-extern crate clap;
-
 #[macro_use]
 extern crate uucore;
 
