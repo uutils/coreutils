@@ -10,10 +10,6 @@
 
 // spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
-extern crate chrono;
-extern crate clap;
-extern crate time;
-
 use chrono::{Local, TimeZone, Utc};
 use clap::{App, Arg};
 

@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck
 
-extern crate clap;
-
 #[macro_use]
 extern crate uucore;
 

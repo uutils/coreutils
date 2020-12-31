@@ -9,9 +9,6 @@
 
 // spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf
 
-extern crate getopts;
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

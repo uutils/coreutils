@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
-extern crate getopts;
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) signalname pids
 
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

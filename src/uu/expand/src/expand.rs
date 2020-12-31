@@ -9,9 +9,6 @@
 
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag
 
-extern crate getopts;
-extern crate unicode_width;
-
 #[macro_use]
 extern crate uucore;
 

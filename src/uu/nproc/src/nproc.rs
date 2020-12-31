@@ -7,12 +7,6 @@
 
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
-extern crate clap;
-extern crate num_cpus;
-
-#[cfg(unix)]
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

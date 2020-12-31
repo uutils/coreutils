@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath
 
-extern crate clap;
-extern crate libc;
-
 mod mode;
 
 #[macro_use]

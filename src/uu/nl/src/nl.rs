@@ -8,12 +8,6 @@
 
 // spell-checker:ignore (ToDO) corasick memchr
 
-extern crate aho_corasick;
-extern crate getopts;
-extern crate memchr;
-extern crate regex;
-extern crate regex_syntax;
-
 #[macro_use]
 extern crate uucore;
 

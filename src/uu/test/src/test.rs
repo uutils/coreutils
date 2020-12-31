@@ -7,10 +7,6 @@
 
 // spell-checker:ignore (ToDO) retval paren prec subprec cond
 
-extern crate libc;
-#[cfg(target_os = "redox")]
-extern crate syscall;
-
 use std::collections::HashMap;
 use std::str::from_utf8;
 

@@ -7,10 +7,6 @@
 
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
-extern crate byteorder;
-extern crate getopts;
-extern crate half;
-
 #[macro_use]
 extern crate uucore;
 

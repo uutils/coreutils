@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
 
-extern crate clap;
-
 #[macro_use]
 extern crate uucore;
 

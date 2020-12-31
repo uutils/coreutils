@@ -7,12 +7,6 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-extern crate aho_corasick;
-extern crate getopts;
-extern crate memchr;
-extern crate regex;
-extern crate regex_syntax;
-
 #[macro_use]
 extern crate uucore;
 

@@ -8,9 +8,7 @@
 
 // spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm
 
-extern crate clap;
 pub extern crate filetime;
-extern crate time;
 
 #[macro_use]
 extern crate uucore;

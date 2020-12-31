@@ -9,9 +9,6 @@
 
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype
 
-extern crate getopts;
-extern crate unicode_width;
-
 #[macro_use]
 extern crate uucore;
 

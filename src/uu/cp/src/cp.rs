@@ -10,22 +10,14 @@
 
 // spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs
 
-extern crate clap;
-extern crate filetime;
 #[cfg(target_os = "linux")]
 #[macro_use]
 extern crate ioctl_sys;
-extern crate libc;
 #[macro_use]
 extern crate quick_error;
 #[macro_use]
 extern crate uucore;
-extern crate walkdir;
-#[cfg(unix)]
-extern crate xattr;
 
-#[cfg(windows)]
-extern crate winapi;
 #[cfg(windows)]
 use winapi::um::fileapi::CreateFileW;
 #[cfg(windows)]

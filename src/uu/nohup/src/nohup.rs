@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
-extern crate getopts;
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

@@ -3,10 +3,6 @@
 // Copyright (C) ~ Alex Lyon <arcterus@mail.com>
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
-//## external crates
-
-extern crate wild;
-
 // * feature-gated external crates
 #[cfg(feature = "failure")]
 extern crate failure;

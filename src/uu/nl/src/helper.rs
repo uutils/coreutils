@@ -1,8 +1,5 @@
 // spell-checker:ignore (ToDO) conv
 
-extern crate getopts;
-extern crate regex;
-
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
     if chars.len() == 1 && chars[0] == 'a' {

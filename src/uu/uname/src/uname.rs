@@ -10,8 +10,6 @@
 
 // spell-checker:ignore (ToDO) nodename kernelname kernelrelease kernelversion sysname hwplatform mnrsv
 
-extern crate clap;
-extern crate platform_info;
 #[macro_use]
 extern crate uucore;
 

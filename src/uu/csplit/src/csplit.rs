@@ -4,8 +4,6 @@
 extern crate failure;
 #[macro_use]
 extern crate uucore;
-extern crate getopts;
-extern crate regex;
 use getopts::Matches;
 use regex::Regex;
 use std::cmp::Ordering;

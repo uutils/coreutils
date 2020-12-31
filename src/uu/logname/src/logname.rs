@@ -9,8 +9,6 @@
 
 // spell-checker:ignore (ToDO) getlogin userlogin
 
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

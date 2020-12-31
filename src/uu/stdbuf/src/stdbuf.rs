@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
 
-extern crate getopts;
-extern crate tempfile;
-
 #[macro_use]
 extern crate uucore;
 
