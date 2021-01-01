@@ -35,7 +35,6 @@ use std::ffi::CString;
 #[cfg(windows)]
 use std::ffi::OsStr;
 use std::fs;
-#[cfg(target_os = "linux")]
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
@@ -1233,7 +1232,14 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
         };
         symlink_file(&link, &dest, &*context_for(&link, &dest))?;
     } else {
-        fs::copy(source, dest).context(&*context_for(source, dest))?;
+        if source.to_string_lossy() == "/dev/null" {
+            /* workaround a limitation of fs::copy
+             * https://github.com/rust-lang/rust/issues/79390
+             */
+            File::create(dest)?;
+        } else {
+            fs::copy(source, dest).context(&*context_for(source, dest))?;
+        }
     }
 
     Ok(())
