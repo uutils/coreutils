@@ -903,3 +903,22 @@ fn test_cp_dont_preserve_timestamps() {
     assert!(res.as_secs() < 3605);
     assert!(result.success);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_target_file_dev_null() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "/dev/null";
+    let file2 = "test_cp_target_file_file_i2";
+
+    at.touch(file1);
+    at.touch(file2);
+    ucmd.arg(file1).arg(file2).fails();
+
+    /* Uncomment when fixed
+    ucmd.arg(file1).arg(file2).succeeds().no_stderr();
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    */
+}
