@@ -322,11 +322,7 @@ fn test_symlink_errors() {
     // $ ln -T -t a b
     // ln: cannot combine --target-directory (-t) and --no-target-directory (-T)
     ucmd.args(&["-T", "-t", dir, file_a, file_b])
-        .fails()
-        .stderr_is(
-            "ln: error: cannot combine --target-directory (-t) and --no-target-directory \
-                (-T)\n",
-        );
+        .fails();
 }
 
 #[test]

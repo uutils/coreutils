@@ -1756,6 +1756,7 @@ dependencies = [
 name = "uu_ln"
 version = "0.0.1"
 dependencies = [
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
  "uucore_procs 0.0.4",

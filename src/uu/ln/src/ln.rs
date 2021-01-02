@@ -10,6 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
+
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fs;
@@ -21,19 +23,6 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
-
-static NAME: &str = "ln";
-static SUMMARY: &str = "";
-static LONG_HELP: &str = "
- In the 1st form, create a link to TARGET with the name LINK_NAME.
- In the 2nd form, create a link to TARGET in the current directory.
- In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
- Create hard links by default, symbolic links with --symbolic.
- By default, each destination (name of new link) should not already exist.
- When creating hard links, each TARGET must exist.  Symbolic links
- can hold arbitrary text; if later resolved, a relative link is
- interpreted in relation to its parent directory.
-";
 
 pub struct Settings {
     overwrite: OverwriteMode,
@@ -61,143 +50,202 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+fn get_usage() -> String {
+    format!(
+        "{0} [OPTION]... [-T] TARGET LINK_executable!()   (1st form)
+       {0} [OPTION]... TARGET                  (2nd form)
+       {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
+       {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
+        executable!()
+    )
+}
 
-    let syntax = format!(
-        "[OPTION]... [-T] TARGET LINK_NAME   (1st form)
- {0} [OPTION]... TARGET                  (2nd form)
- {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
- {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
-        NAME
-    );
-    let matches = app!(&syntax, SUMMARY, LONG_HELP)
-        .optflag(
-            "b",
-            "",
+fn get_long_usage() -> String {
+    String::from(
+        " In the 1st form, create a link to TARGET with the name LINK_executable!().
+        In the 2nd form, create a link to TARGET in the current directory.
+        In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
+        Create hard links by default, symbolic links with --symbolic.
+        By default, each destination (name of new link) should not already exist.
+        When creating hard links, each TARGET must exist.  Symbolic links
+        can hold arbitrary text; if later resolved, a relative link is
+        interpreted in relation to its parent directory.
+        ",
+    )
+}
+
+static ABOUT: &str = "change file owner and group";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_B: &str = "b";
+static OPT_BACKUP: &str = "backup";
+static OPT_FORCE: &str = "force";
+static OPT_INTERACTIVE: &str = "interactive";
+static OPT_SYMBOLIC: &str = "symbolic";
+static OPT_SUFFIX: &str = "suffix";
+static OPT_TARGET_DIRECTORY: &str = "target-directory";
+static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
+static OPT_RELATIVE: &str = "relative";
+static OPT_VERBOSE: &str = "verbose";
+
+static ARG_FILES: &str = "files";
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let long_usage = get_long_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&long_usage[..])
+        .arg(Arg::with_name(OPT_B).short(OPT_B).help(
             "make a backup of each file that would otherwise be overwritten or \
              removed",
-        )
-        .optflagopt(
-            "",
-            "backup",
-            "make a backup of each file that would otherwise be overwritten \
+        ))
+        .arg(
+            Arg::with_name(OPT_BACKUP)
+                .long(OPT_BACKUP)
+                .help(
+                    "make a backup of each file that would otherwise be overwritten \
              or removed",
-            "METHOD",
+                )
+                .takes_value(true)
+                .possible_value("simple")
+                .possible_value("never")
+                .possible_value("numbered")
+                .possible_value("t")
+                .possible_value("existing")
+                .possible_value("nil")
+                .possible_value("none")
+                .possible_value("off")
+                .value_name("METHOD"),
         )
-        // TODO: opts.optflag("d", "directory", "allow users with appropriate privileges to attempt \
+        // TODO: opts.arg(
+        //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
-        .optflag("f", "force", "remove existing destination files")
-        .optflag(
-            "i",
-            "interactive",
-            "prompt whether to remove existing destination files",
+        .arg(
+            Arg::with_name(OPT_FORCE)
+                .short("f")
+                .long(OPT_FORCE)
+                .help("remove existing destination files"),
         )
-        // TODO: opts.optflag("L", "logical", "dereference TARGETs that are symbolic links");
-        // TODO: opts.optflag("n", "no-dereference", "treat LINK_NAME as a normal file if it is a \
+        .arg(
+            Arg::with_name(OPT_INTERACTIVE)
+                .short("i")
+                .long(OPT_INTERACTIVE)
+                .help("prompt whether to remove existing destination files"),
+        )
+        // TODO: opts.arg(
+        //    Arg::with_name(("L", "logical", "dereference TARGETs that are symbolic links");
+        // TODO: opts.arg(
+        //    Arg::with_name(("n", "no-dereference", "treat LINK_executable!() as a normal file if it is a \
         //                                            symbolic link to a directory");
-        // TODO: opts.optflag("P", "physical", "make hard links directly to symbolic links");
-        .optflag("s", "symbolic", "make symbolic links instead of hard links")
-        .optopt("S", "suffix", "override the usual backup suffix", "SUFFIX")
-        .optopt(
-            "t",
-            "target-directory",
-            "specify the DIRECTORY in which to create the links",
-            "DIRECTORY",
+        // TODO: opts.arg(
+        //    Arg::with_name(("P", "physical", "make hard links directly to symbolic links");
+        .arg(
+            Arg::with_name(OPT_SYMBOLIC)
+                .short("s")
+                .long("symbolic")
+                .help("make symbolic links instead of hard links"),
         )
-        .optflag(
-            "T",
-            "no-target-directory",
-            "treat LINK_NAME as a normal file always",
+        .arg(
+            Arg::with_name(OPT_SUFFIX)
+                .short("S")
+                .long(OPT_SUFFIX)
+                .help("override the usual backup suffix")
+                .value_name("SUFFIX")
+                .takes_value(true),
         )
-        .optflag(
-            "r",
-            "relative",
-            "create symbolic links relative to link location",
+        .arg(
+            Arg::with_name(OPT_TARGET_DIRECTORY)
+                .short("t")
+                .long(OPT_TARGET_DIRECTORY)
+                .help("specify the DIRECTORY in which to create the links")
+                .value_name("DIRECTORY")
+                .conflicts_with(OPT_NO_TARGET_DIRECTORY),
         )
-        .optflag("v", "verbose", "print name of each linked file")
-        .parse(args);
+        .arg(
+            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+                .short("T")
+                .long(OPT_NO_TARGET_DIRECTORY)
+                .help("treat LINK_executable!() as a normal file always"),
+        )
+        .arg(
+            Arg::with_name(OPT_RELATIVE)
+                .short("r")
+                .long(OPT_RELATIVE)
+                .help("create symbolic links relative to link location"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("print name of each linked file"),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .required(true)
+                .min_values(1),
+        )
+        .get_matches_from(args);
 
-    let overwrite_mode = if matches.opt_present("force") {
+    /*  the list of files */
+
+    let paths: Vec<PathBuf> = matches
+        .values_of(ARG_FILES)
+        .unwrap()
+        .map(|path| PathBuf::from(path))
+        .collect();
+
+    let overwrite_mode = if matches.is_present(OPT_FORCE) {
         OverwriteMode::Force
-    } else if matches.opt_present("interactive") {
+    } else if matches.is_present(OPT_INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = if matches.opt_present("b") {
+    let backup_mode = if matches.is_present(OPT_B) {
         BackupMode::ExistingBackup
-    } else if matches.opt_present("backup") {
-        match matches.opt_str("backup") {
+    } else if matches.is_present(OPT_BACKUP) {
+        match matches.value_of(OPT_BACKUP) {
             None => BackupMode::ExistingBackup,
             Some(mode) => match &mode[..] {
                 "simple" | "never" => BackupMode::SimpleBackup,
                 "numbered" | "t" => BackupMode::NumberedBackup,
                 "existing" | "nil" => BackupMode::ExistingBackup,
                 "none" | "off" => BackupMode::NoBackup,
-                x => {
-                    show_error!(
-                        "invalid argument '{}' for 'backup method'\n\
-                         Try '{} --help' for more information.",
-                        x,
-                        NAME
-                    );
-                    return 1;
-                }
+                _ => panic!(), // cannot happen as it is managed by clap
             },
         }
     } else {
         BackupMode::NoBackup
     };
 
-    let backup_suffix = if matches.opt_present("suffix") {
-        match matches.opt_str("suffix") {
-            Some(x) => x,
-            None => {
-                show_error!(
-                    "option '--suffix' requires an argument\n\
-                     Try '{} --help' for more information.",
-                    NAME
-                );
-                return 1;
-            }
-        }
+    let backup_suffix = if matches.is_present(OPT_SUFFIX) {
+        matches.value_of(OPT_SUFFIX).unwrap()
     } else {
-        "~".to_owned()
+        "~"
     };
-
-    if matches.opt_present("T") && matches.opt_present("t") {
-        show_error!("cannot combine --target-directory (-t) and --no-target-directory (-T)");
-        return 1;
-    }
 
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        suffix: backup_suffix,
-        symbolic: matches.opt_present("s"),
-        relative: matches.opt_present("r"),
-        target_dir: matches.opt_str("t"),
-        no_target_dir: matches.opt_present("T"),
-        verbose: matches.opt_present("v"),
+        suffix: backup_suffix.to_string(),
+        symbolic: matches.is_present(OPT_SYMBOLIC),
+        relative: matches.is_present(OPT_RELATIVE),
+        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
+        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
+        verbose: matches.is_present(OPT_VERBOSE),
     };
-
-    let string_to_path = |s: &String| PathBuf::from(s);
-    let paths: Vec<PathBuf> = matches.free.iter().map(string_to_path).collect();
 
     exec(&paths[..], &settings)
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
-    if files.is_empty() {
-        show_error!(
-            "missing file operand\nTry '{} --help' for more information.",
-            NAME
-        );
-        return 1;
-    }
-
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -228,7 +276,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
         show_error!(
             "extra operand '{}'\nTry '{} --help' for more information.",
             files[2].display(),
-            NAME
+            executable!()
         );
         return 1;
     }
@@ -321,7 +369,7 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                print!("{}: overwrite '{}'? ", NAME, dst.display());
+                print!("{}: overwrite '{}'? ", executable!(), dst.display());
                 if !read_yes() {
                     return Ok(());
                 }
