@@ -66,6 +66,67 @@ fn test_mktemp_mktemp() {
 }
 
 #[test]
+fn test_mktemp_mktemp_t() {
+    let scene = TestScenario::new(util_name!());
+
+    let pathname = scene.fixtures.as_string();
+
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE1)
+        .succeeds();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE2)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE3)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE4)
+        .fails();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE5)
+        .succeeds();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE6)
+        .succeeds();
+    scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE7)
+        .succeeds();
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg(TEST_TEMPLATE8)
+        .fails();
+    println!("stdout {}", result.stdout);
+    println!("stderr {}", result.stderr);
+    assert!(result
+        .stderr
+        .contains("error: suffix cannot contain any path separators"));
+}
+
+#[test]
 fn test_mktemp_make_temp_dir() {
     let scene = TestScenario::new(util_name!());
 
