@@ -14,7 +14,7 @@ fn test_count_down() {
         .args(&["--", "5", "-1", "1"])
         .run()
         .stdout_is("5\n4\n3\n2\n1\n");
-        new_ucmd!()
+    new_ucmd!()
         .args(&["5", "-1", "1"])
         .run()
         .stdout_is("5\n4\n3\n2\n1\n");
