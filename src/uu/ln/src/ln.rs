@@ -27,11 +27,13 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
+    force: bool,
     suffix: String,
     symbolic: bool,
     relative: bool,
     target_dir: Option<String>,
     no_target_dir: bool,
+    no_dereference: bool,
     verbose: bool,
 }
 
@@ -81,6 +83,7 @@ static OPT_B: &str = "b";
 static OPT_BACKUP: &str = "backup";
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
+static OPT_NO_DEREFERENCE: &str = "no-dereference";
 static OPT_SYMBOLIC: &str = "symbolic";
 static OPT_SUFFIX: &str = "suffix";
 static OPT_TARGET_DIRECTORY: &str = "target-directory";
@@ -136,11 +139,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_INTERACTIVE)
                 .help("prompt whether to remove existing destination files"),
         )
+        .arg(
+            Arg::with_name(OPT_NO_DEREFERENCE)
+                .short("n")
+                .long(OPT_NO_DEREFERENCE)
+                .help(
+                    "treat LINK_executable!() as a normal file if it is a \
+                                                    symbolic link to a directory",
+                ),
+        )
         // TODO: opts.arg(
         //    Arg::with_name(("L", "logical", "dereference TARGETs that are symbolic links");
-        // TODO: opts.arg(
-        //    Arg::with_name(("n", "no-dereference", "treat LINK_executable!() as a normal file if it is a \
-        //                                            symbolic link to a directory");
+        //
         // TODO: opts.arg(
         //    Arg::with_name(("P", "physical", "make hard links directly to symbolic links");
         .arg(
@@ -192,7 +202,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .get_matches_from(args);
 
-    /*  the list of files */
+    /* the list of files */
 
     let paths: Vec<PathBuf> = matches
         .values_of(ARG_FILES)
@@ -234,11 +244,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
+        force: matches.is_present(OPT_FORCE),
         suffix: backup_suffix.to_string(),
         symbolic: matches.is_present(OPT_SYMBOLIC),
         relative: matches.is_present(OPT_RELATIVE),
         target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
         no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
+        no_dereference: matches.is_present(OPT_NO_DEREFERENCE),
         verbose: matches.is_present(OPT_VERBOSE),
     };
 
@@ -299,24 +311,47 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
 
     let mut all_successful = true;
     for srcpath in files.iter() {
-        let targetpath = match srcpath.as_os_str().to_str() {
-            Some(name) => {
-                match Path::new(name).file_name() {
-                    Some(basename) => target_dir.join(basename),
-                    // This can be None only for "." or "..". Trying
-                    // to create a link with such name will fail with
-                    // EEXIST, which agrees with the behavior of GNU
-                    // coreutils.
-                    None => target_dir.join(name),
+        let targetpath = if settings.no_dereference && settings.force {
+            // In that case, we don't want to do link resolution
+            // We need to clean the target
+            if is_symlink(target_dir) {
+                if target_dir.is_file() {
+                    match fs::remove_file(target_dir) {
+                        Err(e) => show_error!("Could not update {}: {}", target_dir.display(), e),
+                        _ => (),
+                    };
+                }
+                if target_dir.is_dir() {
+                    // Not sure why but on Windows, the symlink can be
+                    // considered as a dir
+                    // See test_ln::test_symlink_no_deref_dir
+                    match fs::remove_dir(target_dir) {
+                        Err(e) => show_error!("Could not update {}: {}", target_dir.display(), e),
+                        _ => (),
+                    };
                 }
             }
-            None => {
-                show_error!(
-                    "cannot stat '{}': No such file or directory",
-                    srcpath.display()
-                );
-                all_successful = false;
-                continue;
+            target_dir.clone()
+        } else {
+            match srcpath.as_os_str().to_str() {
+                Some(name) => {
+                    match Path::new(name).file_name() {
+                        Some(basename) => target_dir.join(basename),
+                        // This can be None only for "." or "..". Trying
+                        // to create a link with such name will fail with
+                        // EEXIST, which agrees with the behavior of GNU
+                        // coreutils.
+                        None => target_dir.join(name),
+                    }
+                }
+                None => {
+                    show_error!(
+                        "cannot stat '{}': No such file or directory",
+                        srcpath.display()
+                    );
+                    all_successful = false;
+                    continue;
+                }
             }
         };
 
@@ -386,6 +421,12 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         };
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)?;
+        }
+    }
+
+    if settings.no_dereference && settings.force {
+        if dst.exists() {
+            fs::remove_file(dst)?;
         }
     }
 
