@@ -32,6 +32,7 @@ static OPT_DRY_RUN: &str = "dry-run";
 static OPT_QUIET: &str = "quiet";
 static OPT_SUFFIX: &str = "suffix";
 static OPT_TMPDIR: &str = "tmpdir";
+static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
 
@@ -79,12 +80,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-         $TMPDIR if set, else /tmp.  With this option, TEMPLATE  must  not \
-         be  an  absolute name; unlike with -t, TEMPLATE may contain \
+         $TMPDIR if set, else /tmp. With this option, TEMPLATE must not \
+         be an absolute name; unlike with -t, TEMPLATE may contain \
          slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR"),
         )
+        .arg(Arg::with_name(OPT_T).short(OPT_T).help(
+            "Generate a template (using the supplied prefix and TMPDIR if set) \
+                               to create a filename template [deprecated]",
+        ))
         .arg(
             Arg::with_name(ARG_TEMPLATE)
                 .multiple(false)
@@ -93,10 +98,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .default_value(DEFAULT_TEMPLATE),
         )
         .get_matches_from(args);
-    // deprecated option of GNU coreutils
-    //    .arg(
-    // Arg::with_name(("t", "", "Generate a template (using the supplied prefix and TMPDIR if set) \
-    //                           to create a filename template");
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
 
@@ -129,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "suffix cannot contain any path separators");
     }
 
-    let tmpdir = match matches.value_of(OPT_TMPDIR) {
+    let mut tmpdir = match matches.value_of(OPT_TMPDIR) {
         Some(s) => {
             if PathBuf::from(prefix).is_absolute() {
                 show_info!(
@@ -141,6 +142,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             PathBuf::from(s)
         }
         None => env::temp_dir(),
+    };
+
+    if matches.is_present(OPT_T) {
+        tmpdir = env::temp_dir()
     };
 
     if dry_run {
