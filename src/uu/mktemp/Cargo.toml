@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/mktemp.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 rand = "0.5"
 tempfile = "3.0"
 uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
