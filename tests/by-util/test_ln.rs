@@ -321,8 +321,7 @@ fn test_symlink_errors() {
 
     // $ ln -T -t a b
     // ln: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    ucmd.args(&["-T", "-t", dir, file_a, file_b])
-        .fails();
+    ucmd.args(&["-T", "-t", dir, file_a, file_b]).fails();
 }
 
 #[test]
@@ -483,4 +482,96 @@ fn test_symlink_relative_dir() {
     assert!(at.dir_exists(dir));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), dir);
+}
+
+#[test]
+fn test_symlink_no_deref_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir1 = "foo";
+    let dir2 = "bar";
+    let link = "baz";
+
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    scene
+        .ucmd()
+        .args(&["-s", dir2, link])
+        .succeeds()
+        .no_stderr();
+    assert!(at.dir_exists(dir1));
+    assert!(at.dir_exists(dir2));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), dir2);
+
+    // try the normal behavior
+    scene
+        .ucmd()
+        .args(&["-sf", dir1, link])
+        .succeeds()
+        .no_stderr();
+    assert!(at.dir_exists(dir1));
+    assert!(at.dir_exists(dir2));
+    assert!(at.is_symlink("baz/foo"));
+    assert_eq!(at.resolve_link("baz/foo"), dir1);
+
+    // Doesn't work without the force
+    scene.ucmd().args(&["-sn", dir1, link]).fails();
+
+    // Try with the no-deref
+    let result = scene.ucmd().args(&["-sfn", dir1, link]).run();
+    println!("stdout {}", result.stdout);
+    println!("stderr {}", result.stderr);
+    assert!(result.success);
+    assert!(at.dir_exists(dir1));
+    assert!(at.dir_exists(dir2));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), dir1);
+}
+
+#[test]
+fn test_symlink_no_deref_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "foo";
+    let file2 = "bar";
+    let link = "baz";
+
+    at.touch(file1);
+    at.touch(file2);
+    scene
+        .ucmd()
+        .args(&["-s", file2, link])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file2);
+
+    // try the normal behavior
+    scene
+        .ucmd()
+        .args(&["-sf", file1, link])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.is_symlink("baz"));
+    assert_eq!(at.resolve_link("baz"), file1);
+
+    // Doesn't work without the force
+    scene.ucmd().args(&["-sn", file1, link]).fails();
+
+    // Try with the no-deref
+    let result = scene.ucmd().args(&["-sfn", file1, link]).run();
+    println!("stdout {}", result.stdout);
+    println!("stderr {}", result.stderr);
+    assert!(result.success);
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file1);
 }
