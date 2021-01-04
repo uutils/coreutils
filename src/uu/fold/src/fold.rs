@@ -98,8 +98,9 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
 
 #[inline]
 fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: usize) {
-    let mut line = String::new();
-    while safe_unwrap!(file.read_line(&mut line)) > 0 {
+    let file_lines = file.lines();
+    for line_result in file_lines {
+        let mut line = safe_unwrap!(line_result);
         if bytes {
             let len = line.len();
             let mut i = 0;
@@ -194,11 +195,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, bytes: bool, spaces: bool, width: 
                 output.push(ch);
             }
             if count > 0 {
-                if newline {
-                    println!("{}", output);
-                } else {
-                    print!("{}", output);
-                }
+                println!("{}", output);
             }
         }
     }

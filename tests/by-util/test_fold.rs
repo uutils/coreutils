@@ -23,3 +23,11 @@ fn test_40_column_word_boundary() {
         .run()
         .stdout_is_fixture("lorem_ipsum_40_column_word.expected");
 }
+
+#[test]
+fn test_default_warp_with_newlines() {
+    new_ucmd!()
+        .arg("lorem_ipsum_new_line.txt")
+        .run()
+        .stdout_is_fixture("lorem_ipsum_new_line_80_column.expected");
+}
