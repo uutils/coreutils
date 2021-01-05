@@ -11,9 +11,11 @@
 extern crate uucore;
 
 use std::char;
+use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
+use std::process::{Child, Command, Stdio};
 
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -46,6 +48,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         "additional-suffix",
         "additional suffix to append to output file names",
         "SUFFIX",
+    );
+    opts.optopt(
+        "",
+        "filter",
+        "write to shell COMMANDl file name is $FILE",
+        "COMMAND",
     );
     opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
     opts.optflag(
@@ -92,6 +100,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         suffix_length: 0,
         additional_suffix: "".to_owned(),
         input: "".to_owned(),
+        filter: None,
         strategy: "".to_owned(),
         strategy_param: "".to_owned(),
         verbose: false,
@@ -138,6 +147,12 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     settings.input = input;
     settings.prefix = prefix;
 
+    settings.filter = if let Some(filter) = matches.opt_str("filter") {
+        Some(filter)
+    } else {
+        None
+    };
+
     split(&settings)
 }
 
@@ -147,6 +162,8 @@ struct Settings {
     suffix_length: usize,
     additional_suffix: String,
     input: String,
+    /// When supplied, a shell command to output to instead of xaa, xab …
+    filter: Option<String>,
     strategy: String,
     strategy_param: String,
     verbose: bool,
@@ -288,6 +305,65 @@ fn num_prefix(i: usize, width: usize) -> String {
     c
 }
 
+/// A writer that writes to a shell_process' stdin
+struct FilterWriter {
+    /// Running shell process
+    shell_process: Child,
+}
+
+impl Write for FilterWriter {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let stdin = self
+            .shell_process
+            .stdin
+            .as_mut()
+            .expect("failed to get shell stdin");
+        stdin.write(buf)
+    }
+    fn flush(&mut self) -> Result<()> {
+        let stdin = self
+            .shell_process
+            .stdin
+            .as_mut()
+            .expect("failed to get shell stdin");
+        stdin.flush()
+    }
+}
+
+impl FilterWriter {
+    /// Create a new filter running a command with $FILE pointing at the output name
+    ///
+    /// #Arguments
+    ///
+    /// * `command` - The shell command to execute
+    /// * `filepath` - Path of the output file (forwarded to command as $FILE)
+    fn new(command: &String, filepath: &String) -> FilterWriter {
+        let shell_command = match env::var("SHELL") {
+            Ok(shell) => shell,
+            Err(_) => String::from("/bin/sh"),
+        };
+        // set $FILE, save previous value (if there was one)
+        let previous_file_env = env::var("FILE");
+        env::set_var("FILE", filepath);
+
+        let shell_process = Command::new(shell_command)
+            .arg("-c")
+            .arg(command)
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("Couldn't spawn filter command");
+
+        // restore previous $FILE
+        if let Ok(prev_file) = previous_file_env {
+            env::set_var("FILE", prev_file)
+        };
+
+        FilterWriter {
+            shell_process: shell_process,
+        }
+    }
+}
+
 fn split(settings: &Settings) -> i32 {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -335,18 +411,26 @@ fn split(settings: &Settings) -> i32 {
                 .as_ref(),
             );
             filename.push_str(settings.additional_suffix.as_ref());
+            // aquí "apunto" $FILE
 
             if fileno != 0 {
                 crash_if_err!(1, writer.flush());
             }
             fileno += 1;
-            writer = BufWriter::new(Box::new(
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .open(Path::new(&filename))
-                    .unwrap(),
-            ) as Box<dyn Write>);
+            // aquí if … escritor_a_stdin de un proceso ql … else … esta weá
+            writer = match settings.filter {
+                None => BufWriter::new(Box::new(
+                    OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .open(Path::new(&filename))
+                        .unwrap(),
+                ) as Box<dyn Write>),
+                Some(ref filter_command) => BufWriter::new(Box::new(FilterWriter::new(
+                    &filter_command,
+                    &filename,
+                )) as Box<dyn Write>),
+            };
             control.request_new_file = false;
             if settings.verbose {
                 println!("creating file '{}'", filename);
