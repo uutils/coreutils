@@ -159,3 +159,20 @@ fn test_split_additional_suffix() {
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
+
+#[test]
+#[cfg(unix)]
+fn test_filter() {
+    // like `test_split_default()` but run a command before writing
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "filtered";
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    let n_lines = 2000;
+    let n_bytes = 2000 * RandomFile::LINESIZE;
+    RandomFile::new(&at, name).add_lines(n_lines);
+
+    ucmd.args(&["--filter='sed s/./i/g > $FILE'", name])
+        .succeeds();
+    let single_char_vec = vec!['i' as u8; n_bytes as usize];
+    assert_eq!(glob.collate(), single_char_vec);
+}
