@@ -65,6 +65,9 @@ struct RandomFile {
 }
 
 impl RandomFile {
+    /// Size of each line that's being generated
+    const LINESIZE: usize = 32;
+
     fn new(at: &AtPath, name: &str) -> RandomFile {
         RandomFile {
             inner: File::create(&at.plus(name)).unwrap(),
@@ -81,11 +84,11 @@ impl RandomFile {
         let _ = write!(self.inner, "{}", random_chars(n));
     }
 
+    /// Add n lines each of size `RandomFile::line_size`
     fn add_lines(&mut self, lines: usize) {
-        let line_size: usize = 32;
         let mut n = lines;
         while n > 0 {
-            let _ = writeln!(self.inner, "{}", random_chars(line_size));
+            let _ = writeln!(self.inner, "{}", random_chars(RandomFile::LINESIZE));
             n -= 1;
         }
     }
