@@ -313,20 +313,18 @@ struct FilterWriter {
 
 impl Write for FilterWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let stdin = self
-            .shell_process
+        self.shell_process
             .stdin
             .as_mut()
-            .expect("failed to get shell stdin");
-        stdin.write(buf)
+            .expect("failed to get shell stdin")
+            .write(buf)
     }
     fn flush(&mut self) -> Result<()> {
-        let stdin = self
-            .shell_process
+        self.shell_process
             .stdin
             .as_mut()
-            .expect("failed to get shell stdin");
-        stdin.flush()
+            .expect("failed to get shell stdin")
+            .flush()
     }
 }
 
@@ -361,6 +359,18 @@ impl FilterWriter {
         FilterWriter {
             shell_process: shell_process,
         }
+    }
+}
+
+impl Drop for FilterWriter {
+    fn drop(&mut self) {
+        {
+            // close stdin by dropping it
+            let _stdin = self.shell_process.stdin.as_mut();
+        }
+        self.shell_process
+            .wait()
+            .expect("Couldn't wait for child process");
     }
 }
 
