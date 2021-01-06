@@ -32,6 +32,7 @@ impl Glob {
         self.collect().len()
     }
 
+    /// Get all files in `self.directory` that match `self.regex`
     fn collect(&self) -> Vec<String> {
         read_dir(Path::new(&self.directory.subdir))
             .unwrap()
@@ -49,6 +50,7 @@ impl Glob {
             .collect()
     }
 
+    /// Accumulate bytes of all files in `self.collect()`
     fn collate(&self) -> Vec<u8> {
         let mut files = self.collect();
         files.sort();
