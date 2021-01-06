@@ -52,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     opts.optopt(
         "",
         "filter",
-        "write to shell COMMANDl file name is $FILE",
+        "write to shell COMMAND file name is $FILE",
         "COMMAND",
     );
     opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
