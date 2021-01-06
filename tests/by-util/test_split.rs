@@ -175,7 +175,15 @@ fn test_filter() {
     // change all characters to 'i'
     ucmd.args(&["--filter=sed s/./i/g > $FILE", name])
         .succeeds();
-    // assert all characters are 'i' (command succeded)
-    assert!(glob.collate().iter().find(|&&c| c == ('i' as u8)));
+    // assert all characters are 'i' / no character is not 'i'
+    // (assert that command succeded)
+    assert!(
+        glob.collate().iter().find(|&&c| {
+            // is not i
+            c != ('i' as u8)
+            // is not newline
+            && c != ('\n' as u8)
+        }) == None
+    );
 }
 // TODO: add failing command (assert the command failed)
