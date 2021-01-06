@@ -342,7 +342,7 @@ impl FilterWriter {
         };
         // set $FILE, save previous value (if there was one)
         let previous_file_env = env::var("FILE");
-        env::set_var("FILE", filepath);
+        env::set_var("FILE", &filepath);
 
         let shell_process = Command::new(shell_command)
             .arg("-c")
