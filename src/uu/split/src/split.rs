@@ -363,6 +363,7 @@ impl FilterWriter {
 }
 
 impl Drop for FilterWriter {
+    /// close stdin and wait on `shell_process` before dropping self
     fn drop(&mut self) {
         {
             // close stdin by dropping it
@@ -409,7 +410,6 @@ fn split(settings: &Settings) -> i32 {
                 _ => {}
             }
         }
-
         if control.request_new_file {
             let mut filename = settings.prefix.clone();
             filename.push_str(
@@ -436,6 +436,7 @@ fn split(settings: &Settings) -> i32 {
                         .open(Path::new(&filename))
                         .unwrap(),
                 ) as Box<dyn Write>),
+
                 Some(ref filter_command) => BufWriter::new(Box::new(FilterWriter::new(
                     &filter_command,
                     &filename,
