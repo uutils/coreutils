@@ -324,6 +324,33 @@ impl Write for FilterWriter {
     }
 }
 
+/// Have an environment variable set at a value during this lifetime
+struct WithEnvVarSet {
+    /// Env var key
+    _previous_var_key: String,
+    /// Previous value set to this key
+    _previous_var_value: std::result::Result<String, env::VarError>,
+}
+impl WithEnvVarSet {
+    fn new(key: &str, value: &str) -> WithEnvVarSet {
+        let previous_env_value = env::var(key);
+        env::set_var(key, value);
+        WithEnvVarSet {
+            _previous_var_key: String::from(key),
+            _previous_var_value: previous_env_value,
+        }
+    }
+}
+impl Drop for WithEnvVarSet {
+    fn drop(&mut self) {
+        if let Ok(ref prev_value) = self._previous_var_value {
+            env::set_var(&self._previous_var_key, &prev_value);
+        } else {
+            env::remove_var(&self._previous_var_key)
+        }
+    }
+}
+
 impl FilterWriter {
     /// Create a new filter running a command with $FILE pointing at the output name
     ///
@@ -338,8 +365,7 @@ impl FilterWriter {
             "cmd".to_owned()
         };
         // set $FILE, save previous value (if there was one)
-        let previous_file_env = env::var("FILE");
-        env::set_var("FILE", &filepath);
+        let _with_env_var_set = WithEnvVarSet::new("FILE", &filepath);
 
         let shell_process = Command::new(shell_command)
             .arg("-c")
@@ -347,11 +373,6 @@ impl FilterWriter {
             .stdin(Stdio::piped())
             .spawn()
             .expect("Couldn't spawn filter command");
-
-        // restore previous $FILE
-        if let Ok(prev_file) = previous_file_env {
-            env::set_var("FILE", prev_file)
-        };
 
         FilterWriter {
             shell_process: shell_process,
