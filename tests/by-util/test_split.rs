@@ -4,6 +4,7 @@ extern crate regex;
 use self::rand::{thread_rng, Rng};
 use self::regex::Regex;
 use crate::common::util::*;
+use std::env;
 use std::fs::{read_dir, File};
 use std::io::Write;
 use std::path::Path;
@@ -185,5 +186,21 @@ fn test_filter() {
             && c != ('\n' as u8)
         }) == None
     );
+}
+
+#[test]
+fn test_filter_with_env_var_set() {
+    // like `test_split_default()` but run a command before writing
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "filtered";
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    let n_lines = 3;
+    RandomFile::new(&at, name).add_lines(n_lines);
+
+    let env_var_value = "somevalue";
+    env::set_var("FILE", &env_var_value);
+    ucmd.args(&["--filter=cat > $FILE", name]).succeeds();
+    assert_eq!(glob.collate(), at.read(name).into_bytes());
+    assert!(env::var("FILE").unwrap_or("var was unset".to_owned()) == env_var_value);
 }
 // TODO: add failing command (assert the command failed)
