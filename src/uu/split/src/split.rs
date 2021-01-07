@@ -147,11 +147,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     settings.input = input;
     settings.prefix = prefix;
 
-    settings.filter = if let Some(filter) = matches.opt_str("filter") {
-        Some(filter)
-    } else {
-        None
-    };
+    settings.filter = matches.opt_str("filter");
 
     split(&settings)
 }
