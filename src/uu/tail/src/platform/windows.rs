@@ -57,3 +57,13 @@ impl Drop for ProcessChecker {
 pub fn supports_pid_checks(_pid: self::Pid) -> bool {
     true
 }
+
+#[inline]
+pub fn links_count(f: &File) -> u64 {
+    // experimental API
+    1
+}
+
+pub fn supports_links_count() -> bool {
+    false
+}

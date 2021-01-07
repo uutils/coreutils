@@ -38,6 +38,7 @@ struct Settings {
     beginning: bool,
     follow: bool,
     pid: platform::Pid,
+    retry: bool,
 }
 
 impl Default for Settings {
@@ -48,6 +49,7 @@ impl Default for Settings {
             beginning: false,
             follow: false,
             pid: 0,
+            retry: false,
         }
     }
 }
@@ -74,6 +76,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     opts.optopt("c", "bytes", "Number of bytes to print", "k");
     opts.optopt("n", "lines", "Number of lines to print", "k");
     opts.optflag("f", "follow", "Print the file as it grows");
+    opts.optflag(
+        "r",
+        "retry",
+        "keep trying to open a file if it is inaccessible",
+    );
+    opts.optflag("F", "follow and retry", "Equivalent to --follow --retry");
     opts.optopt(
         "s",
         "sleep-interval",
@@ -110,7 +118,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    settings.follow = given_options.opt_present("f");
+    if given_options.opt_present("F") {
+        settings.follow = true;
+        settings.retry = true;
+    } else {
+        settings.follow = given_options.opt_present("f");
+        settings.retry = given_options.opt_present("r");
+    }
+
     if settings.follow {
         if let Some(n) = given_options.opt_str("s") {
             let parsed: Option<u32> = n.parse().ok();
@@ -118,6 +133,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 settings.sleep_msec = m * 1000
             }
         }
+    } else if settings.retry {
+        settings.retry = false;
+        show_warning!("--retry ignored; --retry is useful only when following");
+    }
+
+    if settings.retry && !platform::supports_links_count() {
+        show_warning!("--retry is not supported on this system");
+        settings.retry = false;
     }
 
     if let Some(pid_str) = given_options.opt_str("pid") {
@@ -199,25 +222,40 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
             let path = Path::new(filename);
             if path.is_dir() {
+                readers.push(None);
                 continue;
             }
-            let mut file = File::open(&path).unwrap();
+            let file = File::open(&path);
+
+            if let Err(err) = file {
+                if !settings.retry {
+                    show_error!("File open of {} failed because {}", path.display(), err);
+                }
+                if settings.follow || settings.retry {
+                    readers.push(None);
+                }
+                continue;
+            }
+
+            let mut file = file.unwrap();
+
             if is_seekable(&mut file) {
                 bounded_tail(&file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
-                    readers.push(reader);
+                    readers.push(Some(reader));
                 }
             } else {
                 let mut reader = BufReader::new(file);
                 unbounded_tail(&mut reader, &settings);
                 if settings.follow {
-                    readers.push(reader);
+                    readers.push(Some(reader));
                 }
             }
         }
 
         if settings.follow {
+            assert_eq!(readers.len(), files.len());
             follow(&mut readers[..], &files[..], &settings);
         }
     }
@@ -353,7 +391,11 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 /// block read at a time.
 const BLOCK_SIZE: u64 = 1 << 16;
 
-fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
+fn follow<T: Read>(
+    readers: &mut [Option<BufReader<T>>],
+    filenames: &[String],
+    settings: &Settings,
+) {
     assert!(settings.follow);
     let mut last = readers.len() - 1;
     let mut read_some = false;
@@ -366,10 +408,14 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
         read_some = false;
 
         for (i, reader) in readers.iter_mut().enumerate() {
+            if let None = reader {
+                continue;
+            }
             // Print all new content since the last pass
             loop {
                 let mut datum = String::new();
-                match reader.read_line(&mut datum) {
+
+                match reader.as_mut().unwrap().read_line(&mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;

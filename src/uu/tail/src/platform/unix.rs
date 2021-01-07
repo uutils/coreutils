@@ -9,7 +9,9 @@
 
 // spell-checker:ignore (ToDO) errno EPERM ENOSYS
 
+use std::fs::File;
 use std::io::Error;
+use std::os::unix::fs::MetadataExt;
 
 pub type Pid = libc::pid_t;
 
@@ -39,4 +41,13 @@ pub fn supports_pid_checks(pid: self::Pid) -> bool {
 #[inline]
 fn get_errno() -> i32 {
     Error::last_os_error().raw_os_error().unwrap()
+}
+
+#[inline]
+pub fn links_count(f: &File) -> u64 {
+    f.metadata().unwrap().nlink()
+}
+
+pub fn supports_links_count() -> bool {
+    true
 }
