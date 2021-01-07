@@ -360,9 +360,11 @@ impl FilterWriter {
 }
 
 impl Drop for FilterWriter {
-    /// close stdin and wait on `shell_process` before dropping self
+    /// flush stdin, close it and wait on `shell_process` before dropping self
     fn drop(&mut self) {
         {
+            self.flush()
+                .expect("Couldn't flush before closing shell process");
             // close stdin by dropping it
             let _stdin = self.shell_process.stdin.as_mut();
         }
