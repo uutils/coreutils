@@ -332,9 +332,10 @@ impl FilterWriter {
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
     fn new(command: &String, filepath: &String) -> FilterWriter {
-        let shell_command = match env::var("SHELL") {
-            Ok(shell) => shell,
-            Err(_) => String::from("/bin/sh"),
+        let shell_command = if cfg!(target_family = "unix") {
+            env::var("SHELL").unwrap_or("/bin/sh".to_owned())
+        } else {
+            "cmd".to_owned()
         };
         // set $FILE, save previous value (if there was one)
         let previous_file_env = env::var("FILE");
