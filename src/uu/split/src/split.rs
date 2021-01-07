@@ -421,15 +421,14 @@ fn split(settings: &Settings) -> i32 {
                 .as_ref(),
             );
             filename.push_str(settings.additional_suffix.as_ref());
-            // aquí "apunto" $FILE
 
             if fileno != 0 {
                 crash_if_err!(1, writer.flush());
             }
             fileno += 1;
-            // aquí if … escritor_a_stdin de un proceso ql … else … esta weá
             writer = match settings.filter {
                 None => BufWriter::new(Box::new(
+                    // write to the next file
                     OpenOptions::new()
                         .write(true)
                         .create(true)
@@ -437,10 +436,10 @@ fn split(settings: &Settings) -> i32 {
                         .unwrap(),
                 ) as Box<dyn Write>),
 
-                Some(ref filter_command) => BufWriter::new(Box::new(FilterWriter::new(
-                    &filter_command,
-                    &filename,
-                )) as Box<dyn Write>),
+                Some(ref filter_command) => BufWriter::new(Box::new(
+                    // spawn a shell command and write to it
+                    FilterWriter::new(&filter_command, &filename),
+                ) as Box<dyn Write>),
             };
             control.request_new_file = false;
             if settings.verbose {
