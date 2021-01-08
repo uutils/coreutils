@@ -209,7 +209,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         let multiple = files.len() > 1;
         let mut first_header = true;
-        let mut readers = Vec::new();
         let mut file_objs = Vec::new();
 
         for filename in &files {
@@ -221,9 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let file = File::open(&path);
 
             if let Err(err) = file {
-                if !settings.retry {
-                    show_error!("cannot open '{}' for reading: {}", path.display(), err);
-                }
+                show_error!("cannot open '{}' for reading: {}", path.display(), err);
                 file_objs.push(None);
                 continue;
             }
@@ -232,21 +229,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             file_objs.push(Some(file));
         }
 
-        let mut is_seekable_bools = Vec::with_capacity(file_objs.len());
-        for file in file_objs.iter_mut() {
+        for (i, file) in file_objs.iter_mut().enumerate() {
             if let None = file {
-                is_seekable_bools.push(false);
-            } else {
-                let file_mut = file.as_mut().unwrap();
-                is_seekable_bools.push(is_seekable(file_mut));
-            }
-        }
-
-        for (i, file) in file_objs.iter().enumerate() {
-            if let None = file {
-                if settings.follow || settings.retry {
-                    readers.push(None);
-                }
                 continue;
             }
 
@@ -258,26 +242,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             first_header = false;
 
-            let file = file.as_ref().unwrap();
-            if is_seekable_bools[i] {
+            let file = file.as_mut().unwrap();
+            if is_seekable(file) {
                 bounded_tail(file, &settings);
-                if settings.follow {
-                    let reader = BufReader::new(file);
-                    readers.push(Some(reader));
-                }
             } else {
                 let mut reader = BufReader::new(file);
                 unbounded_tail(&mut reader, &settings);
-                if settings.follow {
-                    readers.push(Some(reader));
-                }
             }
         }
 
-        if settings.follow {
-            assert_eq!(readers.len(), files.len());
+        if settings.retry || settings.follow {
             assert_eq!(file_objs.len(), files.len());
-            follow_or_retry(&mut readers[..], &file_objs[..], &files[..], &settings);
+            follow_with_retry(&mut file_objs[..], &files[..], &settings);
         }
     }
 
@@ -412,20 +388,38 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 /// block read at a time.
 const BLOCK_SIZE: u64 = 1 << 16;
 
-fn follow_or_retry<'a, T>(
-    readers: &'a mut [Option<BufReader<&'a T>>],
-    file_objs: &[Option<File>],
-    filenames: &[String],
-    settings: &Settings,
-) where
-    T: Read,
-    &'a T: Read,
-{
+fn follow_with_retry(file_objs: &mut [Option<File>], filenames: &[String], settings: &Settings) {
     assert!(settings.follow || settings.retry);
 
-    let mut last = readers.len() - 1;
+    let total = filenames.len();
+    let mut last = total - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
+    let mut open_file_count = total;
+
+    for file in file_objs.iter() {
+        if let None = file {
+            open_file_count -= 1;
+        }
+    }
+
+    if open_file_count == 0 {
+        show_error!("no files remaining");
+        return;
+    }
+
+    // Only call when sure that existing file at given path does not exist
+    fn reopen(path: &str) -> Option<File> {
+        let n_file = File::open(Path::new(path));
+
+        match n_file {
+            Ok(n_file) => {
+                show_warning!("'{}' has appeared;  following new file", path);
+                Some(n_file)
+            }
+            Err(_) => None,
+        }
+    }
 
     loop {
         sleep(Duration::new(0, settings.sleep_msec * 1000));
@@ -433,15 +427,45 @@ fn follow_or_retry<'a, T>(
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
         read_some = false;
 
-        for (i, reader) in readers.iter_mut().enumerate() {
-            if let None = reader {
+        for i in 0..total {
+            if let None = file_objs[i] {
+                if settings.retry {
+                    file_objs[i] = reopen(&filenames[i]);
+                }
+
+                if let None = file_objs[i] {
+                    continue;
+                } else {
+                    // a file object went from close to open state
+                    open_file_count += 1;
+                }
+            }
+
+            let file = file_objs[i].as_mut().unwrap();
+
+            if platform::links_count(file) == 0 {
+                show_warning!(
+                    "'{}' has become inaccessible: No such file or directory",
+                    filenames[i]
+                );
+                file_objs[i] = None;
+                // a file object went from open to close state
+                open_file_count -= 1;
+
+                if open_file_count == 0 && !settings.retry {
+                    show_error!("no files remaining");
+                    return;
+                }
                 continue;
             }
+
+            let mut reader = BufReader::new(file);
+
             // Print all new content since the last pass
             loop {
                 let mut datum = String::new();
 
-                match reader.as_mut().unwrap().read_line(&mut datum) {
+                match reader.read_line(&mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
