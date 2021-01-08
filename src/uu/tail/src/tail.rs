@@ -230,7 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
 
         for (i, file) in file_objs.iter_mut().enumerate() {
-            if let None = file {
+            if file.is_none() {
                 continue;
             }
 
@@ -398,7 +398,7 @@ fn follow_with_retry(file_objs: &mut [Option<File>], filenames: &[String], setti
     let mut open_file_count = total;
 
     for file in file_objs.iter() {
-        if let None = file {
+        if file.is_none() {
             open_file_count -= 1;
         }
     }
@@ -428,12 +428,12 @@ fn follow_with_retry(file_objs: &mut [Option<File>], filenames: &[String], setti
         read_some = false;
 
         for i in 0..total {
-            if let None = file_objs[i] {
+            if file_objs[i].is_none() {
                 if settings.retry {
                     file_objs[i] = reopen(&filenames[i]);
                 }
 
-                if let None = file_objs[i] {
+                if file_objs[i].is_none() {
                     continue;
                 } else {
                     // a file object went from close to open state
