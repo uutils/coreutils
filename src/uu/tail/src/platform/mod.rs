@@ -11,7 +11,9 @@
 pub use self::unix::{links_count, supports_links_count, supports_pid_checks, Pid, ProcessChecker};
 
 #[cfg(windows)]
-pub use self::windows::{links_count, supports_pid_checks, Pid, ProcessChecker};
+pub use self::windows::{
+    links_count, supports_links_count, supports_pid_checks, Pid, ProcessChecker,
+};
 
 #[cfg(target_os = "redox")]
 pub use self::redox::{links_count, supports_pid_checks, Pid, ProcessChecker};

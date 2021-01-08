@@ -210,37 +210,57 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let multiple = files.len() > 1;
         let mut first_header = true;
         let mut readers = Vec::new();
+        let mut file_objs = Vec::new();
 
         for filename in &files {
-            if (multiple || verbose) && !quiet {
-                if !first_header {
-                    println!();
-                }
-                println!("==> {} <==", filename);
-            }
-            first_header = false;
-
             let path = Path::new(filename);
             if path.is_dir() {
-                readers.push(None);
+                file_objs.push(None);
                 continue;
             }
             let file = File::open(&path);
 
             if let Err(err) = file {
                 if !settings.retry {
-                    show_error!("File open of {} failed because {}", path.display(), err);
+                    show_error!("cannot open '{}' for reading: {}", path.display(), err);
                 }
+                file_objs.push(None);
+                continue;
+            }
+
+            let file = file.unwrap();
+            file_objs.push(Some(file));
+        }
+
+        let mut is_seekable_bools = Vec::with_capacity(file_objs.len());
+        for file in file_objs.iter_mut() {
+            if let None = file {
+                is_seekable_bools.push(false);
+            } else {
+                let file_mut = file.as_mut().unwrap();
+                is_seekable_bools.push(is_seekable(file_mut));
+            }
+        }
+
+        for (i, file) in file_objs.iter().enumerate() {
+            if let None = file {
                 if settings.follow || settings.retry {
                     readers.push(None);
                 }
                 continue;
             }
 
-            let mut file = file.unwrap();
+            if (multiple || verbose) && !quiet {
+                if !first_header {
+                    println!();
+                }
+                println!("==> {} <==", files[i]);
+            }
+            first_header = false;
 
-            if is_seekable(&mut file) {
-                bounded_tail(&file, &settings);
+            let file = file.as_ref().unwrap();
+            if is_seekable_bools[i] {
+                bounded_tail(file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
                     readers.push(Some(reader));
@@ -256,7 +276,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         if settings.follow {
             assert_eq!(readers.len(), files.len());
-            follow(&mut readers[..], &files[..], &settings);
+            assert_eq!(file_objs.len(), files.len());
+            follow_or_retry(&mut readers[..], &file_objs[..], &files[..], &settings);
         }
     }
 
@@ -391,12 +412,17 @@ fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
 /// block read at a time.
 const BLOCK_SIZE: u64 = 1 << 16;
 
-fn follow<T: Read>(
-    readers: &mut [Option<BufReader<T>>],
+fn follow_or_retry<'a, T>(
+    readers: &'a mut [Option<BufReader<&'a T>>],
+    file_objs: &[Option<File>],
     filenames: &[String],
     settings: &Settings,
-) {
-    assert!(settings.follow);
+) where
+    T: Read,
+    &'a T: Read,
+{
+    assert!(settings.follow || settings.retry);
+
     let mut last = readers.len() - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
