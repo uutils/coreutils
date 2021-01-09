@@ -13,8 +13,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 
-#[cfg(unix)]
-use isatty::stdout_isatty;
 use number_prefix::NumberPrefix;
 use std::cmp::Reverse;
 #[cfg(unix)]
@@ -627,7 +625,7 @@ fn display_file_name(
         None => true,
         Some(val) => match val.as_ref() {
             "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => stdout_isatty(),
+            "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
             /* "never" | "no" | "none" | */ _ => false,
         },
     };
