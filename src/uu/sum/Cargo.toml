@@ -1,6 +1,6 @@
 [package]
 name = "uu_sum"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sum ~ (uutils) display checksum and block counts for input"

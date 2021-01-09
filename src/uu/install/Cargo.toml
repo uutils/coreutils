@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
     "Ben Eills <ben@beneills.com>",
     "uutils developers",

@@ -1,6 +1,6 @@
 [package]
 name = "uu_nproc"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nproc ~ (uutils) display the number of processing units available"

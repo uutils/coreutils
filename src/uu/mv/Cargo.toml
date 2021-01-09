@@ -1,6 +1,6 @@
 [package]
 name = "uu_mv"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
