@@ -112,8 +112,9 @@ fn test_follow_retry() {
     at.write(non_existent_file, content);
 
     let expected = format!(
-        "tail: cannot open 'x' for reading: No such file or directory\n\
-                    tail: 'x' has appeared;  following new file\n{}",
+        "{}\n{}\n{}",
+        "tail: error: cannot open 'x' for reading: No such file or directory (os error 2)",
+        "tail: 'x' has appeared;  following new file",
         content
     );
 

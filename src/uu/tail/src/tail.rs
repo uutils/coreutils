@@ -403,7 +403,7 @@ fn follow_with_retry(file_objs: &mut [Option<File>], filenames: &[String], setti
         }
     }
 
-    if open_file_count == 0 {
+    if open_file_count == 0 && !settings.retry {
         show_error!("no files remaining");
         return;
     }
