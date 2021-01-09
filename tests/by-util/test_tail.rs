@@ -95,6 +95,33 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
+#[test]
+fn test_follow_retry() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let non_existent_file = "foobar_for_retry.txt";
+
+    let mut child = ucmd
+        .arg("-f")
+        .arg("-r")
+        .arg(non_existent_file)
+        .run_no_wait();
+
+    let content = "content";
+
+    at.make_file(non_existent_file);
+    at.write(non_existent_file, content);
+
+    let expected = format!(
+        "tail: cannot open 'x' for reading: No such file or directory\n\
+                    tail: 'x' has appeared;  following new file\n{}",
+        content
+    );
+
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    child.kill().unwrap();
+}
+
 // FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')
 #[cfg(not(windows))]
 #[test]

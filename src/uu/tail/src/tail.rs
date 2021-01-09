@@ -414,7 +414,7 @@ fn follow_with_retry(file_objs: &mut [Option<File>], filenames: &[String], setti
 
         match n_file {
             Ok(n_file) => {
-                show_warning!("'{}' has appeared;  following new file", path);
+                show_info!("'{}' has appeared;  following new file", path);
                 Some(n_file)
             }
             Err(_) => None,
