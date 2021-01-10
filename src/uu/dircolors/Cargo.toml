@@ -1,6 +1,6 @@
 [package]
 name = "uu_dircolors"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dircolors ~ (uutils) display commands to set LS_COLORS"

@@ -1,6 +1,6 @@
 [package]
 name = "uu_base64"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base64 ~ (uutils) decode/encode input (base64-encoding)"

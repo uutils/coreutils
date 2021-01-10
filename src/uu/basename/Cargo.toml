@@ -1,6 +1,6 @@
 [package]
 name = "uu_basename"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "basename ~ (uutils) display PATHNAME with leading directory components removed"

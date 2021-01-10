@@ -222,7 +222,7 @@ dependencies = [
 
 [[package]]
 name = "coreutils"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "cc 1.0.61 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -242,101 +242,101 @@ dependencies = [
  "unindent 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "users 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "uu_arch 0.0.1",
- "uu_base32 0.0.1",
- "uu_base64 0.0.1",
- "uu_basename 0.0.1",
- "uu_cat 0.0.1",
- "uu_chgrp 0.0.1",
- "uu_chmod 0.0.1",
- "uu_chown 0.0.1",
- "uu_chroot 0.0.1",
- "uu_cksum 0.0.1",
- "uu_comm 0.0.1",
- "uu_cp 0.0.1",
- "uu_csplit 0.0.1",
- "uu_cut 0.0.1",
- "uu_date 0.0.1",
- "uu_df 0.0.1",
- "uu_dircolors 0.0.1",
- "uu_dirname 0.0.1",
- "uu_du 0.0.1",
- "uu_echo 0.0.1",
- "uu_env 0.0.1",
- "uu_expand 0.0.1",
- "uu_expr 0.0.1",
- "uu_factor 0.0.1",
- "uu_false 0.0.1",
- "uu_fmt 0.0.1",
- "uu_fold 0.0.1",
- "uu_groups 0.0.1",
- "uu_hashsum 0.0.1",
- "uu_head 0.0.1",
- "uu_hostid 0.0.1",
- "uu_hostname 0.0.1",
- "uu_id 0.0.1",
- "uu_install 0.0.1",
- "uu_join 0.0.1",
- "uu_kill 0.0.1",
- "uu_link 0.0.1",
- "uu_ln 0.0.1",
- "uu_logname 0.0.1",
- "uu_ls 0.0.1",
- "uu_mkdir 0.0.1",
- "uu_mkfifo 0.0.1",
- "uu_mknod 0.0.1",
- "uu_mktemp 0.0.1",
- "uu_more 0.0.1",
- "uu_mv 0.0.1",
- "uu_nice 0.0.1",
- "uu_nl 0.0.1",
- "uu_nohup 0.0.1",
- "uu_nproc 0.0.1",
- "uu_numfmt 0.0.1",
- "uu_od 0.0.1",
- "uu_paste 0.0.1",
- "uu_pathchk 0.0.1",
- "uu_pinky 0.0.1",
- "uu_printenv 0.0.1",
- "uu_printf 0.0.1",
- "uu_ptx 0.0.1",
- "uu_pwd 0.0.1",
- "uu_readlink 0.0.1",
- "uu_realpath 0.0.1",
- "uu_relpath 0.0.1",
- "uu_rm 0.0.1",
- "uu_rmdir 0.0.1",
- "uu_seq 0.0.1",
- "uu_shred 0.0.1",
- "uu_shuf 0.0.1",
- "uu_sleep 0.0.1",
- "uu_sort 0.0.1",
- "uu_split 0.0.1",
- "uu_stat 0.0.1",
- "uu_stdbuf 0.0.1",
- "uu_sum 0.0.1",
- "uu_sync 0.0.1",
- "uu_tac 0.0.1",
- "uu_tail 0.0.1",
- "uu_tee 0.0.1",
- "uu_test 0.0.1",
- "uu_timeout 0.0.1",
- "uu_touch 0.0.1",
- "uu_tr 0.0.1",
- "uu_true 0.0.1",
- "uu_truncate 0.0.1",
- "uu_tsort 0.0.1",
- "uu_tty 0.0.1",
- "uu_uname 0.0.1",
- "uu_unexpand 0.0.1",
- "uu_uniq 0.0.1",
- "uu_unlink 0.0.1",
- "uu_uptime 0.0.1",
- "uu_users 0.0.1",
- "uu_wc 0.0.1",
- "uu_who 0.0.1",
- "uu_whoami 0.0.1",
- "uu_yes 0.0.1",
+ "uu_arch 0.0.2",
+ "uu_base32 0.0.2",
+ "uu_base64 0.0.2",
+ "uu_basename 0.0.2",
+ "uu_cat 0.0.2",
+ "uu_chgrp 0.0.2",
+ "uu_chmod 0.0.2",
+ "uu_chown 0.0.2",
+ "uu_chroot 0.0.2",
+ "uu_cksum 0.0.2",
+ "uu_comm 0.0.2",
+ "uu_cp 0.0.2",
+ "uu_csplit 0.0.2",
+ "uu_cut 0.0.2",
+ "uu_date 0.0.2",
+ "uu_df 0.0.2",
+ "uu_dircolors 0.0.2",
+ "uu_dirname 0.0.2",
+ "uu_du 0.0.2",
+ "uu_echo 0.0.2",
+ "uu_env 0.0.2",
+ "uu_expand 0.0.2",
+ "uu_expr 0.0.2",
+ "uu_factor 0.0.2",
+ "uu_false 0.0.2",
+ "uu_fmt 0.0.2",
+ "uu_fold 0.0.2",
+ "uu_groups 0.0.2",
+ "uu_hashsum 0.0.2",
+ "uu_head 0.0.2",
+ "uu_hostid 0.0.2",
+ "uu_hostname 0.0.2",
+ "uu_id 0.0.2",
+ "uu_install 0.0.2",
+ "uu_join 0.0.2",
+ "uu_kill 0.0.2",
+ "uu_link 0.0.2",
+ "uu_ln 0.0.2",
+ "uu_logname 0.0.2",
+ "uu_ls 0.0.2",
+ "uu_mkdir 0.0.2",
+ "uu_mkfifo 0.0.2",
+ "uu_mknod 0.0.2",
+ "uu_mktemp 0.0.2",
+ "uu_more 0.0.2",
+ "uu_mv 0.0.2",
+ "uu_nice 0.0.2",
+ "uu_nl 0.0.2",
+ "uu_nohup 0.0.2",
+ "uu_nproc 0.0.2",
+ "uu_numfmt 0.0.2",
+ "uu_od 0.0.2",
+ "uu_paste 0.0.2",
+ "uu_pathchk 0.0.2",
+ "uu_pinky 0.0.2",
+ "uu_printenv 0.0.2",
+ "uu_printf 0.0.2",
+ "uu_ptx 0.0.2",
+ "uu_pwd 0.0.2",
+ "uu_readlink 0.0.2",
+ "uu_realpath 0.0.2",
+ "uu_relpath 0.0.2",
+ "uu_rm 0.0.2",
+ "uu_rmdir 0.0.2",
+ "uu_seq 0.0.2",
+ "uu_shred 0.0.2",
+ "uu_shuf 0.0.2",
+ "uu_sleep 0.0.2",
+ "uu_sort 0.0.2",
+ "uu_split 0.0.2",
+ "uu_stat 0.0.2",
+ "uu_stdbuf 0.0.2",
+ "uu_sum 0.0.2",
+ "uu_sync 0.0.2",
+ "uu_tac 0.0.2",
+ "uu_tail 0.0.2",
+ "uu_tee 0.0.2",
+ "uu_test 0.0.2",
+ "uu_timeout 0.0.2",
+ "uu_touch 0.0.2",
+ "uu_tr 0.0.2",
+ "uu_true 0.0.2",
+ "uu_truncate 0.0.2",
+ "uu_tsort 0.0.2",
+ "uu_tty 0.0.2",
+ "uu_uname 0.0.2",
+ "uu_unexpand 0.0.2",
+ "uu_uniq 0.0.2",
+ "uu_unlink 0.0.2",
+ "uu_uptime 0.0.2",
+ "uu_users 0.0.2",
+ "uu_wc 0.0.2",
+ "uu_who 0.0.2",
+ "uu_whoami 0.0.2",
+ "uu_yes 0.0.2",
  "uucore 0.0.4",
  "winapi-util 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1372,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "uu_arch"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "platform-info 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1381,7 +1381,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base32"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1389,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base64"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basename"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1405,7 +1405,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cat"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "unix_socket 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chgrp"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1424,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chmod"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1434,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chown"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1445,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chroot"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1454,7 +1454,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cksum"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1463,7 +1463,7 @@ dependencies = [
 
 [[package]]
 name = "uu_comm"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1473,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cp"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "filetime 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1489,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "uu_csplit"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1510,7 +1510,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1520,7 +1520,7 @@ dependencies = [
 
 [[package]]
 name = "uu_df"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1532,7 +1532,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dircolors"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1541,7 +1541,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1550,7 +1550,7 @@ dependencies = [
 
 [[package]]
 name = "uu_du"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1559,7 +1559,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1567,7 +1567,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1578,7 +1578,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expand"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1588,7 +1588,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "onig 4.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1598,7 +1598,7 @@ dependencies = [
 
 [[package]]
 name = "uu_factor"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "criterion 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1613,7 +1613,7 @@ dependencies = [
 
 [[package]]
 name = "uu_false"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1621,7 +1621,7 @@ dependencies = [
 
 [[package]]
 name = "uu_fmt"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "uu_fold"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "uu_groups"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1648,7 +1648,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hashsum"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1667,7 +1667,7 @@ dependencies = [
 
 [[package]]
 name = "uu_head"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1676,7 +1676,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostid"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1685,7 +1685,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostname"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "hostname 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1697,7 +1697,7 @@ dependencies = [
 
 [[package]]
 name = "uu_id"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1706,7 +1706,7 @@ dependencies = [
 
 [[package]]
 name = "uu_install"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1717,7 +1717,7 @@ dependencies = [
 
 [[package]]
 name = "uu_join"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1726,7 +1726,7 @@ dependencies = [
 
 [[package]]
 name = "uu_kill"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1735,7 +1735,7 @@ dependencies = [
 
 [[package]]
 name = "uu_link"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1744,7 +1744,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ln"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1754,7 +1754,7 @@ dependencies = [
 
 [[package]]
 name = "uu_logname"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1763,7 +1763,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ls"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "atty 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1779,7 +1779,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkdir"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1789,7 +1789,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkfifo"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mknod"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1809,7 +1809,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mktemp"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1820,7 +1820,7 @@ dependencies = [
 
 [[package]]
 name = "uu_more"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "nix 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1832,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mv"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "fs_extra 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1842,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nice"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nl"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "aho-corasick 0.7.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nohup"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nproc"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "uu_numfmt"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "uu_od"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1908,7 +1908,7 @@ dependencies = [
 
 [[package]]
 name = "uu_paste"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1917,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pathchk"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1927,7 +1927,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pinky"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -1935,7 +1935,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printenv"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1944,7 +1944,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1953,7 +1953,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ptx"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "aho-corasick 0.7.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pwd"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1976,7 +1976,7 @@ dependencies = [
 
 [[package]]
 name = "uu_readlink"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1986,7 +1986,7 @@ dependencies = [
 
 [[package]]
 name = "uu_realpath"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -1995,7 +1995,7 @@ dependencies = [
 
 [[package]]
 name = "uu_relpath"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2004,7 +2004,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rm"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "remove_dir_all 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2015,7 +2015,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rmdir"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2033,7 +2033,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shred"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "filetime 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shuf"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2056,7 +2056,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sleep"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2065,7 +2065,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2076,7 +2076,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2085,7 +2085,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stat"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2095,18 +2095,18 @@ dependencies = [
 
 [[package]]
 name = "uu_stdbuf"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "uu_stdbuf_libstdbuf 0.0.1",
+ "uu_stdbuf_libstdbuf 0.0.2",
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
 ]
 
 [[package]]
 name = "uu_stdbuf_libstdbuf"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "cpp 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cpp_build 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2117,7 +2117,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sum"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2126,7 +2126,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sync"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2137,7 +2137,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tac"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2146,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tail"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2158,7 +2158,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tee"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2168,7 +2168,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "redox_syscall 0.1.57 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2178,7 +2178,7 @@ dependencies = [
 
 [[package]]
 name = "uu_timeout"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2189,7 +2189,7 @@ dependencies = [
 
 [[package]]
 name = "uu_touch"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "filetime 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2200,7 +2200,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "bit-set 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2211,7 +2211,7 @@ dependencies = [
 
 [[package]]
 name = "uu_true"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -2219,7 +2219,7 @@ dependencies = [
 
 [[package]]
 name = "uu_truncate"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2228,7 +2228,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tsort"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tty"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uname"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "platform-info 0.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2257,7 +2257,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unexpand"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uniq"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2276,7 +2276,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unlink"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uptime"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2297,7 +2297,7 @@ dependencies = [
 
 [[package]]
 name = "uu_users"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2306,7 +2306,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "uu_who"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "uucore 0.0.4",
  "uucore_procs 0.0.4",
@@ -2323,7 +2323,7 @@ dependencies = [
 
 [[package]]
 name = "uu_whoami"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "advapi32-sys 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2334,7 +2334,7 @@ dependencies = [
 
 [[package]]
 name = "uu_yes"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.4",

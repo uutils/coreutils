@@ -1,6 +1,6 @@
 [package]
 name = "uu_hashsum"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hashsum ~ (uutils) display or check input digests"
