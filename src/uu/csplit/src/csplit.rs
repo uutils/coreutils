@@ -1,8 +1,6 @@
 #![crate_name = "uu_csplit"]
 
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate uucore;
 use getopts::Matches;
 use regex::Regex;
