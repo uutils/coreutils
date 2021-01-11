@@ -4,10 +4,6 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
 // * feature-gated external crates
-#[cfg(feature = "failure")]
-extern crate failure;
-#[cfg(feature = "failure_derive")]
-extern crate failure_derive;
 #[cfg(all(feature = "lazy_static", target_os = "linux"))]
 extern crate lazy_static;
 #[cfg(feature = "nix")]
