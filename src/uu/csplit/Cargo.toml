@@ -16,8 +16,8 @@ path = "src/csplit.rs"
 
 [dependencies]
 getopts = "0.2.17"
-failure = "0.1.1"
-failure_derive = "0.1.1"
+failure = "0.1"
+failure_derive = "0.1"
 regex = "1.0.0"
 glob = "0.2.11"
 uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["entries", "fs"] }
