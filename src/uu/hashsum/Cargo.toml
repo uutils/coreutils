@@ -1,6 +1,6 @@
 [package]
 name = "uu_hashsum"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hashsum ~ (uutils) display or check input digests"
@@ -26,8 +26,8 @@ sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
 blake2-rfc = "0.2.18"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "hashsum"

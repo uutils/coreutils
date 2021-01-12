@@ -1,6 +1,6 @@
 [package]
 name = "uu_false"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "false ~ (uutils) do nothing and fail"
@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/false.rs"
 
 [dependencies]
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "false"

@@ -1,6 +1,6 @@
 [package]
 name = "uu_seq"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"
@@ -16,8 +16,8 @@ path = "src/seq.rs"
 
 [dependencies]
 clap = "2.33"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "seq"

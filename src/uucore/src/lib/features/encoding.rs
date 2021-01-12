@@ -8,31 +8,20 @@
 // spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ
 
 extern crate data_encoding;
-extern crate failure;
 
 use self::data_encoding::{DecodeError, BASE32, BASE64};
 
-use failure::Fail;
 use std::io::{self, Read, Write};
 
-#[derive(Fail, Debug)]
+#[cfg(feature = "thiserror")]
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum EncodingError {
-    #[fail(display = "{}", _0)]
-    Decode(#[cause] DecodeError),
-    #[fail(display = "{}", _0)]
-    Io(#[cause] io::Error),
-}
-
-impl From<io::Error> for EncodingError {
-    fn from(err: io::Error) -> EncodingError {
-        EncodingError::Io(err)
-    }
-}
-
-impl From<DecodeError> for EncodingError {
-    fn from(err: DecodeError) -> EncodingError {
-        EncodingError::Decode(err)
-    }
+    #[error("{}", _0)]
+    Decode(#[from] DecodeError),
+    #[error("{}", _0)]
+    Io(#[from] io::Error),
 }
 
 pub type DecodeResult = Result<Vec<u8>, EncodingError>;

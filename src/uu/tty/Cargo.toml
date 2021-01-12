@@ -1,6 +1,6 @@
 [package]
 name = "uu_tty"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tty ~ (uutils) display the name of the terminal connected to standard input"
@@ -17,8 +17,8 @@ path = "src/tty.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["fs"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "tty"

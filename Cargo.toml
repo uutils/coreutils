@@ -3,7 +3,7 @@
 
 [package]
 name = "coreutils"
-version = "0.0.1" # "0.0.1.1"
+version = "0.0.2" # "0.0.2.1"
 authors = ["uutils developers"]
 license = "MIT"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
@@ -226,110 +226,111 @@ test = [ "uu_test" ]
 [dependencies]
 lazy_static = { version="1.3" }
 textwrap = { version="=0.11.0", features=["term_size"] } # !maint: [2020-05-10; rivy] unstable crate using undocumented features; pinned currently, will review
-uucore = { version=">=0.0.4", package="uucore", path="src/uucore" }
+uucore = { version=">=0.0.5", package="uucore", path="src/uucore" }
 # * uutils
-uu_test  = { optional=true, version="0.0.1", package="uu_test", path="src/uu/test" }
+uu_test  = { optional=true, version="0.0.2", package="uu_test", path="src/uu/test" }
 #
-arch     = { optional=true, version="0.0.1", package="uu_arch", path="src/uu/arch" }
-base32   = { optional=true, version="0.0.1", package="uu_base32", path="src/uu/base32" }
-base64   = { optional=true, version="0.0.1", package="uu_base64", path="src/uu/base64" }
-basename = { optional=true, version="0.0.1", package="uu_basename", path="src/uu/basename" }
-cat      = { optional=true, version="0.0.1", package="uu_cat", path="src/uu/cat" }
-chgrp    = { optional=true, version="0.0.1", package="uu_chgrp", path="src/uu/chgrp" }
-chmod    = { optional=true, version="0.0.1", package="uu_chmod", path="src/uu/chmod" }
-chown    = { optional=true, version="0.0.1", package="uu_chown", path="src/uu/chown" }
-chroot   = { optional=true, version="0.0.1", package="uu_chroot", path="src/uu/chroot" }
-cksum    = { optional=true, version="0.0.1", package="uu_cksum", path="src/uu/cksum" }
-comm     = { optional=true, version="0.0.1", package="uu_comm", path="src/uu/comm" }
-cp       = { optional=true, version="0.0.1", package="uu_cp", path="src/uu/cp" }
-csplit   = { optional=true, version="0.0.1", package="uu_csplit", path="src/uu/csplit" }
-cut      = { optional=true, version="0.0.1", package="uu_cut", path="src/uu/cut" }
-date     = { optional=true, version="0.0.1", package="uu_date", path="src/uu/date" }
-df       = { optional=true, version="0.0.1", package="uu_df", path="src/uu/df" }
-dircolors= { optional=true, version="0.0.1", package="uu_dircolors", path="src/uu/dircolors" }
-dirname  = { optional=true, version="0.0.1", package="uu_dirname", path="src/uu/dirname" }
-du       = { optional=true, version="0.0.1", package="uu_du", path="src/uu/du" }
-echo     = { optional=true, version="0.0.1", package="uu_echo", path="src/uu/echo" }
-env      = { optional=true, version="0.0.1", package="uu_env", path="src/uu/env" }
-expand   = { optional=true, version="0.0.1", package="uu_expand", path="src/uu/expand" }
-expr     = { optional=true, version="0.0.1", package="uu_expr", path="src/uu/expr" }
-factor   = { optional=true, version="0.0.1", package="uu_factor", path="src/uu/factor" }
-false    = { optional=true, version="0.0.1", package="uu_false", path="src/uu/false" }
-fmt      = { optional=true, version="0.0.1", package="uu_fmt", path="src/uu/fmt" }
-fold     = { optional=true, version="0.0.1", package="uu_fold", path="src/uu/fold" }
-groups   = { optional=true, version="0.0.1", package="uu_groups", path="src/uu/groups" }
-hashsum  = { optional=true, version="0.0.1", package="uu_hashsum", path="src/uu/hashsum" }
-head     = { optional=true, version="0.0.1", package="uu_head", path="src/uu/head" }
-hostid   = { optional=true, version="0.0.1", package="uu_hostid", path="src/uu/hostid" }
-hostname = { optional=true, version="0.0.1", package="uu_hostname", path="src/uu/hostname" }
-id       = { optional=true, version="0.0.1", package="uu_id", path="src/uu/id" }
-install  = { optional=true, version="0.0.1", package="uu_install", path="src/uu/install" }
-join     = { optional=true, version="0.0.1", package="uu_join", path="src/uu/join" }
-kill     = { optional=true, version="0.0.1", package="uu_kill", path="src/uu/kill" }
-link     = { optional=true, version="0.0.1", package="uu_link", path="src/uu/link" }
-ln       = { optional=true, version="0.0.1", package="uu_ln", path="src/uu/ln" }
-ls       = { optional=true, version="0.0.1", package="uu_ls", path="src/uu/ls" }
-logname  = { optional=true, version="0.0.1", package="uu_logname", path="src/uu/logname" }
-mkdir    = { optional=true, version="0.0.1", package="uu_mkdir", path="src/uu/mkdir" }
-mkfifo   = { optional=true, version="0.0.1", package="uu_mkfifo", path="src/uu/mkfifo" }
-mknod    = { optional=true, version="0.0.1", package="uu_mknod", path="src/uu/mknod" }
-mktemp   = { optional=true, version="0.0.1", package="uu_mktemp", path="src/uu/mktemp" }
-more     = { optional=true, version="0.0.1", package="uu_more", path="src/uu/more" }
-mv       = { optional=true, version="0.0.1", package="uu_mv", path="src/uu/mv" }
-nice     = { optional=true, version="0.0.1", package="uu_nice", path="src/uu/nice" }
-nl       = { optional=true, version="0.0.1", package="uu_nl", path="src/uu/nl" }
-nohup    = { optional=true, version="0.0.1", package="uu_nohup", path="src/uu/nohup" }
-nproc    = { optional=true, version="0.0.1", package="uu_nproc", path="src/uu/nproc" }
-numfmt   = { optional=true, version="0.0.1", package="uu_numfmt", path="src/uu/numfmt" }
-od       = { optional=true, version="0.0.1", package="uu_od", path="src/uu/od" }
-paste    = { optional=true, version="0.0.1", package="uu_paste", path="src/uu/paste" }
-pathchk  = { optional=true, version="0.0.1", package="uu_pathchk", path="src/uu/pathchk" }
-pinky    = { optional=true, version="0.0.1", package="uu_pinky", path="src/uu/pinky" }
-printenv = { optional=true, version="0.0.1", package="uu_printenv", path="src/uu/printenv" }
-printf   = { optional=true, version="0.0.1", package="uu_printf", path="src/uu/printf" }
-ptx      = { optional=true, version="0.0.1", package="uu_ptx", path="src/uu/ptx" }
-pwd      = { optional=true, version="0.0.1", package="uu_pwd", path="src/uu/pwd" }
-readlink = { optional=true, version="0.0.1", package="uu_readlink", path="src/uu/readlink" }
-realpath = { optional=true, version="0.0.1", package="uu_realpath", path="src/uu/realpath" }
-relpath  = { optional=true, version="0.0.1", package="uu_relpath", path="src/uu/relpath" }
-rm       = { optional=true, version="0.0.1", package="uu_rm", path="src/uu/rm" }
-rmdir    = { optional=true, version="0.0.1", package="uu_rmdir", path="src/uu/rmdir" }
-seq      = { optional=true, version="0.0.1", package="uu_seq", path="src/uu/seq" }
-shred    = { optional=true, version="0.0.1", package="uu_shred", path="src/uu/shred" }
-shuf     = { optional=true, version="0.0.1", package="uu_shuf", path="src/uu/shuf" }
-sleep    = { optional=true, version="0.0.1", package="uu_sleep", path="src/uu/sleep" }
-sort     = { optional=true, version="0.0.1", package="uu_sort", path="src/uu/sort" }
-split    = { optional=true, version="0.0.1", package="uu_split", path="src/uu/split" }
-stat     = { optional=true, version="0.0.1", package="uu_stat", path="src/uu/stat" }
-stdbuf   = { optional=true, version="0.0.1", package="uu_stdbuf", path="src/uu/stdbuf" }
-sum      = { optional=true, version="0.0.1", package="uu_sum", path="src/uu/sum" }
-sync     = { optional=true, version="0.0.1", package="uu_sync", path="src/uu/sync" }
-tac      = { optional=true, version="0.0.1", package="uu_tac", path="src/uu/tac" }
-tail     = { optional=true, version="0.0.1", package="uu_tail", path="src/uu/tail" }
-tee      = { optional=true, version="0.0.1", package="uu_tee", path="src/uu/tee" }
-timeout  = { optional=true, version="0.0.1", package="uu_timeout", path="src/uu/timeout" }
-touch    = { optional=true, version="0.0.1", package="uu_touch", path="src/uu/touch" }
-tr       = { optional=true, version="0.0.1", package="uu_tr", path="src/uu/tr" }
-true     = { optional=true, version="0.0.1", package="uu_true", path="src/uu/true" }
-truncate = { optional=true, version="0.0.1", package="uu_truncate", path="src/uu/truncate" }
-tsort    = { optional=true, version="0.0.1", package="uu_tsort", path="src/uu/tsort" }
-tty      = { optional=true, version="0.0.1", package="uu_tty", path="src/uu/tty" }
-uname    = { optional=true, version="0.0.1", package="uu_uname", path="src/uu/uname" }
-unexpand = { optional=true, version="0.0.1", package="uu_unexpand", path="src/uu/unexpand" }
-uniq     = { optional=true, version="0.0.1", package="uu_uniq", path="src/uu/uniq" }
-unlink   = { optional=true, version="0.0.1", package="uu_unlink", path="src/uu/unlink" }
-uptime   = { optional=true, version="0.0.1", package="uu_uptime", path="src/uu/uptime" }
-users    = { optional=true, version="0.0.1", package="uu_users", path="src/uu/users" }
-wc       = { optional=true, version="0.0.1", package="uu_wc", path="src/uu/wc" }
-who      = { optional=true, version="0.0.1", package="uu_who", path="src/uu/who" }
-whoami   = { optional=true, version="0.0.1", package="uu_whoami", path="src/uu/whoami" }
-yes      = { optional=true, version="0.0.1", package="uu_yes", path="src/uu/yes" }
+arch     = { optional=true, version="0.0.2", package="uu_arch", path="src/uu/arch" }
+base32   = { optional=true, version="0.0.2", package="uu_base32", path="src/uu/base32" }
+base64   = { optional=true, version="0.0.2", package="uu_base64", path="src/uu/base64" }
+basename = { optional=true, version="0.0.2", package="uu_basename", path="src/uu/basename" }
+cat      = { optional=true, version="0.0.2", package="uu_cat", path="src/uu/cat" }
+chgrp    = { optional=true, version="0.0.2", package="uu_chgrp", path="src/uu/chgrp" }
+chmod    = { optional=true, version="0.0.2", package="uu_chmod", path="src/uu/chmod" }
+chown    = { optional=true, version="0.0.2", package="uu_chown", path="src/uu/chown" }
+chroot   = { optional=true, version="0.0.2", package="uu_chroot", path="src/uu/chroot" }
+cksum    = { optional=true, version="0.0.2", package="uu_cksum", path="src/uu/cksum" }
+comm     = { optional=true, version="0.0.2", package="uu_comm", path="src/uu/comm" }
+cp       = { optional=true, version="0.0.2", package="uu_cp", path="src/uu/cp" }
+csplit   = { optional=true, version="0.0.2", package="uu_csplit", path="src/uu/csplit" }
+cut      = { optional=true, version="0.0.2", package="uu_cut", path="src/uu/cut" }
+date     = { optional=true, version="0.0.2", package="uu_date", path="src/uu/date" }
+df       = { optional=true, version="0.0.2", package="uu_df", path="src/uu/df" }
+dircolors= { optional=true, version="0.0.2", package="uu_dircolors", path="src/uu/dircolors" }
+dirname  = { optional=true, version="0.0.2", package="uu_dirname", path="src/uu/dirname" }
+du       = { optional=true, version="0.0.2", package="uu_du", path="src/uu/du" }
+echo     = { optional=true, version="0.0.2", package="uu_echo", path="src/uu/echo" }
+env      = { optional=true, version="0.0.2", package="uu_env", path="src/uu/env" }
+expand   = { optional=true, version="0.0.2", package="uu_expand", path="src/uu/expand" }
+expr     = { optional=true, version="0.0.2", package="uu_expr", path="src/uu/expr" }
+factor   = { optional=true, version="0.0.2", package="uu_factor", path="src/uu/factor" }
+false    = { optional=true, version="0.0.2", package="uu_false", path="src/uu/false" }
+fmt      = { optional=true, version="0.0.2", package="uu_fmt", path="src/uu/fmt" }
+fold     = { optional=true, version="0.0.2", package="uu_fold", path="src/uu/fold" }
+groups   = { optional=true, version="0.0.2", package="uu_groups", path="src/uu/groups" }
+hashsum  = { optional=true, version="0.0.2", package="uu_hashsum", path="src/uu/hashsum" }
+head     = { optional=true, version="0.0.2", package="uu_head", path="src/uu/head" }
+hostid   = { optional=true, version="0.0.2", package="uu_hostid", path="src/uu/hostid" }
+hostname = { optional=true, version="0.0.2", package="uu_hostname", path="src/uu/hostname" }
+id       = { optional=true, version="0.0.2", package="uu_id", path="src/uu/id" }
+install  = { optional=true, version="0.0.2", package="uu_install", path="src/uu/install" }
+join     = { optional=true, version="0.0.2", package="uu_join", path="src/uu/join" }
+kill     = { optional=true, version="0.0.2", package="uu_kill", path="src/uu/kill" }
+link     = { optional=true, version="0.0.2", package="uu_link", path="src/uu/link" }
+ln       = { optional=true, version="0.0.2", package="uu_ln", path="src/uu/ln" }
+ls       = { optional=true, version="0.0.2", package="uu_ls", path="src/uu/ls" }
+logname  = { optional=true, version="0.0.2", package="uu_logname", path="src/uu/logname" }
+mkdir    = { optional=true, version="0.0.2", package="uu_mkdir", path="src/uu/mkdir" }
+mkfifo   = { optional=true, version="0.0.2", package="uu_mkfifo", path="src/uu/mkfifo" }
+mknod    = { optional=true, version="0.0.2", package="uu_mknod", path="src/uu/mknod" }
+mktemp   = { optional=true, version="0.0.2", package="uu_mktemp", path="src/uu/mktemp" }
+more     = { optional=true, version="0.0.2", package="uu_more", path="src/uu/more" }
+mv       = { optional=true, version="0.0.2", package="uu_mv", path="src/uu/mv" }
+nice     = { optional=true, version="0.0.2", package="uu_nice", path="src/uu/nice" }
+nl       = { optional=true, version="0.0.2", package="uu_nl", path="src/uu/nl" }
+nohup    = { optional=true, version="0.0.2", package="uu_nohup", path="src/uu/nohup" }
+nproc    = { optional=true, version="0.0.2", package="uu_nproc", path="src/uu/nproc" }
+numfmt   = { optional=true, version="0.0.2", package="uu_numfmt", path="src/uu/numfmt" }
+od       = { optional=true, version="0.0.2", package="uu_od", path="src/uu/od" }
+paste    = { optional=true, version="0.0.2", package="uu_paste", path="src/uu/paste" }
+pathchk  = { optional=true, version="0.0.2", package="uu_pathchk", path="src/uu/pathchk" }
+pinky    = { optional=true, version="0.0.2", package="uu_pinky", path="src/uu/pinky" }
+printenv = { optional=true, version="0.0.2", package="uu_printenv", path="src/uu/printenv" }
+printf   = { optional=true, version="0.0.2", package="uu_printf", path="src/uu/printf" }
+ptx      = { optional=true, version="0.0.2", package="uu_ptx", path="src/uu/ptx" }
+pwd      = { optional=true, version="0.0.2", package="uu_pwd", path="src/uu/pwd" }
+readlink = { optional=true, version="0.0.2", package="uu_readlink", path="src/uu/readlink" }
+realpath = { optional=true, version="0.0.2", package="uu_realpath", path="src/uu/realpath" }
+relpath  = { optional=true, version="0.0.2", package="uu_relpath", path="src/uu/relpath" }
+rm       = { optional=true, version="0.0.2", package="uu_rm", path="src/uu/rm" }
+rmdir    = { optional=true, version="0.0.2", package="uu_rmdir", path="src/uu/rmdir" }
+seq      = { optional=true, version="0.0.2", package="uu_seq", path="src/uu/seq" }
+shred    = { optional=true, version="0.0.2", package="uu_shred", path="src/uu/shred" }
+shuf     = { optional=true, version="0.0.2", package="uu_shuf", path="src/uu/shuf" }
+sleep    = { optional=true, version="0.0.2", package="uu_sleep", path="src/uu/sleep" }
+sort     = { optional=true, version="0.0.2", package="uu_sort", path="src/uu/sort" }
+split    = { optional=true, version="0.0.2", package="uu_split", path="src/uu/split" }
+stat     = { optional=true, version="0.0.2", package="uu_stat", path="src/uu/stat" }
+stdbuf   = { optional=true, version="0.0.2", package="uu_stdbuf", path="src/uu/stdbuf" }
+sum      = { optional=true, version="0.0.2", package="uu_sum", path="src/uu/sum" }
+sync     = { optional=true, version="0.0.2", package="uu_sync", path="src/uu/sync" }
+tac      = { optional=true, version="0.0.2", package="uu_tac", path="src/uu/tac" }
+tail     = { optional=true, version="0.0.2", package="uu_tail", path="src/uu/tail" }
+tee      = { optional=true, version="0.0.2", package="uu_tee", path="src/uu/tee" }
+timeout  = { optional=true, version="0.0.2", package="uu_timeout", path="src/uu/timeout" }
+touch    = { optional=true, version="0.0.2", package="uu_touch", path="src/uu/touch" }
+tr       = { optional=true, version="0.0.2", package="uu_tr", path="src/uu/tr" }
+true     = { optional=true, version="0.0.2", package="uu_true", path="src/uu/true" }
+truncate = { optional=true, version="0.0.2", package="uu_truncate", path="src/uu/truncate" }
+tsort    = { optional=true, version="0.0.2", package="uu_tsort", path="src/uu/tsort" }
+tty      = { optional=true, version="0.0.2", package="uu_tty", path="src/uu/tty" }
+uname    = { optional=true, version="0.0.2", package="uu_uname", path="src/uu/uname" }
+unexpand = { optional=true, version="0.0.2", package="uu_unexpand", path="src/uu/unexpand" }
+uniq     = { optional=true, version="0.0.2", package="uu_uniq", path="src/uu/uniq" }
+unlink   = { optional=true, version="0.0.2", package="uu_unlink", path="src/uu/unlink" }
+uptime   = { optional=true, version="0.0.2", package="uu_uptime", path="src/uu/uptime" }
+users    = { optional=true, version="0.0.2", package="uu_users", path="src/uu/users" }
+wc       = { optional=true, version="0.0.2", package="uu_wc", path="src/uu/wc" }
+who      = { optional=true, version="0.0.2", package="uu_who", path="src/uu/who" }
+whoami   = { optional=true, version="0.0.2", package="uu_whoami", path="src/uu/whoami" }
+yes      = { optional=true, version="0.0.2", package="uu_yes", path="src/uu/yes" }
 #
 # * pinned transitive dependencies
 pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 pin_rustc-demangle = { version="0.1.16, < 0.1.17", package="rustc-demangle" } ## rust-demangle v0.1.17 has compiler errors for MinRustV v1.32.0, expects 1.33
 pin_same-file = { version="1.0.4, < 1.0.6", package="same-file" } ## same-file v1.0.6 has compiler errors for MinRustV v1.32.0, expects 1.34
 pin_winapi-util = { version="0.1.2, < 0.1.3", package="winapi-util" } ## winapi-util v0.1.3 has compiler errors for MinRustV v1.32.0, expects 1.34
+pin_byteorder = { version="1.3.4, < 1.4.0", package="byteorder" } ## byteorder v1.4 has compiler errors for MinRustV v1.32.0, requires 1.3 (for `use of unstable library feature 'try_from' (see issue #33417)`)
 
 [dev-dependencies]
 conv = "0.3"
@@ -342,7 +343,7 @@ sha1 = { version="0.6", features=["std"] }
 tempfile = "3.1"
 time = "0.1"
 unindent = "0.1"
-uucore = { version=">=0.0.4", package="uucore", path="src/uucore", features=["entries"] }
+uucore = { version=">=0.0.5", package="uucore", path="src/uucore", features=["entries"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 rust-users = { version="0.10", package="users" }

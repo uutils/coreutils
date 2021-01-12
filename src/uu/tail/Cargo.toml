@@ -1,6 +1,6 @@
 [package]
 name = "uu_tail"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"
@@ -15,10 +15,10 @@ edition = "2018"
 path = "src/tail.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 libc = "0.2.42"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
 [target.'cfg(target_os = "redox")'.dependencies]

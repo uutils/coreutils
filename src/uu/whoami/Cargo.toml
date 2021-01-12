@@ -1,6 +1,6 @@
 [package]
 name = "uu_whoami"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "whoami ~ (uutils) display user name of current effective user ID"
@@ -16,8 +16,8 @@ path = "src/whoami.rs"
 
 [dependencies]
 clap = "2.33"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["entries", "wide"] }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["entries", "wide"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 advapi32-sys = "0.2.0"

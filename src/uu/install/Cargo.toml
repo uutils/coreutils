@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
     "Ben Eills <ben@beneills.com>",
     "uutils developers",
@@ -20,8 +20,8 @@ path = "src/install.rs"
 [dependencies]
 clap = "2.33"
 libc = ">= 0.2"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["mode", "perms"] }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["mode", "perms"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [dev-dependencies]
 time = "0.1.40"

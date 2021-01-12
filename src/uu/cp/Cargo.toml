@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
     "Jordy Dickinson <jordy.dickinson@gmail.com>",
     "Joshua S. Miller <jsmiller@uchicago.edu>",
@@ -23,8 +23,8 @@ clap = "2.33"
 filetime = "0.2"
 libc = "0.2.42"
 quick-error = "1.2.3"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["fs"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]

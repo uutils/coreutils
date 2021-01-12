@@ -1,6 +1,6 @@
 [package]
 name = "uu_mkdir"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mkdir ~ (uutils) create DIRECTORY"
@@ -17,8 +17,8 @@ path = "src/mkdir.rs"
 [dependencies]
 clap = "2.33"
 libc = "0.2.42"
-uucore = { version=">=0.0.4", package="uucore", path="../../uucore", features=["fs", "mode"] }
-uucore_procs = { version=">=0.0.4", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["fs", "mode"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "mkdir"
