@@ -10,22 +10,34 @@
 // spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf
 
 #[macro_use]
+extern crate clap;
+
+#[macro_use]
 extern crate uucore;
 
 mod platform;
 
+use clap::{App, Arg};
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
 
-static NAME: &str = "tail";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_BYTES: &str = "bytes";
+static OPT_FOLLOW: &str = "follow";
+static OPT_LINES: &str = "lines";
+static OPT_PID: &str = "pid";
+static OPT_QUIET: &str = "quiet";
+static OPT_SILENT: &str = "silent";
+static OPT_SLEEP_INT: &str = "sleep-interval";
+static OPT_VERBOSE: &str = "verbose";
+static OPT_ZERO_TERM: &str = "zero-terminated";
+
+static ARG_FILES: &str = "files";
 
 enum FilterMode {
     Bytes(u64),
@@ -54,65 +66,78 @@ impl Default for Settings {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
     let mut settings: Settings = Default::default();
 
-    // handle obsolete -number syntax
-    let options = match obsolete(&args[1..]) {
-        (args, Some(n)) => {
-            settings.mode = FilterMode::Lines(n, b'\n');
-            args
-        }
-        (args, None) => args,
-    };
+    let app = App::new(executable!())
+        .version(crate_version!())
+        .about("output the last part of files")
+        .arg(
+            Arg::with_name(OPT_BYTES)
+                .short("c")
+                .long(OPT_BYTES)
+                .takes_value(true)
+                .help("Number of bytes to print"),
+        )
+        .arg(
+            Arg::with_name(OPT_FOLLOW)
+                .short("f")
+                .long(OPT_FOLLOW)
+                .help("Print the file as it grows"),
+        )
+        .arg(
+            Arg::with_name(OPT_LINES)
+                .short("n")
+                .long(OPT_LINES)
+                .takes_value(true)
+                .help("Number of lines to print"),
+        )
+        .arg(
+            Arg::with_name(OPT_PID)
+                .long(OPT_PID)
+                .takes_value(true)
+                .help("with -f, terminate after process ID, PID dies"),
+        )
+        .arg(
+            Arg::with_name(OPT_QUIET)
+                .short("q")
+                .long(OPT_QUIET)
+                .help("never output headers giving file names"),
+        )
+        .arg(
+            Arg::with_name(OPT_SILENT)
+                .long(OPT_SILENT)
+                .help("synonym of --quiet"),
+        )
+        .arg(
+            Arg::with_name(OPT_SLEEP_INT)
+                .short("s")
+                .long(OPT_SLEEP_INT)
+                .help("Number or seconds to sleep between polling the file when running with -f"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("always output headers giving file names"),
+        )
+        .arg(
+            Arg::with_name(OPT_ZERO_TERM)
+                .short("z")
+                .long(OPT_ZERO_TERM)
+                .help("Line delimiter is NUL, not newline"),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
+        );
 
-    let args = options;
+    let matches = app.get_matches_from(args);
 
-    let mut opts = getopts::Options::new();
-
-    opts.optopt("c", "bytes", "Number of bytes to print", "k");
-    opts.optopt("n", "lines", "Number of lines to print", "k");
-    opts.optflag("f", "follow", "Print the file as it grows");
-    opts.optopt(
-        "s",
-        "sleep-interval",
-        "Number or seconds to sleep between polling the file when running with -f",
-        "n",
-    );
-    opts.optopt(
-        "",
-        "pid",
-        "with -f, terminate after process ID, PID dies",
-        "PID",
-    );
-    opts.optflag("z", "zero-terminated", "Line delimiter is NUL, not newline");
-    opts.optflag("h", "help", "help");
-    opts.optflag("V", "version", "version");
-    opts.optflag("v", "verbose", "always output headers giving file names");
-    opts.optflag("q", "quiet", "never output headers giving file names");
-    opts.optflag("", "silent", "synonym of --quiet");
-
-    let given_options = match opts.parse(&args) {
-        Ok(m) => m,
-        Err(_) => {
-            println!("{}", opts.usage(""));
-            return 1;
-        }
-    };
-
-    if given_options.opt_present("h") {
-        println!("{}", opts.usage(""));
-        return 0;
-    }
-    if given_options.opt_present("V") {
-        version();
-        return 0;
-    }
-
-    settings.follow = given_options.opt_present("f");
+    settings.follow = matches.is_present(OPT_FOLLOW);
     if settings.follow {
-        if let Some(n) = given_options.opt_str("s") {
+        if let Some(n) = matches.value_of(OPT_SLEEP_INT) {
             let parsed: Option<u32> = n.parse().ok();
             if let Some(m) = parsed {
                 settings.sleep_msec = m * 1000
@@ -120,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    if let Some(pid_str) = given_options.opt_str("pid") {
+    if let Some(pid_str) = matches.value_of(OPT_PID) {
         if let Ok(pid) = pid_str.parse() {
             settings.pid = pid;
             if pid != 0 {
@@ -136,7 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    match given_options.opt_str("n") {
+    match matches.value_of(OPT_LINES) {
         Some(n) => {
             let mut slice: &str = n.as_ref();
             if slice.chars().next().unwrap_or('_') == '+' {
@@ -152,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
         None => {
-            if let Some(n) = given_options.opt_str("c") {
+            if let Some(n) = matches.value_of(OPT_BYTES) {
                 let mut slice: &str = n.as_ref();
                 if slice.chars().next().unwrap_or('_') == '+' {
                     settings.beginning = true;
@@ -169,16 +194,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    if given_options.opt_present("z") {
+    if matches.is_present(OPT_ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
             settings.mode = FilterMode::Lines(count, 0);
         }
     }
 
-    let verbose = given_options.opt_present("v");
-    let quiet = given_options.opt_present("q") || given_options.opt_present("silent");
+    let verbose = matches.is_present(OPT_VERBOSE);
+    let quiet = matches.is_present(OPT_QUIET) || matches.is_present(OPT_SILENT);
 
-    let files = given_options.free;
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
@@ -311,42 +339,6 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
             .map(|v| Ok(multiplier * v))
             .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
     }
-}
-
-// It searches for an option in the form of -123123
-//
-// In case is found, the options vector will get rid of that object so that
-// getopts works correctly.
-fn obsolete(options: &[String]) -> (Vec<String>, Option<u64>) {
-    let mut options: Vec<String> = options.to_vec();
-    let mut a = 0;
-    let b = options.len();
-
-    while a < b {
-        let current = options[a].clone();
-        let current = current.as_bytes();
-
-        if current.len() > 1 && current[0] == b'-' {
-            let len = current.len();
-            for pos in 1..len {
-                // Ensure that the argument is only made out of digits
-                if !(current[pos] as char).is_numeric() {
-                    break;
-                }
-
-                // If this is the last number
-                if pos == len - 1 {
-                    options.remove(a);
-                    let number: Option<u64> = from_utf8(&current[1..len]).unwrap().parse().ok();
-                    return (options, Some(number.unwrap()));
-                }
-            }
-        }
-
-        a += 1;
-    }
-
-    (options, None)
 }
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -562,8 +554,4 @@ fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
 #[inline]
 fn print_string<T: Write>(_: &mut T, s: &str) {
     print!("{}", s);
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
 }
