@@ -17,10 +17,9 @@ extern crate uucore;
 
 mod platform;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg};
 use std::collections::VecDeque;
 use std::error::Error;
-use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
@@ -28,8 +27,17 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-static NAME: &str = "tail";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+static OPT_BYTES: &str = "bytes";
+static OPT_LINES: &str = "lines";
+static OPT_FOLLOW: &str = "follow";
+static OPT_SLEEP_INT: &str = "sleep-interval";
+static OPT_ZERO_TERM: &str = "zero-terminated";
+static OPT_VERBOSE: &str = "verbose";
+static OPT_QUIET: &str = "quiet";
+static OPT_SILENT: &str = "silent";
+static OPT_PID: &str = "pid";
+
+static ARG_FILES: &str = "files";
 
 enum FilterMode {
     Bytes(u64),
@@ -58,72 +66,78 @@ impl Default for Settings {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let program = args.next().unwrap_or_else(|| OsString::from(NAME));
-    let args = std::iter::once(program.clone()).chain(args);
-
     let mut settings: Settings = Default::default();
 
-    let mut app = App::new(executable!())
+    let app = App::new(executable!())
         .version(crate_version!())
         .about("output the last part of files")
         .arg(
-            Arg::with_name("bytes")
-                .short("b")
-                .long("bytes")
+            Arg::with_name(OPT_BYTES)
+                .short("c")
+                .long(OPT_BYTES)
+                .takes_value(true)
                 .help("Number of bytes to print"),
         )
         .arg(
-            Arg::with_name("lines")
+            Arg::with_name(OPT_LINES)
                 .short("n")
-                .long("lines")
+                .long(OPT_LINES)
+                .takes_value(true)
                 .help("Number of lines to print"),
         )
         .arg(
-            Arg::with_name("follow")
+            Arg::with_name(OPT_FOLLOW)
                 .short("f")
-                .long("follow")
+                .long(OPT_FOLLOW)
                 .help("Print the file as it grows"),
         )
         .arg(
-            Arg::with_name("sleep-interval")
+            Arg::with_name(OPT_SLEEP_INT)
                 .short("s")
-                .long("sleep-interval")
+                .long(OPT_SLEEP_INT)
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )
         .arg(
-            Arg::with_name("zero-terminated")
+            Arg::with_name(OPT_ZERO_TERM)
                 .short("z")
-                .long("zero-terminated")
+                .long(OPT_ZERO_TERM)
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name("verbose")
+            Arg::with_name(OPT_VERBOSE)
                 .short("v")
-                .long("verbose")
+                .long(OPT_VERBOSE)
                 .help("always output headers giving file names"),
         )
         .arg(
-            Arg::with_name("quiet")
+            Arg::with_name(OPT_QUIET)
                 .short("q")
-                .long("quiet")
+                .long(OPT_QUIET)
                 .help("never output headers giving file names"),
         )
         .arg(
-            Arg::with_name("silent")
-                .long("silent")
+            Arg::with_name(OPT_SILENT)
+                .long(OPT_SILENT)
                 .help("synonym of --quiet"),
         )
         .arg(
-            Arg::with_name("pid")
-                .long("pid")
+            Arg::with_name(OPT_PID)
+                .long(OPT_PID)
+                .takes_value(true)
                 .help("with -f, terminate after process ID, PID dies"),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
         );
 
     let matches = app.get_matches_from(args);
 
-    settings.follow = matches.is_present("f");
+    settings.follow = matches.is_present(OPT_FOLLOW);
     if settings.follow {
-        if let Some(n) = matches.value_of("sleep-interval") {
+        if let Some(n) = matches.value_of(OPT_SLEEP_INT) {
             let parsed: Option<u32> = n.parse().ok();
             if let Some(m) = parsed {
                 settings.sleep_msec = m * 1000
@@ -131,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    if let Some(pid_str) = matches.value_of("pid") {
+    if let Some(pid_str) = matches.value_of(OPT_PID) {
         if let Ok(pid) = pid_str.parse() {
             settings.pid = pid;
             if pid != 0 {
@@ -147,7 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    match matches.value_of("lines") {
+    match matches.value_of(OPT_LINES) {
         Some(n) => {
             let mut slice: &str = n.as_ref();
             if slice.chars().next().unwrap_or('_') == '+' {
@@ -163,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
         None => {
-            if let Some(n) = matches.value_of("bytes") {
+            if let Some(n) = matches.value_of(OPT_BYTES) {
                 let mut slice: &str = n.as_ref();
                 if slice.chars().next().unwrap_or('_') == '+' {
                     settings.beginning = true;
@@ -180,16 +194,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    if matches.is_present("z") {
+    if matches.is_present(OPT_ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
             settings.mode = FilterMode::Lines(count, 0);
         }
     }
 
-    let verbose = matches.is_present("v");
-    let quiet = matches.is_present("q") || matches.is_present("silent");
+    let verbose = matches.is_present(OPT_VERBOSE);
+    let quiet = matches.is_present(OPT_QUIET) || matches.is_present(OPT_SILENT);
 
-    let files = matches.is_present("free");
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
@@ -537,8 +554,4 @@ fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
 #[inline]
 fn print_string<T: Write>(_: &mut T, s: &str) {
     print!("{}", s);
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
 }
