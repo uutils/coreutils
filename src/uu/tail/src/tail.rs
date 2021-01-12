@@ -28,14 +28,14 @@ use std::thread::sleep;
 use std::time::Duration;
 
 static OPT_BYTES: &str = "bytes";
-static OPT_LINES: &str = "lines";
 static OPT_FOLLOW: &str = "follow";
-static OPT_SLEEP_INT: &str = "sleep-interval";
-static OPT_ZERO_TERM: &str = "zero-terminated";
-static OPT_VERBOSE: &str = "verbose";
+static OPT_LINES: &str = "lines";
+static OPT_PID: &str = "pid";
 static OPT_QUIET: &str = "quiet";
 static OPT_SILENT: &str = "silent";
-static OPT_PID: &str = "pid";
+static OPT_SLEEP_INT: &str = "sleep-interval";
+static OPT_VERBOSE: &str = "verbose";
+static OPT_ZERO_TERM: &str = "zero-terminated";
 
 static ARG_FILES: &str = "files";
 
@@ -79,6 +79,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Number of bytes to print"),
         )
         .arg(
+            Arg::with_name(OPT_FOLLOW)
+                .short("f")
+                .long(OPT_FOLLOW)
+                .help("Print the file as it grows"),
+        )
+        .arg(
             Arg::with_name(OPT_LINES)
                 .short("n")
                 .long(OPT_LINES)
@@ -86,28 +92,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Number of lines to print"),
         )
         .arg(
-            Arg::with_name(OPT_FOLLOW)
-                .short("f")
-                .long(OPT_FOLLOW)
-                .help("Print the file as it grows"),
-        )
-        .arg(
-            Arg::with_name(OPT_SLEEP_INT)
-                .short("s")
-                .long(OPT_SLEEP_INT)
-                .help("Number or seconds to sleep between polling the file when running with -f"),
-        )
-        .arg(
-            Arg::with_name(OPT_ZERO_TERM)
-                .short("z")
-                .long(OPT_ZERO_TERM)
-                .help("Line delimiter is NUL, not newline"),
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
-                .long(OPT_VERBOSE)
-                .help("always output headers giving file names"),
+            Arg::with_name(OPT_PID)
+                .long(OPT_PID)
+                .takes_value(true)
+                .help("with -f, terminate after process ID, PID dies"),
         )
         .arg(
             Arg::with_name(OPT_QUIET)
@@ -121,10 +109,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("synonym of --quiet"),
         )
         .arg(
-            Arg::with_name(OPT_PID)
-                .long(OPT_PID)
-                .takes_value(true)
-                .help("with -f, terminate after process ID, PID dies"),
+            Arg::with_name(OPT_SLEEP_INT)
+                .short("s")
+                .long(OPT_SLEEP_INT)
+                .help("Number or seconds to sleep between polling the file when running with -f"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("always output headers giving file names"),
+        )
+        .arg(
+            Arg::with_name(OPT_ZERO_TERM)
+                .short("z")
+                .long(OPT_ZERO_TERM)
+                .help("Line delimiter is NUL, not newline"),
         )
         .arg(
             Arg::with_name(ARG_FILES)
