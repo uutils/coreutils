@@ -95,6 +95,7 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
+#[ignore]
 #[test]
 fn test_follow_retry() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -102,7 +103,7 @@ fn test_follow_retry() {
 
     let mut child = ucmd
         .arg("-f")
-        .arg("-r")
+        .arg("--retry")
         .arg(non_existent_file)
         .run_no_wait();
 
@@ -113,8 +114,14 @@ fn test_follow_retry() {
 
     let expected = format!(
         "{}\n{}\n{}",
-        "tail: error: cannot open 'x' for reading: No such file or directory (os error 2)",
-        "tail: 'x' has appeared;  following new file",
+        format!(
+            "tail: error: cannot open '{}' for reading: No such file or directory (os error 2)",
+            non_existent_file
+        ),
+        format!(
+            "tail: '{}' has appeared;  following new file",
+            non_existent_file
+        ),
         content
     );
 
