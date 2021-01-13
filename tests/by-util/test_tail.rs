@@ -107,25 +107,28 @@ fn test_follow_retry() {
         .arg(non_existent_file)
         .run_no_wait();
 
-    let content = "content";
-
-    at.make_file(non_existent_file);
-    at.write(non_existent_file, content);
-
-    let expected = format!(
-        "{}\n{}\n{}",
-        format!(
-            "tail: error: cannot open '{}' for reading: No such file or directory (os error 2)",
-            non_existent_file
-        ),
-        format!(
-            "tail: '{}' has appeared;  following new file",
-            non_existent_file
-        ),
-        content
+    let e1 = format!(
+        "tail: error: cannot open '{}' for reading: No such file or directory (os error 2)",
+        non_existent_file
     );
 
-    assert_eq!(read_size(&mut child, expected.len()), expected);
+    println!("h1");
+    assert_eq!(read_size(&mut child, e1.len()), e1);
+
+    at.touch(non_existent_file);
+
+    let e2 = format!(
+        "tail: '{}' has appeared;  following new file",
+        non_existent_file
+    );
+    println!("h2");
+    assert_eq!(read_size(&mut child, e2.len()), e2);
+
+    let content = "content";
+    at.write(non_existent_file, content);
+
+    println!("h3");
+    assert_eq!(read_size(&mut child, content.len()), content);
 
     child.kill().unwrap();
 }
