@@ -63,6 +63,7 @@ impl Glob {
     }
 }
 
+/// File handle that user can add random bytes (line-formatted or not) to
 struct RandomFile {
     inner: File,
 }
@@ -71,6 +72,7 @@ impl RandomFile {
     /// Size of each line that's being generated
     const LINESIZE: usize = 32;
 
+    /// `create()` file handle located at `at` / `name`
     fn new(at: &AtPath, name: &str) -> RandomFile {
         RandomFile {
             inner: File::create(&at.plus(name)).unwrap(),
@@ -87,7 +89,7 @@ impl RandomFile {
         let _ = write!(self.inner, "{}", random_chars(n));
     }
 
-    /// Add n lines each of size `RandomFile::line_size`
+    /// Add n lines each of size `RandomFile::LINESIZE`
     fn add_lines(&mut self, lines: usize) {
         let mut n = lines;
         while n > 0 {
