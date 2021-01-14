@@ -189,6 +189,20 @@ fn test_filter() {
         }) == None
     );
 }
+#[test]
+#[cfg(windows)]
+fn test_filter() {
+    // like `test_split_default()` but run a command before writing
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "filtered";
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    let n_lines = 3;
+    RandomFile::new(&at, name).add_lines(n_lines);
+    // concat bytes to $FILE (bytes are forwarded as-is)
+    ucmd.args(&["--filter=TYPE > %FILE%", name]).succeeds();
+    assert_eq!(glob.count(), 3);
+    assert_eq!(glob.collate(), at.read(name).into_bytes());
+}
 
 #[test]
 fn test_filter_with_env_var_set() {
