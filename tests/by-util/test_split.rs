@@ -203,4 +203,17 @@ fn test_filter_with_env_var_set() {
     assert_eq!(glob.collate(), at.read(name).into_bytes());
     assert!(env::var("FILE").unwrap_or("var was unset".to_owned()) == env_var_value);
 }
-// TODO: add failing command (assert the command failed)
+
+#[test]
+fn test_filter_command_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "filter-will-fail";
+    RandomFile::new(&at, name).add_lines(4);
+
+    let r = ucmd
+        .args(&["--filter=/a/path/that/totally/does/not/exist", name])
+        .run()
+        .success;
+    println!("→{}", &r);
+    assert!(!r);
+}

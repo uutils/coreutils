@@ -384,14 +384,20 @@ impl Drop for FilterWriter {
     /// flush stdin, close it and wait on `shell_process` before dropping self
     fn drop(&mut self) {
         {
-            self.flush()
-                .expect("Couldn't flush before closing shell process");
             // close stdin by dropping it
             let _stdin = self.shell_process.stdin.as_mut();
         }
-        self.shell_process
+        let exit_status = self
+            .shell_process
             .wait()
             .expect("Couldn't wait for child process");
+        if let Some(return_code) = exit_status.code() {
+            if return_code != 0 {
+                crash!(1, "Shell process returned {}", return_code);
+            }
+        } else {
+            crash!(1, "Shell process terminated by signal")
+        }
     }
 }
 
@@ -442,9 +448,7 @@ fn split(settings: &Settings) -> i32 {
             );
             filename.push_str(settings.additional_suffix.as_ref());
 
-            if fileno != 0 {
-                crash_if_err!(1, writer.flush());
-            }
+            crash_if_err!(1, writer.flush());
             fileno += 1;
             writer = match settings.filter {
                 None => BufWriter::new(Box::new(
