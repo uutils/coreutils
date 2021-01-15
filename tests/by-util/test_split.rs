@@ -190,7 +190,7 @@ fn test_filter() {
     );
 }
 #[cfg(windows)]
-const CAT_TO_FILE: &'static str = "find /v \"\" > %FILE%";
+const CAT_TO_FILE: &'static str = "find /v \"\" > \"%FILE%\"";
 #[cfg(unix)]
 const CAT_TO_FILE: &'static str = "cat > $FILE";
 
