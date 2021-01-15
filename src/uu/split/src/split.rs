@@ -149,6 +149,11 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 
     settings.filter = matches.opt_str("filter");
 
+    if settings.filter.is_some() && cfg!(windows) {
+        // see https://github.com/rust-lang/rust/issues/29494
+        crash!(1, "--filter is not supported in this platform")
+    }
+
     split(&settings)
 }
 
@@ -301,12 +306,14 @@ fn num_prefix(i: usize, width: usize) -> String {
     c
 }
 
+#[cfg(unix)]
 /// A writer that writes to a shell_process' stdin
 struct FilterWriter {
     /// Running shell process
     shell_process: Child,
 }
 
+#[cfg(unix)]
 impl Write for FilterWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.shell_process
@@ -351,6 +358,7 @@ impl Drop for WithEnvVarSet {
     }
 }
 
+#[cfg(unix)]
 impl FilterWriter {
     /// Create a new filter running a command with $FILE pointing at the output name
     ///
@@ -359,23 +367,11 @@ impl FilterWriter {
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
     fn new(command: &str, filepath: &str) -> FilterWriter {
-        let shell_command = if cfg!(target_family = "unix") {
-            env::var("SHELL").unwrap_or("/bin/sh".to_owned())
-        } else {
-            "CMD".to_owned()
-        };
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", &filepath);
 
-        let shell_process = Command::new(shell_command)
-            .arg(
-                // `sh -c …` or `CMD /C …`
-                if cfg!(target_family = "unix") {
-                    "-c"
-                } else {
-                    "/C"
-                },
-            )
+        let shell_process = Command::new(env::var("SHELL").unwrap_or("/bin/sh".to_owned()))
+            .arg("-c")
             .arg(command)
             .stdin(Stdio::piped())
             .spawn()
@@ -387,6 +383,7 @@ impl FilterWriter {
     }
 }
 
+#[cfg(unix)]
 impl Drop for FilterWriter {
     /// flush stdin, close it and wait on `shell_process` before dropping self
     fn drop(&mut self) {
@@ -405,6 +402,34 @@ impl Drop for FilterWriter {
         } else {
             crash!(1, "Shell process terminated by signal")
         }
+    }
+}
+
+fn get_file_writer(filename: &str) -> BufWriter<Box<dyn Write>> {
+    BufWriter::new(Box::new(
+        // write to the next file
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(Path::new(&filename))
+            .unwrap(),
+    ) as Box<dyn Write>)
+}
+
+#[cfg(windows)]
+fn instantiate_current_writer(_settings: &Settings, filename: &str) -> BufWriter<Box<dyn Write>> {
+    get_file_writer(filename);
+}
+
+#[cfg(unix)]
+fn instantiate_current_writer(settings: &Settings, filename: &str) -> BufWriter<Box<dyn Write>> {
+    match settings.filter {
+        None => get_file_writer(filename),
+
+        Some(ref filter_command) => BufWriter::new(Box::new(
+            // spawn a shell command and write to it
+            FilterWriter::new(&filter_command, &filename),
+        ) as Box<dyn Write>),
     }
 }
 
@@ -457,21 +482,7 @@ fn split(settings: &Settings) -> i32 {
 
             crash_if_err!(1, writer.flush());
             fileno += 1;
-            writer = match settings.filter {
-                None => BufWriter::new(Box::new(
-                    // write to the next file
-                    OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .open(Path::new(&filename))
-                        .unwrap(),
-                ) as Box<dyn Write>),
-
-                Some(ref filter_command) => BufWriter::new(Box::new(
-                    // spawn a shell command and write to it
-                    FilterWriter::new(&filter_command, &filename),
-                ) as Box<dyn Write>),
-            };
+            writer = instantiate_current_writer(settings, filename.as_str());
             control.request_new_file = false;
             if settings.verbose {
                 println!("creating file '{}'", filename);
