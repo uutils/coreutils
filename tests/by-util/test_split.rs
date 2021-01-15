@@ -199,7 +199,8 @@ fn test_filter() {
     let n_lines = 3;
     RandomFile::new(&at, name).add_lines(n_lines);
     // concat bytes to $FILE (bytes are forwarded as-is)
-    ucmd.args(&["--filter=TYPE > %FILE%", name]).succeeds();
+    ucmd.args(&["--filter=findstr x* > %FILE%", name])
+        .succeeds();
     assert_eq!(glob.count(), 3);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
@@ -221,7 +222,7 @@ fn test_filter_with_env_var_set() {
         if cfg!(target_family = "unix") {
             "--filter=cat > $FILE"
         } else {
-            "--filter=TYPE > %FILE%"
+            "--filter=findstr x* > %FILE%"
         },
         name,
     ])
