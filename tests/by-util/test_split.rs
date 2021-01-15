@@ -189,6 +189,11 @@ fn test_filter() {
         }) == None
     );
 }
+#[cfg(windows)]
+const CAT_TO_FILE: &'static str = "find /v \"\" > %FILE%";
+#[cfg(unix)]
+const CAT_TO_FILE: &'static str = "cat > $FILE";
+
 #[test]
 #[cfg(windows)]
 fn test_filter() {
@@ -199,7 +204,7 @@ fn test_filter() {
     let n_lines = 3;
     RandomFile::new(&at, name).add_lines(n_lines);
     // concat bytes to $FILE (bytes are forwarded as-is)
-    ucmd.args(&["--filter=findstr x* > %FILE%", name])
+    ucmd.args(&[format!("--filter={}", CAT_TO_FILE).as_str(), name])
         .succeeds();
     assert_eq!(glob.count(), 3);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
@@ -218,15 +223,8 @@ fn test_filter_with_env_var_set() {
 
     let env_var_value = "somevalue";
     env::set_var("FILE", &env_var_value);
-    ucmd.args(&[
-        if cfg!(target_family = "unix") {
-            "--filter=cat > $FILE"
-        } else {
-            "--filter=findstr x* > %FILE%"
-        },
-        name,
-    ])
-    .succeeds();
+    ucmd.args(&[format!("--filter={}", CAT_TO_FILE).as_str(), name])
+        .succeeds();
     assert_eq!(glob.collate(), at.read(name).into_bytes());
     assert!(env::var("FILE").unwrap_or("var was unset".to_owned()) == env_var_value);
 }
@@ -237,9 +235,10 @@ fn test_filter_command_fails() {
     let name = "filter-will-fail";
     RandomFile::new(&at, name).add_lines(4);
 
-    let r = ucmd
-        .args(&["--filter=/a/path/that/totally/does/not/exist", name])
-        .run()
-        .success;
-    assert!(!r);
+    assert!(
+        !ucmd
+            .args(&["--filter=/a/path/that/totally/does/not/exist", name])
+            .fails()
+            .success
+    );
 }
