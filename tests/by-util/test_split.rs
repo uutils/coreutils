@@ -206,7 +206,9 @@ fn test_filter() {
 
 #[test]
 fn test_filter_with_env_var_set() {
-    // like `test_split_default()` but run a command before writing
+    // This test will ensure that if $FILE env var was set before running --filter, it'll stay that
+    // way
+    // implemented like `test_split_default()` but run a command before writing
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "filtered";
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
@@ -215,7 +217,15 @@ fn test_filter_with_env_var_set() {
 
     let env_var_value = "somevalue";
     env::set_var("FILE", &env_var_value);
-    ucmd.args(&["--filter=cat > $FILE", name]).succeeds();
+    ucmd.args(&[
+        if cfg!(target_family = "unix") {
+            "--filter=cat > $FILE"
+        } else {
+            "--filter=TYPE > %FILE%"
+        },
+        name,
+    ])
+    .succeeds();
     assert_eq!(glob.collate(), at.read(name).into_bytes());
     assert!(env::var("FILE").unwrap_or("var was unset".to_owned()) == env_var_value);
 }
@@ -230,6 +240,5 @@ fn test_filter_command_fails() {
         .args(&["--filter=/a/path/that/totally/does/not/exist", name])
         .run()
         .success;
-    println!("→{}", &r);
     assert!(!r);
 }

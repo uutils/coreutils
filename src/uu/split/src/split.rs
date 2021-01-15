@@ -358,17 +358,24 @@ impl FilterWriter {
     ///
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
-    fn new(command: &String, filepath: &String) -> FilterWriter {
+    fn new(command: &str, filepath: &str) -> FilterWriter {
         let shell_command = if cfg!(target_family = "unix") {
             env::var("SHELL").unwrap_or("/bin/sh".to_owned())
         } else {
-            "cmd".to_owned()
+            "CMD".to_owned()
         };
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", &filepath);
 
         let shell_process = Command::new(shell_command)
-            .arg("-c")
+            .arg(
+                // `sh -c …` or `CMD /C …`
+                if cfg!(target_family = "unix") {
+                    "-c"
+                } else {
+                    "/C"
+                },
+            )
             .arg(command)
             .stdin(Stdio::piped())
             .spawn()
