@@ -155,7 +155,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 
     if settings.filter.is_some() && cfg!(windows) {
         // see https://github.com/rust-lang/rust/issues/29494
-        show_error!("--filter is not supported in this platform");
+        show_error!("--filter is currently not supported in this platform");
         exit!(-1);
     }
 
