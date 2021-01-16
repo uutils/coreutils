@@ -11,6 +11,7 @@
 extern crate uucore;
 
 use std::char;
+#[cfg(unix)]
 use std::env;
 use std::fs::{File, OpenOptions};
 #[cfg(unix)]
@@ -154,7 +155,8 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 
     if settings.filter.is_some() && cfg!(windows) {
         // see https://github.com/rust-lang/rust/issues/29494
-        crash!(1, "--filter is not supported in this platform")
+        show_error!("--filter is not supported in this platform");
+        exit!(-1);
     }
 
     split(&settings)
@@ -311,6 +313,9 @@ fn num_prefix(i: usize, width: usize) -> String {
 
 #[cfg(unix)]
 /// A writer that writes to a shell_process' stdin
+///
+/// We use a shell process (not directy calling a sub-process) so we can forward the name of the
+/// corresponding output file (xaa, xab, xac… ). This is the way it was implemented in GNU split.
 struct FilterWriter {
     /// Running shell process
     shell_process: Child,
@@ -335,13 +340,16 @@ impl Write for FilterWriter {
 }
 
 /// Have an environment variable set at a value during this lifetime
+#[cfg(unix)]
 struct WithEnvVarSet {
     /// Env var key
     _previous_var_key: String,
     /// Previous value set to this key
     _previous_var_value: std::result::Result<String, env::VarError>,
 }
+#[cfg(unix)]
 impl WithEnvVarSet {
+    /// Save previous value assigned to key, set key=value
     fn new(key: &str, value: &str) -> WithEnvVarSet {
         let previous_env_value = env::var(key);
         env::set_var(key, value);
@@ -351,7 +359,9 @@ impl WithEnvVarSet {
         }
     }
 }
+#[cfg(unix)]
 impl Drop for WithEnvVarSet {
+    /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
         if let Ok(ref prev_value) = self._previous_var_value {
             env::set_var(&self._previous_var_key, &prev_value);
