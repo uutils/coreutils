@@ -217,10 +217,6 @@ fn test_filter_command_fails() {
     let name = "filter-will-fail";
     RandomFile::new(&at, name).add_lines(4);
 
-    assert!(
-        !ucmd
-            .args(&["--filter=/a/path/that/totally/does/not/exist", name])
-            .fails()
-            .success
-    );
+    ucmd.args(&["--filter=/a/path/that/totally/does/not/exist", name])
+        .fails();
 }
