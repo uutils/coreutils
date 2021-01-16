@@ -13,8 +13,11 @@ extern crate uucore;
 use std::char;
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
+#[cfg(unix)]
+use std::io::Result;
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
+#[cfg(unix)]
 use std::process::{Child, Command, Stdio};
 
 static NAME: &str = "split";
@@ -418,9 +421,10 @@ fn get_file_writer(filename: &str) -> BufWriter<Box<dyn Write>> {
 
 #[cfg(windows)]
 fn instantiate_current_writer(_settings: &Settings, filename: &str) -> BufWriter<Box<dyn Write>> {
-    get_file_writer(filename);
+    get_file_writer(filename)
 }
 
+/// Instantiate either a file writer or a "write to shell process's stdin" writer
 #[cfg(unix)]
 fn instantiate_current_writer(settings: &Settings, filename: &str) -> BufWriter<Box<dyn Write>> {
     match settings.filter {
