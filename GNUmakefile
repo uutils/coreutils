@@ -55,6 +55,7 @@ PROGS       := \
 	cp \
 	csplit \
 	cut \
+	date \
 	df \
 	dircolors \
 	dirname \
@@ -163,6 +164,7 @@ TEST_PROGS  := \
 	cp \
 	csplit \
 	cut \
+	date \
 	dircolors \
 	dirname \
 	echo \
