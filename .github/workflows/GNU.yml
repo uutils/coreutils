@@ -20,7 +20,7 @@ jobs:
     - name: Chechout GNU corelib
       uses: actions/checkout@v2
       with:
-        repository: 'coreutils/coreutils/gnulib'
+        repository: 'coreutils/gnulib'
         path: 'gnulib'
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
