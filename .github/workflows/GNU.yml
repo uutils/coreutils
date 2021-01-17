@@ -10,15 +10,18 @@ jobs:
       # Checks out a copy of your repository on the ubuntu-latest machine
     - name: Checkout code uutil
       uses: actions/checkout@v2
-      path: 'uutils'
+      with:
+        path: 'uutils'
     - name: Chechout GNU coreutils
       uses: actions/checkout@v2
-      repository: 'coreutils/coreutils'
-      path: 'gnu'
+      with:
+        repository: 'coreutils/coreutils'
+        path: 'gnu'
     - name: Chechout GNU corelib
       uses: actions/checkout@v2
-      repository: 'coreutils/coreutils/gnulib'
-      path: 'gnulib'
+      with:
+        repository: 'coreutils/coreutils/gnulib'
+        path: 'gnulib'
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
