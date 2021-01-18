@@ -10,8 +10,11 @@
 #[macro_use]
 extern crate uucore;
 
+mod platform;
+
 use std::char;
-use std::fs::{File, OpenOptions};
+use std::env;
+use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
@@ -46,6 +49,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         "additional-suffix",
         "additional suffix to append to output file names",
         "SUFFIX",
+    );
+    opts.optopt(
+        "",
+        "filter",
+        "write to shell COMMAND file name is $FILE (Currently not implemented for Windows)",
+        "COMMAND",
     );
     opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
     opts.optflag(
@@ -92,6 +101,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         suffix_length: 0,
         additional_suffix: "".to_owned(),
         input: "".to_owned(),
+        filter: None,
         strategy: "".to_owned(),
         strategy_param: "".to_owned(),
         verbose: false,
@@ -138,6 +148,14 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     settings.input = input;
     settings.prefix = prefix;
 
+    settings.filter = matches.opt_str("filter");
+
+    if settings.filter.is_some() && cfg!(windows) {
+        // see https://github.com/rust-lang/rust/issues/29494
+        show_error!("--filter is currently not supported in this platform");
+        exit!(-1);
+    }
+
     split(&settings)
 }
 
@@ -147,6 +165,8 @@ struct Settings {
     suffix_length: usize,
     additional_suffix: String,
     input: String,
+    /// When supplied, a shell command to output to instead of xaa, xab …
+    filter: Option<String>,
     strategy: String,
     strategy_param: String,
     verbose: bool,
@@ -323,7 +343,6 @@ fn split(settings: &Settings) -> i32 {
                 _ => {}
             }
         }
-
         if control.request_new_file {
             let mut filename = settings.prefix.clone();
             filename.push_str(
@@ -336,17 +355,9 @@ fn split(settings: &Settings) -> i32 {
             );
             filename.push_str(settings.additional_suffix.as_ref());
 
-            if fileno != 0 {
-                crash_if_err!(1, writer.flush());
-            }
+            crash_if_err!(1, writer.flush());
             fileno += 1;
-            writer = BufWriter::new(Box::new(
-                OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .open(Path::new(&filename))
-                    .unwrap(),
-            ) as Box<dyn Write>);
+            writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
             control.request_new_file = false;
             if settings.verbose {
                 println!("creating file '{}'", filename);

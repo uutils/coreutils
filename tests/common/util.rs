@@ -72,8 +72,12 @@ pub fn repeat_str(s: &str, n: u32) -> String {
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
+    /// zero-exit from running the Command?
+    /// see [`success`]
     pub success: bool,
+    /// captured utf-8 standard output after running the Command
     pub stdout: String,
+    /// captured utf-8 standard error after running the Command
     pub stderr: String,
 }
 
