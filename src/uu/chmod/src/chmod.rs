@@ -182,7 +182,17 @@ impl Chmoder {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 if !self.quiet {
-                    show_error!("{}", err);
+                    if is_symlink(file) {
+                        if self.verbose {
+                            show_info!(
+                                "neither symbolic link '{}' nor referent has been changed",
+                                file.display()
+                            );
+                        }
+                        return Ok(());
+                    } else {
+                        show_error!("{}: '{}'", err, file.display());
+                    }
                 }
                 return Err(1);
             }
@@ -258,5 +268,12 @@ impl Chmoder {
             }
             Ok(())
         }
+    }
+}
+
+pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(m) => m.file_type().is_symlink(),
+        Err(_) => false,
     }
 }
