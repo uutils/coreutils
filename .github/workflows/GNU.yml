@@ -33,7 +33,7 @@ jobs:
       shell: bash
       run: |
         pushd uutils
-        make PROFILE=release
+        cargo build --release
         BUILDDIR="$PWD/target/release/"
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
