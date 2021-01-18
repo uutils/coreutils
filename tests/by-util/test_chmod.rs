@@ -346,3 +346,31 @@ fn test_chmod_preserve_root() {
         .stderr
         .contains("chmod: error: it is dangerous to operate recursively on '/'"));
 }
+
+#[test]
+fn test_chmod_symlink_non_existing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/non-existing", "test-long.link");
+
+    let result = ucmd
+        .arg("-R")
+        .arg("755")
+        .arg("-v")
+        .arg("test-long.link")
+        .fails();
+}
+
+#[test]
+fn test_chmod_symlink_non_existing_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tmp");
+    at.symlink_file("/non-existing", "tmp/test-long.link");
+
+    let result = ucmd.arg("-R").arg("755").arg("-v").arg("tmp").succeeds();
+    // it should be a success
+    println!("stderr {}", result.stderr);
+    println!("stdout {}", result.stdout);
+    assert!(result
+        .stderr
+        .contains("neither symbolic link 'tmp/test-long.link' nor referent has been changed"));
+}
