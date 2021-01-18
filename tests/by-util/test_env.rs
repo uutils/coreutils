@@ -1,11 +1,10 @@
 #[cfg(not(windows))]
 use std::fs;
 
-use std::path::Path;
-extern crate tempfile;
-use self::tempfile::tempdir;
 use crate::common::util::*;
 use std::env;
+use std::path::Path;
+use tempfile::tempdir;
 
 #[test]
 fn test_env_help() {

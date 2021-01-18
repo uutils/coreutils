@@ -1,8 +1,7 @@
 use crate::common::util::*;
-
-use std::fs;
 extern crate tempfile;
-use self::tempfile::tempdir;
+use std::fs;
+use tempfile::tempdir;
 
 #[test]
 fn test_sync_default() {
