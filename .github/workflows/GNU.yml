@@ -46,6 +46,6 @@ jobs:
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
         ulimit -t 60
-        make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes VERBOSE=no
+        make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no 
 
 
