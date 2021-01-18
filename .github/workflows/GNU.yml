@@ -22,6 +22,7 @@ jobs:
       with:
         repository: 'coreutils/gnulib'
         path: 'gnulib'
+        fetch-depth: 0
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
