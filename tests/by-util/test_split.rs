@@ -166,6 +166,11 @@ fn test_split_additional_suffix() {
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
 
+// note: the test_filter* tests below are unix-only
+// windows support has been waived for now because of the difficulty of getting
+// the `cmd` call right
+// see https://github.com/rust-lang/rust/issues/29494
+
 #[test]
 #[cfg(unix)]
 fn test_filter() {
