@@ -4,6 +4,7 @@ extern crate regex;
 use self::rand::{thread_rng, Rng};
 use self::regex::Regex;
 use crate::common::util::*;
+#[cfg(not(windows))]
 use std::env;
 use std::fs::{read_dir, File};
 use std::io::Write;
