@@ -1933,7 +1933,7 @@ dependencies = [
 name = "uu_realpath"
 version = "0.0.2"
 dependencies = [
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.5",
  "uucore_procs 0.0.5",
 ]
