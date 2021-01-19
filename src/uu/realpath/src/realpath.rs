@@ -10,61 +10,71 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
-static NAME: &str = "realpath";
+static ABOUT: &str = "print the resolved path";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
+static OPT_QUIET: &str = "quiet";
+static OPT_STRIP: &str = "strip";
+static OPT_ZERO: &str = "zero";
+
+static ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE...", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(OPT_QUIET)
+                .short("q")
+                .long(OPT_QUIET)
+                .help("Do not print warnings for invalid paths"),
+        )
+        .arg(
+            Arg::with_name(OPT_STRIP)
+                .short("s")
+                .long(OPT_STRIP)
+                .help("Only strip '.' and '..' components, but don't resolve symbolic links"),
+        )
+        .arg(
+            Arg::with_name(OPT_ZERO)
+                .short("z")
+                .long(OPT_ZERO)
+                .help("Separate output filenames with \\0 rather than newline"),
+        )
+        .arg(
+            Arg::with_name(ARG_FILES)
+                .multiple(true)
+                .takes_value(true)
+                .required(true)
+                .min_values(1),
+        )
+        .get_matches_from(args);
 
-    opts.optflag("h", "help", "Show help and exit");
-    opts.optflag("V", "version", "Show version and exit");
-    opts.optflag(
-        "s",
-        "strip",
-        "Only strip '.' and '..' components, but don't resolve symbolic links",
-    );
-    opts.optflag(
-        "z",
-        "zero",
-        "Separate output filenames with \\0 rather than newline",
-    );
-    opts.optflag("q", "quiet", "Do not print warnings for invalid paths");
+    /*  the list of files */
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f);
-            show_usage(&opts);
-            return 1;
-        }
-    };
+    let paths: Vec<PathBuf> = matches
+        .values_of(ARG_FILES)
+        .unwrap()
+        .map(|path| PathBuf::from(path))
+        .collect();
 
-    if matches.opt_present("V") {
-        version();
-        return 0;
-    }
-    if matches.opt_present("h") {
-        show_usage(&opts);
-        return 0;
-    }
-
-    if matches.free.is_empty() {
-        show_error!("Missing operand: FILENAME, at least one is required");
-        println!("Try `{} --help` for more information.", NAME);
-        return 1;
-    }
-
-    let strip = matches.opt_present("s");
-    let zero = matches.opt_present("z");
-    let quiet = matches.opt_present("q");
+    let strip = matches.is_present(OPT_STRIP);
+    let zero = matches.is_present(OPT_ZERO);
+    let quiet = matches.is_present(OPT_QUIET);
     let mut retcode = 0;
-    for path in &matches.free {
+    for path in &paths {
         if !resolve_path(path, strip, zero, quiet) {
             retcode = 1
         };
@@ -72,15 +82,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     retcode
 }
 
-fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
-    let p = Path::new(path).to_path_buf();
+fn resolve_path(p: &PathBuf, strip: bool, zero: bool, quiet: bool) -> bool {
     let abs = canonicalize(p, CanonicalizeMode::Normal).unwrap();
 
     if strip {
         if zero {
-            print!("{}\0", abs.display());
+            print!("{}\0", p.display());
         } else {
-            println!("{}", abs.display())
+            println!("{}", p.display())
         }
         return true;
     }
@@ -93,7 +102,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
         loop {
             if links_left == 0 {
                 if !quiet {
-                    show_error!("Too many symbolic links: {}", path)
+                    show_error!("Too many symbolic links: {}", p.display())
                 };
                 return false;
             }
@@ -109,7 +118,7 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
                         }
                         _ => {
                             if !quiet {
-                                show_error!("Invalid path: {}", path)
+                                show_error!("Invalid path: {}", p.display())
                             };
                             return false;
                         }
@@ -126,24 +135,4 @@ fn resolve_path(path: &str, strip: bool, zero: bool, quiet: bool) -> bool {
     }
 
     true
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION)
-}
-
-fn show_usage(opts: &getopts::Options) {
-    version();
-    println!();
-    println!("Usage:");
-    println!("  {} [-s|--strip] [-z|--zero] FILENAME...", NAME);
-    println!("  {} -V|--version", NAME);
-    println!("  {} -h|--help", NAME);
-    println!();
-    print!("{}", opts.usage(
-            "Convert each FILENAME to the absolute path.\n\
-            All the symbolic links will be resolved, resulting path will contain no special components like '.' or '..'.\n\
-            Each path component must exist or resolution will fail and non-zero exit status returned.\n\
-            Each resolved FILENAME will be written to the standard output, one per line.")
-    );
 }
