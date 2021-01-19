@@ -1,7 +1,3 @@
-#![allow(dead_code)]
-extern crate tempfile;
-
-use self::tempfile::TempDir;
 use std::env;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
@@ -16,6 +12,7 @@ use std::rc::Rc;
 use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
+use tempfile::TempDir;
 
 #[cfg(windows)]
 static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");

@@ -16,10 +16,7 @@ pub enum CsplitError {
     MatchNotFoundOnRepetition(String, usize),
     #[error("line number must be greater than zero")]
     LineNumberIsZero,
-    #[error(
-        "line number '{}' is smaller than preceding line number, {}",
-        _0, _1
-    )]
+    #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
     LineNumberSmallerThanPrevious(usize, usize),
     #[error("invalid pattern: {}", _0)]
     InvalidPattern(String),

@@ -340,7 +340,9 @@ libc = "0.2"
 rand = "0.7"
 regex = "1.0"
 sha1 = { version="0.6", features=["std"] }
-tempfile = "3.1"
+## tempfile 3.2 depends on recent version of rand which depends on getrandom v0.2 which has compiler errors for MinRustV v1.32.0
+## min dep for tempfile = Rustc 1.40
+tempfile = "= 3.1.0"
 time = "0.1"
 unindent = "0.1"
 uucore = { version=">=0.0.5", package="uucore", path="src/uucore", features=["entries"] }

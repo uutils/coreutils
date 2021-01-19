@@ -1,7 +1,6 @@
 use crate::common::util::*;
 
-extern crate tempfile;
-use self::tempfile::tempdir;
+use tempfile::tempdir;
 
 static TEST_TEMPLATE1: &'static str = "tempXXXXXX";
 static TEST_TEMPLATE2: &'static str = "temp";

@@ -17,7 +17,7 @@ path = "src/mktemp.rs"
 [dependencies]
 clap = "2.33"
 rand = "0.5"
-tempfile = "3.0"
+tempfile = "3.1"
 uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
