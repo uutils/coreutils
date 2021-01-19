@@ -32,3 +32,79 @@ fn test_long_redirection_to_root() {
     println!("expect: {:?}", expect);
     assert_eq!(actual, expect);
 }
+
+#[test]
+fn test_file_and_links() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let result = scene.ucmd().run();
+
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    let actual = scene.ucmd().arg("foo").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("foo\n"));
+
+    let actual = scene.ucmd().arg("bar").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("foo\n"));
+}
+
+#[test]
+fn test_file_and_links_zero() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let result = scene.ucmd().run();
+
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    let actual = scene.ucmd().arg("foo").arg("-z").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("foo"));
+    assert!(!actual.contains("\n"));
+
+    let actual = scene.ucmd().arg("bar").arg("-z").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("foo"));
+    assert!(!actual.contains("\n"));
+}
+
+#[test]
+fn test_file_and_links_strip() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let result = scene.ucmd().run();
+
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    let actual = scene.ucmd().arg("foo").arg("-s").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("foo\n"));
+
+    let actual = scene.ucmd().arg("bar").arg("-s").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("bar\n"));
+}
+
+#[test]
+fn test_file_and_links_strip_zero() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let result = scene.ucmd().run();
+
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    let actual = scene.ucmd().arg("foo").arg("-s").arg("-z").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("foo"));
+    assert!(!actual.contains("\n"));
+
+    let actual = scene.ucmd().arg("bar").arg("-s").arg("-z").run().stdout;
+    println!("actual: {:?}", actual);
+    assert!(actual.contains("bar"));
+    assert!(!actual.contains("\n"));
+}
