@@ -39,11 +39,13 @@ jobs:
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
         pushd gnu/
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc gdb python-pyinotify
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
         # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils 
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
+        make src/getlimits
+        test -f $BUILDDIR/getlimits || cp src/getlimits $BUILDDIR
         ulimit -t 60
         make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no
