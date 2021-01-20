@@ -39,6 +39,7 @@ jobs:
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
         pushd gnu/
+        sudo apt-get update
         sudo apt-get install autoconf autopoint bison texinfo gperf gcc gdb python-pyinotify
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
