@@ -8,28 +8,10 @@
 
 use num_traits::{
     int::PrimInt,
+    ops::overflowing::OverflowingAdd,
     ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
 };
 use std::fmt::{Debug, Display};
-
-// NOTE: Trait can be removed once num-traits adds a similar one;
-//       see https://github.com/rust-num/num-traits/issues/168
-pub(crate) trait OverflowingAdd: Sized {
-    fn overflowing_add_(self, n: Self) -> (Self, bool);
-}
-
-macro_rules! overflowing {
-    ($x:ty) => {
-        impl OverflowingAdd for $x {
-            fn overflowing_add_(self, n: Self) -> (Self, bool) {
-                self.overflowing_add(n)
-            }
-        }
-    };
-}
-overflowing!(u32);
-overflowing!(u64);
-overflowing!(u128);
 
 pub(crate) trait Int:
     Display + Debug + PrimInt + OverflowingAdd + WrappingNeg + WrappingSub + WrappingMul
