@@ -22,7 +22,7 @@ jobs:
       with:
         repository: 'coreutils/gnulib'
         path: 'gnulib'
-        fetch-depth: 0
+        fetch-depth: 0 # gnu gets upset if gnulib is a shallow checkout
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
