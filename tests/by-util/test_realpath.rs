@@ -37,7 +37,6 @@ fn test_long_redirection_to_root() {
 fn test_file_and_links() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let result = scene.ucmd().run();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
@@ -55,7 +54,6 @@ fn test_file_and_links() {
 fn test_file_and_links_zero() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let result = scene.ucmd().run();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
@@ -75,7 +73,6 @@ fn test_file_and_links_zero() {
 fn test_file_and_links_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let result = scene.ucmd().run();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
