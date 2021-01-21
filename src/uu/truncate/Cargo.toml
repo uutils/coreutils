@@ -1,6 +1,6 @@
 [package]
 name = "uu_truncate"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "truncate ~ (uutils) truncate (or extend) FILE to SIZE"

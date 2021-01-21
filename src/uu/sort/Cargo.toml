@@ -1,6 +1,6 @@
 [package]
 name = "uu_sort"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sort ~ (uutils) sort input lines"

@@ -1,6 +1,6 @@
 [package]
 name = "uu_kill"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "kill ~ (uutils) send a signal to a process"

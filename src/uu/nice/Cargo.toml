@@ -1,6 +1,6 @@
 [package]
 name = "uu_nice"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nice ~ (uutils) run PROGRAM with modified scheduling priority"
