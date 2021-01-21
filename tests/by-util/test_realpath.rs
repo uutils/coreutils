@@ -90,7 +90,6 @@ fn test_file_and_links_strip() {
 fn test_file_and_links_strip_zero() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let result = scene.ucmd().run();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
