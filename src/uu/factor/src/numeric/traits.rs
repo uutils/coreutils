@@ -6,9 +6,12 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
+pub(crate) use num_traits::{
+    identities::{One, Zero},
+    ops::overflowing::OverflowingAdd,
+};
 use num_traits::{
     int::PrimInt,
-    ops::overflowing::OverflowingAdd,
     ops::wrapping::{WrappingMul, WrappingNeg, WrappingSub},
 };
 use std::fmt::{Debug, Display};

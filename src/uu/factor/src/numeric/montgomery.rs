@@ -8,9 +8,7 @@
 
 use super::*;
 
-use num_traits::identities::{One, Zero};
-use num_traits::ops::overflowing::OverflowingAdd;
-use traits::{DoubleInt, Int};
+use traits::{DoubleInt, Int, One, OverflowingAdd, Zero};
 
 pub(crate) trait Arithmetic: Copy + Sized {
     // The type of integers mod m, in some opaque representation
