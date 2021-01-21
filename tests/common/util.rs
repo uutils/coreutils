@@ -137,12 +137,6 @@ impl CmdResult {
         Box::new(self)
     }
 
-    /// like stderr_is(...), but expects the contents of the file at the provided relative path
-    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stderr_is(contents)
-    }
-
     /// asserts that
     /// 1. the command resulted in stdout stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
@@ -163,12 +157,6 @@ impl CmdResult {
     /// and 2. the command resulted in empty (zero-length) stdout stream output
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         self.no_stdout().stderr_is(msg)
-    }
-
-    /// like stderr_only(...), but expects the contents of the file at the provided relative path
-    pub fn stderr_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stderr_only(contents)
     }
 
     pub fn fails_silently(&self) -> Box<&CmdResult> {
@@ -360,22 +348,6 @@ impl AtPath {
         }
     }
 
-    pub fn cleanup(&self, path: &'static str) {
-        let p = &self.plus(path);
-        if let Ok(m) = fs::metadata(p) {
-            if m.is_file() {
-                fs::remove_file(&p).unwrap();
-            } else {
-                fs::remove_dir(&p).unwrap();
-            }
-        }
-    }
-
-    pub fn root_dir(&self) -> String {
-        log_info("current_directory", "");
-        self.subdir.to_str().unwrap().to_owned()
-    }
-
     pub fn root_dir_resolved(&self) -> String {
         log_info("current_directory_resolved", "");
         let s = self
@@ -523,12 +495,6 @@ impl UCommand {
         self.comm_string.push_str(arg.as_ref().to_str().unwrap());
         self.raw.arg(arg.as_ref());
         Box::new(self)
-    }
-
-    /// like arg(...), but uses the contents of the file at the provided relative path as the argument
-    pub fn arg_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.arg(contents)
     }
 
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
