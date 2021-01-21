@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
     "Jordy Dickinson <jordy.dickinson@gmail.com>",
     "Joshua S. Miller <jsmiller@uchicago.edu>",

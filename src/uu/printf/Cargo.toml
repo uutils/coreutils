@@ -1,6 +1,6 @@
 [package]
 name = "uu_printf"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
     "Nathan Ross",
     "uutils developers",

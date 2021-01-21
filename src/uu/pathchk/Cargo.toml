@@ -1,6 +1,6 @@
 [package]
 name = "uu_pathchk"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pathchk ~ (uutils) diagnose invalid or non-portable PATHNAME"

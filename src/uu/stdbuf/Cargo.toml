@@ -1,6 +1,6 @@
 [package]
 name = "uu_stdbuf"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
@@ -21,7 +21,7 @@ uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [build-dependencies]
-libstdbuf = { version="0.0.2", package="uu_stdbuf_libstdbuf", path="src/libstdbuf" }
+libstdbuf = { version="0.0.3", package="uu_stdbuf_libstdbuf", path="src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"
