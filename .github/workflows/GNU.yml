@@ -51,5 +51,6 @@ jobs:
     - name: Run GNU tests
       shell: bash
       run: |
+        pushd gnu
         ulimit -t 60
         unbuffer make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
