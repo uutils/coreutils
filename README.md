@@ -291,10 +291,10 @@ Utilities
 | arch      | cp        | chcon  |
 | base32    | expr      | dd     |
 | base64    | install   | numfmt |
-| basename  | ls        | stty   |
-| cat       | more      | pr     |
-| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
-| chmod     | printf    | stty   |
+| basename  | ls        | pr     |
+| cat       | more      | runcon |
+| chgrp     | od (`--strings` and 128-bit data types missing) | stty |
+| chmod     | printf    |        |
 | chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
