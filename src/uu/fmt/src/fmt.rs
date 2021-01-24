@@ -34,6 +34,7 @@ mod parasplit;
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
 static LONG_HELP: &str = "";
+static MAX_WIDTH: usize = 2500;
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 pub struct FmtOptions {
@@ -137,6 +138,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 crash!(1, "Invalid WIDTH specification: `{}': {}", s, e);
             }
         };
+        if fmt_opts.width > MAX_WIDTH {
+            crash!(
+                1,
+                "invalid width: '{}': Numerical result out of range",
+                fmt_opts.width
+            );
+        }
         fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
     };
 
