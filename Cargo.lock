@@ -1576,6 +1576,7 @@ dependencies = [
 name = "uu_fmt"
 version = "0.0.3"
 dependencies = [
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.5",
