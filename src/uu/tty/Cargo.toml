@@ -17,7 +17,7 @@ path = "src/tty.rs"
 [dependencies]
 getopts = "0.2.18"
 libc = "0.2.42"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

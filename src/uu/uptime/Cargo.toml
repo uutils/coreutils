@@ -18,7 +18,7 @@ path = "src/uptime.rs"
 time = "0.1.40"
 chrono = "0.4"
 clap = "2.33"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

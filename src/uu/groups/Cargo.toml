@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/groups.rs"
 
 [dependencies]
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["entries"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["entries"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 clap = "2.33"
 

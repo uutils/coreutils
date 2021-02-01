@@ -26,7 +26,7 @@ sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
 blake2-rfc = "0.2.18"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
