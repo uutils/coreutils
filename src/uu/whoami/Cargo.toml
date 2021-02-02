@@ -16,7 +16,7 @@ path = "src/whoami.rs"
 
 [dependencies]
 clap = "2.33"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["entries", "wide"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["entries", "wide"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(target_os = "windows")'.dependencies]

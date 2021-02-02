@@ -18,7 +18,7 @@ path = "src/touch.rs"
 filetime = "0.2.1"
 clap = "2.33"
 time = "0.1.40"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["libc"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["libc"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
