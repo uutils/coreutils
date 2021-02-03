@@ -53,6 +53,21 @@ jobs:
           make tests/factor/t${i}.sh
         done
         grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
+        sed -i -e 's|^seq |/usr/bin/seq |' tests/factor/t*sh
+        sed -i -e '/tests\/misc\/cat-self.sh/ D' Makefile # issue #1707
+        sed -i -e '/tests\/misc\/numfmt.pl/ D' Makefile # issue #1708
+        sed -i -e '/tests\/chown\/preserve-root.sh/ D' Makefile # issue #1709
+        sed -i -e '/tests\/cp\/file-perm-race.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/cp\/special-f.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/mv\/mv-special-1.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/dd\/stats.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/cp\/existing-perm-race.sh/ D' Makefile # hangs, cp doesn't implement --copy-contents
+        # Remove tests that rely on seq with large numbers. See issue #1703
+        sed -i -e '/tests\/misc\/seq.pl/ D' \
+               -e '/tests\/misc\/seq-precision.sh/D' \
+               Makefile
+        sed -i -e '/tests\/tail-2\/pid.sh/ D' Makefile # hangs on github, tail doesn't support -f
+
         test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
     - name: Run GNU tests
       shell: bash
