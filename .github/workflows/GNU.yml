@@ -47,6 +47,12 @@ jobs:
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
         make
+        # Generate the factor tests, so they can be fixed
+        for i in $(seq -w 1 36)
+        do
+          make tests/factor/t${i}.sh
+        done
+        grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
         test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
     - name: Run GNU tests
       shell: bash
