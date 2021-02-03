@@ -77,3 +77,7 @@ jobs:
         pushd gnu
         
         unbuffer timeout 3600 make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
+    - uses: actions/upload-artifact@v2
+      with:
+        name: test-report
+        path: gnu/tests/**/*.log
